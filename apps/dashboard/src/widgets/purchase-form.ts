@@ -4,7 +4,8 @@ import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
+import "@waitron/ui/src/components/wt-price-input.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import type {
@@ -262,20 +263,24 @@ export class PurchaseForm extends LitElement {
         .value=${line.rate}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "rate")}
       ></wt-input>
-      <wt-input
+      <wt-price-input
         class="line-field"
+        fixed-unit
+        locale=${currentLocale()}
         data-test=${`line-base-${index}`}
         label=${t("purchase.line_base")}
         .value=${line.base}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "base")}
-      ></wt-input>
-      <wt-input
+      ></wt-price-input>
+      <wt-price-input
         class="line-field"
+        fixed-unit
+        locale=${currentLocale()}
         data-test=${`line-tax-${index}`}
         label=${t("purchase.line_tax")}
         .value=${line.tax}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "tax")}
-      ></wt-input>
+      ></wt-price-input>
       <label class="line-field"
         >${t("purchase.line_kind")}
         <select
@@ -345,13 +350,15 @@ export class PurchaseForm extends LitElement {
           .value=${this.receivedOn}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "receivedOn")}
         ></wt-input>
-        <wt-input
+        <wt-price-input
           class="field"
+          fixed-unit
+          locale=${currentLocale()}
           data-test="total"
           label=${t("purchase.total")}
           .value=${this.total}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "total")}
-        ></wt-input>
+        ></wt-price-input>
         <label class="field"
           >${t("purchase.regime")}
           <select data-test="regime" @change=${(e: Event) => this.#onRegimeChange(e)}>

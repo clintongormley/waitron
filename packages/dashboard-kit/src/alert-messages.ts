@@ -1,5 +1,8 @@
+import { formatMoney } from "@waitron/shared";
 import { currentLocale, pickLocale } from "./i18n.js";
 
+/** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
+ * euros, the way the alert's language writes them. */
 export type AlertMessageTable = Readonly<
   Record<string, { readonly en: string; readonly es: string }>
 >;
@@ -18,6 +21,8 @@ export function hasAlertMessage(code: string): boolean {
   return Object.hasOwn(messages, code);
 }
 
+const DECIMAL = /^-?\d+(?:\.\d+)?$/;
+
 function formatParam(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean")
@@ -31,7 +36,13 @@ export function alertMessage(
   l: string = currentLocale(),
 ): string {
   const template = pickLocale(hasAlertMessage(code) ? messages[code]! : GENERIC, l);
-  return template.replace(/\{([A-Za-z0-9_]+)\}/g, (_match, name: string) =>
-    formatParam(Object.hasOwn(params, name) ? params[name] : undefined),
+  return template.replace(
+    /\{([A-Za-z0-9_]+)(:money)?\}/g,
+    (_match, name: string, money: string | undefined) => {
+      const value = Object.hasOwn(params, name) ? params[name] : undefined;
+      return money && typeof value === "string" && DECIMAL.test(value)
+        ? formatMoney(value, l)
+        : formatParam(value);
+    },
   );
 }

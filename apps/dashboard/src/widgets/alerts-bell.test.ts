@@ -71,7 +71,7 @@ describe("dashboard-alerts-bell", () => {
     const alerts = ["1", "2", "3", "4", "5", "6"].map((id) => event(id));
     const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", { alerts });
     expect(qa(el, "li")).toHaveLength(5);
-    expect(qa(el, "li")[0]!.textContent).toContain("A card payment of 12.50 taken while offline");
+    expect(qa(el, "li")[0]!.textContent).toContain("A card payment of €12.50 taken while offline");
     expect(q(el, "[data-test=alerts-see-all]")).not.toBeNull();
   });
 

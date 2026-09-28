@@ -70,7 +70,7 @@ describe("dashboard-alerts-screen", () => {
     await flush(el);
     expect(rows(el, "open-alerts-table")).toHaveLength(2);
     expect(rows(el, "open-alerts-table")[0]!.textContent).toContain(
-      "A card payment of 12.50 taken while offline",
+      "A card payment of €12.50 taken while offline",
     );
     expect(location.pathname).toBe("/manage/alerts/view/open");
   });

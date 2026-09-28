@@ -1,12 +1,13 @@
 import { expect, it } from "vitest";
 import { alertMessage, hasAlertMessage } from "./alerts.js";
+import { ALERT_MESSAGES } from "./alert-messages.js";
 
 it("registers the dashboard's alert wording on import", () => {
   expect(hasAlertMessage("payment.offline_forward_declined")).toBe(true);
   expect(
     alertMessage("payment.offline_forward_declined", { amount: "12.50", paymentRef: "pi_1" }, "en"),
   ).toBe(
-    "A card payment of 12.50 taken while offline was declined when it was sent on (reference pi_1). Collect the money another way.",
+    "A card payment of €12.50 taken while offline was declined when it was sent on (reference pi_1). Collect the money another way.",
   );
 });
 
@@ -20,4 +21,52 @@ it("reads a backwards clock jump correctly with its negative number", () => {
   expect(alertMessage("clock.jump_detected", params, "es")).toBe(
     "La hora de este equipo ha retrocedido: ha cambiado -120 segundos. Revisa su fecha y hora.",
   );
+});
+
+it("shows every amount an alert carries with the euro sign, where each language writes it", () => {
+  const cases: [string, Record<string, unknown>, string, string][] = [
+    [
+      "payment.offline_forward_declined",
+      { amount: "1279.50", paymentRef: "pi_1" },
+      "A card payment of €1,279.50 taken",
+      "Un pago con tarjeta de 1279,50\u00a0€ cobrado",
+    ],
+    [
+      "payment.bill_capture_mismatch",
+      { captured: "30.00", expected: "25.50" },
+      "charged €30.00 for a payment towards a bill that should have been €25.50.",
+      "cobró 30,00\u00a0€ por un pago a cuenta de una cuenta que debía ser de 25,50\u00a0€.",
+    ],
+    [
+      "payment.bill_settle_failed",
+      { amount: "12.00" },
+      "A card payment of €12.00 towards",
+      "un pago de 12,00\u00a0€ a cuenta",
+    ],
+    [
+      "payment.refund_outcome_conflict",
+      { amount: "4.20" },
+      "a refund of €4.20 as made",
+      "una devolución de 4,20\u00a0€ que",
+    ],
+    [
+      "payment.refund_unresolved",
+      { amount: "4.20" },
+      "A card refund of €4.20 has been",
+      "Una devolución con tarjeta de 4,20\u00a0€ lleva",
+    ],
+  ];
+  for (const [code, params, en, es] of cases) {
+    expect(alertMessage(code, params, "en-GB"), code).toContain(en);
+    expect(alertMessage(code, params, "es-ES"), code).toContain(es);
+  }
+});
+
+it("marks every amount slot in the alert wording as money", () => {
+  const unmarked = Object.entries(ALERT_MESSAGES).flatMap(([code, { en, es }]) =>
+    [en, es].flatMap((text) =>
+      [...text.matchAll(/\{(amount|captured|expected)\}/g)].map((m) => `${code}: ${m[0]}`),
+    ),
+  );
+  expect(unmarked).toEqual([]);
 });

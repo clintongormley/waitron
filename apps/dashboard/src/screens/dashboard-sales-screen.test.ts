@@ -236,17 +236,21 @@ describe("dashboard-sales-screen", () => {
     // Tender table: a per-till row per method, with the tender + tip totals.
     expect(root.querySelector("[data-test=tender-table]")).not.toBeNull();
     const cashRow = root.querySelector("[data-test=tender-row-till-1-cash]")!;
-    expect(cashRow.textContent).toContain("80.00");
-    expect(cashRow.textContent).toContain("5.00");
-    expect(root.querySelector("[data-test=tender-total]")!.textContent).toContain("176.00");
-    expect(root.querySelector("[data-test=tip-total]")!.textContent).toContain("8.00");
+    expect(cashRow.textContent).toContain("80,00\u00a0€");
+    expect(cashRow.textContent).toContain("5,00\u00a0€");
+    expect(root.querySelector("[data-test=tender-total]")!.textContent).toContain("176,00\u00a0€");
+    expect(root.querySelector("[data-test=tip-total]")!.textContent).toContain("8,00\u00a0€");
 
     // VAT-by-rate table with per-rate rows and the base/tax/gross totals.
     expect(root.querySelector("[data-test=vat-table]")).not.toBeNull();
     expect(root.querySelector('[data-test="vat-row-21.00"]')!.textContent).toContain("21.00");
-    expect(root.querySelector("[data-test=vat-base-total]")!.textContent).toContain("150.00");
-    expect(root.querySelector("[data-test=vat-tax-total]")!.textContent).toContain("26.00");
-    expect(root.querySelector("[data-test=vat-gross-total]")!.textContent).toContain("176.00");
+    expect(root.querySelector("[data-test=vat-base-total]")!.textContent).toContain(
+      "150,00\u00a0€",
+    );
+    expect(root.querySelector("[data-test=vat-tax-total]")!.textContent).toContain("26,00\u00a0€");
+    expect(root.querySelector("[data-test=vat-gross-total]")!.textContent).toContain(
+      "176,00\u00a0€",
+    );
 
     // Record counts.
     expect(root.querySelector("[data-test=count-sales]")!.textContent).toContain("10");
@@ -260,7 +264,7 @@ describe("dashboard-sales-screen", () => {
     // Its variants follow as their own rows, each under its own name and figures.
     const variant0 = root.querySelector('[data-test="seller-row-0-variant-0"]')!;
     expect(variant0.querySelector("[data-test=variant-name]")!.textContent).toBe("Café doble");
-    expect(variant0.textContent).toContain("7.50");
+    expect(variant0.textContent).toContain("7,50\u00a0€");
     const variant1 = root.querySelector('[data-test="seller-row-0-variant-1"]')!;
     expect(variant1.querySelector("[data-test=variant-name]")!.textContent).toBe("Café solo");
     // Painted by this screen's styles: the variant's name is indented past its product's, and the
@@ -278,6 +282,50 @@ describe("dashboard-sales-screen", () => {
     expect(root.querySelector("[data-test=period-note]")).toBeNull();
   });
 
+  it("writes every amount of a day's tables as English writes euros, and each VAT rate as it is", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api: stubApi() });
+    await flush(el);
+    const root = el.shadowRoot!;
+    const cells = (selector: string) =>
+      [...root.querySelectorAll(`${selector} th, ${selector} td`)].map((cell) =>
+        cell.textContent!.trim(),
+      );
+    expect(cells("[data-test=tender-row-till-1-cash]")).toEqual([
+      "till-1",
+      "cash",
+      "€80.00",
+      "€5.00",
+    ]);
+    expect(cells("[data-test=tender-table] tfoot")).toEqual(["Tender total", "€176.00", "€8.00"]);
+    expect(cells('[data-test="vat-row-21.00"]')).toEqual(["21.00", "€100.00", "€21.00"]);
+    expect(cells("[data-test=vat-table] tfoot")).toEqual([
+      "Base total",
+      "€150.00",
+      "€26.00",
+      "Gross total",
+      "€176.00",
+    ]);
+    expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual([
+      "Café, Café doble",
+      "3",
+      "€7.50",
+    ]);
+  });
+
+  it("groups thousands in a period's English totals, and not in its Spanish ones", async () => {
+    const period = async () => {
+      const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api: stubApi() });
+      await flush(el);
+      setDate(el, "to-picker", "2030-06-15");
+      await flush(el);
+      return el.shadowRoot!.querySelector("[data-test=vat-gross-total]")!.textContent!.trim();
+    };
+    expect(await period()).toBe("1210,00\u00a0€");
+    setLocale("en-GB");
+    expect(await period()).toBe("€1,210.00");
+  });
+
   it("switches to a period roll-up when `to` is a later date, calling getSalesPeriod(from, to)", async () => {
     const api = stubApi();
     const { el } = await mountWidget<SalesScreen>("dashboard-sales-screen", { api });
@@ -292,7 +340,9 @@ describe("dashboard-sales-screen", () => {
     const root = el.shadowRoot!;
     // Period mode: VAT + top sellers + the per-day note, and NO tender table.
     expect(root.querySelector("[data-test=vat-table]")).not.toBeNull();
-    expect(root.querySelector("[data-test=vat-gross-total]")!.textContent).toContain("1210.00");
+    expect(root.querySelector("[data-test=vat-gross-total]")!.textContent).toContain(
+      "1210,00\u00a0€",
+    );
     expect(root.querySelector("[data-test=period-note]")).not.toBeNull();
     expect(root.querySelector("[data-test=tender-table]")).toBeNull();
     expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();

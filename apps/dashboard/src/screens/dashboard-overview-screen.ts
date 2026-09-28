@@ -3,8 +3,9 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-card.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
 import {
@@ -183,14 +184,15 @@ export class OverviewScreen extends LitElement {
 
   #renderOverview(overview: SalesOverview): TemplateResult {
     const { takings, counts, openTables } = overview;
+    const money = (value: string) => formatMoney(value, currentLocale());
     return html`
       <p class="business-day" data-test="business-day">${overview.businessDay}</p>
       <div class="cards">
         <wt-card data-test="takings">
           <h2 slot="header">${t("overview.takings_title")}</h2>
-          ${renderMetric(t("overview.tender_total"), takings.tenderTotal, "tender-total")}
-          ${renderMetric(t("overview.tips"), takings.tipTotal, "tip-total")}
-          ${renderMetric(t("overview.gross_total"), takings.grossTotal, "gross-total")}
+          ${renderMetric(t("overview.tender_total"), money(takings.tenderTotal), "tender-total")}
+          ${renderMetric(t("overview.tips"), money(takings.tipTotal), "tip-total")}
+          ${renderMetric(t("overview.gross_total"), money(takings.grossTotal), "gross-total")}
         </wt-card>
 
         <wt-card data-test="counts">

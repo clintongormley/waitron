@@ -3,8 +3,9 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
 import {
@@ -25,6 +26,8 @@ import type {
   VatSummaryDto,
 } from "../api/client.js";
 import { today } from "../date-utils.js";
+
+const money = (value: string): string => formatMoney(value, currentLocale());
 
 interface CategoryRow {
   kind: CategoryTotalDto["kind"] | "direct";
@@ -515,8 +518,8 @@ export class SalesScreen extends LitElement {
                       : nothing
                   }<span data-test="category-label">${row.label}</span>
                 </th>
-                <td class="num" data-test="category-gross">${row.gross}</td>
-                <td class="num" data-test="category-net">${row.net}</td>
+                <td class="num" data-test="category-gross">${money(row.gross)}</td>
+                <td class="num" data-test="category-net">${money(row.net)}</td>
               </tr>`,
           )}
         </tbody>
@@ -528,9 +531,9 @@ export class SalesScreen extends LitElement {
               data-test="category-total-gross"
               aria-describedby=${report.grossComplete ? nothing : "gross-incomplete"}
             >
-              ${report.gross}
+              ${money(report.gross)}
             </td>
-            <td class="num" data-test="category-total-net">${report.net}</td>
+            <td class="num" data-test="category-total-net">${money(report.net)}</td>
           </tr>
         </tfoot>
       </table>
@@ -595,8 +598,8 @@ export class SalesScreen extends LitElement {
             (label) =>
               html`<tr data-test="label-row" class="label-row">
                 <th scope="row" class="cat-name">${label.name}</th>
-                <td class="num">${label.gross}</td>
-                <td class="num">${label.net}</td>
+                <td class="num">${money(label.gross)}</td>
+                <td class="num">${money(label.net)}</td>
               </tr>`,
           )}
         </tbody>
@@ -711,8 +714,8 @@ export class SalesScreen extends LitElement {
                 html`<tr data-test=${`tender-row-${till.tillId}-${line.method}`}>
                   <th scope="row">${till.tillId}</th>
                   <td>${line.method}</td>
-                  <td class="num">${line.amount}</td>
-                  <td class="num">${line.tip}</td>
+                  <td class="num">${money(line.amount)}</td>
+                  <td class="num">${money(line.tip)}</td>
                 </tr>`,
             ),
           )}
@@ -720,8 +723,8 @@ export class SalesScreen extends LitElement {
         <tfoot>
           <tr>
             <th scope="row" colspan="2">${t("sales.tender_total")}</th>
-            <td class="num" data-test="tender-total">${cash.tenderTotal}</td>
-            <td class="num" data-test="tip-total">${cash.tipTotal}</td>
+            <td class="num" data-test="tender-total">${money(cash.tenderTotal)}</td>
+            <td class="num" data-test="tip-total">${money(cash.tipTotal)}</td>
           </tr>
         </tfoot>
       </table>
@@ -744,20 +747,20 @@ export class SalesScreen extends LitElement {
             (row) =>
               html`<tr data-test=${`vat-row-${row.rate}`}>
                 <th scope="row">${row.rate}</th>
-                <td class="num">${row.base}</td>
-                <td class="num">${row.tax}</td>
+                <td class="num">${money(row.base)}</td>
+                <td class="num">${money(row.tax)}</td>
               </tr>`,
           )}
         </tbody>
         <tfoot>
           <tr>
             <th scope="row">${t("sales.base_total")}</th>
-            <td class="num" data-test="vat-base-total">${vat.baseTotal}</td>
-            <td class="num" data-test="vat-tax-total">${vat.taxTotal}</td>
+            <td class="num" data-test="vat-base-total">${money(vat.baseTotal)}</td>
+            <td class="num" data-test="vat-tax-total">${money(vat.taxTotal)}</td>
           </tr>
           <tr>
             <th scope="row" colspan="2">${t("sales.gross_total")}</th>
-            <td class="num" data-test="vat-gross-total">${vat.grossTotal}</td>
+            <td class="num" data-test="vat-gross-total">${money(vat.grossTotal)}</td>
           </tr>
         </tfoot>
       </table>

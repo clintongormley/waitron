@@ -68,9 +68,25 @@ describe("dashboard-overview-screen", () => {
     await flush(el);
     expect(api.getSalesOverview).toHaveBeenCalledTimes(1);
     const root = el.shadowRoot!;
-    expect(root.querySelector("[data-test=gross-total]")!.textContent).toContain("1279.50");
-    expect(root.querySelector("[data-test=tender-total]")!.textContent).toContain("1234.50");
-    expect(root.querySelector("[data-test=tip-total]")!.textContent).toContain("45.00");
+    expect(root.querySelector("[data-test=gross-total]")!.textContent).toBe("1279,50\u00a0€");
+    expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("1234,50\u00a0€");
+    expect(root.querySelector("[data-test=tip-total]")!.textContent).toBe("45,00\u00a0€");
+  });
+
+  it("writes the takings and the top sellers' totals as English writes euros", async () => {
+    setLocale("en-GB");
+    const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-test=gross-total]")!.textContent).toBe("€1,279.50");
+    expect(root.querySelector("[data-test=tender-total]")!.textContent).toBe("€1,234.50");
+    expect(root.querySelector("[data-test=tip-total]")!.textContent).toBe("€45.00");
+    const cells = (test: string) =>
+      [...root.querySelectorAll(`[data-test="${test}"] td`)].map((cell) => cell.textContent);
+    expect(cells("seller-row-0")).toEqual(["18", "€36.00"]);
+    expect(cells("seller-row-0-variant-1")).toEqual(["8", "€14.00"]);
   });
 
   it("renders the record counts", async () => {
@@ -109,7 +125,7 @@ describe("dashboard-overview-screen", () => {
     );
     expect(variants).toEqual(["Café con leche grande", "Café con leche pequeño"]);
     expect(card.querySelector('[data-test="seller-row-0-variant-1"]')!.textContent).toContain(
-      "14.00",
+      "14,00\u00a0€",
     );
     expect(card.querySelector('[data-test="seller-row-1-variant-0"]')).toBeNull();
     // Painted by this screen's styles: the variant's name is indented past its product's.
@@ -328,7 +344,7 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
     const root = el.shadowRoot!;
     // The sales-overview cards render normally: the overdue failure must not blank them, and must not
     // raise the TOP banner (that's reserved for the overview's own failures).
-    expect(root.querySelector("[data-test=gross-total]")!.textContent).toContain("1279.50");
+    expect(root.querySelector("[data-test=gross-total]")!.textContent).toContain("1279,50\u00a0€");
     expect(root.querySelector("[data-test=count-sales]")!.textContent).toContain("42");
     expect(root.querySelector("[data-test=top-sellers]")).not.toBeNull();
     expect(root.querySelector("[data-test=error]")).toBeNull();

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import { PurchaseForm } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
@@ -466,4 +467,48 @@ describe("purchase-form keyboard submit", () => {
       { rate: "21.00", base: "100.00", tax: "21.00", kind: "ordinary" },
     ]);
   });
+});
+
+describe("purchase-form — money fields", () => {
+  afterEach(() => setLocale("es-ES"));
+
+  type MoneyField = HTMLElement & { label: string; value: string };
+  const MONEY = [
+    ["total", "purchase.total", "242.00"],
+    ["line-base-0", "purchase.line_base", "100.00"],
+    ["line-tax-0", "purchase.line_tax", "10.00"],
+    ["line-base-1", "purchase.line_base", "100.00"],
+    ["line-tax-1", "purchase.line_tax", "21.00"],
+  ] as const;
+
+  it.each([
+    ["es-ES", "after"],
+    ["en-GB", "before"],
+  ])(
+    "draws the euro sign in the total and each line's base and tax, where %s writes it",
+    async (locale, side) => {
+      setLocale(locale);
+      const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", {
+        open: true,
+        invoice: EDIT_INVOICE,
+      });
+      await el.updateComplete;
+      for (const [id, label, value] of MONEY) {
+        const field = el.shadowRoot!.querySelector<MoneyField>(`[data-test=${id}]`)!;
+        await (field as MoneyField & { updateComplete: Promise<unknown> }).updateComplete;
+        expect(field.tagName, id).toBe("WT-PRICE-INPUT");
+        expect(field.label, id).toBe(t(label));
+        expect(field.value, id).toBe(value);
+        const sign = field.shadowRoot!.querySelector("[part=currency]");
+        expect(sign?.textContent, id).toBe("€");
+        const amount = field.shadowRoot!.querySelector("[part=amount]")!.getBoundingClientRect();
+        const signLeft = sign!.getBoundingClientRect().left;
+        expect(signLeft < amount.left + amount.width / 2 ? "before" : "after", id).toBe(side);
+        expect(field.shadowRoot!.querySelector("button"), `${id} has no unit button`).toBeNull();
+      }
+      for (const id of ["line-rate-0", "deductible-proportion"]) {
+        expect(el.shadowRoot!.querySelector(`[data-test=${id}]`)!.tagName, id).toBe("WT-INPUT");
+      }
+    },
+  );
 });

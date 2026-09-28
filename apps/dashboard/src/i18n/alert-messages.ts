@@ -1,5 +1,6 @@
 // English and Spanish sentences for every alert code. `{name}` slots are filled from the alert's
-// params. Kept free of imports so the root guard (`scripts/alert-codes.test.ts`) can load it.
+// params, and a `{name:money}` slot writes its amount as euros. Kept free of imports so the root
+// guard (`scripts/alert-codes.test.ts`) can load it.
 //
 // No sentence promises a later check by the server: the daily payments check looks at each day once,
 // and the fiscal reconciliation sweep has no production caller. Only `alert.source_unavailable`
@@ -132,28 +133,28 @@ export const ALERT_MESSAGES: Readonly<
     es: "Hay registros fiscales en espera porque no hay un certificado tributario válido instalado. Sube el certificado para reanudar los envíos.",
   },
   "payment.offline_forward_declined": {
-    en: "A card payment of {amount} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
-    es: "Un pago con tarjeta de {amount} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
+    en: "A card payment of {amount:money} taken while offline was declined when it was sent on (reference {paymentRef}). Collect the money another way.",
+    es: "Un pago con tarjeta de {amount:money} cobrado sin conexión se rechazó al enviarlo (referencia {paymentRef}). Cobra el importe de otra forma.",
   },
   "payment.pending_outcome_unactionable": {
     en: "Waitron could not tell what happened to card payment {paymentRef}: the card provider reported {status}, and money may have moved without reaching a sale. Waitron has marked the payment as failed. Check it in the provider's own dashboard.",
     es: "Waitron no ha podido saber qué pasó con el pago con tarjeta {paymentRef}: el proveedor de pagos indicó {status}, y puede que se haya movido dinero sin llegar a una venta. Waitron ha marcado el pago como fallido. Compruébalo en el panel del proveedor.",
   },
   "payment.bill_capture_mismatch": {
-    en: `The card provider charged {captured} for a payment towards a bill that should have been {expected}. Waitron has not counted it, and the bill cannot be changed or invoiced until a manager records what happened. Check the charge in the card provider's own dashboard.${MORE_EN}`,
-    es: `El proveedor de pagos cobró {captured} por un pago a cuenta de una cuenta que debía ser de {expected}. Waitron no lo ha contado, y la cuenta no se puede modificar ni facturar hasta que un responsable registre lo ocurrido. Comprueba el cobro en el panel del proveedor de pagos.${MORE_ES}`,
+    en: `The card provider charged {captured:money} for a payment towards a bill that should have been {expected:money}. Waitron has not counted it, and the bill cannot be changed or invoiced until a manager records what happened. Check the charge in the card provider's own dashboard.${MORE_EN}`,
+    es: `El proveedor de pagos cobró {captured:money} por un pago a cuenta de una cuenta que debía ser de {expected:money}. Waitron no lo ha contado, y la cuenta no se puede modificar ni facturar hasta que un responsable registre lo ocurrido. Comprueba el cobro en el panel del proveedor de pagos.${MORE_ES}`,
   },
   "payment.bill_settle_failed": {
-    en: `A card payment of {amount} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN}`,
-    es: `Se cobró con tarjeta un pago de {amount} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Contacta con soporte.${MORE_ES}`,
+    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. The bill cannot be changed or invoiced until it is recorded. Contact support.${MORE_EN}`,
+    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. La cuenta no se puede modificar ni facturar hasta que se registre. Contacta con soporte.${MORE_ES}`,
   },
   "payment.refund_outcome_conflict": {
-    en: `The card provider shows a refund of {amount} as made, which Waitron had already recorded as not made. Waitron has changed nothing: the money went back to the payer, so check the bill's payments against the provider's own dashboard.${MORE_EN}`,
-    es: `El proveedor de pagos muestra como hecha una devolución de {amount} que Waitron ya había registrado como no hecha. Waitron no ha cambiado nada: el dinero se devolvió al cliente, así que revisa los pagos de la cuenta en el panel del proveedor.${MORE_ES}`,
+    en: `The card provider shows a refund of {amount:money} as made, which Waitron had already recorded as not made. Waitron has changed nothing: the money went back to the payer, so check the bill's payments against the provider's own dashboard.${MORE_EN}`,
+    es: `El proveedor de pagos muestra como hecha una devolución de {amount:money} que Waitron ya había registrado como no hecha. Waitron no ha cambiado nada: el dinero se devolvió al cliente, así que revisa los pagos de la cuenta en el panel del proveedor.${MORE_ES}`,
   },
   "payment.refund_unresolved": {
-    en: `A card refund of {amount} has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms.${MORE_EN}`,
-    es: `Una devolución con tarjeta de {amount} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.${MORE_ES}`,
+    en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Its bill cannot be changed or invoiced until then. Check the refund in the provider's own dashboard, and record the outcome it confirms.${MORE_EN}`,
+    es: `Una devolución con tarjeta de {amount:money} lleva más de una hora esperando a que el proveedor de pagos muestre qué pasó. Hasta entonces, su cuenta no se puede modificar ni facturar. Comprueba la devolución en el panel del proveedor y registra el resultado que confirme.${MORE_ES}`,
   },
   "payment.reconcile_unsettled": {
     en: `A check found {count} card payments that the card provider had not paid out.${MORE_EN}${NOT_RECHECKED_EN}`,

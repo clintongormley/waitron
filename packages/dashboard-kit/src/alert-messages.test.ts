@@ -8,6 +8,33 @@ registerAlertMessages({
     es: "ES rejected: {reason} (ES code {errorCode})",
   },
   "test.count": { en: "{count} payments", es: "{count} ES" },
+  "test.charged": {
+    en: "Charged {amount:money}, not {expected:money}; {count} tries",
+    es: "ES charged {amount:money}, ES not {expected:money}; {count} ES",
+  },
+});
+
+describe("a money placeholder", () => {
+  it("writes a decimal amount as euros, where the alert's language writes the sign", () => {
+    const params = { amount: "1279.50", expected: "9", count: "2.50" };
+    expect(alertMessage("test.charged", params, "en-GB")).toBe(
+      "Charged €1,279.50, not €9.00; 2.50 tries",
+    );
+    expect(alertMessage("test.charged", params, "es-ES")).toBe(
+      "ES charged 1279,50\u00a0€, ES not 9,00\u00a0€; 2.50 ES",
+    );
+    expect(alertMessage("test.charged", { amount: "-5.25" }, "en")).toContain("-€5.25");
+  });
+
+  it("shows a dash for a missing amount, and a value that is not a decimal as it is", () => {
+    expect(alertMessage("test.charged", { amount: null }, "en")).toBe("Charged —, not —; — tries");
+    expect(alertMessage("test.charged", { amount: "12,50", expected: 12.5 }, "en")).toBe(
+      "Charged 12,50, not 12.5; — tries",
+    );
+    expect(alertMessage("test.charged", { amount: "1.2.3", expected: ".5" }, "en")).toBe(
+      "Charged 1.2.3, not .5; — tries",
+    );
+  });
 });
 
 describe("alertMessage", () => {
