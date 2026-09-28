@@ -17,6 +17,9 @@ import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
 // The table remembers its filter in sessionStorage under its `viewKey`.
 beforeEach(() => sessionStorage.clear());
+// The column chooser remembers its choice in localStorage, which outlives a test.
+beforeEach(() => localStorage.removeItem("waitron.sections.table:columns"));
+afterEach(() => localStorage.removeItem("waitron.sections.table:columns"));
 beforeEach(() => history.replaceState(null, "", "/manage/sections"));
 
 /** The three names read differently (CLAUDE.md §3), so a surface showing the customer-facing or
@@ -421,6 +424,29 @@ it("opens the section a ?section= link names, once, and ignores an unknown one",
   history.replaceState(null, "", "/manage/sections?section=s-gone");
   const other = await mount();
   expect(modal(other, "editor").open).toBe(false);
+});
+
+it("offers every section column but the name and the actions in the column chooser, and remembers a hidden one", async () => {
+  const el = await mount();
+  await vi.waitFor(() => expect(table(el).shadowRoot.querySelector("tbody tr")).not.toBeNull());
+  const root = table(el).shadowRoot;
+  expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+  const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
+  expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
+    ["customerName", true],
+    ["members", true],
+    ["usedIn", true],
+  ]);
+  const headerTexts = () =>
+    [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+  expect(headerTexts()).toContain(t("sections.customer_name"));
+  boxes[0]!.checked = false;
+  boxes[0]!.dispatchEvent(new Event("change"));
+  await table(el).updateComplete;
+  expect(headerTexts()).not.toContain(t("sections.customer_name"));
+  expect(JSON.parse(localStorage.getItem("waitron.sections.table:columns")!)).toEqual({
+    customerName: false,
+  });
 });
 
 it("keeps the table's columns while the editor is typed in, and rebuilds them for a new language", async () => {

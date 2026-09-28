@@ -606,12 +606,14 @@ export class SectionsScreen extends LitElement {
       {
         key: "customerName",
         label: t("sections.customer_name"),
+        choosable: "shown",
         sortValue: ({ section }) => this.#customerName(section),
         cell: ({ section }) => this.#customerName(section),
       },
       {
         key: "members",
         label: t("sections.member_count"),
+        choosable: "shown",
         align: "end",
         sortValue: ({ section }) => section.members.length,
         // Without this the search would fall back to the count and match every section of that size.
@@ -621,6 +623,7 @@ export class SectionsScreen extends LitElement {
       {
         key: "usedIn",
         label: t("sections.used_in"),
+        choosable: "shown",
         sortValue: ({ section }) => usedInText(this.#usagesOf(section.id)),
         cell: ({ section }) => {
           const text = usedInText(this.#usagesOf(section.id));
@@ -680,6 +683,7 @@ export class SectionsScreen extends LitElement {
         searchLabel=${t("sections.search")}
         noMatchesMessage=${t("sections.no_matches")}
         viewKey="waitron.sections.table"
+        columnsLabel=${t("table.columns")}
         sortKey="name"
         sortDirection="ascending"
         initiallyCollapsed

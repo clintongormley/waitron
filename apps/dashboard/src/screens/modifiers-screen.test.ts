@@ -23,6 +23,13 @@ afterEach(() => setLocale("es-ES"));
 // Each tab's table remembers its sort and its status filter in sessionStorage under its own
 // `viewKey`, so a filter one test chooses would otherwise be restored into every later mount.
 beforeEach(() => sessionStorage.clear());
+// The column chooser remembers each tab's chosen columns in localStorage, which outlives a test.
+const columnKeys = [
+  "waitron.modifiers.extras.table:columns",
+  "waitron.modifiers.options.table:columns",
+];
+beforeEach(() => columnKeys.forEach((key) => localStorage.removeItem(key)));
+afterEach(() => columnKeys.forEach((key) => localStorage.removeItem(key)));
 // The screen reads and writes the chosen tab in the path, so every test starts from the screen's own
 // route rather than from wherever the previous file left the browser.
 beforeEach(() => history.replaceState(null, "", "/manage/modifiers"));
@@ -399,6 +406,37 @@ async function usedByText(el: ModifiersScreen, testId: string, name: string): Pr
   const index = found.columns.findIndex((column) => column.key === "usedBy");
   return row!.querySelectorAll("td")[index]!.textContent!.trim().replace(/\s+/g, " ");
 }
+
+describe("the column chooser", () => {
+  for (const [testId, kind, detail, detailLabel] of [
+    ["extra-lists", "extras", "items", "extras.items"],
+    ["option-lists", "options", "labels", "options.labels"],
+  ] as const) {
+    it(`offers every ${kind} column but the name and the actions, and remembers a hidden one`, async () => {
+      const el = await mount();
+      const found = table(el, testId);
+      await vi.waitFor(() => expect(found.shadowRoot.querySelector("tbody tr")).not.toBeNull());
+      const root = found.shadowRoot;
+      expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+      const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
+      expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
+        [detail, true],
+        ["usedBy", true],
+        ["status", true],
+      ]);
+      const headerTexts = () =>
+        [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+      expect(headerTexts()).toContain(t(detailLabel));
+      boxes[0]!.checked = false;
+      boxes[0]!.dispatchEvent(new Event("change"));
+      await found.updateComplete;
+      expect(headerTexts()).not.toContain(t(detailLabel));
+      expect(JSON.parse(localStorage.getItem(`waitron.modifiers.${kind}.table:columns`)!)).toEqual({
+        [detail]: false,
+      });
+    });
+  }
+});
 
 describe("in English", () => {
   beforeEach(() => setLocale("en"));

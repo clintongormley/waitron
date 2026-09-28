@@ -1481,6 +1481,38 @@ async function confirmMove(el: CategoriesScreen): Promise<void> {
   await el.updateComplete;
 }
 
+it("offers every category column but the name and the actions in the column chooser, the parent only in the flat view, and remembers a hidden one", async () => {
+  const { el } = await mount();
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const root = table.shadowRoot!;
+  const choices = () =>
+    [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
+      box.dataset.column,
+      box.checked,
+    ]);
+  expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+  expect(choices()).toEqual([["products", true]]);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="mode-flat"]')!.click();
+  await el.updateComplete;
+  await table.updateComplete;
+  expect(choices()).toEqual([
+    ["parent", true],
+    ["products", true],
+  ]);
+  const headerTexts = () =>
+    [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+  expect(headerTexts()).toContain(t("categories.parent"));
+  const box = root.querySelector<HTMLInputElement>('input[data-column="parent"]')!;
+  box.checked = false;
+  box.dispatchEvent(new Event("change"));
+  await table.updateComplete;
+  expect(headerTexts()).not.toContain(t("categories.parent"));
+  expect(JSON.parse(localStorage.getItem("waitron.categories.table:columns")!)).toEqual({
+    parent: false,
+  });
+});
+
 it("opens in the flat view when that was the view last chosen", async () => {
   localStorage.setItem("waitron.categories.mode", "flat");
   const { el } = await mount();

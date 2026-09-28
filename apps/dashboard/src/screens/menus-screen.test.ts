@@ -36,6 +36,9 @@ import { formatIsoMinute } from "../date-utils.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => sessionStorage.clear());
+// The list's column chooser remembers its choice in localStorage, which outlives a test.
+beforeEach(() => localStorage.removeItem("waitron.menus.table:columns"));
+afterEach(() => localStorage.removeItem("waitron.menus.table:columns"));
 beforeEach(() => history.replaceState(null, "", "/manage/menus"));
 
 const LUNCH_PATH = "/manage/menus/menu/menu-lunch/view/structure";
@@ -3014,6 +3017,27 @@ describe("publishing", () => {
     await vi.waitFor(() => expect(q(el, '[data-test="load-error"]')).toBeNull());
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown);
     expect(client.getMenuStatus).not.toHaveBeenCalled();
+  });
+
+  it("offers the status column, and neither the name nor the actions, in the list's column chooser, and remembers a hidden one", async () => {
+    const el = await mount();
+    const headerTexts = () =>
+      [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th));
+    await vi.waitFor(async () => {
+      await table(el).updateComplete;
+      expect(headerTexts()).toContain(t("menus.status"));
+    });
+    const root = table(el).shadowRoot;
+    expect(text(root.querySelector(".columns-trigger"))).toBe(t("table.columns"));
+    const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
+    expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([["status", true]]);
+    boxes[0]!.checked = false;
+    boxes[0]!.dispatchEvent(new Event("change"));
+    await table(el).updateComplete;
+    expect(headerTexts()).not.toContain(t("menus.status"));
+    expect(JSON.parse(localStorage.getItem("waitron.menus.table:columns")!)).toEqual({
+      status: false,
+    });
   });
 
   it("shows each menu's state under its name on a phone-width list, with no status column", async () => {

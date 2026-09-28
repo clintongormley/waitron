@@ -151,8 +151,18 @@ export class AlertsScreen extends LitElement {
   #openColumns(): DataTableColumn<AlertView>[] {
     return [
       { key: "alert", label: t("alerts.col_alert"), cell: (a) => this.#alertCell(a) },
-      { key: "area", label: t("alerts.col_area"), cell: (a) => areaLabel(a.area) },
-      { key: "since", label: t("alerts.col_since"), cell: (a) => formatAlertTime(a.since) },
+      {
+        key: "area",
+        label: t("alerts.col_area"),
+        choosable: "shown",
+        cell: (a) => areaLabel(a.area),
+      },
+      {
+        key: "since",
+        label: t("alerts.col_since"),
+        choosable: "shown",
+        cell: (a) => formatAlertTime(a.since),
+      },
       {
         key: "actions",
         label: t("alerts.col_actions"),
@@ -186,10 +196,16 @@ export class AlertsScreen extends LitElement {
   #handledColumns(): DataTableColumn<AlertView>[] {
     return [
       { key: "alert", label: t("alerts.col_alert"), cell: (a) => this.#alertCell(a) },
-      { key: "area", label: t("alerts.col_area"), cell: (a) => areaLabel(a.area) },
+      {
+        key: "area",
+        label: t("alerts.col_area"),
+        choosable: "shown",
+        cell: (a) => areaLabel(a.area),
+      },
       {
         key: "handled",
         label: t("alerts.col_handled"),
+        choosable: "shown",
         cell: (a) =>
           t("alerts.handled_by")
             .replace("{time}", formatAlertTime(a.handledAt ?? null))
@@ -229,6 +245,8 @@ export class AlertsScreen extends LitElement {
         <div slot="open">
           <wt-data-table
             data-test="open-alerts-table"
+            viewKey="waitron.alerts.open.table"
+            columnsLabel=${t("table.columns")}
             aria-label=${t("alerts.tab_open")}
             .rows=${this.open}
             .columns=${this.#openColumns()}
@@ -241,6 +259,8 @@ export class AlertsScreen extends LitElement {
         <div slot="handled">
           <wt-data-table
             data-test="handled-alerts-table"
+            viewKey="waitron.alerts.handled.table"
+            columnsLabel=${t("table.columns")}
             aria-label=${t("alerts.tab_handled")}
             .rows=${this.handled}
             .columns=${this.#handledColumns()}

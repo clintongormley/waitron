@@ -9,6 +9,9 @@ import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
 // The table remembers its sort in sessionStorage; a sort clicked by one test would reorder the next.
 beforeEach(() => sessionStorage.clear());
+// The column chooser remembers its choice in localStorage, which outlives a test.
+beforeEach(() => localStorage.removeItem("waitron.labels.table:columns"));
+afterEach(() => localStorage.removeItem("waitron.labels.table:columns"));
 afterEach(() => setLocale("es-ES"));
 
 const alcoholic: LabelSummary = { id: "l-alc", name: "Alcoholic", productCount: 3 };
@@ -69,6 +72,24 @@ function deferred<T>() {
   const promise = new Promise<T>((settle) => (resolve = settle));
   return { promise, resolve };
 }
+
+it("offers the product count, and neither the name nor the actions, in the column chooser, and remembers a hidden one", async () => {
+  const { el } = await mount();
+  const root = table(el).shadowRoot!;
+  expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+  const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
+  expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([["products", true]]);
+  const headerTexts = () =>
+    [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+  expect(headerTexts()).toContain(t("categories.products_modal"));
+  boxes[0]!.checked = false;
+  boxes[0]!.dispatchEvent(new Event("change"));
+  await table(el).updateComplete;
+  expect(headerTexts()).not.toContain(t("categories.products_modal"));
+  expect(JSON.parse(localStorage.getItem("waitron.labels.table:columns")!)).toEqual({
+    products: false,
+  });
+});
 
 it("lists every label by name with the number of products carrying it", async () => {
   const { el } = await mount();

@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
@@ -55,13 +55,24 @@ const flush = async (el: AlertsScreen) => {
 const rows = (el: AlertsScreen, test: string) =>
   el.shadowRoot!.querySelector(`[data-test=${test}]`)!.shadowRoot!.querySelectorAll("tbody tr");
 
+// Each table remembers its view in sessionStorage and its chosen columns in localStorage.
+const viewKeys = ["waitron.alerts.open.table", "waitron.alerts.handled.table"];
+function forgetViews() {
+  for (const key of viewKeys) {
+    sessionStorage.removeItem(key);
+    localStorage.removeItem(`${key}:columns`);
+  }
+}
+
 beforeEach(() => {
   setLocale("en-GB");
   history.replaceState(null, "", "/manage/alerts");
+  forgetViews();
 });
 afterEach(() => {
   cleanupWidgets();
   setLocale("es-ES");
+  forgetViews();
 });
 
 describe("dashboard-alerts-screen", () => {
@@ -74,6 +85,53 @@ describe("dashboard-alerts-screen", () => {
     );
     expect(location.pathname).toBe("/manage/alerts/view/open");
   });
+
+  for (const [test, viewKey, choices, hidden, hiddenLabel] of [
+    [
+      "open-alerts-table",
+      "waitron.alerts.open.table",
+      [
+        ["area", true],
+        ["since", true],
+      ],
+      "area",
+      "alerts.col_area",
+    ],
+    [
+      "handled-alerts-table",
+      "waitron.alerts.handled.table",
+      [
+        ["area", true],
+        ["handled", true],
+      ],
+      "handled",
+      "alerts.col_handled",
+    ],
+  ] as const) {
+    it(`offers every ${test} column but the alert's own and any actions column in the column chooser, and remembers a hidden one`, async () => {
+      const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      const table = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<boolean> }
+      >(`[data-test=${test}]`)!;
+      await table.updateComplete;
+      const root = table.shadowRoot!;
+      expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+      const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
+      expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual(choices);
+      const headerTexts = () =>
+        [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+      expect(headerTexts()).toContain(t(hiddenLabel));
+      const box = boxes.find((b) => b.dataset.column === hidden)!;
+      box.checked = false;
+      box.dispatchEvent(new Event("change"));
+      await table.updateComplete;
+      expect(headerTexts()).not.toContain(t(hiddenLabel));
+      expect(JSON.parse(localStorage.getItem(`${viewKey}:columns`)!)).toEqual({ [hidden]: false });
+    });
+  }
 
   it("switches to Handled and shows who handled it", async () => {
     const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", { api: stubApi() });

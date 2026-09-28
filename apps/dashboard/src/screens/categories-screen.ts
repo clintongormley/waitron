@@ -449,6 +449,7 @@ export class CategoriesScreen extends LitElement {
       {
         key: "parent",
         label: t("categories.parent"),
+        choosable: "shown",
         sortValue: (category) => this.#parentPath(category) ?? "",
         cell: (category) => this.#parentPath(category) ?? t("categories.no_parent"),
         filter: {
@@ -464,6 +465,7 @@ export class CategoriesScreen extends LitElement {
       {
         key: "products",
         label: t("categories.products_modal"),
+        choosable: "shown",
         sortValue: (category) => this.#mainCount(category),
         cell: (category) => this.#mainCount(category),
       },
@@ -710,6 +712,7 @@ export class CategoriesScreen extends LitElement {
         searchLabel=${t("categories.search")}
         noMatchesMessage=${t("categories.no_matches")}
         viewKey="waitron.categories.table"
+        columnsLabel=${t("table.columns")}
         sortKey="name"
         sortDirection="ascending"
         .rows=${this.categories}
