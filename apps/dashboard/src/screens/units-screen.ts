@@ -342,6 +342,7 @@ export class UnitsScreen extends LitElement {
       {
         key: "abbreviation",
         label: t("units.abbreviation"),
+        choosable: "shown",
         cell: (unit) => localizedName(unit.abbreviation),
         searchValue: (unit) => localizedName(unit.abbreviation),
         sortValue: (unit) => localizedName(unit.abbreviation),
@@ -349,6 +350,7 @@ export class UnitsScreen extends LitElement {
       {
         key: "precision",
         label: t("units.precision"),
+        choosable: "shown",
         cell: (unit) => this.#precisionLabel(unit.precision),
         sortValue: (unit) => unit.precision,
         filter: {
@@ -424,6 +426,7 @@ export class UnitsScreen extends LitElement {
         searchLabel=${t("units.search")}
         noMatchesMessage=${t("units.no_matches")}
         viewKey="waitron.units.table"
+        columnsLabel=${t("table.columns")}
         sortKey="name"
         sortDirection="ascending"
         .rows=${this.units}

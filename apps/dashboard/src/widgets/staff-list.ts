@@ -35,6 +35,7 @@ export class StaffList extends LitElement {
       },
       {
         key: "legalName",
+        choosable: "shown",
         label: t("staff.field_legal_name"),
         cell: (person) =>
           person.lastNames || person.firstNames
@@ -44,24 +45,28 @@ export class StaffList extends LitElement {
       },
       {
         key: "role",
+        choosable: "shown",
         label: t("staff.field_role"),
         cell: (person) => roleName(person.role),
         sortValue: (person) => roleName(person.role),
       },
       {
         key: "email",
+        choosable: "shown",
         label: t("staff.field_email"),
         cell: (person) => person.email ?? "—",
         sortValue: (person) => person.email ?? "",
       },
       {
         key: "telephone",
+        choosable: "shown",
         label: t("staff.field_telephone"),
         cell: (person) => person.telephone ?? "—",
         sortValue: (person) => person.telephone ?? "",
       },
       {
         key: "status",
+        choosable: "shown",
         label: t("staff.field_status"),
         cell: (person) => statusName(person.status),
         sortValue: (person) => statusName(person.status),
@@ -117,6 +122,8 @@ export class StaffList extends LitElement {
     return html`
       <wt-data-table
         aria-label=${t("staff.title")}
+        viewKey="waitron.staff.table"
+        columnsLabel=${t("table.columns")}
         .rows=${this.people}
         .columns=${this.#columns()}
         .rowKey=${(person: PersonSummary) => person.personId}

@@ -369,6 +369,14 @@ session storage. An entry applies only to a column that is choosable now, and on
 or `false` is ignored; blocked storage, malformed JSON or a stored list reads as nothing stored. A
 new `viewKey` restores the choice stored under it, or the defaults when there is none.
 
+Every list a dashboard screen or dashboard module shows as its main content with `wt-data-table`
+offers the chooser for every column except the one that names the row and the one holding the row's
+buttons, which are always shown. A column starts shown unless the screen has a reason to hide it
+(the menu Prices tab's combined price does); the table passes a translated `columnsLabel`
+(`table.columns` in the dashboard, the menu Prices tab's own `menu_prices.columns`, or the module's
+own key) and a `viewKey` of its own. A table inside a dialog or picker does not offer one, and a
+list whose only other column is its buttons (servers) has nothing to offer.
+
 In tree mode the table keeps a match's ancestor rows and tells each cell, via its second argument's
 `ancestorOnly`, whether the row is present only to hold a descendant's place — mute those with a
 `part` on the cell.

@@ -1232,6 +1232,7 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "host",
+        choosable: "shown",
         label: t("printers.agent_host"),
         cell: (a) =>
           html`${
@@ -1245,6 +1246,7 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "status",
+        choosable: "shown",
         label: t("printers.status"),
         cell: (a) =>
           html`<span data-test=${`agent-status-${a.id}`}
@@ -1263,6 +1265,7 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "lastSeen",
+        choosable: "shown",
         label: t("printers.last_seen"),
         sortValue: (a) => a.lastSeenAt,
         cell: (a) =>
@@ -1276,6 +1279,7 @@ export class PrintersScreen extends LitElement {
       <wt-data-table
         data-test="agents-table"
         viewKey="printers:agents"
+        columnsLabel=${t("table.columns")}
         aria-label=${t("printers.agents_title")}
         .rows=${this.agents}
         .columns=${columns}
@@ -1581,6 +1585,7 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "agent",
+        choosable: "shown",
         label: t("printers.last_seen_by"),
         cell: (p) =>
           html`<span data-test=${`printer-agent-${p.id}`}>
@@ -1589,12 +1594,14 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "pending",
+        choosable: "shown",
         label: t("printers.pending_jobs"),
         sortValue: (p) => p.pendingJobs,
         cell: (p) => p.pendingJobs,
       },
       {
         key: "status",
+        choosable: "shown",
         label: t("printers.status"),
         cell: (p) => (p.active ? t("printers.status_active") : t("printers.status_inactive")),
         filter: {
@@ -1610,6 +1617,7 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "lastPrint",
+        choosable: "shown",
         label: t("printers.last_print"),
         sortValue: (p) => p.lastPrintAt,
         cell: (p) => this.#timestamp(p.lastPrintAt),
@@ -1620,6 +1628,7 @@ export class PrintersScreen extends LitElement {
       <wt-data-table
         data-test="printers-table"
         viewKey="printers:table"
+        columnsLabel=${t("table.columns")}
         aria-label=${t("printers.list_title")}
         .rows=${this.printers}
         .columns=${columns}
@@ -1673,6 +1682,7 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "status",
+        choosable: "shown",
         label: t("printers.status"),
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
@@ -1681,18 +1691,21 @@ export class PrintersScreen extends LitElement {
       },
       {
         key: "attempts",
+        choosable: "shown",
         label: t("printers.job_attempts"),
         sortValue: (j) => j.attempts,
         cell: (j) => html`<span data-test=${`job-attempts-${j.id}`}>${j.attempts}</span>`,
       },
       {
         key: "queued",
+        choosable: "shown",
         label: t("printers.queued_at"),
         sortValue: (j) => j.createdAt,
         cell: (j) => this.#timestamp(j.createdAt),
       },
       {
         key: "delivered",
+        choosable: "shown",
         label: t("printers.delivered_at"),
         sortValue: (j) => j.deliveredAt,
         cell: (j) => this.#timestamp(j.deliveredAt),
@@ -1721,6 +1734,8 @@ export class PrintersScreen extends LitElement {
       <p class="hint">${t("printers.jobs_limit")}</p>
       <wt-data-table
         data-test="jobs-table"
+        viewKey="printers:jobs"
+        columnsLabel=${t("table.columns")}
         aria-label=${t("printers.jobs_title")}
         .rows=${this.jobs}
         .columns=${columns}

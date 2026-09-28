@@ -523,16 +523,19 @@ export class AdjustmentReasonsScreen extends LitElement {
       {
         key: "actions",
         label: t("adjustments.column.actions"),
+        choosable: "shown",
         cell: (reason) => this.#lines(reason.actions.map((action) => actionName(action))),
       },
       {
         key: "limits",
         label: t("adjustments.column.limits"),
+        choosable: "shown",
         cell: (reason) => this.#lines(this.#limits(reason)),
       },
       {
         key: "roles",
         label: t("adjustments.column.roles"),
+        choosable: "shown",
         cell: (reason) =>
           this.#lines([
             roleName(reason.applyRole),
@@ -542,6 +545,7 @@ export class AdjustmentReasonsScreen extends LitElement {
       {
         key: "status",
         label: t("adjustments.column.status"),
+        choosable: "shown",
         cell: (reason) => t(reason.active ? "adjustments.active" : "adjustments.inactive"),
         filter: {
           label: t("adjustments.column.status"),
@@ -774,6 +778,8 @@ export class AdjustmentReasonsScreen extends LitElement {
           ? html`<wt-data-table
               data-test="reasons"
               aria-label=${t("adjustments.title")}
+              viewKey="waitron.adjustments.reasons.table"
+              columnsLabel=${t("adjustments.columns")}
               .rows=${this.reasons}
               .columns=${this.#columns()}
               .rowKey=${(reason: AdjustmentReason) => reason.id}

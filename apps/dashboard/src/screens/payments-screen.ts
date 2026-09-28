@@ -1135,18 +1135,21 @@ export class PaymentsScreen extends LitElement {
       },
       {
         key: "provider",
+        choosable: "shown",
         label: t("payments.reader_col_provider"),
         cell: (reader) => this.#providerName(reader.provider),
         sortValue: (reader) => this.#providerName(reader.provider),
       },
       {
         key: "status",
+        choosable: "shown",
         label: t("payments.reader_col_status"),
         cell: (reader) =>
           html`<span data-test="reader-status-${reader.id}">${this.#statusText(reader)}</span>`,
       },
       {
         key: "battery",
+        choosable: "shown",
         label: t("payments.reader_col_battery"),
         cell: (reader) => {
           const status = this.statuses.get(reader.id);
@@ -1158,6 +1161,7 @@ export class PaymentsScreen extends LitElement {
       },
       {
         key: "deviceCount",
+        choosable: "shown",
         label: t("payments.reader_col_default_count"),
         align: "end",
         cell: (reader) => String(reader.deviceCount),
@@ -1442,6 +1446,8 @@ export class PaymentsScreen extends LitElement {
       </div>
       <wt-data-table
         aria-label=${t("payments.readers_heading")}
+        viewKey="waitron.payments.readers.table"
+        columnsLabel=${t("table.columns")}
         .rows=${(this.readers ?? []).filter((reader) => this.readerFilter === "all" || reader.active === (this.readerFilter === "active"))}
         .columns=${this.#readerColumns()}
         .rowKey=${(reader: ReaderRow) => reader.id}

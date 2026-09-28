@@ -11,6 +11,9 @@ afterEach(cleanupWidgets);
 // The table remembers its sort and precision filter in sessionStorage under waitron.units.table; a
 // value left by an earlier test would make the first-visit assertions order-dependent.
 beforeEach(() => sessionStorage.clear());
+// The column chooser remembers its choice in localStorage, which outlives a test.
+beforeEach(() => localStorage.removeItem("waitron.units.table:columns"));
+afterEach(() => localStorage.removeItem("waitron.units.table:columns"));
 // Some tests pin the reader locale so the precision marker or a translated string can be asserted;
 // restore the file's default (es-ES) afterwards so later tests are unaffected.
 afterEach(() => setLocale("es-ES"));
@@ -208,6 +211,30 @@ describe("units-screen", () => {
     expect(table.sortDirection).toBe("descending");
     // The stored precision filter keeps only the precision-3 unit.
     expect(listedKeys(el)).toEqual(["u2"]);
+  });
+
+  it("offers every column but the unit's name and its actions in the column chooser, and remembers a hidden one", async () => {
+    const el = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const root = table.shadowRoot!;
+    expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+    const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
+    expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([
+      ["abbreviation", true],
+      ["precision", true],
+    ]);
+    const headerTexts = () =>
+      [...root.querySelectorAll("thead th")].map((th) => th.textContent!.trim());
+    expect(headerTexts()).toContain(t("units.abbreviation"));
+    const box = boxes[0]!;
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    await table.updateComplete;
+    expect(headerTexts()).not.toContain(t("units.abbreviation"));
+    expect(JSON.parse(localStorage.getItem("waitron.units.table:columns")!)).toEqual({
+      abbreviation: false,
+    });
   });
 
   it("left-aligns the row-action buttons", async () => {

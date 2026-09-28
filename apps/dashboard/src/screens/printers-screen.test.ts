@@ -19,8 +19,10 @@ import { LiveData } from "@waitron/dashboard-kit";
 beforeEach(() => {
   localStorage.removeItem("printers:agents:columns");
   localStorage.removeItem("printers:table:columns");
+  localStorage.removeItem("printers:jobs:columns");
   sessionStorage.removeItem("printers:agents");
   sessionStorage.removeItem("printers:table");
+  sessionStorage.removeItem("printers:jobs");
 });
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
@@ -807,6 +809,65 @@ describe("printers-screen", () => {
     expect(sessionStorage.getItem("printers:agents")).toContain("disabled");
     expect(sessionStorage.getItem("printers:table")).toBeNull();
   });
+
+  it.each([
+    {
+      tab: "agents",
+      table: "agents-table",
+      viewKey: "printers:agents",
+      choices: ["host", "status", "lastSeen"],
+      hide: "host",
+      label: () => t("printers.agent_host"),
+    },
+    {
+      tab: "printers",
+      table: "printers-table",
+      viewKey: "printers:table",
+      choices: ["agent", "pending", "status", "lastPrint"],
+      hide: "pending",
+      label: () => t("printers.pending_jobs"),
+    },
+    {
+      tab: "queue",
+      table: "jobs-table",
+      viewKey: "printers:jobs",
+      choices: ["status", "attempts", "queued", "delivered"],
+      hide: "attempts",
+      label: () => t("printers.job_attempts"),
+    },
+  ])(
+    "offers the $tab table's columns but the name and the actions in a translated column chooser, and remembers a hidden one",
+    async ({ tab, table: testId, viewKey, choices, hide, label }) => {
+      const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      await selectTab(el, tab);
+      const table = q(el, `[data-test="${testId}"]`) as HTMLElement & {
+        updateComplete: Promise<unknown>;
+      };
+      const root = table.shadowRoot!;
+      expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+      expect(
+        [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
+          box.dataset.column,
+          box.checked,
+        ]),
+      ).toEqual(choices.map((key) => [key, true]));
+      const headerLabels = () =>
+        [...root.querySelectorAll("thead th")].map((th) =>
+          th.textContent!.replace(/[▲▼]/g, "").trim(),
+        );
+      const before = headerLabels();
+      expect(before).toContain(label());
+      const box = root.querySelector<HTMLInputElement>(`input[data-column="${hide}"]`)!;
+      box.checked = false;
+      box.dispatchEvent(new Event("change"));
+      await table.updateComplete;
+      expect(headerLabels()).toEqual(before.filter((text) => text !== label()));
+      expect(JSON.parse(localStorage.getItem(`${viewKey}:columns`)!)).toEqual({ [hide]: false });
+    },
+  );
 
   it("renders each printer's transport and derived connection mode", async () => {
     const api = stubApi();

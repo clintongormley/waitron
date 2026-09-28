@@ -1440,6 +1440,7 @@ export class MenusScreen extends LitElement {
             {
               key: "status",
               label: t("menus.status"),
+              choosable: "shown" as const,
               sortValue: (menu: MenuRow) =>
                 STATUS_ORDER.indexOf(
                   typeof menu.status === "string" ? menu.status : menu.status.state,
@@ -1613,6 +1614,7 @@ export class MenusScreen extends LitElement {
                   class=${this.narrow ? "narrow" : ""}
                   aria-label=${t("menus.title")}
                   viewKey="waitron.menus.table"
+                  columnsLabel=${t("table.columns")}
                   sortKey="name"
                   sortDirection="ascending"
                   .rows=${this.#rows}

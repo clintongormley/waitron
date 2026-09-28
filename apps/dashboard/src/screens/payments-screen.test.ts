@@ -17,6 +17,10 @@ import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
 beforeEach(() => setLocale("en"));
+beforeEach(() => {
+  localStorage.removeItem("waitron.payments.readers.table:columns");
+  sessionStorage.removeItem("waitron.payments.readers.table");
+});
 afterEach(cleanupWidgets);
 
 registerCatalogue({
@@ -166,6 +170,43 @@ describe("payments-screen", () => {
     expect(api.readerStatus).toHaveBeenCalledWith("r-1");
     expect(qCell(el, "[data-test=reader-status-r-1]")?.textContent).toContain("Online");
     expect(qCell(el, "[data-test=disable-r-1]")).not.toBeNull();
+  });
+
+  it("offers the reader columns but the name and the actions in a translated column chooser, and remembers a hidden one", async () => {
+    // In Spanish, because the table's own default label is the English "Columns".
+    setLocale("es-ES");
+    const { el } = await mount();
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    const root = table.shadowRoot!;
+    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe("Columnas");
+    expect(
+      [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
+        box.dataset.column,
+        box.checked,
+      ]),
+    ).toEqual([
+      ["provider", true],
+      ["status", true],
+      ["battery", true],
+      ["deviceCount", true],
+    ]);
+    const headerLabels = () =>
+      [...root.querySelectorAll("thead th")].map((th) =>
+        th.textContent!.replace(/[▲▼]/g, "").trim(),
+      );
+    const before = headerLabels();
+    expect(before).toContain(t("payments.reader_col_provider"));
+    const box = root.querySelector<HTMLInputElement>('input[data-column="provider"]')!;
+    box.checked = false;
+    box.dispatchEvent(new Event("change"));
+    await table.updateComplete;
+    expect(headerLabels()).toEqual(
+      before.filter((text) => text !== t("payments.reader_col_provider")),
+    );
+    expect(JSON.parse(localStorage.getItem("waitron.payments.readers.table:columns")!)).toEqual({
+      provider: false,
+    });
   });
 
   it("disables a reader locally from its row menu and reloads", async () => {

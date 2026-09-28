@@ -146,6 +146,7 @@ export class LabelsPanel extends LitElement {
       {
         key: "products",
         label: t("categories.products_modal"),
+        choosable: "shown",
         cell: (label) => String(label.productCount),
         sortValue: (label) => label.productCount,
       },
@@ -204,6 +205,7 @@ export class LabelsPanel extends LitElement {
         searchLabel=${t("labels.search")}
         noMatchesMessage=${t("labels.no_matches")}
         viewKey="waitron.labels.table"
+        columnsLabel=${t("table.columns")}
         sortKey="name"
         sortDirection="ascending"
         .rows=${this.labels}

@@ -390,6 +390,7 @@ export class ModifiersScreen extends LitElement {
         ? {
             key: "items",
             label: t("extras.items"),
+            choosable: "shown",
             searchValue: (list) => this.#itemNames(list as ExtraList),
             sortValue: (list) => this.#itemNames(list as ExtraList),
             cell: (list) => this.#itemNames(list as ExtraList),
@@ -397,6 +398,7 @@ export class ModifiersScreen extends LitElement {
         : {
             key: "labels",
             label: t("options.labels"),
+            choosable: "shown",
             searchValue: (list) => this.#labelNames(list as OptionList),
             sortValue: (list) => this.#labelNames(list as OptionList),
             cell: (list) => this.#labelNames(list as OptionList),
@@ -414,6 +416,7 @@ export class ModifiersScreen extends LitElement {
       {
         key: "usedBy",
         label: t("modifiers.used_by"),
+        choosable: "shown",
         searchValue: (list) => this.#usageText(kind, list),
         sortValue: (list) => this.#usageTotal(kind, list),
         cell: (list) => this.#usageCell(kind, list),
@@ -421,6 +424,7 @@ export class ModifiersScreen extends LitElement {
       {
         key: "status",
         label: t(`${kind}.status`),
+        choosable: "shown",
         sortValue: (list) => this.#statusText(kind, list),
         cell: (list) => this.#statusText(kind, list),
         filter: {
@@ -615,6 +619,7 @@ export class ModifiersScreen extends LitElement {
         searchLabel=${t(`${kind}.search`)}
         noMatchesMessage=${t(`${kind}.no_matches`)}
         viewKey=${`waitron.modifiers.${kind}.table`}
+        columnsLabel=${t("table.columns")}
         sortKey="name"
         sortDirection="ascending"
         .rows=${this.#lists(kind)}
