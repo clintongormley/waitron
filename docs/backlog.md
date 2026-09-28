@@ -3355,9 +3355,9 @@ approved.
   sets printed the same as before; each set generated from nothing gave the same SQL and snapshots
   before and after the override (ids and timestamps aside); and the loader itself still runs a
   TypeScript file on esbuild 0.25.12. A full Stryker run over `packages/shared` gave the same 990
-  mutants with the same results on the old and new lockfile. The alerts are expected to close once
-  Dependabot rescans `main` after this change merges; that has not been seen yet. To check, rerun
-  `gh api repos/clintongormley/waitron/dependabot/alerts?state=open`. The `versioning-strategy`
+  mutants with the same results on the old and new lockfile. After the merge, `gh api
+  repos/clintongormley/waitron/dependabot/alerts?state=open` returned none, and all 15 alerts read
+  `fixed`, stamped 2026-09-28 00:33 UTC. The `versioning-strategy`
   question is recorded under #432's loose ends in Track C.
 - **CodeQL's three smaller findings — DONE (lane A's A106, run by lane C, **PR #792**,
   2026-09-28).** `js/biased-cryptographic-random` (alert 34): the demo company tax id in
