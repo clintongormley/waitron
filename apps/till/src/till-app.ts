@@ -380,8 +380,8 @@ type CounterError =
   | { lateChange: LateChange; also?: StringKey };
 
 /** A read of the party's bills: the party it was for (null when there was none), the bills (null
- * when the read failed), and its generation, current until a later read starts or the table is
- * left. */
+ * when the read failed), and its generation, current until a later read starts or
+ * {@link #leaveTable} closes the finished table. */
 interface ReadBills {
   read: number;
   visitId: string | null;
@@ -2591,11 +2591,11 @@ export class TillApp extends LitElement {
    * failure already is. With the floor unread, what the party still owes is taken from the bills
    * just read, which is the sum the floor would have answered (`readBillsOfVisits` in
    * `apps/server/src/visits.ts` feeds both). When the order is no longer the open one once the floor
-   * answers, or a later re-read has started, nothing more is read. When the waiter has left the
-   * order since `visit` ({@link #hasLeftOrder}), or a later re-read has started, what the party owes
-   * is not taken from these bills and nothing is said. When only a later bills read has started, the
-   * bills are not used, and a failed floor read is still said unless the party shown has been
-   * replaced since, as a reload taking it from a later floor read does. */
+   * answers, or a later re-read has started, nothing more is read or said. When the waiter has left
+   * the order since `visit` ({@link #hasLeftOrder}), or a later re-read has started, what the party
+   * owes is not taken from these bills and nothing is said. When only a later bills read has
+   * started, the bills are not used, and a failed floor read is still said unless the party shown
+   * has been replaced since, as a reload taking it from a later floor read does. */
   async #rereadAmounts(orderId: string, visit: number): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
@@ -3266,9 +3266,9 @@ export class TillApp extends LitElement {
    * too, and one because the kitchen has started the line offers to cancel it. A change that got
    * no answer also reads the order, its bills and what the party owes again.
    * When the order is no longer the open one, or {@link #orderVisit} says the waiter started leaving
-   * it and did not come back to it, a refusal changes nothing on screen but the message, which names
-   * the line, and its table while the floor lists it, because the waiter may believe a note (an
-   * allergy, say) was saved. Paying the tab and a server switch take the order off screen without
+   * it and did not come back to it, a refusal or a change that got no answer changes nothing on
+   * screen but the message, which names the line, and its table while the floor lists it, because
+   * the waiter may believe a note (an allergy, say) was saved. Paying the tab and a server switch take the order off screen without
    * that counter moving.
    */
   async #onChangeLine(event: Event): Promise<void> {
