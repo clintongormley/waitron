@@ -932,6 +932,56 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(banner(el)).toBeNull();
   });
 
+  it("says so when the floor cannot be read after a Change and a refused Finish reads the bills first", async () => {
+    const { el } = await mountApp({
+      ...cheeseServer(async () => ({ revision: 1, visit: { id: "v1", revision: 4 } })),
+      finishTable: vi.fn().mockRejectedValue({ code: "visit.bill_outstanding" }),
+    });
+    const order = await openMesa(el);
+    vi.mocked(api.getTablesState).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    let answerBills!: (bills: VisitBill[]) => void;
+    vi.mocked(api.getVisitBills).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answerBills = resolve;
+        }),
+    );
+    emit(order, "change-line", cheese);
+    await flush(el);
+    emit(tableOrder(el)!, "finish-table", {});
+    await flush(el);
+    expect(tableOrder(el)!.finishRefused).toBe(true);
+
+    answerBills([{ ...tabBill, total: "15.50", outstanding: "15.50" }, checkBill]);
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
+  });
+
+  it("a cancel answering once the waiter is back on the floor, with the floor unread, says nothing", async () => {
+    let answerVoid!: (answer: { visit: { id: string; revision: number } }) => void;
+    const { el } = await mountApp({
+      voidLine: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            answerVoid = resolve;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "void-line", { lineNo: 1 });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    expect(floor(el)).not.toBeNull();
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    answerVoid({ visit: { id: "v1", revision: 4 } });
+    await flush(el);
+
+    expect(banner(el)).toBeNull();
+  });
+
   it("prints a copy of a paid bill's receipt", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);

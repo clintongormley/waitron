@@ -828,7 +828,8 @@ export class TillApp extends LitElement {
   #tabLinesRead = 0;
   /** The same for the party's bills. */
   #visitBillsRead = 0;
-  /** Identifies the latest {@link #rereadAmounts}. */
+  /** Identifies the latest {@link #rereadAmounts}, so an older re-read cannot overwrite a newer one's
+   * figures or warn. */
   #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
@@ -2591,19 +2592,22 @@ export class TillApp extends LitElement {
    * just read, which is the sum the floor would have answered (`readBillsOfVisits` in
    * `apps/server/src/visits.ts` feeds both). When the order is no longer the open one once the floor
    * answers, or a later re-read has started, nothing more is read. When the waiter has left the
-   * order since `visit` ({@link #hasLeftOrder}), or a later re-read or bills read has started, what
-   * the party owes is not taken from these bills and nothing is said. */
+   * order since `visit` ({@link #hasLeftOrder}), or a later re-read has started, what the party owes
+   * is not taken from these bills and nothing is said. When only a later bills read has started, the
+   * bills are not used, and a failed floor read is still said unless the party shown has been
+   * replaced since, as a reload taking it from a later floor read does. */
   async #rereadAmounts(orderId: string, visit: number): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
     if (this.activeTabId !== orderId || reread !== this.#amountsReread) return;
+    const party = this.orderParty;
     const [, bills] = await this.#loadLinesAndBills();
-    if (
-      this.#hasLeftOrder(orderId, visit) ||
-      reread !== this.#amountsReread ||
-      bills.read !== this.#visitBillsRead
-    )
+    if (this.#hasLeftOrder(orderId, visit) || reread !== this.#amountsReread) return;
+    if (bills.read !== this.#visitBillsRead) {
+      if (!floorRead && this.orderParty === party && this.errorKey === undefined)
+        this.errorKey = "table.reread_failed";
       return;
+    }
     if (!floorRead && bills.bills !== null && this.orderParty?.id === bills.visitId) {
       const outstanding = sumDecimals(bills.bills.map((bill) => decimal(bill.outstanding)));
       this.orderParty = {
