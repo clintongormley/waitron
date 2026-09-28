@@ -90,7 +90,7 @@ signed, encrypted daily snapshots and uploads them to Cloud; the setup wizard gu
 replacement through Cloud owner approval of one verified snapshot for a test venue; and the restored
 test-server Cloud replacement path has landed (#638). A stopped replacement stays stopped when
 `cloud-connection.json` is lost, because Stop access also records the stop in
-`cloud-replacement.json`, unless that file cannot be read (see Open). Observations are synthetic
+`cloud-replacement.json` (#808), unless that file cannot be read (see Open). Observations are synthetic
 until service adapters exist. Cloud owns the two-server WireGuard/HAProxy proof, bot gate, DNS
 override, gateway replacement and revocation.
 
@@ -107,8 +107,8 @@ Open:
 - A stop made while `cloud-replacement.json` is unreadable is not recorded in it. If that file is
   later repaired and `cloud-connection.json` lost, the next start restores the connection without
   the stop and the next check sends `renew`, so a stop Cloud had not yet heard is lost (reproduced
-  by the review of lane C's C29, 2026-09-28). Owner to choose: refuse Stop access while the replacement file is unreadable, or
-  record the stop somewhere that survives the repair.
+  by the review of lane C's C29, #808, 2026-09-28). Owner to choose: refuse Stop access while the
+  replacement file is unreadable, or record the stop somewhere that survives the repair.
 
 The Litestream stream's sealed-state restore and activation still need integration with Cloud
 storage and owner recovery. Connected does
