@@ -3735,6 +3735,12 @@ visible at all. That distinction is exactly what the new `CLAUDE.md` §4 rule is
 itself is not named there. **Next action:** name it and its hedge on that rule's line, whenever
 `CLAUDE.md` is next opened for a PR.
 
+**The mode screen's certificate note** (C40, #833, 2026-09-29): it now shows only when the wizard
+skipped the connection question, because the server offered no certificate authority to download,
+and reads "If your browser shows a certificate warning, open certificate help". **Open, the owner's
+call:** on that skipped path, ask the connection question anyway instead of showing the note (the
+Codex review's alternative) — it changes #330's design, so it was not taken.
+
 ### B2. Backups that leave the box
 
 - **Guided Cloud snapshot recovery for test venues is built.** Cloud approval alone does not
