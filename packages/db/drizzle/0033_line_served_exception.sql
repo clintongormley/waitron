@@ -3,7 +3,8 @@
 -- its food reaches the table, so a line on an order that is no longer open may still record how much
 -- of it was served. Such an update must change `served_quantity` or `served_at` and nothing else, so
 -- the list names every other column of `working_order_lines`. A column added to
--- `working_order_lines` goes into this list too.
+-- `working_order_lines` goes into this list too. Unlike `0027`'s, the rule reads the order a line
+-- leaves as well as the one it lands on, so a line moves only from an open order to an open order.
 DROP TRIGGER working_order_lines_require_open_parent_update;
 --> statement-breakpoint
 CREATE TRIGGER working_order_lines_require_open_parent_update
@@ -12,7 +13,10 @@ FOR EACH ROW
 BEGIN
   SELECT raise(abort, 'lines may only be written while the order is open')
   WHERE NOT (
-    exists (SELECT 1 FROM working_orders WHERE id = new.working_order_id AND status = 'open')
+    (
+      exists (SELECT 1 FROM working_orders WHERE id = new.working_order_id AND status = 'open')
+      AND exists (SELECT 1 FROM working_orders WHERE id = old.working_order_id AND status = 'open')
+    )
     OR (
       exists (SELECT 1 FROM working_orders WHERE id = old.working_order_id)
       AND NOT (new.served_quantity IS old.served_quantity AND new.served_at IS old.served_at)

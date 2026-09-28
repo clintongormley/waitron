@@ -45,7 +45,8 @@ import {
  * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql` and again by
  * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
  * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
- * with its served exception, by `packages/db/drizzle/0033_line_served_exception.sql`. The one trigger that ACTS rather
+ * with its served exception and a refusal to move a line off an order that is not open, by
+ * `packages/db/drizzle/0033_line_served_exception.sql`. The one trigger that ACTS rather
  * than refuses is `visits_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`):
  * a table's service status comes off when the party's visit leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
@@ -399,8 +400,10 @@ function seed(connection) {
     line("line-served-settled", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-frozen", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-unchanged", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
+    line("line-served-reparent", "wo-served-settled", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-orphan", "wo-served-orphan", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-open", "wo-served-open", '{"es":"Plato","ca":"Plat"}'),
+    line("line-open-moves", "wo-served-open", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-relocale", "wo-served-relocale", '{"es":"Plato","ca":"Plat"}'),
     `update working_orders set status = 'placed' where id = 'wo-served-placed'`,
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
@@ -778,6 +781,33 @@ describe("working_order_lines_require_open_parent_update's served exception", ()
           `where id = 'line-served-relocale'`,
       ),
     ).toBe(LOCALES_REFUSAL);
+  });
+});
+
+describe("working_order_lines_require_open_parent_update moving a line between orders", () => {
+  it("refuses moving a settled order's line onto an open order, alone or with other changes", () => {
+    for (const also of [
+      "",
+      ", name = 'changed', unit_price_gross = 1",
+      ", served_quantity = 1000",
+    ]) {
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set working_order_id = 'wo-open'${also} ` +
+            `where id = 'line-served-reparent'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    }
+  });
+
+  it("accepts moving a line from one open order to another", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set working_order_id = 'wo-open' where id = 'line-open-moves'`,
+      ),
+    ).toBeUndefined();
   });
 });
 
