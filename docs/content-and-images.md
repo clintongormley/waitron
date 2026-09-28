@@ -24,7 +24,7 @@ remain visible where the translation is still missing.
 Required fields need text in the default language. Other translations can wait. To change the
 default to English, first complete the required English translations and image names.
 If the change is refused, check your products, modifiers, sections and image metadata for
-missing translations. Sections are edited in **Products and recipes**, **Sections**.
+missing translations. Sections are edited in **Products and menus**, **Sections**.
 
 A product's and a variant's customer-facing name is the exception, because it is optional: leave it
 empty in every language and Waitron falls back to the staff name, so it never blocks the change. Fill
@@ -32,7 +32,7 @@ it in for Spanish and leave English blank, though, and that *is* a missing trans
 meant to translate it — so it does hold the change up until you finish it or clear it. A reusable
 section's customer names work the same way: none at all never blocks the change, but a section with
 some names and none in the new default language does. Edit a reusable section's customer names in
-**Products and recipes**, **Sections**.
+**Products and menus**, **Sections**.
 
 Removing an additional language hides its ordinary translation fields but keeps the saved text.
 Add the language again to resume using those translations. You cannot remove the default language
@@ -98,7 +98,7 @@ To remove the photograph itself, choose **Delete** in the library and confirm. I
 product variant, category or section still uses it, deletion is blocked. You see links to those
 products, including inactive products, to those categories, and to those sections, a section
 shown by its internal name. Remove the photograph from each of them before trying deletion again. A
-section's link opens its editor in **Products and recipes**, **Sections**, where **Remove image**
+section's link opens its editor in **Products and menus**, **Sections**, where **Remove image**
 clears it when you save the section.
 
 A published menu also holds every photograph its last publish included, even after you remove the
