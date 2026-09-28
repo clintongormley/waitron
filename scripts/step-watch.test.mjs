@@ -1,37 +1,37 @@
 import { setTimeout } from "node:timers";
 import { describe, expect, it } from "vitest";
-import { createStepWatch, withDeadline } from "./step-watch.mjs";
+import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
 function clock(...readings) {
   return () => readings.shift();
 }
 
 describe("createStepWatch", () => {
-  it("returns each step's value and lists every step with its duration", async () => {
+  it("returns each phase's value and lists every phase with its duration", async () => {
     const watch = createStepWatch({ now: clock(0, 40, 100, 350) });
 
-    expect(await watch.step("first", async () => "one")).toBe("one");
-    expect(await watch.step("second", () => "two")).toBe("two");
+    expect(await watch.phase("first", async () => "one")).toBe("one");
+    expect(await watch.phase("second", () => "two")).toBe("two");
 
     expect(watch.summary()).toBe("first: 40 ms\nsecond: 250 ms");
   });
 
-  it("lists only the slowest steps, slowest first, under their total, when given a limit", async () => {
+  it("lists only the slowest phases, slowest first, under their total, when given a limit", async () => {
     const watch = createStepWatch({ now: clock(0, 30, 30, 40, 40, 90) });
-    await watch.step("middling", () => undefined);
-    await watch.step("quick", () => undefined);
-    await watch.step("slow", () => undefined);
+    await watch.phase("middling", () => undefined);
+    await watch.phase("quick", () => undefined);
+    await watch.phase("slow", () => undefined);
 
     expect(watch.summary(2)).toBe(
-      "3 steps, 90 ms in all; the slowest:\nslow: 50 ms\nmiddling: 30 ms",
+      "3 phases, 90 ms in all; the slowest:\nslow: 50 ms\nmiddling: 30 ms",
     );
   });
 
-  it("records a step that throws, and lets the error through", async () => {
+  it("records a phase that throws, and lets the error through", async () => {
     const watch = createStepWatch({ now: clock(0, 7) });
 
     await expect(
-      watch.step("refused", async () => {
+      watch.phase("refused", async () => {
         throw new Error("no such table");
       }),
     ).rejects.toThrow("no such table");
@@ -39,60 +39,60 @@ describe("createStepWatch", () => {
     expect(watch.summary()).toBe("refused: 7 ms");
   });
 
-  it("names the step still running, how long it has run and what the process waits on", async () => {
+  it("names the phase still running, how long it has run and the process's active resources", async () => {
     const watch = createStepWatch({
       now: clock(0, 5, 10, 1510),
       resources: () => ["Timeout", "FSReqCallback"],
     });
-    await watch.step("done", () => undefined);
-    const pending = watch.step("stuck", () => new Promise(() => {}));
+    await watch.phase("done", () => undefined);
+    const pending = watch.phase("stuck", () => new Promise(() => {}));
 
     expect(watch.stalled()).toBe(
-      "Stalled in step stuck after 1500 ms. Waiting on: Timeout, FSReqCallback.\nSteps finished before it:\ndone: 5 ms",
+      "Stalled in phase stuck after 1500 ms. Active resources: Timeout, FSReqCallback.\nPhases finished before it:\ndone: 5 ms",
     );
     void pending;
   });
 
-  it("says when no step was running", () => {
+  it("says when no phase was running", () => {
     const watch = createStepWatch({ now: clock(), resources: () => [] });
 
     expect(watch.stalled()).toBe(
-      "Stalled between steps. Waiting on: nothing.\nSteps finished before it:\n(none)",
+      "Stalled between phases. Active resources: none.\nPhases finished before it:\n(none)",
     );
   });
 
-  it("does not blame the last finished step for a stall after it", async () => {
+  it("does not blame the last finished phase for a stall after it", async () => {
     const watch = createStepWatch({ now: clock(0, 4), resources: () => [] });
-    await watch.step("finished", () => undefined);
+    await watch.phase("finished", () => undefined);
 
     expect(watch.stalled()).toBe(
-      "Stalled between steps. Waiting on: nothing.\nSteps finished before it:\nfinished: 4 ms",
+      "Stalled between phases. Active resources: none.\nPhases finished before it:\nfinished: 4 ms",
     );
   });
 
   it("reads the real clock and the process's active resources by default", async () => {
     const watch = createStepWatch();
-    const pending = watch.step(
+    const pending = watch.phase(
       "waiting on a timer",
       () => new Promise((resolve) => setTimeout(resolve, 50)),
     );
 
     expect(watch.stalled()).toMatch(
-      /^Stalled in step waiting on a timer after \d+ ms\. Waiting on: .*Timeout/,
+      /^Stalled in phase waiting on a timer after \d+ ms\. Active resources: .*Timeout/,
     );
     await pending;
     expect(watch.summary()).toMatch(/^waiting on a timer: \d+ ms$/);
   });
 });
 
-describe("withDeadline", () => {
+describe("reportStallAfter", () => {
   it("fails with the watch's report when the body outlives the deadline", async () => {
     const watch = createStepWatch({ resources: () => ["Timeout"] });
 
     await expect(
-      withDeadline(watch, 20, () => watch.step("hangs", () => new Promise(() => {}))),
+      reportStallAfter(watch, 20, () => watch.phase("hangs", () => new Promise(() => {}))),
     ).rejects.toThrow(
-      /^Still running after 20 ms\. Stalled in step hangs after \d+ ms\. Waiting on: Timeout\./,
+      /^Still running after 20 ms\. Stalled in phase hangs after \d+ ms\. Active resources: Timeout\./,
     );
   });
 
@@ -103,9 +103,22 @@ describe("withDeadline", () => {
       clearTimer: (timer) => cleared.push(timer),
     };
 
-    expect(await withDeadline(createStepWatch(), 1000, async () => "migrated", timers)).toBe(
+    expect(await reportStallAfter(createStepWatch(), 1000, async () => "migrated", timers)).toBe(
       "migrated",
     );
     expect(cleared).toEqual(["the timer"]);
   });
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "refuses a deadline of %s before running the body",
+    async (ms) => {
+      let ran = false;
+      await expect(
+        reportStallAfter(createStepWatch(), ms, () => {
+          ran = true;
+        }),
+      ).rejects.toThrow("The deadline must be a positive finite number of milliseconds");
+      expect(ran).toBe(false);
+    },
+  );
 });

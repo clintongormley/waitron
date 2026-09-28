@@ -11,7 +11,7 @@ import {
   resolveMigrationsFolder,
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
-import { createStepWatch, withDeadline } from "./step-watch.mjs";
+import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
 /**
  * One database upgraded the way a box is: every shipped migration applied in date order, with what
@@ -43,8 +43,8 @@ interface JournalEntry {
  */
 const FLOOR = { set: "core", tag: "0003_variant_inherited_nullable" };
 
-/** Below the test's own bound, so a stall fails with the step it was on rather than a bare timeout. */
-const STALL_DEADLINE_MS = 110_000;
+const TEST_BOUND_MS = 120_000;
+const STALL_DEADLINE_MS = TEST_BOUND_MS - 10_000;
 
 const scratch: string[] = [];
 afterAll(() => {
@@ -56,11 +56,15 @@ function readJournal(folder: string): { entries: JournalEntry[] } {
 }
 
 describe("upgrading a venue one migration at a time", () => {
-  it("applies every shipped migration on top of the change feed the step before installed", async () => {
-    const watch = createStepWatch();
-    await withDeadline(watch, STALL_DEADLINE_MS, () => upgradeOneStepAtATime(watch));
-    console.log(watch.summary(5));
-  }, 120_000);
+  it(
+    "applies every shipped migration on top of the change feed the step before installed",
+    async () => {
+      const watch = createStepWatch();
+      await reportStallAfter(watch, STALL_DEADLINE_MS, () => upgradeOneStepAtATime(watch));
+      console.log(watch.summary(5));
+    },
+    TEST_BOUND_MS,
+  );
 });
 
 async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) {
@@ -114,9 +118,9 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
         JSON.stringify({ ...journal, entries }),
       );
     }
-    await watch.step(`${label}: migrate`, () => applyMigrations(venueDir, options));
+    await watch.phase(`${label}: migrate`, () => applyMigrations(venueDir, options));
 
-    const store = await watch.step(`${label}: open`, () => openVenueDatabase(venueDir));
+    const store = await watch.phase(`${label}: open`, () => openVenueDatabase(venueDir));
     try {
       const present = sources.filter((source) => {
         const columns = new Set(
@@ -126,14 +130,14 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
         );
         return columns.size > 0 && (source.related ?? []).every((rel) => columns.has(rel.column));
       });
-      await watch.step(`${label}: change feed`, () => installChangeFeed(store.venue, present));
+      await watch.phase(`${label}: change feed`, () => installChangeFeed(store.venue, present));
       existing = new Set(
         store.venue
           .all<{ name: string }>(`select name from sqlite_master where type = 'table'`)
           .map((table) => table.name),
       );
     } finally {
-      await watch.step(`${label}: close`, () => store.close());
+      await watch.phase(`${label}: close`, () => store.close());
     }
   }
 }
