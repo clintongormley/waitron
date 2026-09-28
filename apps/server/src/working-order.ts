@@ -1832,13 +1832,10 @@ export async function insertTabRound(
 }
 
 /**
- * A settled or abandoned tab that tables of its party still point at: its party, and those tables.
- * Null for any other order, so a screen that has not seen the party's next bill cannot act on it.
+ * A settled or abandoned tab that tables of its party still point at: its party. Null for any other
+ * order, so a screen that has not seen the party's next bill cannot act on it.
  */
-async function closedPartyTab(
-  tx: Transaction,
-  tabId: string,
-): Promise<{ partyId: string; tables: string[] } | null> {
+async function closedPartyTab(tx: Transaction, tabId: string): Promise<{ partyId: string } | null> {
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
@@ -1846,7 +1843,7 @@ async function closedPartyTab(
   if (order?.partyId == null || (order.status !== "settled" && order.status !== "abandoned")) {
     return null;
   }
-  const pointed = await tx
+  const [pointed] = await tx
     .select({ id: diningTables.id })
     .from(diningTables)
     .innerJoin(partyTables, eq(partyTables.tableId, diningTables.id))
@@ -1856,10 +1853,9 @@ async function closedPartyTab(
         eq(partyTables.partyId, order.partyId),
         isNull(partyTables.leftAt),
       ),
-    );
-  return pointed.length === 0
-    ? null
-    : { partyId: order.partyId, tables: pointed.map((table) => table.id) };
+    )
+    .limit(1);
+  return pointed === undefined ? null : { partyId: order.partyId };
 }
 
 /**

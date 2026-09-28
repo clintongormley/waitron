@@ -35,6 +35,7 @@ import {
   OPERATOR,
   inTx,
   order,
+  orderForParty,
   partyRow,
   pay,
   placeByHand,
@@ -620,9 +621,7 @@ describe("joined tables (Mesa 4 and Mesa 5)", () => {
       expect((await floorRow(venue.cfg, table)).state).toBe("open-tab");
     }
 
-    const { tabId: dessertTab } = await inTx(suite, (tx) =>
-      addTabRound(tx, venue.cfg, tabId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
-    );
+    const { tabId: dessertTab } = await orderForParty(venue, partyId, ["Flan"]);
 
     for (const table of [mesa4, mesa5]) {
       expect((await tableRow(suite, table)).tabId).toBe(dessertTab);
@@ -759,9 +758,7 @@ describe("a paid party (paying changes no table of the party)", () => {
       });
       expect((await tableRow(suite, table)).tabId).toBe(tabId);
     }
-    const { tabId: dessertTab } = await inTx(suite, (tx) =>
-      addTabRound(tx, venue.cfg, tabId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
-    );
+    const { tabId: dessertTab } = await orderForParty(venue, partyId, ["Flan"]);
     expect(await partyIdOf(dessertTab)).toBe(partyId);
     for (const table of [mesa4, mesa5]) {
       expect((await tableRow(suite, table)).tabId).toBe(dessertTab);
@@ -770,7 +767,7 @@ describe("a paid party (paying changes no table of the party)", () => {
 
   it("refuses moving or joining with a settled tab the party has moved on from", async () => {
     const { venue, partyId, tabId } = await paid();
-    await order(venue, tabId, "Flan");
+    await orderForParty(venue, partyId, ["Flan"]);
     const mesa7 = await venue.table("Mesa 7");
     const command = await cmd(partyId);
 
@@ -971,9 +968,7 @@ describe("a split check moved to another table", () => {
     const { venue, mesa4, mesa7, partyId, tabId, checkId } = await checkMoved();
     await pay(venue, tabId, "12.00");
 
-    const { tabId: dessertTab } = await inTx(suite, (tx) =>
-      addTabRound(tx, venue.cfg, tabId, [{ menuItemId: venue.item("Flan"), quantity: "1" }]),
-    );
+    const { tabId: dessertTab } = await orderForParty(venue, partyId, ["Flan"]);
 
     expect(await partyIdOf(dessertTab)).toBe(partyId);
     expect((await tableRow(suite, mesa4)).tabId).toBe(dessertTab);
