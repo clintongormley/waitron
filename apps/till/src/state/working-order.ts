@@ -121,6 +121,16 @@ function newLine(product: TillProduct, quantity: string, selection?: LineSelecti
   return line;
 }
 
+/** A line of its own: its answers and picks are copied, never shared with `line`. */
+function copyLine(line: OrderLine): OrderLine {
+  const copy: OrderLine = { ...line };
+  if (line.extras !== undefined) copy.extras = line.extras.map((extra) => ({ ...extra }));
+  if (line.options !== undefined) copy.options = line.options.map((answer) => ({ ...answer }));
+  if (line.optionSnapshots !== undefined)
+    copy.optionSnapshots = line.optionSnapshots.map((snapshot) => ({ ...snapshot }));
+  return copy;
+}
+
 /** An empty list is not an answer, so it leaves no key. */
 function applySelection(line: OrderLine, selection: LineSelection | undefined): void {
   if (selection?.extras?.length) line.extras = selection.extras;
@@ -334,7 +344,7 @@ export class WorkingOrderStore {
     line.quantity = "1";
     line.noMerge = true;
     if (this.#lastAdded === line) this.#lastAdded = undefined;
-    const rest = Array.from({ length: count - 1 }, (): OrderLine => ({ ...line }));
+    const rest = Array.from({ length: count - 1 }, () => copyLine(line));
     this.#lines.splice(index + 1, 0, ...rest);
     this.#changedLines();
   }

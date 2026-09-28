@@ -1646,6 +1646,52 @@ describe("till-app: the draft beside browsing, or on its own Review view", () =>
     }
   });
 
+  it("on a 390 px phone, comes Back from Review to where the menu was scrolled", async () => {
+    await page.viewport(390, 844);
+    try {
+      const long = catalogue("v1");
+      const tapas = Array.from({ length: 40 }, (_, n) => offer(`offer-tapa-${n}`, `Tapa ${n}`));
+      long.offers = [...long.offers, ...tapas];
+      long.menus[0]!.structure.members.push(
+        ...tapas.map((each) => ({
+          kind: "product" as const,
+          menuItemId: each.id,
+          productId: each.productId,
+        })),
+      );
+      const { el } = await mountApp({
+        listZoneOffers: vi.fn().mockResolvedValue(long),
+        getTill: vi.fn().mockResolvedValue(till(phoneCanvas)),
+        getDeviceIdentity: vi.fn().mockResolvedValue({
+          deviceId: "phone-1",
+          name: "Phone",
+          formFactor: "phone-portrait",
+          stationId: null,
+        }),
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      const tile = () =>
+        [...browser(el)!.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")].find(
+          (button) => button.querySelector(".name")?.textContent === "Tapa 30",
+        )!;
+      tile().scrollIntoView({ block: "center" });
+      await flush(el);
+      const where = tile().getBoundingClientRect().top;
+      const menuTop = browser(el)!.getBoundingClientRect().top;
+      expect(where - menuTop).toBeGreaterThan(844);
+
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+      await flush(el);
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-back]")!.click();
+      await flush(el);
+
+      expect(Math.round(tile().getBoundingClientRect().top)).toBe(Math.round(where));
+    } finally {
+      await page.viewport(...DEFAULT_FRAME);
+    }
+  });
+
   it("on a 1280 px till, shows browsing and the draft together, with no Review", async () => {
     await page.viewport(1280, 720);
     try {
@@ -1740,5 +1786,176 @@ describe("till-app: the last-added bar across a save", () => {
     await back(el);
 
     expect(savedLines()).toEqual(["offer-beer ×3"]);
+  });
+});
+
+describe("till-app: two table opens overlapping", () => {
+  const mesa9 = table("t9", "9", null);
+  const state = (el: TillApp) => {
+    const own = el as unknown as { activeTableId?: string; activeTabId?: string };
+    return {
+      orderId: tableOrder(el)!.orderId,
+      tableId: own.activeTableId,
+      tabId: own.activeTabId,
+      party: tableOrder(el)!.visit?.id,
+    };
+  };
+
+  it("ends on the newest table alone when a seat answers while the newer open reads its lines", async () => {
+    let answerSeat!: () => void;
+    let answerLines!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      seatTable: vi.fn(async () => {
+        await new Promise<void>((resolve) => (answerSeat = resolve));
+        return { visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 };
+      }),
+      getTabLines: vi.fn(async (tabId: string) => {
+        if (tabId === "wo-7") await new Promise<void>((resolve) => (answerLines = resolve));
+        return { lines: [], revision: 0, editSentLines: true };
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    answerSeat();
+    await flush(el, 6);
+    answerLines();
+    await flush(el, 6);
+
+    expect(state(el)).toEqual({ orderId: "wo-7", tableId: "t7", tabId: "wo-7", party: "v7" });
+    expect(api.listDrafts).toHaveBeenLastCalledWith("v7", expect.anything());
+  });
+});
+
+describe("till-app: a table open whose last wait outlives the session", () => {
+  const mesa9 = table("t9", "9", null);
+
+  it("leaves the next person on their floor when the table's lines answer after a sign-out", async () => {
+    let answerLines!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTabLines: vi.fn(async () => {
+        await new Promise<void>((resolve) => (answerLines = resolve));
+        return { lines: [], revision: 0, editSentLines: true };
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    answerLines();
+    await flush(el, 6);
+
+    expect(floor(el)).not.toBeNull();
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("leaves the next person on their floor when a seated table's read answers after a sign-out", async () => {
+    let answerLines!: () => void;
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue(till(orderTabCanvas)),
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9]),
+      seatTable: vi
+        .fn()
+        .mockResolvedValue({ visitId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
+      getTabLines: vi.fn(async (tabId: string) => {
+        if (tabId === "wo-new") await new Promise<void>((resolve) => (answerLines = resolve));
+        return { lines: [], revision: 0, editSentLines: true };
+      }),
+    });
+    await flush(el);
+    await signIn(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    emit(el.shadowRoot!.querySelector("till-tab-shell")!, "logout");
+    await flush(el);
+    await signIn(el, "p2", "Sam");
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    answerLines();
+    await flush(el, 6);
+
+    expect(floor(el)).not.toBeNull();
+    expect(tableOrder(el)).toBeNull();
+  });
+});
+
+describe("till-app: another device's save arriving while the draft is shown", () => {
+  const steakLine = {
+    menuItemId: "offer-steak",
+    variantId: null,
+    menuVersionId: "v1",
+    options: [],
+    extras: [],
+    note: null,
+    quantity: "2",
+    courseId: null,
+    noMerge: false,
+  };
+  const visible = (el: TillApp, selector: string) =>
+    tableOrder(el)!.shadowRoot!.querySelector(selector)?.checkVisibility() ?? false;
+  const bar = (el: TillApp) =>
+    tableOrder(el)!
+      .shadowRoot!.querySelector<HTMLElement>("[data-last-added]")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim();
+  const ticks = (el: TillApp) =>
+    [...tableOrder(el)!.shadowRoot!.querySelectorAll("[data-draft-select]")].map((tick) =>
+      tick.textContent!.replace(/[☑☐]/g, "").replace(/\s+/g, " ").trim(),
+    );
+  const saveWait = () => new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+
+  it("on Review, shows the server's draft there, says so, and sends nothing again", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    server.save("v1", { draftId: null, revision: 0, lines: [steakLine] });
+    await tap(el, "Beer");
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await flush(el);
+
+    await saveWait();
+    await flush(el, 6);
+
+    expect(banner(el)!.textContent).toContain(t("table.draft_changed_elsewhere"));
+    expect(visible(el, "[data-draft-pane]")).toBe(true);
+    expect(ticks(el)).toEqual(["Steak ×2"]);
+    expect(bar(el)).toBeUndefined();
+    expect(api.saveDraft).toHaveBeenCalledOnce();
+    expect(api.submitDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps the bar on the dish tapped when the server's draft still orders it", async () => {
+    const { el } = await mountApp();
+    await openMesa(el);
+    server.save("v1", { draftId: null, revision: 0, lines: [steakLine] });
+    await tap(el, "Steak");
+    expect(bar(el)).toContain("Steak ×1");
+
+    await saveWait();
+    await flush(el, 6);
+
+    expect(banner(el)!.textContent).toContain(t("table.draft_changed_elsewhere"));
+    expect(rows(el)).toEqual(["Steak ×2"]);
+    expect(bar(el)).toContain("Steak ×2");
+    expect(api.saveDraft).toHaveBeenCalledOnce();
   });
 });

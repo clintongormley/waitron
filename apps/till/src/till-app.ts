@@ -766,8 +766,8 @@ export class TillApp extends LitElement {
   @state() private tableSelectedCatalogueId = "";
   /** Identifies the latest table-selection offer request so a slower prior selection cannot win. */
   #tableOfferRequest = 0;
-  /** The {@link #tableOfferRequest} of the latest table open that has put its order on screen. */
-  #openShown = 0;
+  /** The {@link #tableOfferRequest} of the latest table open that has made its table the active one. */
+  #openClaimed = 0;
   /** Bumped when the waiter goes back to the floor, starts opening a table, selects a tab that hides
    * the order, or logs out, so an answer to a request sent before can tell the order has been left
    * while {@link activeTabId} still names it. Paying the tab does not bump it. */
@@ -2269,6 +2269,7 @@ export class TillApp extends LitElement {
     }
     // `set-status` is keyed by table id, so it is remembered alongside the tab's order id.
     this.activeTableId = tableId;
+    this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
     this.finishRefused = false;
     this.reprintSent = [];
     if (guestCount === undefined) {
@@ -2278,13 +2279,14 @@ export class TillApp extends LitElement {
         this.#loadLinesAndBills(),
         this.#openDraft(true, session),
       ]);
+      if (session !== this.#operatorSession) return;
       this.#showDraft(opened);
     } else {
       try {
         const { tabId, visitId, revision } = await this.api.seatTable(tableId, guestCount);
-        // A table opened after this one and already on screen stays there. One still opening
-        // replaces this table when it finishes.
-        if (session !== this.#operatorSession || this.#openShown > offerRequest) return;
+        // A table opened after this one has made its own table the active one, so this answer
+        // would put this table's order beside that table.
+        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
         this.activeTabId = tabId;
         this.orderParty = {
           id: visitId,
@@ -2303,11 +2305,10 @@ export class TillApp extends LitElement {
         return;
       }
       await this.#reloadOrder();
+      if (session !== this.#operatorSession) return;
     }
-    this.#openShown = Math.max(this.#openShown, offerRequest);
     // A canvas that authors a `table-order` card (handheld, tablet) switches to that tab; a till drills
-    // in over the floor tab. Off the shell, only the lock screen is reached here, by a logout that lands
-    // while the tab is opening.
+    // in over the floor tab.
     if (this.#inShell()) {
       const orderTabKey = this.#tableOrderTabKey();
       if (orderTabKey !== undefined)

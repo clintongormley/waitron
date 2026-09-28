@@ -242,10 +242,10 @@ export class TillBasket extends LitElement {
 
   @property({ type: Boolean, reflect: true }) stacked = false;
 
-  /** A POSITIONAL index into `store.lines`, so it must follow any change that shifts positions:
-   * {@link #removeLine} adjusts it and a whole-basket swap closes it. Otherwise a note, which can carry
-   * allergy information, would reattach to whatever line slid into the edited line's slot. */
-  @state() private editingIndex: number | null = null;
+  /** The line whose note editor is open, by the line itself rather than its place: other lines move
+   * under it (a remove elsewhere, another basket showing the same order), and a note, which can
+   * carry allergy information, must never reattach to the line that slid into its place. */
+  @state() private editingLine: OrderLine | null = null;
 
   /** Assigned only through {@link #openModifierPicker} / {@link #closeModifierPicker}, which keep
    * {@link #modifierSelection} in step with it. */
@@ -291,23 +291,12 @@ export class TillBasket extends LitElement {
   #onStoreChanged(): void {
     if (this.store.id !== this.#lastStoreId) {
       this.#lastStoreId = this.store.id;
-      this.editingIndex = null;
+      this.editingLine = null;
       this.#closeModifierPicker();
     }
     if (this.modifierLine !== null && !this.store.lines.includes(this.modifierLine))
       this.#closeModifierPicker();
     this.requestUpdate();
-  }
-
-  #removeLine(index: number): void {
-    if (this.editingIndex !== null) {
-      if (index === this.editingIndex) {
-        this.editingIndex = null;
-      } else if (index < this.editingIndex) {
-        this.editingIndex -= 1;
-      }
-    }
-    this.store.removeLine(index);
   }
 
   #lineName(line: OrderLine): string {
@@ -369,9 +358,9 @@ export class TillBasket extends LitElement {
               variant="ghost"
               size="md"
               data-test=${`line-note-button-${index}`}
-              aria-expanded=${this.editingIndex === index}
+              aria-expanded=${this.editingLine === line}
               aria-label=${`${t("line.note.button")} ${this.#lineName(line)}`}
-              @click=${() => this.#toggleEditor(index)}
+              @click=${() => this.#toggleEditor(line)}
             >
               ${t("line.note.button")}
             </wt-button>
@@ -380,7 +369,7 @@ export class TillBasket extends LitElement {
               variant="ghost"
               size="md"
               aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
-              @click=${() => this.#removeLine(index)}
+              @click=${() => this.store.removeLine(index)}
             >
               <span aria-hidden="true">×</span>
             </wt-button>
@@ -401,7 +390,7 @@ export class TillBasket extends LitElement {
                 >`
               : nothing
           }
-          ${this.#extrasRow(line, index)} ${this.#extrasEditor(line, index)}
+          ${this.#extrasRow(line, index)} ${this.#extrasEditor(line)}
           ${(line.extras ?? []).map(
             // No remove control: a pick goes only with its dish. Its own allergens and diet sit
             // beside the dish's rows, never folded into them.
@@ -458,8 +447,8 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  #toggleEditor(index: number): void {
-    this.editingIndex = this.editingIndex === index ? null : index;
+  #toggleEditor(line: OrderLine): void {
+    this.editingLine = this.editingLine === line ? null : line;
   }
 
   #extrasRow(line: OrderLine, index: number) {
@@ -473,13 +462,14 @@ export class TillBasket extends LitElement {
     `;
   }
 
-  #extrasEditor(line: OrderLine, index: number) {
-    if (this.editingIndex !== index) return nothing;
+  #extrasEditor(line: OrderLine) {
+    if (this.editingLine !== line) return nothing;
     return html`
       <div class="line-extras-editor">
         ${renderLineExtrasEditor({
           note: line.note ?? "",
-          onNoteChange: (note) => this.store.setLineExtras(index, { note }),
+          onNoteChange: (note) =>
+            this.store.setLineExtras(this.store.lines.indexOf(line), { note }),
         })}
       </div>
     `;

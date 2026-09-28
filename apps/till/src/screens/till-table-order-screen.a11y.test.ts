@@ -369,6 +369,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       );
       el.shadowRoot!.querySelector<HTMLElement>('[data-destination="add-to-held"]')!.click();
       await el.updateComplete;
+      await openReview(el);
       await expectNoA11yViolations(host);
     });
   });

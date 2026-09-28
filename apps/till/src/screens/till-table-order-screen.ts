@@ -3,6 +3,7 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
+import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import {
@@ -918,8 +919,11 @@ export class TillTableOrderScreen extends LitElement {
     this.#resizing = undefined;
   }
 
+  /** Side by side has no Review view, so one left open is closed rather than kept for a later
+   * narrowing. */
   #measure(width: number): void {
     this.wide = width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH;
+    if (this.wide && this.reviewing) void this.#closeReview();
   }
   /** The draft lines the waiter checked, by the line's object identity, which a store keeps until the
    * line leaves it. */
@@ -1683,7 +1687,7 @@ export class TillTableOrderScreen extends LitElement {
               class="review-open"
               variant="primary"
               data-review-open
-              @click=${() => this.#openReview()}
+              @click=${() => void this.#openReview()}
             >
               ${t("table.review").replace("{n}", String(this.#itemCount(draft)))}
             </wt-button>`
@@ -1749,11 +1753,14 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #openReview(): void {
+  /** Focus follows the view: the control pressed is hidden by what it opens. */
+  async #openReview(): Promise<void> {
     const scroller = this.#scroller();
     this.#browsingScroll = { scroller, top: scroller.scrollTop };
     this.reviewing = true;
     scroller.scrollTop = 0;
+    await this.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("[data-review-back]")?.focus();
   }
 
   async #closeReview(): Promise<void> {
@@ -1762,6 +1769,7 @@ export class TillTableOrderScreen extends LitElement {
     this.reviewing = false;
     await this.updateComplete;
     if (saved !== undefined) saved.scroller.scrollTop = saved.top;
+    this.renderRoot.querySelector<HTMLElement>("[data-review-open]")?.focus();
   }
 
   /** The nearest ancestor that scrolls, across shadow roots, else the page. */
@@ -1865,7 +1873,9 @@ export class TillTableOrderScreen extends LitElement {
     const lines = store.lines;
     const sections = draftSections(this.#draftEntries(lines), this.courses);
     return html`<div class="draft-sections" data-draft-sections>
-      ${sections.map(
+      ${repeat(
+        sections,
+        (section) => section.course?.id ?? "",
         (section) =>
           html`<section
             class="draft-section"

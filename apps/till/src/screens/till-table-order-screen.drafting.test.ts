@@ -1,143 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
+import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import { DraftStore } from "../state/draft-sync.js";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
-import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-
-// Beer and Flan ring straight in; the Burger asks for its doneness and its extras first (Bacon
-// comes preselected); Jamón is sold by weight.
-
-const beer: TillProduct = {
-  id: "beer",
-  menuItemId: "offer-beer",
-  catalogueId: "menu-table",
-  name: "Beer",
-  customerName: { es: "Cerveza de barril" },
-  pricingUnit: "each",
-  unitPrice: "3.00",
-  vatClass: "general",
-  category: null,
-  allergens: null,
-  courseId: null,
-};
-
-const flan: TillProduct = { ...beer, id: "flan", menuItemId: "offer-flan", name: "Flan" };
-
-const cookedList: OfferedModifier = {
-  kind: "options",
-  id: "list-cooked",
-  name: "Doneness",
-  customerName: { es: "Punto carta" },
-  kitchenName: "Punto KDS",
-  defaultLabelId: "label-medium",
-  labels: [
-    {
-      id: "label-rare",
-      name: "Rare",
-      customerName: { es: "Poco hecha carta" },
-      kitchenName: "Poco hecha KDS",
-      available: true,
-    },
-    {
-      id: "label-medium",
-      name: "Medium",
-      customerName: { es: "Al punto carta" },
-      kitchenName: "Al punto KDS",
-      available: true,
-    },
-  ],
-};
-
-const extrasList: OfferedModifier = {
-  kind: "extras",
-  id: "list-extras",
-  name: "Extras",
-  customerName: { es: "Extras carta" },
-  kitchenName: "Extras KDS",
-  minPicks: 0,
-  maxPicks: null,
-  items: [
-    {
-      productId: "p-bacon",
-      name: "Bacon",
-      customerName: { es: "Bacon carta" },
-      kitchenName: "Bacon KDS",
-      price: "1.00",
-      vatClass: "general",
-      maxQuantity: 3,
-      preselected: true,
-      addAllergens: null,
-      suitableFor: [],
-    },
-  ],
-};
-
-const burger: TillProduct = {
-  ...beer,
-  id: "burger",
-  menuItemId: "offer-burger",
-  name: "Burger",
-  unitPrice: "9.50",
-  offeredModifiers: [cookedList, extrasList],
-};
-
-const jamon: TillProduct = {
-  ...beer,
-  id: "jamon",
-  menuItemId: "offer-jamon",
-  name: "Jamón",
-  pricingUnit: "weight",
-  unitPrice: "20.00",
-};
-
-const products = [beer, flan, burger, jamon];
-
-function menuOf(offered: TillProduct[], section?: (product: TillProduct) => string | undefined) {
-  return servedMenus(
-    [{ id: "menu-table", name: "Carta", isDefault: true, versionId: "menu-table-v1" }],
-    offered.map((product) => {
-      const placed = section?.(product);
-      return {
-        id: product.menuItemId!,
-        menuId: "menu-table",
-        productId: product.id,
-        ...(placed === undefined ? {} : { section: placed }),
-      };
-    }),
-  );
-}
-
-async function mount(over: Partial<TillTableOrderScreen> = {}) {
-  const offered = over.products ?? products;
-  return mountWidget<TillTableOrderScreen>("till-table-order-screen", {
-    products: offered,
-    menus: menuOf(offered),
-    lines: [],
-    statuses: [],
-    orderId: "wo-4",
-    draftStore: new DraftStore(),
-    ...over,
-  });
-}
-
-const browser = (el: TillTableOrderScreen) =>
-  el.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
-const store = (el: TillTableOrderScreen) => el.draftStore!;
-const rows = (el: TillTableOrderScreen) =>
-  store(el).lines.map(
-    (line) => `${line.product.name} ×${line.quantity}${line.noMerge === true ? " apart" : ""}`,
-  );
-
-/** Taps the menu browser's tile named `name`. */
-async function tap(el: TillTableOrderScreen, name: string): Promise<void> {
-  [...browser(el).shadowRoot!.querySelectorAll<HTMLElement>("wt-button.tile")]
-    .find((tile) => tile.querySelector(".name")?.textContent === name)!
-    .click();
-  await el.updateComplete;
-}
+import type { TillProduct } from "../api/client.js";
+import {
+  beer,
+  browser,
+  flan,
+  jamon,
+  menuOf,
+  mount,
+  rows,
+  store,
+  tap,
+} from "./till-table-order-screen.test-helpers.js";
 
 const bar = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-last-added]");
@@ -321,5 +197,108 @@ describe("till-table-order-screen: Split quantity on a draft line", () => {
     await el.updateComplete;
     expect(split(el, 0)).toBeNull();
     expect(split(el, 1)).toBeNull();
+  });
+});
+
+describe("till-table-order-screen: a note being written while other lines move", () => {
+  const cola: TillProduct = {
+    ...beer,
+    id: "cola",
+    menuItemId: "offer-cola",
+    name: "Cola",
+    courseId: "drinks",
+  };
+  const byCourse = [{ ...flan, courseId: "desserts" }, cola, { ...beer, courseId: "drinks" }];
+  const courses = [
+    { id: "drinks", name: "Drinks", displayOrder: 0 },
+    { id: "desserts", name: "Desserts", displayOrder: 1 },
+  ];
+
+  /** Flan, Cola, Beer, and Cola's note editor open, holding "no ice". */
+  async function writingColasNote(): Promise<TillTableOrderScreen> {
+    const { el } = await mount({ products: byCourse, menus: menuOf(byCourse), courses });
+    await tap(el, "Flan");
+    await tap(el, "Cola");
+    await tap(el, "Beer");
+    store(el).setLineExtras(1, { note: "no ice" });
+    await el.updateComplete;
+    noteButton(el, "Cola").click();
+    await settle(el);
+    expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
+    return el;
+  }
+
+  function noteButton(el: TillTableOrderScreen, dish: string): HTMLElement {
+    return [...el.shadowRoot!.querySelectorAll("till-basket")]
+      .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".note-toggle")])
+      .find((button) => button.getAttribute("aria-label")!.endsWith(dish))!;
+  }
+
+  /** The dish whose row the open note editor sits under, and what the editor holds. */
+  function openNote(el: TillTableOrderScreen): { dish: string; note: string } | null {
+    for (const basket of el.shadowRoot!.querySelectorAll("till-basket")) {
+      const editor =
+        basket.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]');
+      if (editor === null) continue;
+      const open = basket.shadowRoot!.querySelector('.note-toggle[aria-expanded="true"]')!;
+      return {
+        dish: open.getAttribute("aria-label")!.split(" ").at(-1)!,
+        note: editor.value,
+      };
+    }
+    return null;
+  }
+
+  async function settle(el: TillTableOrderScreen): Promise<void> {
+    for (const basket of el.shadowRoot!.querySelectorAll<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("till-basket"))
+      await basket.updateComplete;
+    await el.updateComplete;
+  }
+
+  it("stays under its dish when a line in another section is removed", async () => {
+    const el = await writingColasNote();
+    const flanRemove = [...el.shadowRoot!.querySelectorAll("till-basket")]
+      .flatMap((basket) => [...basket.shadowRoot!.querySelectorAll<HTMLElement>(".remove")])
+      .find((button) => button.getAttribute("aria-label")!.endsWith("Flan"))!;
+
+    flanRemove.click();
+    await settle(el);
+
+    expect(rows(el)).toEqual(["Cola ×1", "Beer ×1"]);
+    expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
+  });
+
+  it("stays open under its dish when the section above it empties", async () => {
+    const { el } = await mount({ products: byCourse, menus: menuOf(byCourse), courses });
+    await tap(el, "Flan");
+    await tap(el, "Cola");
+    store(el).setLineExtras(0, { note: "no cream" });
+    await el.updateComplete;
+    noteButton(el, "Flan").click();
+    await settle(el);
+    expect(openNote(el)).toEqual({ dish: "Flan", note: "no cream" });
+
+    store(el).removeLine(1);
+    await settle(el);
+
+    expect(rows(el)).toEqual(["Flan ×1"]);
+    expect(openNote(el)).toEqual({ dish: "Flan", note: "no cream" });
+  });
+
+  it("stays under its dish when the last-added bar's −1 takes an earlier line out", async () => {
+    const el = await writingColasNote();
+    await tap(el, "Flan");
+    await settle(el);
+    expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
+
+    for (let press = 0; press < 2; press++) {
+      el.shadowRoot!.querySelector<HTMLElement>('[data-last-added-step="-1"]')!.click();
+      await settle(el);
+    }
+
+    expect(rows(el)).toEqual(["Cola ×1", "Beer ×1"]);
+    expect(openNote(el)).toEqual({ dish: "Cola", note: "no ice" });
   });
 });

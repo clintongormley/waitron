@@ -999,6 +999,35 @@ describe("WorkingOrderStore.splitLine (Split quantity)", () => {
     expect(notified).toBe(1);
   });
 
+  it("gives each split row its own copy of the line's answers and picks", () => {
+    const s = new WorkingOrderStore();
+    s.addMerging(burger, "2", {
+      extras: [
+        { listId: "toppings", productId: "p-cheese", name: "Cheese", price: "1.00", quantity: 1 },
+      ],
+      options: [{ listId: "doneness", labelId: "rare" }],
+      optionSnapshots: [
+        {
+          listName: { en: "Doneness" },
+          listCustomerName: null,
+          listKitchenName: null,
+          labelName: { en: "Rare" },
+          labelCustomerName: null,
+          labelKitchenName: null,
+        },
+      ],
+    });
+    s.splitLine(0);
+    const [first, second] = s.lines;
+    expect(second!.extras).toEqual(first!.extras);
+    expect(second!.extras).not.toBe(first!.extras);
+    expect(second!.extras![0]).not.toBe(first!.extras![0]);
+    expect(second!.options).not.toBe(first!.options);
+    expect(second!.optionSnapshots).not.toBe(first!.optionSnapshots);
+    first!.extras![0]!.quantity = 2;
+    expect(second!.extras![0]!.quantity).toBe(1);
+  });
+
   it("is not regrouped by a later tap, which starts a line of its own and grows that", () => {
     const s = new WorkingOrderStore();
     s.addMerging(burger, "3");

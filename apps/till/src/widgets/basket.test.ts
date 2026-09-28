@@ -1158,3 +1158,33 @@ describe("till-basket: stacked", () => {
     expect(name.bottom).toBeGreaterThan(stepper.top);
   });
 });
+
+describe("till-basket: the note editor keeps to its line", () => {
+  const flan: TillProduct = { ...cafe, id: "flan", name: "Flan" };
+
+  async function typeNote(el: TillBasket, text: string): Promise<void> {
+    const box = el.shadowRoot!.querySelector<HTMLTextAreaElement>('[data-test="line-note"]')!;
+    box.value = text;
+    box.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+  }
+
+  it("writes the note to the line it was opened on, wherever that line now is", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(cafe, "1");
+    store.addProduct(flan, "1");
+    store.addProduct(jamon, "0.100");
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="line-note-button-1"]')!.click();
+    await el.updateComplete;
+
+    store.removeLine(0);
+    await el.updateComplete;
+    await typeNote(el, "no cream");
+
+    expect(store.lines.map((line) => [line.product.name, line.note])).toEqual([
+      ["Flan", "no cream"],
+      ["Jamón", undefined],
+    ]);
+  });
+});
