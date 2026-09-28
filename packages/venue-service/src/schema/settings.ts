@@ -23,7 +23,7 @@ export const serviceSettings = table(
     printHeldWork: flag("print_held_work").notNull().default(false),
     // How long after the fired work ahead of a held group is served that the group is due. Null is
     // off. No CHECK on the range: adding one to this table makes drizzle rebuild it (as
-    // `0006_kitchen_ticket_grouping_check.sql` did), so the management route holds the bound.
+    // `0006_kitchen_ticket_grouping_check.sql` did).
     releaseReminderMinutes: count("release_reminder_minutes").default(10),
   },
   (t) => [
