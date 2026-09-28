@@ -89,6 +89,22 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("a token with an unsent-order mark naming people but given no label is accessible", async () => {
+    await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", unsentDrafts: ["Alex", "Sam"] }),
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token with a DECORATIVE unsent-order mark (no label, no names) is accessible", async () => {
+    await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", unsentDrafts: [""] }),
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   test("a forgotten-band token with a LABELLED marker (app-supplied accessible name) is accessible", async () => {
     const el = await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
     el.labels = { ...el.labels, forgotten: "Olvidada" };
