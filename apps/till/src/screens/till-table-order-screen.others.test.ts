@@ -328,7 +328,7 @@ describe("till-table-order-screen: Take over draft", () => {
       await userEvent.keyboard("{Escape}");
       await new Promise((resolve) => setTimeout(resolve, 50));
       await el.updateComplete;
-      expect(dialog(el).open).toBe(true);
+      expect(dialog(el).shadowRoot!.querySelector("dialog")!.open).toBe(true);
     }
     expect(cancel.disabled).toBe(true);
 

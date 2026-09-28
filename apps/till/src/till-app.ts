@@ -106,6 +106,7 @@ import {
   isStale,
   lineBlock,
   refreshBasket,
+  repriceRebuilt,
   withUnavailable,
 } from "./state/menu-refresh.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
@@ -796,6 +797,8 @@ export class TillApp extends LitElement {
   /** The draft may hold lines priced against a menu version that is not the live one, and has not
    * been compared with the live version since (D9). */
   #draftRefreshDue = false;
+  /** A read of the table's offers made before comparing the draft is out. */
+  #draftRereading = false;
   /** The party whose groups {@link tabGroups} holds, once a read of them has finished. */
   #groupsReadFor: string | null = null;
   readonly #menuPoll = new MenuStatePoll({
@@ -1464,21 +1467,30 @@ export class TillApp extends LitElement {
     this.#evaluateBasket();
   }
 
-  /** With `loaded` false (a failed load, or a table with no zone) no remembered round is marked. */
+  /**
+   * With `loaded` false (a failed load, or a table with no zone) no remembered round is marked.
+   * Offers of another version make the draft's comparison due, whichever read loaded them: a read
+   * that overtakes a poll's own read discards the poll's answer.
+   */
   #loadTableOffers(
     zoneId: string | undefined,
     catalogue: Pick<ZoneOfferCatalogue, "offers" | "menus">,
     loaded = true,
   ): void {
+    const before = this.#tableOffers.versions;
     this.#tableZoneId = zoneId;
     this.#tableOffers.load(catalogue, loaded);
     this.#reportRemovedLayouts(this.tableMenus, catalogue.menus);
     this.tableMenus = catalogue.menus;
     this.tableProducts = this.#tableOffers.products();
-    if (loaded) {
-      this.#markRounds(true);
-      this.#markDraft(true);
-    }
+    if (!loaded) return;
+    const { versions, live } = this.#tableOffers;
+    if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
+      this.#draftRefreshDue = true;
+    const sync = this.#draftSync;
+    sync?.reshow(repriceRebuilt(sync.store.lines, live, versions));
+    this.#markRounds(true);
+    this.#markDraft(true);
   }
 
   #reportRemovedLayouts(shown: readonly TillZoneMenu[], next: readonly TillZoneMenu[]): void {
@@ -1526,19 +1538,40 @@ export class TillApp extends LitElement {
 
   /**
    * D9 on the table: the person's draft is compared with the table's live offers, as the counter's
-   * basket is, when it is due — a poll named a new version and the offers were read again, or the
-   * server's draft replaced what the screen held. Nothing relevant changed: the lines take the live version silently. Otherwise
+   * basket is, when it is due — offers of another version were loaded, or the server's draft
+   * replaced what the screen held. With `reread`, a line rebuilt under a version the till does not
+   * hold as live has the offers read once more first, and only a version still not live after that
+   * is asked about. Nothing relevant changed: the lines take the live version silently. Otherwise
    * the refresh dialog asks. Either way the adopted lines are saved as any edit is. It waits while
    * a send or take-over holds the draft, a save is out, or any dialog is open; the next poll asks
    * again. Another person's draft is never compared.
    */
-  #reconcileDraft(): void {
+  #reconcileDraft(reread = true): void {
     const sync = this.#draftSync;
     if (!this.#draftRefreshDue || sync === undefined || !this.#draftReady) return;
     if (!this.#tableOffers.loaded || sync.store.sending || sync.saving) return;
     if (this.basketRefresh !== undefined || dialogOpenUnder(this.renderRoot)) return;
+    const zoneId = this.#tableZoneId;
+    if (reread && zoneId !== undefined && this.#rebuiltUnknown(sync.store)) {
+      if (this.#draftRereading) return;
+      this.#draftRereading = true;
+      void this.#reloadTableOffers(zoneId).then((read) => {
+        this.#draftRereading = false;
+        if (read) this.#reconcileDraft(false);
+      });
+      return;
+    }
     this.#draftRefreshDue = false;
     if (sync.store.lineCount > 0) this.#reconcileBasket(sync.store, this.#tableOffers);
+  }
+
+  /** Whether a line rebuilt from the server names a version the till does not hold as live. It may
+   * be a version newer than the till's offers (another device of the person's saved it first), which
+   * only a fresh read of the offers tells apart from an older one. */
+  #rebuiltUnknown(store: WorkingOrderStore): boolean {
+    return store.lines.some(
+      (line) => line.earlierPriceUnknown === true && isStale(line, this.#tableOffers.versions),
+    );
   }
 
   /** Marks each unsaved basket line that cannot be sold as it stands against the counter's offers,
@@ -1584,9 +1617,7 @@ export class TillApp extends LitElement {
       if (!versionsMoved(this.tableMenus, state.menus)) this.#reconcileDraft();
       else
         void this.#reloadTableOffers(zoneId).then((read) => {
-          if (!read) return;
-          this.#draftRefreshDue = true;
-          this.#reconcileDraft();
+          if (read) this.#reconcileDraft(false);
         });
     }
   }
@@ -1684,6 +1715,7 @@ export class TillApp extends LitElement {
   async #refreshRound(round: WorkingOrderStore): Promise<"adopted" | "confirming" | "failed"> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined || !(await this.#reloadTableOffers(zoneId))) return "failed";
+    if (round === this.#draftSync?.store) this.#draftRefreshDue = false;
     const outcome = this.#reconcileBasket(round, this.#tableOffers);
     this.#markedRounds.add(round);
     this.#markRounds(true);

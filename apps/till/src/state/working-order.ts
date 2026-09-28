@@ -83,10 +83,12 @@ export interface OrderLine {
   courseId?: string;
   /** Never merged with another line, either way; Split quantity's rows carry it. */
   noMerge?: true;
-  /** A table draft line the server said, at its last answer, cannot be sold now. Never sent. */
+  /** A table draft line the server said, at its last answer, cannot be sold now. Not part of the
+   * saved line. */
   unavailableOnServer?: true;
   /** A draft line rebuilt from the server under a menu version that is not the live one: the price
-   * shown is the live one, and what it cost under its own version is unknown. Never sent. */
+   * shown is the live one, and what it cost under its own version is unknown. Not part of the saved
+   * line. */
   earlierPriceUnknown?: true;
 }
 

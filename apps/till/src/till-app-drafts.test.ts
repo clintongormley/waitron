@@ -2572,6 +2572,165 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
   });
 
+  it("asks nothing while a take-over is out, and asks at the next poll once it has answered", async () => {
+    server.personId = "p-alex";
+    server.personName = "Alex";
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-flan",
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    let answer!: () => void;
+    const take = server.takeOverDraft.getMockImplementation()!;
+    server.takeOverDraft.mockImplementationOnce(async (...args) => {
+      await new Promise<void>((resolve) => (answer = resolve));
+      return take(...args);
+    });
+    const screen = tableOrder(el)!.shadowRoot!;
+    screen.querySelector<HTMLElement>("[data-review-open]")!.click();
+    await flush(el);
+    screen.querySelector<HTMLElement>("[data-take-over]")!.click();
+    await flush(el);
+    screen.querySelector<HTMLElement>("[data-take-over-confirm]")!.click();
+    await flush(el, 6);
+
+    await publish(el, { Beer: "6.00" });
+    expect(refresh(el)).toBeNull();
+    answer();
+    await flush(el, 6);
+    expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+    expect(refresh(el)).toBeNull();
+
+    await poll(el);
+    expect(refreshText(el)).toContain("Beer €6.00");
+    expect(refreshText(el)).toContain("Flan €5.00");
+  });
+
+  it("still asks at the next poll when the publish's own offers read was overtaken by another read", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    let answerPollRead!: (offers: ZoneOfferCatalogue) => void;
+    api.listZoneOffers.mockImplementationOnce(
+      () => new Promise<ZoneOfferCatalogue>((resolve) => (answerPollRead = resolve)),
+    );
+    api.menuState.mockResolvedValue(state("v2"));
+    await poll(el);
+    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.submitDraft.mockRejectedValueOnce({
+      code: "product.unavailable",
+      status: 409,
+      productId: "product-offer-flan",
+    });
+    await act(el, "fire-all");
+    answerPollRead(catalogue("v2", { Beer: "6.00" }));
+    await flush(el);
+
+    await poll(el);
+
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+  });
+
+  /** Beer saved on Mesa 4 under v0, a version this till never read. */
+  function savedUnderV0(): void {
+    server.save("v1", {
+      draftId: null,
+      revision: 0,
+      lines: [
+        {
+          menuItemId: "offer-beer",
+          variantId: null,
+          menuVersionId: "v0",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        },
+      ],
+    });
+  }
+
+  it("asks nothing about a line saved under another version while the offers cannot be read again, and asks at the next poll", async () => {
+    savedUnderV0();
+    const { el } = await mountApp({
+      menuState: vi.fn().mockResolvedValue(state("v1")),
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValueOnce(catalogue("v1"))
+        .mockRejectedValueOnce({ code: "server.internal", status: 500 })
+        .mockResolvedValue(catalogue("v1")),
+    });
+
+    await openMesa(el);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
+    expect(refresh(el)).toBeNull();
+
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(3);
+    expect(refreshText(el)).toContain("Beer €5.00");
+  });
+
+  it("reads the offers once when a poll comes while the read for a line saved under another version is out", async () => {
+    savedUnderV0();
+    let answer!: (offers: ZoneOfferCatalogue) => void;
+    const { el } = await mountApp({
+      menuState: vi.fn().mockResolvedValue(state("v1")),
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValueOnce(catalogue("v1"))
+        .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve))),
+    });
+    await openMesa(el);
+
+    await poll(el);
+    expect(api.listZoneOffers).toHaveBeenCalledTimes(2);
+    answer(catalogue("v1"));
+    await flush(el);
+
+    expect(refreshText(el)).toContain("Beer €5.00");
+  });
+
+  it("does not ask again at the next poll about a price Send found changed and the person put aside", async () => {
+    const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
+    await openMesa(el);
+    await tap(el, "Beer");
+    await saved(el);
+    api.listZoneOffers.mockResolvedValue(catalogue("v2", { Beer: "6.00" }));
+    api.submitDraft.mockRejectedValueOnce({
+      code: "menu.version_changed",
+      status: 409,
+      menus: [{ menuId: "lunch", liveVersionId: "v2" }],
+    });
+    await act(el, "fire-all");
+    expect(refreshText(el)).toContain("Beer €5.00 → €6.00");
+    await answerRefresh(el, "cancel");
+    api.menuState.mockResolvedValue(state("v2"));
+
+    await poll(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(versions()).toEqual(["offer-beer v1"]);
+  });
+
   it("adopts nothing onto another line when the server's draft replaced the lines while it asked", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
     await openMesa(el);
@@ -2753,6 +2912,29 @@ describe("till-app: a draft read from the server with a line on an earlier menu 
     await flush(el);
     await saved(el);
     expect(server.drafts[0]!.lines.map((line) => line.menuVersionId)).toEqual(["v2"]);
+  });
+
+  it("reads the offers again, and asks nothing, when a line names a version newer than the one this till read", async () => {
+    savedAt("v2", "offer-beer");
+    const { el } = await mountApp({
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValueOnce(catalogue("v1"))
+        .mockResolvedValue(catalogue("v2", { Beer: "6.00" })),
+    });
+
+    await openMesa(el);
+    await saved(el);
+
+    expect(refresh(el)).toBeNull();
+    expect(server.drafts[0]!.lines.map((line) => line.menuVersionId)).toEqual(["v2"]);
+    expect(
+      draft(el).lines.map((line) => [
+        line.product.menuVersionId,
+        line.product.unitPrice,
+        line.earlierPriceUnknown,
+      ]),
+    ).toEqual([["v2", "6.00", undefined]]);
   });
 
   it("asks nothing, and saves nothing, when every line is on the live version", async () => {
@@ -2960,6 +3142,48 @@ describe("till-app: a draft line that cannot be sold now", () => {
       await flush(el, 6);
 
       expect(flagText(el)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("flags the line again, and sends nothing, when a poll dropped the server's flag and the send is then refused as sold out", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      server.unavailable.add("offer-flan");
+      const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state([])) });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await tap(el, "Flan");
+      await saved(el);
+      vi.advanceTimersByTime(15_000);
+      await flush(el, 6);
+      expect(flagText(el)).toEqual([]);
+      const offers = catalogue("v1");
+      api.listZoneOffers.mockResolvedValue({
+        ...offers,
+        offers: offers.offers.map((each) =>
+          each.id === "offer-flan" ? { ...each, available: false } : each,
+        ),
+      });
+      api.submitDraft.mockRejectedValueOnce({
+        code: "product.unavailable",
+        status: 409,
+        productId: "product-offer-flan",
+      });
+
+      await act(el, "fire-all");
+
+      expect(api.submitDraft).toHaveBeenCalledOnce();
+      expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+      expect(server.drafts[0]!.lines.map((line) => line.menuItemId)).toEqual([
+        "offer-beer",
+        "offer-flan",
+      ]);
+      expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
+      expect(screen(el).querySelector('[data-flag-remove="0"]')).toBeNull();
+      expect(screen(el).querySelector('[data-flag-remove="1"]')).not.toBeNull();
+      expect(screen(el).querySelector('[data-flag-keep="1"]')).not.toBeNull();
     } finally {
       vi.useRealTimers();
     }

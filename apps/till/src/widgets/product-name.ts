@@ -51,7 +51,9 @@ export function unitName(product: TillProduct, locale: string = currentLocale())
   return descriptionFor(unit.abbreviation, unit.id, locale);
 }
 
-export function productUnit(product: TillProduct): NonNullable<TillProduct["unit"]> {
+export function productUnit(
+  product: Pick<TillProduct, "unit" | "pricingUnit">,
+): NonNullable<TillProduct["unit"]> {
   return (
     product.unit ??
     (product.pricingUnit === "weight"

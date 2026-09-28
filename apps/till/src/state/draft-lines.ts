@@ -50,9 +50,10 @@ export function orderLinesMerge(kept: OrderLine, added: OrderLine): boolean {
 /**
  * A saved draft line as the till shows it, named and priced from `offers` (the table zone's live
  * offers, by menu item id) the way a tap builds a line. The product keeps the line's own menu
- * version, so a line priced against an earlier one is still seen as stale; with `liveVersions` (the
- * version each menu's offers come from) such a line is marked as holding no earlier price, since the
- * price shown is the live one.
+ * version, so a line naming another version than the live one is still seen as stale; with
+ * `liveVersions` (the version each menu's offers come from) such a line is marked as holding no
+ * price of its own version, since the price shown is the live one. That version may be older or
+ * newer than the offers the till holds.
  *
  * Nothing the offer no longer holds is dropped: the ids go back on the next save as they came. A
  * dish no longer offered at all is marked, and has no name, because the server sends none. A saved

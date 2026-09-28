@@ -144,7 +144,7 @@ function leftOutText(lines: readonly OrderLine[]): string {
   if (lines.length > LEFT_OUT_NAMED)
     return t("table.left_out_unnamed").replace("{n}", String(lines.length));
   const names = lines
-    .map((line) => `${shownName(line.product)} ×${trimQuantity(line.quantity)}`)
+    .map((line) => `${shownName(line.product)}\u00a0×${trimQuantity(line.quantity)}`)
     .join(", ");
   return countText(lines.length, "table.left_out", "table.left_out_one").replace(
     "{names}",
@@ -2177,11 +2177,13 @@ export class TillTableOrderScreen extends LitElement {
     if (this.#kept.has(line))
       return html`<span class="flag-kept" data-flag-kept>${t("table.flag_kept")}</span>`;
     const name = shownName(line.product);
+    const busy = store.sending || this.takeOverSent !== null;
     return html`<span class="flag-choice" role="group" aria-label=${name}>
       <wt-button
         variant="secondary"
         data-flag-remove=${index}
         aria-label=${`${t("table.flag_remove")} · ${name}`}
+        ?disabled=${busy}
         @click=${() => void this.#removeFlagged(store, line)}
       >
         ${t("table.flag_remove")}
@@ -2190,6 +2192,7 @@ export class TillTableOrderScreen extends LitElement {
         variant="secondary"
         data-flag-keep=${index}
         aria-label=${`${t("table.flag_keep")} · ${name}`}
+        ?disabled=${busy}
         @click=${() => void this.#keepFlagged(store, line)}
       >
         ${t("table.flag_keep")}

@@ -24,8 +24,8 @@ const standIn = (quantity: string): OrderLine => ({
 });
 
 /** A 1280 px screen whose draft holds `lines`. */
-async function holding(lines: OrderLine[]) {
-  const mounted = await mount();
+async function holding(lines: OrderLine[], over: Partial<TillTableOrderScreen> = {}) {
+  const mounted = await mount(over);
   mounted.host.style.width = "1280px";
   await resized(mounted.el);
   store(mounted.el).loadFrom(store(mounted.el).id, lines);
@@ -147,6 +147,41 @@ describe("till-table-order-screen: a draft line that cannot be sold now", () => 
     );
   });
 
+  it("keeps Remove and Keep off while a send is out", async () => {
+    const { el } = await holding([{ product: beer, quantity: "1", unavailableOnServer: true }]);
+    const off = () =>
+      [removeButton(el, 0)!, keepButton(el, 0)!].map(
+        (button) => (button as HTMLElement & { disabled: boolean }).disabled,
+      );
+    expect(off()).toEqual([false, false]);
+
+    store(el).sending = true;
+    await settled(el);
+
+    expect(off()).toEqual([true, true]);
+  });
+
+  it("keeps Remove and Keep off while a take-over is out", async () => {
+    const { el } = await holding([{ product: beer, quantity: "1", unavailableOnServer: true }], {
+      otherDrafts: [
+        {
+          id: "draft-alex",
+          revision: 1,
+          ownerName: "Alex",
+          takenFromYou: false,
+          lines: [{ product: flan, quantity: "1" }],
+        },
+      ],
+    });
+    el.shadowRoot!.querySelector<HTMLElement>("[data-take-over]")!.click();
+    await settled(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-take-over-confirm]")!.click();
+    await settled(el);
+
+    for (const button of [removeButton(el, 0)!, keepButton(el, 0)!])
+      expect((button as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+  });
+
   it("drops the flag, and the choice, once the line can be sold again", async () => {
     const { el } = await holding([{ product: flan, quantity: "1", blocked: "unavailable" }]);
 
@@ -199,6 +234,19 @@ describe("till-table-order-screen: sending a draft with a flagged line", () => {
 
     expect(previewText(el)).toContain(t("table.left_out_one").replace("{names}", "Beer ×1"));
     expect((await confirmed(el)).sent.map((line) => line.product.name)).toEqual(["Flan"]);
+  });
+
+  it("keeps each named line's name and count together, so a narrow screen never breaks between them", async () => {
+    const { el } = await holding([
+      { product: beer, quantity: "2", unavailableOnServer: true },
+      { product: flan, quantity: "1" },
+    ]);
+
+    await press(el, "send-all");
+
+    expect(el.shadowRoot!.querySelector("[data-preview-left-out]")!.textContent).toContain(
+      "Beer\u00a0×2",
+    );
   });
 
   it("names how many, and not which, when more than three are left out", async () => {

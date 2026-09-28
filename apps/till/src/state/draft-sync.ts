@@ -260,6 +260,12 @@ export class DraftSync {
     return "taken";
   }
 
+  /** Replaces the lines at the given positions for display only: the saved draft does not change,
+   * so nothing is saved. */
+  reshow(lines: ReadonlyMap<number, OrderLine>): void {
+    if (lines.size > 0) this.#quietly(() => this.store.adoptLines(lines));
+  }
+
   /** No save is sent after this, and no answer taken. */
   drop(): void {
     this.#dropped = true;

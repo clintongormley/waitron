@@ -837,6 +837,31 @@ describe("DraftSync: what the server says about each line", () => {
     expect(replaced).toBe(1);
   });
 
+  it("shows lines re-priced by position without saving them, and keeps an unsaved edit to save", async () => {
+    seed("p1", beer);
+    const draft = sync();
+    await draft.load();
+    const [shown] = draft.store.lines;
+    const repriced = (price: string) =>
+      new Map([[0, { product: { ...beer, unitPrice: price }, quantity: "1" }]]);
+
+    draft.reshow(repriced("3.50"));
+    draft.reshow(new Map());
+    await settle();
+    expect(draft.store.lines[0]).toBe(shown);
+    expect(draft.store.lines[0]!.product.unitPrice).toBe("3.50");
+    expect(server.saveDraft).not.toHaveBeenCalled();
+
+    draft.store.addProduct(steak, "1");
+    draft.reshow(repriced("4.00"));
+    await settle();
+    expect(server.saveDraft).toHaveBeenCalledOnce();
+    expect(server.drafts[0]!.lines.map((line) => line.menuItemId)).toEqual([
+      "offer-beer",
+      "offer-steak",
+    ]);
+  });
+
   it("says whether a save is out", async () => {
     let answer!: () => void;
     const draft = sync();

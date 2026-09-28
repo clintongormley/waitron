@@ -1,11 +1,6 @@
 import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import { compareDecimal } from "@waitron/shared";
-import {
-  menuOfferToTillProduct,
-  sellingValuesOf,
-  type MenuUnavailable,
-  type TillMenuOffer,
-} from "../api/client.js";
+import { menuOfferToTillProduct, type MenuUnavailable, type TillMenuOffer } from "../api/client.js";
 import { lineProductName, productUnit } from "../widgets/product-name.js";
 import { lineGross, productAsVariant, quantityPlaces } from "./order-line.js";
 import type { OrderLine } from "./working-order.js";
@@ -106,9 +101,8 @@ export function lineBlock(
     if (variant === undefined || !variant.offered) return { reason: "variant_removed", name };
     if (!variant.available) return { reason: "unavailable", name };
   }
-  const sold = menuOfferToTillProduct(offer);
-  const unit = productUnit(variant === undefined ? sold : { ...sold, ...sellingValuesOf(variant) });
-  if (quantityPlaces(line.quantity) > unit.precision) return { reason: "unit_changed", name };
+  const { precision } = productUnit(variant ?? offer);
+  if (quantityPlaces(line.quantity) > precision) return { reason: "unit_changed", name };
   for (const pick of line.extras ?? []) {
     const list = offer.offeredModifiers.find(
       (entry) => entry.kind === "extras" && entry.id === pick.listId,
@@ -163,6 +157,30 @@ function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string)
   delete adopted.blocked;
   delete adopted.earlierPriceUnknown;
   return adopted;
+}
+
+/**
+ * By index, each line marked `earlierPriceUnknown` whose version has since become the live one,
+ * priced from the live offers. Its saved line already names that version, so only what the till
+ * shows changes. A line the live offer cannot hold as it stands is left as it is.
+ */
+export function repriceRebuilt(
+  lines: readonly OrderLine[],
+  offers: readonly TillMenuOffer[],
+  liveVersions: ReadonlyMap<string, string>,
+): Map<number, OrderLine> {
+  const offerById = new Map(offers.map((offer) => [offer.id, offer]));
+  const repriced = new Map<number, OrderLine>();
+  lines.forEach((line, index) => {
+    if (line.earlierPriceUnknown !== true || isStale(line, liveVersions)) return;
+    const { menuItemId, menuVersionId } = line.product;
+    const offer = offerById.get(menuItemId ?? "");
+    if (offer === undefined || menuVersionId === undefined) return;
+    const reason = lineBlock(line, offer)?.reason;
+    if (reason === "variant_removed" || reason === "unit_changed") return;
+    repriced.set(index, adoptLine(line, offer, menuVersionId));
+  });
+  return repriced;
 }
 
 /** Whether the line was priced against a version of its menu other than the live one. A line with
