@@ -1,12 +1,13 @@
 # Tables, parties and bills: the till's table actions — design
 
-**Status:** draft for review, revision 3 (2026-09-28). Section 4 holds the owner's decisions, made in
+**Status:** draft for review, revision 4 (2026-09-28). Section 4 holds the owner's decisions, made in
 design sessions on 2026-09-28; everything else is this document's proposal and is open to review.
 Section 13 lists the points the reviewers should look at hardest. Revision 2 folds in the first
 outside review (payment identity, paid items, kitchen groups, the main bill's life, MOVED notices,
 the service area of later orders) and the owner's answers to it. Revision 3 folds in the second
 review: a presented bill keeps its invoice and its service area when it moves, its contents cannot
-change in this build, the main bill may be absent, and paid bills do not move.
+change in this build, the main bill may be absent, and paid bills do not move. Revision 4
+corrects a factual slip in section 3 found by the third review, which found no further blockers.
 
 ## 1. Why
 
@@ -95,11 +96,9 @@ not run.
   invoice-first flow, before payment (`apps/server/src/till-sale.ts:207`, `:703-756`).
 - **"Pay, then order dessert"** is settled by the service design: the new charge goes on a new bill of
   the same party with its own invoice (`docs/superpowers/specs/2026-09-20-service-ordering-and-billing-design.md:387-390`).
-- **Nothing reopens a presented bill.** The fiscal backend can record an anulación (`recordVoid`)
-  or a rectificativa (`recordRectificativa`, `packages/fiscal-verifactu/src/backend.ts:332-390`). The
-  void is called from the card-reversal path (`packages/payments-stripe/src/reverse.ts`); nothing in
-  `apps/` or `packages/` outside the backends calls the rectificativa (grep, 2026-09-28). Neither
-  returns a bill to `open`, and the bill status trigger refuses `placed → open`
+- **Nothing reopens a presented bill.** Fiscal voids and corrections (`packages/core/src/record-void.ts`,
+  `packages/core/src/record-correction.ts`) record against the original invoice but do not reopen the
+  original bill, and the bill status trigger refuses `placed → open`
   (`packages/db/drizzle/0001_behavioural_triggers.sql`, around line 318; the second review ran its
   eight transition-guard tests).
 - **Collecting a bill picks its path from the service mode**: in invoice-first mode it settles the
