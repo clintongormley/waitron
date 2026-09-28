@@ -402,8 +402,11 @@ unit (`grep -rn "insert(workingOrderLines)" apps packages` finds four non-test s
 `apps/server/src/working-order.ts`: `createOpenOrder`, `insertTabRound` and `applyLineEdits` each
 follow the insert with `recordLineContexts` (in `createOpenOrder` under a known zone, which its call
 to `priceOrderLines` requires for any line), and `carveOffLines` with `copyLineContext`; run
-2026-09-28). The merge-or-split check still compares abbreviation text (`abbreviatedLikeEach` in
-`kitchen-print.ts`). **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
+2026-09-28). **Done since (2026-09-28, lane C's A114):** the merge-or-split check goes by
+the unit's identity too: a ticket entry is merged or split only when its unit does not print (sold
+in Each, or no unit recorded on the line), so a venue's own unit spelled like Each keeps its entries
+apart and a renamed stored Each unit's are merged or split. The known gap above applies to merging
+and splitting as well. **Kept as they are, by the owner's choice (2026-09-28):** the printed receipt
 (`apps/server/src/receipt-ticket.ts`) and the till's ticket view
 (`apps/till/src/screens/till-ticket-view.ts`), which still show the Each unit: the receipt's case
 "prints the unit abbreviation of the invoice language…" in `apps/server/src/receipt-ticket.test.ts`

@@ -25,7 +25,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
-import { EACH_UNIT, kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
+import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
@@ -67,21 +67,6 @@ function ticketName(text: Record<string, string>, locale: string): string {
   // The map is never empty: `unit_name` freezes a unit's abbreviation, and `createUnit` and
   // `updateUnit` (`packages/catalogue/src/units.ts`) put it through `requireTranslations`.
   return Object.values(text)[0]!;
-}
-
-/**
- * Whether a line's frozen unit abbreviations equal Each's. This decides only whether a ticket entry
- * may be merged or split (`measured`); whether the unit prints is decided by the unit's identity,
- * through `readLinesSoldInEach`.
- */
-function abbreviatedLikeEach(unitName: Record<string, string> | null): boolean {
-  if (unitName === null) return true;
-  const each: Record<string, string> = EACH_UNIT.abbreviation;
-  const locales = Object.keys(unitName);
-  return (
-    locales.length === Object.keys(each).length &&
-    locales.every((locale) => unitName[locale] === each[locale])
-  );
 }
 
 interface PrinterMapping {
@@ -220,18 +205,19 @@ async function buildTicketItems(
     { lineNo: number; group: number | null; item: KitchenTicketItem }
   >();
   for (const row of lineRows) {
+    const unit =
+      row.unitName == null || eachByIdentity.has(row.id)
+        ? undefined
+        : ticketName(row.unitName, cfg.locale);
     byLine.set(row.id, {
       lineNo: row.lineNo,
       group: row.group,
       item: {
         qty: row.quantity,
-        unit:
-          row.unitName == null || eachByIdentity.has(row.id)
-            ? undefined
-            : ticketName(row.unitName, cfg.locale),
+        unit,
         name: kitchenPresentationName(row),
         note: row.note ?? undefined,
-        ...(abbreviatedLikeEach(row.unitName) ? {} : { measured: true }),
+        ...(unit === undefined ? {} : { measured: true }),
         modifiers: [
           ...optionSnapshotLabels(row.optionSnapshots),
           ...(modifiersByParent.get(row.id) ?? []),
