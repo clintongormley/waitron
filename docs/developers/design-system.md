@@ -755,13 +755,14 @@ variant (see `--wt-opacity-hover` above). A `.nav-group` header takes a small-ca
 A headed group (the pinned first group — Overview, Sales — has no header and is never
 collapsible) is also its own disclosure toggle: the header is a `<button>` with `aria-expanded` and
 `aria-controls` pointing at its item list, a `chevron-down` `wt-icon` that rotates 180° when
-expanded (pointing down at rest — "expand this way" — up when open — "collapse"). Collapsed state
-is a plain `Set<NavGroupId>` in component state, not persisted — reopens to fully expanded next
-session, deliberately, rather than risk a collapsed-by-default group hiding something a new build
-adds to it. A group that contains the CURRENT screen always renders expanded regardless of that
-set, even if the user collapsed it earlier and then navigated back into it — collapsing "Team" and
-opening Staff must never hide the page you are already on; only navigating to a DIFFERENT screen
-lets a group honour a collapse the user asked for.
+expanded (pointing down at rest — "expand this way" — up when open — "collapse"). Every headed
+group starts collapsed (owner decision 2026-09-28, replacing expanded-by-default). Collapsed state
+is a plain `Set<NavGroupId>` in component state, not persisted, so each load starts collapsed again.
+A group that contains the CURRENT screen always renders expanded regardless of that set, so opening
+the dashboard on a page shows that page's group open and the rest closed. A header click records
+the opposite of what the header shows. The group holding the current screen always shows open, so
+clicking its header leaves a collapse recorded that a further click cannot clear; the collapse shows
+once you open a screen outside that group, and never hides the page you are on.
 
 A group that has ITS OWN scrolled-to items shrink when collapsed can leave the sidebar's
 `scrollTop` past the new (shorter) scrollable range — the browser then clamps it down on its own,
