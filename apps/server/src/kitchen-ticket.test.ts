@@ -69,7 +69,7 @@ describe("formatKitchenTicket", () => {
             tableLabel: "Mesa 1",
             orderNumber: "A-1",
             firedAt: new Date(2026, 7, 17, 9, 5),
-            items: [{ qty: "0.375", unit: "kg", name: "Jamón" }],
+            items: [{ qty: "0.375", unit: "kg", name: "Jamón", printedAsSold: true }],
           },
           KITCHEN_80,
         ),
@@ -575,7 +575,7 @@ describe("the reprint mark and a party's group numbers", () => {
 });
 
 describe("arrangeTicketItems (D14)", () => {
-  const burger = { qty: "1.000", unit: "ea", name: "Burger", modifiers: ["Cheese"] };
+  const burger = { qty: "1.000", name: "Burger", modifiers: ["Cheese"] };
 
   // Fails if identical entries stop merging, or the quantities are not added.
   it("combined: merges entries that would print identically into one, adding the quantities", () => {
@@ -597,7 +597,7 @@ describe("arrangeTicketItems (D14)", () => {
       { ...burger, modifiers: ["Bacon"] },
       { ...burger, modifiers: ["Cheese", "Bacon"] },
       { ...burger, modifiers: ["Bacon", "Cheese"] },
-      { ...burger, unit: "kg" },
+      { ...burger, unit: "kg", printedAsSold: true },
       { ...burger, note: "rare" },
       { ...burger, group: 2 },
     ];
@@ -606,7 +606,7 @@ describe("arrangeTicketItems (D14)", () => {
 
   // Fails if two non-whole quantities are added together, or whole-number ones stop merging.
   it("combined: prints each non-whole quantity on its own, still merging whole-number ones", () => {
-    const hake = { qty: "0.350", unit: "kg", name: "Hake" };
+    const hake = { qty: "0.350", name: "Hake" };
     expect(arrangeTicketItems([hake, burger, { ...hake }, burger], "combined")).toEqual([
       hake,
       { ...burger, qty: "2.000" },
@@ -651,9 +651,10 @@ describe("arrangeTicketItems (D14)", () => {
     ]);
   });
 
-  // Fails if a measured quantity that happens to be whole is merged or split like a count.
-  it("prints a measured entry as it is, under combined and separate alike", () => {
-    const hake = { qty: "350.000", unit: "g", name: "Hake", measured: true };
+  // Fails if a `printedAsSold` entry whose quantity happens to be whole is merged or split like a
+  // count.
+  it("prints an entry printed as sold as it is, under combined and separate alike", () => {
+    const hake = { qty: "350.000", unit: "g", name: "Hake", printedAsSold: true };
     expect(arrangeTicketItems([hake, burger, { ...hake }, burger], "combined")).toEqual([
       hake,
       { ...burger, qty: "2.000" },

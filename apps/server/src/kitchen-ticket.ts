@@ -24,7 +24,7 @@ export interface KitchenTicketItem {
   /** The position of the party's group the item fired in; absent for an item in no group. */
   group?: number;
   /** Printed as sold, never merged or split. */
-  measured?: boolean;
+  printedAsSold?: boolean;
 }
 
 export interface KitchenTicketStation {
@@ -71,7 +71,7 @@ function entryKey(item: KitchenTicketItem): string {
 /**
  * One ticket list laid out by grouping. `combined` merges entries that would print identically into
  * the first of them, adding the quantities. `separate` prints a whole-number quantity N as N entries
- * of 1. A `measured` entry, or a quantity that is not a whole number, is never merged and never
+ * of 1. A `printedAsSold` entry, or a quantity that is not a whole number, is never merged and never
  * split: two 350 g portions are two pieces to cook, not one of 700 g nor 700 of 1 g.
  */
 export function arrangeTicketItems(
@@ -80,7 +80,7 @@ export function arrangeTicketItems(
 ): KitchenTicketItem[] {
   const count = (item: KitchenTicketItem) => stringToThousandths(String(item.qty));
   const countable = (item: KitchenTicketItem, thousandths: number) =>
-    item.measured !== true && thousandths % 1000 === 0;
+    item.printedAsSold !== true && thousandths % 1000 === 0;
   if (grouping === "separate") {
     return items.flatMap((item) => {
       const thousandths = count(item);
