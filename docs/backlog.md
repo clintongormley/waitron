@@ -3003,11 +3003,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Tests changed by spec decision 9: `apps/server/src/print-problems.test.ts` "follows the held
     dishes when their bill is merged into another table's, and clears by that bill's reprint"
     matched one table in the reprint header and now matches the party's two.
-    **Waiting for a ruling:** `apps/server/src/order-groups.test.ts` "takes a fired-group line to
-    the table's own new bill on an unjoin with no group, and prints the MOVED slip" expects one new
-    print job and now gets two: the taken dish's MOVED slip, and one for the beer still on the tab,
-    whose slips named both tables and now name one. That second slip is this task's behaviour; the
-    assertion was left unchanged for the controller to rule on, and the test fails until then.
+    `apps/server/src/order-groups.test.ts` "takes a fired-group line to the table's own new bill
+    on an unjoin with no group, and prints the MOVED slip" expected one new print job; it now
+    expects two, the taken dish's MOVED slip and one for the beer left on the tab, whose tables
+    went from two to one (spec §8).
     Left open: at 390 px a pass card whose label wraps also wraps its "2 min" onto two lines
     (seen with a seven-table label, `apps/till/src/screens/till-expo-screen.ts`); nothing
     overflows.

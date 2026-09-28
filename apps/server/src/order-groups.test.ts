@@ -1949,9 +1949,12 @@ describe("a line leaving its party", () => {
     expect(await linesOfBill(tabId!)).toMatchObject([{ id: croquettes!.id, groupId: null }]);
     expect((await groupsOf(s.partyId)).groups.find((g) => g.id === s.cold)!.lineIds).toEqual([]);
     const jobs = await printed(v);
-    expect(jobs).toHaveLength(jobsBefore + 1);
+    expect(jobs).toHaveLength(jobsBefore + 2);
     expect(jobs.at(-1)).toContain("MOVED");
     expect(jobs.at(-1)).toContain(DISHES.cold.kitchen);
+    // The beer left on the tab now belongs to one table where it belonged to two (spec §8).
+    expect(jobs.at(-2)).toContain("MOVED");
+    expect(jobs.at(-2)).toContain(DISHES.beer.kitchen);
   });
 });
 
