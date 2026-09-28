@@ -149,6 +149,7 @@ import {
   type VisitCommandArgs,
 } from "./order-groups.js";
 import {
+  copyKitchenJobLines,
   copyKitchenPrintLinks,
   enqueueCorrectionSlips,
   enqueueKitchenTickets,
@@ -3363,6 +3364,7 @@ async function carveOffLines(
           quantity,
         );
         splitFrom.set(splitTicketId, line.ticketItemId);
+        await copyKitchenJobLines(tx, line.id, splitLineId);
         movedLineIds.push(line.id);
       }
     }

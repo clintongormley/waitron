@@ -2372,7 +2372,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`copyKitchenPrintLinks`, `apps/server/src/kitchen-print.ts`), so the destination shows the
       problem and its Reprint clears it; the source keeps its own until its Reprint would print
       nothing there. Still open: Finish table drops the problem of a bill that transfers emptied
-      (read, not run; not re-checked by B6a).
+      (read, not run; not re-checked by B6a). _(C31, 2026-09-28: a move now copies only a ticket
+      that carried a moved dish, at that dish's station.)_
     - After a merge, a reprint of the absorbed bill that was still waiting at the merge clears
       nothing when it prints, so its warning stays until the merged bill is reprinted once more:
       one queue order cannot let it clear the absorbed bill's older failures without also
@@ -2381,13 +2382,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       move: a copied ticket never counts as a reprint, so a source-bill reprint still waiting at
       the move clears nothing on the destination when it prints. Also, not tested as a rule: move
       a dish from bill A to bill B, reprint B so it prints, move the dish back, and A shows its
-      old failure again. And a link records a job, a bill and a station, not which dishes the
-      ticket carried, so the copy also takes a ticket at a moved dish's station that carried only
-      dishes that stayed behind: measured, Mesa 4's burger printed on Cocina, a later fish ticket
-      at Cocina failed, the burger moved to Mesa 5, and Mesa 5 then showed a Cocina problem (its
-      own Reprint should clear it once printed; not run). It errs toward showing a warning. Fixing
-      it needs a record of which dishes each ticket carried, a new table and so a migration; open
-      for the owner.)_
+      old failure again.)_
+    - _Fixed by lane C item C31 (2026-09-28):_ a move copied every unprinted ticket at a moved
+      dish's station, so a ticket that carried only dishes that stayed behind showed on the new
+      bill too (Mesa 4's burger printed on Cocina, a later fish ticket there failed, the burger
+      moved to Mesa 5, and Mesa 5 showed a Cocina problem). Each kitchen ticket now records the
+      order lines it carried (core migration `0035_kitchen_print_job_lines.sql`), a line's
+      split-off part inherits its line's records, and a move copies only a ticket that carried a
+      moved line, at that line's station. A ticket queued before the migration recorded no lines,
+      so on an upgraded venue a move carries none of those tickets' failures to the new bill:
+      measured by deleting a failed ticket's line records and moving its only dish whole, after
+      which neither bill showed the problem (the old bill's Reprint would print nothing there).
+      Cases: `apps/server/src/print-problems.test.ts`.
     - Only dishes whose unit does not print on the ticket — sold in Each by the unit's identity
       (`readLinesSoldInEach`), or with no unit recorded on the line — are added together or split;
       a venue-made unit that counts pieces (a "portion"), even one spelled like Each, prints line by
@@ -2467,7 +2473,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       a printer detached from the station drops the problem. The venue's printer alert
       (`apps/server/src/alert-sources.ts`) is unchanged and reads switched-on printers only.
       Dishes moved to another bill now carry their station's unprinted tickets to it
-      (`copyKitchenPrintLinks`). The later cases for moves and for switched-off and detached
+      (`copyKitchenPrintLinks`) _(C31, 2026-09-28: only the tickets that carried them, at their
+      station)_. The later cases for moves and for switched-off and detached
       printers each failed with their fix deleted.
   - **Task 7 landed as #789** (lane B item B7, 2026-09-28, main `3e4a75e2b`): the server keeps each
     person's unsent order on a seated party, a "draft", so two waiters at one table each have their

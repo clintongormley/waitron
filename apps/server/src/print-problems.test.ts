@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  kitchenPrintJobLines,
   kitchenPrintJobs,
   locations,
   printJobs,
@@ -386,6 +387,34 @@ describe("the link from a kitchen ticket to its bill and station", () => {
       [s.tabId, v.cocina, true],
       [checkId, v.cocina, true],
     ]);
+  });
+
+  it("records the lines each ticket carried: a station ticket its station's, a pass ticket every one", async () => {
+    const v = await setupVenue();
+    const pase = await passPrinter(v);
+    const s = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+
+    expect(await linesCarried(await jobFor(s.tabId, v.cocinaPrinter))).toEqual(["Burger"]);
+    expect(await linesCarried(await jobFor(s.tabId, v.barraPrinter))).toEqual(["Beer tap"]);
+    expect(await linesCarried(oneJobOf(await links(), s.tabId, pase))).toEqual([
+      "Beer tap",
+      "Burger",
+    ]);
+  });
+
+  it("records a Reprint's fired and held lines on the one job that prints both", async () => {
+    const v = await holdingVenue();
+    const s = await seated(v, "Mesa 4");
+    await submit(v, s.visitId, [
+      { release: "fire", lines: [line(v, "burger")] },
+      { release: "hold", lines: [line(v, "fish")] },
+    ]);
+    const before = (await links()).length;
+
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
+
+    const [reprint] = (await links()).slice(before);
+    expect(await linesCarried(reprint!.printJobId)).toEqual(["Burger", "Fish"]);
   });
 
   it("marks a reprint's links as a reprint", async () => {
@@ -1610,6 +1639,116 @@ describe("a printing problem whose dishes move to another bill", () => {
     ]);
   });
 
+  it("does not carry a failure whose ticket carried only dishes that stayed behind", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger"]);
+    const mesa5 = await seated(v, "Mesa 5");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
+    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    const fishTicket = (await links()).at(-1)!;
+    expect([fishTicket.workingOrderId, fishTicket.printerId]).toEqual([
+      mesa4.tabId,
+      v.cocinaPrinter,
+    ]);
+    await setJob(fishTicket.printJobId, exhausted);
+
+    await transferDish(v, mesa4, mesa5, "burger");
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([]);
+    expect(await stationSees(v.cocina, mesa5.tabId)).toBe(false);
+    expect(await problemsOf(mesa4.visitId)).toEqual([
+      {
+        workingOrderId: mesa4.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(fishTicket.printJobId),
+      },
+    ]);
+  });
+
+  it("carries a failure to the bill the dish its ticket carried moves to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger"]);
+    const mesa5 = await seated(v, "Mesa 5");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
+    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "fish")] }]);
+    const fishTicket = (await links()).at(-1)!;
+    await setJob(fishTicket.printJobId, exhausted);
+
+    await transferDish(v, mesa4, mesa5, "fish");
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([
+      {
+        workingOrderId: mesa5.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(fishTicket.printJobId),
+      },
+    ]);
+  });
+
+  it("shows a failure on both bills when its ticket carried a dish that moved and one that stayed", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    const mesa5 = await seated(v, "Mesa 5");
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+
+    await transferDish(v, mesa4, mesa5, "burger");
+
+    const problem = {
+      stationId: v.cocina,
+      stationName: "Cocina",
+      since: await createdAtOf(failed),
+    };
+    expect(await problemsOf(mesa4.visitId)).toEqual([{ workingOrderId: mesa4.tabId, ...problem }]);
+    expect(await problemsOf(mesa5.visitId)).toEqual([{ workingOrderId: mesa5.tabId, ...problem }]);
+  });
+
+  it("carries a failure on with the part of a dish split off to another bill when that part moves again", async () => {
+    const v = await setupVenue();
+    const mesa4 = await seated(v, "Mesa 4");
+    await submit(v, mesa4.visitId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
+    const mesa5 = await seated(v, "Mesa 5");
+    const mesa6 = await seated(v, "Mesa 6");
+    const failed = await jobFor(mesa4.tabId, v.cocinaPrinter);
+    await setJob(failed, exhausted);
+
+    await transferDish(v, mesa4, mesa5, "burger", "1");
+    await transferDish(v, mesa5, mesa6, "burger");
+
+    expect(await problemsOf(mesa6.visitId)).toEqual([
+      {
+        workingOrderId: mesa6.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(failed),
+      },
+    ]);
+  });
+
+  it("carries a failed Reprint to the bill a dish it carried moves to", async () => {
+    const v = await setupVenue();
+    const mesa4 = await firedTable(v, "Mesa 4", ["burger"]);
+    const mesa5 = await seated(v, "Mesa 5");
+    await setJob(await jobFor(mesa4.tabId, v.cocinaPrinter), { status: "done" });
+    await inTx((tx) => reprintOrderTickets(tx, v.cfg, mesa4.tabId));
+    const reprint = (await links()).at(-1)!;
+    expect([reprint.printerId, reprint.reprint]).toEqual([v.cocinaPrinter, true]);
+    await setJob(reprint.printJobId, exhausted);
+
+    await transferDish(v, mesa4, mesa5, "burger");
+
+    expect(await problemsOf(mesa5.visitId)).toEqual([
+      {
+        workingOrderId: mesa5.tabId,
+        stationId: v.cocina,
+        stationName: "Cocina",
+        since: await createdAtOf(reprint.printJobId),
+      },
+    ]);
+  });
+
   it("clears by a Reprint queued before some of the held dishes moved to a new group of the same bill", async () => {
     const v = await holdingVenue();
     const mesa4 = await seated(v, "Mesa 4");
@@ -1669,6 +1808,16 @@ describe("a printing problem whose dishes move to another bill", () => {
     expect(await problemsOf(mesa5.visitId)).toEqual([]);
   });
 });
+
+/** The staff names of the lines `printJobId` recorded carrying, sorted. */
+async function linesCarried(printJobId: string): Promise<string[]> {
+  const rows = await db
+    .select({ name: workingOrderLines.name })
+    .from(kitchenPrintJobLines)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, kitchenPrintJobLines.workingOrderLineId))
+    .where(eq(kitchenPrintJobLines.printJobId, printJobId));
+  return rows.map((row) => row.name).sort();
+}
 
 /** Whether the station's own read, which its cards use, finds a problem on `orderId`. */
 function stationSees(stationId: string, orderId: string): Promise<boolean> {

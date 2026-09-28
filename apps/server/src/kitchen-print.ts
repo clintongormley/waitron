@@ -11,6 +11,7 @@
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
+  kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
   orderGroups,
@@ -275,8 +276,12 @@ interface KitchenRoute {
   printers: PrinterMapping[];
 }
 
-/** One kitchen print job: its printer, the stations its paper carries, and its bytes. */
-type KitchenJob = Omit<KitchenRoute, "printers"> & { printerId: string; bytes: Uint8Array };
+/** One kitchen print job: its printer, the stations and lines its paper carries, and its bytes. */
+type KitchenJob = Omit<KitchenRoute, "printers"> & {
+  printerId: string;
+  lineIds: string[];
+  bytes: Uint8Array;
+};
 
 /** Each station's printer mappings, in the order of the list they came from, with their place in it. */
 type MappingsByStation = ReadonlyMap<string, readonly (PrinterMapping & { at: number })[]>;
@@ -419,11 +424,19 @@ async function planKitchenTickets(
         : { ...head, scope: "station", stationName: station.name, items: station.items },
       layoutOf(route.printers[0]!),
     );
+    const lineIds = [
+      ...new Set(
+        firedItems
+          .filter((fired) => route.stationIds.includes(fired.stationId))
+          .map((fired) => fired.workingOrderLineId),
+      ),
+    ];
     for (const printer of route.printers) {
       jobs.push({
         printerId: printer.printerId,
         station: route.station,
         stationIds: route.stationIds,
+        lineIds,
         bytes,
       });
     }
@@ -431,7 +444,7 @@ async function planKitchenTickets(
   return jobs;
 }
 
-/** Enqueue each job and link it to the bill and to every station its paper carries. */
+/** Enqueue each job and link it to the bill and to every station and line its paper carries. */
 async function enqueueKitchenJobs(
   tx: Transaction,
   cfg: TillConfig,
@@ -443,13 +456,16 @@ async function enqueueKitchenJobs(
   for (const job of jobs) {
     const { jobId } = await enqueuePrintJob(tx, printCfg, job.printerId, job.bytes);
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
+    await tx
+      .insert(kitchenPrintJobLines)
+      .values(job.lineIds.map((workingOrderLineId) => ({ printJobId: jobId, workingOrderLineId })));
   }
 }
 
 /**
  * Enqueue the kitchen tickets for a set of just-fired lines ({@link planKitchenTickets}), each job
- * linked to the bill and to every station its ticket carries (`kitchen_print_jobs`). Answers whether
- * any job was enqueued.
+ * linked to the bill and to every station its ticket carries (`kitchen_print_jobs`) and to every
+ * line it carries (`kitchen_print_job_lines`). Answers whether any job was enqueued.
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
@@ -856,6 +872,7 @@ export async function reprintOrderTickets(
     }
     same.bytes = concatBytes(same.bytes, hold.bytes);
     same.stationIds = [...new Set([...same.stationIds, ...hold.stationIds])];
+    same.lineIds = [...new Set([...same.lineIds, ...hold.lineIds])];
   }
   await enqueueKitchenJobs(tx, cfg, orderId, jobs, true);
 }
@@ -1044,14 +1061,10 @@ export async function moveKitchenPrintLinks(
 
 /**
  * Give `toOrderId` a link to each of `fromOrderId`'s unprinted kitchen tickets that no printed
- * reprint has covered, at the stations of the ticket items of `lineIds`, which have just moved there
- * off `fromOrderId`, some or all of them. Both bills then show the problem, each until its own
- * Reprint prints, or until a Reprint of it would print nothing there ({@link readPrintProblems}).
- * The new links are written as {@link writeLinksAfter} writes them.
- *
- * A link records a job, a bill and a station, not which dishes the ticket carried, so the copy takes
- * every such ticket at a moved dish's station, including one that carried only dishes that stayed
- * behind: the destination can show a problem that is not its own until its Reprint prints.
+ * reprint has covered and that carried one of `lineIds`, which have just moved there off
+ * `fromOrderId`, some or all of them, at that line's station. Both bills then show the problem, each
+ * until its own Reprint prints, or until a Reprint of it would print nothing there
+ * ({@link readPrintProblems}). The new links are written as {@link writeLinksAfter} writes them.
  */
 export async function copyKitchenPrintLinks(
   tx: Transaction,
@@ -1060,15 +1073,38 @@ export async function copyKitchenPrintLinks(
   lineIds: readonly string[],
 ): Promise<void> {
   if (lineIds.length === 0) return;
-  const moved = await tx
-    .selectDistinct({ stationId: ticketItems.stationId })
-    .from(ticketItems)
-    .where(inArray(ticketItems.workingOrderLineId, [...lineIds]));
-  const stationIds = new Set(moved.map((row) => row.stationId));
+  const carried = await tx
+    .selectDistinct({
+      printJobId: kitchenPrintJobLines.printJobId,
+      stationId: ticketItems.stationId,
+    })
+    .from(kitchenPrintJobLines)
+    .innerJoin(
+      ticketItems,
+      eq(ticketItems.workingOrderLineId, kitchenPrintJobLines.workingOrderLineId),
+    )
+    .where(inArray(kitchenPrintJobLines.workingOrderLineId, [...lineIds]));
+  const jobStations = new Set(carried.map((row) => `${row.printJobId}|${row.stationId}`));
   const copies = (await readUncoveredLinks(tx, fromOrderId))
-    .filter((row) => row.status !== "done" && stationIds.has(row.stationId))
+    .filter((row) => row.status !== "done" && jobStations.has(`${row.printJobId}|${row.stationId}`))
     .map(({ printJobId, stationId, createdAt }) => ({ printJobId, stationId, createdAt }));
   await writeLinksAfter(tx, toOrderId, copies);
+}
+
+/** Record that every kitchen ticket which carried `fromLineId` carried `toLineId`, split off it. */
+export async function copyKitchenJobLines(
+  tx: Transaction,
+  fromLineId: string,
+  toLineId: string,
+): Promise<void> {
+  const jobs = await tx
+    .select({ printJobId: kitchenPrintJobLines.printJobId })
+    .from(kitchenPrintJobLines)
+    .where(eq(kitchenPrintJobLines.workingOrderLineId, fromLineId));
+  if (jobs.length === 0) return;
+  await tx
+    .insert(kitchenPrintJobLines)
+    .values(jobs.map(({ printJobId }) => ({ printJobId, workingOrderLineId: toLineId })));
 }
 
 /**
