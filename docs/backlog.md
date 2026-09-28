@@ -2858,11 +2858,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **Tables, parties and bills — the till's table actions: planned (2026-09-28).**
   [plan](superpowers/plans/2026-09-28-table-actions.md), thirteen tasks; the service plan's B10
   onward wait until its Task 13 lands.
-  - **Task 1 built, in review as #816** (`refactor/party-rename`): "visit" renamed "party" in the
+  - **Task 1 DONE (#816, 2026-09-28):** "visit" renamed "party" in the
     code, the tables (`parties`, `party_tables`, the `party_id` columns, core migration `0036`), the
     routes (`/api/parties/...`) and the error codes (`party.*`, `tab.party_mismatch`,
     `tab.party_has_other_open_bill`, `group.held_leaves_party`), with no behaviour change. The four
-    `visits_*_ck` CHECK names and the stored scope value `'visit'` stay until Task 13.
+    `visits_*_ck` CHECK names and the stored scope value `'visit'` stay until Task 13. Left as it
+    is (no backwards-compatibility code before a venue is live, CLAUDE.md §3): a till command
+    recorded before `0036` and retried after it with the same submission id is refused
+    `submission.id_reused`, because the stored fingerprint was taken over argument names that
+    included `visitId` (found by #816's Codex review). Only a dev venue, on a retry that straddles
+    the upgrade, can meet it.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
