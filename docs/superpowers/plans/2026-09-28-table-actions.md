@@ -34,24 +34,20 @@ replay record (D8); read its D1, D2, D8 and D19.
 
 ---
 
-## Pending owner rulings
+## Owner rulings (2026-09-28)
 
-The watcher has put these to the owner. Each task that depends on one names it. Until the owner
-answers, the plan follows the default written here.
+The owner answered the four rulings this plan was written with. Each task that depends on one names it.
 
-1. **Lane B timing.** The watcher asked whether lane B (the service plan's B10–B17) holds until this
-   whole plan lands, or only until Task 1.
-   - **Recommended: until the whole plan lands.** B10, B11, B15 and B17 read the party's bills and
-     the merge rules this plan changes (spec §12).
-   - The task table below gates only on Task 1 as the minimum.
-2. **Task 13's one-time venue reset and box wipe** (P28), or leaving the unused `tab_id` column and
-   the other leftovers in place and dropping Task 13's schema half.
-3. **Decision 6 versus the venue's clearing setting** (P8). The plan follows decision 6 as written:
-   every table the guests leave needs cleaning, whatever `service_settings.clearing_workflow` says.
-   If the owner prefers the setting, revert to the setting-based rule as P8 describes (Tasks 3 and
-   8).
-4. **A pending card payment does not stop a bill moving** (P19, spec §7). This overrides A82's text,
-   which asked to refuse such a bill.
+1. **Lane B holds until the whole plan lands.** The service plan's B10–B17 start only after Task 13
+   has landed. B10, B11, B15 and B17 read the party's bills and the merge rules this plan changes
+   (spec §12).
+2. **Task 13's one-time venue reset and box wipe are agreed** (P28). Task 13 keeps its schema half,
+   and its PR is still labelled `needs-owner-review` so the owner times the box wipe.
+3. **The venue's clearing setting decides whether a table the guests leave needs cleaning** (P8,
+   Tasks 3 and 8). With `service_settings.clearing_workflow` on, the tables need cleaning; with it
+   off, they are free at once, as Finish does today. This narrows spec decision 6.
+4. **A pending card payment does not stop a bill moving** (P19, spec §7), which overrides A82's text.
+   A fully paid bill still never moves (decision 5).
 
 ---
 
@@ -137,9 +133,8 @@ branch (read from `git diff --stat main...feat/service-served-and-reminders`), a
 those four files move.** Each task's Step 0 re-maps them.
 
 Spec §12 and §13 item 10 (accepted) put this work after B9 and before B10. Lane B is building B10–B17
-of the service plan in parallel, and the brief for this plan says so. **At the least (pending owner ruling 1, which recommends holding lane B until the whole plan
-lands), B10 onward must not start until Task 1 has landed**, because the rename touches nearly every file they touch.
-After Task 1, the overlap rule below decides.
+of the service plan in parallel, and the brief for this plan says so. **By owner ruling 1, B10 onward start only after Task 13 has landed.** The rename alone touches
+nearly every file they touch.
 
 | Task | Slug | Branch | May start when |
 | --- | --- | --- | --- |
@@ -155,7 +150,7 @@ After Task 1, the overlap rule below decides.
 | 10 | `party-till-bills` | `feat/party-till-bills` | Tasks 5 and 8 `landed` (see below) |
 | 11 | `party-till-tables` | `feat/party-till-tables` | Tasks 8 and 10 `landed` |
 | 12 | `party-till-move-bill` | `feat/party-till-move-bill` | Tasks 9 and 11 `landed` |
-| 13 | `party-drop-tab-pointer` | `refactor/party-drop-tab-pointer` | Task 12 `landed`, and the owner has agreed the venue reset (P28) |
+| 13 | `party-drop-tab-pointer` | `refactor/party-drop-tab-pointer` | Task 12 `landed` (the venue reset was agreed 2026-09-28, P28) |
 
 **Task 10 waits for Task 8, not only Task 5.** Task 10 replaces the till's Merge with Task 5's
 same-party merge, which removes the till's only way to combine two parties: the old cross-party
@@ -404,15 +399,11 @@ flagged for the owner in their PRs.**
     timestamp is set, else free.
   - A later "reserved" joins the union from the bookings module's own rows, so no table column is
     added now.
-  - **Every table the guests leave needs cleaning, whatever the venue's clearing setting** (spec
-    decision 6, as written). That covers Finish, Move guests, and the tables a combining party
-    leaves behind. `service_settings.clearing_workflow` stops being read by these paths. Today only
-    a venue with that setting on puts tables into needing clearing, and with it off Finish frees
-    them at once. **This is pending the owner's ruling (see "Pending owner rulings"); the watcher
-    has asked.** If the owner prefers the venue setting, revert to the setting-based rule: in
-    `leaveForCleaning` (Task 3), set `needs_cleaning_since` only when
-    `VENUE_SERVICE.readClearingWorkflow(tx)` is true, and restore Task 3's "frees the tables at
-    once when the venue does not use the clearing workflow" case.
+  - **The venue's clearing setting decides whether a table the guests leave needs cleaning**
+    (owner ruling 3). That covers Finish, Move guests, and the tables a combining party leaves
+    behind. `leaveForCleaning` (Task 3) sets `needs_cleaning_since` only when
+    `VENUE_SERVICE.readClearingWorkflow(tx)` is true; with the setting off, the tables are free at
+    once, as Finish frees them today. A venue with no settings row reads off.
 - **P9. Mark cleared is per table, and doing it twice is harmless.**
   - The route is `POST /api/tables/:id/cleared`.
   - A table that does not need cleaning is left as it is, with a 204. It takes no revision: two
@@ -1810,11 +1801,9 @@ Spec decision 6, §5 ("Needs cleaning moves from the party … to the table", ro
 and §6 (Finish, Cleared); P8, P9, P10. Branch `feat/party-table-cleaning`. Full review wave (a
 migration, and the configuration export's column list).
 
-**Decision 6 as written, pending the owner's ruling** (P8; "Pending owner rulings" item 3). Every
-table the guests leave needs cleaning, whatever `service_settings.clearing_workflow` says.
-- This changes what a venue with the setting off sees: Finish used to free its tables at once.
-- If the owner prefers the setting, revert to the setting-based rule as P8 describes, and restore
-  the case this task replaces. The PR says so at its top.
+**The venue's clearing setting decides** (P8; owner ruling 3). With
+`service_settings.clearing_workflow` on, every table the guests leave needs cleaning; with it off,
+Finish frees the tables at once, as today.
 
 **Files:**
 - Modify:
@@ -1864,7 +1853,7 @@ table the guests leave needs cleaning, whatever `service_settings.clearing_workf
   export function tableCondition(row: { held: boolean; needsCleaningSince: string | null }): TableCondition;
   export interface TableState { …; condition: TableCondition }
   // apps/server/src/parties.ts
-  export async function leaveForCleaning(tx, tableIds: readonly string[], at: string): Promise<void>; // ends memberships; tab_id and status_id null; needs_cleaning_since = at, whatever the venue's clearing setting (P8, pending the owner's ruling)
+  export async function leaveForCleaning(tx, tableIds: readonly string[], at: string): Promise<void>; // ends memberships; tab_id and status_id null; needs_cleaning_since = at only when the venue's clearing setting is on (P8)
   export async function markTableCleared(tx, tableId: string): Promise<void>; // table.not_found; idempotent (P9)
   // finishTable answers { state: "closed" } always now; the tables carry the rest
   // wire: POST /api/tables/:id/cleared → 204; TableState.condition
@@ -1937,14 +1926,13 @@ table the guests leave needs cleaning, whatever `service_settings.clearing_workf
       expect(await condition(mesa6)).toBe("held");
     });
 
-    // Decision 6 as written, pending the owner's ruling (plan P8): the venue's setting is not read.
-    it("leaves the tables needing cleaning even when the venue's clearing setting is off", async () => {
+    it("frees the tables at once when the venue's clearing setting is off (P8)", async () => {
       await inTx(v, (tx) => writeClearingWorkflow(tx, false));
       const mesa8 = await v.table("Mesa 8c");
       const { partyId } = await seat(v, mesa8);
       await finish(partyId);
-      expect(await condition(mesa8)).toBe("needs_cleaning");
-      expect((await tableRow(v, mesa8)).needsCleaningSince).not.toBeNull();
+      expect(await condition(mesa8)).toBe("free");
+      expect((await tableRow(v, mesa8)).needsCleaningSince).toBeNull();
     });
 
     it("clears a table that does not need cleaning without complaint, and changes nothing", async () => {
@@ -1992,12 +1980,9 @@ table the guests leave needs cleaning, whatever `service_settings.clearing_workf
 
 - [ ] **Step 3: Implement.**
   - `leaveForCleaning(tx, tableIds, at)`: calls `leaveTables(tx, tableIds, at)`, then updates
-    `dining_tables` for those ids with `tabId: null`, `statusId: null` and `needsCleaningSince: at`.
-    It does not read `VENUE_SERVICE.readClearingWorkflow` (P8, decision 6 as written, pending the
-    owner's ruling).
-    - Nothing else reads that setting after this task, so the setting stays but does nothing. Say so
-      in the PR and in `docs/backlog.md`.
-    - Deleting the setting waits for the owner's ruling.
+    `dining_tables` for those ids with `tabId: null` and `statusId: null`, and with
+    `needsCleaningSince: at` only when `VENUE_SERVICE.readClearingWorkflow(tx)` is true (P8, owner
+    ruling 3).
   - `finishTable`:
     1. keeps its refusal checks and the empty-bill abandon;
     2. updates the party to `state: "closed"`, with `closedAt` and `closedBy`, **before**
@@ -3289,7 +3274,7 @@ Task 11.
        exist, and both are `isUntouched`. Otherwise, when `into` has no main bill and `from`'s is
        open, `setMainBill(into, fromMain)`;
     5. the tables: `"leave"` calls `leaveForCleaning(from's tables)`, so every table left behind
-       needs cleaning whatever the venue's clearing setting (P8, pending the owner's ruling); and `"join"` calls
+       needs cleaning when the venue's clearing setting is on (P8); and `"join"` calls
        `leaveTables(from's tables)` and inserts a `party_tables` row for `into` for each. Both happen
        BEFORE `from` closes, so closing clears no status of a table that joins (Step 0);
     6. close `from`: `state: "closed"`, `closedAt`, `closedBy`, `mergedIntoPartyId: into`;
@@ -3312,8 +3297,9 @@ Task 11.
       - a free table whose zone's service mode is not `table_tab` is refused
         `service_zone.mode_incompatible` before anything is written, with the check `openTab` makes
         (`working-order.ts:1002-1010`), as Task 7 does for a bill;
-      - `leaveForCleaning` of the party's other tables (they need cleaning, whatever the venue's
-        setting: P8, pending the owner's ruling), then insert the new membership;
+      - `leaveForCleaning` of the party's other tables (they need cleaning when the venue's
+        clearing setting is on, P8), then insert the new membership. Add a Move guests case with
+        the setting off: the tables left behind read free and `needsCleaningSince` stays null;
       - when the free table's zone differs from `partyZone`, `takeIntoParty` each open bill of the
         party, again to the same party, with the new zone. That is the area rule (P15), as
         `moveTab` retargets today.
@@ -4196,7 +4182,7 @@ in the task's own PR wherever the task makes it stale. **The last task to land**
   | decision 3 | 2 (P6), 8 (split a table's name), 11 (naming) |
   | decision 4 | 5 (P21), 8 |
   | decision 5 | 5 (P3), 7 |
-  | decision 6 | 3, 8 (P8, flagged) |
+  | decision 6 | 3, 8 (P8, narrowed by owner ruling 3) |
   | decision 7 | 2 (P5), 10 |
   | decision 8 | 10 (M7b3 goes) |
   | decision 9 | 4 (P7) |
@@ -4256,13 +4242,10 @@ in the task's own PR wherever the task makes it stale. **The last task to land**
   5. **Spec §5 drops `tab_id`,** and that needs a rebuild which fails on any venue that ever seated
      a party (measurements 4 and 5). Hence P28 and the owner's review of Task 13.
   6. **The brief for this plan says lane B builds B10–B17 in parallel,** while spec §12 and §13
-     item 10 put this work before B10. The task table asks lane B to hold until at least Task 1.
-     The watcher and the owner decide the rest.
-- **Pending owner rulings** are listed near the top of the plan: lane B timing, Task 13's reset,
-  decision 6 versus the clearing setting, and a pending card payment on a moved bill.
+     item 10 put this work before B10. Owner ruling 1 settles it: lane B holds until Task 13 lands.
+- **Owner rulings** (2026-09-28) are listed near the top of the plan: lane B timing, Task 13's
+  reset, the clearing setting, and a pending card payment on a moved bill.
 - **Flagged for the owner in the PRs that implement them:**
-  - P8: every table guests leave needs cleaning, whatever the venue's clearing setting (decision 6
-    as written, pending the owner's ruling);
   - P17: a MOVED slip for a counter move can name the same label twice;
   - P16: dishes arriving in a party get a group, which reads against spec §15's "outside any
     group";
