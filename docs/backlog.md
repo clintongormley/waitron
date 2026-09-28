@@ -2987,15 +2987,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A joined party's kitchen slips, pass cards and overdue-report rows read "Mesa 4, 5" (the
       tables in the order they joined, `partyTablesName`), where they read the table with the
       lowest id. A bill split off the tab names the party's tables too, not the label it was split
-      with; a split bill's own label is now the party's tables (`orderTableLabel`), never its name.
-      Once a party holds no table, its bills fall back to their own label.
+      with. When a bill is split off, the new bill's own label is set to the party's tables
+      (`orderTableLabel`), not to the receipt label with the party's name; paying a bill later
+      replaces its label (see the open point below). Once a party holds no table, its bills fall
+      back to their own label.
     - A party's receipt and payment slip read "Ana · Mesa 4, 5" for a named party and "Mesa 4, 5"
       for an unnamed one (`partyReceiptLabel`). A receipt already issued keeps the label frozen at
       issuance. A counter order still names its delivery table.
     - Joining, unjoining and moving a table, and merging bills, send a MOVED notice and slip for
       the sent dishes on every open, placed or settled bill of the parties involved whose tables
       changed (`readPartiesSentWork`, `enqueueMovedSlipsFor` in
-      `apps/server/src/kitchen-print.ts`). Before, only the one bill acted on was compared.
+      `apps/server/src/kitchen-print.ts`). Before, a join sent none, and a move, unjoin or merge
+      compared only the bill acted on.
       Moving lines between bills and transferring lines keep their one-bill comparison.
     - A table's bill that belongs to no party keeps the old rule: the lowest-id table seated at
       it, and no notice on a join. `openTab`'s one caller outside the test helpers is
@@ -3007,9 +3010,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on an unjoin with no group, and prints the MOVED slip" expected one new print job; it now
     expects two, the taken dish's MOVED slip and one for the beer left on the tab, whose tables
     went from two to one (spec §8).
-    Left open: at 390 px a pass card whose label wraps also wraps its "2 min" onto two lines
-    (seen with a seven-table label, `apps/till/src/screens/till-expo-screen.ts`); nothing
-    overflows.
+    Left open:
+    - At 390 px a pass card whose label wraps also wraps its "2 min" onto two lines (seen with a
+      seven-table label, `apps/till/src/screens/till-expo-screen.ts`); nothing overflows.
+    - Paying a named party's bill freezes its receipt label, "Ana · Mesa 4, 5", into
+      `working_orders.label` (`readReceiptOrder` at issuance, written in
+      `apps/server/src/till-sale.ts` and `apps/server/src/bill-payments.ts`), so reprints match.
+      Kept on purpose (spec §8: receipts show the name). Every other reader of that column then
+      shows the party's name with its tables for that bill: the station queue card
+      (`listStationQueue`, `apps/server/src/working-order.ts`), the order label on kitchen notices
+      recorded afterwards ("#N · label", `recordKitchenNotices`,
+      `packages/venue-service/src/kitchen-notices.ts`), the till's list of a party's bills
+      (`readBillsOfParties`, `apps/server/src/parties.ts`), the dashboard's stuck card payments,
+      bill payments and bill refunds lists (`apps/server/src/payments-api.ts`), and
+      `orderTableLabel`'s fallback once the party holds no table (slips, the pass and the overdue
+      report). Decide whether those should read the tables alone.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

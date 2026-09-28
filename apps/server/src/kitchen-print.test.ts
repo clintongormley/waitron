@@ -1412,13 +1412,13 @@ it("falls back to the product's staff name when it has no kitchen name", async (
 describe("the table a slip names (spec decision 9)", () => {
   it("names every table of the party on the slip, in the order they joined", async () => {
     const v = await setupPartyVenue(db);
-    const mesa5 = await v.table("Mesa 5");
     const mesa4 = await v.table("Mesa 4");
-    const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, tabId, mesa5);
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa5);
+    await join(v, partyId, tabId, mesa4);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, tabId))).toBe("Mesa 4, 5");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, tabId))).toBe("Mesa 5, 4");
   });
 
   it("names the party's tables on a bill split from the tab, not the label it was split with", async () => {

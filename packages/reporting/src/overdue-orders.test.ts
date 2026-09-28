@@ -272,8 +272,8 @@ describe("computeOverdueOrders", () => {
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
     await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
-      { label: "Mesa 5", joinedAt: "2026-09-28T20:02:00.000Z" },
-      { label: "Mesa 4", joinedAt: "2026-09-28T20:00:00.000Z" },
+      { label: "Mesa 4", joinedAt: "2026-09-28T20:02:00.000Z" },
+      { label: "Mesa 5", joinedAt: "2026-09-28T20:00:00.000Z" },
       {
         label: "Mesa 3",
         joinedAt: "2026-09-28T20:01:00.000Z",
@@ -283,7 +283,7 @@ describe("computeOverdueOrders", () => {
 
     const rows = await run();
 
-    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Mesa 4, 5" })]);
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Mesa 5, 4" })]);
   });
 
   it("names a party's bill by its own label once the party holds no table", async () => {

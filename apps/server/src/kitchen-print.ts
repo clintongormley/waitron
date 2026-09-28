@@ -310,13 +310,19 @@ export async function orderTableLabel(
   return (await readOrderHeader(tx, cfg, orderId)).tableLabel;
 }
 
-/** The order number and table ({@link orderTableLabels}) its kitchen paper is headed with. */
-async function readOrderHeader(
+/** What a kitchen paper for an order is headed with. */
+interface OrderHeader {
+  orderNumber: string;
+  tableLabel: string | null;
+}
+
+/** Each order's number and table ({@link orderTableLabels}), keyed by order. */
+async function readOrderHeaders(
   tx: Transaction,
   cfg: TillConfig,
-  orderId: string,
-): Promise<{ orderNumber: string; tableLabel: string | null }> {
-  const [order] = await tx
+  orderIds: readonly string[],
+): Promise<Map<string, OrderHeader>> {
+  const orders = await tx
     .select({
       id: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
@@ -325,9 +331,22 @@ async function readOrderHeader(
       label: workingOrders.label,
     })
     .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
-  const labels = await orderTableLabels(tx, cfg.locationId, [order!]);
-  return { orderNumber: String(order!.orderNumber), tableLabel: labels.get(orderId)! };
+    .where(inArray(workingOrders.id, [...orderIds]));
+  const labels = await orderTableLabels(tx, cfg.locationId, orders);
+  return new Map(
+    orders.map((order) => [
+      order.id,
+      { orderNumber: String(order.orderNumber), tableLabel: labels.get(order.id)! },
+    ]),
+  );
+}
+
+async function readOrderHeader(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<OrderHeader> {
+  return (await readOrderHeaders(tx, cfg, [orderId])).get(orderId)!;
 }
 
 /** A kitchen ticket's printers, all of one layout so they share its bytes. */
@@ -663,7 +682,7 @@ async function printCorrectionSlips(
   orderId: string,
   items: CorrectionItem[],
   change: CorrectionChange,
-  knownHeader?: { orderNumber: string; tableLabel: string | null },
+  knownHeader?: OrderHeader,
 ): Promise<void> {
   const stationIds = [...new Set(items.map((i) => i.stationId))];
   const mappingRows = await printerMappings(tx, stationIds);
@@ -754,9 +773,27 @@ export async function enqueueMovedSlips(
   if (before.ticketItemIds.size === 0) return;
   const header = await readOrderHeader(tx, cfg, toOrderId);
   if (header.tableLabel === before.tableLabel) return;
+  const fired = await readTicketItemsOn(tx, [toOrderId]);
+  await notifyMoved(tx, cfg, before, toOrderId, header, fired.get(toOrderId) ?? [], splitFrom);
+}
 
-  const fired = await tx
+/** A ticket item on an order, as a MOVED notice reads it. */
+interface ItemOnOrder {
+  id: string;
+  workingOrderLineId: string;
+  stationId: string | null;
+  state: TicketState;
+  quantity: number;
+}
+
+/** The ticket items on each order, in line order, keyed by order. */
+async function readTicketItemsOn(
+  tx: Transaction,
+  orderIds: readonly string[],
+): Promise<Map<string, ItemOnOrder[]>> {
+  const rows = await tx
     .select({
+      orderId: ticketItems.workingOrderId,
       id: ticketItems.id,
       workingOrderLineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
@@ -765,9 +802,31 @@ export async function enqueueMovedSlips(
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(eq(ticketItems.workingOrderId, toOrderId))
-    .orderBy(workingOrderLines.lineNo);
-  const moved: CorrectionItem[] = fired
+    .where(inArray(ticketItems.workingOrderId, [...orderIds]))
+    .orderBy(workingOrderLines.lineNo, ticketItems.id);
+  const byOrder = new Map<string, ItemOnOrder[]>();
+  for (const { orderId, ...item } of rows) {
+    const items = byOrder.get(orderId) ?? [];
+    items.push(item);
+    byOrder.set(orderId, items);
+  }
+  return byOrder;
+}
+
+/**
+ * The `moved` notices and MOVED slips for `before`'s items now on `toOrderId`, whose current
+ * header and ticket items the caller has read and whose table differs from `before`'s.
+ */
+async function notifyMoved(
+  tx: Transaction,
+  cfg: TillConfig,
+  before: SentWork,
+  toOrderId: string,
+  header: OrderHeader,
+  onOrder: readonly ItemOnOrder[],
+  splitFrom: ReadonlyMap<string, string>,
+): Promise<void> {
+  const moved: CorrectionItem[] = onOrder
     .filter((item) => before.ticketItemIds.has(splitFrom.get(item.id) ?? item.id))
     .map((item) => ({
       workingOrderLineId: item.workingOrderLineId,
@@ -863,7 +922,7 @@ export async function readPartiesSentWork(
 
 /**
  * {@link enqueueMovedSlips} for each bill `before` read, onto the bill `mergedInto` maps it to, else
- * onto itself.
+ * onto itself, reading every destination's header and ticket items once.
  */
 export async function enqueueMovedSlipsFor(
   tx: Transaction,
@@ -871,8 +930,16 @@ export async function enqueueMovedSlipsFor(
   before: ReadonlyMap<string, SentWork>,
   mergedInto: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
-  for (const [billId, work] of before) {
-    await enqueueMovedSlips(tx, cfg, work, mergedInto.get(billId) ?? billId);
+  const moves = [...before]
+    .filter(([, work]) => work.ticketItemIds.size > 0)
+    .map(([billId, work]) => ({ work, to: mergedInto.get(billId) ?? billId }));
+  if (moves.length === 0) return;
+  const headers = await readOrderHeaders(tx, cfg, [...new Set(moves.map((move) => move.to))]);
+  const changed = moves.filter((move) => headers.get(move.to)!.tableLabel !== move.work.tableLabel);
+  if (changed.length === 0) return;
+  const onOrders = await readTicketItemsOn(tx, [...new Set(changed.map((move) => move.to))]);
+  for (const { work, to } of changed) {
+    await notifyMoved(tx, cfg, work, to, headers.get(to)!, onOrders.get(to) ?? [], new Map());
   }
 }
 

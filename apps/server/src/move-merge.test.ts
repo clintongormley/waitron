@@ -993,4 +993,35 @@ describe("a table action tells the kitchen of every bill of the party", () => {
       FLAN: [ana.tabId, "Mesa 4, 7"],
     });
   });
+
+  it("tells the kitchen of a split bill of the party taken in, which joins the receiving party", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa7 = await v.table("Mesa 7");
+    const ana = await seat(v, mesa4);
+    await nextMillisecond();
+    const other = await seat(v, mesa7);
+    await orderForParty(v, other.partyId, ["Flan", "Tarta"], other.tabId);
+    const otherCheckId = await split(v, other.partyId, other.tabId, [2]);
+    const expectedPartyRevision = await revisionOf(v, ana.partyId);
+    const expectedSourcePartyRevision = await revisionOf(v, other.partyId);
+    await nextMillisecond();
+
+    await inTx(v, (tx) =>
+      mergeTabs(tx, v.cfg, ana.tabId, other.tabId, {
+        freeSourceTable: false,
+        expectedPartyRevision,
+        expectedSourcePartyRevision,
+        operatorId: OPERATOR,
+      }),
+    );
+
+    const notices = await noticesOf([ana.tabId, other.tabId, otherCheckId]);
+    expect(
+      Object.fromEntries(notices.map((n) => [n.lineName, [n.workingOrderId, n.movedTo]])),
+    ).toEqual({
+      FLAN: [ana.tabId, "Mesa 4, 7"],
+      TARTA: [otherCheckId, "Mesa 4, 7"],
+    });
+  });
 });
