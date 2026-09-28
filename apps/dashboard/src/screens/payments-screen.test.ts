@@ -173,10 +173,13 @@ describe("payments-screen", () => {
   });
 
   it("offers the reader columns but the name and the actions in a translated column chooser, and remembers a hidden one", async () => {
+    // In Spanish, because the table's own default label is the English "Columns".
+    setLocale("es-ES");
     const { el } = await mount();
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = table.shadowRoot!;
     expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe(t("table.columns"));
+    expect(root.querySelector(".columns-trigger")?.textContent?.trim()).toBe("Columnas");
     expect(
       [...root.querySelectorAll<HTMLInputElement>("input[data-column]")].map((box) => [
         box.dataset.column,

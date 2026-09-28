@@ -109,6 +109,8 @@ describe("dashboard-alerts-screen", () => {
     ],
   ] as const) {
     it(`offers every ${test} column but the alert's own and any actions column in the column chooser, and remembers a hidden one`, async () => {
+      // In Spanish, because the table's own default label is the English "Columns".
+      setLocale("es-ES");
       const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
         api: stubApi(),
       });
@@ -119,6 +121,7 @@ describe("dashboard-alerts-screen", () => {
       await table.updateComplete;
       const root = table.shadowRoot!;
       expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe(t("table.columns"));
+      expect(root.querySelector(".columns-trigger")!.textContent!.trim()).toBe("Columnas");
       const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
       expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual(choices);
       const headerTexts = () =>

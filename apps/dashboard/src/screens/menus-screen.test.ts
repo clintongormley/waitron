@@ -2855,7 +2855,7 @@ it("opens no product's window while a save is out, even after Back and Forward c
 // Publishing
 
 describe("publishing", () => {
-  // Read as a person reads the page, in English, on a screen wide enough for every column.
+  // Read as a person reads the page, in English unless a case says otherwise, on a screen wide enough for every column.
   const frame = { width: 0, height: 0 };
   beforeEach(async () => {
     setLocale("en");
@@ -3020,6 +3020,8 @@ describe("publishing", () => {
   });
 
   it("offers the status column, and neither the name nor the actions, in the list's column chooser, and remembers a hidden one", async () => {
+    // In Spanish, because the table's own default label is the English "Columns".
+    setLocale("es-ES");
     const el = await mount();
     const headerTexts = () =>
       [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th));
@@ -3029,6 +3031,7 @@ describe("publishing", () => {
     });
     const root = table(el).shadowRoot;
     expect(text(root.querySelector(".columns-trigger"))).toBe(t("table.columns"));
+    expect(text(root.querySelector(".columns-trigger"))).toBe("Columnas");
     const boxes = [...root.querySelectorAll<HTMLInputElement>("input[data-column]")];
     expect(boxes.map((box) => [box.dataset.column, box.checked])).toEqual([["status", true]]);
     boxes[0]!.checked = false;
