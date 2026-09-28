@@ -2982,6 +2982,35 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
+  - **Task 4 DONE (PR to follow, 2026-09-29): kitchen slips, the pass, receipts and the overdue
+    report name all of a party's tables.** What changes for a person:
+    - A joined party's kitchen slips, pass cards and overdue-report rows read "Mesa 4, 5" (the
+      tables in the order they joined, `partyTablesName`), where they read the table with the
+      lowest id. A bill split off the tab names the party's tables too, not the label it was split
+      with; a split bill's own label is now the party's tables (`orderTableLabel`), never its name.
+      Once a party holds no table, its bills fall back to their own label.
+    - A party's receipt and payment slip read "Ana · Mesa 4, 5" for a named party and "Mesa 4, 5"
+      for an unnamed one (`partyReceiptLabel`). A receipt already issued keeps the label frozen at
+      issuance. A counter order still names its delivery table.
+    - Joining, unjoining and moving a table, and merging bills, send a MOVED notice and slip for
+      the sent dishes on every open, placed or settled bill of the parties involved whose tables
+      changed (`readPartiesSentWork`, `enqueueMovedSlipsFor` in
+      `apps/server/src/kitchen-print.ts`). Before, only the one bill acted on was compared.
+      Moving lines between bills and transferring lines keep their one-bill comparison.
+    - A table's bill that belongs to no party keeps the old rule: the lowest-id table seated at
+      it, and no notice on a join. `openTab`'s one caller outside the test helpers is
+      `seatTable`, which opens the tab on a new party.
+    Tests changed by spec decision 9: `apps/server/src/print-problems.test.ts` "follows the held
+    dishes when their bill is merged into another table's, and clears by that bill's reprint"
+    matched one table in the reprint header and now matches the party's two.
+    **Waiting for a ruling:** `apps/server/src/order-groups.test.ts` "takes a fired-group line to
+    the table's own new bill on an unjoin with no group, and prints the MOVED slip" expects one new
+    print job and now gets two: the taken dish's MOVED slip, and one for the beer still on the tab,
+    whose slips named both tables and now name one. That second slip is this task's behaviour; the
+    assertion was left unchanged for the controller to rule on, and the test fails until then.
+    Left open: at 390 px a pass card whose label wraps also wraps its "2 min" onto two lines
+    (seen with a seven-table label, `apps/till/src/screens/till-expo-screen.ts`); nothing
+    overflows.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

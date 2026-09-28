@@ -28,12 +28,12 @@ import {
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES } from "../modules.js";
 import { placeGroups } from "../order-groups.js";
-import { memberTables, seatTable } from "../parties.js";
+import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { createTable } from "../tables.js";
 import type { TillConfig } from "../till-config.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "../till-sale.js";
-import { addTabRound, listTablesWithState, splitOffCheck } from "../working-order.js";
+import { addTabRound, joinTable, listTablesWithState, splitOffCheck } from "../working-order.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 
 /**
@@ -232,6 +232,34 @@ export async function split(
     ),
   );
   return checkId;
+}
+
+/**
+ * Waits until the clock reads a later millisecond. `joined_at` is stamped to the millisecond and a
+ * tie orders by random id, so a test that expects tables in the order they joined calls this before
+ * each later join.
+ */
+export async function nextMillisecond(): Promise<void> {
+  const start = Date.now();
+  while (Date.now() <= start) await new Promise((resolve) => setTimeout(resolve, 1));
+}
+
+/** Joins the table to the party's bill, as the till's join does, a millisecond after the last. */
+export async function join(
+  v: PartyVenue,
+  partyId: string,
+  billId: string,
+  tableId: string,
+): Promise<void> {
+  await nextMillisecond();
+  const sent = await commandFor(v, partyId);
+  await inTx(v, (tx) => joinTable(tx, v.cfg, billId, tableId, sent));
+}
+
+/** Names the party, as the till's rename does. */
+export async function nameParty(v: HasDb, partyId: string, name: string): Promise<void> {
+  const expectedPartyRevision = await revisionOf(v, partyId);
+  await inTx(v, (tx) => setPartyName(tx, { partyId, name, expectedPartyRevision }));
 }
 
 /** The table as the till's floor lists it. */

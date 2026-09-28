@@ -6,6 +6,8 @@ import {
   diningTables,
   drawerOpens,
   locations,
+  nowIso,
+  partyTables,
   printJobs,
   readTenant,
   sales,
@@ -47,6 +49,17 @@ import { createTable } from "./tables.js";
 import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import {
+  inTx,
+  join,
+  nameParty,
+  orderForParty,
+  pay,
+  seat,
+  setupPartyVenue,
+  split,
+} from "./testing/party-venue.js";
+import { readReceiptOrder } from "./receipt-order.js";
 
 /**
  * The auto-print hook: a `print_jobs` outbox row and a `drawer_opens` audit row written atomically
@@ -844,5 +857,66 @@ describe("receipt issuer", () => {
     );
     expect(recorded).toContain("Emisor Registrado SL");
     expect(recorded).not.toContain(taxpayer.legalName);
+  });
+});
+
+describe("a party's receipt names the party and its tables (spec §8)", () => {
+  /** The receipt a party at Mesa 4 and 5 is printed when it pays, named `name` when one is given. */
+  async function receiptOfJoinedParty(name?: string): Promise<string> {
+    const v = await setupPartyVenue(suite.db);
+    await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter(v.cfg) });
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v, partyId, tabId, mesa5);
+    if (name !== undefined) await nameParty(v, partyId, name);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+
+    await pay(v, tabId, "12.00");
+
+    const receipts = (await printJobsFor(v.cfg))
+      .map((job) => decodeTicket(new Uint8Array(job.payload)))
+      .filter((text) => text.includes("TOTAL"));
+    expect(receipts).toHaveLength(1);
+    return receipts[0]!;
+  }
+
+  it("prints a named party's name and all its tables", async () => {
+    expect(await receiptOfJoinedParty("Ana")).toContain("Ana · Mesa 4, 5 · Pedido");
+  });
+
+  it("prints an unnamed party's tables alone", async () => {
+    const receipt = await receiptOfJoinedParty();
+    expect(receipt).toContain("Mesa 4, 5 · Pedido");
+    expect(receipt).not.toContain("· Mesa 4, 5");
+  });
+
+  it("names a party's bill by its own label once the party holds no table", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const mesa4 = await v.table("Mesa 4");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await nameParty(v, partyId, "Ana");
+    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    await inTx(v, (tx) =>
+      tx.update(partyTables).set({ leftAt: nowIso() }).where(eq(partyTables.partyId, partyId)),
+    );
+
+    const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, checkId));
+
+    expect(orderLabel).toBe("Mesa 4");
+  });
+
+  it("still names a counter order's delivery table", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const terraza = await v.table("Terraza 2");
+    const orderId = randomUUID();
+    await inTx(v, (tx) =>
+      createOpenOrder(tx, v.cfg, orderId, [], null, { deliveryTableId: terraza }),
+    );
+
+    const { orderLabel } = await inTx(v, (tx) => readReceiptOrder(tx, v.cfg, orderId));
+
+    expect(orderLabel).toBe("Terraza 2");
   });
 });

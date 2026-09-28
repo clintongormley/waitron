@@ -5,6 +5,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
   locations,
+  nowIso,
+  partyTables,
   printJobs,
   ticketItems,
   tills,
@@ -51,11 +53,22 @@ import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueCorrectionSlips,
   enqueueKitchenTickets,
+  orderTableLabel,
   reprintOrderTickets,
 } from "./kitchen-print.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import {
+  billRow,
+  inTx,
+  join,
+  nameParty,
+  orderForParty,
+  seat,
+  setupPartyVenue,
+  split,
+} from "./testing/party-venue.js";
 import "./errors.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
@@ -1394,4 +1407,70 @@ it("falls back to the product's staff name when it has no kitchen name", async (
   });
   expect(paper).toContain("Coffee");
   expect(paper).not.toContain("Café recién hecho");
+});
+
+describe("the table a slip names (spec decision 9)", () => {
+  it("names every table of the party on the slip, in the order they joined", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa5 = await v.table("Mesa 5");
+    const mesa4 = await v.table("Mesa 4");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v, partyId, tabId, mesa5);
+    await orderForParty(v, partyId, ["Burger"], tabId);
+
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, tabId))).toBe("Mesa 4, 5");
+  });
+
+  it("names the party's tables on a bill split from the tab, not the label it was split with", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    await join(v, partyId, tabId, mesa5);
+
+    expect((await billRow(v, checkId)).label).toBe("Mesa 4");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Mesa 4, 5");
+  });
+
+  it("copies the party's tables, not its name, as a split bill's own label", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const mesa5 = await v.table("Mesa 5");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v, partyId, tabId, mesa5);
+    await nameParty(v, partyId, "Ana");
+    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+
+    const checkId = await split(v, partyId, tabId, [2]);
+
+    expect((await billRow(v, checkId)).label).toBe("Mesa 4, 5");
+  });
+
+  it("names a bill by its own label once its party holds no table", async () => {
+    const v = await setupPartyVenue(db);
+    const mesa4 = await v.table("Mesa 4");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
+    const checkId = await split(v, partyId, tabId, [2]);
+    await inTx(v, (tx) =>
+      tx.update(partyTables).set({ leftAt: nowIso() }).where(eq(partyTables.partyId, partyId)),
+    );
+
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Mesa 4");
+  });
+
+  it("names a counter order's delivery table, and an unlabelled walk-up nothing", async () => {
+    const v = await setupPartyVenue(db);
+    const terraza = await v.table("Terraza 2");
+    const [delivered, walkUp] = [randomUUID(), randomUUID()];
+    await inTx(v, async (tx) => {
+      await createOpenOrder(tx, v.cfg, delivered, [], null, { deliveryTableId: terraza });
+      await createOpenOrder(tx, v.cfg, walkUp, [], null);
+    });
+
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, delivered))).toBe("Terraza 2");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, walkUp))).toBeNull();
+  });
 });

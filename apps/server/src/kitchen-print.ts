@@ -11,6 +11,7 @@
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
+  diningTables,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
@@ -25,14 +26,19 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
+import {
+  AppError,
+  partyTablesName,
+  perDishOptionQuantity,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { partyFamily } from "./parties.js";
+import { partyFamily, partyTableLabels } from "./parties.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -240,32 +246,88 @@ async function readStationNames(
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
+/** What {@link orderTableLabels} reads of an order. */
+interface LabelledOrder {
+  id: string;
+  partyId: string | null;
+  deliveryTableId: string | null;
+  label: string | null;
+}
+
 /**
- * The order number and dining-table label, else the order's own label: a check split off a tab has no
- * table and carries the tab's table label as its own (`splitOffCheck`). Null for an unlabelled
- * walk-up. The outer `working_orders` columns are written as literal qualified names: drizzle renders
- * a `.from()` base table's column inside `sql` as a bare `"id"`, which inside this subquery would bind
- * to `dining_tables.id`.
+ * The table each order's kitchen work belongs to. A party bill names the party's active tables
+ * together ({@link partyTablesName}), or its own label once the party holds none. Any other order
+ * names the table seated at it (the lowest id when several are), else the table it is delivered to,
+ * else its own label; null for an unlabelled walk-up.
  */
+export async function orderTableLabels(
+  tx: Transaction,
+  locationId: string,
+  orders: readonly LabelledOrder[],
+): Promise<Map<string, string | null>> {
+  const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
+  const byParty = await partyTableLabels(tx, partyIds);
+  const others = orders.filter((order) => order.partyId === null);
+  const seatedAt = others.map((order) => order.id);
+  const deliveredTo = others.flatMap((order) => order.deliveryTableId ?? []);
+  const tables =
+    others.length === 0
+      ? []
+      : await tx
+          .select({ id: diningTables.id, label: diningTables.label, tabId: diningTables.tabId })
+          .from(diningTables)
+          .where(
+            and(
+              eq(diningTables.locationId, locationId),
+              or(
+                inArray(diningTables.tabId, seatedAt),
+                deliveredTo.length === 0 ? undefined : inArray(diningTables.id, deliveredTo),
+              ),
+            ),
+          )
+          .orderBy(diningTables.id);
+  const labels = new Map<string, string | null>();
+  for (const order of orders) {
+    if (order.partyId !== null) {
+      const partyLabels = byParty.get(order.partyId)!;
+      labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
+      continue;
+    }
+    const table =
+      tables.find((each) => each.tabId === order.id) ??
+      tables.find((each) => each.id === order.deliveryTableId);
+    labels.set(order.id, table?.label ?? order.label);
+  }
+  return labels;
+}
+
+/** The order's table, as {@link orderTableLabels} names it. */
+export async function orderTableLabel(
+  tx: Transaction,
+  cfg: TillConfig,
+  orderId: string,
+): Promise<string | null> {
+  return (await readOrderHeader(tx, cfg, orderId)).tableLabel;
+}
+
+/** The order number and table ({@link orderTableLabels}) its kitchen paper is headed with. */
 async function readOrderHeader(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
 ): Promise<{ orderNumber: string; tableLabel: string | null }> {
-  const rows = await tx
+  const [order] = await tx
     .select({
+      id: workingOrders.id,
       orderNumber: workingOrders.orderNumber,
-      tableLabel: sql<string | null>`coalesce((
-        select dt.label from dining_tables dt
-        where dt.location_id = ${cfg.locationId}
-          and (dt.tab_id = working_orders.id or working_orders.delivery_table_id = dt.id)
-        order by (dt.tab_id = working_orders.id) desc nulls last, dt.id
-        limit 1), working_orders.label)`,
+      partyId: workingOrders.partyId,
+      deliveryTableId: workingOrders.deliveryTableId,
+      label: workingOrders.label,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
-  const order = rows[0]!;
-  return { orderNumber: String(order.orderNumber), tableLabel: order.tableLabel };
+  const labels = await orderTableLabels(tx, cfg.locationId, [order!]);
+  return { orderNumber: String(order!.orderNumber), tableLabel: labels.get(orderId)! };
 }
 
 /** A kitchen ticket's printers, all of one layout so they share its bytes. */
@@ -734,6 +796,84 @@ export async function enqueueMovedSlips(
     },
     header,
   );
+}
+
+/**
+ * The sent work of every open, placed or settled bill of `partyIds`, and of each of `orderIds`
+ * whatever its party, keyed by bill; a bill with nothing fired is left out. Read before a table
+ * action changes which tables those bills belong to.
+ */
+export async function readPartiesSentWork(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyIds: readonly (string | null)[],
+  orderIds: readonly string[] = [],
+): Promise<Map<string, SentWork>> {
+  const ofParties = partyIds.filter((partyId): partyId is string => partyId !== null);
+  const work = new Map<string, SentWork>();
+  if (ofParties.length === 0 && orderIds.length === 0) return work;
+  const bills = await tx
+    .select({
+      id: workingOrders.id,
+      orderNumber: workingOrders.orderNumber,
+      partyId: workingOrders.partyId,
+      deliveryTableId: workingOrders.deliveryTableId,
+      label: workingOrders.label,
+    })
+    .from(workingOrders)
+    .where(
+      and(
+        inArray(workingOrders.status, ["open", "placed", "settled"]),
+        or(
+          ofParties.length === 0 ? undefined : inArray(workingOrders.partyId, ofParties),
+          orderIds.length === 0 ? undefined : inArray(workingOrders.id, [...orderIds]),
+        ),
+      ),
+    );
+  if (bills.length === 0) return work;
+  const fired = await tx
+    .select({ id: ticketItems.id, workingOrderId: ticketItems.workingOrderId })
+    .from(ticketItems)
+    .where(
+      and(
+        inArray(
+          ticketItems.workingOrderId,
+          bills.map((bill) => bill.id),
+        ),
+        isNotNull(ticketItems.firedAt),
+      ),
+    );
+  const firedByBill = new Map<string, Set<string>>();
+  for (const item of fired) {
+    const ids = firedByBill.get(item.workingOrderId) ?? new Set<string>();
+    ids.add(item.id);
+    firedByBill.set(item.workingOrderId, ids);
+  }
+  const sent = bills.filter((bill) => firedByBill.has(bill.id));
+  const labels = await orderTableLabels(tx, cfg.locationId, sent);
+  for (const bill of sent) {
+    work.set(bill.id, {
+      tableLabel: labels.get(bill.id)!,
+      orderNumber: String(bill.orderNumber),
+      ticketItemIds: firedByBill.get(bill.id)!,
+    });
+  }
+  return work;
+}
+
+/**
+ * {@link enqueueMovedSlips} for each bill `before` read, onto the bill `mergedInto` maps it to, else
+ * onto itself.
+ */
+export async function enqueueMovedSlipsFor(
+  tx: Transaction,
+  cfg: TillConfig,
+  before: ReadonlyMap<string, SentWork>,
+  mergedInto: ReadonlyMap<string, string> = new Map(),
+): Promise<void> {
+  for (const [billId, work] of before) {
+    await enqueueMovedSlips(tx, cfg, work, mergedInto.get(billId) ?? billId);
+  }
 }
 
 interface ReprintPart {
