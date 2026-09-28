@@ -3330,14 +3330,19 @@ ongoing overhaul listed at the top of Track A.
   needs a layout where the browser pulls the list back on its own, which may not be reachable; next
   action is to find out whether it is, then either fix the test or drop the correction and its test.
 
-- **A generated display name is the first given name and first surname (C38, owner decision
+- **A generated display name is the first given name and first surname (C38, #827, owner decision
   2026-09-28).** `deriveDisplayName` (`packages/shared/src/derive-display-name.ts`) takes the first
   word of each field, so "María José" + "García López" gives "María García". Shorter names collide
   more often, so the add-person, edit-person and profile forms now show `person.display_name_taken`
   beside the display-name field. Left open, not fixed: on the add-person and edit-person forms
   (`apps/dashboard/src/widgets/person-form.ts`, `person-edit.ts`) a `person.email_taken` refusal still
   shows only in the error summary, not beside the email field as the form rule in
-  [design-system.md](developers/design-system.md) asks; the profile screen already places it.
+  [design-system.md](developers/design-system.md) asks; the profile screen already places it. Also
+  left as they were, from #827's review: the profile screen clears a taken-name message differently
+  from the two staff forms (after an edit its summary keeps the sentence until the next save, and a
+  first- or last-name change that regenerates the display name leaves the field's message); and the
+  two staff forms turn the refusal into a field message inside the form, where other dashboard forms
+  receive field messages from their parent screen.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
