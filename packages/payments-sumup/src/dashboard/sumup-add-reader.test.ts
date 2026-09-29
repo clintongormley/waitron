@@ -108,6 +108,104 @@ async function fillAndPair(el: SumUpAddReader): Promise<void> {
 }
 
 describe("sumup-add-reader", () => {
+  it("keeps a reader paired after Cancel while the pair POST was still pending", async () => {
+    vi.useFakeTimers();
+    try {
+      const add = deferred<AddReaderResult>();
+      const request = stubRequest({
+        add: () => add.promise,
+        status: () => ({ online: false, pairingStatus: "paired" }),
+      });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+      await fillAndPair(el);
+      q(el, "[data-test=cancel]")!.click();
+      el.remove();
+      add.resolve({ id: "r1", status: "processing" });
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+      expect(request.statusCalls()).toBe(1);
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(request.unpairCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still cleans up once if the final Cancel status read fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => {
+          throw new Error("offline");
+        },
+      });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+      await fillAndPair(el);
+      q(el, "[data-test=cancel]")!.click();
+      q(el, "[data-test=cancel]")!.click();
+      el.remove();
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+      expect(request.statusCalls()).toBe(1);
+      expect(request.unpairCalls()).toBe(1);
+      expect(onAdded).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["paired", "processing"] as const)(
+    "checks once after Cancel and keeps only a reader now %s, even when the dialog is removed",
+    async (pairingStatus) => {
+      vi.useFakeTimers();
+      try {
+        const finalStatus = deferred<ReaderStatus>();
+        let reads = 0;
+        const request = stubRequest({
+          status: () =>
+            ++reads === 1 ? { online: false, pairingStatus: "processing" } : finalStatus.promise,
+        });
+        const onAdded = vi.fn();
+        const onClose = vi.fn();
+        const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+          request,
+          onAdded,
+          onClose,
+        });
+        onClose.mockImplementation(() => el.remove());
+        await fillAndPair(el);
+        await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+
+        q(el, "[data-test=cancel]")!.click();
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(el.isConnected).toBe(false);
+        expect(request.unpairCalls()).toBe(0);
+        expect(request.statusCalls()).toBe(2);
+        finalStatus.resolve({ online: false, pairingStatus });
+        await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+        expect(onAdded).toHaveBeenCalledTimes(pairingStatus === "paired" ? 1 : 0);
+        expect(request.unpairCalls()).toBe(pairingStatus === "paired" ? 0 : 1);
+        expect(request.statusCalls()).toBe(2);
+        expect(onClose).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   it("posts the code, polls status every 2s, and on pairingStatus=paired emits onAdded and closes", async () => {
     vi.useFakeTimers();
     try {
@@ -442,7 +540,7 @@ describe("sumup-add-reader", () => {
 
       expect(request).toHaveBeenCalledWith(UNPAIR_PATH, "POST");
       expect(request.unpairCalls()).toBe(1);
-      expect(request.statusCalls()).toBe(0);
+      expect(request.statusCalls()).toBe(1);
       expect(onAdded).not.toHaveBeenCalled();
       expect(onClose).toHaveBeenCalledTimes(1);
     } finally {
@@ -503,7 +601,7 @@ describe("sumup-add-reader", () => {
       expect(el.isConnected).toBe(false);
       expect(request).toHaveBeenCalledWith(UNPAIR_PATH, "POST");
       expect(request.unpairCalls()).toBe(1);
-      expect(request.statusCalls()).toBe(1);
+      expect(request.statusCalls()).toBe(2);
       expect(onAdded).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
@@ -590,8 +688,8 @@ describe("sumup-add-reader", () => {
       await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
 
       expect(onClose).toHaveBeenCalledTimes(1);
-      expect(request.statusCalls()).toBe(0);
-      expect(request.unpairCalls()).toBe(1); // the processing row, unpaired at Cancel
+      expect(request.statusCalls()).toBe(1);
+      expect(request.unpairCalls()).toBe(0);
     } finally {
       vi.useRealTimers();
     }

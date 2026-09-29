@@ -3673,6 +3673,17 @@ ongoing overhaul listed at the top of Track A.
   (`docs/developers/design-system.md` → Forms); now that the Choose image button inside it carries
   `aria-invalid` and takes focus, a screen reader hears "invalid" with no reason. The
   `aria-describedby` on the host predates C47 part 1 (both files carry it at 4fcac1646).
+  **DONE (C53, 2026-09-29): SumUp Cancel checks pairing once more before cleanup** (owner's
+  ruling on C47 part 2, option B: keep a reader known to be paired). The add-reader dialog closes
+  immediately; a final status reply of `paired` calls `onAdded` and skips unpairing, including when
+  the pair POST returns `processing` after Cancel. A processing, missing or failed status still
+  takes the cleanup path. Browser regressions cover a reader pairing between the last poll and
+  Cancel, a reader still processing, delayed POST completion, and a failed final read. Direct
+  removal without Cancel, expiry and polling failure retain their existing cleanup behavior.
+  The C53 review's slow-poll browser probe observed two status reads in flight on Cancel, one
+  `onAdded`, one `onClose` and no unpair: the final read does not share the pending poll. Physical
+  SumUp timing and the parent readers screen's refresh after the closed dialog's `onAdded` were
+  not exercised by that review or the dialog harness.
   Found during part 2 and not fixed: (a) a bad Stripe reader id reaches the add-reader dialog as
   `server.internal`, so it cannot be told from a server fault — the Stripe seat's `readers.add`
   (`packages/payments-stripe/src/card-provider.ts`) lets the Stripe library's own error through,
