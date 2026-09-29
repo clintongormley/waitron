@@ -1,6 +1,11 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, customSquarePixels, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  customSquarePixels,
+  mountWidget,
+} from "./test-helpers.js";
 import {
   CategoryForm,
   categoryAncestors,
@@ -444,6 +449,39 @@ it("emits cancellation across the host boundary when Escape closes the modal", a
   expect(dialog.open).toBe(true);
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(detail).toEqual({}));
+});
+
+it("sends one wt-cancel when the dialog reports its close after the form has been closed", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+  });
+  let cancels = 0;
+  el.addEventListener("wt-cancel", () => cancels++);
+
+  el.shadowRoot!.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  el.open = false;
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  await closeReportsDelivered();
+
+  expect(cancels).toBe(1);
+});
+
+it("sends one wt-cancel when its dialog is dismissed with Escape while the form is open", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+  });
+  let cancels = 0;
+  el.addEventListener("wt-cancel", () => cancels++);
+
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(cancels).toBe(1));
+  await closeReportsDelivered();
+
+  expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+  expect(cancels).toBe(1);
 });
 
 it("keeps the editor open when Escape is pressed during a save", async () => {

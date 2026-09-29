@@ -1,4 +1,5 @@
 import type { LitElement } from "lit";
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   CatalogueSummary,
@@ -769,6 +770,36 @@ describe("catalogue-screen", () => {
     emit(categoryForm, "wt-cancel", {});
     await flush(el);
     expect([unitForm.open, categoryForm.open, editor(el).childOpen]).toEqual([true, false, true]);
+  });
+
+  // Opened by a real click: opened by a synthetic click with this case run first, one Escape also
+  // closed the editor behind it (HeadlessChrome 153; C74).
+  it("closes only the unit form when Escape is pressed in it, leaving the product editor open", async () => {
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el).shadowRoot!.querySelector("wt-price-input")!, "wt-unit-click", {});
+    await editor(el).updateComplete;
+    await userEvent.click(
+      editor(el).shadowRoot!.querySelector<HTMLElement>("[data-test=add-unit]")!,
+    );
+    await el.updateComplete;
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    expect(form.open).toBe(true);
+    let cancels = 0;
+    form.addEventListener("wt-cancel", () => cancels++);
+
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(cancels).toBe(1));
+    await flush(el);
+    await closeReportsDelivered();
+
+    expect(form.open).toBe(false);
+    expect(editor(el).open).toBe(true);
+    expect(cancels).toBe(1);
   });
 
   it("reports a refused attachment inside the editor, not behind it", async () => {
