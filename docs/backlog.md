@@ -3476,6 +3476,17 @@ ongoing overhaul listed at the top of Track A.
   them) are the only dashboard view keys that use a colon and lack the `waitron.` prefix — cheap to
   rename until a venue is live.
 
+- **A search box at the top of the dashboard sidebar finds a page by its name or its group's name
+  (C46, owner request 2026-09-28).** It lists only the pages the person may open (the same checks
+  the sidebar already applies), ignores case and accents, opens a group with a match without
+  changing which groups are folded, says "No pages match" when nothing does, and opens the first
+  match on Enter; opening a page empties the box. `docs/developers/design-system.md` → "Dashboard
+  sidebar navigation" describes it. Left open, not fixed: (1) clicking a group header while a term
+  is typed records a fold that shows only once the term is cleared; (2) the new accessibility case
+  checks the search box and its message only, because the light theme's sidebar headers and current
+  page already fail the colour-contrast rule — the primary-blue entry under "Also open, and
+  product-wide" above.
+
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
