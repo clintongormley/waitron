@@ -2866,7 +2866,7 @@ export class TillApp extends LitElement {
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     this.errorKey = draftRefusalError(refusal);
     const zoneId = this.#tableZoneId;
-    if (UNSELLABLE_LINE_REFUSALS.has(refusal.refused) && zoneId !== undefined)
+    if (refusal.refused === "product.not_sold_separately" && zoneId !== undefined)
       void this.#reloadTableOffers(zoneId);
   }
 

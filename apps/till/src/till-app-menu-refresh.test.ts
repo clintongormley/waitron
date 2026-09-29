@@ -749,6 +749,37 @@ describe("the other counter requests refused because the menu changed", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("menu.version_changed"));
   });
 
+  it("blocks an unsaved line v2 sells only as an extra, holding Pay until it is removed", async () => {
+    const { el } = await mountApp({
+      listZoneOffers: vi
+        .fn()
+        .mockResolvedValue(
+          catalogue("v2", [
+            offer("offer-lemonade", "Lemonade", "3.00", { ordering: "not_sold_separately" }),
+            burgerOffer(),
+          ]),
+        ),
+    });
+    await toCounter(el);
+    add(el, "Burger");
+    add(el, "Lemonade");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+
+    expect(dialogText(el)).toContain("Lemonade is now sold only as an extra on another dish");
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(counter(el).store.lines.map((line) => line.blocked)).toEqual([
+      undefined,
+      "not_sold_separately",
+    ]);
+    expect(payButton(el).disabled).toBe(true);
+
+    counter(el).store.removeLine(1);
+    await flush(el);
+    expect(payButton(el).disabled).toBe(false);
+  });
+
   it("confirming a dialog whose every line is gone re-prices nothing and keeps Pay shut", async () => {
     const { el } = await mountApp({
       listZoneOffers: vi.fn().mockResolvedValue(catalogue("v2", [burgerOffer()])),
