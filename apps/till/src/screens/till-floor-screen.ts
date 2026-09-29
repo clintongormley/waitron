@@ -29,7 +29,7 @@ import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
 
 function needsClearing(table: TableState): boolean {
-  return table.condition === "needs_cleaning";
+  return table.condition === "needs_clearing";
 }
 
 function unsentText({ ownerName, lineCount }: UnsentDraft): string {
@@ -49,7 +49,7 @@ function partyPaid(table: TableState): boolean {
 
 /**
  * The TILL live-floor screen. Tapping a free table asks for the party's guest count and then asks the
- * app to seat it; tapping a seated table asks the app to resume it. A table that needs cleaning
+ * app to seat it; tapping a seated table asks the app to resume it. A table that needs clearing
  * offers Mark cleared instead. The screen itself owns NO fiscal path, because a
  * tab is a PRE-FISCAL working order.
  *
@@ -484,7 +484,7 @@ export class TillFloorScreen extends LitElement {
         : table.status;
     return toFloorTable(table, {
       ...table,
-      // The server reads a table no party holds as free; one needing cleaning must not look ready to seat.
+      // The server reads a table no party holds as free; one needing clearing must not look ready to seat.
       state: needsClearing(table) ? "open-tab" : table.state,
       tabTotal,
       status,

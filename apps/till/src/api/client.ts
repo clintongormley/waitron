@@ -1229,9 +1229,9 @@ export interface TableState {
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
-  /** `held` while a party holds the table; `needs_cleaning` after Finish table with the clearing
+  /** `held` while a party holds the table; `needs_clearing` after Finish table with the clearing
    * setting on, until Mark cleared. */
-  condition: "free" | "held" | "needs_cleaning";
+  condition: "free" | "held" | "needs_clearing";
   tabId?: string;
   tabLineCount?: number;
   tabTotal?: string;
@@ -1845,7 +1845,7 @@ export class TillApi {
   /**
    * Seat a party at a free table → `POST /api/tables/:tableId/seat`, which opens its tab. `guestCount`
    * is sent as an explicit null when none was given. A table a party already holds rejects
-   * `tab.already_open`; `table.not_found`, `table.inactive` and `table.needs_cleaning` surface as a
+   * `tab.already_open`; `table.not_found`, `table.inactive` and `table.needs_clearing` surface as a
    * rejected `{ code }`.
    */
   seatTable(tableId: string, guestCount: number | null): Promise<SeatResult> {
@@ -1861,7 +1861,7 @@ export class TillApi {
     return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
   }
 
-  /** Free a table that needs cleaning → `POST /api/tables/:tableId/cleared`. A table that does not
+  /** Free a table that needs clearing → `POST /api/tables/:tableId/cleared`. A table that does not
    * need it is left as it is; rejects `table.not_found`. */
   async markTableCleared(tableId: string): Promise<void> {
     await this.#request<void>(`/api/tables/${tableId}/cleared`, "POST");
@@ -2148,7 +2148,7 @@ export class TillApi {
   /**
    * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
    * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`,
-   * `table.needs_cleaning`, `tab.not_open`, and
+   * `table.needs_clearing`, `tab.not_open`, and
    * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
    * missing revision.
    */

@@ -288,10 +288,10 @@ declare module "@waitron/shared" {
      */
     "table.occupied": { tableId: string };
     /**
-     * The table still needs cleaning (`dining_tables.needs_cleaning_since` is set), so
+     * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
-    "table.needs_cleaning": { tableId: string };
+    "table.needs_clearing": { tableId: string };
     /**
      * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
      * at a closed one, at none, or the id names no table. One code for all, so the answer does not

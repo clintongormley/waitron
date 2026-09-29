@@ -232,9 +232,9 @@ describe("till-floor-screen: what a seated party owes", () => {
 });
 
 describe("till-floor-screen: a table needing clearing", () => {
-  const clearing = (id: string, label: string) => table({ id, label, condition: "needs_cleaning" });
+  const clearing = (id: string, label: string) => table({ id, label, condition: "needs_clearing" });
 
-  it("says so on each table that needs cleaning, each with Mark cleared", async () => {
+  it("says so on each table that needs clearing, each with Mark cleared", async () => {
     const el = await mountFloor([clearing("t4", "4"), { ...clearing("t5", "5"), capacity: null }]);
 
     for (const id of ["t4", "t5"]) {
@@ -303,7 +303,7 @@ describe("till-floor-screen: a table needing clearing", () => {
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
   });
 
-  it("does not paint a table needing cleaning as free on the map, although no party holds it", async () => {
+  it("does not paint a table needing clearing as free on the map, although no party holds it", async () => {
     const el = await mountFloor([
       { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
     ]);

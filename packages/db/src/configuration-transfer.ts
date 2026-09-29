@@ -16,7 +16,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
     {
       name: "dining_tables",
       locationColumns: ["location_id"],
-      omit: ["tab_id", "needs_cleaning_since"],
+      omit: ["tab_id", "needs_clearing_since"],
     },
     {
       name: "print_agents",

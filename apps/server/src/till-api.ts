@@ -343,7 +343,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.merge_leaves_no_table": 409,
   "tab.line_not_found": 404,
   "table.occupied": 409,
-  "table.needs_cleaning": 409,
+  "table.needs_clearing": 409,
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,

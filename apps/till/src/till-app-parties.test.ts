@@ -370,9 +370,9 @@ describe("till-app: seating a party", () => {
     expect(api.joinTable).toHaveBeenCalledWith("wo-new", "t4", { expectedPartyRevision: 0 });
   });
 
-  it("says the table needs cleaning when seating it is refused for that, and re-reads the floor", async () => {
+  it("says the table needs clearing when seating it is refused for that, and re-reads the floor", async () => {
     const { el } = await mountApp({
-      seatTable: vi.fn().mockRejectedValue({ code: "table.needs_cleaning", tableId: "t9" }),
+      seatTable: vi.fn().mockRejectedValue({ code: "table.needs_clearing", tableId: "t9" }),
     });
     const screen = await toFloor(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
@@ -380,7 +380,7 @@ describe("till-app: seating a party", () => {
     emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: null });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(codeMessage("table.needs_cleaning"));
+    expect(banner(el)!.textContent).toContain(codeMessage("table.needs_clearing"));
     expect(tableOrder(el)).toBeNull();
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
@@ -1252,7 +1252,7 @@ describe("till-app: reads and refusals around the party", () => {
   });
 });
 
-describe("till-app: a table needing cleaning", () => {
+describe("till-app: a table needing clearing", () => {
   it("marks that one table cleared and re-reads the floor", async () => {
     const { el } = await mountApp();
     const screen = await toFloor(el);
@@ -1695,8 +1695,8 @@ describe("till-app: another device changed the table first", () => {
   it.each([
     ["table.occupied", "move-tab", { toTableId: "t9" }, "moveTab"],
     ["table.occupied", "join-table", { tableId: "t9" }, "joinTable"],
-    ["table.needs_cleaning", "move-tab", { toTableId: "t9" }, "moveTab"],
-    ["table.needs_cleaning", "join-table", { tableId: "t9" }, "joinTable"],
+    ["table.needs_clearing", "move-tab", { toTableId: "t9" }, "moveTab"],
+    ["table.needs_clearing", "join-table", { tableId: "t9" }, "joinTable"],
     ["party.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
     [
       "group.held_leaves_party",

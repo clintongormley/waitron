@@ -2776,19 +2776,19 @@ describe("till-table-order-screen", () => {
     });
 
     it.each(["move", "join"])(
-      "%s → the free-table picker leaves out a table that needs cleaning",
+      "%s → the free-table picker leaves out a table that needs clearing",
       async (action) => {
         const free = tableState({ id: "t9", label: "9", state: "free" });
-        const cleaning = tableState({
+        const uncleared = tableState({
           id: "t6",
           label: "6",
           state: "free",
-          condition: "needs_cleaning",
+          condition: "needs_clearing",
         });
         const { el } = await mount({
           lines: [pendingLine],
           orderId: "wo-7",
-          tables: [free, cleaning],
+          tables: [free, uncleared],
         });
         await toMenu(el);
         click(el, `[data-action="${action}"]`);

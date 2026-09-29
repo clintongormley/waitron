@@ -419,7 +419,7 @@ describe("POST /api/parties/:id/groups naming a bill", () => {
   });
 });
 
-describe("a table that needs cleaning", () => {
+describe("a table that needs clearing", () => {
   async function tableRow(id: string) {
     const [row] = await withTransaction(suite.db, (tx) =>
       tx.select().from(diningTables).where(eq(diningTables.id, id)),
@@ -449,16 +449,16 @@ describe("a table that needs cleaning", () => {
 
   it("POST /api/tables/:id/cleared frees it with a 204, and the floor reads it free", async () => {
     const { tableId } = await finishedWithClearing();
-    expect(await condition(tableId)).toBe("needs_cleaning");
+    expect(await condition(tableId)).toBe("needs_clearing");
 
     const res = await post(`/api/tables/${tableId}/cleared`, {});
 
     expect(res.status).toBe(204);
-    expect((await tableRow(tableId)).needsCleaningSince).toBeNull();
+    expect((await tableRow(tableId)).needsClearingSince).toBeNull();
     expect(await condition(tableId)).toBe("free");
   });
 
-  it("POST /api/tables/:id/cleared answers 204 for a table that does not need cleaning, changing nothing", async () => {
+  it("POST /api/tables/:id/cleared answers 204 for a table that does not need clearing, changing nothing", async () => {
     const { tableId, partyId, revision } = await seat();
 
     const res = await post(`/api/tables/${tableId}/cleared`, {});
@@ -478,16 +478,16 @@ describe("a table that needs cleaning", () => {
     }
   });
 
-  it("POST /api/tables/:id/cleared 401s without a session, leaving the table needing cleaning", async () => {
+  it("POST /api/tables/:id/cleared 401s without a session, leaving the table needing clearing", async () => {
     const { tableId } = await finishedWithClearing();
 
     const res = await post(`/api/tables/${tableId}/cleared`, {}, false);
 
     expect(res.status).toBe(401);
-    expect((await tableRow(tableId)).needsCleaningSince).not.toBeNull();
+    expect((await tableRow(tableId)).needsClearingSince).not.toBeNull();
   });
 
-  it("refuses seating it with 409 table.needs_cleaning, opening no party", async () => {
+  it("refuses seating it with 409 table.needs_clearing, opening no party", async () => {
     const { tableId } = await finishedWithClearing();
     const partiesBefore = await withTransaction(suite.db, (tx) => tx.select().from(parties));
 
@@ -495,12 +495,12 @@ describe("a table that needs cleaning", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "table.needs_cleaning", params: { tableId } },
+      error: { code: "table.needs_clearing", params: { tableId } },
     });
     expect(await withTransaction(suite.db, (tx) => tx.select().from(parties))).toHaveLength(
       partiesBefore.length,
     );
-    expect(await condition(tableId)).toBe("needs_cleaning");
+    expect(await condition(tableId)).toBe("needs_clearing");
   });
 
   it("no longer answers the party route that cleared a whole party", async () => {
@@ -509,7 +509,7 @@ describe("a table that needs cleaning", () => {
     const res = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: 1 });
 
     expect(res.status).toBe(404);
-    expect(await condition(tableId)).toBe("needs_cleaning");
+    expect(await condition(tableId)).toBe("needs_clearing");
   });
 });
 

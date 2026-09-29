@@ -1338,7 +1338,7 @@ describe("TillApi", () => {
         zoneId: null,
         capacity: null,
         state: "free",
-        condition: "needs_cleaning",
+        condition: "needs_clearing",
         hasOpenTab: false,
         pendingDeliveries: 0,
         pendingToServe: 0,

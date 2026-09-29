@@ -987,7 +987,7 @@ export async function parkOrder(
  * Open the running tab on a table. The link is the table's `tab_id` back-pointer; the order carries
  * no tab column.
  *
- * Refused while the table needs cleaning, while its `tab_id` points at an open order, and while a
+ * Refused while the table needs clearing, while its `tab_id` points at an open order, and while a
  * party still holds the table (an active `party_tables` row, `left_at` null) whatever its `tab_id`
  * points at. The check-then-set below cannot interleave with a second `openTab`, because
  * `withTransaction` IS the venue file's write lock. A `tab_id` pointing at a settled or abandoned
@@ -1009,7 +1009,7 @@ export async function openTab(
       active: diningTables.active,
       tabId: diningTables.tabId,
       zoneId: diningTables.zoneId,
-      needsCleaningSince: diningTables.needsCleaningSince,
+      needsClearingSince: diningTables.needsClearingSince,
     })
     .from(diningTables)
     .where(eq(diningTables.id, req.tableId));
@@ -1019,8 +1019,8 @@ export async function openTab(
   if (!table.active) {
     throw new AppError("table.inactive", { tableId: req.tableId });
   }
-  if (table.needsCleaningSince !== null) {
-    throw new AppError("table.needs_cleaning", { tableId: req.tableId });
+  if (table.needsClearingSince !== null) {
+    throw new AppError("table.needs_clearing", { tableId: req.tableId });
   }
 
   if (table.zoneId !== null) {
@@ -2717,14 +2717,14 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
 }
 
 /**
- * Assert a move/join TARGET table exists, is `active`, and is FREE: it does not need cleaning, its
+ * Assert a move/join TARGET table exists, is `active`, and is FREE: it does not need clearing, its
  * `tab_id` is null or points at a settled or abandoned order, and no party holds it (an active
  * `party_tables` row).
  */
 async function assertTableAvailable(
   tx: Transaction,
   cfg: TillConfig,
-  table: { tabId: string | null; active: boolean; needsCleaningSince: string | null } | undefined,
+  table: { tabId: string | null; active: boolean; needsClearingSince: string | null } | undefined,
   tableId: string,
 ): Promise<void> {
   void cfg;
@@ -2734,8 +2734,8 @@ async function assertTableAvailable(
   if (!table.active) {
     throw new AppError("table.inactive", { tableId });
   }
-  if (table.needsCleaningSince !== null) {
-    throw new AppError("table.needs_cleaning", { tableId });
+  if (table.needsClearingSince !== null) {
+    throw new AppError("table.needs_clearing", { tableId });
   }
   if (table.tabId !== null) {
     const [pointed] = await tx
@@ -2785,7 +2785,7 @@ export async function moveTab(
       tabId: diningTables.tabId,
       active: diningTables.active,
       zoneId: diningTables.zoneId,
-      needsCleaningSince: diningTables.needsCleaningSince,
+      needsClearingSince: diningTables.needsClearingSince,
     })
     .from(diningTables)
     .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)));
@@ -2919,7 +2919,7 @@ export async function joinTable(
       tabId: diningTables.tabId,
       active: diningTables.active,
       zoneId: diningTables.zoneId,
-      needsCleaningSince: diningTables.needsCleaningSince,
+      needsClearingSince: diningTables.needsClearingSince,
     })
     .from(diningTables)
     .where(eq(diningTables.id, tableId));
@@ -5847,16 +5847,16 @@ export interface TableParty {
   reminder: ReleaseReminder | null;
 }
 
-/** Whether a party holds the table, it waits to be cleaned, or it is free. */
-export type TableCondition = "free" | "held" | "needs_cleaning";
+/** Whether a party holds the table, it waits to be cleared, or it is free. */
+export type TableCondition = "free" | "held" | "needs_clearing";
 
-/** Held while a party holds the table, whatever its cleaning state; else as its cleaning state says. */
+/** Held while a party holds the table, whatever its clearing state; else as its clearing state says. */
 export function tableCondition(row: {
   held: boolean;
-  needsCleaningSince: string | null;
+  needsClearingSince: string | null;
 }): TableCondition {
   if (row.held) return "held";
-  return row.needsCleaningSince === null ? "free" : "needs_cleaning";
+  return row.needsClearingSince === null ? "free" : "needs_clearing";
 }
 
 /** One row of the occupancy read-model. */
@@ -5928,11 +5928,11 @@ export async function listTablesWithState(
     pos_y: number | null;
     shape: FloorTableShape | null;
     rotation: number | null;
-    needs_cleaning_since: string | null;
+    needs_clearing_since: string | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
-      dt.pos_x, dt.pos_y, dt.shape, dt.rotation, dt.needs_cleaning_since,
+      dt.pos_x, dt.pos_y, dt.shape, dt.rotation, dt.needs_clearing_since,
       tab.id as tab_id,
       cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
@@ -6048,7 +6048,7 @@ export async function listTablesWithState(
       hasOpenTab,
       condition: tableCondition({
         held: party !== undefined,
-        needsCleaningSince: r.needs_cleaning_since,
+        needsClearingSince: r.needs_clearing_since,
       }),
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),

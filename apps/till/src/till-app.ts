@@ -217,7 +217,7 @@ const TABLE_REFUSALS = new Set([
   "table.occupied",
   "table.not_shared",
   "group.held_leaves_party",
-  "table.needs_cleaning",
+  "table.needs_clearing",
   "table.not_found",
   "tab.already_open",
   "tab.not_table_tab",
