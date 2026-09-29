@@ -3038,7 +3038,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     reverse issues one; before the change the first was refused by `sales_working_order_id_key` and
     the second threw "has no sale" (`apps/server/src/collect-by-invoice.test.ts`).
     Two points #818's review raised, not changed there:
-    - **DONE (C50, 2026-09-29):** collecting a bill whose invoice carries a corrective invoice now
+    - **DONE (C50, #847, 2026-09-29):** collecting a bill whose invoice carries a corrective invoice now
       settles at what the customer owes, the invoice total plus its corrections. New cases in
       `apps/server/src/collect-by-invoice.test.ts` issue an invoice-first bill for 18.00, correct it
       by -2.42 through `recordCorrection`, then collect it in cash and by manual card. On the old
