@@ -34,9 +34,10 @@ export function row(
 }
 
 // Group 1: Croquetas ×4 half served, a Salad served, a Beer the pass marked ready, and Bravas the pass
-// sent away. Group 2: a Steak needing no preparation, a Fish a station is preparing, and a Pulpo at a
-// station that records nothing, on another bill of the party. Group 3 is held, added later, and its
-// reminder is due. Group 4 is held. A Coffee sits in no group.
+// sent away, fired by Luis. Group 2: a Steak needing no preparation, a Fish a station is preparing,
+// and a Pulpo at a station that records nothing, on another bill of the party, fired by someone the
+// server has no name for. Group 3 was held by Ana and its reminder is due. Group 4 was held by someone
+// the server has no name for. A Coffee sits in no group.
 export const croquetas = row("l-croq", "Croquetas", "4.000", { servedQuantity: "2.000" });
 export const salad = row("l-salad", "Salad", "1.000", {
   servedQuantity: "1.000",
@@ -64,12 +65,17 @@ export const tarta = row("l-tarta", "Tarta", "1.000", {
 });
 export const coffee = row("l-coffee", "Coffee", "1.000", { kitchen: null });
 
+/** When group 3 was sent to hold. */
+export const heldAt = "2026-09-28T20:02:00.000Z";
+/** When group 4 was sent to hold. */
+export const laterHeldAt = "2026-09-28T20:07:00.000Z";
+
 export function currentGroup(
   id: string,
   position: number,
   state: "held" | "fired",
   rows: CurrentOrderRow[],
-  addedLater = false,
+  sent: Partial<Pick<CurrentOrderGroup, "sentAt" | "sentBy">> = {},
 ): CurrentOrderGroup {
   return {
     id,
@@ -77,7 +83,9 @@ export function currentGroup(
     state,
     firedAt: state === "fired" ? fired : null,
     remindAt: null,
-    addedLater,
+    sentAt: state === "fired" ? fired : heldAt,
+    sentBy: state === "fired" ? "Luis" : "Ana",
+    ...sent,
     rows,
   };
 }
@@ -107,9 +115,9 @@ export function current(over: Partial<CurrentOrders> = {}): CurrentOrders {
     reminder: { groupId: "g3", dueAt: "2026-09-28T20:15:00.000Z" },
     groups: [
       currentGroup("g1", 1, "fired", [croquetas, salad, beer, bravas]),
-      currentGroup("g2", 2, "fired", [steak, fish, pulpo]),
-      currentGroup("g3", 3, "held", [flan], true),
-      currentGroup("g4", 4, "held", [tarta]),
+      currentGroup("g2", 2, "fired", [steak, fish, pulpo], { sentBy: null }),
+      currentGroup("g3", 3, "held", [flan]),
+      currentGroup("g4", 4, "held", [tarta], { sentAt: laterHeldAt, sentBy: null }),
     ],
     ungrouped: [coffee],
     ...over,

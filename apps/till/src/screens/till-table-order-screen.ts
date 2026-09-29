@@ -47,6 +47,7 @@ import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
+  CurrentOrderGroup,
   CurrentOrderRow,
   CurrentOrders,
   GroupLine,
@@ -184,6 +185,12 @@ interface HeldRow {
   name: string;
   quantity: string;
   splits: boolean;
+}
+
+function clockTime(at: number): string {
+  return new Intl.DateTimeFormat(currentLocale(), { hour: "2-digit", minute: "2-digit" }).format(
+    new Date(at),
+  );
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
@@ -695,11 +702,9 @@ export class TillTableOrderScreen extends LitElement {
         overflow-wrap: anywhere;
       }
 
-      .group-tag {
+      .group-sent {
         margin-inline-end: auto;
-        padding: 0 var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
+        color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
 
@@ -2777,13 +2782,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<li class="group" data-group=${group.id} data-group-state=${group.state}>
       <div class="group-head">
         <span class="group-name" data-group-position>${name}</span>
-        ${
-          shown?.addedLater === true
-            ? html`<span class="group-tag" data-group-added-later
-                >${t("table.group_added_later")}</span
-              >`
-            : nothing
-        }
+        ${shown === undefined ? nothing : this.#sentOf(shown)}
         <span class="group-state" data-group-kitchen>${this.#groupProgress(group, current)}</span>
       </div>
       ${
@@ -2852,6 +2851,18 @@ export class TillTableOrderScreen extends LitElement {
     </li>`;
   }
 
+  #sentOf(group: CurrentOrderGroup): TemplateResult {
+    const time = clockTime(Date.parse(group.sentAt));
+    const [withName, unnamed] =
+      group.state === "held"
+        ? (["table.group_held_since", "table.group_held_since_time"] as const)
+        : (["table.group_sent", "table.group_sent_time"] as const);
+    const at = (key: StringKey) => t(key).replace("{time}", () => time);
+    return html`<span class="group-sent" data-group-sent
+      >${named(group.sentBy ?? "", at(withName), at(unnamed))}</span
+    >`;
+  }
+
   /** This bill's dish lines of `group`, for want of Current orders. */
   #billLinesOf(group: OrderGroup): TabLine[] {
     return group.lineIds.flatMap((id) => {
@@ -2881,10 +2892,7 @@ export class TillTableOrderScreen extends LitElement {
       return nothing;
     const name = t("table.group_n").replace("{n}", String(group.position));
     if (!this.#reminderDue) {
-      const time = new Intl.DateTimeFormat(currentLocale(), {
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(this.#reminderDueAt()));
+      const time = clockTime(this.#reminderDueAt());
       return html`<p class="group-reminder" data-group-reminder="waiting">
         ${t("table.reminder_at").replace("{time}", () => time)}
       </p>`;

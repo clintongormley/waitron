@@ -529,7 +529,10 @@ export interface CurrentOrderGroup {
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
-  addedLater: boolean;
+  /** A fired group's firing; a held group's holding. */
+  sentAt: string;
+  /** The display name of whoever fired or held it; null when the server has none. */
+  sentBy: string | null;
   rows: CurrentOrderRow[];
 }
 

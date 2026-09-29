@@ -2300,7 +2300,8 @@ describe("TillApi: a seated party", () => {
           state: "fired",
           firedAt: "2026-09-28T19:50:00.000Z",
           remindAt: null,
-          addedLater: false,
+          sentAt: "2026-09-28T19:50:00.000Z",
+          sentBy: "Luis",
           rows: [
             {
               lineId: "l1",
