@@ -3366,8 +3366,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Moving guests to, or joining, a table another party holds combines the two parties
       (`combineParties`): the absorbed party's kitchen groups and drafts move, its open and
       presented bills move across whole, and it closes, recorded as merged. Its paid bills stay on
-      it and are listed through the family. When moving, its tables need clearing; when joining,
-      they join the other party and keep their status, because their memberships end before the
+      it and are listed through the family. When moving, its tables need clearing when the venue's
+      clearing setting is on; when joining, they join the other party in the order they joined the
+      absorbed one and keep their status, because their memberships end before the
       absorbed party closes. The bill choice is `bills: "merge" | "separate"`, merge by default:
       the incoming main bill merges into the receiving one only when both are untouched and in one
       service mode; otherwise both stay (`merged: false`). The receiving main bill stays main; with
@@ -3377,7 +3378,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       none is chosen. A presented bill goes with its lines unchanged except their kitchen group,
       and the new party has no main bill until it orders. Refusals: `table.not_joined` and
       `table.not_shared` (now with `{ tableId, partyId }`), `bill.other_party`, `bill.paid`,
-      `tab.not_open`, `party.main_bill_stays` and `group.held_leaves_party`.
+      `tab.not_open`, `party.main_bill_stays` and `group.held_leaves_party`. A remaining table
+      that showed the chosen bill shows the party's main bill instead.
     - Every action checks the path party's revision, then the revision of the party holding the
       target table, before any table or bill, so of two tills acting from one read the second is
       `party.out_of_date`. A party already combined into another is `party.not_open`.
@@ -3389,12 +3391,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
     Open points: `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
     which Split a table choosing the main bill need not satisfy. A paid bill left on the absorbed
-    party gets a MOVED notice only if the label it was given when paid differs from the tables it
-    was at, and then that notice names the label, not the table the guests went to:
-    `orderTableLabels` reads the bill's own label once its party holds no table. A case where the
-    two match (no notice) was run; one where they differ was not. The tables a joined party brings are
-    written in one statement, so they share a joining time and their order in the party's name
-    is not fixed.
+    party, with sent dishes still in the kitchen, is named by the label it was given when paid,
+    because `orderTableLabels` reads the bill's own label once its party holds no table. When that
+    label matches the tables its dishes were at, the kitchen gets no MOVED notice although the
+    guests moved; when it differs, the notice names that old label, not the table the guests went
+    to. The matching case was run; the differing one was not. The old merge (`mergeTabs`) reads
+    these parties the same way (read, not run). That old path also still writes a merged party's
+    tables in one statement, so they share a joining time and their order in its name is not
+    fixed; it goes with Task 13.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

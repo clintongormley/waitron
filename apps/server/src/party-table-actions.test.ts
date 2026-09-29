@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -8,6 +8,7 @@ import {
   diningTables,
   floorZones,
   orderGroups,
+  partyTables,
   tableServiceStatuses,
   ticketItems,
   workingOrderLines,
@@ -741,6 +742,31 @@ describe("join tables", () => {
     expect((await partyRow(v, ana.partyId)).revision).toBe(joining.expectedPartyRevision + 1);
   });
 
+  it("gives the tables it brings in join times in the order they joined the other party", async () => {
+    const [m4, m7, m8, m9] = await tables("Orden", 4, 7, 8, 9);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await joinFree(luis.partyId, m8);
+    await joinFree(luis.partyId, m9);
+
+    const joining = await opts(ana.partyId, luis.partyId);
+    await act((tx) => joinTables(tx, v.cfg, ana.partyId, m8, joining));
+
+    const joinedAt = async (tableId: string) =>
+      (
+        await act((tx) =>
+          tx
+            .select({ joinedAt: partyTables.joinedAt })
+            .from(partyTables)
+            .where(and(eq(partyTables.partyId, ana.partyId), eq(partyTables.tableId, tableId))),
+        )
+      )[0]!.joinedAt;
+    const times = [await joinedAt(m4), await joinedAt(m7), await joinedAt(m8), await joinedAt(m9)];
+    expect(times).toEqual([...times].sort());
+    expect(new Set(times).size).toBe(times.length);
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4, m7, m8, m9]);
+  });
+
   it("combines the party at a held table into this one, with all of its tables", async () => {
     const [m4, m7, m8] = await tables("Juntar", 4, 7, 8);
     const ana = await seat(v, m4);
@@ -754,10 +780,7 @@ describe("join tables", () => {
     const result = await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
 
     expect(result).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: true });
-    // Luis's two memberships are written in one statement, so they share a joining time.
-    const held = await activeTablesOf(v, ana.partyId);
-    expect(held[0]).toBe(m4);
-    expect(held.slice(1).sort()).toEqual([m7, m8].sort());
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4, m7, m8]);
     expect(await activeTablesOf(v, luis.partyId)).toEqual([]);
     expect(await partyRow(v, luis.partyId)).toMatchObject({
       state: "closed",
@@ -896,6 +919,22 @@ describe("split a table", () => {
     });
     expect((await tableRow(v, m4)).tabId).toBe(ana.tabId);
     expect(await zoneOf(v, b2)).toBe(v.tables.zoneId);
+  });
+
+  it("points a remaining table that showed the chosen bill at the party's main bill", async () => {
+    const [m4, m5, m6] = await tables("Puntero", 4, 5, 6);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await joinFree(ana.partyId, m6);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    // The state `setMainBill` leaves alone: a table of the party showing another open bill of it.
+    await act((tx) => tx.update(diningTables).set({ tabId: b2 }).where(eq(diningTables.id, m6)));
+
+    const splitting = await cmd(ana.partyId);
+    await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+    expect((await tableRow(v, m6)).tabId).toBe(ana.tabId);
   });
 
   it("gives the new party a new, empty main bill at once when no bill is chosen", async () => {

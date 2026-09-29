@@ -383,9 +383,9 @@ async function adoptZone(
  * While tables still point at bills, a table of the party the bill is leaving that shows it shows
  * the party's main bill instead, or none when the bill leaving is the main bill.
  */
-async function repointSourceTables(
+export async function repointSourceTables(
   tx: Transaction,
-  party: SourceParty,
+  party: Pick<SourceParty, "id" | "mainBillId">,
   billId: string,
 ): Promise<void> {
   const main = party.mainBillId === billId ? null : party.mainBillId;

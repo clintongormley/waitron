@@ -9,6 +9,7 @@ import {
   leaveParty,
   readTargetTable,
   refuseUnseatable,
+  repointSourceTables,
   takeIntoParty,
   type BillState,
 } from "./move-bill.js";
@@ -206,8 +207,6 @@ export async function combineParties(
       intoMain !== null &&
       (await isUntouched(tx, fromMain, fromMainState)) &&
       (await isUntouched(tx, intoMain)) &&
-      // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
-      // dishes merged into it would never reach the kitchen.
       (await serviceModesMatch(tx, cfg, fromMain, intoMain))
     ) {
       await mergeCheckedBills(tx, cfg, into, intoMain, fromMain, {
@@ -226,7 +225,12 @@ export async function combineParties(
     await leaveForClearing(tx, tables, at);
   } else if (tables.length > 0) {
     await leaveTables(tx, tables, at);
-    await tx.insert(partyTables).values(tables.map((tableId) => ({ partyId: into, tableId })));
+    // One millisecond apart, in the order they joined `from`: the display name lists a party's
+    // tables by join time, and a tie falls back to the membership's random id.
+    const joinedAt = (i: number) => new Date(Date.parse(at) + i).toISOString();
+    await tx
+      .insert(partyTables)
+      .values(tables.map((tableId, i) => ({ partyId: into, tableId, joinedAt: joinedAt(i) })));
   }
   // Only after `from`'s memberships have ended: closing a party clears the manual status of every
   // table it still holds (`parties_clear_table_status`), which a joining table keeps.
@@ -259,7 +263,10 @@ export async function splitTable(
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
   const partyMain = await mainBillOf(tx, partyId);
   const open = billId !== null && (await refuseUnsplittableBill(tx, partyId, partyMain, billId));
-  if (billId !== null) await leaveParty(tx, billId);
+  if (billId !== null) {
+    await leaveParty(tx, billId);
+    await repointSourceTables(tx, { id: partyId, mainBillId: partyMain }, billId);
+  }
 
   const before = await readPartiesSentWork(tx, cfg, [partyId]);
   await leaveTables(tx, [tableId]);
