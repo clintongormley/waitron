@@ -688,7 +688,7 @@ inside `withTransaction`, so every other write waits behind them: the print agen
 (`requireAgent` in `apps/server/src/print-agent-session.ts` calls `authenticateAgent` inside it), a
 join request's status (`readJoinStatus`, called inside it in `apps/server/src/device-api.ts`) and a
 print agent's join status (`readAgentJoinStatus`, called inside it in
-`apps/server/src/print-api.ts`). **Done since (2026-09-30, lane A's A126, moved to lane C):**
+`apps/server/src/print-api.ts`). **Done since (2026-09-30, lane A's A126, moved to lane C, #900):**
 `verifyPin` and `verifyPassword` (`packages/identity/src/verify-pin.ts`, `verify-password.ts`) now
 return a promise from `verifySecretAsync`, and every caller awaits them: the PIN check
 (`verifyPersonCredential`, `credential.ts`), manager login including its dummy checks for timing
