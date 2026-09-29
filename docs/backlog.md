@@ -2990,8 +2990,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         the same probe passed. The same run measured the Spanish chip's right edge at 143.94 px
         against the token's right edge at 118.98 px, so the chip runs past the token's edge. Seen
         in screenshots during A117 but not measured: a round token's "Reservada 22:30" chip does
-        the same. **Next action:** decide whether the map keeps a token inside the plan, or the
-        chip hangs off the token's edge like "Unsent".
+        the same. The owner chose on 2026-09-29 to land #891 with the chip inside the token and
+        fix this later. **Next action:** decide whether the map keeps a token inside the plan, or
+        the chip hangs off the token's edge like "Unsent".
       - The map gives its "forgotten table" corner marker no spoken name. This predates the
         branch: at `700ec7f70` `wt-floor-canvas` passes its tables no such label.
     - The table screen:
@@ -3122,7 +3123,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         once that reminder is due, without showing the time or the group. The table screen's
         Current orders shows it on the waiting group once it has a time: the time it falls due,
         then Snooze and, where waiters fire held groups, Fire; while it is snoozed, also Clear
-        snooze (A120). **DONE (campaign item A117):** once a party's reminder falls due, the floor
+        snooze (A120). **DONE (#891, campaign item A117):** once a party's reminder falls due, the floor
         shows a "Time to fire" chip (`floor.fire_due`) on the table's list card and on its map and
         tray token, and nothing before then; the floor redraws itself at the moment the next
         reminder falls due, without waiting for a new floor read. The chip itself can push a label
