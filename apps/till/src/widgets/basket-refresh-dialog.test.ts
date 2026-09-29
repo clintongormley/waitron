@@ -156,6 +156,15 @@ describe("till-basket-refresh-dialog", () => {
     expect(text(el)).toContain("Bacon is no longer offered with this dish");
   });
 
+  it("says a dish is now sold only as an extra, in English and in Spanish", async () => {
+    const only = [{ lineNo: 1, name: "Bacon", reason: "not_sold_separately" as const }];
+    const { el } = await mount({ changed: [], blocked: only });
+    expect(text(el)).toContain("Bacon is now sold only as an extra on another dish");
+    cleanupWidgets();
+    const { el: spanish } = await mount({ changed: [], blocked: only }, "es-ES");
+    expect(text(spanish)).toContain("Bacon ahora solo se vende como extra de otro plato");
+  });
+
   it("confirms with a composed, bubbling event carrying what it showed", async () => {
     const { el, host } = await mount({ changed, blocked });
     const confirmed = vi.fn();

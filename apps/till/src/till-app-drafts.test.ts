@@ -3610,6 +3610,102 @@ describe("till-app: a draft line that cannot be sold now", () => {
     expect(flagText(el)).toEqual([t("basket.blocked.unavailable")]);
   });
 
+  describe("a line whose dish is now sold only as an extra", () => {
+    const onlyFlanAsExtra = (): ZoneOfferCatalogue => {
+      const offers = catalogue("v1");
+      return {
+        ...offers,
+        offers: offers.offers.map((each) =>
+          each.id === "offer-flan" ? { ...each, ordering: "not_sold_separately" as const } : each,
+        ),
+      };
+    };
+
+    function savedBeerAndFlan(): void {
+      server.save("v1", {
+        draftId: null,
+        revision: 0,
+        lines: ["offer-beer", "offer-flan"].map((menuItemId) => ({
+          menuItemId,
+          variantId: null,
+          menuVersionId: "v1",
+          options: [],
+          extras: [],
+          note: null,
+          quantity: "1",
+          courseId: null,
+          noMerge: false,
+        })),
+      });
+    }
+
+    it("is shown flagged in words for why, and Remove takes it out and saves that", async () => {
+      savedBeerAndFlan();
+      const { el } = await mountApp({
+        listZoneOffers: vi.fn().mockResolvedValue(onlyFlanAsExtra()),
+      });
+      await openMesa(el);
+
+      expect(rows(el)).toEqual(["Beer ×1", "Flan ×1"]);
+      expect(flagText(el)).toEqual([t("basket.blocked.not_sold_separately")]);
+
+      screen(el).querySelector<HTMLElement>('[data-flag-remove="1"]')!.click();
+      await saved(el);
+
+      expect(rows(el)).toEqual(["Beer ×1"]);
+      expect(server.drafts[0]!.lines.map((line) => line.menuItemId)).toEqual(["offer-beer"]);
+    });
+
+    it("keeps its flag when a later poll finds nothing sold out", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      try {
+        savedBeerAndFlan();
+        server.unavailable.add("offer-flan");
+        const { el } = await mountApp({
+          listZoneOffers: vi.fn().mockResolvedValue(onlyFlanAsExtra()),
+          menuState: vi.fn().mockResolvedValue(state([])),
+        });
+        await openMesa(el);
+        vi.advanceTimersByTime(15_000);
+        await flush(el, 6);
+
+        expect(flagText(el)).toEqual([t("basket.blocked.not_sold_separately")]);
+        expect(await pressAndRead(el, "send-all")).toContain(
+          t("table.left_out_one").replace("{names}", "Flan ×1"),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("says a save refused for it in the refusal's own words", async () => {
+      const { el } = await mountApp({
+        saveDraft: vi
+          .fn()
+          .mockRejectedValue({ code: "product.not_sold_separately", status: 409, productId: "x" }),
+      });
+      await openMesa(el);
+      await tap(el, "Beer");
+      await saved(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage("product.not_sold_separately"));
+    });
+
+    it("reads the table's offers again after such a refused save, and flags the line", async () => {
+      const { el } = await mountApp({
+        saveDraft: vi
+          .fn(server.saveDraft)
+          .mockRejectedValueOnce({ code: "product.not_sold_separately", status: 409 }),
+      });
+      await openMesa(el);
+      api.listZoneOffers.mockResolvedValue(onlyFlanAsExtra());
+      await tap(el, "Flan");
+      await saved(el);
+
+      expect(flagText(el)).toEqual([t("basket.blocked.not_sold_separately")]);
+    });
+  });
+
   it("takes a flagged line out on Remove, and saves that", async () => {
     server.unavailable.add("offer-flan");
     const { el } = await mountApp();

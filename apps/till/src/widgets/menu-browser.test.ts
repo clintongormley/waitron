@@ -852,6 +852,83 @@ describe("till-menu-browser", () => {
     });
   });
 
+  describe("who may order a product on its own", () => {
+    const withOrdering = (
+      ordering: NonNullable<TillProduct["ordering"]>,
+      ...keys: string[]
+    ): TillProduct[] =>
+      PRODUCTS.map((each) =>
+        keys.includes(each.id.slice(2)) ? { ...each, ordering } : { ...each, ordering: "public" },
+      );
+
+    it("leaves a product not sold separately out of the tiles, the structure, its section and the search, and a section left empty goes too", async () => {
+      const { el } = await mount({
+        products: withOrdering("not_sold_separately", "cola", "cana", "cafe"),
+      });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Burger", "Drinks (EN)", "Agua"]);
+      await tap(el, entry(el, "structure", "Drinks (EN)"));
+      expect(names(entries(el, "section"))).toEqual(["Lemonade"]);
+      await search(el, "a");
+      expect(names(entries(el, "results"))).toEqual(["Lemonade", "Jamón", "Tostada", "Agua"]);
+    });
+
+    it("shows a staff-only product as it shows a public one, and rings it up", async () => {
+      // Staff only is for guest ordering, which does not exist yet, so every screen today is staff's.
+      const { el, store } = await mount({
+        menu: lunch({ homeLayoutId: "lay-four" }),
+        products: withOrdering("staff_only", "cola"),
+      });
+      expect(names(entries(el, "shortcuts"))).toEqual(["Café", "Burger", "Cola", "Agua"]);
+      await search(el, "col");
+      expect(names(entries(el, "results"))).toEqual(["Cola"]);
+      await tap(el, entry(el, "results", "Cola"));
+      expect(store.lines.map((line) => line.product.name)).toEqual(["Cola"]);
+    });
+
+    it("still offers a product not sold separately as an extra on a dish that lists it", async () => {
+      const extra = {
+        productId: "p-cola",
+        name: "Cola",
+        customerName: null,
+        kitchenName: null,
+        price: "1.00",
+        vatClass: "general" as const,
+        maxQuantity: 1,
+        preselected: false,
+        addAllergens: null,
+        suitableFor: [],
+      };
+      const tostadaWithExtras = {
+        ...tostada,
+        offeredModifiers: [
+          {
+            kind: "extras" as const,
+            id: "list-drinks",
+            name: "Drinks",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: 1,
+            items: [extra],
+          },
+        ],
+      };
+      const { el } = await mount({
+        products: [
+          ...withOrdering("not_sold_separately", "cola").filter((each) => each.id !== tostada.id),
+          tostadaWithExtras,
+        ],
+      });
+      await search(el, "col");
+      expect(entries(el, "results")).toEqual([]);
+      await search(el, "tostada");
+      await tap(el, entry(el, "results", "Tostada"));
+      const picker = root(el).querySelector("till-modifier-picker")!;
+      await picker.updateComplete;
+      expect(picker.shadowRoot!.textContent).toContain("Cola");
+    });
+  });
+
   describe("an open section the menu no longer holds (§9)", () => {
     it("says Not found and returns home when a new menu drops the open section", async () => {
       const { el } = await mount();

@@ -203,7 +203,7 @@ export const SUBMIT_RETRY_PAUSE_MS = 500;
  * operator is still on it; `landedOn` names the tab the server added the draft to, when it is not the
  * one it was sent to.
  */
-type DraftFollowUp = "read-tab" | "find-tab" | "mark-sold-out" | { landedOn: string } | undefined;
+type DraftFollowUp = "read-tab" | "find-tab" | "mark-unsellable" | { landedOn: string } | undefined;
 
 /** A draft opened for the order: `sync` is undefined for an order with no party, and `read` false
  * when its read failed. Undefined when the operator session it was opened in has ended. */
@@ -278,6 +278,7 @@ function draftRefusalError({ refused, ownerName }: DraftRefused, unsent = false)
   if (refused === "draft.taken_over")
     return unsent ? { takenOver: ownerName ?? "", unsent } : { takenOver: ownerName ?? "" };
   if (refused === "draft.out_of_date") return "table.draft_changed_elsewhere";
+  if (refused === "product.not_sold_separately") return { code: refused };
   return DRAFT_REFUSALS.has(refused) || refused === "session.required"
     ? { code: refused }
     : tableWriteError({ code: refused });
@@ -356,6 +357,7 @@ function partyChangeMessage(change: PartyChange): string {
  * operator can still do. */
 const LINE_REFUSALS = new Set([
   "product.unavailable",
+  "product.not_sold_separately",
   "ticket.already_started",
   "ticket.already_fired",
   "tab.void_quantity_invalid",
@@ -379,7 +381,14 @@ function lineWriteError(error: unknown): CounterError {
 
 /** Refusals the counter shows in their own words (`codeMessage`): each names what to do next, where
  * the generic "try again" would send the operator round the same refusal. */
-const ACTIONABLE_REFUSALS = new Set(["order.payment_in_flight", "product.unavailable"]);
+const ACTIONABLE_REFUSALS = new Set([
+  "order.payment_in_flight",
+  "product.unavailable",
+  "product.not_sold_separately",
+]);
+
+/** Refusals naming a line the table's offers can mark once they are read again. */
+const UNSELLABLE_LINE_REFUSALS = new Set(["product.unavailable", "product.not_sold_separately"]);
 
 /** A counter pay, place or hold refusal: its own message when it is actionable, else `fallback`. */
 function counterError(error: unknown, fallback: StringKey): CounterError {
@@ -1556,9 +1565,9 @@ export class TillApp extends LitElement {
     if (found.length > 0) this.removedLayouts = [...this.removedLayouts, ...found];
   }
 
-  /** A round refused because a dish in it sold out is marked against the table's offers from now on,
-   * and the offers are read again. */
-  async #markSoldOut(round: WorkingOrderStore): Promise<void> {
+  /** A round refused because a dish in it cannot be sold as it stands is marked against the table's
+   * offers from now on, and the offers are read again. */
+  async #markUnsellable(round: WorkingOrderStore): Promise<void> {
     const zoneId = this.#tableZoneId;
     if (zoneId === undefined) return;
     this.#markedRounds.add(round);
@@ -2851,10 +2860,14 @@ export class TillApp extends LitElement {
     });
   }
 
-  /** A save refused. An edit made after the session ended is lost: nothing can send it now. */
+  /** A save refused. An edit made after the session ended is lost: nothing can send it now. A line
+   * the refusal names is marked once the table's offers are read again. */
   #onDraftRefused(sync: DraftSync, refusal: DraftRefused): void {
     if (sync !== this.#draftSync || refusal.refused === "session.required") return;
     this.errorKey = draftRefusalError(refusal);
+    const zoneId = this.#tableZoneId;
+    if (UNSELLABLE_LINE_REFUSALS.has(refusal.refused) && zoneId !== undefined)
+      void this.#reloadTableOffers(zoneId);
   }
 
   /** The other people's drafts on the party of the draft shown, `shown` being what
@@ -3022,8 +3035,8 @@ export class TillApp extends LitElement {
       store.sending = false;
     }
     if (followUp === undefined) return;
-    if (followUp === "mark-sold-out") {
-      await this.#markSoldOut(store);
+    if (followUp === "mark-unsellable") {
+      await this.#markUnsellable(store);
       return;
     }
     const onSentTable = () => this.activeTabId === tabId && this.activeTableId === tableId;
@@ -3141,7 +3154,9 @@ export class TillApp extends LitElement {
         billId !== undefined && refusal?.refused === "tab.not_open"
           ? { code: "tab.not_open" }
           : lineWriteError(error);
-      return refusal?.refused === "product.unavailable" ? "mark-sold-out" : undefined;
+      return refusal !== undefined && UNSELLABLE_LINE_REFUSALS.has(refusal.refused)
+        ? "mark-unsellable"
+        : undefined;
     } finally {
       send.done();
     }

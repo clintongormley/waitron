@@ -32,6 +32,7 @@ function notOfferedMarker() {
 const BLOCKED_WORDS: Record<BlockReason, StringKey> = {
   removed: "basket.blocked.removed",
   variant_removed: "basket.blocked.removed",
+  not_sold_separately: "basket.blocked.not_sold_separately",
   unavailable: "basket.blocked.unavailable",
   extra_removed: "basket.blocked.extra",
   extra_unavailable: "basket.blocked.extra",

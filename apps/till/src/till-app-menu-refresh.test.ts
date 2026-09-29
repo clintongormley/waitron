@@ -1308,6 +1308,31 @@ describe("a table round refused for another reason", () => {
     expect(banner(el)!.textContent).toContain(codeMessage("product.unavailable"));
     expect(roundStore(el).lineCount).toBe(1);
   });
+
+  it("says a dish sold only as an extra in its own words, keeps the round, and marks the line from the offers read again", async () => {
+    const onlyAsExtra = {
+      ...DINING,
+      offers: [
+        offer("offer-lemonade", "Lemonade", "3.00", { ordering: "not_sold_separately" }),
+        burgerOffer(),
+      ],
+    };
+    const { el } = await mountApp(
+      tableStubs(onlyAsExtra, {
+        submitDraft: vi.fn().mockRejectedValue({
+          code: "product.not_sold_separately",
+          status: 409,
+          productId: "Lemonade",
+        }),
+      }),
+    );
+    await toTable(el);
+    await sendLemonadeRound(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("product.not_sold_separately"));
+    expect(roundStore(el).lineCount).toBe(1);
+    expect(roundStore(el).lines[0]!.blocked).toBe("not_sold_separately");
+  });
 });
 
 describe("a round line's mark", () => {
