@@ -41,6 +41,8 @@ export interface FloorTable {
   timingBand?: TimingBand;
   /** Who has an order on this table not yet sent, one name per order; "" for an unknown person. */
   unsentDrafts?: readonly string[];
+  /** The name of the party seated there, shown under the table's label. */
+  partyName?: string;
 }
 
 /** A table's spatial placement — the mutable subset an edit-mode gesture produces. */
@@ -147,6 +149,7 @@ export interface FloorOccupancyInput {
   reservedTime?: string | null;
   timingBand?: TimingBand;
   unsentDrafts?: readonly string[];
+  partyName?: string;
 }
 
 export function toFloorTable(
@@ -169,5 +172,6 @@ export function toFloorTable(
     status: occupancy.status,
     reservedTime: occupancy.reservedTime ?? null,
     unsentDrafts: occupancy.unsentDrafts,
+    partyName: occupancy.partyName,
   };
 }

@@ -564,7 +564,8 @@ function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
       "expectedOtherPartyRevision",
     );
   }
-  if (body.otherPartyId !== undefined) {
+  if (body.otherPartyId === null) read.otherPartyId = null;
+  else if (body.otherPartyId !== undefined) {
     read.otherPartyId = requireBodyUuid(body.otherPartyId, "otherPartyId").toLowerCase();
   }
   return read;

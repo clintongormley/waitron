@@ -123,12 +123,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
   };
 }
 
-function table(
-  id: string,
-  label: string,
-  tableParty: TableParty | null,
-  tabId?: string,
-): TableState {
+function table(id: string, label: string, tableParty: TableParty | null): TableState {
   return {
     id,
     label,
@@ -137,7 +132,6 @@ function table(
     state: tableParty === null ? "free" : "open-tab",
     condition: tableParty === null ? "free" : "held",
     hasOpenTab: tableParty !== null,
-    ...(tabId === undefined ? {} : { tabId }),
     pendingDeliveries: 0,
     pendingToServe: 0,
     readyToServe: 0,
@@ -153,8 +147,12 @@ function table(
   };
 }
 
-const mesa4 = table("t4", "4", party(), "wo-4");
-const mesa7 = table("t7", "7", party({ id: "v7", revision: 9, tableIds: ["t7"] }), "wo-7");
+const mesa4 = table("t4", "4", party());
+const mesa7 = table(
+  "t7",
+  "7",
+  party({ id: "v7", revision: 9, mainBillId: "wo-7", tableIds: ["t7"] }),
+);
 
 const drillCanvas: CanvasDef = {
   formFactor: "till",
@@ -582,7 +580,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 describe("till-app: an order that moves to another party", () => {
   it("saves the person's edits to the party they were made on, then shows the new party's draft", async () => {
     const { el } = await mountApp({
-      moveTab: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+      moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     await openMesa(el);
     server.save("v9", {
@@ -604,11 +602,11 @@ describe("till-app: an order that moves to another party", () => {
     });
     await tap(el, "Beer");
     api.getTablesState.mockResolvedValue([
-      table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] }), "wo-4"),
+      table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] })),
       mesa7,
     ]);
 
-    emit(tableOrder(el)!, "move-tab", { toTableId: "t7" });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
     await flush(el, 6);
 
     expect(server.drafts.map((each) => [each.partyId, each.lines.length])).toEqual([
@@ -1844,7 +1842,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     };
     let answerGroups!: () => void;
     const { el } = await mountApp({
-      moveTab: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+      moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
       listGroups: vi.fn(async (partyId: string) => {
         if (partyId !== "v9") return { revision: 3, groups: [] };
         await new Promise<void>((resolve) => (answerGroups = resolve));
@@ -1870,11 +1868,11 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
       ],
     });
     api.getTablesState.mockResolvedValue([
-      table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] }), "wo-4"),
+      table("t4", "4", party({ id: "v9", revision: 1, tableIds: ["t4", "t7"] })),
       mesa7,
     ]);
 
-    emit(tableOrder(el)!, "move-tab", { toTableId: "t7" });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t7", bills: "merge" });
     await flush(el, 6);
     answerGroups();
     await flush(el, 6);

@@ -106,7 +106,8 @@ import type {
   TillProduct,
   TillSaleResult,
   PartyBill,
-  PartyRevisions,
+  TableActionResult,
+  TableActionRevisions,
   BillRevisions,
   TillZoneMenu,
   ZoneOfferCatalogue,
@@ -217,6 +218,12 @@ const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
   "table.occupied",
   "table.not_shared",
+  "table.not_joined",
+  "table.already_in_party",
+  "table.inactive",
+  "party.main_bill_stays",
+  "service_zone.join_mismatch",
+  "service_zone.mode_incompatible",
   "group.held_leaves_party",
   "table.needs_clearing",
   "table.not_found",
@@ -232,6 +239,12 @@ const TABLE_REFUSALS = new Set([
   "bill.payments_received",
   "bill.line_paid",
 ]);
+
+/** The bill a seated party opens on when it has no main bill: its first unpaid, else its latest. */
+function billToOpen(bills: readonly PartyBill[]): string | undefined {
+  const unpaid = bills.find((bill) => bill.status === "open" || bill.status === "placed");
+  return (unpaid ?? bills.at(-1))?.workingOrderId;
+}
 
 function isPartyOutOfDate(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "party.out_of_date";
@@ -904,6 +917,8 @@ export class TillApp extends LitElement {
   @state() private takeOversAnswered = 0;
   /** Finish table was refused because a bill of the party is unpaid. */
   @state() private finishRefused = false;
+  /** A name the server refused for the party, and why, which the table screen shows beside its field. */
+  @state() private nameRefusal: { name: string; message: string } | null = null;
   /** The venue's setting for changing sent lines, read with {@link tabLines}. */
   @state() private editSentLines = true;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
@@ -2373,8 +2388,8 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A free table seats a party with the guest count given; a seated one resumes
-   * {@link TableState.tabId}, even when that tab is no longer open. */
+  /** A free table seats a party with the guest count given; a seated one resumes its party
+   * ({@link billToOpen}). */
   async #onOpenTable(event: Event): Promise<void> {
     const { tableId, seated, guestCount } = (
       event as CustomEvent<{ tableId: string; seated: boolean; guestCount?: number | null }>
@@ -2428,12 +2443,20 @@ export class TillApp extends LitElement {
     this.activeTableId = tableId;
     this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
     this.finishRefused = false;
+    this.nameRefusal = null;
     this.reprintSent = [];
     if (guestCount === undefined) {
-      this.activeTabId = table?.tabId;
       this.orderParty = table?.party ?? null;
+      const main = this.orderParty?.mainBillId ?? null;
+      const billsRead = main === null && this.orderParty !== null;
+      this.activeTabId = main ?? undefined;
+      if (billsRead) {
+        const read = await this.#loadPartyBills();
+        if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
+        this.activeTabId = billToOpen(read.bills ?? []);
+      }
       const [, opened] = await Promise.all([
-        this.#loadLinesAndBills(),
+        billsRead ? this.#loadTabLines() : this.#loadLinesAndBills(),
         this.#openDraft(true, session),
       ]);
       if (session !== this.#operatorSession) return;
@@ -2848,10 +2871,14 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The revision of the party at the open table, for a move or join. */
-  #revisions(): PartyRevisions {
-    const own = this.orderParty;
-    return own === null ? {} : { expectedPartyRevision: own.revision };
+  /** What a move or join sends of the parties read: the open party's revision, and what the floor
+   * showed at the target table — another party and its revision, or null when it read free. */
+  #tableActionRevisions(party: TableParty, tableId: string): TableActionRevisions {
+    const own = { expectedPartyRevision: party.revision };
+    const other = this.tables.find((table) => table.id === tableId)?.party ?? null;
+    if (other === null) return { ...own, otherPartyId: null };
+    if (other.id === party.id) return own;
+    return { ...own, otherPartyId: other.id, expectedOtherPartyRevision: other.revision };
   }
 
   /** The party the open bill was read under, for a bill action. */
@@ -2944,9 +2971,9 @@ export class TillApp extends LitElement {
       // The server puts a draft only on a bill of its own party, the one named or else the main
       // bill, so the table is followed only while it still holds the party the screen showed when
       // the draft was sent.
-      const now = this.tables.find((row) => row.id === tableId);
-      if (now?.tabId !== undefined && now.party?.id === partyId && onSentTable())
-        this.#followDraft(tabId, billId ?? now.tabId);
+      const now = this.tables.find((row) => row.id === tableId)?.party;
+      const landed = billId ?? now?.mainBillId ?? null;
+      if (landed !== null && now?.id === partyId && onSentTable()) this.#followDraft(tabId, landed);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
       if (!live()) return;
@@ -3391,32 +3418,126 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The tab now lives on the new table, so it becomes {@link activeTableId}. */
-  async #onMoveTab(event: Event): Promise<void> {
-    const { toTableId } = (event as CustomEvent<{ toTableId: string }>).detail;
-    if (this.activeTabId === undefined) return;
+  /**
+   * The guests move off all their tables to the one chosen, which becomes {@link activeTableId}. At a
+   * table another party held, they are now that party: the screen follows them to its main bill, or
+   * the bill {@link billToOpen} picks, and says so when bills asked to merge stayed apart.
+   */
+  async #onMoveGuests(event: Event): Promise<void> {
+    const { toTableId, bills } = (
+      event as CustomEvent<{ toTableId: string; bills: "merge" | "separate" }>
+    ).detail;
+    const party = this.orderParty;
+    if (party === null) return;
     this.errorKey = undefined;
+    const revisions = this.#tableActionRevisions(party, toTableId);
+    let result: TableActionResult;
     try {
-      await this.api.moveTab(this.activeTabId, toTableId, this.#revisions());
+      result = await this.api.moveGuests(party.id, toTableId, bills, revisions);
     } catch (error) {
       await this.#onTableRefusal(error);
       return;
     }
     this.activeTableId = toTableId;
-    await this.#reloadOrder();
+    await this.#reloadTables();
+    this.#rememberOrderParty();
+    if (result.partyId !== party.id) {
+      if (result.mainBillId !== null) this.activeTabId = result.mainBillId;
+      else this.activeTabId = billToOpen((await this.#loadPartyBills()).bills ?? []);
+    }
+    await this.#loadLinesAndBills();
+    this.#sayBillsKeptApart(revisions, bills, result);
   }
 
-  async #onJoinTable(event: Event): Promise<void> {
-    const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
-    if (this.activeTabId === undefined) return;
+  /** The chosen table joins the party; a party seated there joins it with all its tables. */
+  async #onJoinTables(event: Event): Promise<void> {
+    const { tableId, bills } = (
+      event as CustomEvent<{ tableId: string; bills: "merge" | "separate" }>
+    ).detail;
+    const party = this.orderParty;
+    if (party === null) return;
     this.errorKey = undefined;
+    const revisions = this.#tableActionRevisions(party, tableId);
+    let result: TableActionResult;
     try {
-      await this.api.joinTable(this.activeTabId, tableId, this.#revisions());
+      result = await this.api.joinTables(party.id, tableId, bills, revisions);
     } catch (error) {
       await this.#onTableRefusal(error);
       return;
     }
     await this.#reloadOrder();
+    this.#sayBillsKeptApart(revisions, bills, result);
+  }
+
+  #sayBillsKeptApart(
+    revisions: TableActionRevisions,
+    bills: "merge" | "separate",
+    result: TableActionResult,
+  ): void {
+    const combined = typeof revisions.otherPartyId === "string";
+    if (combined && bills === "merge" && !result.merged)
+      this.errorKey = "table.bills_kept_separate";
+  }
+
+  /**
+   * The table leaves the party with the chosen bill, or none, and a new party starts there. The
+   * screen stays with this party: at another of its tables when the open one left, and on its main
+   * bill when the bill on screen left with the table.
+   */
+  async #onSplitTable(event: Event): Promise<void> {
+    const { tableId, billId } = (event as CustomEvent<{ tableId: string; billId: string | null }>)
+      .detail;
+    const party = this.orderParty;
+    if (party === null) return;
+    this.errorKey = undefined;
+    try {
+      await this.api.splitTable(party.id, tableId, billId, party.revision);
+    } catch (error) {
+      await this.#onTableRefusal(error);
+      return;
+    }
+    if (this.activeTableId === tableId)
+      this.activeTableId = party.tableIds.find((id) => id !== tableId);
+    await this.#reloadTables();
+    this.#rememberOrderParty();
+    if (billId !== null && this.activeTabId === billId) {
+      const main = this.orderParty?.mainBillId ?? null;
+      this.activeTabId = main ?? billToOpen((await this.#loadPartyBills()).bills ?? []);
+    }
+    await this.#loadLinesAndBills();
+  }
+
+  /** A refusal of the name itself goes back to the screen's field, unless the waiter has left the
+   * party since; any other is said on the banner. */
+  async #onNameParty(event: Event): Promise<void> {
+    const { name } = (event as CustomEvent<{ name: string | null }>).detail;
+    const party = this.orderParty;
+    if (party === null) return;
+    const visit = this.#orderVisit;
+    this.errorKey = undefined;
+    this.nameRefusal = null;
+    try {
+      const named = await this.api.setPartyName(party.id, name, party.revision);
+      this.#notePartyRevision(party.id, named.revision);
+    } catch (error) {
+      const refused = error as { code?: string; field?: string } | undefined;
+      if (refused?.code === "management.request_invalid" && refused.field === "name") {
+        if (visit === this.#orderVisit && this.orderParty?.id === party.id)
+          this.nameRefusal = { name: name ?? "", message: t("table.name_too_long") };
+        return;
+      }
+      await this.#onTableRefusal(error);
+      return;
+    }
+    await this.#reloadOrder();
+  }
+
+  /** `service_zone.mode_incompatible`'s own words are about a table; between two bills it means
+   * the two are served in different ways. */
+  async #onBillPairRefusal(error: unknown): Promise<void> {
+    if ((error as { code?: string } | undefined)?.code === "service_zone.mode_incompatible")
+      this.errorKey = "table.bills_served_differently";
+    else await this.#onTableRefusal(error);
   }
 
   async #onMergeBills(event: Event): Promise<void> {
@@ -3426,7 +3547,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.mergeBills(this.activeTabId, fromBillId, this.#billRevisions());
     } catch (error) {
-      await this.#onTableRefusal(error);
+      await this.#onBillPairRefusal(error);
       return;
     }
     await this.#reloadOrder();
@@ -3441,7 +3562,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.transferItems(this.activeTabId, toBillId, transfers, this.#billRevisions());
     } catch (error) {
-      await this.#onTableRefusal(error);
+      await this.#onBillPairRefusal(error);
       return;
     }
     await this.#reloadOrder();
@@ -3829,6 +3950,7 @@ export class TillApp extends LitElement {
       .party=${this.orderParty}
       .partyBills=${this.partyBills}
       .finishRefused=${this.finishRefused}
+      .nameRefusal=${this.nameRefusal}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
     ></till-card-grid>`;
@@ -3871,6 +3993,7 @@ export class TillApp extends LitElement {
           .party=${this.orderParty}
           .bills=${this.partyBills}
           .finishRefused=${this.finishRefused}
+          .nameRefusal=${this.nameRefusal}
           .busy=${this.submitting}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheldMode}
@@ -3972,8 +4095,10 @@ export class TillApp extends LitElement {
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
-        @move-tab=${(event: Event) => void this.#onMoveTab(event)}
-        @join-table=${(event: Event) => void this.#onJoinTable(event)}
+        @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
+        @join-tables=${(event: Event) => void this.#onJoinTables(event)}
+        @split-table=${(event: Event) => void this.#onSplitTable(event)}
+        @name-party=${(event: Event) => void this.#onNameParty(event)}
         @merge-bills=${(event: Event) => void this.#onMergeBills(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @split-lines=${(event: Event) => void this.#onSplitLines(event)}

@@ -50,7 +50,6 @@ const openTable: TableState = {
   state: "open-tab",
   condition: "free",
   hasOpenTab: true,
-  tabId: "wo-7",
   tabLineCount: 2,
   tabTotal: "12.00",
   pendingDeliveries: 0,
@@ -64,12 +63,6 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
-  party: null,
-};
-
-/** {@link openTable} with a party seated at it: a round goes to the party. */
-const seatedTable: TableState = {
-  ...openTable,
   party: {
     id: "v-2",
     revision: 3,
@@ -85,7 +78,8 @@ const seatedTable: TableState = {
     reminder: null,
   },
 };
-const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([seatedTable]) });
+
+const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([openTable]) });
 
 const tabLine: TabLine = {
   id: "line-1",
@@ -257,6 +251,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     listStatuses: vi.fn().mockResolvedValue([]),
     seatTable: vi.fn().mockResolvedValue({ tabId: "wo-new", orderNumber: 12 }),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
+    getPartyBills: vi.fn().mockResolvedValue([]),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
@@ -267,8 +262,10 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     voidLine: vi.fn().mockResolvedValue({ party: null }),
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
-    moveTab: vi.fn().mockResolvedValue(undefined),
-    joinTable: vi.fn().mockResolvedValue(undefined),
+    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
+    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
+    splitTable: vi.fn().mockResolvedValue({ partyId: "v-new", mainBillId: null }),
+    setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -434,7 +431,6 @@ describe("till-app table ordering: the table's menus", () => {
       id: "t1",
       state: "free",
       hasOpenTab: false,
-      tabId: undefined,
     };
     const { el } = await mountApp({
       getTablesState: vi.fn().mockResolvedValue([freeTable]),
@@ -454,8 +450,18 @@ describe("till-app table ordering: the table's menus", () => {
   });
 
   it("says nothing about a failed offer load for a table the operator has already left", async () => {
-    const tableA = { ...openTable, id: "table-a", tabId: "order-a", zoneId: "zone-a" };
-    const tableB = { ...openTable, id: "table-b", tabId: "order-b", zoneId: "zone-b" };
+    const tableA = {
+      ...openTable,
+      id: "table-a",
+      zoneId: "zone-a",
+      party: { ...openTable.party!, id: "party-a", mainBillId: "order-a" },
+    };
+    const tableB = {
+      ...openTable,
+      id: "table-b",
+      zoneId: "zone-b",
+      party: { ...openTable.party!, id: "party-b", mainBillId: "order-b" },
+    };
     let rejectA!: (reason: unknown) => void;
     const listZoneOffers = vi.fn((zoneId: string) =>
       zoneId === "zone-a"
@@ -522,8 +528,10 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
       "updateOrderLine",
     ],
     ["set-status", { statusId: "s1" }, "setTableStatus"],
-    ["move-tab", { toTableId: "t9" }, "moveTab"],
-    ["join-table", { tableId: "t9" }, "joinTable"],
+    ["move-guests", { toTableId: "t9", bills: "merge" }, "moveGuests"],
+    ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
+    ["split-table", { tableId: "t9", billId: null }, "splitTable"],
+    ["name-party", { name: "Ana" }, "setPartyName"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
     ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
@@ -582,7 +590,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
   );
 
   it.each([
-    ["join-table", { tableId: "t9" }, "joinTable"],
+    ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
     ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
     ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
   ] as const)(
@@ -669,10 +677,13 @@ describe("till-app table ordering: refused and failed table actions", () => {
     const screen = await toTableOrder(el);
     expect(screen.tables).toEqual([openTable]);
 
-    emit(screen, "move-tab", { toTableId: "t9" });
+    emit(screen, "move-guests", { toTableId: "t9", bills: "merge" });
     await flush(el);
 
-    expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", {});
+    expect(api.moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
+      expectedPartyRevision: 3,
+      otherPartyId: null,
+    });
     expect(tableOrder(el)!.tables).toEqual([]);
     expect(banner(el)).toBeNull();
   });
@@ -920,7 +931,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   describe("an answer that arrives after the waiter has moved to another table", () => {
-    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
 
     /** Sends a change on table 2, then opens table 3 before the server answers it. */
@@ -1377,7 +1393,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   describe("an answer that arrives once the waiter is back on the same order", () => {
-    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
     const noted: TabLine = { ...burgerLine, note: "no onions" };
 
     /** Sends a held change on table 2 from a device on `canvas`. Once `saved()` is called, table 2
@@ -1568,7 +1589,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   it("shows the table the waiter opened, not the lines of an earlier order whose read answers later", async () => {
-    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
     let finishReload!: () => void;
     const getTabLines = vi
@@ -1609,7 +1635,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   it("keeps the opened table's lines when an earlier order's read fails after them", async () => {
-    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
     let failReload!: () => void;
     const getTabLines = vi
@@ -1642,7 +1673,12 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   });
 
   it("offers no Cancel when the waiter moves to another table while the refused line reloads", async () => {
-    const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
+    const otherTable: TableState = {
+      ...openTable,
+      id: "t3",
+      label: "3",
+      party: { ...openTable.party!, id: "v-3", mainBillId: "wo-8", tableIds: ["t3"] },
+    };
     const otherLine: TabLine = { ...burgerLine, name: "Tarta", state: "preparing" };
     let finishReload!: () => void;
     const getTabLines = vi

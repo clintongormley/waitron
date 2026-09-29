@@ -856,6 +856,7 @@ const party = {
   revision: 1,
   guestCount: 2,
   state: "open" as const,
+  mainBillId: "wo-7",
   outstanding: "3.00",
   billCount: 1,
   tableIds: ["t2"],
@@ -868,7 +869,6 @@ const table = {
   capacity: 4,
   state: "open-tab",
   hasOpenTab: true,
-  tabId: "wo-7",
   tabLineCount: 1,
   tabTotal: "3.00",
   pendingDeliveries: 0,
@@ -1380,8 +1380,7 @@ const tableB = {
   ...table,
   id: "t3",
   label: "3",
-  tabId: "wo-8",
-  party: { ...party, id: "party-c", tableIds: ["t3"] },
+  party: { ...party, id: "party-c", mainBillId: "wo-8", tableIds: ["t3"] },
 };
 
 describe("a kept round and another table", () => {
@@ -1696,7 +1695,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     );
     await toTable(el);
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-next", party: { ...party, revision: 2 } },
+      { ...seated, party: { ...party, revision: 2, mainBillId: "wo-next" } },
     ]);
     const round = roundStore(el);
     await sendLemonadeRound(el);
@@ -1722,7 +1721,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     await toTable(el);
     // Another till settled and cleared the party, and seated a new one at the same table.
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-other", party: { ...party, id: "party-b" } },
+      { ...seated, party: { ...party, id: "party-b", mainBillId: "wo-other" } },
     ]);
     await sendLemonadeRound(el);
     await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
@@ -1736,19 +1735,30 @@ describe("a round that got no answer while the party moved on to its next tab", 
   });
 
   it("sends nothing, and follows nothing, when the tab had no party", async () => {
+    // The till opens a table by its party's bills, so the order on screen has no party only once
+    // its party has left the table.
     const { el } = await mountApp(
       tableStubs(DINING, {
-        getTablesState: vi.fn().mockResolvedValue([{ ...table, party: null }]),
+        getTablesState: vi.fn().mockResolvedValue([seated]),
+        getPartyBills: vi.fn().mockResolvedValue([]),
+        mergeBills: vi.fn().mockResolvedValue(undefined),
       }),
     );
     await toTable(el);
-    api.getTablesState.mockResolvedValue([{ ...table, party: null, tabId: "wo-other" }]);
+    api.getTablesState.mockResolvedValue([{ ...table, party: null }]);
+    emit(tableScreen(el), "merge-bills", { fromBillId: "wo-9" });
+    await flush(el);
+    api.getTablesState.mockResolvedValue([
+      { ...seated, party: { ...party, id: "party-b", mainBillId: "wo-other" } },
+    ]);
+    const floorReads = api.getTablesState.mock.calls.length;
     await sendLemonadeRound(el);
     await flush(el);
 
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(shownTab(el)).toBe("wo-7");
     expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
     expect(roundStore(el).lineCount).toBe(1);
   });
 
@@ -1773,7 +1783,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     expect(shownTab(el)).toBe("wo-8");
 
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-next", party: { ...party, revision: 2 } },
+      { ...seated, party: { ...party, revision: 2, mainBillId: "wo-next" } },
       tableB,
     ]);
     fail(new TypeError("offline"));
@@ -1871,20 +1881,22 @@ describe("a round that got no answer while its tab moved to another table", () =
         getTablesState: vi.fn().mockResolvedValue([seated]),
         getPartyBills: vi.fn().mockResolvedValue([]),
         submitDraft: failLater((reject) => (fail = reject)),
-        moveTab: vi.fn().mockResolvedValue(undefined),
+        moveGuests: vi
+          .fn()
+          .mockResolvedValue({ partyId: "party-a", mainBillId: "wo-other", merged: false }),
       }),
     );
     await toTable(el);
     await sendLemonadeRound(el);
-    // The tab moves from t2 to t4, and the party, which holds both, has a new tab at t2.
-    const spread = { ...party, revision: 2, tableIds: ["t2", "t4"] };
+    // The guests move from t2 to t4, and the party, which holds both, has a new main bill.
+    const spread = { ...party, revision: 2, mainBillId: "wo-other", tableIds: ["t2", "t4"] };
     api.getTablesState.mockResolvedValue([
-      { ...seated, tabId: "wo-other", party: spread },
+      { ...seated, party: spread },
       { ...seated, id: "t4", label: "4", party: spread },
     ]);
-    emit(tableScreen(el), "move-tab", { toTableId: "t4" });
+    emit(tableScreen(el), "move-guests", { toTableId: "t4", bills: "merge" });
     await flush(el);
-    expect(api.moveTab).toHaveBeenCalledOnce();
+    expect(api.moveGuests).toHaveBeenCalledOnce();
 
     fail(new TypeError("offline"));
     await flush(el);

@@ -117,6 +117,7 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) party: TableParty | null = null;
   @property({ attribute: false }) partyBills: PartyBill[] = [];
   @property({ type: Boolean }) finishRefused = false;
+  @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   @property({ type: Boolean }) groupCommandBusy = false;
   /** A handheld form factor, whose menu browser shows fewer columns unless its card sets them. */
   @property({ type: Boolean }) handheld = false;
@@ -260,6 +261,7 @@ export class TillCardGrid extends LitElement {
           .party=${this.party}
           .bills=${this.partyBills}
           .finishRefused=${this.finishRefused}
+          .nameRefusal=${this.nameRefusal}
           .busy=${this.busy}
           .groupCommandBusy=${this.groupCommandBusy}
           .handheld=${this.handheld}

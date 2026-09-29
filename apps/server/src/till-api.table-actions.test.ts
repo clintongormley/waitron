@@ -254,7 +254,7 @@ describe("the table action routes", () => {
       });
     });
 
-    it.each([["not-a-uuid"], [7], [null]])(
+    it.each([["not-a-uuid"], [7]])(
       `answers ${path} with the other party id %j with 400 management.request_invalid`,
       async (otherPartyId) => {
         const ana = await seatedWith(venue);
@@ -275,6 +275,79 @@ describe("the table action routes", () => {
         expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
       },
     );
+
+    it(`takes ${path} sent with the target read free (otherPartyId null) to a table still free`, async () => {
+      const ana = await seatedWith(venue);
+      const to = await freeTable();
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: to,
+        expectedPartyRevision: ana.revision,
+        otherPartyId: null,
+      });
+
+      expect(answer.status).toBe(200);
+      expect(tablesOf(ana.partyId)).toContain(to);
+    });
+
+    it(`answers ${path} sent with the target read free to a table a party now holds with 409 party.out_of_date, changing nothing`, async () => {
+      const ana = await seatedWith(venue);
+      const luis = await seatedWith(venue);
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: luis.tableId,
+        expectedPartyRevision: ana.revision,
+        otherPartyId: null,
+      });
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: luis.partyId, revision: luis.revision },
+      });
+      expect(revisionOf(ana.partyId)).toBe(ana.revision);
+      expect(revisionOf(luis.partyId)).toBe(luis.revision);
+      expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
+      expect(tablesOf(luis.partyId)).toEqual([luis.tableId]);
+    });
+
+    it(`answers ${path} sent with the target read free to the party's own only table with 409 table.already_in_party, changing nothing`, async () => {
+      const ana = await seatedWith(venue);
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: ana.tableId,
+        expectedPartyRevision: ana.revision,
+        otherPartyId: null,
+      });
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({
+        code: "table.already_in_party",
+        params: { tableId: ana.tableId },
+      });
+      expect(revisionOf(ana.partyId)).toBe(ana.revision);
+      expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
+    });
+
+    it(`answers ${path} sent with the target read free and another party's revision with 400, changing nothing`, async () => {
+      const ana = await seatedWith(venue);
+      const to = await freeTable();
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: to,
+        expectedPartyRevision: ana.revision,
+        otherPartyId: null,
+        expectedOtherPartyRevision: 3,
+      });
+
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "otherPartyId" },
+      });
+      expect(revisionOf(ana.partyId)).toBe(ana.revision);
+      expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
+    });
 
     it(`answers ${path} with the other party's revision but not its id with 400`, async () => {
       const ana = await seatedWith(venue);
@@ -359,6 +432,20 @@ describe("the table action routes", () => {
       expect(revisionOf(ana.partyId)).toBe(ana.revision);
     });
   }
+
+  it("move guests sent with the target read free to one of the party's own tables leaves it at that table alone", async () => {
+    const { ana, second } = await anaAtTwo();
+
+    const answer = await post(`/api/parties/${ana.partyId}/move`, {
+      toTableId: second,
+      expectedPartyRevision: revisionOf(ana.partyId),
+      otherPartyId: null,
+    });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
+    expect(tablesOf(ana.partyId)).toEqual([second]);
+  });
 
   it("answers split-table with a malformed table with 409 table.not_joined, and a malformed or missing bill", async () => {
     const { ana, second } = await anaAtTwo();

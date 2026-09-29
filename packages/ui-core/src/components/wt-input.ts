@@ -99,6 +99,7 @@ export class WtInput extends LitElement {
   @property() type = "text";
   @property() autocomplete = "";
   @property() placeholder = "";
+  @property({ type: Number }) maxlength?: number;
   @property() error = "";
   /** A line of help under the field, rendered in this shadow root so the native input is described
    * by it; why a paragraph beside the element is not: design-system.md → Forms. */
@@ -152,6 +153,7 @@ export class WtInput extends LitElement {
           type=${this.type}
           autocomplete=${this.autocomplete || nothing}
           placeholder=${this.placeholder}
+          maxlength=${this.maxlength ?? nothing}
           ?required=${this.required}
           ?disabled=${this.disabled}
           aria-invalid=${this.invalid || hasError}

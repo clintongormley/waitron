@@ -117,7 +117,6 @@ const openTable: TableState = {
   state: "open-tab",
   condition: "free",
   hasOpenTab: true,
-  tabId: "wo-7",
   tabLineCount: 2,
   tabTotal: "12.00",
   pendingDeliveries: 0,
@@ -131,12 +130,6 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
-  party: null,
-};
-
-/** {@link openTable} with a party seated at it: a round goes to the party. */
-const seatedTable: TableState = {
-  ...openTable,
   party: {
     id: "v-2",
     revision: 3,
@@ -435,8 +428,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     recallLines: vi.fn().mockResolvedValue(undefined),
     voidLine: vi.fn().mockResolvedValue({ party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
-    moveTab: vi.fn().mockResolvedValue(undefined),
-    joinTable: vi.fn().mockResolvedValue(undefined),
+    moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
+    joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -1709,11 +1702,7 @@ describe("till-app", () => {
 
     emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "20.00" });
     await flush(el);
-    expect(recordSale).toHaveBeenCalledWith(
-      [],
-      { method: "cash", amount: "20.00" },
-      openTable.tabId,
-    );
+    expect(recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "20.00" }, "wo-7");
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=open-drawer]")).toBeNull();
 
     emit(ticket(el)!, "open-drawer");
@@ -3724,7 +3713,7 @@ describe("till-app", () => {
       await flush(el);
 
       // An occupied table already has a tab — no seatTable call, just the transition. The screen
-      // points at the RESUMED tab id (resolved from the read-model's tabId), not a new one.
+      // points at the RESUMED party's main bill, not a new one.
       expect(seatTable).not.toHaveBeenCalled();
       // The table-order drill overlays the still-mounted floor tab.
       expect(floor(el)).not.toBeNull();
@@ -3848,8 +3837,18 @@ describe("till-app", () => {
       });
 
       it("ignores a late offer response for a table the operator has already left", async () => {
-        const tableA = { ...openTable, id: "table-a", tabId: "order-a", zoneId: "zone-a" };
-        const tableB = { ...openTable, id: "table-b", tabId: "order-b", zoneId: "zone-b" };
+        const tableA = {
+          ...openTable,
+          id: "table-a",
+          zoneId: "zone-a",
+          party: { ...openTable.party!, id: "party-a", mainBillId: "order-a" },
+        };
+        const tableB = {
+          ...openTable,
+          id: "table-b",
+          zoneId: "zone-b",
+          party: { ...openTable.party!, id: "party-b", mainBillId: "order-b" },
+        };
         const offersA = fixtureOffers({
           menus: [{ id: "menu-a", name: "Menu A", isDefault: true }],
           products: [{ ...cafe, id: "product-a", catalogueId: "menu-a", catalogueName: "Menu A" }],
@@ -3971,12 +3970,12 @@ describe("till-app", () => {
         const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           submitDraft,
           getTabLines,
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
         emit(screen, "submit-draft", await ringCafe(el, screen));
@@ -4003,12 +4002,12 @@ describe("till-app", () => {
       it("submit-draft forwards a per-line course OVERRIDE verbatim with the draft (KDS-2 §5b)", async () => {
         const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           submitDraft,
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
         emit(screen, "submit-draft", await ringCafe(el, screen, "fire", "postres"));
         await flush(el);
         expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
@@ -4022,12 +4021,12 @@ describe("till-app", () => {
       it("submit-draft sends a held line's group held (coursing A3)", async () => {
         const submitDraft = answering({ tabId: "wo-7", revision: 4, groups: [] });
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           submitDraft,
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
         emit(screen, "submit-draft", await ringCafe(el, screen, "hold"));
         await flush(el);
         expect(drafts.sentGroups(submitDraft.mock.calls[0]![2])).toEqual([
@@ -4068,13 +4067,13 @@ describe("till-app", () => {
         const fireGroup = vi.fn().mockResolvedValue({ revision: 4 });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [heldCourseLine], revision: 0 });
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [heldGroup] }),
           fireGroup,
           getTabLines,
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
         emit(screen, "fire-group", { groupId: "g1" });
@@ -4090,13 +4089,13 @@ describe("till-app", () => {
 
       it("a failed fire-group surfaces a non-fatal banner, leaving the screen up", async () => {
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [heldCourseLine], revision: 0 }),
           listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [heldGroup] }),
           fireGroup: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
         emit(screen, "fire-group", { groupId: "g1" });
         await flush(el);
         expect(tableOrder(el)).not.toBeNull();
@@ -4107,12 +4106,12 @@ describe("till-app", () => {
         const markServed = vi.fn().mockResolvedValue({ revision: 4 });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           markServed,
           getTabLines,
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
 
         emit(screen, "serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] });
         await flush(el);
@@ -4126,12 +4125,12 @@ describe("till-app", () => {
 
       it("a serve-lines refused because the quantity no longer fits the line says so in its own words", async () => {
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           markServed: vi.fn().mockRejectedValue({ code: "tab.serve_quantity_invalid" }),
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
 
         emit(screen, "serve-lines", { items: [{ lineId: "line-1", quantity: "2" }] });
         await flush(el);
@@ -4200,7 +4199,7 @@ describe("till-app", () => {
 
       it("a failed round/serve/status write surfaces a non-fatal error, leaving the screen up", async () => {
         const { el } = await mountApp({
-          getTablesState: vi.fn().mockResolvedValue([seatedTable]),
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
           submitDraft: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
@@ -4208,7 +4207,7 @@ describe("till-app", () => {
           setLineCourse: vi.fn().mockRejectedValue({ code: "course.not_found" }),
           setTableStatus: vi.fn().mockRejectedValue({ code: "status.not_found" }),
         });
-        const screen = await toTableOrder(el, seatedTable);
+        const screen = await toTableOrder(el, openTable);
 
         for (const [type, detail] of [
           ["submit-draft", await ringCafe(el, screen)],
@@ -4367,42 +4366,52 @@ describe("till-app", () => {
       });
 
       // ── Move / join / merge / transfer table actions ──────────────────────────────────
-      it("move-tab relocates the tab then reloads the floor (staying on the screen)", async () => {
-        const moveTab = vi.fn().mockResolvedValue(undefined);
+      it("move-guests moves the party then reloads the floor (staying on the screen)", async () => {
+        const moveGuests = vi
+          .fn()
+          .mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          moveTab,
+          moveGuests,
         });
         const screen = await toTableOrder(el, openTable);
         // One floor load reached the screen (entering the floor).
         expect(getTablesState).toHaveBeenCalledTimes(1);
 
-        emit(screen, "move-tab", { toTableId: "t9" });
+        emit(screen, "move-guests", { toTableId: "t9", bills: "merge" });
         await flush(el);
 
-        expect(moveTab).toHaveBeenCalledWith("wo-7", "t9", {});
+        expect(moveGuests).toHaveBeenCalledWith("v-2", "t9", "merge", {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+        });
         // Re-reads the floor so the freed/occupied tables reconcile, and stays on the table-order screen.
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(tableOrder(el)).not.toBeNull();
       });
 
-      it("join-table extends the tab onto a table then reloads the floor", async () => {
-        const joinTable = vi.fn().mockResolvedValue(undefined);
+      it("join-tables adds a table to the party then reloads the floor", async () => {
+        const joinTables = vi
+          .fn()
+          .mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          joinTable,
+          joinTables,
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTablesState).toHaveBeenCalledTimes(1);
 
-        emit(screen, "join-table", { tableId: "t9" });
+        emit(screen, "join-tables", { tableId: "t9", bills: "merge" });
         await flush(el);
 
-        expect(joinTable).toHaveBeenCalledWith("wo-7", "t9", {});
+        expect(joinTables).toHaveBeenCalledWith("v-2", "t9", "merge", {
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+        });
         expect(getTablesState).toHaveBeenCalledTimes(2);
         expect(tableOrder(el)).not.toBeNull();
       });
@@ -4424,7 +4433,10 @@ describe("till-app", () => {
         emit(screen, "merge-bills", { fromBillId: "wo-9" });
         await flush(el);
 
-        expect(mergeBills).toHaveBeenCalledWith("wo-7", "wo-9", {});
+        expect(mergeBills).toHaveBeenCalledWith("wo-7", "wo-9", {
+          expectedPartyRevision: 3,
+          partyId: "v-2",
+        });
         // The current tab absorbed the other's lines (reload) and the floor changed (reload).
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -4446,9 +4458,31 @@ describe("till-app", () => {
         emit(screen, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
+        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {
+          expectedPartyRevision: 3,
+          partyId: "v-2",
+        });
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
+      });
+
+      it("sends no party with a bill action once the party has left the table while its bill is open", async () => {
+        const transferItems = vi.fn().mockResolvedValue(undefined);
+        const getTablesState = vi.fn().mockResolvedValue([openTable]);
+        const { el } = await mountApp({
+          getTablesState,
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          transferItems,
+        });
+        const screen = await toTableOrder(el, openTable);
+        getTablesState.mockResolvedValue([{ ...openTable, party: null }]);
+        emit(screen, "merge-bills", { fromBillId: "wo-9" });
+        await flush(el);
+
+        emit(tableOrder(el)!, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
+        await flush(el);
+
+        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
       });
 
       it("split-lines switches pay and later receipt actions to the bill split off", async () => {
@@ -4470,7 +4504,10 @@ describe("till-app", () => {
         emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {});
+        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {
+          expectedPartyRevision: 3,
+          partyId: "v-2",
+        });
         expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
         expect(tableOrder(el)!.orderId).toBe("wo-check");
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -4501,7 +4538,10 @@ describe("till-app", () => {
         emit(screen, "split-lines", { transfers: [{ lineNo: 1, quantity: "1" }] });
         await flush(el);
 
-        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {});
+        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {
+          expectedPartyRevision: 3,
+          partyId: "v-2",
+        });
         expect(tableOrder(el)!.orderId).toBe("wo-7");
         expect(getTabLines).toHaveBeenCalledTimes(1);
         expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
@@ -4535,14 +4575,14 @@ describe("till-app", () => {
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
-          moveTab: vi.fn().mockRejectedValue({ code: "table.occupied" }),
+          moveGuests: vi.fn().mockRejectedValue({ code: "table.needs_clearing" }),
         });
         const screen = await toTableOrder(el, openTable);
-        emit(screen, "move-tab", { toTableId: "t9" });
+        emit(screen, "move-guests", { toTableId: "t9", bills: "merge" });
         await flush(el);
         expect(tableOrder(el)).not.toBeNull();
         expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(
-          codeMessage("table.occupied"),
+          codeMessage("table.needs_clearing"),
         );
       });
 
@@ -6303,7 +6343,6 @@ describe("till-app", () => {
         ...freeTable,
         state: "open-tab",
         hasOpenTab: true,
-        tabId: "wo-new",
         tabLineCount: 1,
         tabTotal: "3.00",
       };
@@ -6353,7 +6392,6 @@ describe("till-app", () => {
         ...freeTable,
         state: "open-tab",
         hasOpenTab: true,
-        tabId: "wo-new",
         tabLineCount: 1,
         tabTotal: "3.00",
       };
@@ -6472,7 +6510,6 @@ describe("till-app", () => {
         ...freeTable,
         state: "open-tab",
         hasOpenTab: true,
-        tabId: "wo-new",
         tabLineCount: 1,
         tabTotal: "3.00",
       };

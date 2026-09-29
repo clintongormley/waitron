@@ -591,6 +591,11 @@ flagged for the owner in their PRs.**
     none does, or the moving party itself does — the answer is `party.out_of_date` naming the party
     the till read, or `party.not_open` when no such party exists. See `readTargetTable` in
     `apps/server/src/move-bill.ts`.)
+  - (2026-09-29, Task 11 finish: `otherPartyId: null` says the till read the target table free.
+    When a party other than the moving one holds it by then, the answer is `party.out_of_date`
+    naming that party, and nothing is written; when the moving party itself holds it, the ordinary
+    rules for its own table apply. `otherPartyId: null` sent with `expectedOtherPartyRevision` is
+    400 `management.request_invalid` `{ field: "otherPartyId" }`.)
 - **P28. Task 13 needs every venue reset** (measurement 5).
   - Every dev venue that has ever seated a party runs `wa-wt reset demo <name>`.
   - The owner's box is wiped once, as menus Task 3 needed (`docs/backlog.md`, the paragraph opening
@@ -2692,6 +2697,7 @@ paid bill, kitchen groups, MOVED, service area).
   export async function enqueueMovedSlips(tx, cfg, before: SentWork, toOrderId: string, splitFrom?: ReadonlyMap<string, string>, options?: { force?: boolean }): Promise<void>;
   // wire: POST /api/bills/:id/move { to: { tableId } | { counter: { zoneId } }, bills?, expectedPartyRevision?, partyId?, expectedOtherPartyRevision?, otherPartyId? } → MoveBillResult
   //   otherPartyId: the party the till read at the target table, sent with its revision (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number)
+  //   (2026-09-29, Task 11 finish: otherPartyId: null means the till read the table free; see P27)
   // codes: party.main_bill_stays { partyId }, table.already_in_party { tableId } — 409
   ```
 
@@ -3131,6 +3137,7 @@ Task 11.
   // wire: POST /api/parties/:id/move { toTableId, bills?, expectedPartyRevision, expectedOtherPartyRevision? } → TableActionResult
   //       POST /api/parties/:id/join { tableId, bills?, expectedPartyRevision, expectedOtherPartyRevision? } → TableActionResult
   //   both also take otherPartyId?: the party the till read at the target table, sent with its revision (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number)
+  //   (2026-09-29, Task 11 finish: otherPartyId: null means the till read the table free; see P27)
   //       POST /api/parties/:id/split-table { tableId, billId: string | null, expectedPartyRevision } → { partyId, mainBillId }
   ```
 
@@ -3763,7 +3770,9 @@ only, consuming Task 8's routes.
     - `table.bills_separate` ("Keep separate bills" / "Mantener cuentas separadas");
     - `table.bills_kept_separate` ("The bills were kept separate: one has already been paid
       towards or presented" / "Las cuentas se han mantenido separadas: una ya tiene pagos o se ha
-      presentado");
+      presentado"); (2026-09-29, Task 11 finish: reworded, because the server also keeps the bills
+      apart when they are served differently or a party has no main bill; the wording is in
+      `apps/till/src/i18n/strings.ts`.)
     - `table.split_no_bill` ("No bill, start an empty one" / "Sin cuenta, empezar una vacía");
     - `table.held_by` ("Seated: {party}" / "Ocupada: {party}").
 - Test:
@@ -3783,6 +3792,7 @@ only, consuming Task 8's routes.
   joinTables(partyId: string, tableId: string, bills: "merge" | "separate", revisions: { expectedPartyRevision: number; expectedOtherPartyRevision?: number; otherPartyId?: string }): Promise<{ partyId: string; mainBillId: string | null; merged: boolean }>;
   splitTable(partyId: string, tableId: string, billId: string | null, expectedPartyRevision: number): Promise<{ partyId: string; mainBillId: string | null }>;
   // otherPartyId in moveGuests and joinTables (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number)
+  // (2026-09-29, Task 11 finish: otherPartyId is string | null in both; the till sends null for a table it read free, and for one its floor list does not hold)
   setPartyName(partyId: string, name: string | null, expectedPartyRevision: number): Promise<{ revision: number; name: string | null }>;
   // screen events: "move-guests" { toTableId, bills }, "join-tables" { tableId, bills }, "split-table" { tableId, billId: string | null }, "name-party" { name: string | null }
   ```
@@ -3806,6 +3816,7 @@ only, consuming Task 8's routes.
       emit(order, "move-guests", { toTableId: "t9", bills: "merge" });
       await flush(el);
 
+      // (2026-09-29, Task 11 finish: the landed till also sends otherPartyId: null here, for a table it read free)
       expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", { expectedPartyRevision: 3 });
       expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(readsBefore);
     });
@@ -3829,7 +3840,8 @@ only, consuming Task 8's routes.
 
   The other cases:
   - **Join a table:** `join-tables` `{ tableId: "t9", bills: "merge" }` calls `joinTables` with the
-    own revision only. To a seated table it also sends `expectedOtherPartyRevision` and
+    own revision only. (2026-09-29, Task 11 finish: the landed till also sends `otherPartyId: null` for
+    a table it read free.) To a seated table it also sends `expectedOtherPartyRevision` and
     `otherPartyId` (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number).
   - **Split a table:** Split a table is offered only when `party.tableIds.length > 1`. Choosing
     table `t5` and bill `wo-check` calls `splitTable("v1", "t5", "wo-check", 3)`. Choosing "No
@@ -3959,6 +3971,7 @@ sits.** Read from the code, not run:
   // apps/till/src/api/client.ts
   moveBill(billId: string, to: { tableId: string } | { counter: { zoneId: string | null } }, bills: "merge" | "separate", revisions: { expectedPartyRevision?: number; partyId?: string; expectedOtherPartyRevision?: number; otherPartyId?: string }): Promise<{ partyId: string | null; billId: string; merged: boolean }>;
   // otherPartyId (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number)
+  // (2026-09-29, Task 11 finish: partyId and otherPartyId are string | null. partyId: null says the till read the bill with no party, as for a counter order; otherPartyId: null says the till read the table free, and the server refuses such a request as party.out_of_date when a party other than the bill's own has been seated there since)
   // events: table screen "move-bill" { to: { tableId } | { counter: true }, bills }; held-orders "move-held-order" { orderId, tableId, bills }
   ```
 
@@ -3990,7 +4003,11 @@ sits.** Read from the code, not run:
   The other cases:
   - **A held counter order to a free table:** "Move to table" on a held counter order, then Mesa 9,
     calls `moveBill(orderId, { tableId: "t9" }, "merge", {})`. No party revision is sent, since a
-    counter order has no party and Mesa 9 is free. To Mesa 7 (Luis) the bill choice dialog opens
+    counter order has no party and Mesa 9 is free. (2026-09-29, Task 11 finish: the till sends `otherPartyId: null` for a
+    table it read free, and the server refuses such a request as `party.out_of_date` when a party
+    has been seated there since; a bill read with no party is sent as `partyId: null`, without
+    which a second till moving the same order is answered 400 rather than `party.out_of_date`. So
+    this call should carry `{ partyId: null, otherPartyId: null }`.) To Mesa 7 (Luis) the bill choice dialog opens
     first, and the call carries `{ otherPartyId: "v7", expectedOtherPartyRevision: 9 }`, naming
     the party the till read at Mesa 7 as well as its revision (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number).
   - **Refusals in their own words:** `party.main_bill_stays` ("move the other bills first or merge
@@ -4066,6 +4083,9 @@ lands it.**
     `tab.merge_leaves_no_table`, `tab.party_has_other_open_bill`, `tab.not_table_tab`,
     `tab.party_mismatch` and `table.occupied`, their `STATUS` entries, and their tests
     (`apps/till/src/i18n/codes.test.ts:110-161` on `f19768b3e`).
+    (2026-09-29, Task 11 finish: `TABLE_REFUSALS` in `apps/till/src/till-app.ts` also lists codes
+    that only the removed tab routes raise — for example `tab.not_table_tab`, raised only by the
+    old join and merge routes' `joinTable` and `refuseInconsistentMerge`. Those entries go too.)
   - `packages/bookings/src/testing/fake-core.ts`: stop writing `dining_tables.tab_id`.
 - Modify, schema:
   - `packages/db/src/schema/dining-tables.ts`: delete `tabId` and its doc comment.

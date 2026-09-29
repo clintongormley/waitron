@@ -1484,6 +1484,44 @@ describe("a request read against a party that has since left the target table", 
         params: { field: "otherPartyId" },
       });
     });
+
+    it(`${name}: refuses a table read free that a party now holds, as out of date for that party`, async () => {
+      const [m4, m7] = await tables(`Leída libre ${name}`, 4, 7);
+      const source = await seat(v, m4);
+      const target = await seat(v, m7);
+      const readFree = { ...(await opts(source.partyId)), otherPartyId: null };
+
+      const error = await refused(
+        [source.partyId, target.partyId],
+        [source.tabId, target.tabId],
+        [m4, m7],
+        () => act((tx) => act_(tx, v.cfg, source.partyId, m7, readFree)),
+      );
+
+      expect(error).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: target.partyId, revision: await revisionOf(v, target.partyId) },
+      });
+    });
+
+    it(`${name}: refuses a table read free sent with another party's revision`, async () => {
+      const [m4, m7] = await tables(`Libre con revisión ${name}`, 4, 7);
+      const source = await seat(v, m4);
+      const contradictory = {
+        ...(await opts(source.partyId)),
+        otherPartyId: null,
+        expectedOtherPartyRevision: 3,
+      };
+
+      const error = await refused([source.partyId], [source.tabId], [m4, m7], () =>
+        act((tx) => act_(tx, v.cfg, source.partyId, m7, contradictory)),
+      );
+
+      expect(error).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "otherPartyId" },
+      });
+    });
   }
 });
 
