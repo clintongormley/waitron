@@ -93,6 +93,7 @@ stops the job pull, the same way a failed scan does not today.
   is the expected command; the plan confirms it on the box). The printer's registration stays, as
   every switched-off printer's does, so it can be paired and switched on again later.
   _2026-09-30 (A138): a listed paired device with no printer row also offers Forget pairing._
+  _2026-09-30 (A141): an added Bluetooth printer's row offers Forget pairing whether it is switched on or off; in Spanish it is "Desvincular"._
 - **Both commands** take the same permission as starting a discovery scan, read from the existing
   route. Their error codes follow the `printer_discovery` / `agent` siblings — grep them before naming
   them.
@@ -207,6 +208,8 @@ Tests first, each failing on today's code:
   outcomes; Forget pairing appears only on a switched-off Bluetooth printer; the list hides non-printers
   until Show all devices. Open the screen and look — English and Spanish, light and dark, phone and
   desktop.
+  _2026-09-30 (A141): Forget pairing now appears on an added Bluetooth printer whether it is switched
+  on or off._
 - **Proof by deletion** for the loopback check, the "reported by this agent" checks and the countdown's
   call-off.
 

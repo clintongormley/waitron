@@ -839,7 +839,7 @@ Then add screen tests that prove:
 - a paired Bluetooth row can be added/restored through today's naming flow;
 - a non-printer Bluetooth row is hidden by default and appears after **Show all devices**;
 - a wrongly-described but paired/registered printer remains reachable in its normal printer row;
-- **Forget pairing** appears only for an inactive Bluetooth printer with a current paired report, never for an active, USB, network, or unreported printer;
+- **Forget pairing** appears only for an inactive Bluetooth printer with a current paired report, never for an active, USB, network, or unreported printer; _2026-09-30 (A141): it now appears for an active Bluetooth printer with a current paired report too._
 - Forget calls the correct agent/address and its terminal result renders;
 - opening the add-printer modal again resets **Show all devices** to off;
 - the background command poll uses `api.background`, stops at a terminal outcome/expiry or disconnect, and does not overlap itself.
@@ -868,7 +868,7 @@ const visible = this.discovered.filter(
 );
 ```
 
-For an unpaired Bluetooth row, render Pair instead of opening the naming modal. For a paired row, retain Add/Add again. On inactive registered Bluetooth rows, resolve the current paired entry by `printerId` and render Forget pairing in the row actions.
+For an unpaired Bluetooth row, render Pair instead of opening the naming modal. For a paired row, retain Add/Add again. On inactive registered Bluetooth rows, resolve the current paired entry by `printerId` and render Forget pairing in the row actions. _2026-09-30 (A141): on every registered Bluetooth row, switched on or off._
 
 - [ ] **Step 4: Add English and Spanish wording**
 
@@ -878,6 +878,8 @@ Use these exact meanings:
 EN: Pair / Forget pairing / Show all devices / Hide other devices
 ES: Emparejar / Olvidar emparejamiento / Mostrar todos los dispositivos / Ocultar otros dispositivos
 ```
+
+_2026-09-30 (A141): the Spanish for Forget pairing is now "Desvincular"._
 
 Replace `printers.bluetooth_pair_note` with wording that points to Pair on this screen and says Bluetooth printing is not available yet. Do not say pairing makes the printer usable.
 

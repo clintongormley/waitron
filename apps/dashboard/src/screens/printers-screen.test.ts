@@ -5563,7 +5563,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p4", { active: true });
   });
 
-  it("offers Forget pairing only on an inactive Bluetooth printer its agent reports paired now", async () => {
+  it("offers Forget pairing only on a Bluetooth printer its agent reports paired now, switched on or off", async () => {
     const rows = [
       btPrinter("p4", ADDRESS, false),
       btPrinter("p5", "11:11:11:11:11:11", false),
@@ -5588,9 +5588,60 @@ describe("printers-screen Bluetooth pairing", () => {
     );
     await selectTab(el, "printers");
     await filterPrinters(el, "all");
-    expect(text(el, sel("forget-pairing-p4"))).toBe(t("printers.bluetooth_forget"));
-    for (const id of ["p1", "p2", "p3", "p5", "p6", "p7"])
+    for (const id of ["p4", "p6"])
+      expect(text(el, sel(`forget-pairing-${id}`)), id).toBe(t("printers.bluetooth_forget"));
+    for (const id of ["p1", "p2", "p3", "p5", "p7"])
       expect(q(el, sel(`forget-pairing-${id}`)), id).toBeNull();
+  });
+
+  describe("an added printer that is switched on", () => {
+    const added = btPrinter("p8", ADDRESS, true);
+    const reported: DiscoveredPrinter = {
+      ...barPrinter,
+      paired: true,
+      alreadyRegistered: true,
+      printerId: "p8",
+    };
+    const mountAdded = () =>
+      mountPairing([reported], {
+        listPrinters: vi.fn().mockResolvedValue([...printers, added]),
+      });
+
+    it("offers Forget pairing in its row menu and forgets through its agent and address", async () => {
+      const { el, api } = await mountAdded();
+      await selectTab(el, "printers");
+      const forget = q(el, sel("forget-pairing-p8"))!;
+      expect(forget).not.toBeNull();
+      const menu = forget.closest("dashboard-row-actions")!;
+      expect(q(el, sel("edit-printer-p8"))!.closest("dashboard-row-actions")).toBe(menu);
+      await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+      expect(text(el, sel("forget-pairing-p8"))).toBe(t("printers.bluetooth_forget"));
+      forget.shadowRoot!.querySelector("button")!.click();
+      await flush(el);
+      expect(api.forgetBluetoothPairing).not.toHaveBeenCalled();
+      expect(text(el, sel("forget-pairing-p8"))).toBe(t("printers.bluetooth_forget_confirm"));
+      forget.shadowRoot!.querySelector("button")!.click();
+      await flush(el);
+      expect(api.forgetBluetoothPairing).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS);
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("names Forget pairing Desvincular in Spanish, and its confirm ¿Desvincular?", async () => {
+      const before = currentLocale();
+      try {
+        setLocale("es-ES");
+        const { el } = await mountAdded();
+        await selectTab(el, "printers");
+        expect(text(el, sel("forget-pairing-p8"))).toBe("Desvincular");
+        q(el, sel("forget-pairing-p8"))!.click();
+        await flush(el);
+        expect(text(el, sel("forget-pairing-p8"))).toBe("¿Desvincular?");
+      } finally {
+        setLocale(before);
+      }
+    });
   });
 
   describe("Pair and add", () => {

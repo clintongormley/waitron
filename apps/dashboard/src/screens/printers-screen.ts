@@ -1296,9 +1296,9 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** The agent's current pairing report for a switched-off Bluetooth printer, which Forget needs. */
+  /** The agent's current pairing report for a Bluetooth printer, which Forget needs. */
   #pairedReport(p: Printer): DiscoveredPrinter | undefined {
-    return p.transport !== "bluetooth" || p.active ? undefined : this.#pairedReports.get(p.id);
+    return p.transport === "bluetooth" ? this.#pairedReports.get(p.id) : undefined;
   }
 
   #onForget(p: Printer, device: DiscoveredPrinter): void {

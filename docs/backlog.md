@@ -2377,9 +2377,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     dismissed or the device comes back, marked "No longer found by the scan" while the scan does
     not report the device.
   - **Forget pairing** sits in the row menu of a switched-off Bluetooth printer whose agent reports
-    it paired now, and asks for a second, confirming click. Switching a printer off does not forget
-    its pairing (read, not run: the screen's Disable calls only `deactivatePrinter`, in
-    `apps/dashboard/src/screens/printers-screen.ts`).
+    it paired now, and asks for a second, confirming click. _2026-09-30 (A141): switched on or
+    off._ Switching a printer off does not forget its pairing (read, not run: the screen's Disable
+    calls only `deactivatePrinter`, in `apps/dashboard/src/screens/printers-screen.ts`).
   - Both need the existing `printer.manage` permission. The server takes a Pair only for a device
     the same agent's scan reported within the last 15 seconds, and a Forget only for a device the
     same agent reported paired within that time (`reportedFresh` and `DISCOVERED_TTL_MS` in
@@ -2497,8 +2497,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   row. If another add form or PIN dialog is open when a pairing succeeds, the row offers Add instead.
   Cancelling the form leaves the device paired: its row offers Add, and Forget pairing beside it
   once the agent reports it paired — only for a device with no printer row; an added printer's own
-  Forget pairing is A141. While pairing, the row shows a spinner and says it can take up to two
-  minutes, the server's command lifetime (`COMMAND_TTL_MS`,
+  Forget pairing is in its row menu (A141). While pairing, the row shows a spinner and says it can
+  take up to two minutes, the server's command lifetime (`COMMAND_TTL_MS`,
   `apps/server/src/printer-bluetooth-commands.ts`) after which the dashboard reports no answer.
   **The waits in the flow, read from the code and not timed:** the agent asks the server for work
   every 2 s when idle (`POLL_INTERVAL_MS`, `packages/print-agent/src/agent.ts`); while Add a
@@ -2519,20 +2519,24 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   keeps scanning through a pairing because skipping the scan would drop every unpaired device from
   the list after the server's 15 s `DISCOVERED_TTL_MS`. Box check owed: time a pairing through the
   dashboard.
-- **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — open.** The
-  owner: _"i also don't see how to unpair the printer"_. Today an added Bluetooth printer's row
-  offers Forget pairing only while the printer is disabled and an agent reports it paired
-  (`#forgetAction` and `#pairedReport`, `apps/dashboard/src/screens/printers-screen.ts`); since
-  A138 a paired device with no printer row offers it in the new-printer list
-  (`#forgetDeviceAction`). Open: (i) find the actual cause first. The first suspect was that the
-  agent's paired listing drops every paired Bluetooth device while `liveBtDevicePath` throws (the
-  comment above `visibleDevices`' catch in `apps/print-agent/src/linux-devices.ts`); with a fake
-  radio, the A139 end-to-end case shows the paired listing still reports the device while
-  `liveBtDevicePath` throws, because that catch covers only the visible list. What the real radio's
-  listing returns on the box is still unchecked;
-  (ii) the owner's Spanish wording for the action, "Desvincular" instead of "Olvidar
-  emparejamiento" (`printers.bluetooth_forget` and its siblings in
-  `apps/dashboard/src/i18n/strings.ts`).
+- **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done.** The
+  owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
+  offered Forget pairing only while the printer was switched off (`#pairedReport`,
+  `apps/dashboard/src/screens/printers-screen.ts`), and a printer you have just added is switched
+  on. Now the row offers it whether the printer is switched on or off, as long as an agent reports
+  the printer paired. It is in the printer's row on the Printers tab, behind the three-dot button
+  (⋮) in the Actions column, below Edit and Disable; a second click confirms it. On a phone-width
+  screen the Actions column starts off the right-hand edge, so the table has to be scrolled
+  sideways to reach the three dots (seen in screenshots at 390 px, 2026-09-30). In Spanish the
+  action is now "Desvincular" ("¿Desvincular?" to confirm; `printers.bluetooth_forget` and its
+  siblings in `apps/dashboard/src/i18n/strings.ts`). The suspect that was ruled out: the agent's
+  paired listing does not drop paired devices. `pairedBluetooth()` in
+  `apps/print-agent/src/linux-devices.ts` never asks for a device path, and the test "lists every
+  paired device, without asking for a device path, which would throw" in
+  `apps/print-agent/src/linux-devices.test.ts` passes; when `pairedBluetooth()` was made to ask for
+  a device path, that test failed with `liveBtDevicePath`'s "resolution not implemented" error.
+  The server's forget route takes an agent and an address, never a printer, so it had no
+  switched-on check to change (read, not run: `apps/server/src/print-api.ts`).
 - **A print job for a Bluetooth printer waited with no reason (A139, owner 2026-09-29: _"i tried
   to print the character set block, but nothing printed, the jobs just get stuck"_) — FIXED where
   the tests reach (#904); the printing itself is A140.** The cause,
