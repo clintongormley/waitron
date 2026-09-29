@@ -244,7 +244,7 @@ this floor — removing the `min-width` regresses that guard.
 
 | Element | Properties | Events |
 | --- | --- | --- |
-| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded` (these three forwarded to the inner `<button>`) | native `click` |
+| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded`, `aria-invalid` (these four forwarded to the inner `<button>`) | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
@@ -584,8 +584,10 @@ A form says nothing about errors until the operator first presses its primary ac
 - the primary action works until the first submission. If that submission is invalid, pass a
   plain-language sentence to each invalid field's `error` property, pass ONE localized sentence to
   `wt-form-actions`'s `error` property (it shows beside the primary action and is announced), move
-  focus to the first invalid field with `focusFirstInvalid(this.shadowRoot)`, and keep the entered
-  values;
+  focus to the first invalid field with `focusFirstInvalid(form)`, passing the shadow root when it
+  holds only the form, and the form or dialog element when the shadow root holds more (a table,
+  other panels), so focus cannot land on a marked control elsewhere on the page, and keep the
+  entered values;
 - from then on the form re-checks itself on every change: a fixed field loses its message, a field
   broken again gets it back, and the primary action stays disabled while any field still has one.
   When the last one is fixed, the action works again and the bottom message goes;

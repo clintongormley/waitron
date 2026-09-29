@@ -1466,10 +1466,10 @@ What Task 11 left open:
   cleanly — `translations()`, the placeholder-carrying translated-name fields, the visually-hidden
   rule and the table chrome all live in `form-fields.ts` and `reorder-table.ts` now. What is still
   written twice is the per-form plumbing: `#primaryLanguage`, `#mapFieldErrors`, `#edit`, `#emit`,
-  `#cancel`, the `willUpdate` reseed guard, the Escape-while-busy handler, the error summary and the
-  footer, each identical modulo the `t()` key prefix. **Next action:** decide whether a shared base
-  or a controller is the right vehicle before a third list form is written; the row editors
-  genuinely differ and should NOT be merged.
+  `#cancel`, the `willUpdate` reseed guard, the Escape-while-busy handler and the footer, each
+  identical modulo the `t()` key prefix. **Next action:** decide whether a shared base or a
+  controller is the right vehicle before a third list form is written; the row editors genuinely
+  differ and should NOT be merged.
 
 What option lists left open, none of it taken in #436 or #445:
 
@@ -3436,11 +3436,11 @@ ongoing overhaul listed at the top of Track A.
   more often, so the add-person, edit-person and profile forms now show `person.display_name_taken`
   beside the display-name field. Left open, not fixed: on the add-person and edit-person forms
   (`apps/dashboard/src/widgets/person-form.ts`, `person-edit.ts`) a `person.email_taken` refusal still
-  shows only in the form's bottom message (the error summary until C47), not beside the email field as the form rule in
+  shows only in the form's bottom message, not beside the email field as the form rule in
   [design-system.md](developers/design-system.md) asks; the profile screen already places it. Also
-  left as they were, from #827's review: the profile screen clears a taken-name message differently
-  from the two staff forms (after an edit its summary keeps the sentence until the next save, and a
-  first- or last-name change that regenerates the display name leaves the field's message); and the
+  left as they were, from #827's review: unlike the two staff forms, the profile screen keeps a
+  taken-name message beside the display name when a first- or last-name change regenerates that
+  name (`apps/dashboard/src/screens/profile-screen.ts` drops only the changed field's refusal); and the
   two staff forms turn the refusal into a field message inside the form, where other dashboard forms
   receive field messages from their parent screen.
 
@@ -3516,20 +3516,43 @@ ongoing overhaul listed at the top of Track A.
   box at the top (C47 part 1, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
   message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
   (`packages/ui-core/src/interactive.ts`) moves focus to the first marked field after a failed
-  submission. Every form in `apps/dashboard` follows it: after the first failed press each bad field
+  submission. The forms in `apps/dashboard` follow it: after the first failed press each bad field
   shows its message, the bottom message asks to fix the marked fields and the action stays disabled
   until they are fixed; a refusal that names no field on the form (a failed save, a conflict) is the
   bottom message instead and leaves the action working, so the person can try again.
-  `docs/developers/design-system.md` → Forms states the rule. Left open, not done: (1) the dashboard
-  module screens (adjustments reasons, image library, Stripe and SumUp connect and add-reader, venue
-  operations) still show `wt-form-error-summary` at the top — part 2; (2) the setup wizard's screens —
-  part 3, now that C42 has landed; (3) the till's forms are C48; (4) `wt-form-error-summary` is
-  deleted once nothing uses it; (5) the backups panel's refusal paragraph
-  (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays where it was, directly under the
-  form's buttons, because it also reports a refused Turn off, when no form is open;
-  (6) the profile screen, opened with required details missing, marks those fields at once, before
-  any press (two existing tests pin it), unlike every other form; (7) `placeErrors` is written twice,
-  in `menus-screen.ts` and `sections-screen.ts`.
+  `docs/developers/design-system.md` → Forms states the rule. Deliberate exceptions in
+  `apps/dashboard`: the add-to-menus dialog (`apps/dashboard/src/widgets/add-to-menus.ts`) keeps its
+  list of places that failed, and its menu-load error, at the top of the dialog; the backups panel's
+  refusal paragraph (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays directly under the
+  form's buttons, because it also reports a refused Turn off, when no form is open; the cloud
+  services screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons,
+  and shows a refusal as a plain alert; and the delete confirmations in
+  `apps/dashboard/src/screens/labels-panel.ts` and `apps/dashboard/src/screens/sections-screen.ts`
+  keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
+  errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
+  because each member change is saved at once, not on a submit. Left open, not done: (1) the dashboard module screens
+  (adjustments reasons, image library, Stripe and SumUp connect and add-reader, venue operations)
+  still show `wt-form-error-summary` at the top — part 2; (2) the setup wizard's screens — part 3,
+  now that C42 has landed; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
+  nothing uses it — besides the module screens, the `packages/ui` workbench demo
+  (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
+  which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it; (5) the profile
+  screen, opened with required details missing, marks those fields at once, before any press (two
+  existing tests pin it), unlike every other form; (6) the form plumbing is hand-written per form:
+  assembling the bottom message (a refusal's sentences, then `form.fix_fields`, joined), waiting for
+  the render and then calling `focusFirstInvalid`, and the state that remembers the first press and
+  which refusals the person has since changed — an `attempted` flag beside either a `dismissed` set
+  or a `refused` map, two styles — each appear in many forms (`grep -rl form.fix_fields
+  apps/dashboard/src` lists them), and `placeErrors` is written twice, in `menus-screen.ts` and
+  `sections-screen.ts`; a follow-up could move the first two into one helper in
+  `apps/dashboard/src/widgets/form-fields.ts` and the state into a controller in
+  `apps/dashboard/src/state/`; (7) the image picker's error message is not read to a screen reader:
+  `apps/dashboard/src/widgets/category-form.ts` and `apps/dashboard/src/screens/sections-screen.ts`
+  put `aria-describedby="category-image-error"` / `"section-image-error"` on the
+  `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
+  (`docs/developers/design-system.md` → Forms); now that the Choose image button inside it carries
+  `aria-invalid` and takes focus, a screen reader hears "invalid" with no reason. The
+  `aria-describedby` on the host predates C47 part 1 (both files carry it at 4fcac1646).
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

@@ -124,7 +124,7 @@ export class VariantTable extends LitElement {
           max-width: calc(var(--wt-tap-min) + var(--wt-space-6));
         }
       }
-      /* A rejected row is marked in the row itself: a message in the summary alone does not say
+      /* A rejected row is marked in the row itself: a message beside Save alone does not say
          WHICH variant is wrong, and these rows have no field of their own to attach it to. */
       tr.invalid td:first-child {
         border-inline-start: 2px solid var(--wt-color-danger);
