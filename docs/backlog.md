@@ -4416,9 +4416,13 @@ approved.
 ### B9. CI and test infra
 
 - **`scripts/migration-upgrade.test.ts` makes its scratch directory under `/dev/shm` when it exists
-  — DONE (lane A's A122, 2026-09-29).** It ran 2.5 to 6 times slower on CI's disk than in memory;
-  the disk as the cause of its timeouts is inferred:
+  — DONE (lane A's A122, **PR #856**, 2026-09-29).** It ran 2.5 to 6 times slower on CI's disk than
+  in memory; the disk as the cause of its timeouts is inferred:
   [ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
+  Left open by #856: `scratchParent()` does not fall back to the disk when `/dev/shm` is nearly full
+  (in a Linux container the test peaked at about 14 MiB and failed with 8 MiB free), and on CI's
+  Linux runner `scripts/scratch-dir.mjs` measures 83% of branches, because the line for a missing
+  `/dev/shm` runs only on macOS; the root project's thresholds still pass. Neither is queued.
 - **Would the package suites' databases gain from memory too?** `useVenueDb`
   (`packages/db/src/testing/venue-db.ts`) makes each suite's venue folder under the system temporary
   directory, and the root suites `scripts/append-only-triggers.test.ts` and
