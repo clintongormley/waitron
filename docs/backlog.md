@@ -156,7 +156,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 6. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
    (*Detail → Reporting*); refusing requests from a device that is not enrolled (A4); the pairing
    alert, "devices tried to join" (A5); Logging Slice 2, the one-touch bug report (A9); the
-   print agent's Bluetooth command channel and dashboard pairing (A3, after the real-radio check);
+   dashboard Bluetooth pairing, P2c (A3; the print agent's side, P2b, is built);
    paying at the table from a handheld (A6, Slice 2).
 
 Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud primary,
@@ -2246,11 +2246,64 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   pending verification number before the token, and learned venue nodes survive an agent restart.
   The old Bluetooth card and routes are gone. The owner-approved
   [design](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and
-  [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) leave the
-  optional agent Bluetooth command channel and the manager-only dashboard Pair/Forget controls
-  open as their next two branches. Before either starts, the box's BlueZ pairing, `Trusted`,
-  reconnection and remove behavior still needs the plan's real-radio receipt, taken with pairing
-  allowed: the agent's shipped AppArmor profile refuses it (A129, B6).
+  [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) split the
+  work into three branches; the first is the lockdown above (#732).
+- **The print agent's Bluetooth side (P2b, the plan's second branch) — BUILT in this pull
+  request.** What the agent now does. The unit tests of `apps/print-agent` and
+  `packages/print-agent` pass on this branch (run 2026-09-29, against a fake host, not a radio);
+  the real-hardware evidence is the paragraph after this list:
+  - It asks `bluetoothctl info` about the first eight devices a Bluetooth scan finds, all at the
+    same time, and marks one as looking like a printer when it shows a printer icon, a device class
+    of "imaging" with the printer bit set, or the Serial Port profile (the standard way a Bluetooth
+    printer offers a plain data channel). Devices past the eighth stay in the scan unmarked.
+  - Each job pull (the agent's regular request to the server for print work) now reports the
+    devices the box is paired with, separately from the devices that can take print jobs. A paired
+    printer still takes no jobs (read, not run: see Bluetooth delivery, below).
+  - It carries out Pair and Forget commands the server sends back on a job pull. Pair runs
+    `bluetoothctl` interactively, so its own pairing agent is running (the part of `bluetoothctl`
+    that BlueZ, the Linux Bluetooth service, asks for a PIN), and answers the printer's PIN
+    request with the PIN the operator gave. Forget runs `bluetoothctl remove`. Commands run one at
+    a time on a background worker, so a pull and its print jobs never wait for a Pair; each outcome
+    goes back on the next pull. The agent remembers the ids of the last eight commands it took, so one
+    of those sent again does not run again; an older id sent again would, and a setup reset
+    forgets them all.
+  - An error that contains the PIN is replaced whole, before it is logged or sent back, by
+    "pairing failed; the detail was withheld because it contained the PIN".
+  - No server route sends a command yet; that is P2c. The server ignores the two new lists in a
+    pull (a temporary server case sending them got a 200, recorded in commit 23ad42283).
+
+  The real-box receipt this rests on (the owner, 2026-09-29, BlueZ 5.82): after a host reboot and
+  a printer power cycle the bond alone reconnected, so Pair never runs `trust`; `remove` of a
+  device already gone exits 1 with "Device <MAC> not available", which Forget counts as success;
+  and bluetoothd's `autopair` plugin (a part of the Bluetooth service that answers a PIN request
+  with 0000 by itself) answered first, BlueZ's retry went over Bluetooth Low Energy, which that
+  printer refuses, and it never paired, while with the plugin off it paired. So
+  `waitron.sh install` now switches the plugin off with a systemd drop-in (a small file that
+  changes how the Bluetooth service is started), and the operator types the PIN, 0000 for a 0000
+  printer. That drop-in was tried on a GitHub runner, where systemd showed the flag in the
+  service's start command but the Bluetooth service itself never ran; it has not run on the
+  owner's box. Pair and Forget under the shipped AppArmor profile (the Linux rules limiting what
+  the agent's container may do) were measured against a stand-in BlueZ on a CI runner (probe runs
+  36585218089 and 36586467212), and image-smoke pairs and forgets the stand-in's PIN printer
+  under the profile through `scripts/bluetoothctl-pair.mjs` and `bluetoothctl remove`, not
+  through the agent's own code. None of this has run on the real box.
+- **Open for P2c, the plan's third branch (`feat/dashboard-bluetooth-pairing`, plan Tasks 9–12):**
+  - The dashboard's Pair needs a PIN field accepting 1 to 16 printable ASCII characters with no
+    spaces: the agent drops a pair command whose PIN is outside that (read in
+    `packages/print-agent/src/client.ts`; `client.test.ts` tries both sides of the rule).
+  - The server must keep sending a command until its outcome arrives. The agent holds at most eight
+    commands, counting queued, running and those whose outcome is not yet sent, and a new one
+    arriving past that is not remembered, so it is taken only when the server sends it again once
+    there is room; it also reads only the first eight commands in a reply. The server must also
+    stop sending a command once its outcome has arrived, because the agent remembers only its last
+    eight command ids.
+  - The server must never store, log or echo the PIN.
+- **Open, needs the box:** a first real pairing through the agent, under the shipped profile with
+  `autopair` off; whether a real Bluetooth service sends `Agent1.Release` (its "your pairing agent
+  is no longer needed" message), which the profile does not allow and the stand-in never sends;
+  and printing over RFCOMM (Bluetooth's serial-cable channel) from INSIDE the print-agent
+  container — the owner printed from the host only. The last belongs with Bluetooth delivery,
+  below, still unbuilt.
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.
@@ -8458,7 +8511,7 @@ while it holds decisions still open.
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
-| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | first branch built (#732); two to go | A3 |
+| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | two of three branches built (#732, and P2b in this pull request); P2c to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
