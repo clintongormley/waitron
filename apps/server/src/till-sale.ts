@@ -1505,21 +1505,27 @@ export async function collectOrder(
     if (outstanding !== undefined) {
       const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       const settledAt = deps.clock.now().instant;
+      // Nothing is owed once corrections reach the invoice's total, so no money changes hands and
+      // no tender is written (`tenders_amount_ck` refuses one of zero or less). Below zero,
+      // `settleSale` refuses the empty tender list with `sale.tender_shortfall`.
+      const paysNothing = compareDecimal(outstanding.amountDue, decimal("0")) <= 0;
 
       await settleSale(tx, {
         saleId: outstanding.saleId,
-        tenders: [
-          {
-            method: req.tender.method,
-            amount: settledAmount,
-            tipAmount: "0.00",
-            cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
-            settledAt,
-          },
-        ],
+        tenders: paysNothing
+          ? []
+          : [
+              {
+                method: req.tender.method,
+                amount: settledAmount,
+                tipAmount: "0.00",
+                cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
+                settledAt,
+              },
+            ],
       });
 
-      if (req.tender.method === "card") {
+      if (req.tender.method === "card" && !paysNothing) {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
           workingOrderId: req.id,
           amount: outstanding.amountDue,
@@ -1543,7 +1549,7 @@ export async function collectOrder(
         .where(eq(workingOrders.id, req.id));
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-      if (req.tender.method === "cash") {
+      if (req.tender.method === "cash" && !paysNothing) {
         await enqueueCashSaleDrawer(tx, cfg, outstanding.saleId, operatorId);
       }
       return ticket;

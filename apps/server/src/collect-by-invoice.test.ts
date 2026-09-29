@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { invoiceSeries, saleSettlements, sales, tenders } from "@waitron/db";
+import { drawerOpens, invoiceSeries, saleSettlements, sales, tenders } from "@waitron/db";
 import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { payments } from "@waitron/payments";
@@ -119,7 +119,9 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
 describe("collecting an invoice that carries a corrective invoice", () => {
   // Tarta's 18.00 invoice (21% VAT), corrected by a credit note of -2.00 base (-2.42): the
   // customer owes 15.58.
-  async function correctedTarta(): Promise<{ billId: string; saleId: string }> {
+  async function correctedTarta(
+    credit: { base: string; total: string } = { base: "2.00", total: "-2.42" },
+  ): Promise<{ billId: string; saleId: string }> {
     const billId = await placedTarta(invoiceFirstZone);
     const [issued] = await salesOf(billId);
     await inTx(venue, async (tx) => {
@@ -142,16 +144,16 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
         correctsSaleId: brandSaleId(issued!.id),
-        total: "-2.42",
+        total: credit.total,
         lines: [
           {
             lineNo: 1,
             name: "Descuento",
             descriptions: { [venue.cfg.locale]: "Descuento" },
             quantity: "-1",
-            unitPrice: "2.00",
+            unitPrice: credit.base,
             vatRate: "21.00",
-            lineTotal: "-2.00",
+            lineTotal: `-${credit.base}`,
           },
         ],
         clock: venue.clock,
@@ -201,5 +203,84 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(paid).toEqual([{ amount: 1558, saleId }]);
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(registroCount(venue, billId)).toBe(1);
+  });
+
+  function drawerOpensOf(saleId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ saleId: drawerOpens.saleId })
+        .from(drawerOpens)
+        .where(eq(drawerOpens.saleId, saleId)),
+    );
+  }
+
+  function settlementsOf(saleId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ saleId: saleSettlements.saleId })
+        .from(saleSettlements)
+        .where(eq(saleSettlements.saleId, saleId)),
+    );
+  }
+
+  // Tarta's 18.00 is a 14.88 base at 21%: a credit note of that base reverses the whole invoice.
+  const wholeInvoice = { base: "14.88", total: "-18.00" };
+
+  it("opens the cash drawer when a corrected bill is collected in cash", async () => {
+    const { billId, saleId } = await correctedTarta();
+
+    await collectCash(billId);
+
+    expect(await drawerOpensOf(saleId)).toEqual([{ saleId }]);
+  });
+
+  it("closes a cash collection of a bill that owes nothing, with no tender and no drawer", async () => {
+    const { billId, saleId } = await correctedTarta(wholeInvoice);
+
+    const ticket = await collectCash(billId);
+
+    expect(await tendersOf(saleId)).toEqual([]);
+    expect(await settlementsOf(saleId)).toEqual([{ saleId }]);
+    expect(await drawerOpensOf(saleId)).toEqual([]);
+    expect(ticket.tender).toEqual({ method: "unpaid" });
+    expect(await statusOf(venue, billId)).toBe("settled");
+    expect(registroCount(venue, billId)).toBe(1);
+  });
+
+  it("closes a card collection of a bill that owes nothing, with no tender and no payment row", async () => {
+    const { billId, saleId } = await correctedTarta(wholeInvoice);
+
+    await collectOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: billId, lines: [], tender: { method: "card", amount: "18.00" } },
+      venue.operatorId,
+    );
+
+    expect(await tendersOf(saleId)).toEqual([]);
+    expect(await settlementsOf(saleId)).toEqual([{ saleId }]);
+    const paid = await inTx(venue, (tx) =>
+      tx
+        .select({ amount: payments.amount })
+        .from(payments)
+        .where(eq(payments.workingOrderId, billId)),
+    );
+    expect(paid).toEqual([]);
+    expect(await statusOf(venue, billId)).toBe("settled");
+    expect(registroCount(venue, billId)).toBe(1);
+  });
+
+  it("refuses to close a bill corrected below zero, with the domain code, and leaves it open", async () => {
+    // A 16.53 base at 21% is 20.00: the customer is owed 2.00, which collecting cannot pay out.
+    const { billId, saleId } = await correctedTarta({ base: "16.53", total: "-20.00" });
+
+    await expect(collectCash(billId)).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { due: "-2.00", charged: "0" },
+    });
+
+    expect(await tendersOf(saleId)).toEqual([]);
+    expect(await settlementsOf(saleId)).toEqual([]);
+    expect(await statusOf(venue, billId)).toBe("placed");
   });
 });
