@@ -283,9 +283,9 @@ declare module "@waitron/shared" {
     /**
      * A move/join TARGET table already has an OPEN tab, or, for the tab routes, a party still holds
      * it (an active `party_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two
-     * bills instead. Moving guests, joining tables and moving a bill combine with a party holding
-     * the table, and refuse only a table no party holds that shows an open order
-     * (`refuseUnseatable` in `move-bill.ts`). The partial unique index `party_tables_active_table_uq`
+     * bills instead. Moving guests and joining tables combine with the party holding the table,
+     * and moving a bill joins that party; all three refuse only a table no party holds that still
+     * shows an open order (`refuseUnseatable` in `move-bill.ts`). The partial unique index `party_tables_active_table_uq`
      * allows one active membership per table; the check runs first so the index never refuses with
      * an engine error.
      */

@@ -3277,7 +3277,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Task 8 finish: the other party is named by id as well as revision, `otherPartyId`. The table
       must still be held by the party the till read there, or the move is `party.out_of_date`
       naming that party, because a party seated there since can carry the same revision number and
-      the move would otherwise land on strangers' bill. A revision sent without the id is
+      the move would otherwise land with strangers. A revision sent without the id is
       `management.request_invalid` `{ field: "otherPartyId" }`.)_
     - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
       bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
@@ -3394,7 +3394,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       is `party.out_of_date` naming it: a party seated there since can carry the same revision
       number, and without the id a stale move would combine the guests with strangers, or a stale
       join land on a table now free. A revision sent without the id is
-      `management.request_invalid` `{ field: "otherPartyId" }`. Tasks 11 and 12's till sends both.
+      `management.request_invalid` `{ field: "otherPartyId" }`. The plan's Tasks 11 and 12 have the till send both.
     - The kitchen gets a MOVED notice for each sent dish whose tables change, including a dish on
       a main bill merged away when parties combine (it is told once, on the bill it merged into).
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
@@ -3411,10 +3411,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the notice names the new tables when the bill was paid under another table's name; and after
       a move to a held table the pass names the new table. A one-off probe (not kept as a test)
       marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
-      neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels` (read, not run).
+      neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels`, and not every other
+      view follows the merge (read, not run; see the open points).
     Tests: `apps/server/src/party-table-actions.test.ts` and
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
-    Open points: `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
+    Open points: the manager overview's slow-orders list (`computeOverdueOrders`,
+    `packages/reporting/src/overdue-orders.ts`, which keeps its own copy of the pass's table naming
+    in `readPartyTableLabels`) does not follow the merge chain, so a late dish on a paid bill left
+    on a party combined away is named there from that party's own tables or the bill's label, while
+    the pass names the tables its guests went to (found by reading, not run).
+    `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
     which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
     writes a merged party's tables in one statement, so they share a joining time and their order in
     its name is not fixed; it goes with Task 13.

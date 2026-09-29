@@ -139,8 +139,8 @@ export async function moveBill(
 }
 
 /**
- * The destination, with the revision of a party holding the target table checked and moved on
- * first; then the table's own state.
+ * The destination, with the party the till read at the target table checked first, by identity and
+ * revision, and that revision moved on ({@link readTargetTable}); then the table's own state.
  */
 async function resolveDestination(
   tx: Transaction,

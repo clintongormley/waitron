@@ -584,6 +584,13 @@ flagged for the owner in their PRs.**
   - A bill action may also send `partyId`: the party the till read the path bill under. When the
     bill has since left that party, the answer is `party.out_of_date` even if the revision number
     happens to match its new party's.
+  - (2026-09-29, Task 8 finish: moving guests, joining tables or moving a bill to a table another
+    party holds also sends `otherPartyId`, the party the till read there. It is required whenever
+    `expectedOtherPartyRevision` is sent, else 400 `management.request_invalid`
+    `{ field: "otherPartyId" }`. When that party no longer holds the table — another party does,
+    none does, or the moving party itself does — the answer is `party.out_of_date` naming the party
+    the till read, or `party.not_open` when no such party exists. See `readTargetTable` in
+    `apps/server/src/move-bill.ts`.)
 - **P28. Task 13 needs every venue reset** (measurement 5).
   - Every dev venue that has ever seated a party runs `wa-wt reset demo <name>`.
   - The owner's box is wiped once, as menus Task 3 needed (`docs/backlog.md`, the paragraph opening
@@ -2082,6 +2089,7 @@ receipts show the name and tables); P7, P17. Branch `feat/party-kitchen-names`. 
   // apps/server/src/kitchen-print.ts
   export async function orderTableLabel(tx, cfg, orderId: string): Promise<string | null>; // a party bill: its active tables (partyTablesName), else its label; a counter order: its delivery table, else its label
   export async function readPartiesSentWork(tx, cfg, partyIds: readonly (string | null)[], orderIds: readonly string[] = []): Promise<Map<string, SentWork>>; // every open, placed or settled bill of those parties with fired items, keyed by bill; moveTab and mergeTabs pass orderIds for bills of no party
+  //   (2026-09-29, Task 8: it also reads the bills of every party merged into those parties)
   export async function enqueueMovedSlipsFor(tx, cfg, before: ReadonlyMap<string, SentWork>, mergedInto?: ReadonlyMap<string, string>): Promise<void>; // enqueueMovedSlips(before.get(bill), mergedInto.get(bill) ?? bill) for each; Task 8 passes mergedInto
   ```
 
@@ -3119,6 +3127,7 @@ Task 11.
   export async function joinTables(tx, cfg, partyId: string, tableId: string, options: TableActionOptions): Promise<TableActionResult>;
   export async function splitTable(tx, cfg, partyId: string, tableId: string, billId: string | null, options: { expectedPartyRevision: number; operatorId: string }): Promise<{ partyId: string; mainBillId: string | null }>;
   export async function combineParties(tx, cfg, args: { from: string; into: string; bills: "merge" | "separate"; tables: "leave" | "join"; operatorId: string }): Promise<{ merged: boolean; mainBillId: string | null; mergedInto: Map<string, string> }>; // mergedInto: each bill merged away → the bill it merged into
+  //   (2026-09-29, Task 8: args also takes intoZoneId?: string | null, `into`'s zone when the caller has just read it; when absent it is read)
   // wire: POST /api/parties/:id/move { toTableId, bills?, expectedPartyRevision, expectedOtherPartyRevision? } → TableActionResult
   //       POST /api/parties/:id/join { tableId, bills?, expectedPartyRevision, expectedOtherPartyRevision? } → TableActionResult
   //   both also take otherPartyId?: the party the till read at the target table, sent with its revision (2026-09-29, Task 8 finish: the server refuses a revision sent without the id, since a party seated there since can carry the same revision number)
