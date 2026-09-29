@@ -161,6 +161,25 @@ describe.each(["light", "dark"] as const)("backup-screen a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  it("renders a retention box the form refused accessibly", async () => {
+    const { el, host } = await mountWidget<BackupScreen>(
+      "dashboard-backup-screen",
+      { api: stubApi(ENABLED) },
+      theme,
+    );
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    const box = q(el, "[data-test=retain-count]") as HTMLInputElement;
+    box.value = "";
+    box.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+    expect(q(el, "[data-test=retain-count-error]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders the error banner accessibly", async () => {
     const { el, host } = await mountWidget<BackupScreen>(
       "dashboard-backup-screen",
