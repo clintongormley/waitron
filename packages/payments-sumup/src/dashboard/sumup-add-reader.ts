@@ -1,10 +1,10 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import { SumUpPaymentsClient } from "./client.js";
@@ -52,7 +52,7 @@ export class SumUpAddReader extends LitElement {
 
   @state() private name = "";
   @state() private code = "";
-  @state() private errors: string[] = [];
+  @state() private attempted = false;
   @state() private phase: Phase = "form";
   @state() private remaining = PAIRING_LIFETIME_MS / 1000;
 
@@ -78,22 +78,28 @@ export class SumUpAddReader extends LitElement {
     this[field] = event.detail.value;
   }
 
-  #validate(): string[] {
-    const errors: string[] = [];
-    if (this.name.trim() === "") errors.push("payments.sumup.reader_name_required");
-    if (this.code.trim() === "") errors.push("payments.sumup.pairing_code_required");
-    return errors;
+  #fieldErrors(): { name: string; code: string } {
+    if (!this.attempted) return { name: "", code: "" };
+    return {
+      name: this.name.trim() === "" ? t("payments.sumup.reader_name_required") : "",
+      code: this.code.trim() === "" ? t("payments.sumup.pairing_code_required") : "",
+    };
+  }
+
+  #blocked(): boolean {
+    const errors = this.#fieldErrors();
+    return errors.name !== "" || errors.code !== "";
   }
 
   async #pair(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.phase === "pairing") return; // one pairing at a time
-    const errorKeys = this.#validate();
-    if (errorKeys.length > 0) {
-      this.errors = errorKeys.map((k) => t(k as Parameters<typeof t>[0]));
+    this.attempted = true;
+    if (this.#blocked()) {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    this.errors = [];
     this.phase = "pairing";
     this.remaining = PAIRING_LIFETIME_MS / 1000;
     this.#readerId = ""; // clear any id from a previous attempt so a failed POST leaves no stale ref
@@ -176,7 +182,7 @@ export class SumUpAddReader extends LitElement {
   #tryAgain(): void {
     this.#endPoll();
     this.code = "";
-    this.errors = [];
+    this.attempted = false;
     this.phase = "form";
     this.remaining = PAIRING_LIFETIME_MS / 1000;
   }
@@ -220,18 +226,16 @@ export class SumUpAddReader extends LitElement {
         ${t("payments.sumup.pairing_failed")}
       </p>`;
     }
+    const errors = this.#fieldErrors();
     return html`
       <p class="steps">${t("payments.sumup.pairing_steps")}</p>
-      <wt-form-error-summary
-        heading=${t("payments.sumup.form_problem")}
-        .errors=${this.errors}
-      ></wt-form-error-summary>
       <wt-input
         class="field"
         name="name"
         data-test="reader-name"
         label=${t("payments.sumup.reader_name")}
         required
+        error=${errors.name}
         .value=${this.name}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "name")}
       ></wt-input>
@@ -241,6 +245,7 @@ export class SumUpAddReader extends LitElement {
         data-test="pairing-code"
         label=${t("payments.sumup.pairing_code")}
         required
+        error=${errors.code}
         .value=${this.code}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "code")}
       ></wt-input>
@@ -257,18 +262,21 @@ export class SumUpAddReader extends LitElement {
         >${t("payments.sumup.try_again")}</wt-button
       >`;
     }
+    const blocked = this.#blocked();
     return html`
-      <wt-button slot="footer" data-test="cancel" @click=${() => this.onClose()}
-        >${t("payments.sumup.cancel")}</wt-button
-      >
-      <wt-button
-        slot="footer"
-        variant="primary"
-        data-test="pair"
-        ?loading=${this.phase === "pairing"}
-        @click=${(e: Event) => void this.#pair(e)}
-        >${t("payments.sumup.pair")}</wt-button
-      >
+      <wt-form-actions slot="footer" .error=${blocked ? t("payments.sumup.fix_fields") : ""}>
+        <wt-button slot="cancel" data-test="cancel" @click=${() => this.onClose()}
+          >${t("payments.sumup.cancel")}</wt-button
+        >
+        <wt-button
+          variant="primary"
+          data-test="pair"
+          ?loading=${this.phase === "pairing"}
+          ?disabled=${blocked}
+          @click=${(e: Event) => void this.#pair(e)}
+          >${t("payments.sumup.pair")}</wt-button
+        >
+      </wt-form-actions>
     `;
   }
 }

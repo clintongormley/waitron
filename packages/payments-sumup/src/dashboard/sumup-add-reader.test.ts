@@ -74,6 +74,31 @@ async function setInput(el: SumUpAddReader, testId: string, value: string): Prom
   await el.updateComplete;
 }
 
+async function bottomOf(el: SumUpAddReader): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function fieldError(el: SumUpAddReader, testId: string): string {
+  return (q(el, `[data-test=${testId}]`) as unknown as { error: string }).error;
+}
+
+function pairDisabled(el: SumUpAddReader): boolean {
+  return q(el, "[data-test=pair]")!.hasAttribute("disabled");
+}
+
+function focused(el: SumUpAddReader, testId: string): boolean {
+  const field = q(el, `[data-test=${testId}]`)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
+}
+
+async function pressPair(el: SumUpAddReader): Promise<void> {
+  q(el, "[data-test=pair]")!.click();
+  await el.updateComplete;
+  await el.updateComplete;
+}
+
 async function fillAndPair(el: SumUpAddReader): Promise<void> {
   await setInput(el, "reader-name", "Front counter");
   await setInput(el, "pairing-code", "ABCD1234");
@@ -335,11 +360,8 @@ describe("sumup-add-reader", () => {
       await el.updateComplete;
 
       expect(request).not.toHaveBeenCalled();
-      const summary = q(el, "wt-form-error-summary");
-      expect((summary as unknown as { errors: string[] }).errors).toEqual([
-        t("payments.sumup.reader_name_required"),
-        t("payments.sumup.pairing_code_required"),
-      ]);
+      expect(fieldError(el, "reader-name")).toBe(t("payments.sumup.reader_name_required"));
+      expect(fieldError(el, "pairing-code")).toBe(t("payments.sumup.pairing_code_required"));
     } finally {
       vi.useRealTimers();
     }
@@ -482,5 +504,92 @@ describe("sumup-add-reader", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onAdded).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about errors before the first press, and Pair works", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    await setInput(el, "reader-name", "Front");
+    await setInput(el, "reader-name", "");
+
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(fieldError(el, "pairing-code")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(pairDisabled(el)).toBe(false);
+  });
+
+  it("on an invalid press marks the fields, says so beside Pair, focuses the first and disables Pair", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    await setInput(el, "pairing-code", "ABCD1234");
+    await pressPair(el);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(fieldError(el, "reader-name")).toBe(t("payments.sumup.reader_name_required"));
+    expect(fieldError(el, "pairing-code")).toBe("");
+    expect(await bottomOf(el)).toBe(t("payments.sumup.fix_fields"));
+    expect(pairDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "reader-name")).toBe(true));
+    expect((q(el, "[data-test=pairing-code]") as unknown as { value: string }).value).toBe(
+      "ABCD1234",
+    );
+  });
+
+  it("re-checks every change after a failed press, and Pair works again once both are filled", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    await pressPair(el);
+    await setInput(el, "reader-name", "Front");
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(fieldError(el, "pairing-code")).toBe(t("payments.sumup.pairing_code_required"));
+    expect(pairDisabled(el)).toBe(true);
+
+    await setInput(el, "pairing-code", "ABCD1234");
+    expect(fieldError(el, "pairing-code")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(pairDisabled(el)).toBe(false);
+
+    await setInput(el, "reader-name", " ");
+    expect(fieldError(el, "reader-name")).toBe(t("payments.sumup.reader_name_required"));
+    expect(pairDisabled(el)).toBe(true);
+  });
+
+  it("starts the form again after Try again: the cleared code is not marked and Pair works", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        add: () => {
+          throw { code: "server.internal" };
+        },
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      q(el, "[data-test=try-again]")!.click();
+      await el.updateComplete;
+
+      expect((q(el, "[data-test=reader-name]") as unknown as { value: string }).value).toBe(
+        "Front counter",
+      );
+      expect(fieldError(el, "pairing-code")).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(pairDisabled(el)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends the form in one action row with Cancel on the left and Pair as the primary action", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    const actions = q(el, "wt-form-actions")!;
+    expect(actions.getAttribute("slot")).toBe("footer");
+    expect(actions.querySelector("[data-test=cancel]")!.getAttribute("slot")).toBe("cancel");
+    expect(actions.querySelector("[data-test=pair]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "wt-form-error-summary")).toBeNull();
   });
 });

@@ -19,12 +19,39 @@ function text(el: SumUpConnectForm, sel: string): string {
   return q(el, sel)?.textContent?.trim() ?? "";
 }
 
-async function summaryItems(el: SumUpConnectForm): Promise<string[]> {
-  const summary = q(el, "wt-form-error-summary") as HTMLElement & {
-    updateComplete: Promise<unknown>;
-  };
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+async function bottomOf(el: SumUpConnectForm): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function fieldError(el: SumUpConnectForm, testId: string): string {
+  return (q(el, `[data-test=${testId}]`) as unknown as { error: string }).error;
+}
+
+function connectDisabled(el: SumUpConnectForm): boolean {
+  return q(el, "[data-test=connect]")!.hasAttribute("disabled");
+}
+
+function focused(el: SumUpConnectForm, testId: string): boolean {
+  const field = q(el, `[data-test=${testId}]`)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
+}
+
+async function chooseMerchant(el: SumUpConnectForm, code: string): Promise<void> {
+  const select = q(el, "[data-test=merchant]") as HTMLSelectElement;
+  select.value = code;
+  select.dispatchEvent(new Event("change"));
+  await el.updateComplete;
+}
+
+function ambiguousThenPending(merchants: { code: string; name: string }[]): DashboardRequest {
+  return vi
+    .fn()
+    .mockImplementationOnce(async () => {
+      throw { code: "payment.provider_merchant_ambiguous", params: { merchants } };
+    })
+    .mockImplementation(() => new Promise(() => {})) as unknown as DashboardRequest;
 }
 
 async function setInput(el: SumUpConnectForm, testId: string, value: string): Promise<void> {
@@ -83,10 +110,11 @@ describe("sumup-connect-form", () => {
     await setInput(el, "api-key", "spans_two_merchants");
     await connect(el);
 
-    // The picker is shown, no error banner yet.
+    // The picker is shown, no error message yet.
     const select = q(el, "[data-test=merchant]") as HTMLSelectElement | null;
     expect(select).not.toBeNull();
-    expect((q(el, "wt-form-error-summary") as unknown as { errors: string[] }).errors).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=merchant-error]")).toBeNull();
 
     // Choose the second merchant and connect again.
     select!.value = "M2";
@@ -111,12 +139,12 @@ describe("sumup-connect-form", () => {
     await connect(el);
 
     expect(request).not.toHaveBeenCalled();
-    expect((q(el, "wt-form-error-summary") as unknown as { errors: string[] }).errors).toEqual([
-      t("payments.sumup.api_key_required"),
-    ]);
+    expect(fieldError(el, "api-key")).toBe(t("payments.sumup.api_key_required"));
   });
 
-  it("shows the SumUp not-accepted copy when the key is rejected", async () => {
+  // `payment.provider_credential_rejected` carries only `{ providerId }` and is also thrown when
+  // the call to SumUp fails for any other reason, so it names no field.
+  it("shows the SumUp not-accepted copy beside Connect, not under the key, when the key is rejected", async () => {
     const request = vi.fn(async () => {
       throw { code: "payment.provider_credential_rejected" };
     }) as unknown as DashboardRequest;
@@ -125,9 +153,8 @@ describe("sumup-connect-form", () => {
     await setInput(el, "api-key", "bad_key");
     await connect(el);
 
-    expect((q(el, "wt-form-error-summary") as unknown as { errors: string[] }).errors).toEqual([
-      t("payments.sumup.connect_failed"),
-    ]);
+    expect(await bottomOf(el)).toBe(t("payments.sumup.connect_failed"));
+    expect(fieldError(el, "api-key")).toBe("");
   });
 
   it("carries the optional affiliate fields through and reveals their help tooltip", async () => {
@@ -163,7 +190,7 @@ describe("sumup-connect-form", () => {
     await connect(el);
 
     expect(request).toHaveBeenCalledTimes(1);
-    expect(await summaryItems(el)).toEqual([t("payments.sumup.merchant_required")]);
+    expect(text(el, "[data-test=merchant-error]")).toBe(t("payments.sumup.merchant_required"));
   });
 
   it("sends one connect request when Connect is pressed again while the first is in flight", async () => {
@@ -204,8 +231,163 @@ describe("sumup-connect-form", () => {
     await setInput(el, "api-key", "k");
     await connect(el);
 
-    expect(await summaryItems(el)).toEqual([codeMessage("payment.provider_unknown")]);
+    expect(await bottomOf(el)).toBe(codeMessage("payment.provider_unknown"));
     expect(codeMessage("payment.provider_unknown")).not.toBe(t("payments.sumup.connect_failed"));
     expect(codeMessage("payment.provider_unknown")).not.toBe(codeMessage("server.internal"));
+  });
+
+  it("says nothing about errors before the first press, and Connect works", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "k");
+    await setInput(el, "api-key", "  ");
+
+    expect(fieldError(el, "api-key")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+  });
+
+  it("on an invalid press marks the key, says so beside Connect, focuses the key and disables Connect", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "affiliate-app-id", "app-1");
+    await connect(el);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(fieldError(el, "api-key")).toBe(t("payments.sumup.api_key_required"));
+    expect(await bottomOf(el)).toBe(t("payments.sumup.fix_fields"));
+    expect(connectDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "api-key")).toBe(true));
+    expect((q(el, "[data-test=affiliate-app-id]") as unknown as { value: string }).value).toBe(
+      "app-1",
+    );
+  });
+
+  it("re-checks every change after a failed press, and Connect works again once the key is filled", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await connect(el);
+    await setInput(el, "api-key", "k");
+
+    expect(fieldError(el, "api-key")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+
+    await setInput(el, "api-key", "");
+    expect(fieldError(el, "api-key")).toBe(t("payments.sumup.api_key_required"));
+    expect(connectDisabled(el)).toBe(true);
+  });
+
+  it("leaves Connect working after a credential refusal, so the same key can be retried, and drops the message on the next press", async () => {
+    const request = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw { code: "payment.provider_credential_rejected" };
+      })
+      .mockImplementationOnce(() => new Promise(() => {})) as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "k");
+    await connect(el);
+
+    expect(await bottomOf(el)).toBe(t("payments.sumup.connect_failed"));
+    expect(connectDisabled(el)).toBe(false);
+
+    await connect(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenLastCalledWith(CONNECT_PATH, "POST", { apiKey: "k" });
+    expect(await bottomOf(el)).toBe("");
+    expect(fieldError(el, "api-key")).toBe("");
+  });
+
+  it("leaves Connect working after a refusal that names no field, and drops it on the next press", async () => {
+    registerCodeMessages({
+      "payment.provider_unknown": {
+        en: "Provider copy for this test",
+        es: "Provider copy for this test (es)",
+      },
+    });
+    const request = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw { code: "payment.provider_unknown" };
+      })
+      .mockImplementationOnce(() => new Promise(() => {})) as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "k");
+    await connect(el);
+
+    expect(fieldError(el, "api-key")).toBe("");
+    expect(await bottomOf(el)).toBe(codeMessage("payment.provider_unknown"));
+    expect(connectDisabled(el)).toBe(false);
+
+    await connect(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("says a refusal and the generic sentence together when the key then breaks", async () => {
+    registerCodeMessages({
+      "payment.provider_unknown": {
+        en: "Provider copy for this test",
+        es: "Provider copy for this test (es)",
+      },
+    });
+    const request = vi.fn(async () => {
+      throw { code: "payment.provider_unknown" };
+    }) as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "k");
+    await connect(el);
+    await setInput(el, "api-key", "");
+
+    expect(await bottomOf(el)).toBe(
+      `${codeMessage("payment.provider_unknown")} ${t("payments.sumup.fix_fields")}`,
+    );
+    expect(connectDisabled(el)).toBe(true);
+  });
+
+  it("marks an unpicked merchant on a press, focuses the picker, and clears once one is chosen", async () => {
+    const request = ambiguousThenPending([
+      { code: "M1", name: "Deli One" },
+      { code: "M2", name: "Deli Two" },
+    ]);
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await setInput(el, "api-key", "spans_two_merchants");
+    await connect(el);
+    const select = q(el, "[data-test=merchant]") as HTMLSelectElement;
+    expect(select.required).toBe(true);
+    expect(select.getAttribute("aria-invalid")).toBe("false");
+
+    await connect(el);
+
+    expect(select.getAttribute("aria-invalid")).toBe("true");
+    expect(select.getAttribute("aria-describedby")).toBe("merchant-error");
+    expect(text(el, "[data-test=merchant-error]")).toBe(t("payments.sumup.merchant_required"));
+    expect(await bottomOf(el)).toBe(t("payments.sumup.fix_fields"));
+    expect(connectDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(select));
+
+    await chooseMerchant(el, "M1");
+
+    expect(select.getAttribute("aria-invalid")).toBe("false");
+    expect(q(el, "[data-test=merchant-error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+  });
+
+  it("has no error summary above the fields", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<SumUpConnectForm>("sumup-connect-form", { request });
+
+    await connect(el);
+
+    expect(q(el, "wt-form-error-summary")).toBeNull();
   });
 });

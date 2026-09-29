@@ -26,8 +26,23 @@ async function setInput(el: StripeConnectForm, testId: string, value: string): P
   await el.updateComplete;
 }
 
-function errorsOf(el: StripeConnectForm): string[] {
-  return (q(el, "wt-form-error-summary") as unknown as { errors: string[] }).errors;
+async function bottomOf(el: StripeConnectForm): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function fieldError(el: StripeConnectForm, testId: string): string {
+  return (q(el, `[data-test=${testId}]`) as unknown as { error: string }).error;
+}
+
+function connectDisabled(el: StripeConnectForm): boolean {
+  return q(el, "[data-test=connect]")!.hasAttribute("disabled");
+}
+
+function focused(el: StripeConnectForm, testId: string): boolean {
+  const field = q(el, `[data-test=${testId}]`)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -80,10 +95,12 @@ describe("stripe-connect-form", () => {
     await connect(el);
 
     expect(request).not.toHaveBeenCalled();
-    expect(errorsOf(el)).toEqual([t("payments.stripe.secret_key_required")]);
+    expect(fieldError(el, "secret-key")).toBe(t("payments.stripe.secret_key_required"));
   });
 
-  it("shows the not-accepted copy when the key is rejected", async () => {
+  // `payment.provider_credential_rejected` carries only `{ providerId }` and is also thrown when
+  // the call to Stripe fails for any other reason, so it names no field.
+  it("shows the not-accepted copy beside Connect, not under the key, when the key is rejected", async () => {
     const request = vi.fn(async () => {
       throw { code: "payment.provider_credential_rejected" };
     }) as unknown as DashboardRequest;
@@ -92,7 +109,8 @@ describe("stripe-connect-form", () => {
     await setInput(el, "secret-key", "sk_bad");
     await connect(el);
 
-    expect(errorsOf(el)).toEqual([t("payments.stripe.connect_failed")]);
+    expect(await bottomOf(el)).toBe(t("payments.stripe.connect_failed"));
+    expect(fieldError(el, "secret-key")).toBe("");
   });
 
   it("shows the merchant name when the host sets no onConnected", async () => {
@@ -109,8 +127,8 @@ describe("stripe-connect-form", () => {
       t("payments.stripe.connected_as").replace("{name}", "Deli Gormley"),
     );
     // The confirmation replaces the form, so a failure after the name is set would not show in the
-    // DOM; the component's own error list is the only place it would land.
-    expect((el as unknown as { errors: string[] }).errors).toEqual([]);
+    // DOM; the component's own refusal state is the only place it would land.
+    expect((el as unknown as { refusal: string }).refusal).toBe("");
   });
 
   it("sends one connect request when Connect is pressed twice before the first answers", async () => {
@@ -164,8 +182,138 @@ describe("stripe-connect-form", () => {
     await setInput(el, "secret-key", "sk_test_123");
     await connect(el);
 
-    expect(errorsOf(el)).toEqual(["Stripe connect copy for this test"]);
+    expect(await bottomOf(el)).toBe("Stripe connect copy for this test");
     expect(onConnected).not.toHaveBeenCalled();
     expect(q(el, "[data-test=connected]")).toBeNull();
+  });
+
+  it("says nothing about errors before the first press, and Connect works", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await setInput(el, "secret-key", "sk_test_1");
+    await setInput(el, "secret-key", "  ");
+
+    expect(fieldError(el, "secret-key")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+  });
+
+  it("on an invalid press marks the key, says so beside Connect, focuses the key and disables Connect", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await setInput(el, "webhook-secret", "whsec_1");
+    await connect(el);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(fieldError(el, "secret-key")).toBe(t("payments.stripe.secret_key_required"));
+    expect(await bottomOf(el)).toBe(t("payments.stripe.fix_fields"));
+    expect(connectDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "secret-key")).toBe(true));
+    expect((q(el, "[data-test=webhook-secret]") as unknown as { value: string }).value).toBe(
+      "whsec_1",
+    );
+  });
+
+  it("re-checks every change after a failed press, and Connect works again once the key is filled", async () => {
+    const request = vi.fn(async () => ({ merchantName: "Deli" })) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await connect(el);
+    await setInput(el, "secret-key", "sk_test_1");
+
+    expect(fieldError(el, "secret-key")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(connectDisabled(el)).toBe(false);
+
+    await setInput(el, "secret-key", " ");
+    expect(fieldError(el, "secret-key")).toBe(t("payments.stripe.secret_key_required"));
+    expect(await bottomOf(el)).toBe(t("payments.stripe.fix_fields"));
+    expect(connectDisabled(el)).toBe(true);
+  });
+
+  it("leaves Connect working after a credential refusal, so the same key can be retried, and drops the message on the next press", async () => {
+    const request = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw { code: "payment.provider_credential_rejected" };
+      })
+      .mockImplementationOnce(() => new Promise(() => {})) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await setInput(el, "secret-key", "sk_test_1");
+    await connect(el);
+
+    expect(await bottomOf(el)).toBe(t("payments.stripe.connect_failed"));
+    expect(connectDisabled(el)).toBe(false);
+
+    await connect(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenLastCalledWith(
+      CONNECT_PATH,
+      "POST",
+      expect.objectContaining({ secretKey: "sk_test_1" }),
+    );
+    expect(await bottomOf(el)).toBe("");
+    expect(fieldError(el, "secret-key")).toBe("");
+  });
+
+  it("leaves Connect working after a refusal that names no field, and drops it on the next press", async () => {
+    registerCodeMessages({
+      "payment.provider_unknown": {
+        en: "Stripe connect copy for this test",
+        es: "Stripe connect copy for this test",
+      },
+    });
+    const request = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw { code: "payment.provider_unknown" };
+      })
+      .mockImplementationOnce(() => new Promise(() => {})) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await setInput(el, "secret-key", "sk_test_1");
+    await connect(el);
+
+    expect(fieldError(el, "secret-key")).toBe("");
+    expect(await bottomOf(el)).toBe("Stripe connect copy for this test");
+    expect(connectDisabled(el)).toBe(false);
+
+    await connect(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("says a refusal and the generic sentence together when the key then breaks", async () => {
+    registerCodeMessages({
+      "payment.provider_unknown": {
+        en: "Stripe connect copy for this test",
+        es: "Stripe connect copy for this test",
+      },
+    });
+    const request = vi.fn(async () => {
+      throw { code: "payment.provider_unknown" };
+    }) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await setInput(el, "secret-key", "sk_test_1");
+    await connect(el);
+    await setInput(el, "secret-key", "");
+
+    expect(await bottomOf(el)).toBe(
+      `Stripe connect copy for this test ${t("payments.stripe.fix_fields")}`,
+    );
+    expect(connectDisabled(el)).toBe(true);
+  });
+
+  it("has no error summary above the fields", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
+
+    await connect(el);
+
+    expect(q(el, "wt-form-error-summary")).toBeNull();
   });
 });

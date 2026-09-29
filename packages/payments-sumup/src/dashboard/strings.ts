@@ -27,7 +27,7 @@ const en = {
   "payments.sumup.merchant_prompt":
     "This key covers more than one merchant. Choose which one to connect.",
   "payments.sumup.merchant_label": "Merchant",
-  "payments.sumup.form_problem": "There is a problem with this form",
+  "payments.sumup.fix_fields": "Correct the highlighted fields to continue.",
   "payments.sumup.api_key_required": "Enter your SumUp API key",
   "payments.sumup.merchant_required": "Choose a merchant to connect",
   "payments.sumup.connect_failed": "That API key was not accepted. Check it and try again.",
@@ -60,7 +60,7 @@ const es: Record<keyof typeof en, string> = {
   "payments.sumup.connected_as": "Conectado como {name}",
   "payments.sumup.merchant_prompt": "Esta clave abarca más de un comercio. Elige cuál conectar.",
   "payments.sumup.merchant_label": "Comercio",
-  "payments.sumup.form_problem": "Hay un problema con este formulario",
+  "payments.sumup.fix_fields": "Corrige los campos marcados para continuar.",
   "payments.sumup.api_key_required": "Introduce tu clave de API de SumUp",
   "payments.sumup.merchant_required": "Elige un comercio para conectar",
   "payments.sumup.connect_failed":

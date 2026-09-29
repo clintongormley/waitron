@@ -23,8 +23,23 @@ async function setInput(el: StripeAddReader, testId: string, value: string): Pro
   await el.updateComplete;
 }
 
-function errorsOf(el: StripeAddReader): string[] {
-  return (q(el, "wt-form-error-summary") as unknown as { errors: string[] }).errors;
+async function bottomOf(el: StripeAddReader): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function fieldError(el: StripeAddReader, testId: string): string {
+  return (q(el, `[data-test=${testId}]`) as unknown as { error: string }).error;
+}
+
+function addDisabled(el: StripeAddReader): boolean {
+  return q(el, "[data-test=add]")!.hasAttribute("disabled");
+}
+
+function focused(el: StripeAddReader, testId: string): boolean {
+  const field = q(el, `[data-test=${testId}]`)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
 }
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
@@ -78,10 +93,8 @@ describe("stripe-add-reader", () => {
     await add(el);
 
     expect(request).not.toHaveBeenCalled();
-    expect(errorsOf(el)).toEqual([
-      t("payments.stripe.reader_name_required"),
-      t("payments.stripe.reader_id_required"),
-    ]);
+    expect(fieldError(el, "reader-name")).toBe(t("payments.stripe.reader_name_required"));
+    expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_required"));
   });
 
   it("shows the not-accepted copy when the reference is rejected", async () => {
@@ -95,7 +108,7 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_bad");
     await add(el);
 
-    expect(errorsOf(el)).toEqual([t("payments.stripe.add_failed")]);
+    expect(await bottomOf(el)).toBe(t("payments.stripe.add_failed"));
     expect(onAdded).not.toHaveBeenCalled();
   });
 
@@ -126,7 +139,7 @@ describe("stripe-add-reader", () => {
       name: "Bar terminal",
       reference: "tmr_ABC123",
     });
-    expect(errorsOf(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
     expect((q(el, "[data-test=add]") as unknown as { loading: boolean }).loading).toBe(false);
   });
 
@@ -203,7 +216,7 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_bad");
     await add(el);
 
-    expect(errorsOf(el)).toEqual([t("payments.stripe.add_failed")]);
+    expect(await bottomOf(el)).toBe(t("payments.stripe.add_failed"));
     expect(onAdded).not.toHaveBeenCalled();
   });
 
@@ -224,7 +237,91 @@ describe("stripe-add-reader", () => {
     await setInput(el, "reader-id", "tmr_ABC123");
     await add(el);
 
-    expect(errorsOf(el)).toEqual(["Stripe add-reader copy for this test"]);
+    expect(await bottomOf(el)).toBe("Stripe add-reader copy for this test");
     expect(onAdded).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about errors before the first press, and Add works", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-name", "Bar");
+    await setInput(el, "reader-name", "");
+
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(addDisabled(el)).toBe(false);
+  });
+
+  it("on an invalid press marks the fields, says so beside Add, focuses the first and disables Add", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-id", "tmr_ABC123");
+    await add(el);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(fieldError(el, "reader-name")).toBe(t("payments.stripe.reader_name_required"));
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(await bottomOf(el)).toBe(t("payments.stripe.fix_fields"));
+    expect(addDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "reader-name")).toBe(true));
+    expect((q(el, "[data-test=reader-id]") as unknown as { value: string }).value).toBe(
+      "tmr_ABC123",
+    );
+  });
+
+  it("re-checks every change after a failed press, and Add works again once both are filled", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await add(el);
+    await setInput(el, "reader-name", "Bar");
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(fieldError(el, "reader-id")).toBe(t("payments.stripe.reader_id_required"));
+    expect(addDisabled(el)).toBe(true);
+
+    await setInput(el, "reader-id", "tmr_ABC123");
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(addDisabled(el)).toBe(false);
+
+    await setInput(el, "reader-name", " ");
+    expect(fieldError(el, "reader-name")).toBe(t("payments.stripe.reader_name_required"));
+    expect(addDisabled(el)).toBe(true);
+  });
+
+  it("leaves Add working after a refusal that names no field, and drops it on the next press", async () => {
+    const request = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        throw { code: "server.internal" };
+      })
+      .mockImplementationOnce(() => new Promise(() => {})) as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    await setInput(el, "reader-name", "Bar");
+    await setInput(el, "reader-id", "tmr_bad");
+    await add(el);
+
+    expect(await bottomOf(el)).toBe(t("payments.stripe.add_failed"));
+    expect(fieldError(el, "reader-id")).toBe("");
+    expect(addDisabled(el)).toBe(false);
+
+    await add(el);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("ends in one action row with Cancel on the left and Add as the primary action", async () => {
+    const request = vi.fn() as unknown as DashboardRequest;
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
+
+    const actions = q(el, "wt-form-actions")!;
+    expect(actions.getAttribute("slot")).toBe("footer");
+    expect(actions.querySelector("[data-test=cancel]")!.getAttribute("slot")).toBe("cancel");
+    expect(actions.querySelector("[data-test=add]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "wt-form-error-summary")).toBeNull();
   });
 });
