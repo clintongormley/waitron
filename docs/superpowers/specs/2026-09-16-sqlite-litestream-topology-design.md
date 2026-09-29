@@ -765,7 +765,10 @@ quietly assumes finer granularity than Litestream gives.
 - **Nothing external blocks a sale** (CLAUDE.md §5): Litestream is a separate process, and the sale
   path waits on it only for the checkpoint write-lock, which Litestream documents as "periodic but
   short" and covers with a recommended 5-second `busy_timeout` — short, not proven sub-second (Fable
-  review finding 8). With `wal_autocheckpoint = 0` only Litestream checkpoints, so the one shape that
+  review finding 8). *(2026-09-29, A133, run 36615242523: measured through the server with one
+  seller, a write waited 829–831 ms behind Litestream 0.5.17's checkpoint on a disk delayed 100 ms
+  per flush, and up to 629 ms on a CI runner's normal disk; `docs/backlog.md`, A130's entry.)* With
+  `wal_autocheckpoint = 0` only Litestream checkpoints, so the one shape that
   could put our own process on the sale path is a long offline stretch (§4.2) letting the WAL grow
   unbounded; **§12's prototype must run a multi-day offline write load and confirm the sale latency and
   WAL size stay bounded** before this bullet is believed. *(2026-09-18, run: the prototype's S4 has now
