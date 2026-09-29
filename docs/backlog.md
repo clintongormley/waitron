@@ -3065,7 +3065,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       confirm the completed refund with a manager's PIN. The server records it on the bill and the
       manual payment in one transaction. Task 15 must put the terminal-refund instruction beside
       the manager-PIN confirmation on the till; the till has no bill-refund action yet.
-    - **A bill receipt's payments keep the order they were taken in — DONE (A123, 2026-09-29).**
+    - **A bill receipt's payments keep the order they were taken in — DONE (A123, #886, 2026-09-29).**
       `bill-refunds.card.test.ts`'s invoice case ("design §8 test 23") printed the cash tender
       before the earlier card tender now and then (on B14a, and again on lane B's T5, #852).
       `readBillTenderLines` broke a tie on the millisecond timestamp with a random id, so two
