@@ -14,7 +14,13 @@ import {
   setMainBill,
 } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
-import { clearGroups, refuseHeldLeavingParty, serviceModesMatch } from "./working-order.js";
+import {
+  clearGroups,
+  fireLines,
+  refuseHeldLeavingParty,
+  serviceModesMatch,
+  unsentDishLines,
+} from "./working-order.js";
 import "./errors.js";
 
 export type MoveTarget = { tableId: string } | { counter: { zoneId: string | null } };
@@ -114,7 +120,8 @@ export async function moveBill(
       main !== null &&
       (await isUntouched(tx, billId)) &&
       (await isUntouched(tx, main)) &&
-      // Paying a prepay bill fires its lines, and one already sent fails it.
+      // A pay-first bill's unsent dishes go when it is paid, and a table bill sends none when it is
+      // paid.
       (await serviceModesMatch(tx, cfg, billId, main))
     ) {
       await mergeCheckedBills(tx, cfg, partyId, main, billId);
@@ -274,6 +281,11 @@ async function moveRevisionOn(tx: Transaction, billId: string): Promise<void> {
     .where(eq(workingOrders.id, billId));
 }
 
+/**
+ * The open bill takes `zoneId`'s service context. In table service its unsent dishes, which a
+ * pay-first or invoice-first bill sends when it is paid or placed, are sent now as a round is: table
+ * service sends a dish when it is ordered, and none when the bill is paid.
+ */
 async function adoptZone(
   tx: Transaction,
   cfg: TillConfig,
@@ -284,6 +296,10 @@ async function adoptZone(
     await VENUE_SERVICE.recordOrderContext(tx, cfg, billId, zoneId);
   } else {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, billId, zoneId);
+  }
+  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, billId);
+  if (context!.serviceMode === "table_tab") {
+    await fireLines(tx, cfg, billId, await unsentDishLines(tx, billId));
   }
 }
 

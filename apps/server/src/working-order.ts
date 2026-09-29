@@ -1095,6 +1095,27 @@ type FireableLine = {
 };
 
 /**
+ * The order's dish lines the kitchen has not been given, in line order: never sent and holding no
+ * ticket item. A held or recalled dish holds one, and a no-preparation dish is stamped sent when
+ * it would have fired.
+ */
+export async function unsentDishLines(tx: Transaction, orderId: string): Promise<FireableLine[]> {
+  return tx
+    .select(fireableLineColumns)
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        isNull(workingOrderLines.parentLineId),
+        isNull(workingOrderLines.sentAt),
+        isNull(ticketItems.id),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo);
+}
+
+/**
  * Fire lines to the kitchen: one `ticket_items` row per line, its station and course RESOLVED and
  * SNAPSHOTTED at fire time, so a later configuration change never moves an already-fired item. The
  * one fire point every path funnels through. A zoned order routes by the venue-service route
@@ -4939,15 +4960,11 @@ export async function placeOrder(
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
     // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
-    const lines = await tx
-      .select(fireableLineColumns)
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    // Nothing on an open order has fired yet, so every dish line is about to be sent.
+    // Read before the stamp below. A bill moved here from a table has dishes already sent.
+    const lines = await unsentDishLines(tx, id);
     await assertSendable(
       tx,
-      lines.filter((line) => line.parentLineId === null).map((line) => line.id),
+      lines.map((line) => line.id),
     );
     // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
     // Stamped while the order is still open, which is the only time a line may be written.

@@ -25,7 +25,6 @@ import {
   sales,
   tenders,
   withTransaction,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -42,13 +41,13 @@ import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   createOpenOrder,
-  fireableLineColumns,
   fireLines,
   priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   refusePaymentInFlight,
   toVatBreakdown,
+  unsentDishLines,
 } from "./working-order.js";
 import type { GrossOrder, LineExtras, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -1267,7 +1266,10 @@ async function finalizeRecovery(
   });
 }
 
-/** Fire an open order at payment when its frozen service context uses the prepay flow. */
+/**
+ * Fire an open order's unsent dishes at payment when its service context uses the prepay flow. A
+ * bill moved here from a table has dishes already sent, which are not sent again.
+ */
 export async function firePrepayOrder(
   tx: Transaction,
   cfg: TillConfig,
@@ -1277,14 +1279,7 @@ export async function firePrepayOrder(
   if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
     return;
   }
-
-  const lines = await tx
-    .select(fireableLineColumns)
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
-    .orderBy(workingOrderLines.lineNo);
-
-  await fireLines(tx, cfg, workingOrderId, lines);
+  await fireLines(tx, cfg, workingOrderId, await unsentDishLines(tx, workingOrderId));
 }
 
 /**

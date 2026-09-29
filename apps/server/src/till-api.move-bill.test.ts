@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentLines, billPaymentRefunds, saleLines, sales } from "@waitron/db";
+import { billPaymentLines, billPaymentRefunds, floorZones, saleLines, sales } from "@waitron/db";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
@@ -22,6 +22,8 @@ import "./errors.js";
 // itself is tested in `party-move-bill.test.ts`.
 let venue: BillVenue;
 let invoiceFirstZone: string;
+/** A counter zone of its own whose orders are paid before they are sent to the kitchen. */
+let prepayZone: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -34,6 +36,15 @@ useVenueDb({
         offerProducts(tx, venue.cfg, { zone: "counter", serviceMode: "invoice_first" }),
       )
     ).zoneId;
+    prepayZone = await inTx(venue, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: venue.cfg.locationId, name: "Barra prepago" })
+        .returning({ id: floorZones.id });
+      return (
+        await offerProducts(tx, venue.cfg, { zone: { zoneId: zone!.id }, serviceMode: "prepay" })
+      ).zoneId;
+    });
   },
 });
 
@@ -166,6 +177,122 @@ async function wholeBillAtReader(billId: string) {
   expect(row!.payment_attempt_at).not.toBeNull();
   return { release, paying };
 }
+
+/** The kitchen's items for the bill, and how many of them have been sent. */
+function kitchenItems(billId: string): { items: number; fired: number } {
+  const [row] = venue.db.all<{ items: number; fired: number }>(
+    sql`select count(*) as items, count(fired_at) as fired from ticket_items
+        where working_order_id = ${billId}`,
+  );
+  return row!;
+}
+
+/** Moves the party's bill to the counter, in `zoneId`. */
+function toCounter(
+  party: { partyId: string; tabId: string },
+  zoneId: string,
+  cookie = venue.cookie,
+) {
+  return post(
+    `/api/bills/${party.tabId}/move`,
+    {
+      to: { counter: { zoneId } },
+      partyId: party.partyId,
+      expectedPartyRevision: revisionOf(party.partyId),
+    },
+    cookie,
+  );
+}
+
+/** A counter order of no party in the pay-first zone, one of each dish named. */
+async function prepayOrder(...names: string[]): Promise<string> {
+  const id = randomUUID();
+  await parkOrder({ db: venue.db }, venue.cfg, {
+    id,
+    lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+    zoneId: prepayZone,
+    operatorId: venue.operatorId,
+  });
+  return id;
+}
+
+describe("a bill moved between service modes sends each dish to the kitchen once", () => {
+  it("settles a table bill whose dish was sent, moved to a pay-first counter while its card is at the reader, with one invoice", async () => {
+    const ana = await seatedWith(venue, "Pulpo");
+    expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
+    const { release, paying } = await wholeBillAtReader(ana.tabId);
+
+    const moved = await toCounter(ana, prepayZone, venue.cookie2);
+    release();
+    const paid = await paying;
+
+    expect(moved.status).toBe(200);
+    expect(paid.status).toBe(200);
+    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(await statusOf(venue, ana.tabId)).toBe("settled");
+    expect(registroCount(venue, ana.tabId)).toBe(1);
+    expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
+  });
+
+  it("settles a table bill whose dish was sent, moved to a pay-first counter, by a cash contribution with one invoice", async () => {
+    const ana = await seatedWith(venue, "Pulpo");
+
+    const moved = await toCounter(ana, prepayZone);
+    const paid = await cashContribution(ana.tabId, "20.00");
+
+    expect(moved.status).toBe(200);
+    expect(paid.status).toBe(200);
+    expect(await statusOf(venue, ana.tabId)).toBe("settled");
+    expect(registroCount(venue, ana.tabId)).toBe(1);
+    expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
+  });
+
+  it("places a table bill whose dish was sent, moved to an invoice-first counter, issuing its one invoice", async () => {
+    const ana = await seatedWith(venue, "Pulpo");
+
+    const moved = await toCounter(ana, invoiceFirstZone);
+    const placed = await post(`/api/working-orders/${ana.tabId}/place`, {});
+
+    expect(moved.status).toBe(200);
+    expect(placed.status).toBe(200);
+    expect(placed.json).toMatchObject({ status: "placed", total: "20.00" });
+    expect(registroCount(venue, ana.tabId)).toBe(1);
+    expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
+  });
+
+  it("sends the dish of a pay-first counter order moved into a party while its card is at the reader, and the card settles it", async () => {
+    const luis = await seatedWith(venue, "Caña");
+    const orderId = await prepayOrder("Pulpo");
+    const { release, paying } = await wholeBillAtReader(orderId);
+
+    const moved = await moveTo(orderId, luis.tableId, {}, venue.cookie2);
+    release();
+    const paid = await paying;
+
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId: orderId, merged: false });
+    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(await statusOf(venue, orderId)).toBe("settled");
+    expect(registroCount(venue, orderId)).toBe(1);
+    expect(kitchenItems(orderId)).toEqual({ items: 1, fired: 1 });
+  });
+
+  it("sends the dish of a pay-first counter order when it moves into a party, and paying in cash sends nothing again", async () => {
+    const luis = await seatedWith(venue, "Caña");
+    const orderId = await prepayOrder("Pulpo");
+
+    const moved = await moveTo(orderId, luis.tableId, { bills: "separate" });
+    const sent = kitchenItems(orderId);
+    const paid = await cashContribution(orderId, "20.00");
+
+    expect(moved.status).toBe(200);
+    expect(sent).toEqual({ items: 1, fired: 1 });
+    expect(paid.status).toBe(200);
+    expect(await statusOf(venue, orderId)).toBe("settled");
+    expect(registroCount(venue, orderId)).toBe(1);
+    expect(kitchenItems(orderId)).toEqual({ items: 1, fired: 1 });
+  });
+});
 
 describe("money on a moved bill", () => {
   it("finishes a card payment still at the reader on the bill it began on, after the bill moved party", async () => {

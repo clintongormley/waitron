@@ -314,8 +314,8 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect((await partyRow(v, ana.partyId)).mainBillId).toBeNull();
   });
 
-  // A dish already sent, merged onto a bill that takes payment first, would make it unpayable
-  // (`ticket.already_fired`), so a move merges only bills of one service mode, and never refuses.
+  // Two service modes send a dish at different times, so a move merges only bills of one service
+  // mode, and never refuses.
   it("keeps both bills when the receiving main bill is in another service mode, though both are untouched", async () => {
     const mesa = await v.table("Mesa modos 2");
     const ana = await seat(v, await v.table("Mesa modos 1"));
@@ -824,6 +824,103 @@ describe("the service area of a moved bill", () => {
     expect(error).toMatchObject({ code: "bill.presented", params: { workingOrderId: placed } });
     expect(await lineRows(placed)).toEqual(linesBefore);
     expect((await partyRow(v, ana.partyId)).mainBillId).toBe(ana.tabId);
+  });
+});
+
+describe("the dishes of an open bill moved between service modes", () => {
+  it("sends a pay-first counter order's dish when it joins a party as a separate bill, as a round is sent", async () => {
+    const mesa = await v.table("Mesa envío 1");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Burger");
+    const orderId = await counterOrder(v, "Tarta");
+    expect(await ticketsOf(orderId)).toEqual([]);
+
+    await move(orderId, { tableId: mesa }, { bills: "separate" });
+
+    const sent = await ticketsOf(orderId);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.firedAt).not.toBeNull();
+    expect((await lineRows(orderId))[0]!.sentAt).not.toBeNull();
+
+    await orderForParty(v, ana.partyId, ["Flan"], orderId);
+    await cashContribution(v, orderId, "20.00");
+
+    expect((await billRow(v, orderId)).status).toBe("settled");
+    expect(registroCount(orderId)).toBe(1);
+    const after = await ticketsOf(orderId);
+    expect(after).toHaveLength(2);
+    expect(after[0]).toEqual(sent[0]);
+  });
+
+  it("sends a pay-first counter order's dish when it merges into the party's main bill", async () => {
+    const mesa = await v.table("Mesa envío 2");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Burger");
+    const orderId = await counterOrder(v, "Tarta");
+
+    const result = await move(orderId, { tableId: mesa });
+
+    expect(result).toEqual({ partyId: ana.partyId, billId: ana.tabId, merged: true });
+    const tickets = await ticketsOf(ana.tabId);
+    expect(tickets).toHaveLength(2);
+    expect(tickets.every((ticket) => ticket.firedAt !== null)).toBe(true);
+  });
+
+  it("sends a pay-first counter order's dish when it is seated at a free table", async () => {
+    const orderId = await counterOrder(v, "Tarta");
+
+    await move(orderId, { tableId: await v.table("Mesa envío 3") });
+
+    const tickets = await ticketsOf(orderId);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]!.firedAt).not.toBeNull();
+  });
+
+  it("sends an invoice-first counter order's dish when it joins a party before it is placed", async () => {
+    const mesa = await v.table("Mesa envío 5");
+    await seat(v, mesa);
+    const orderId = randomUUID();
+    await parkOrder({ db: v.db }, v.cfg, {
+      id: orderId,
+      zoneId: invoiceFirstZone,
+      lines: [{ menuItemId: v.item("Tarta"), quantity: "1" }],
+      operatorId: OPERATOR,
+    });
+
+    await move(orderId, { tableId: mesa }, { bills: "separate" });
+
+    const tickets = await ticketsOf(orderId);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]!.firedAt).not.toBeNull();
+  });
+
+  it("leaves a counter order's dish for its payment to send when it keeps its pay-first zone at a table with no zone", async () => {
+    const bare = await inTx(v, (tx) => createTable(tx, v.cfg, { label: "Mesa envío sin zona" }));
+    const orderId = await counterOrder(v, "Tarta");
+
+    await move(orderId, { tableId: bare.id });
+    const atMove = await ticketsOf(orderId);
+    await cashContribution(v, orderId, "15.00");
+
+    expect(await zoneOf(v, orderId)).toBe(v.counter.zoneId);
+    expect(atMove).toEqual([]);
+    expect((await billRow(v, orderId)).status).toBe("settled");
+    const tickets = await ticketsOf(orderId);
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0]!.firedAt).not.toBeNull();
+  });
+
+  it("does not send a table bill's sent dish again when it is paid at a pay-first counter", async () => {
+    const ana = await seat(v, await v.table("Mesa envío 4"));
+    await order(v, ana.tabId, "Burger");
+    const sent = await ticketsOf(ana.tabId);
+
+    await move(ana.tabId, { counter: { zoneId: v.counter.zoneId } });
+    await cashContribution(v, ana.tabId, "12.00");
+
+    expect((await billRow(v, ana.tabId)).status).toBe("settled");
+    expect(registroCount(ana.tabId)).toBe(1);
+    expect(await ticketsOf(ana.tabId)).toEqual(sent);
   });
 });
 

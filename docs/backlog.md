@@ -3265,7 +3265,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `service_zone.mode_incompatible`, before changing either bill, as the old tab transfer does.
       Why: in the same reproduction, merging or transferring already-fired items onto the `prepay`
       bill succeeded, but paying that bill then failed with `ticket.already_fired`, because paying
-      a `prepay` bill fires its items again.
+      a `prepay` bill fires its items again. (2026-09-29, Task 7's review fix: paying a `prepay`
+      bill now sends only the dishes not yet sent, so that failure is gone. The refusal stays: a
+      table bill sends no dish when it is paid, which is when a `prepay` bill's unsent ones go.)
     - A table of the party still pointing at the merged-away bill is pointed at the surviving one,
       so the old till screens do not show an abandoned bill; its membership is unchanged.
   - **Task 7 built on the server (branch `feat/party-move-bill`, 2026-09-29): move a whole bill to
@@ -3293,13 +3295,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       holding no payment, one being given back included, and not being paid in full at a reader)
       AND in the same service mode once the moved bill has taken the party's zone; otherwise it stays a
       separate bill and the answer says `merged: false`. A move is never refused because the two
-      bills' modes differ (plan P15); merging across modes would make a pay-first bill unpayable, as Task 5
-      found. To a free table: a new unnamed party opens there with the bill as its main bill. To
+      bills' modes differ (plan P15); a pay-first bill sends its unsent dishes when it is paid, and a
+      table bill sends none then. To a free table: a new unnamed party opens there with the bill as its main bill. To
       the counter: the bill leaves its party and, while it is open, is labelled with the party's
       display name. A counter order already at the counter is refused `management.request_invalid`
       `{ field: "to" }`.
     - An open bill takes the receiving side's zone for what is ordered next (a party's earliest
       table's zone, or the zone the till sends for the counter); a presented bill keeps its own.
+    - A move between service modes sends no dish twice and leaves none unsent. Paying a pay-first
+      bill and placing an invoice-first one send only the dishes not yet sent, so a table bill
+      whose dishes were sent can be moved to such a counter and still be paid (by cash, or by a
+      card already at the reader when it moved) or placed, getting its one invoice. Before this
+      fix the payment was refused `ticket.already_fired` after the card had been charged. An open
+      bill that takes a table-service zone has its unsent dishes sent at the move, as a round is
+      sent, because table service sends nothing when the bill is paid. Before this fix a pay-first
+      counter order moved to a table and paid by card had no dish sent to the kitchen.
     - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
       otherwise), and the party's next order then starts a new one. A table the bill's own party
       holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is

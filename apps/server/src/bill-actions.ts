@@ -198,7 +198,8 @@ export async function mergeBills(
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
-  // Paying a prepay bill fires its lines, and one already sent fails it (`ticket.already_fired`).
+  // A pay-first bill's unsent dishes go when it is paid, and a table bill sends none when it is
+  // paid.
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
   await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId);
 }
@@ -252,7 +253,8 @@ export async function transferItems(
   const path = await guardPathParty(tx, fromBillId, command);
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
-  // Paying a prepay bill fires its lines, and one already sent fails it (`ticket.already_fired`).
+  // A pay-first bill's unsent dishes go when it is paid, and a table bill sends none when it is
+  // paid.
   await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
 
   const before = await readSentWork(tx, cfg, fromBillId);
