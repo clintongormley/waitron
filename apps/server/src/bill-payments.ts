@@ -342,6 +342,9 @@ function paidQuantitiesOf(
   return paid;
 }
 
+/** The states in which a payment is held on its bill, one given back in full included. */
+const HOLDING_STATES: readonly PaymentRow["state"][] = ["pending", "received"];
+
 /** {@link paidQuantitiesOf} the bill, read. */
 export async function readPaidQuantities(
   tx: Transaction,
@@ -358,7 +361,7 @@ export async function readPaidQuantities(
     .where(
       and(
         eq(billPayments.workingOrderId, workingOrderId),
-        inArray(billPayments.state, ["pending", "received"]),
+        inArray(billPayments.state, [...HOLDING_STATES]),
       ),
     );
   if (lines.length === 0) return new Map();
@@ -447,9 +450,6 @@ export async function refuseBillWithPayments(
     throw new AppError("bill.payments_received", { workingOrderId });
   }
 }
-
-/** The states in which a payment is held on its bill, one given back in full included. */
-const HOLDING_STATES: readonly PaymentRow["state"][] = ["pending", "received"];
 
 /** Whether the bill holds a pending or received payment, one given back in full included. */
 export async function holdsPayment(tx: Transaction, workingOrderId: string): Promise<boolean> {

@@ -256,7 +256,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
     await openPicker(el);
 
-    expect(opened).toHaveLength(1);
+    expect(opened).toEqual([null]);
     expect(picker(el)!.heading).toBe(t("table.move_bill_heading").replace("{bill}", "#5 Mesa 4"));
     expect(
       [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(

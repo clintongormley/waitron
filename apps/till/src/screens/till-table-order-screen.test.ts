@@ -3520,6 +3520,27 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
     });
 
+    it("offers neither merge nor transfer a bill holding a pending payment, though it still owes its total", async () => {
+      const pendingCard = bill({
+        workingOrderId: "wo-pending",
+        total: "20.00",
+        outstanding: "20.00",
+        hasPayments: true,
+      });
+      for (const verb of ["merge", "transfer"]) {
+        const { el } = await mount({
+          party: anaParty,
+          bills: [tabBill, checkBill, pendingCard],
+          lines: [pendingLine],
+          orderId: "wo-4",
+        });
+        await toMenu(el);
+        click(el, `[data-action="${verb}"]`);
+        await el.updateComplete;
+        expect(targetIds(el), verb).toEqual(["wo-check"]);
+      }
+    });
+
     it("says which bill the chosen one merges into before anything is chosen", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
       await toMenu(el);

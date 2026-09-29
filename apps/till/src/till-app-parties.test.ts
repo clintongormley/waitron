@@ -1698,6 +1698,39 @@ describe("till-app: moving a bill", () => {
     expect(heldRows(el)).toEqual([moved]);
   });
 
+  it("keeps the floor it had when the floor cannot be read after the move", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue([tabBill]);
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
+  });
+
+  it("says the move stands when the held orders cannot be read again after a move to the counter", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    vi.mocked(api.listWorkingOrders).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')!
+        .textContent!.trim(),
+    ).toBe(t("refresh.held_after_move"));
+  });
+
   it("goes back to the floor when the moved bill was the party's last", async () => {
     const bills = vi.fn().mockResolvedValue([tabBill]);
     const { el } = await mountApp({ getPartyBills: bills });

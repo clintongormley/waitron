@@ -3572,7 +3572,7 @@ export class TillTableOrderScreen extends LitElement {
     return [...owned, ...this.tables.filter((table) => !own.has(table.id))];
   }
 
-  /** The party's other open bills whose outstanding amount equals their total, which merge and
+  /** The party's other open bills holding no payment, a pending one included, which merge and
    * transfer offer, each with its name. The server decides whether it takes the chosen one. */
   #otherBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
@@ -3581,7 +3581,7 @@ export class TillTableOrderScreen extends LitElement {
       bill.workingOrderId !== this.orderId &&
       bill.partyId === party.id &&
       bill.status === "open" &&
-      compareDecimal(decimal(bill.outstanding), decimal(bill.total)) === 0
+      !bill.hasPayments
         ? [{ bill, name: this.#billName(index) }]
         : [],
     );

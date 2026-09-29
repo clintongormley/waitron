@@ -3517,8 +3517,9 @@ export class TillApp extends LitElement {
   /**
    * The bill on screen moves whole to another table or to the counter, in the zone the counter's
    * orders are made in. The screen stays with this party, on its main bill or {@link billToOpen}'s,
-   * and goes back to the floor when the party has no bill left. Once the waiter has left the bill,
-   * the answer changes nothing on screen.
+   * and goes back to the floor when the party has no bill left. A failed read of the floor after the
+   * move keeps the last floor. Once the waiter has left the bill, the move opens no other bill, does
+   * not go back to the floor and says nothing about bills kept apart.
    */
   async #onMoveBill(event: Event): Promise<void> {
     const { to, bills } = (event as CustomEvent<MoveBillDetail>).detail;
@@ -3547,7 +3548,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (!toTable) void this.#refreshAfterWrite("held", "refresh.held_after_move");
-    await this.#reloadTables();
+    await this.#refreshFloor();
     if (this.#hasLeftOrder(billId, visit)) return;
     this.#rememberOrderParty();
     const { bills: read } = await this.#loadPartyBills();
