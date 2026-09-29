@@ -40,8 +40,9 @@ export type MoveTarget = { tableId: string } | { counter: { zoneId: string | nul
 export interface OtherPartyRead {
   /** The revision of the party holding the target table, required when one does. */
   expectedOtherPartyRevision?: number;
-  /** The party the till read at the target table, required with its revision. */
-  otherPartyId?: string;
+  /** The party the till read at the target table, required with its revision; null when it read
+   * the table free. */
+  otherPartyId?: string | null;
 }
 
 export interface MoveBillOptions extends OtherPartyRead {
@@ -182,7 +183,8 @@ export interface TargetTable {
 /**
  * The table an action moves to or joins: the party the command read there must be the one holding
  * it now, else `party.out_of_date` for that party, since a revision alone can match a party seated
- * there since; then the revision of a party holding it, other than `source`, checked and moved on
+ * there since; a table read free (`otherPartyId: null`) that a party holds now is `party.out_of_date`
+ * for the party holding it; then the revision of a party holding it, other than `source`, checked and moved on
  * first (P27); then refused when it does not exist, is out of use or needs clearing.
  */
 export async function readTargetTable(
@@ -201,7 +203,8 @@ export async function readTargetTable(
     .from(partyTables)
     .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
   const holding = holder?.partyId ?? null;
-  if (otherPartyId !== undefined && otherPartyId !== holding) {
+  if (otherPartyId === null && holding !== null) await refuseMovedParty(tx, holding);
+  if (typeof otherPartyId === "string" && otherPartyId !== holding) {
     await refuseMovedParty(tx, otherPartyId);
   }
   if (holding !== null && holding !== source) {

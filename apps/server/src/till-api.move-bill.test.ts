@@ -756,7 +756,6 @@ describe("the move route", () => {
     ["expectedPartyRevision", -1],
     ["expectedOtherPartyRevision", "3"],
     ["otherPartyId", "not-a-uuid"],
-    ["otherPartyId", null],
   ])("answers a malformed %s with 400 management.request_invalid", async (field, value) => {
     const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
 
@@ -770,6 +769,26 @@ describe("the move route", () => {
 
     expect(answer.status).toBe(400);
     expect(answer.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+  });
+
+  it("answers a move sent with the target read free (otherPartyId null) to a table a party now holds with 409 party.out_of_date, changing nothing", async () => {
+    const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const revisions = [revisionOf(ana.partyId), revisionOf(luis.partyId)];
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: luis.tableId },
+      expectedPartyRevision: revisions[0],
+      partyId: ana.partyId,
+      otherPartyId: null,
+    });
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "party.out_of_date",
+      params: { partyId: luis.partyId, revision: revisions[1] },
+    });
+    expect([revisionOf(ana.partyId), revisionOf(luis.partyId)]).toEqual(revisions);
+    expect(partyOfBill(billId)).toBe(ana.partyId);
   });
 
   it("answers the other party's revision sent without its id with 400, changing nothing", async () => {
