@@ -3513,7 +3513,7 @@ ongoing overhaul listed at the top of Track A.
   pass.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
-  box at the top (C47 part 1, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
+  box at the top (C47 part 1, #838, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
   message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
   (`packages/ui-core/src/interactive.ts`) moves focus to the first marked field after a failed
   submission. The forms in `apps/dashboard` follow it: after the first failed press each bad field
@@ -3531,9 +3531,9 @@ ongoing overhaul listed at the top of Track A.
   keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Left open, not done: (1) the dashboard module screens
-  (adjustments reasons, image library, Stripe and SumUp connect and add-reader, venue operations)
-  still show `wt-form-error-summary` at the top — part 2; (2) the setup wizard's screens — part 3,
-  now that C42 has landed; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
+  (adjustments reasons, Stripe and SumUp connect and add-reader, venue operations) still show
+  `wt-form-error-summary` at the top — C47 part 2, lane B; the image library
+  (`packages/media`) is C47m, lane A; (2) the setup wizard's screens — C47s, lane C; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
   nothing uses it — besides the module screens, the `packages/ui` workbench demo
   (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
   which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it; (5) the profile
