@@ -3,7 +3,8 @@ import { runBluetoothctl } from "./bluetooth-command.js";
 import { createLinuxDevices } from "./linux-devices.js";
 
 // A file of its own, because the module mock below replaces bluetoothctl for every case in it.
-vi.mock("./bluetooth-command.js", () => ({
+vi.mock(import("./bluetooth-command.js"), async (importOriginal) => ({
+  ...(await importOriginal()),
   runBluetoothctl: vi.fn(async () => "Device 66:55:44:33:22:11 CI Printer\n"),
 }));
 

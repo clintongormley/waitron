@@ -249,15 +249,6 @@ jobs:
           docker exec "$agent" bluetoothctl --timeout 3 scan on | tee "$RUNNER_TEMP/bt-scan.txt"
           grep -q "Device 11:22:33:44:55:66 Found" "$RUNNER_TEMP/bt-scan.txt"
           grep -q "Discovering: yes" "$RUNNER_TEMP/bt-scan.txt"
-          # A BlueZ method the profile does not allow. The stand-in prints a line if one ever arrives.
-          set +e
-          docker exec "$agent" bluetoothctl remove 66:55:44:33:22:11 > "$RUNNER_TEMP/bt-remove.txt" 2>&1
-          removed=$?
-          set -e
-          cat "$RUNNER_TEMP/bt-remove.txt"
-          [ "$removed" -ne 0 ]
-          grep -q "org.freedesktop.DBus.Error.AccessDenied" "$RUNNER_TEMP/bt-remove.txt"
-          if grep -q "RemoveDevice" "$RUNNER_TEMP/fake-bluez.log"; then exit 1; fi
 
           set +e
           docker run --rm -u node --security-opt apparmor=docker-default \
@@ -269,6 +260,46 @@ jobs:
           [ "$control" -ne 0 ]
           grep -q 'connection != NULL' "$RUNNER_TEMP/bt-control.txt"
           if grep -q "CI Printer" "$RUNNER_TEMP/bt-control.txt"; then exit 1; fi
+
+      # What the agent's Pair and Forget run, under the shipped profile: interactive bluetoothctl over
+      # pipes answers the stand-in's PIN request, and `remove` forgets the printer again. A D-Bus
+      # refusal reaches the kernel log through the kernel's printk rate limit, which drops lines: in
+      # probe run 36585218089, under the previous rules in complain mode, one pairing and two removes
+      # logged one AppArmor line with the limit on and nine with it off. So it is switched off first. `trust`, which the profile does
+      # not allow, is the control: it must never reach the stand-in, its refusal must reach the log,
+      # and it must be the only refusal logged since the count was taken.
+      - name: The print agent pairs a PIN printer and forgets it under its profile, and is still refused what the profile does not list
+        run: |
+          set -euo pipefail
+          agent=$(docker compose ps -q print-agent)
+          sudo sysctl -w kernel.printk_ratelimit=0
+          refusals() { sudo dmesg | grep 'apparmor="DENIED"' | grep 'label="waitron-print-agent"' || true; }
+          before=$(refusals | wc -l)
+
+          docker cp scripts/bluetoothctl-pair.mjs "$agent:/tmp/bluetoothctl-pair.mjs"
+          docker exec "$agent" node /tmp/bluetoothctl-pair.mjs 86:67:7A:00:00:01 1234 | tee "$RUNNER_TEMP/bt-pair.txt"
+          grep -q "Pairing successful" "$RUNNER_TEMP/bt-pair.txt"
+          grep -q "fake bluez: RequestPinCode reply '1234'" "$RUNNER_TEMP/fake-bluez.log"
+
+          docker exec "$agent" bluetoothctl remove 86:67:7A:00:00:01 | tee "$RUNNER_TEMP/bt-forget.txt"
+          grep -q "Device has been removed" "$RUNNER_TEMP/bt-forget.txt"
+          grep -q "fake bluez: RemoveDevice /org/bluez/hci0/dev_86_67_7A_00_00_01" "$RUNNER_TEMP/fake-bluez.log"
+
+          set +e
+          docker exec "$agent" bluetoothctl trust 66:55:44:33:22:11 > "$RUNNER_TEMP/bt-trust.txt" 2>&1
+          trusted=$?
+          set -e
+          cat "$RUNNER_TEMP/bt-trust.txt"
+          [ "$trusted" -ne 0 ]
+          grep -q "org.freedesktop.DBus.Error.AccessDenied" "$RUNNER_TEMP/bt-trust.txt"
+          if grep -q "fake bluez: Set " "$RUNNER_TEMP/fake-bluez.log"; then exit 1; fi
+          for _ in $(seq 1 20); do
+            [ "$(refusals | wc -l)" -gt "$before" ] && break
+            sleep 0.25
+          done
+          refusals | tail -n +"$((before + 1))" | tee "$RUNNER_TEMP/bt-refusals.txt"
+          grep -q 'member="Set"' "$RUNNER_TEMP/bt-refusals.txt"
+          if grep -v 'member="Set"' "$RUNNER_TEMP/bt-refusals.txt"; then exit 1; fi
 
       - name: Tear the stack down, volumes and all
         if: always()

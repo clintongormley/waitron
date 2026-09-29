@@ -177,8 +177,8 @@ hook, or how tests are scheduled:
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **No front-end bundle is built by a pull request that changed no image input.** In CI the SPAs
   are `vite build`-ed only inside `deploy/Dockerfile`, which on a pull request runs only when
-  `deploy/` or a file only image-smoke runs (`scripts/fake-bluez.py`) changed
-  (`isImageInputPath`, `scripts/changed-scope.mjs`) — and wherever it does run it builds them
+  `deploy/` or a file `IMAGE_SMOKE_FILES` names (`scripts/changed-scope.mjs`) changed
+  (`isImageInputPath`, in the same file) — and wherever it does run it builds them
   without opening one, so a bundle that renders nothing passes anyway. Cost: the vite 6 → 8 bundler
   replacement had to take its build evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
@@ -373,8 +373,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   sends a bus message the profile does not list is refused until the profile gains a rule for it.**
   Cost: on the owner's box (2026-09-29) Docker's default profile refused
   the agent's first bus message and it silently listed no Bluetooth printers. Guards, weaker than
-  their names: image-smoke runs only the agent's paired listing and the commands its Bluetooth step
-  names, and not on a pull request that changed no image input; `scripts/deploy-image-env.test.ts`
+  their names: image-smoke runs only the agent's paired listing and the commands its Bluetooth steps
+  name, pairing through its own driver rather than the agent's Pair code, and not on a pull request
+  that changed no image input; `scripts/deploy-image-env.test.ts`
   reads the profile as TEXT for globbed bus rules, not for a grown literal list. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error

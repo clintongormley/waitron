@@ -111,11 +111,12 @@ fetch_box_files() {
 
 # 2b. The print agent's AppArmor profile, from the INSTALLED ref like compose.yml. Docker's default
 #     profile keeps the agent off the system bus, so bluetoothctl cannot reach BlueZ; this one allows
-#     the bus messages bluetoothctl's listing and scan send. .env names the profile only once
-#     apparmor_parser has loaded it, because Docker refuses to start a container that names a profile
-#     the host has not loaded — compose then falls back to docker-default rather than leaving the
-#     agent down. Written into /etc/apparmor.d so the boot-time apparmor.service can load it again;
-#     that reload after a reboot is not yet measured.
+#     the bus messages bluetoothctl's listing, scan, pairing and remove send. .env names the profile
+#     only once apparmor_parser has loaded it, because Docker refuses to start a container that names
+#     a profile the host has not loaded — compose then falls back to docker-default rather than
+#     leaving the agent down. Written into /etc/apparmor.d so the boot-time apparmor.service loads it
+#     again: on the owner's box, 2026-09-29, after a restart `.env` still named it and
+#     `bluetoothctl list` in the agent still reached BlueZ.
 PRINT_AGENT_PROFILE=/etc/apparmor.d/waitron-print-agent
 load_print_agent_apparmor() {
   local ref="$1" tmp
@@ -132,6 +133,92 @@ load_print_agent_apparmor() {
   else
     env_unset WAITRON_PRINT_AGENT_APPARMOR
     echo "waitron.sh: could not load the print agent's AppArmor profile — it runs under Docker's default profile, which keeps it from Bluetooth printers" >&2
+  fi
+  rm -f "$tmp"
+}
+
+# 2c. On the owner's box (BlueZ 5.82, 2026-09-29) bluetoothd's autopair plugin answered a PIN-1234
+#     printer's PIN request with 0000 before any agent was asked; bluetoothd's retry then went over
+#     Low Energy, which that printer refuses, so it never paired. With the plugin off the agent was
+#     asked and the printer bonded. The plugin does this for a device whose class marks it as a
+#     printer (read in plugins/autopair.c, BlueZ 5.82). This drop-in re-runs the unit's own
+#     ExecStart with the plugin off. Bluetooth is restarted only when the drop-in changed, and a
+#     failure never stops the install. It reads ExecStart from the unit file alone, so writing ours
+#     beside another drop-in that sets ExecStart could discard that drop-in's command; then nothing
+#     is changed, not even a drop-in of ours already there.
+# WAITRON_SH_BLUETOOTH_DROPIN is a test override: scripts/waitron-sh.test.mjs points it inside each
+# case's own directory, so no test can see the shipped path — it is pinned as text by
+# scripts/deploy-image-env.test.ts instead.
+BLUETOOTH_DROPIN="${WAITRON_SH_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
+disable_bluetooth_autopair() {
+  local unit exec_start tmp dropins dropin other="" unreadable=""
+  unit="$(systemctl show -p FragmentPath --value bluetooth.service 2>/dev/null || true)"
+  if [ -z "$unit" ] || [ ! -r "$unit" ]; then
+    echo "waitron.sh: no bluetooth.service on this host — Bluetooth pairing left as it is"
+    return 0
+  fi
+  read -ra dropins <<< "$(systemctl show -p DropInPaths --value bluetooth.service 2>/dev/null || true)"
+  for dropin in ${dropins[@]+"${dropins[@]}"}; do
+    [ "$dropin" = "$BLUETOOTH_DROPIN" ] && continue
+    if [ ! -r "$dropin" ]; then
+      other="$dropin" unreadable=1
+      break
+    fi
+    if grep -Eq '^[[:space:]]*ExecStart[[:space:]]*=' "$dropin" 2>/dev/null; then
+      other="$dropin"
+      break
+    fi
+  done
+  if [ -n "$other" ]; then
+    if [ -f "$BLUETOOTH_DROPIN" ] && [ -n "$unreadable" ]; then
+      echo "waitron.sh: left Bluetooth as it is — $other could not be read and may set bluetooth.service's ExecStart, and $BLUETOOTH_DROPIN from an earlier install is still there, so which command bluetoothd runs may depend on both files ('systemctl cat bluetooth' shows them); to keep only $other's command, delete $BLUETOOTH_DROPIN, then run 'systemctl daemon-reload' and 'systemctl restart bluetooth'" >&2
+    elif [ -f "$BLUETOOTH_DROPIN" ]; then
+      echo "waitron.sh: left Bluetooth as it is — $other also sets bluetooth.service's ExecStart, and $BLUETOOTH_DROPIN from an earlier install is still there, so which command bluetoothd runs depends on both files ('systemctl cat bluetooth' shows them); to keep only $other's command, delete $BLUETOOTH_DROPIN, then run 'systemctl daemon-reload' and 'systemctl restart bluetooth'" >&2
+    elif [ -n "$unreadable" ]; then
+      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — could not read $other, which may set bluetooth.service's ExecStart; left as it is" >&2
+    else
+      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $other also sets bluetooth.service's ExecStart; left as it is" >&2
+    fi
+    return 0
+  fi
+  exec_start="$(sed -nE 's/^[[:space:]]*ExecStart[[:space:]]*=[[:space:]]*//p' "$unit" | tail -n 1)"
+  if [ -z "$exec_start" ]; then
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $unit names no ExecStart" >&2
+    return 0
+  fi
+  case " $exec_start" in
+    *" --noplugin"* | *" -P"*)
+      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — bluetooth.service already chooses its plugins ($exec_start); left as it is" >&2
+      return 0 ;;
+  esac
+  if ! tmp="$(mktemp "$WAITRON_DIR/waitron-noautopair.XXXXXX")"; then
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — could not create a temp file in $WAITRON_DIR" >&2
+    return 0
+  fi
+  printf '%s\n' \
+    "# Written by waitron.sh install: bluetoothd's autopair plugin answers 0000 to the first PIN" \
+    "# request of a device whose class marks it as a printer, before the print agent is asked." \
+    "[Service]" \
+    "ExecStart=" \
+    "ExecStart=$exec_start --noplugin=autopair" > "$tmp"
+  if [ -f "$BLUETOOTH_DROPIN" ] && cmp -s "$tmp" "$BLUETOOTH_DROPIN"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  if as_root install -d -m 0755 "$(dirname "$BLUETOOTH_DROPIN")" \
+    && as_root install -m 0644 "$tmp" "$BLUETOOTH_DROPIN" \
+    && as_root systemctl daemon-reload \
+    && as_root systemctl restart bluetooth; then
+    echo "waitron.sh: switched off bluetoothd's autopair plugin, so a Bluetooth printer's PIN comes from the operator"
+  else
+    # Runs whether the failure came before or after the drop-in was written. Removes whatever
+    # drop-in is at that path, an older, different one included, then reloads and restarts
+    # Bluetooth without it, so the next install finds none and tries again.
+    as_root rm -f "$BLUETOOTH_DROPIN" || true
+    if ! { as_root systemctl daemon-reload && as_root systemctl restart bluetooth; }; then
+      echo "waitron.sh: Bluetooth did not restart after the autopair drop-in was removed, so Bluetooth may be stopped — run 'systemctl restart bluetooth' or restart the box" >&2
+    fi
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — a Bluetooth printer whose PIN is not 0000 may not pair; the next install tries again" >&2
   fi
   rm -f "$tmp"
 }
@@ -348,6 +435,7 @@ cmd_install() {
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"
   load_print_agent_apparmor "$ref"
+  disable_bluetooth_autopair
   select_image "$ref"
   cd "$WAITRON_DIR"
   docker compose up -d --remove-orphans

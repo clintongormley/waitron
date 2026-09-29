@@ -1,10 +1,12 @@
 import type {
   AgentConfig,
   AgentStatus,
+  BluetoothCommandResult,
   DiscoveredDevice,
   Host,
   NetworkProbe,
   PairResult,
+  PairedBluetoothDevice,
   TransportKind,
   VisibleDevice,
 } from "../host.js";
@@ -24,7 +26,9 @@ export function fakeHost(
     probeNetwork: (targets: NetworkProbe[]) => Promise<DiscoveredDevice[]>;
     markPagePrinters: (devices: DiscoveredDevice[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
-    pair: (mac: string) => Promise<PairResult>;
+    pair: (mac: string, pin?: string) => Promise<PairResult>;
+    pairedBluetooth: () => Promise<PairedBluetoothDevice[]>;
+    forgetBluetooth: (mac: string) => Promise<BluetoothCommandResult>;
     now: () => number;
     sleep: (ms: number) => Promise<void>;
   }> = {},
@@ -32,6 +36,9 @@ export function fakeHost(
   statuses: AgentStatus[];
   logs: string[];
   sleeps: number[];
+  /** The calls made to `visibleDevices`, `pair`, `pairedBluetooth` and `forgetBluetooth`, by name,
+   * in call order. */
+  calls: string[];
 } {
   let config = overrides.config === undefined ? null : overrides.config;
   let token = overrides.token ?? null;
@@ -39,6 +46,13 @@ export function fakeHost(
   const statuses: AgentStatus[] = [];
   const logs: string[] = [];
   const sleeps: number[] = [];
+  const calls: string[] = [];
+  const recorded =
+    <A extends unknown[], R>(name: string, body: (...args: A) => R) =>
+    (...args: A): R => {
+      calls.push(name);
+      return body(...args);
+    };
   const line = (level: string) => (msg: string, fields?: Record<string, unknown>) => {
     logs.push(`${level} ${msg}${fields ? " " + JSON.stringify(fields) : ""}`);
   };
@@ -46,6 +60,7 @@ export function fakeHost(
     statuses,
     logs,
     sleeps,
+    calls,
     config: async () => config,
     saveConfig: async (c) => {
       config = c;
@@ -70,7 +85,7 @@ export function fakeHost(
     status: (s) => {
       statuses.push(s);
     },
-    visibleDevices: overrides.visibleDevices ?? (async () => []),
+    visibleDevices: recorded("visibleDevices", overrides.visibleDevices ?? (async () => [])),
     scan: overrides.scan ?? (async () => []),
     probeNetwork: overrides.probeNetwork ?? (async () => []),
     ...(overrides.markPagePrinters === undefined
@@ -85,6 +100,15 @@ export function fakeHost(
         port: job.port,
         devicePath: job.localKey,
       })),
-    pair: overrides.pair ?? (async () => ({ ok: false, error: "not implemented in fake host" })),
+    pair: recorded(
+      "pair",
+      overrides.pair ?? (async () => ({ ok: false, error: "not implemented in fake host" })),
+    ),
+    pairedBluetooth: recorded("pairedBluetooth", overrides.pairedBluetooth ?? (async () => [])),
+    forgetBluetooth: recorded(
+      "forgetBluetooth",
+      overrides.forgetBluetooth ??
+        (async () => ({ ok: false, error: "not implemented in fake host" })),
+    ),
   };
 }

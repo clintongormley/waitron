@@ -1,6 +1,11 @@
 // Every call is folded into a Result, so no network condition reaches the caller as a throw.
 
-import type { DiscoveredDevice, NetworkProbe, VisibleDevice } from "./host.js";
+import type {
+  DiscoveredDevice,
+  NetworkProbe,
+  PairedBluetoothDevice,
+  VisibleDevice,
+} from "./host.js";
 import type { PrintTransport } from "./transport.js";
 
 /** Every pull reports local presence (`visible`) and active scan or address-check results (`scanned`). */
@@ -10,6 +15,26 @@ export interface AgentInventory {
   setupPort?: number;
   visible: VisibleDevice[];
   scanned: DiscoveredDevice[];
+  pairedBluetooth: PairedBluetoothDevice[];
+  bluetoothOutcomes: BluetoothCommandOutcome[];
+}
+
+export type BluetoothCommandKind = "pair" | "forget";
+
+export interface BluetoothCommand {
+  id: string;
+  kind: BluetoothCommandKind;
+  /** Always a full upper-case `XX:XX:XX:XX:XX:XX`, never bluetoothctl's `*` (every device). */
+  address: string;
+  /** The operator's PIN, on `pair` only: 1–16 printable ASCII characters, no spaces. Never
+   * log it. */
+  pin?: string;
+}
+
+export interface BluetoothCommandOutcome {
+  id: string;
+  ok: boolean;
+  error?: string;
 }
 
 export interface NodeProbe {
@@ -60,6 +85,7 @@ export interface PullReply {
   jobs: WireJob[];
   discoveryUntil: number | null;
   networkProbes?: NetworkProbe[];
+  bluetoothCommands?: BluetoothCommand[];
 }
 
 export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
@@ -80,7 +106,7 @@ export const DEFAULT_TIMEOUT_MS = 3_000;
 
 /** `String(value)` invokes a `toString` an object is free to implement badly, and that throw must not
  * escape this module. */
-function describeRejection(error: unknown): string {
+export function describeRejection(error: unknown): string {
   if (error instanceof Error) return error.message;
   try {
     return String(error);
@@ -234,12 +260,67 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
       continue;
     networkProbes.push({ host: target.host, port: target.port, expiresInMs: target.expiresInMs });
   }
+  const bluetoothCommands = decodeBluetoothCommands(b.bluetoothCommands);
   return {
     nodeId: b.nodeId,
     servers,
     jobs,
     discoveryUntil,
     ...(networkProbes.length ? { networkProbes } : {}),
+    ...(bluetoothCommands.length ? { bluetoothCommands } : {}),
+  };
+}
+
+const MAX_BLUETOOTH_COMMANDS = 8;
+const MAX_COMMAND_ID_LENGTH = 128;
+const MAX_OUTCOME_ERROR_LENGTH = 500;
+const MAC_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/i;
+// Printable ASCII only, so the byte count BlueZ limits equals the length, and no newline can reach a
+// line-oriented child's stdin.
+const PIN_PATTERN = /^[\x21-\x7e]{1,16}$/;
+
+export function isBluetoothAddress(value: string): boolean {
+  return MAC_PATTERN.test(value);
+}
+
+export function isBluetoothPin(value: string): boolean {
+  return PIN_PATTERN.test(value);
+}
+
+/** A malformed command is dropped alone, never failing the reply, so a server newer or older than
+ * this agent cannot stop printing. */
+function decodeBluetoothCommands(raw: unknown): BluetoothCommand[] {
+  const commands: BluetoothCommand[] = [];
+  for (const entry of Array.isArray(raw) ? raw.slice(0, MAX_BLUETOOTH_COMMANDS) : []) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { id, kind, address, pin } = entry as Record<string, unknown>;
+    if (
+      typeof id !== "string" ||
+      id.length === 0 ||
+      id.length > MAX_COMMAND_ID_LENGTH ||
+      (kind !== "pair" && kind !== "forget") ||
+      typeof address !== "string" ||
+      !isBluetoothAddress(address)
+    )
+      continue;
+    const command: BluetoothCommand = { id, kind, address: address.toUpperCase() };
+    if (kind === "pair" && pin !== undefined) {
+      if (typeof pin !== "string" || !isBluetoothPin(pin)) continue;
+      command.pin = pin;
+    }
+    commands.push(command);
+  }
+  return commands;
+}
+
+function boundInventory(inventory: AgentInventory): AgentInventory {
+  return {
+    ...inventory,
+    bluetoothOutcomes: inventory.bluetoothOutcomes.map((outcome) =>
+      outcome.error === undefined
+        ? outcome
+        : { ...outcome, error: outcome.error.slice(0, MAX_OUTCOME_ERROR_LENGTH) },
+    ),
   };
 }
 
@@ -317,7 +398,7 @@ export function createClient(opts: { fetch: typeof fetch; timeoutMs?: number }):
         {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-          body: JSON.stringify(inventory),
+          body: JSON.stringify(boundInventory(inventory)),
         },
         parsePullReply,
       );

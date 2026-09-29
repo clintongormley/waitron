@@ -276,6 +276,7 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
       bluetooth: {
         scan: async () => [],
         pair: async () => ({ ok: false, error: "unused" }),
+        forget: async () => ({ ok: false, error: "unused" }),
         paired: () => {
           listings += 1;
           return new Promise((resolve) => {
@@ -303,6 +304,7 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
       bluetooth: {
         scan: async () => [],
         pair: async () => ({ ok: false, error: "unused" }),
+        forget: async () => ({ ok: false, error: "unused" }),
         paired: () => {
           listings += 1;
           throw new Error("thrown before any promise");

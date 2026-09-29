@@ -4,17 +4,22 @@ export type {
   AgentConfig,
   AgentPhase,
   AgentStatus,
+  BluetoothCommandResult,
   DiscoveredDevice,
   Host,
   HostLog,
   NetworkProbe,
   PairResult,
+  PairedBluetoothDevice,
   VisibleDevice,
 } from "./host.js";
-export { DEFAULT_TIMEOUT_MS, createClient } from "./client.js";
+export { DEFAULT_TIMEOUT_MS, createClient, isBluetoothAddress, isBluetoothPin } from "./client.js";
 export type {
   AgentClient,
   AgentInventory,
+  BluetoothCommand,
+  BluetoothCommandKind,
+  BluetoothCommandOutcome,
   Failure,
   JobOutcome,
   JoinReply,

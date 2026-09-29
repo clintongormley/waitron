@@ -82,6 +82,10 @@ stops the job pull, the same way a failed scan does not today.
   by that same agent's own scan** and still fresh, so the button cannot pair an arbitrary device. The
   agent runs the pairing it already knows how to do (`Host.pair`, `packages/print-agent/src/host.ts`).
   The dashboard shows that pairing is under way, then the result — paired, or the reason it failed.
+  _2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII
+  characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin where it
+  can (`deploy/README.md` says when it leaves Bluetooth alone); the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the
+  P2c entry in `docs/backlog.md`._
 - **Forget pairing.** A switched-off Bluetooth printer (`POST /management-api/printers/:id/deactivate`
   already exists) shows a **Forget pairing** action. The server refuses it unless that agent reports
   the address among its paired devices. The agent removes the pairing (`bluetoothctl remove <address>`
@@ -217,4 +221,8 @@ header.
   whose bus rules cover what `list`, `devices` and `scan` were measured to need. The pairing call
   itself, what BlueZ calls back into bluetoothctl while pairing, and `trust` (a property write), are
   not allowed yet; the real-box measurement decides them. See `docs/backlog.md`, B6._
+  _2026-09-29 (P2b): the owner's box showed a bond is enough to reconnect, with `Trusted: no`, and
+  `remove` forgets a printer. The profile now allows pairing with a PIN through interactive
+  bluetoothctl, and `remove`, measured on a CI runner against the stand-in BlueZ; `trust` stays
+  refused. Receipts in the profile's header._
 - The permission name the two routes share with discovery, read from the existing route.

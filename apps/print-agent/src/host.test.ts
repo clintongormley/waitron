@@ -195,7 +195,7 @@ describe("createContainerHost — the rest of the seam", () => {
     ).rejects.toThrow(/no host/);
   });
 
-  it("exposes the injected device seam as its visibleDevices/scan/pair/resolve", async () => {
+  it("exposes the injected device seam as its visibleDevices/scan/pair/pairedBluetooth/forgetBluetooth/resolve", async () => {
     const devices = {
       visibleDevices: vi.fn(async () => [
         { transport: "usb" as const, localKey: "SN-1", make: "Epson", model: "TM-T20" },
@@ -204,6 +204,8 @@ describe("createContainerHost — the rest of the seam", () => {
         { transport: "bluetooth" as const, localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
       ]),
       pair: vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" })),
+      pairedBluetooth: vi.fn(async () => [{ localKey: "AA:BB:CC:DD:EE:FF", name: "Star" }]),
+      forgetBluetooth: vi.fn(async () => ({ ok: true })),
       resolve: vi.fn(async () => ({
         id: "p1",
         transport: "usb" as const,
@@ -225,10 +227,16 @@ describe("createContainerHost — the rest of the seam", () => {
       { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
     ]);
     expect(devices.scan).toHaveBeenCalledWith(["bluetooth"]);
-    expect(await host.pair("AA:BB:CC:DD:EE:FF")).toEqual({
+    expect(await host.pair("AA:BB:CC:DD:EE:FF", "1234")).toEqual({
       ok: true,
       localKey: "AA:BB:CC:DD:EE:FF",
     });
+    expect(devices.pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
+    expect(await host.pairedBluetooth()).toStrictEqual([
+      { localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
+    ]);
+    expect(await host.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({ ok: true });
+    expect(devices.forgetBluetooth).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF");
     const job = {
       id: "j1",
       printerId: "p1",

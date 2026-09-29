@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WireJob } from "../client.js";
 import { FakeSink } from "../transport.js";
 import { fakeHost } from "./fake-host.js";
@@ -83,5 +83,47 @@ describe("fakeHost", () => {
       'warn scan failed {"error":"boom"}',
       'error tick failed {"error":"bug"}',
     ]);
+  });
+
+  it("lists no paired Bluetooth devices and refuses to forget one unless told otherwise", async () => {
+    const host = fakeHost();
+    expect(await host.pairedBluetooth()).toStrictEqual([]);
+    expect(await host.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({
+      ok: false,
+      error: "not implemented in fake host",
+    });
+    const told = fakeHost({
+      pairedBluetooth: async () => [{ localKey: "AA:BB:CC:DD:EE:FF" }],
+      forgetBluetooth: async () => ({ ok: true }),
+    });
+    expect(await told.pairedBluetooth()).toStrictEqual([{ localKey: "AA:BB:CC:DD:EE:FF" }]);
+    expect(await told.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({ ok: true });
+  });
+
+  it("records each device-listing and Bluetooth-command call by name, in call order", async () => {
+    const host = fakeHost({ pair: async () => ({ ok: true }) });
+    await host.pairedBluetooth();
+    await host.visibleDevices();
+    await host.pair("AA:BB:CC:DD:EE:FF", "1234");
+    await host.forgetBluetooth("AA:BB:CC:DD:EE:FF");
+    expect(host.calls).toStrictEqual([
+      "pairedBluetooth",
+      "visibleDevices",
+      "pair",
+      "forgetBluetooth",
+    ]);
+  });
+
+  it("hands an overriding pair the operator's PIN", async () => {
+    const pair = vi.fn(async (mac: string, pin?: string) => ({
+      ok: pin === "1234",
+      localKey: mac,
+    }));
+    const host = fakeHost({ pair });
+    expect(await host.pair("AA:BB:CC:DD:EE:FF", "1234")).toStrictEqual({
+      ok: true,
+      localKey: "AA:BB:CC:DD:EE:FF",
+    });
+    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
   });
 });

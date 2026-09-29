@@ -41,6 +41,7 @@ function fakeBluetooth(over: Partial<BluetoothHost> = {}): BluetoothHost {
     scan: async () => [],
     pair: async () => ({ ok: false, error: "no fake" }),
     paired: async () => [],
+    forget: async () => ({ ok: false, error: "no fake" }),
     ...over,
   };
 }
@@ -239,14 +240,115 @@ describe("createLinuxDevices — scan()", () => {
 });
 
 describe("createLinuxDevices — pair()", () => {
-  it("delegates to the Bluetooth host", async () => {
+  it("delegates to the Bluetooth host, with the operator's PIN", async () => {
     const pair = vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" }));
     const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth({ pair }) });
-    expect(await devices.pair("AA:BB:CC:DD:EE:FF")).toEqual({
+    expect(await devices.pair("AA:BB:CC:DD:EE:FF", "1234")).toEqual({
       ok: true,
       localKey: "AA:BB:CC:DD:EE:FF",
     });
-    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF");
+    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
+  });
+});
+
+describe("createLinuxDevices — pairedBluetooth()", () => {
+  it("lists every paired device, without asking for a device path, which would throw", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({
+        paired: async () => [
+          { mac: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" },
+          { mac: "11:22:33:44:55:66" },
+        ],
+      }),
+    });
+    expect(await devices.pairedBluetooth()).toStrictEqual([
+      { localKey: "5A:4A:45:D4:FB:BB", name: "BlueTooth Printer" },
+      { localKey: "11:22:33:44:55:66" },
+    ]);
+  });
+
+  it("throws when the listing fails, and records the Bluetooth side as unavailable", async () => {
+    const warn = vi.fn();
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      log: { info: vi.fn(), warn, error: vi.fn() },
+      bluetooth: fakeBluetooth({
+        paired: async () => {
+          throw new Error("No default controller available");
+        },
+      }),
+    });
+    await expect(devices.pairedBluetooth()).rejects.toThrow("No default controller available");
+    expect(devices.bluetoothAvailability()).toMatchObject({
+      available: false,
+      reason: "no_controller",
+    });
+    expect(warn).toHaveBeenCalledWith("bluetooth unavailable", {
+      reason: "no_controller",
+      error: "No default controller available",
+    });
+  });
+
+  it("throws without listing again while an unavailable side is not yet due a recheck", async () => {
+    let clock = 0;
+    const paired = vi.fn(async () => {
+      throw new Error("No default controller available");
+    });
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      now: () => clock,
+      bluetooth: fakeBluetooth({ paired }),
+    });
+    await devices.checkBluetooth();
+    clock += 1_000;
+    await expect(devices.pairedBluetooth()).rejects.toThrow("No default controller available");
+    expect(paired).toHaveBeenCalledTimes(1);
+  });
+
+  it("joins a listing already running rather than starting a second", async () => {
+    let release!: (v: { mac: string }[]) => void;
+    const paired = vi.fn(
+      () =>
+        new Promise<{ mac: string }[]>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth({ paired }) });
+    const checked = devices.checkBluetooth();
+    const listed = devices.pairedBluetooth();
+    release([{ mac: "5A:4A:45:D4:FB:BB" }]);
+    await checked;
+    expect(await listed).toStrictEqual([{ localKey: "5A:4A:45:D4:FB:BB" }]);
+    expect(paired).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares one listing with visibleDevices() started beside it, however fast the listing ends", async () => {
+    const paired = vi.fn(async () => [{ mac: "5A:4A:45:D4:FB:BB" }]);
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      bluetooth: fakeBluetooth({ paired }),
+      btDevicePath: () => "/dev/rfcomm0",
+    });
+    // The agent's order: the paired listing first, then the visible read, both in one turn.
+    const listed = devices.pairedBluetooth();
+    const visible = await devices.visibleDevices();
+    expect(await listed).toStrictEqual([{ localKey: "5A:4A:45:D4:FB:BB" }]);
+    expect(visible.map((d) => d.localKey)).toStrictEqual(["B120300001", "5A:4A:45:D4:FB:BB"]);
+    expect(paired).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createLinuxDevices — forgetBluetooth()", () => {
+  it("hands the address to the Bluetooth host and returns its outcome", async () => {
+    const forget = vi.fn(async () => ({ ok: false, error: "org.bluez.Error.NotReady" }));
+    const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth({ forget }) });
+    expect(await devices.forgetBluetooth("5A:4A:45:D4:FB:BB")).toStrictEqual({
+      ok: false,
+      error: "org.bluez.Error.NotReady",
+    });
+    expect(forget).toHaveBeenCalledWith("5A:4A:45:D4:FB:BB");
   });
 });
 
