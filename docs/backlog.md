@@ -4629,7 +4629,10 @@ approved.
   disk. Not measured for them. Next action: time one database-heavy package's `test:coverage` in CI
   with its folders on the disk and under `/dev/shm` (`scratchParent()` in `scripts/scratch-dir.mjs`
   is the choice the upgrade test makes), and adopt it in `useVenueDb` only if the shard times move
-  and a suite's databases fit in `/dev/shm` (Docker's default is 64 MiB).
+  and a suite's databases fit in `/dev/shm` (Docker's default is 64 MiB). One data point from
+  A130: on a CI runner a stream test's commit took 1,017 ms while Linux's pressure counters showed
+  every process stalled on the disk ([testing-guide.md](developers/testing-guide.md), "In CI their
+  temporary files are in memory").
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
@@ -7619,6 +7622,29 @@ it. Left open:
   sale's write waited behind the fold-back, rather than landing before it, is not observed, and the
   fold-back of a 256 MiB file is still timed only by the bench rig (results note, 1b), not through
   the supervisor.
+- **DONE (lane A's A130): the pause test's one failure on `main` (run 36559470238, a frozen sale at
+  1,228 ms against 1,000) was the CI runner's disk, not the bucket.** A probe reproduced it with one
+  commit taking 1,017 ms while the disk stalled. The stream tests' CI step now sets
+  `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
+  are in memory"). Found by the probe, and open:
+  - A sale can wait behind Litestream's own checkpoint. Litestream 0.5.17 holds the database's write
+    lock while it checkpoints (`db.go` lines 2492–2512 at tag v0.5.17), and that checkpoint waits on
+    the disk too. In the reproduction the write after the slow commit waited 1,029 ms to begin. That
+    this wait was Litestream's is inferred: Litestream is the only other writer, and at its normal
+    log level it does not log checkpoints. CLAUDE.md §5's lead says the bucket stream never blocks
+    a sale, and its body that a sale can queue behind the server's own checkpoint but never waits
+    on the bucket. No sale in the probe waited on the bucket; if this wait was Litestream's
+    checkpoint, the stream held a write for about a second, which §5's "never blocks a sale" does
+    not allow for. **Next:** time a sale against a logged checkpoint on a slow disk, then decide
+    whether §5 should name it.
+  - Litestream at trace logging deadlocked sales for five seconds. The probe first ran it at trace
+    level by mistake, and 13 of 24 runs failed with a 500. Each one looked at was `begin immediate`
+    failing `database is locked` after 5,006 to 5,008 ms (runs 36571860113, 36572745451). The inferred
+    mechanism: Litestream held the write lock while blocked writing its log to a pipe that only the
+    server's main thread reads, and the main thread was waiting for that lock. At the normal level
+    Litestream writes too little to fill the pipe; that is inferred, not measured. **Next:** check
+    whether any setting lets an operator raise Litestream's log level, and read the pipe on a thread
+    that does not wait on the database if so.
 - **DONE (A37, #668): the pause's bucket question is bounded.** Each question (`#bucketAnswers`,
   `packages/stream/src/supervisor.ts`) now gives up after `READ_DEADLINE_MS` and the pause asks again.
 - **DONE (lane A's A44, #676): the stream's other bucket calls are bounded for a bucket that
@@ -7641,7 +7667,9 @@ it. Left open:
   in a job of their own"). The growth-per-sale
   question stays open, with one more reading: on its own runner the fill took 283 sales and 16.9 s
   for 11,766,720 bytes, about 41.6 KB a sale, where the shard before the change took 745 sales and
-  78.1 s (one run each). (2) DONE by A44 for the deadline: a question given up at it logs
+  78.1 s (one run each). (2026-09-29: CI's stream step now keeps these files in memory, A130;
+  fills measured after that were taken in memory, the readings above on disk.) (2) DONE by A44 for
+  the deadline: a question given up at it logs
   `stream.pause_check_failed` with `errorCode: "timeout"`. **DONE by lane A's A51 (#686):** a
   refused question is logged once per pause with the refusal's code. **DONE by lane A's A57
   (#697):** that line, and the supervisor's other lines for a bucket request that failed, also

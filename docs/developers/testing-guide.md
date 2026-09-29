@@ -578,6 +578,25 @@ and 14,907 ms beside 72, on the owner's Mac, which reports 18 CPUs (2026-09-26).
 `apps/server/src/boot.ts`, so the default 256 MiB limit applied, the same run failed with `timed out
 waiting for the fold-back: the stream reads {"state":"streaming",…}, the side file 27558712 bytes`.
 
+**In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests
+with `TMPDIR=/dev/shm`, pinned by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text. It
+is the CI step's environment, not `scratchParent()`, so a local run still uses the system temporary
+directory. Each test makes its scratch directory under `tmpdir()`, and that directory holds the
+server's database, Litestream's files and versitygw's bucket, so all of them move. Main run
+36559470238 (2026-09-29) failed with the slowest frozen sale at 1,228 ms. A probe with per-sale
+timing reproduced it on one runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill stage):
+that sale's commit took 1,017 ms. The next write waited 1,029 ms to begin, which the backlog's A130
+entry infers was Litestream's own checkpoint, and Linux's pressure counters showed every process
+stalled on the disk for 1,094 ms of that sale. The write queue wait was 0 ms and nothing waited on
+the bucket. `node:sqlite` commits synchronously on the main thread of the process the test runs the
+server in, so while a commit stalls no other request is served. With the stream switched off, sales
+still reached 790 ms on slow-disk runners. With `TMPDIR=/dev/shm`, 58 runs across 20 runners
+passed, and the slowest frozen sale was 104 ms (run 36575480881). So in CI no timed sale includes a
+commit waiting on the runner's disk. What it gave up, in CI only, is timing sales against a real
+disk, and with it any view there of how long a sale waits behind a Litestream checkpoint on a slow
+disk (`docs/backlog.md`, A130); its assertions are unchanged. How much of `/dev/shm` the two tests
+use, and its size on CI's runners, was not measured; the 58 runs passed with it.
+
 **A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
 listing and resumes once one is answered (`#bucketAnswers`, `packages/stream/src/supervisor.ts`).
 A server frozen with `SIGSTOP` answers the pending listing once it gets `SIGCONT`, as the pause test
