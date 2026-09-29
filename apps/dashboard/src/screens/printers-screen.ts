@@ -20,6 +20,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
+import "@waitron/ui/src/components/wt-spinner.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -201,6 +202,11 @@ export class PrintersScreen extends LitElement {
       }
       wt-data-table::part(bluetooth-problem) {
         color: var(--wt-color-danger);
+      }
+      wt-data-table::part(bluetooth-progress) {
+        display: flex;
+        gap: var(--wt-space-2);
+        align-items: center;
       }
 
       wt-data-table::part(job-status) {
@@ -512,6 +518,8 @@ export class PrintersScreen extends LitElement {
   #pairEpoch = 0;
   @state() private commands: Record<string, TrackedCommand> = {};
   @state() private armedForgetId: string | null = null;
+  /** Separate from `armedForgetId`, so a listed device's arm never matches a printer id. */
+  @state() private armedForgetDevice: string | null = null;
   @state() private forgetting = false;
   #commandTimer?: ReturnType<typeof setInterval>;
   #commandReadInFlight = false;
@@ -599,6 +607,7 @@ export class PrintersScreen extends LitElement {
     this.armedAllowId = null;
     this.armedDenyId = null;
     this.armedForgetId = null;
+    this.armedForgetDevice = null;
     try {
       await Promise.all([
         this.#queries.watch("listAgents", [], (agents) => {
@@ -1118,6 +1127,7 @@ export class PrintersScreen extends LitElement {
     const now = Date.now();
     const next = { ...this.commands };
     let changed = false;
+    let paired: [string, TrackedCommand] | undefined;
     for (const [key, tracked] of pending) {
       // Matched by id: a read sent before this command existed can still carry an earlier outcome.
       // Within one read an outcome wins over the deadline (answerBy is never before the server's own
@@ -1131,12 +1141,30 @@ export class PrintersScreen extends LitElement {
           ...(reported.error !== undefined && { error: reported.error }),
         };
         changed = true;
+        if (tracked.kind === "pair" && reported.state === "succeeded") paired ??= [key, tracked];
       } else if (now >= tracked.answerBy) {
         next[key] = { ...tracked, state: "no_answer" };
         changed = true;
       }
     }
     if (changed) this.commands = next;
+    if (paired) this.#addPaired(...paired);
+  }
+
+  /** Carries a successful pairing straight on into the form to add the device, unless another dialog
+   * is in the way; its row then offers Add. */
+  #addPaired(key: string, tracked: TrackedCommand): void {
+    const device = this.#listedDevice(key) ?? tracked.device!;
+    if (this.namingPrinter !== null || this.pairingDevice !== null || !this.#canAdd(device)) return;
+    this.formAttempted = false;
+    this.errorKey = null;
+    this.namingPrinter = device;
+  }
+
+  #listedDevice(key: string): DiscoveredPrinter | undefined {
+    return this.discovered.find(
+      (d) => d.transport === "bluetooth" && this.#commandKeyOf(d) === key,
+    );
   }
 
   async #commandTick(): Promise<void> {
@@ -1168,9 +1196,19 @@ export class PrintersScreen extends LitElement {
     this.#settleCommandPoll();
   }
 
+  /** Keeps reading while a command waits, and after a pairing succeeds until the agent reports the
+   * device paired, so Forget pairing can appear; never past the pairing's own deadline. */
   #settleCommandPoll(): void {
-    if (!Object.values(this.commands).some(({ state }) => state === "pending"))
-      this.#stopCommandPoll();
+    const now = Date.now();
+    const waiting = Object.entries(this.commands).some(
+      ([key, { kind, state, answerBy }]) =>
+        state === "pending" ||
+        (kind === "pair" &&
+          state === "succeeded" &&
+          now < answerBy &&
+          this.#listedDevice(key)?.paired !== true),
+    );
+    if (!waiting) this.#stopCommandPoll();
   }
 
   #stopCommandPoll(): void {
@@ -1241,6 +1279,15 @@ export class PrintersScreen extends LitElement {
     void this.#forget(device);
   }
 
+  #onForgetDevice(key: string, device: DiscoveredPrinter): void {
+    if (this.armedForgetDevice !== key) {
+      this.armedForgetDevice = key;
+      return;
+    }
+    this.armedForgetDevice = null;
+    void this.#forget(device);
+  }
+
   async #forget(device: DiscoveredPrinter): Promise<void> {
     this.errorKey = null;
     this.forgetting = true;
@@ -1257,22 +1304,28 @@ export class PrintersScreen extends LitElement {
   #renderCommand(key: string, command: TrackedCommand | undefined, test: string) {
     if (command === undefined) return nothing;
     const problem = command.state === "failed" || command.state === "no_answer";
-    return html`<span
-        part=${problem ? "bluetooth-status bluetooth-problem" : "bluetooth-status"}
-        role="status"
-        data-test=${test}
-        >${t(COMMAND_TEXT[command.kind][command.state])}${command.error === undefined ? "" : `: ${command.error}`}</span
-      >${
-        command.state === "pending"
-          ? nothing
-          : html`<wt-button
-              size="sm"
-              variant="ghost"
-              data-test=${`dismiss-${test}`}
-              @click=${() => this.#dismissCommand(key)}
-              >${t("printers.bluetooth_dismiss")}</wt-button
-            >`
-      }`;
+    const status = html`<span
+      part=${problem ? "bluetooth-status bluetooth-problem" : "bluetooth-status"}
+      role="status"
+      data-test=${test}
+      >${t(COMMAND_TEXT[command.kind][command.state])}${command.error === undefined ? "" : `: ${command.error}`}</span
+    >`;
+    if (command.kind === "pair" && command.state === "pending")
+      return html`<span part="bluetooth-progress"
+        ><wt-spinner decorative size="sm" data-test=${`${test}-progress`}></wt-spinner
+        >${status}</span
+      >`;
+    return html`${status}${
+      command.state === "pending"
+        ? nothing
+        : html`<wt-button
+            size="sm"
+            variant="ghost"
+            data-test=${`dismiss-${test}`}
+            @click=${() => this.#dismissCommand(key)}
+            >${t("printers.bluetooth_dismiss")}</wt-button
+          >`
+    }`;
   }
 
   #editPrinter(id: string, patch: Partial<EditablePrinter>): void {
@@ -2716,6 +2769,26 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
+  /** Forget pairing for a paired device with no printer row, such as one whose add was cancelled. */
+  #forgetDeviceAction(
+    d: DiscoveredPrinter,
+    key: string,
+    command: TrackedCommand | undefined,
+  ): TemplateResult | typeof nothing {
+    if (d.paired !== true || d.printerId !== null) return nothing;
+    // As on a printer row (#forgetAction): hidden once a forget succeeds, while the report lingers.
+    if (command?.kind === "forget" && command.state === "succeeded") return nothing;
+    const armed = this.armedForgetDevice === key;
+    return html`<wt-button
+      variant="danger"
+      data-test=${`forget-device-${this.#deviceKey(d)}`}
+      data-armed=${armed ? "true" : nothing}
+      ?disabled=${this.forgetting || command?.state === "pending"}
+      @click=${() => this.#onForgetDevice(key, d)}
+      >${armed ? t("printers.bluetooth_forget_confirm") : t("printers.bluetooth_forget")}</wt-button
+    >`;
+  }
+
   #renderNewPrinter(): TemplateResult | typeof nothing {
     if (!this.addingPrinter) return nothing;
     const addable = this.discovered.filter((d) => this.#canAdd(d));
@@ -2794,11 +2867,13 @@ export class PrintersScreen extends LitElement {
             `discovered-command-${this.#deviceKey(d)}`,
           );
           if (lost.has(d)) return html`<div part="bluetooth-actions">${status}</div>`;
-          // Pairing registers nothing: Add appears once the agent reports the device paired.
+          // A succeeded pairing counts as paired before the agent's own paired report arrives.
+          const paired =
+            d.paired === true || (command?.kind === "pair" && command.state === "succeeded");
           return html`<div part="bluetooth-actions">
             ${
-              d.paired === true
-                ? add
+              paired
+                ? html`${add}${this.#forgetDeviceAction(d, key, command)}`
                 : html`<wt-button
                     variant="primary"
                     data-test=${`pair-${this.#deviceKey(d)}`}
@@ -2826,6 +2901,7 @@ export class PrintersScreen extends LitElement {
       @wt-close=${() => {
         this.addingPrinter = false;
         this.namingPrinter = null;
+        this.armedForgetDevice = null;
         this.#endScan();
         this.commands = Object.fromEntries(
           Object.entries(this.commands).filter(([, command]) => command.kind !== "pair"),
