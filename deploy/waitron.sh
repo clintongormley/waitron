@@ -110,11 +110,12 @@ fetch_box_files() {
 }
 
 # 2b. The print agent's AppArmor profile, from the INSTALLED ref like compose.yml. Docker's default
-#     profile keeps the agent off the system bus, so bluetoothctl cannot reach BlueZ; this one lets it.
-#     .env names the profile only once apparmor_parser has loaded it, because Docker refuses to start
-#     a container that names a profile the host has not loaded — compose then falls back to
-#     docker-default rather than leaving the agent down. Written into /etc/apparmor.d, the folder the
-#     boot-time apparmor.service loads profiles from.
+#     profile keeps the agent off the system bus, so bluetoothctl cannot reach BlueZ; this one allows
+#     the bus messages bluetoothctl's listing and scan send. .env names the profile only once
+#     apparmor_parser has loaded it, because Docker refuses to start a container that names a profile
+#     the host has not loaded — compose then falls back to docker-default rather than leaving the
+#     agent down. Written into /etc/apparmor.d so the boot-time apparmor.service can load it again;
+#     that reload after a reboot is not yet measured.
 PRINT_AGENT_PROFILE=/etc/apparmor.d/waitron-print-agent
 load_print_agent_apparmor() {
   local ref="$1" tmp
