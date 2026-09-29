@@ -300,6 +300,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The password is too short",
     es: "La contraseña es demasiado corta",
   },
+  "locale.unsupported": {
+    en: "That language isn't available. Choose another.",
+    es: "Ese idioma no está disponible. Elige otro.",
+  },
   "account_action.invalid": {
     en: "This link is invalid or has expired. Request a new one.",
     es: "Este enlace no es válido o ha caducado. Solicita uno nuevo.",

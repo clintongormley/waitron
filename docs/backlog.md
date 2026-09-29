@@ -3904,17 +3904,18 @@ ongoing overhaul listed at the top of Track A.
   `management.request_invalid` naming `passphrase` would read only "The configuration export could not be created." at the bottom — read,
   not run, as unreachable from this form, because the client refuses a passphrase shorter than 12
   (`MIN_KEY_LENGTH`) before sending and the server's check is the same `length < 12`
-  (`apps/server/src/configuration-export-api.ts`); (12) the profile screen now puts two refusals
-  under their field whose sentences do not fit there: `account_action.invalid` under the emailed
-  code reads as a link that is invalid or has expired, and `locale.unsupported` has no entry in
-  `apps/dashboard/src/i18n/codes.ts`, so the language select shows the generic fallback sentence;
+  (`apps/server/src/configuration-export-api.ts`); (12) DONE by C61: the profile screen's two refusals
+  placed under a field now read as that field's — `account_action.invalid` under the emailed code
+  says the code is incorrect or no longer valid (`profile.email_code_refused`, used only in the
+  screen's email mode; the code's own link sentence stays for the login screen's links), and
+  `locale.unsupported` has its own sentence in `apps/dashboard/src/i18n/codes.ts`;
   (13) the categories screen's change-main-category dialog draws its message above the picker (it
   did before C54), and since C54 that message reads "Correct the highlighted fields to continue."
   when a refusal is placed under the picker — a summary at the top, which Forms forbids; moving it
   beside the action (inside `wt-form-actions`' shadow root) changes two assertions older than
   C54 that read `p[role="alert"]` from the dialog (`apps/dashboard/src/screens/categories-screen.test.ts`),
-  so it waits for the owner. **Next action:** the owner decides which of (1)–(13) are worth doing;
-  (4), (5) and (13) look like defects.
+  so it waits for the owner. **Next action:** the owner decides which of the open points are worth
+  doing; (4), (5) and (13) look like defects.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

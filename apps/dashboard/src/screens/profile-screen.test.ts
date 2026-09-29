@@ -1128,7 +1128,8 @@ describe("your profile — errors beside Save, not above the form", () => {
     await click(el, "confirm-email");
     input(el, "setupCode", "123456");
     await click(el, "save");
-    expect(field(el, "setupCode").error).toBe(codeMessage("account_action.invalid"));
+    // The code's own sentence speaks of a link; under a code field the screen says code.
+    expect(field(el, "setupCode").error).toBe("Este código no es correcto o ya no es válido.");
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(await nativeSaveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(focused(el, "setupCode")).toBe(true));
@@ -1148,7 +1149,7 @@ describe("your profile — errors beside Save, not above the form", () => {
     const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
     expect(language.getAttribute("aria-invalid")).toBe("true");
     const described = el.shadowRoot!.getElementById(language.getAttribute("aria-describedby")!)!;
-    expect(described.textContent!.trim()).toBe(codeMessage("locale.unsupported"));
+    expect(described.textContent!.trim()).toBe("Ese idioma no está disponible. Elige otro.");
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(await nativeSaveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(language));

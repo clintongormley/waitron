@@ -378,3 +378,12 @@ it("says a booking's table needs clearing on the till first, in both languages",
     "Esa mesa está por recoger. Márcala como recogida en la caja e inténtalo de nuevo",
   );
 });
+
+it("has a sentence of its own for an unsupported language, in both languages", () => {
+  expect(codeMessage("locale.unsupported", "en")).toBe(
+    "That language isn't available. Choose another.",
+  );
+  expect(codeMessage("locale.unsupported", "es")).toBe(
+    "Ese idioma no está disponible. Elige otro.",
+  );
+});
