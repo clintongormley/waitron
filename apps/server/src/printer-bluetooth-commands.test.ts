@@ -98,7 +98,7 @@ describe("printer Bluetooth commands", () => {
       { id: "c2", kind: "forget", address: B },
     ]);
     // A duplicate does not extend the original command's life.
-    clock.now += 30_000;
+    clock.now += 90_000;
     expect(commands.current("agent-1")).toEqual([{ id: "c2", kind: "forget", address: B }]);
   });
 
@@ -114,7 +114,7 @@ describe("printer Bluetooth commands", () => {
     commands.accept("agent-1", [{ id: "c1", ok: false, error: "wrong PIN" }]);
     expect(commands.latest("agent-1", A)).toEqual(retyped);
     // The replacement's life starts at the retype.
-    clock.now += 59_999;
+    clock.now += 119_999;
     expect(commands.current("agent-1")).toHaveLength(1);
     commands.enqueue("agent-1", "pair", A);
     expect(commands.current("agent-1")).toEqual([{ id: "c3", kind: "pair", address: A }]);
@@ -161,20 +161,35 @@ describe("printer Bluetooth commands", () => {
       expect.objectContaining({ code: "printer.bluetooth_command_busy" }),
     );
 
-    clock.now += 60_000;
+    clock.now += 120_000;
     expect(commands.enqueue("agent-1", "forget", address(10))).toMatchObject({ id: "c11" });
   });
 
-  it("expires a pending command 60 seconds after it was queued, with no result", () => {
+  it("expires a pending command 120 seconds after it was queued, with no result", () => {
     const { clock, commands } = store();
     commands.enqueue("agent-1", "pair", A, "0000");
-    clock.now += 59_999;
+    clock.now += 119_999;
     expect(commands.current("agent-1")).toHaveLength(1);
     clock.now += 1;
     expect(commands.current("agent-1")).toEqual([]);
     expect(commands.latest("agent-1", A)).toBeUndefined();
     commands.accept("agent-1", [{ id: "c1", ok: true }]);
     expect(commands.latest("agent-1", A)).toBeUndefined();
+  });
+
+  it("accepts a slow pair's outcome that arrives 90 seconds after it was queued", () => {
+    const { clock, commands } = store();
+    commands.enqueue("agent-1", "pair", A, "0000");
+    clock.now += 90_000;
+    commands.accept("agent-1", [{ id: "c1", ok: false, error: "pairing did not complete" }]);
+    expect(commands.latest("agent-1", A)).toEqual({
+      id: "c1",
+      kind: "pair",
+      address: A,
+      state: "failed",
+      error: "pairing did not complete",
+    });
+    expect(commands.current("agent-1")).toEqual([]);
   });
 
   it("expires a result 60 seconds after its outcome was accepted", () => {

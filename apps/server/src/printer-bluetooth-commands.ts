@@ -30,8 +30,11 @@ interface AgentCommands {
   results: Map<string, Result>;
 }
 
-const MAX_PER_AGENT = 8;
-const COMMAND_TTL_MS = 60_000;
+const MAX_PENDING_PER_AGENT = 8;
+const MAX_RESULTS_PER_AGENT = 8;
+/** Outlasts the agent's slowest command: 10 s to register, a 75 s pair timeout and 5 s exit grace
+ * (apps/print-agent/src/bluetooth-command.ts), then the pull that carries its outcome. */
+const COMMAND_TTL_MS = 120_000;
 const RESULT_TTL_MS = 60_000;
 
 function statusOf({ id, kind, address }: BluetoothCommand): BluetoothCommandStatus {
@@ -85,7 +88,7 @@ export function createPrinterBluetoothCommands(
       const existing = agents.get(agentId)?.pending.get(address);
       if (existing?.command.kind === kind && existing.command.pin === heldPin)
         return statusOf(existing.command);
-      if (!existing && (agents.get(agentId)?.pending.size ?? 0) >= MAX_PER_AGENT)
+      if (!existing && (agents.get(agentId)?.pending.size ?? 0) >= MAX_PENDING_PER_AGENT)
         throw new AppError("printer.bluetooth_command_busy", {});
       // A changed kind or PIN takes a fresh id: the agent never reruns an id it has taken.
       const command: BluetoothCommand = { id: newId(), kind, address };
@@ -118,7 +121,7 @@ export function createPrinterBluetoothCommands(
           };
           if (!outcome.ok && outcome.error !== undefined) status.error = outcome.error;
           agent.results.set(address, { status, expiresAt: instant + RESULT_TTL_MS });
-          if (agent.results.size > MAX_PER_AGENT)
+          if (agent.results.size > MAX_RESULTS_PER_AGENT)
             agent.results.delete(agent.results.keys().next().value!);
           break;
         }
