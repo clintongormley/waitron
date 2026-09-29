@@ -48,7 +48,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_found": 404,
   "table.inactive": 400,
   "tab.already_open": 409,
-  "table.needs_cleaning": 409,
+  "table.needs_clearing": 409,
 };
 
 const run = createErrorBoundary(STATUS, "booking.failed");

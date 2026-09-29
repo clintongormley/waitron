@@ -166,7 +166,7 @@ describe("bookings seat route → real seatTable", () => {
     });
   });
 
-  it("refuses seating a booking at a table that needs cleaning with 409 table.needs_cleaning", async () => {
+  it("refuses seating a booking at a table that needs clearing with 409 table.needs_clearing", async () => {
     const v = await setupVenue();
     const app = mountApp(v.ctx);
     const tableId = await withTransaction(db, async (tx: Transaction) => {
@@ -198,7 +198,7 @@ describe("bookings seat route → real seatTable", () => {
 
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
-      error: { code: "table.needs_cleaning", params: { tableId } },
+      error: { code: "table.needs_clearing", params: { tableId } },
     });
     await withTransaction(db, async (tx) => {
       const booking = await tx.execute<{ status: string; tab_id: string | null }>(
@@ -209,10 +209,10 @@ describe("bookings seat route → real seatTable", () => {
         sql`select count(*) as n from parties where state = 'open'`,
       );
       expect(open.rows[0]!.n).toBe(0);
-      const table = await tx.execute<{ needs_cleaning_since: string | null }>(
-        sql`select needs_cleaning_since from dining_tables where id = ${tableId}`,
+      const table = await tx.execute<{ needs_clearing_since: string | null }>(
+        sql`select needs_clearing_since from dining_tables where id = ${tableId}`,
       );
-      expect(table.rows[0]!.needs_cleaning_since).not.toBeNull();
+      expect(table.rows[0]!.needs_clearing_since).not.toBeNull();
     });
   });
 });

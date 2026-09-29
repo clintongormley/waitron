@@ -3369,7 +3369,7 @@ export class TillTableOrderScreen extends LitElement {
 
   #freeTables(): TableState[] {
     return this.tables.filter(
-      (table) => table.state === "free" && table.condition !== "needs_cleaning",
+      (table) => table.state === "free" && table.condition !== "needs_clearing",
     );
   }
 

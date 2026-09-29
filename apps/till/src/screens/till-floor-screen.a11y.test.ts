@@ -209,7 +209,7 @@ const party = {
   reminder: null,
 };
 
-/** A party still owing, a paid party, and two tables a finished party left needing cleaning. */
+/** A party still owing, a paid party, and two tables a finished party left needing clearing. */
 const partyTables: TableState[] = [
   {
     ...tables[0]!,
@@ -246,7 +246,7 @@ const partyTables: TableState[] = [
     status: null,
     nextReservation: null,
     state: "free",
-    condition: "needs_cleaning",
+    condition: "needs_clearing",
     party: null,
   })),
 ];

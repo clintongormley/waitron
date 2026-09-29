@@ -235,11 +235,11 @@ it("explains a snooze refused because another group is the one waiting, in both 
   ]);
 });
 
-it("says a table needs cleaning, and that a table has gone, in both languages", () => {
-  expect(codeMessage("table.needs_cleaning", "en")).toBe(
+it("says a table needs clearing, and that a table has gone, in both languages", () => {
+  expect(codeMessage("table.needs_clearing", "en")).toBe(
     "That table needs clearing first. Mark it cleared, then try again",
   );
-  expect(codeMessage("table.needs_cleaning", "es")).toBe(
+  expect(codeMessage("table.needs_clearing", "es")).toBe(
     "Esa mesa está por recoger. Márcala como recogida e inténtalo de nuevo",
   );
   expect(codeMessage("table.not_found", "en")).toBe("That table no longer exists");

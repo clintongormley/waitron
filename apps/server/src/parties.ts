@@ -496,10 +496,10 @@ export async function readBillsOfParties(
 
 /**
  * The tables' parties have left them: their memberships end, their tab pointer and manual status go,
- * and, where the venue's clearing setting is on, each needs cleaning from `at` until
+ * and, where the venue's clearing setting is on, each needs clearing from `at` until
  * {@link markTableCleared}.
  */
-export async function leaveForCleaning(
+export async function leaveForClearing(
   tx: Transaction,
   tableIds: readonly string[],
   at: string,
@@ -508,14 +508,14 @@ export async function leaveForCleaning(
   const clearing = await VENUE_SERVICE.readClearingWorkflow(tx);
   await tx
     .update(diningTables)
-    .set({ tabId: null, statusId: null, ...(clearing ? { needsCleaningSince: at } : {}) })
+    .set({ tabId: null, statusId: null, ...(clearing ? { needsClearingSince: at } : {}) })
     .where(inArray(diningTables.id, [...tableIds]));
 }
 
 /**
  * Finish the party's table: refused while any bill of the party's family is placed or open with
  * items on it; an empty open bill is abandoned. The party then closes and leaves its tables
- * ({@link leaveForCleaning}).
+ * ({@link leaveForClearing}).
  */
 export async function finishTable(
   tx: Transaction,
@@ -558,7 +558,7 @@ export async function finishTable(
     .update(parties)
     .set({ state: "closed", closedAt: at, closedBy: args.operatorId })
     .where(eq(parties.id, partyId));
-  await leaveForCleaning(tx, tables, at);
+  await leaveForClearing(tx, tables, at);
   return { state: "closed" };
 }
 
@@ -566,7 +566,7 @@ export async function finishTable(
 export async function markTableCleared(tx: Transaction, tableId: string): Promise<void> {
   const cleared = await tx
     .update(diningTables)
-    .set({ needsCleaningSince: null })
+    .set({ needsClearingSince: null })
     .where(eq(diningTables.id, tableId))
     .returning({ id: diningTables.id });
   if (cleared.length === 0) throw new AppError("table.not_found", { tableId });
