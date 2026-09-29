@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Waitron's AppArmor profile for the print-agent container. Everything above the D-Bus section is
-# Docker's own `docker-default` profile, copied from moby/profiles apparmor/template.go at
-# f0494f1fbb1bbaf2e1b02ee20aab206f32456a63 (Copyright The Moby Authors, Apache-2.0; the licence text
-# is deploy/third-party/licenses/Apache-2.0.txt), with the profile name filled in. The D-Bus section
+# Moby's `docker-default` template, copied from moby/profiles apparmor/template.go at
+# f0494f1fbb1bbaf2e1b02ee20aab206f32456a63 with the profile name filled in; what a given Docker
+# version generates from its own copy may differ. That template is Copyright The Moby Authors,
+# licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0; in
+# the Waitron repository, deploy/third-party/licenses/Apache-2.0.txt). The D-Bus section
 # at the end is Waitron's addition: `docker-default` has no D-Bus rules, so the system bus refuses
 # the container's first message (`Hello`) and `bluetoothctl` cannot reach BlueZ at all.
 #
@@ -42,8 +44,9 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
   signal (receive) peer=runc,
   # crun may send signals to container processes (for "docker stop" when used with crun OCI runtime).
   signal (receive) peer=crun,
-  # dockerd may send signals to container processes (for "docker kill"). Docker fills in dockerd's
-  # own label here, and dockerd runs unconfined on a stock Docker host.
+  # dockerd may send signals to container processes (for "docker kill"). The template fills in
+  # dockerd's own label here; dockerd ran as `unconfined` on a GitHub Ubuntu 24.04 runner with
+  # Docker 28.0.4 (`ps -eo pid,comm,label`, run 36558516384). A confined dockerd was not measured.
   signal (receive) peer=unconfined,
   # Container processes may send signals amongst themselves.
   signal (send,receive) peer=waitron-print-agent,

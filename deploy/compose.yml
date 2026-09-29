@@ -117,13 +117,6 @@ services:
       WAITRON_SERVER_URL: ${WAITRON_PRINT_AGENT_SERVER_URL:-https://127.0.0.1}
       WAITRON_BOX_ADDRESSES: ${WAITRON_BOX_ADDRESSES:-}
       WAITRON_SETUP_URL: ${WAITRON_PRINT_AGENT_SETUP_URL:-}
-    # USB printer access, hot-plug safe. Measured on the real box 2026-09-10 (spec §5): a hard
-    # `devices:` line refuses to start with no printer; a /dev/usb subdirectory mount goes stale on
-    # re-plug. Mounting the whole /dev read-only plus the usblp char-device major (180) lets the node
-    # user reach /dev/usb/lpN after a hot-plug. The cgroup rule ADDS major 180 to Docker's default
-    # device whitelist (null, zero, full, random, tty, …); :ro still permits writing an existing
-    # device node but refuses mknod, and a class that is neither a Docker default nor 180 (e.g.
-    # hidraw) is denied.
     # Docker's default AppArmor profile refuses the system bus, so bluetoothctl cannot reach BlueZ;
     # deploy/apparmor/waitron-print-agent allows it. waitron.sh names that profile in .env only after
     # loading it, because Docker refuses to start a container naming a profile the host has not loaded
@@ -131,6 +124,13 @@ services:
     # on Docker Desktop 29.3.0).
     security_opt:
       - "apparmor=${WAITRON_PRINT_AGENT_APPARMOR:-docker-default}"
+    # USB printer access, hot-plug safe. Measured on the real box 2026-09-10 (spec §5): a hard
+    # `devices:` line refuses to start with no printer; a /dev/usb subdirectory mount goes stale on
+    # re-plug. Mounting the whole /dev read-only plus the usblp char-device major (180) lets the node
+    # user reach /dev/usb/lpN after a hot-plug. The cgroup rule ADDS major 180 to Docker's default
+    # device whitelist (null, zero, full, random, tty, …); :ro still permits writing an existing
+    # device node but refuses mknod, and a class that is neither a Docker default nor 180 (e.g.
+    # hidraw) is denied.
     device_cgroup_rules:
       - "c 180:* rwm"
     group_add:
@@ -139,9 +139,10 @@ services:
     volumes:
       - print_agent:/var/lib/waitron-print-agent
       - /dev:/dev:ro
-      # BlueZ's system DBus socket for `bluetoothctl` scan/pair. Long syntax with create_host_path:
-      # false so a host without DBus fails the mount loudly rather than having Docker create a
-      # directory where the socket should be.
+      # BlueZ's system DBus socket for `bluetoothctl` (pairing is not yet allowed by
+      # deploy/apparmor/waitron-print-agent). Long syntax with create_host_path: false so a host
+      # without DBus fails the mount loudly rather than having Docker create a directory where the
+      # socket should be.
       - type: bind
         source: /run/dbus/system_bus_socket
         target: /run/dbus/system_bus_socket

@@ -307,6 +307,30 @@ The cgroup rule ADDS major 180 to Docker's default device whitelist (null, zero,
 tty, …); a class that is neither a Docker default nor 180 (e.g. hidraw) is what gets denied. Pinned
 by `scripts/deploy-image-env.test.ts`; built in #308.
 
+## The print agent runs under its own AppArmor profile, and a new `bluetoothctl` call needs a new bus rule
+
+Docker's default AppArmor profile refuses the system bus, so under it `bluetoothctl` cannot reach
+BlueZ: on the owner's box (2026-09-29) the bus refused the agent's first message, `Hello`, and the
+agent listed no Bluetooth printers. `deploy/apparmor/waitron-print-agent` is Moby's `docker-default`
+template plus bus rules for the messages `bluetoothctl list`, `devices` and `scan` were seen to send
+against a stand-in BlueZ (`scripts/fake-bluez.py`); every other bus message is refused, pairing
+included. `waitron.sh install` loads it where AppArmor is on and only then writes
+`WAITRON_PRINT_AGENT_APPARMOR` to `.env`; `deploy/compose.yml` falls back to `docker-default`
+without it. The order matters because Docker refuses to start a container naming a profile the host
+has not loaded — measured 2026-09-29 on a GitHub runner (Ubuntu 24.04.5, Docker 28.0.4, AppArmor
+parser 4.0.1), with both `docker run` and compose. Docker Desktop 29.3.0, which has no AppArmor,
+ignored the option.
+
+So a change that makes the agent run a new `bluetoothctl` command, or an old one that sends a message
+it did not before, is refused at the bus until the profile gains a rule for it. Nothing outside
+image-smoke runs the agent under the profile, and on a pull request image-smoke runs only when a
+path under `deploy/` changed (`isImageInputPath`, `scripts/changed-scope.mjs`; the `image` job's
+`if:` in `.github/workflows/ci.yml`); on a push to `main` it runs whenever code changed. Its
+Bluetooth step runs the `bluetoothctl` commands written into the step, not the agent's own code, so
+a new call is checked only once the step runs it too. `scripts/deploy-image-env.test.ts` reads the
+profile as text and checks that every bus rule names its members; it does not notice a member list
+that has grown. Built in A129; the receipts are in the profile's header.
+
 **The recovery page**
 
 ## The unauthenticated recovery page: curated title and action, and the failed start's own lines

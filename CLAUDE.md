@@ -354,6 +354,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A container that must reach a hot-plugged USB printer mounts `/dev:/dev:ro`**, plus
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
+- **The print agent runs under `deploy/apparmor/waitron-print-agent`, named through
+  `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it** — Docker refuses to start a
+  container naming an unloaded profile (measured on Docker 28.0.4, Ubuntu 24.04). A new
+  `bluetoothctl` call needs a new bus rule, and on a pull request image-smoke runs only when
+  `deploy/` changed, so a change to `apps/print-agent` alone is not checked against the profile.
+  Guards, weaker than their names: image-smoke's Bluetooth step runs only the `bluetoothctl`
+  commands written into it, not the agent's own calls; the bus-rule case in
+  `scripts/deploy-image-env.test.ts` reads the profile as TEXT and checks only that each rule names
+  a member. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail shows the failed start's own lines — the error, its cause chain (up to five
   levels in all), the stack and an `AppError`'s params — through `redactSecrets` and

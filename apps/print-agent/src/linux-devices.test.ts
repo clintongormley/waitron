@@ -161,7 +161,7 @@ describe("createLinuxDevices — devices that report no make or model", () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
       devRoot: "/dev",
-      // The Bluetooth entry does not fully pin `pairedLocal`'s no-name path: were it to set
+      // The Bluetooth entry does not fully pin `toLocal`'s no-name path: were it to set
       // `model: undefined`, `dropPath` would drop the key again and this would still pass.
       bluetooth: fakeBluetooth({ paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF" }] }),
       btDevicePath: () => "/dev/rfcomm0",

@@ -5,8 +5,9 @@ name: image-smoke
 # steps exist once: ci.yml's `image` job (scoped to deploy changes on a pull request, and gating
 # `publish` on every main push) and image-nightly.yml (the scheduled + on-request safety net).
 #
-# It earns its place by proving the one thing no developer's machine can. The runner is real Linux,
-# so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that namespace keeps
+# It earns its place by proving two things no developer's machine can. First, the print agent
+# reaches BlueZ under its own AppArmor profile, an option Docker Desktop ignores (measured on 29.3.0;
+# deploy/compose.yml). Second, the runner is real Linux, so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that namespace keeps
 # the kernel's ip_unprivileged_port_start=1024, so a non-root process reaches 443 only because the
 # image sets cap_net_bind_service on node. Docker Desktop's "host" network is its own Linux VM's, so
 # a Mac stack-up has to override the file to bridge + published ports, and Docker's bridge namespace
@@ -35,9 +36,10 @@ jobs:
       - uses: actions/checkout@v7
 
       # deploy/.env is where waitron.sh puts a real box's and it is gitignored, so compose reads it
-      # with no flag. It carries nothing but the two tags this job builds, so compose runs those rather
-      # than resolving the published `:main` images and pulling them. It is written first so every
-      # later step reads the same file, the `if: always()` teardown included.
+      # with no flag. It carries the two tags this job builds, so compose runs those rather than
+      # resolving the published `:main` images and pulling them, and the AppArmor profile line
+      # waitron.sh writes on a box with AppArmor. It is written first so every later step reads the
+      # same file, the `if: always()` teardown included.
       - name: Point compose at the images this job builds
         run: |
           set -euo pipefail

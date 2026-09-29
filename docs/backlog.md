@@ -2248,7 +2248,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) leave the
   optional agent Bluetooth command channel and the manager-only dashboard Pair/Forget controls
   open as their next two branches. Before either starts, the box's BlueZ pairing, `Trusted`,
-  reconnection and remove behavior still needs the plan's real-radio receipt.
+  reconnection and remove behavior still needs the plan's real-radio receipt, taken with pairing
+  allowed: the agent's shipped AppArmor profile refuses it (A129, B6).
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.
@@ -4329,16 +4330,25 @@ approved.
     (`Device1.Pair`), nor anything BlueZ calls back into `bluetoothctl` while pairing (its agent,
     `org.bluez.Agent1`), nor a property write (`trust`); P2b's real-box measurement decides these
     and adds only what it needs.
-  - **The owner's box check:** remove the temporary `compose.override.yml`, reinstall, and run
-    `docker compose exec print-agent bluetoothctl list` (handoff `2026-09-29-bluetooth-measurement`).
+  - **The owner's box, in this order.** First take the plan's real-box pairing measurement with the
+    temporary `compose.override.yml` (`apparmor=unconfined`) still in place, because the shipped
+    profile refuses pairing. Then remove the override, reinstall, and check that
+    `docker compose exec print-agent bluetoothctl list` answers under the profile.
   - **The setup page's HTML says nothing about it** — only `/status.json` and the log do. The page
     is English-only, with no language switch to carry a Spanish line.
-  - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured with a
-    profile lacking the BlueZ rules, `bluetoothctl devices Paired` printed "No default controller
-    available" and exited 0.
+  - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
+    2026-09-29 on a GitHub ubuntu-latest runner (Ubuntu 24.04.5, bluetoothctl 5.82, run
+    36559399185) against the stand-in BlueZ, with a profile that allowed the bus daemon's own
+    messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed "No default
+    controller available" and exited 0. The latest runs against the shipped rules are 36562032152
+    and 36562581079 (the first printed Docker 28.0.4 and AppArmor parser 4.0.1).
   - **Reloading at boot is read, not tried:** the profile is written to `/etc/apparmor.d`, the
     folder Ubuntu 24.04's `apparmor.service` loads from before `sysinit.target`; no box has been
-    restarted with it.
+    restarted with it. If a restart does not reload it, `.env` still names it and Docker will refuse
+    to start the print agent.
+  - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
+    the agent has joined and is not out of touch, `/status.json` answers only loopback callers
+    (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
 - **A sweep in flight keeps connecting after the discovery window closes** (189 of 253 connects on
   #313 started after expiry). Pass the deadline through `Host.scan`. The office-printer paper-size

@@ -76,7 +76,8 @@ ensure_docker() {
 
 # .env line editing: set/replace or remove a KEY, preserving 0600 and never touching other lines. It
 # CREATES .env when there is none, which is now the normal first install — the box has no pre-boot
-# secret, so a plain `install` writes nothing here and a branch install writes only the image pins.
+# secret, so a plain `install` writes only WAITRON_PRINT_AGENT_APPARMOR, and only on a box where it
+# loaded that profile (load_print_agent_apparmor); a branch install adds the image pins.
 # The rewrite is ATOMIC — the new content is built in a temp file BESIDE .env and renamed onto it only
 # after the write fully succeeds. It never truncates .env in place: a write that failed mid-way there
 # would empty the file and lose whichever image the box is pinned to, after which a bare

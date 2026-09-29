@@ -59,8 +59,9 @@ RUN set -eux; \
 # Print-agent stage — the box-local bridge to USB/network/Bluetooth printers.
 # A SEPARATE image from the app (its own compose service), built with
 # `--target print-agent`. bluez supplies bluetoothctl, which the Bluetooth
-# pair path spawns; node:24-alpine never carried it. Runs as the unprivileged
-# `node` user the base image already ships (uid 1000).
+# pair path spawns (pairing is not yet allowed by
+# deploy/apparmor/waitron-print-agent); node:24-alpine never carried it.
+# Runs as the unprivileged `node` user the base image already ships (uid 1000).
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS print-agent
 RUN set -eux; \
