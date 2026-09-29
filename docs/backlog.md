@@ -776,14 +776,17 @@ services screen now follows design-system.md's "Typography roles" table, as
 bold. A computed-style case in `cloud-services-screen.test.ts` checks every label and value on a
 screen showing a completed replacement.
 
-**Open: the Cloud services screen writes its dates in the browser's language, not the dashboard's.**
-It formats them with `toLocaleString()` and no locale argument, so with Spanish chosen in the
-dashboard, a browser set to US English shows "9/29/2026, 1:43:33 PM" (seen on C75's Spanish
-screenshots, taken in a US-English headless Chromium). `backup-screen.ts` and
-`stream-settings-panel.ts` format the same way, and `apps/dashboard/src/screens/profile-screen.ts`
-writes a passkey's creation date with `toLocaleDateString()`, also with no locale. A pattern that
-follows the dashboard's language is `formatAlertTime` in `apps/dashboard/src/widgets/alert-format.ts`,
-which uses `new Intl.DateTimeFormat(currentLocale(), …)`. Found by C75, not fixed there.
+**Fixed (C76): the Cloud services and Backups screens, and the Backups screen's bucket-copy
+panel, write their dates in the dashboard's language, not the browser's.** Found by C75: with
+Spanish chosen in the dashboard, a browser set to US English showed "9/29/2026, 1:43:33 PM". Each
+date now passes `currentLocale()` to `toLocaleString`, as `formatAlertTime`
+(`apps/dashboard/src/widgets/alert-format.ts`) already passed it to `Intl.DateTimeFormat`. Each date
+still shows the day, month, year and the time with seconds. One case each for the Backups screen
+and the bucket-copy panel, and two for Cloud services (one per state that shows a date), set the
+dashboard to Spanish in the English-language test browser and check the Spanish form. **Still open:**
+`apps/dashboard/src/screens/profile-screen.ts` writes a passkey's creation date with
+`toLocaleDateString()` and no locale, so it still follows the browser; it was found by the same
+search and left out of C76, which named the Cloud services, Backups and bucket-copy dates.
 
 **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
 page background, in the light theme.** Measured against the shipped values in

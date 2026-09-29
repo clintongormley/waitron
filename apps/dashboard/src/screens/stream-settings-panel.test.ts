@@ -572,12 +572,25 @@ describe("stream-settings-panel: once set up", () => {
     expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
     expect(text(el, "[data-test=stream-lag]")).toBe(t("stream.status.lag_none"));
     expect(text(el, "[data-test=stream-last]")).toBe(
-      new Date(STREAMING.lastConfirmedUploadAt).toLocaleString(),
+      new Date(STREAMING.lastConfirmedUploadAt).toLocaleString(currentLocale()),
     );
     expect(q(el, "[data-test=kit]")).toBeNull();
     await press(el, "show-kit");
     expect(text(el, "[data-test=kit]")).toBe(KIT);
     expect(q(el, "[data-test=show-kit]")).toBeNull();
+  });
+
+  it("writes the last confirmed copy in the dashboard's language, not the browser's", async () => {
+    const at = STREAMING.lastConfirmedUploadAt;
+    expect(new Date(at).toLocaleString()).not.toBe(new Date(at).toLocaleString("es-ES"));
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mount(stubApi({}, ON));
+      expect(text(el, "[data-test=stream-last]")).toBe(new Date(at).toLocaleString("es-ES"));
+    } finally {
+      setLocale(before);
+    }
   });
 
   it.each([

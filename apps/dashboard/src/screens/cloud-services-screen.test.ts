@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { DashboardApi } from "../api/client.js";
 import { CloudServicesScreen } from "./cloud-services-screen.js";
@@ -518,3 +518,58 @@ it("draws each label at the normal weight, small and muted, and each value bold,
     expect([value.fontWeight, value.color, value.fontSize]).toEqual([bold, text, body]);
   }
 });
+
+for (const shown of ["complete", "awaiting_cloud"] as const)
+  it(`writes the ${shown} screen's dates in the dashboard's language, not the browser's`, async () => {
+    const at = "2026-09-29T13:43:33Z";
+    expect(new Date(at).toLocaleString()).not.toBe(new Date(at).toLocaleString("es"));
+    const before = currentLocale();
+    setLocale("es");
+    try {
+      const state =
+        shown === "complete"
+          ? {
+              state: "complete",
+              configured: true,
+              isPrimary: true,
+              code: "",
+              legalBusinessName: "Sol SL",
+              installation: {
+                state: "active",
+                revision: 2,
+                lastContactAt: at,
+                leaseExpiresAt: at,
+                services: [
+                  {
+                    service: "remote_access",
+                    state: "ready",
+                    health: "healthy",
+                    failure: null,
+                    observedAt: at,
+                  },
+                ],
+              },
+            }
+          : {
+              state: "awaiting_cloud",
+              configured: true,
+              isPrimary: true,
+              code: "12345678",
+              requestId,
+              organisationId,
+              legalBusinessId,
+              expiresAt: at,
+            };
+      const api = new DashboardApi("", async () => Response.json(state));
+      const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", {
+        api,
+      });
+      await flush(el);
+      const times = [...el.shadowRoot!.querySelectorAll("time")];
+      expect(times.length).toBeGreaterThan(0);
+      for (const time of times)
+        expect(time.textContent).toBe(new Date(time.dateTime).toLocaleString("es"));
+    } finally {
+      setLocale(before);
+    }
+  });

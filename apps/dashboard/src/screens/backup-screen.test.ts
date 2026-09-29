@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
@@ -1667,5 +1667,31 @@ describe("backup-screen retention boxes", () => {
     expect(alertText(el)).toBe(codeMessage("backup.request_invalid"));
     expect(boxError(el, "count")).toBeNull();
     expect(boxError(el, "days")).toBeNull();
+  });
+});
+
+describe("backup-screen dates", () => {
+  it("writes the last backup and the key rotation in the dashboard's language, not the browser's", async () => {
+    const status = ENABLED.backupStatus;
+    if (!status.configured) throw new Error("the ENABLED fixture must carry backup freshness");
+    const lastBackupAt = status.destinations[0]!.lastBackupAt!;
+    const keyRotatedAt = "2026-09-05T09:00:00Z";
+    expect(new Date(lastBackupAt).toLocaleString()).not.toBe(
+      new Date(lastBackupAt).toLocaleString("es-ES"),
+    );
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+        api: stubApi({}, { ...ENABLED, keyRotatedAt }),
+      });
+      await flush(el);
+      expect(q(el, "[data-test=key-rotated]")!.textContent!.trim()).toBe(
+        new Date(keyRotatedAt).toLocaleString("es-ES"),
+      );
+      expect(el.shadowRoot!.textContent).toContain(new Date(lastBackupAt).toLocaleString("es-ES"));
+    } finally {
+      setLocale(before);
+    }
   });
 });
