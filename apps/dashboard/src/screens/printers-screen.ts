@@ -1144,6 +1144,7 @@ export class PrintersScreen extends LitElement {
     clearInterval(this.#commandTimer);
     this.#commandTimer = undefined;
     this.#commandReadInFlight = false;
+    this.#commandReadError = null;
   }
 
   #dismissCommand(key: string): void {
@@ -1209,8 +1210,6 @@ export class PrintersScreen extends LitElement {
     );
   }
 
-  /** Undoing a forget needs the printer in pairing mode and its PIN, so it takes a second,
-   * confirming click. */
   #onForget(p: Printer, device: DiscoveredPrinter): void {
     if (this.armedForgetId !== p.id) {
       this.armedForgetId = p.id;

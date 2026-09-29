@@ -5656,6 +5656,30 @@ describe("printers-screen Bluetooth pairing", () => {
       );
     });
 
+    it("forgets the error a finished poll showed, so a later poll leaves another read's same error", async () => {
+      const passive = vi.fn().mockRejectedValue({ code: "connection.failed" });
+      const listPrinters = vi.fn().mockResolvedValue([...printers, stored]);
+      const listAgents = vi.fn().mockResolvedValue(agents);
+      const { el } = await mountForget(passive, {
+        background: stubApi({ listPrinters, listAgents, listDiscoveredPrinters: passive }),
+      });
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(COMMAND_ANSWER_MS + SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_no_answer"));
+      // A page reload now fails with the same code, then a second forget's reads succeed.
+      listAgents.mockRejectedValue({ code: "connection.failed" });
+      q(el, "[data-test=refresh-printer-lists]")!.click();
+      await flush(el);
+      expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+      passive.mockResolvedValue([{ ...reported, bluetoothCommand: pendingCommand("forget") }]);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgetting"));
+      expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+    });
+
     it("hides Forget pairing while a forget it sent has succeeded, though the pairing report lingers", async () => {
       const done = {
         ...reported,
