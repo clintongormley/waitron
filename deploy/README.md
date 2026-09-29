@@ -46,11 +46,23 @@ from the same commit. Finally it pulls the box's images, the two Waitron ones fr
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
 
-A plain `install` writes no `deploy/.env` at all. The box has no secret it needs before it boots: the
-venue's databases are files in the `state` volume that open with no password, and every other setting
-has a default in the image that suits a box reached at `waitron.local`. The only thing that writes `.env` is installing a branch or a
-commit, which records the image tags it built there. So `install` is non-interactive and idempotent,
-and running it again later to update the box does nothing destructive.
+On a box with AppArmor switched on, `install` also
+fetches the print agent's AppArmor profile from the same ref, `deploy/apparmor/waitron-print-agent`,
+writes it to `/etc/apparmor.d/`, loads it, and names it in `.env` as `WAITRON_PRINT_AGENT_APPARMOR`.
+Docker's own default profile keeps a container off the system bus, and the print agent reaches the
+box's Bluetooth service through that bus, so under Docker's default no Bluetooth printer can appear.
+If the profile does not load, `install` says so and leaves the line out, and the agent runs under
+Docker's default: its USB and network printers work and Bluetooth does not. The line is never written
+before the profile has loaded, because Docker refuses to start a container that names a profile the
+box has not loaded. It goes in `/etc/apparmor.d/` because that is the folder the boot-time
+`apparmor.service` loads profiles from (read on Ubuntu 24.04; a box restart has not been tried).
+
+A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it
+needs before it boots: the venue's databases are files in the `state` volume that open with no
+password, and every other setting has a default in the image that suits a box reached at
+`waitron.local`. Apart from the AppArmor line above, the only thing that writes `.env` is installing
+a branch or a commit, which records the image tags it built there. So `install` is non-interactive
+and idempotent, and running it again later to update the box does nothing destructive.
 
 It finishes by printing a setup address and QR code, also shown on an attached monitor:
 `http://waitron.local/setup/trust`. Open that guide on the device you will use, install this box's

@@ -130,6 +130,25 @@ describe("createLinuxDevices — visibleDevices()", () => {
   });
 });
 
+describe("createLinuxDevices — a paired printer with no device path", () => {
+  it("leaves it out of the inventory while the radio still reads available", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF" }] }),
+    });
+    expect(await devices.visibleDevices()).toEqual([
+      {
+        transport: "usb",
+        localKey: "B120300001",
+        make: "YICHIP3121",
+        model: "USB Portable Printer",
+      },
+    ]);
+    expect(devices.bluetoothAvailability()).toEqual({ available: true });
+  });
+});
+
 // `toStrictEqual`, because `toEqual` would also accept a `make: undefined` key.
 describe("createLinuxDevices — devices that report no make or model", () => {
   beforeEach(async () => {

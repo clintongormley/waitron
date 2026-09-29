@@ -191,6 +191,25 @@ describe("the print-agent image and its compose wiring", () => {
     expect(agent).toMatch(/^ {4}network_mode: host$/m);
   });
 
+  it("runs the agent under the AppArmor profile waitron.sh loads, else under Docker's default", () => {
+    const agent = only(
+      COMPOSE,
+      /\n {2}print-agent:([\s\S]*?)(?=\n(?: {2}[a-zA-Z][\w-]*:|[a-zA-Z])|$)/,
+      "print-agent service",
+    );
+    expect(agent).toMatch(/^ {6}- "apparmor=\$\{WAITRON_PRINT_AGENT_APPARMOR:-docker-default\}"$/m);
+    expect(read("deploy/apparmor/waitron-print-agent")).toMatch(/^profile waitron-print-agent /m);
+    expect(WAITRON_SH).toContain("/deploy/apparmor/waitron-print-agent");
+    expect(WAITRON_SH).toContain("env_set WAITRON_PRINT_AGENT_APPARMOR waitron-print-agent");
+  });
+
+  it("smokes the agent under that profile against a stand-in BlueZ, with docker-default as the control", () => {
+    expect(IMAGE_SMOKE).toContain("apparmor_parser -r deploy/apparmor/waitron-print-agent");
+    expect(IMAGE_SMOKE).toContain('echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"');
+    expect(IMAGE_SMOKE).toContain("deploy/apparmor/fake-bluez.py");
+    expect(IMAGE_SMOKE).toContain("--security-opt apparmor=docker-default");
+  });
+
   it("has retired the standalone agent Dockerfile", () => {
     // One image definition. A resurrected file would build a second, drifting image.
     expect(() => read("apps/print-agent/Dockerfile")).toThrow();

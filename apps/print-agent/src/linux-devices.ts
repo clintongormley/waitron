@@ -4,13 +4,19 @@ import { networkInterfaces } from "node:os";
 import type {
   DiscoveredDevice,
   Host,
+  HostLog,
   PairResult,
   PrinterTarget,
   VisibleDevice,
   WireJob,
 } from "@waitron/print-agent";
-import { type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
+import { type BluetoothDevice, type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
 import { runBluetoothctl } from "./bluetooth-command.js";
+import {
+  type BluetoothAvailability,
+  classifyBluetoothFailure,
+  sameAvailability,
+} from "./bluetooth-availability.js";
 import { PDL_SERVICE, parsePdlResponse } from "./network.js";
 import { SWEEP_PORT, mergeDiscovered, sweepCandidates, sweepPort } from "./sweep.js";
 import { type UsbPrinter, readUsbPrinters } from "./usb.js";
@@ -21,31 +27,56 @@ export interface LinuxDeviceOptions {
   bluetooth?: BluetoothHost;
   btDevicePath?: (mac: string) => string;
   scanNetwork?: () => Promise<DiscoveredDevice[]>;
+  log?: HostLog;
+  now?: () => number;
 }
+
+/** An unavailable Bluetooth side is asked again this often rather than on every poll, because the
+ * listing runs before each job pull and a BlueZ that never answers holds it for the `--timeout`. */
+export const BLUETOOTH_RECHECK_MS = 30_000;
+const LIST_SECONDS = 3;
 
 type LocalDevice = VisibleDevice & { devicePath: string };
 
 export type LinuxDevices = Pick<Host, "visibleDevices" | "scan" | "pair" | "resolve">;
 
-export function createLinuxDevices(opts: LinuxDeviceOptions = {}): LinuxDevices {
+export interface BluetoothStatusSource {
+  /** Undefined until the first check. */
+  bluetoothAvailability(): BluetoothAvailability | undefined;
+}
+
+export function createLinuxDevices(
+  opts: LinuxDeviceOptions = {},
+): LinuxDevices & BluetoothStatusSource {
   const sysfsRoot = opts.sysfsRoot ?? "/sys";
   // `/dev` is a SIBLING of `/sys`: deriving it from sysfsRoot would open `/sys/dev/usb/lp0`.
   const devRoot = opts.devRoot ?? "/dev";
-  const bluetooth = opts.bluetooth ?? createBluetoothctlHost({ run: runBluetoothctl });
+  const bluetooth =
+    opts.bluetooth ?? createBluetoothctlHost({ run: runBluetoothctl, listSeconds: LIST_SECONDS });
   const btDevicePath = opts.btDevicePath ?? liveBtDevicePath;
   const scanNetwork = opts.scanNetwork ?? liveNetworkScan;
+  const now = opts.now ?? Date.now;
+  let availability: BluetoothAvailability | undefined;
+  let nextCheckAt = -Infinity;
+
+  const record = (next: BluetoothAvailability): void => {
+    const changed = availability === undefined || !sameAvailability(availability, next);
+    availability = next;
+    if (!changed) return;
+    if (next.available) opts.log?.info("bluetooth available");
+    else opts.log?.warn("bluetooth unavailable", { reason: next.reason, detail: next.detail });
+  };
 
   const usb = (): Promise<UsbPrinter[]> => readUsbPrinters(sysfsRoot, devRoot);
 
-  const pairedLocal = async (): Promise<LocalDevice[]> => {
-    const paired = await bluetooth.paired();
-    return paired.map((d) => ({
+  const toLocal = (paired: BluetoothDevice[]): LocalDevice[] =>
+    paired.map((d) => ({
       transport: "bluetooth",
       localKey: d.mac,
       ...(d.name !== undefined ? { model: d.name } : {}),
       devicePath: btDevicePath(d.mac),
     }));
-  };
+  const pairedLocal = async (): Promise<LocalDevice[]> => toLocal(await bluetooth.paired());
 
   const dropPath = (d: LocalDevice): VisibleDevice => ({
     transport: d.transport,
@@ -55,13 +86,25 @@ export function createLinuxDevices(opts: LinuxDeviceOptions = {}): LinuxDevices 
   });
 
   return {
+    bluetoothAvailability: () => availability,
+
     async visibleDevices(): Promise<VisibleDevice[]> {
       const usbDevices = (await usb()).map(dropPath);
-      // A Bluetooth failure must never suppress the USB inventory. While `liveBtDevicePath` throws,
-      // this catch drops EVERY paired Bluetooth device in production.
+      // A Bluetooth failure must never suppress the USB inventory.
+      let paired: BluetoothDevice[] = [];
+      if (now() >= nextCheckAt) {
+        try {
+          paired = await bluetooth.paired();
+          record({ available: true });
+        } catch (error) {
+          record(classifyBluetoothFailure(error));
+          nextCheckAt = now() + BLUETOOTH_RECHECK_MS;
+        }
+      }
+      // While `liveBtDevicePath` throws, this catch drops EVERY paired Bluetooth device in production.
       let btDevices: VisibleDevice[];
       try {
-        btDevices = (await pairedLocal()).map(dropPath);
+        btDevices = toLocal(paired).map(dropPath);
       } catch {
         btDevices = [];
       }

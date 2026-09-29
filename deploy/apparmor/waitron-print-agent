@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+# Waitron's AppArmor profile for the print-agent container. Everything above the D-Bus section is
+# Docker's own `docker-default` profile, copied from moby/profiles apparmor/template.go at
+# f0494f1fbb1bbaf2e1b02ee20aab206f32456a63 (Copyright The Moby Authors, Apache-2.0; the licence text
+# is deploy/third-party/licenses/Apache-2.0.txt), with the profile name filled in. The D-Bus section
+# at the end is Waitron's addition: `docker-default` has no D-Bus rules, so the system bus refuses
+# the container's first message (`Hello`) and `bluetoothctl` cannot reach BlueZ at all. It allows
+# only what `bluetoothctl list`, `devices` and `scan` were measured to need against a stand-in
+# BlueZ (`deploy/apparmor/fake-bluez.py`, run by image-smoke). Nothing BlueZ calls back into
+# bluetoothctl while pairing (its agent) is allowed, and neither is setting a property (`trust`).
+abi <abi/3.0>,
+#include <tunables/global>
+
+profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
+  #include <abstractions/base>
+
+  network,
+  # Disallow AF_ALG (Linux kernel crypto API); see https://copy.fail/
+  deny network alg,
+  # Disallow AF_VSOCK to prevent host/guest communication.
+  deny network vsock,
+  capability,
+  file,
+  umount,
+  # Host (privileged) processes may send signals to container processes.
+  signal (receive) peer=unconfined,
+  # runc may send signals to container processes (for "docker stop").
+  signal (receive) peer=runc,
+  # crun may send signals to container processes (for "docker stop" when used with crun OCI runtime).
+  signal (receive) peer=crun,
+  # dockerd may send signals to container processes (for "docker kill"). Docker fills in dockerd's
+  # own label here, and dockerd runs unconfined on a stock Docker host.
+  signal (receive) peer=unconfined,
+  # Container processes may send signals amongst themselves.
+  signal (send,receive) peer=waitron-print-agent,
+
+  deny @{PROC}/* w,   # deny write for all files directly in /proc (not in a subdir)
+  # deny write to files not in /proc/<number>/** or /proc/sys/**
+  deny @{PROC}/{[^1-9/],[^1-9/][^0-9/],[^1-9s/][^0-9y/][^0-9s/],[^1-9/][^0-9/][^0-9/][^0-9/]*}/** w,
+  deny @{PROC}/sys/[^k]** w,  # deny /proc/sys except /proc/sys/k* (effectively /proc/sys/kernel)
+  deny @{PROC}/sys/kernel/{?,??,[^s][^h][^m]**} w,  # deny everything except shm* in /proc/sys/kernel/
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/kcore rwklx,
+
+  deny mount,
+
+  deny /sys/[^f]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/** rwklx,
+  deny /sys/devices/virtual/powercap/** rwklx,
+  deny /sys/kernel/security/** rwklx,
+
+  # allow processes within the container to trace each other,
+  # provided all other LSM and yama setting allow it.
+  ptrace (trace,tracedby,read,readby) peer=waitron-print-agent,
+
+  # --- Waitron: the system bus, for bluetoothctl. ---
+
+  # The bus daemon: the connection handshake, and the subscriptions bluetoothctl registers for BlueZ's
+  # signals and for BlueZ's name.
+  dbus send
+       bus=system
+       path=/org/freedesktop/DBus
+       interface=org.freedesktop.DBus
+       member={Hello,AddMatch,RemoveMatch,GetNameOwner}
+       peer=(name=org.freedesktop.DBus),
+
+  # BlueZ: its object list (how bluetoothctl finds the controller and the devices), and its own
+  # adapter, device and agent-manager methods.
+  dbus send
+       bus=system
+       interface=org.freedesktop.DBus.ObjectManager
+       member=GetManagedObjects
+       peer=(name=org.bluez),
+  dbus send
+       bus=system
+       interface=org.bluez.*
+       peer=(name=org.bluez),
+
+  # BlueZ's change signals: a device found during a scan, and a changed property.
+  dbus receive
+       bus=system
+       interface=org.freedesktop.DBus.ObjectManager
+       member={InterfacesAdded,InterfacesRemoved},
+  dbus receive
+       bus=system
+       interface=org.freedesktop.DBus.Properties
+       member=PropertiesChanged,
+}

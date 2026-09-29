@@ -90,6 +90,22 @@ describe("createBluetoothctlHost", () => {
     expect(run).toHaveBeenCalledWith(["pair", "AA:BB:CC:DD:EE:FF"]);
   });
 
+  // bluez 5.82 client/main.c `cmd_devices`: with no controller it prints this line and exits 0.
+  it("paired() refuses, rather than listing nothing, when BlueZ has no controller", async () => {
+    const run = vi.fn<(args: string[]) => Promise<string>>(
+      async () => "No default controller available\n",
+    );
+    await expect(createBluetoothctlHost({ run }).paired()).rejects.toThrow(
+      "No default controller available",
+    );
+  });
+
+  it("paired() bounds its wait for BlueZ with bluetoothctl's own timeout when given one", async () => {
+    const run = vi.fn<(args: string[]) => Promise<string>>(async () => "");
+    await createBluetoothctlHost({ run, listSeconds: 3 }).paired();
+    expect(run).toHaveBeenCalledWith(["--timeout", "3", "devices", "Paired"]);
+  });
+
   it("paired() lists only bonded devices", async () => {
     const run = vi.fn<(args: string[]) => Promise<string>>(
       async () => "[NEW] Device AA:BB:CC:DD:EE:FF Star TSP100\r\n",

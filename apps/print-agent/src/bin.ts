@@ -2,7 +2,8 @@ import { hostname } from "node:os";
 import { serve } from "@hono/node-server";
 import { createAgent } from "@waitron/print-agent";
 import { readEnv } from "./config.js";
-import { createContainerHost } from "./host.js";
+import { createContainerHost, structuredLog } from "./host.js";
+import { createLinuxDevices } from "./linux-devices.js";
 import { createServerTrustingFetch } from "./server-ca.js";
 import { createSetupApp } from "./setup-page.js";
 import { FileState } from "./state.js";
@@ -17,11 +18,13 @@ const trustingFetch = await createServerTrustingFetch({
   stateDir: env.stateDir,
   log: (msg, fields) => console.info(JSON.stringify({ level: "info", msg, ...fields })),
 });
+const devices = createLinuxDevices({ log: structuredLog(console) });
 const host = createContainerHost({
   env,
   state,
   fetch: trustingFetch,
   onStatus: () => {},
+  devices,
 });
 const agent = createAgent({ host });
 
@@ -34,6 +37,7 @@ const page = createSetupApp({
   envLocked: env.serverUrl !== undefined,
   defaultName: env.name ?? hostname(),
   now: () => host.now(),
+  bluetooth: () => devices.bluetoothAvailability(),
 });
 
 // Published on the LAN by default (0.0.0.0); a venue wanting loopback changes the compose publish line.

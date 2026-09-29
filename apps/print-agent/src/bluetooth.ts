@@ -54,12 +54,17 @@ export function parsePairResult(text: string, mac: string): PairResult {
   return { ok: false, error: "pairing did not complete" };
 }
 
-/** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. */
+const NO_CONTROLLER = "No default controller available";
+
+/** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. `listSeconds` bounds
+ * the paired listing: with no BlueZ on the bus, bluetoothctl otherwise waits for it indefinitely. */
 export function createBluetoothctlHost(opts: {
   run: (args: string[]) => Promise<string>;
   scanSeconds?: number;
+  listSeconds?: number;
 }): BluetoothHost {
   const scanSeconds = opts.scanSeconds ?? 6;
+  const listTimeout = opts.listSeconds === undefined ? [] : ["--timeout", String(opts.listSeconds)];
   return {
     async scan(): Promise<DiscoveredDevice[]> {
       const output = await opts.run(["--timeout", String(scanSeconds), "scan", "on"]);
@@ -78,7 +83,9 @@ export function createBluetoothctlHost(opts: {
       return parsePairResult(await opts.run(["pair", mac]), mac);
     },
     async paired(): Promise<BluetoothDevice[]> {
-      return parseBluetoothctlDevices(await opts.run(["devices", "Paired"]));
+      const output = await opts.run([...listTimeout, "devices", "Paired"]);
+      if (output.replace(ANSI, "").includes(NO_CONTROLLER)) throw new Error(NO_CONTROLLER);
+      return parseBluetoothctlDevices(output);
     },
   };
 }

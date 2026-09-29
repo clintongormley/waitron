@@ -108,6 +108,32 @@ fetch_box_files() {
   echo "waitron.sh: wrote compose.yml from ${ref} (any local compose.yml edits were overwritten)"
 }
 
+# 2b. The print agent's AppArmor profile, from the INSTALLED ref like compose.yml. Docker's default
+#     profile keeps the agent off the system bus, so bluetoothctl cannot reach BlueZ; this one lets it.
+#     .env names the profile only once apparmor_parser has loaded it, because Docker refuses to start
+#     a container that names a profile the host has not loaded — compose then falls back to
+#     docker-default rather than leaving the agent down. Written into /etc/apparmor.d, the folder the
+#     boot-time apparmor.service loads profiles from.
+PRINT_AGENT_PROFILE=/etc/apparmor.d/waitron-print-agent
+load_print_agent_apparmor() {
+  local ref="$1" tmp
+  if ! aa-enabled --quiet 2>/dev/null; then
+    env_unset WAITRON_PRINT_AGENT_APPARMOR
+    return 0
+  fi
+  tmp="$(mktemp "$WAITRON_DIR/waitron-print-agent.XXXXXX")" || die "could not create a temp file in $WAITRON_DIR"
+  if fetch "${RAW_BASE}/${ref}/deploy/apparmor/waitron-print-agent" "$tmp" \
+    && as_root install -m 0644 "$tmp" "$PRINT_AGENT_PROFILE" \
+    && as_root apparmor_parser -r "$PRINT_AGENT_PROFILE"; then
+    env_set WAITRON_PRINT_AGENT_APPARMOR waitron-print-agent
+    echo "waitron.sh: loaded the print agent's AppArmor profile"
+  else
+    env_unset WAITRON_PRINT_AGENT_APPARMOR
+    echo "waitron.sh: could not load the print agent's AppArmor profile — it runs under Docker's default profile, which keeps it from Bluetooth printers" >&2
+  fi
+  rm -f "$tmp"
+}
+
 # 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
 #    Waitron images on the box from the git context and records the tags in .env so the box stays
 #    on them.
@@ -319,6 +345,7 @@ cmd_install() {
   ensure_docker
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"
+  load_print_agent_apparmor "$ref"
   select_image "$ref"
   cd "$WAITRON_DIR"
   docker compose up -d --remove-orphans

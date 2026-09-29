@@ -40,7 +40,7 @@ export interface ContainerHostOptions {
 
 const FALLBACK_NAME = "print-agent";
 
-function structuredLog(sink: LineSink): HostLog {
+export function structuredLog(sink: LineSink): HostLog {
   const emit =
     (level: "info" | "warn" | "error") =>
     (msg: string, fields?: Record<string, unknown>): void => {
