@@ -48,6 +48,16 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("reaches the server on a configuration export made with the browser's own fetch", async () => {
+    // The page's own origin answers; whatever it answers, the request has left the browser.
+    const api = new DashboardApi("", fetch);
+    const outcome = await api.exportConfiguration("a strong passphrase").then(
+      () => "answered",
+      (error: unknown) => (error instanceof Error ? error.message : "answered"),
+    );
+    expect(outcome).toBe("answered");
+  });
+
   it("rejects a failed configuration export with the envelope's code and the HTTP status", async () => {
     const response = new Response(
       JSON.stringify({ error: { code: "backup.managed_by_environment" } }),

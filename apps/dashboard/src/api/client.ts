@@ -1250,12 +1250,6 @@ export type BillRecoveryOutcome =
   | { outcome: "completed" }
   | { outcome: "failed" };
 
-export interface AddReaderInput {
-  providerId: string;
-  name: string;
-  [field: string]: string;
-}
-
 export class DashboardApi {
   readonly liveData = new LiveData();
   #background?: DashboardApi;
@@ -2772,7 +2766,8 @@ export class DashboardApi {
   /** The ordinary request helper parses JSON, so this binary response keeps its own small fetch
    * path. */
   async exportConfiguration(passphrase: string): Promise<Blob> {
-    const response = await this.#fetch(`${this.#baseUrl}/management-api/configuration-export`, {
+    const fetchImpl = this.#fetch;
+    const response = await fetchImpl(`${this.#baseUrl}/management-api/configuration-export`, {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
@@ -2837,31 +2832,12 @@ export class DashboardApi {
     return this.#request<PaymentProviderRow[]>("/management-api/payments/providers", "GET");
   }
 
-  connectPaymentProvider(
-    id: string,
-    payload: Record<string, string>,
-  ): Promise<{ merchantName: string }> {
-    return this.#request<{ merchantName: string }>(
-      `/management-api/payments/providers/${id}/connect`,
-      "POST",
-      payload,
-    );
-  }
-
   disconnectPaymentProvider(id: string): Promise<void> {
     return this.#request<void>(`/management-api/payments/providers/${id}/disconnect`, "POST");
   }
 
   listReaders(): Promise<ReaderRow[]> {
     return this.#request<ReaderRow[]>("/management-api/payments/readers", "GET");
-  }
-
-  addReader(input: AddReaderInput): Promise<{ id: string; status: string }> {
-    return this.#request<{ id: string; status: string }>(
-      "/management-api/payments/readers",
-      "POST",
-      input,
-    );
   }
 
   readerStatus(id: string): Promise<ReaderStatusView> {
