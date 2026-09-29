@@ -722,7 +722,7 @@ table; recording each ticket's printed table would fix it. A party's bill names 
 instead (the table-actions "Task 4 DONE" entry below). Outside tests, `openTab`'s one caller is
 `seatTable` (`apps/server/src/parties.ts`), which opens the tab on a new party. Whether a tab of no
 party can reach a join in production is not established: `moveTab` of an open parked order onto a
-table is an unchecked path to one. _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
+table is an unchecked path to one. _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_ _(2026-09-29, table actions Task 13: the routes and `moveTab`, `joinTable`, `mergeTabs`, `transferLines` and `unjoinTable` are deleted, and `dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a counter order, `delivery_table_id`.)_
 
 **The owner decided a split check gets no Void; the server now allows one.** Since
 table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
@@ -1378,7 +1378,7 @@ What B4 leaves open:
   take a round. **Next action:**
   the same owner decision as the entry above; if tabs on tables in no zone stay allowed, `moveTab`
   and `joinTable` must create the zone record rather than only re-point one.
-  _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
+  _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_ _(2026-09-29, table actions Task 13: the routes and `moveTab`, `joinTable`, `mergeTabs`, `transferLines` and `unjoinTable` are deleted, and `dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a counter order, `delivery_table_id`.)_
 - **Two branches still read a held line that names no menu offer, and only an order parked before
   B4 should have one.** `getHeldOrder` (`apps/server/src/working-order.ts`, its
   `context === undefined || line.productId === null` arm) returns such a line by its product alone,
@@ -2467,7 +2467,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   reviewed three times before the merge. _(2026-09-28: table actions Task 1 renamed "visit" to
   "party" — the tables and columns by core migration `0036`, and the routes and error codes in
   code — and the entries below use the new names; the four `visits_*_ck` CHECK names and the
-  stored scope value `'visit'` stay until Task 13.)_ What stays open:
+  stored scope value `'visit'` stay until Task 13; table actions Task 13 (2026-09-29) made them
+  `parties_*_ck` and `'party'`, core migration `0044`.)_ What stays open:
   - **Task 0's [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md) is
     approved** (owner, 2026-09-26, PR #698), with the owner's answers to its open points (its §11):
     the cash-up counts money on the day it moves, in Task 14 (§9a), and a card refund is a durable
@@ -2701,7 +2702,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         bill with no party) show at the pass in a section of their own with no Ready or Away
         button, as dishes with no course did before. _(2026-09-29: since Task 9 a whole bill moved
         in by Move a bill or Split a table gets groups; the tab transfer (`transferLines`) and
-        `unjoinTable` still leave dishes in no group until Task 13.)_
+        `unjoinTable` still leave dishes in no group until Task 13.)_ _(2026-09-29, Task 13: both are
+        deleted.)_
       - The kitchen and pass screens offer Fire on every held group, as the Tab drawer and the
         course-era screens did, where the plan's text said "the first held group".
       - The table screen reads its printing problems in a second request beside the groups read on
@@ -3189,7 +3191,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     code, the tables (`parties`, `party_tables`, the `party_id` columns, core migration `0036`), the
     routes (`/api/parties/...`) and the error codes (`party.*`, `tab.party_mismatch`,
     `tab.party_has_other_open_bill`, `group.held_leaves_party`), with no behaviour change. The four
-    `visits_*_ck` CHECK names and the stored scope value `'visit'` stay until Task 13. Left as it
+    `visits_*_ck` CHECK names and the stored scope value `'visit'` stay until Task 13 (done there:
+    `parties_*_ck`, `'party'`). Left as it
     is (no backwards-compatibility code before a venue is live, CLAUDE.md §3): a till command
     recorded before `0036` and retried after it with the same submission id is refused
     `submission.id_reused`, because the stored fingerprint was taken over argument names that
@@ -3362,7 +3365,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       it, and no notice on a join. Outside tests, `openTab`'s one caller is `seatTable`, which
       opens the tab on a new party. Whether a tab of no party can reach a join in production is
       not established: `moveTab` of an open parked order onto a table is an unchecked path to one.
-      _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
+      _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_ _(2026-09-29, table actions Task 13: the routes and `moveTab`, `joinTable`, `mergeTabs`, `transferLines` and `unjoinTable` are deleted, and `dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a counter order, `delivery_table_id`.)_
     Tests changed by spec decision 9: `apps/server/src/print-problems.test.ts` "follows the held
     dishes when their bill is merged into another table's, and clears by that bill's reprint"
     matched one table in the reprint header and now matches the party's two.
@@ -3414,7 +3417,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Core migration `0039_table_needs_cleaning` adds `dining_tables.needs_cleaning_since`, which
       core `0041_table_needs_clearing` renames `needs_clearing_since` (C60); the configuration
       export leaves it out, like `tab_id`. The party state `needs_clearing` is no longer written;
-      Task 13 drops it from the schema, and the table condition of the same name stays.
+      Task 13 drops it from the schema, and the table condition of the same name stays. _(Task 13:
+      done; `parties_state_ck` now allows `open` and `closed` only.)_
     - Upgrade, measured on a scratch venue seeded by the previous `main`: every row kept, only
       `dining_tables` and its change-feed trigger changed, `foreign_key_check` empty. **A dev venue
       holding a party already in `needs_clearing` keeps that party's tables held, and nothing on
@@ -3476,7 +3480,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A dish in a held group that the kitchen has no ticket for (a product with no preparation,
       such as bottled water) passes the OLD tab split's held check, which looks only at unfired
       tickets. The new split also refuses a line whose group is held. The old tab split is left as
-      it is; the plan's Task 13 deletes it.
+      it is; the plan's Task 13 deletes it. _(Task 13: deleted.)_
     - Two bills of one party can carry different service modes today: the old tab move retargets
       only the bill it moves. A throwaway test while building it, and the review's reproduction,
       each put a party's main bill at a counter-zone table with `moveTab`: that bill's mode read
@@ -3669,6 +3673,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     "the table has other unpaid bills", which Split a table choosing the main bill need not
     satisfy. The old merge (`mergeTabs`) still writes a merged party's tables in one statement, so
     they share a joining time and their order in its name is not fixed; it goes with Task 13.
+    _(Task 13: `mergeTabs` is deleted.)_
   - **Task 9 DONE (#874, 2026-09-29, main `002d54684`): dishes arriving in a party get a kitchen group, so the pass can
     mark them.** A bill that arrives in a party by Move a bill (to a held table or a free one) or
     by Split a table has each dish with no group put in a new group of the receiving party, after
@@ -3684,7 +3689,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     its dishes carry their group onto the main bill and the main bill's own lines keep theirs, a
     dish with no group included. A bill leaving for the counter gets no group. Retires A96 as the
     plan re-scoped it (Move a bill and Split a table); the tab transfer (`transferLines`) and
-    `unjoinTable` still leave arriving dishes in no group until Task 13 deletes them.
+    `unjoinTable` still leave arriving dishes in no group until Task 13 deletes them. _(Task 13:
+    deleted.)_
     - **A plan default the owner may overturn (P16):** spec §15's "leaves with them outside any
       group" is read as the side the bill leaves; the receiving party groups the dishes.
     - **DONE (C78, 2026-09-29): the new fired group takes its earliest-fired dish's fire time and
@@ -3790,7 +3796,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `tab.merge_leaves_no_table` is out of those refusals (`TABLE_REFUSALS`,
     `apps/till/src/till-app.ts`), so the till shows its generic table error for it, while its
     message stays in `apps/till/src/i18n/codes.ts`, read by nothing else under `apps/till/src`
-    but its test. All three go with Task 13. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
+    but its test. All three go with Task 13 _(Task 13: gone from the server, the till's refusals and
+    its wording)_. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
     on the dark dialog (seen in the 390 px Spanish dark screenshot).
   - **Task 11 DONE (#881, 2026-09-29, main `bc5f5cae7`): the till moves guests, joins
     tables, splits a table and names the party, through Task 8's routes and Task 2's
@@ -3827,6 +3834,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Opening a seated table opens its party's main bill, else its first unpaid bill, else its
       latest. `tabId` is gone from the till's `TableState` type, so the till reads it nowhere and
       Task 13 can drop it; `moveTab` and `joinTable` are gone from `apps/till/src/api/client.ts`.
+      _(Task 13: `dining_tables.tab_id` is dropped.)_
     - The till sends `otherPartyId` with `expectedOtherPartyRevision` for a table another party
       holds, and `otherPartyId: null` for a table it read free. The server now takes null as "read
       free" (`readTargetTable`, `apps/server/src/move-bill.ts`, shared by move, join and move a
@@ -3856,7 +3864,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     table at all (a failed floor read empties the list); a table another party holds is then
     refused as out of date, never combined, and the party's own table gets the ordinary own-table
     rules. `tab.not_table_tab` stays in the till's table refusals (`TABLE_REFUSALS`) although only
-    the old tab join and merge raise it, which the till no longer calls; it goes with Task 13. A table the server lists with no party opens no bill any more. On a
+    the old tab join and merge raise it, which the till no longer calls; it goes with Task 13
+    _(Task 13: gone)_. A table the server lists with no party opens no bill any more. On a
     390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines), and on the
     floor map a joined party's tables can break inside a word on a narrow table token.
   - **Task 12 DONE (2026-09-29, #888, main `ba1458c45`): the till moves a bill to
@@ -3921,6 +3930,41 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     bills first or merge them". The plan's `table.move_to_counter` ("Move to counter") string was
     not added: the counter is a target in Move this bill's list, named `table.to_counter`, so
     nothing would read it.
+  - **Task 13 DONE (2026-09-29): the old tab routes and the table's pointer to its bill are
+    gone. RESET NOTICE: every dev venue needs `wa-wt reset demo <worktree-name>`, and the owner's
+    box is wiped once.** Every venue that ever seated a party, took a booking for a table,
+    delivered a counter order to a table, or recorded a party command stops at boot with
+    `migrations.apply_failed` until it is reset. There is no data-migration code before a venue
+    is live (`CLAUDE.md` §3).
+    - Deleted: `POST /api/tabs/:id/move|join|merge|transfer|split|unjoin` (each now answers 404),
+      the functions behind them (`moveTab`, `joinTable`, `mergeTabs`, `transferLines`,
+      `splitOffCheck`, `unjoinTable` and their helpers) and the five codes only they raised
+      (`tab.merge_leaves_no_table`, `tab.party_has_other_open_bill`, `tab.not_table_tab`,
+      `tab.party_mismatch`, `table.occupied`). The floor works out a table's open bill, its line
+      count, its total and its dishes still to serve from the bills of the party holding it.
+    - Schema, core migrations `0043`–`0045`: `0043` drops the three triggers that name or sit on a
+      rebuilt table (`parties_clear_table_status`, `working_orders_release_main_bill` and
+      `working_orders_release_main_bill_on_move`); `0044`, generated, rebuilds `dining_tables`
+      without `tab_id`, `parties` with its CHECKs named `parties_*_ck` and its state limited to
+      `open` and `closed`, and `service_commands` with the scope `'party'` in place of `'visit'`;
+      `0045` re-creates the three triggers with the text they had. The table condition
+      `needs_clearing` (`dining_tables.needs_clearing_since`) is unchanged.
+    - Why the reset: the rebuild's `DROP TABLE` runs with foreign keys on inside the migrator's
+      transaction, and every key into `dining_tables` and `parties` is `no action`
+      (`docs/developers/conventions-data.md`, the rebuild paragraphs). Measured on scratch venues
+      provisioned by the previous `main` (`b3ed0d288`) with its own `dev-setup`, then booted by this
+      branch's server: one seated-and-finished party, one booking for a table, and one open counter
+      order delivered to a table each failed at the rebuild's `DROP TABLE` of `dining_tables` with
+      `FOREIGN KEY constraint failed`; one stored command of scope `'visit'` failed at the copy into
+      the new `service_commands` with `CHECK constraint failed: service_commands_scope_kind_ck`.
+      Each left core's journal at 43 rows and `tab_id` in place. A venue from the same seed with none
+      of those rows, and a fresh venue, migrated and answered `/health` with 200.
+    - On a dev venue the boot also logs `migrations.dev_constraint_violation`, naming
+      `wa-wt reset demo <worktree-name>`. On a box it counts as a failed start, and after three
+      failed starts the next one serves the recovery page, which shows `migrations.apply_failed`'s
+      wording ("The box's database could not be updated…") with the failure's cause in its log
+      tail (read in `apps/server/src/recovery-surface.ts`, `node-entry.ts` and
+      `recovery-state.ts`, not run on a box).
   - **Open: a sent order with no answer can put back an older copy of the party.** When a sent
     order gets no answer, the till calls `#retakePartyFromFloor()`, whose floor read can fail and
     keep the last floor, and then, when the order landed on a different bill from the one it was
@@ -3954,7 +3998,9 @@ bill is refused.
 - **Join and merge keep a table, its bill and its party consistent — done (A73, #794).**
   `joinTable` and `mergeTabs` refuse with `tab.not_table_tab`, `tab.party_mismatch` and
   `tab.party_has_other_open_bill` (and `mergeTabs`, since A111, with `tab.merge_leaves_no_table`).
-- **A table's bill with no party can still be made (A73 review, 2026-09-28).** Two things are left
+  _(2026-09-29, table actions Task 13: both functions, their routes and the four codes are deleted.)_
+- **A table's bill with no party can still be made (A73 review, 2026-09-28) — retired by table
+  actions Task 13, which deleted the routes below.** Two things were left
   open:
   - `moveTab` (route `POST /api/tabs/:id/move`) can point a free table at a parked counter order,
     which makes a table's bill with no party. A review reproduced it with `parkOrder` then
@@ -3967,7 +4013,7 @@ bill is refused.
   **Next action:** owner decision on whether `moveTab` should refuse a counter order, and whether a
   table joined to the party's own bill should stay in the party when that bill is merged into a
   check at another table (today it is freed and leaves, A111).
-  _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
+  _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_ _(2026-09-29, table actions Task 13: the routes and `moveTab`, `joinTable`, `mergeTabs`, `transferLines` and `unjoinTable` are deleted, and `dining_tables.tab_id` is dropped, so a bill reaches a table only through its party or, for a counter order, `delivery_table_id`.)_
 - **A merge within one party with `freeSourceTable: true` frees the source bill's tables AND takes
   them out of the party — done (A111).** The owner's rule of 2026-09-28: a split-off bill has its
   own table because those guests moved there, so merging it back with `freeSourceTable: true` (what
@@ -3980,7 +4026,8 @@ bill is refused.
   with `freeSourceTable: true`, frees every table on that bill, a joined one included, and takes
   them out of the party, unless that would leave the party with none. A table joined to a split
   CHECK rather than to the party's tab is freed with that check, like a check moved to its own
-  table.
+  table. _(2026-09-29, table actions Task 13: `mergeTabs`, `freeSourceTable` and
+  `tab.merge_leaves_no_table` are deleted; `POST /api/bills/:id/merge` frees no table.)_
 - **Later: optional seat/guest item assignment (owner, 2026-09-20).** Include shared items when
   this is designed. For now, orders remain at table/tab level and staff select items manually
   when splitting bills; seat assignment is not a prerequisite for the service workflow.

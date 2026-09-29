@@ -88,7 +88,10 @@ as `parties_clear_table_status`; SQLite rewrites `visit_id` to `party_id` in
 (to another party or to the counter). `0042_placed_bill_moves.sql` re-creates
 `working_orders_enforce_transition` and `working_order_lines_require_open_parent_update`, each with
 an exception for a placed bill: its row may change its party, delivery table and revision, and its
-lines their kitchen group. No migration
+lines their kitchen group. `0043_drop_triggers_before_rebuild.sql` and
+`0045_recreate_triggers_after_rebuild.sql` surround `0044`'s generated rebuild of `dining_tables`,
+`parties` and `service_commands`: the first drops `parties_clear_table_status` and `0038`'s two
+triggers, and the second re-creates them with the same text. No migration
 contains a `GRANT`, a role or an `ENABLE ALWAYS`: there is no database role to grant anything to,
 and file permissions on the venue directory are the access control.
 
