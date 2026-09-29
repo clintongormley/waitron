@@ -3441,6 +3441,16 @@ pairing consumer, and a standby that has fallen behind.
 
 ### A6. Payments
 
+- **A pending card refund does not refuse joining or unjoining tables, though the bill payments
+  design says it does.** The design's §5.2 list ("each payment, refund, void, quantity change,
+  adjustment, split, transfer, join and unjoin … are refused with `bill.refund_in_progress`",
+  [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md)) names join and
+  unjoin. Codex's run-it review of #851 (campaign item A121, 2026-09-29) reported that joining a free
+  table to the party and unjoining a table without moving any dishes both succeeded while a card
+  refund of the bill was pending, on the branch and on `main` before it; its probes were temporary
+  and are not in the tree. Nobody has yet checked whether either can change what the bill charges.
+  **Next action:** the owner decides whether the code should refuse them or the design should drop
+  them from the list; then a test that tries each during a pending refund.
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Question
   4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
   so the owner chose a separate standalone card machine for the internet-down case
