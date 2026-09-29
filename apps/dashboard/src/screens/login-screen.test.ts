@@ -2355,6 +2355,88 @@ describe("login-screen: passkey autofill on the email step", () => {
     expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed"));
   });
 
+  it.each([
+    ["an HTML page", "<!doctype html><title>Sign in to the Wi-Fi</title>", 200],
+    ["JSON null", "null", 200],
+    ["an empty 200", "", 200],
+    ["a 204 with no body", null, 204],
+  ])(
+    "shows no error on first load when the passkey options answer is %s",
+    async (_what, body, status) => {
+      conditionalMediationAvailable.mockResolvedValue(true);
+      const fetchOptions = vi.fn(
+        async () => new Response(body, { status, headers: { "content-type": "text/html" } }),
+      );
+      const real = new DashboardApi("", fetchOptions);
+      const api = stubApi({ passkeyAuthOptions: real.passkeyAuthOptions.bind(real) });
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await vi.waitFor(() => expect(fetchOptions).toHaveBeenCalled());
+      await flush(el);
+      await flush(el);
+      expect(navigator.credentials.get).not.toHaveBeenCalled();
+      expect(await bottomOf(el)).toBe("");
+      expect(field(el, "email")).not.toBeNull();
+    },
+  );
+
+  it("says the passkey could not be verified when a press gets passkey options that are not JSON", async () => {
+    const real = new DashboardApi(
+      "",
+      async () =>
+        new Response("<!doctype html><title>Sign in to the Wi-Fi</title>", { status: 200 }),
+    );
+    const api = stubApi({ passkeyAuthOptions: real.passkeyAuthOptions.bind(real) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await continueWithEmail(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
+    );
+  });
+
+  it("still shows the server's refusal of the passkey options on first load", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const real = new DashboardApi(
+      "",
+      async () =>
+        new Response(JSON.stringify({ error: { code: "server.internal" } }), { status: 503 }),
+    );
+    const api = stubApi({ passkeyAuthOptions: real.passkeyAuthOptions.bind(real) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("server.internal")));
+  });
+
+  it("still shows an error on first load when the passkey options body fails while being read", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const real = new DashboardApi(
+      "",
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              controller.error(new TypeError("network error"));
+            },
+          }),
+          { status: 200 },
+        ),
+    );
+    const api = stubApi({ passkeyAuthOptions: real.passkeyAuthOptions.bind(real) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
+    );
+  });
+
+  it("still says the options request failed when the server cannot be reached on first load", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const real = new DashboardApi("", async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const api = stubApi({ passkeyAuthOptions: real.passkeyAuthOptions.bind(real) });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("connection.failed")));
+  });
+
   it("shows no error for an autofill failure that arrives after the screen is removed", async () => {
     conditionalMediationAvailable.mockResolvedValue(true);
     const verified = deferred<{ personId: string }>();

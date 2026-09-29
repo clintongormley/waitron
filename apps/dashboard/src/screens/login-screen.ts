@@ -733,9 +733,17 @@ export class LoginScreen extends LitElement {
     if (!this.isConnected || this.step !== "email" || this.token !== null) return;
     const attempt = ++this.passkeyAttempt;
     try {
-      const { challengeHandle, options } = await this.api.passkeyAuthOptions();
+      // Nobody asked for this attempt, so a successful options answer whose body is not JSON
+      // (parsing it throws a `SyntaxError`), or is empty or `null`, ends it quietly; a refusal, an
+      // unreachable server or a body that fails while being read still shows.
+      const challenge = await this.api.passkeyAuthOptions().catch((error: unknown) => {
+        if (error instanceof SyntaxError) return null;
+        throw error;
+      });
       if (!this.isConnected || attempt !== this.passkeyAttempt || this.step !== "email") return;
-      // Nobody asked for this attempt, so any rejection from the passkey prompt ends it quietly.
+      if (challenge == null) return;
+      const { challengeHandle, options } = challenge;
+      // Any rejection from the passkey prompt also ends it quietly.
       const response = await startAuthentication({
         optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
         useBrowserAutofill: true,

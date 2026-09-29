@@ -6747,10 +6747,11 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 - **A browser refusing the login screen's automatic passkey attempt no longer shows "Something went
   wrong, try again" on load — DONE (C8, #843, 2026-09-29).** Any rejection from the browser's passkey
   prompt (`startAuthentication`) ends the automatic attempt silently; a failure of the options or
-  verify request still shows its banner. The passkey button shows "Could not verify the passkey,
-  try again" for a browser refusal instead of the generic sentence. Measured in real Chromium with
-  `navigator.credentials.get` stubbed to reject: a `NotSupportedError`, a `SecurityError` and an
-  `UnknownError` each showed the generic sentence on the button before the change.
+  verify request still shows its banner, except the options answers C58 (below) quiets. The passkey
+  button shows "Could not verify the passkey, try again" for a browser refusal instead of the
+  generic sentence. Measured in real Chromium with `navigator.credentials.get` stubbed to reject: a
+  `NotSupportedError`, a `SecurityError` and an `UnknownError` each showed the generic sentence on
+  the button before the change.
   `@simplewebauthn/browser` 14.0.0 (`helpers/identifyAuthenticationError.js`) passes a
   `NotSupportedError` through with the `DOMException`'s numeric `code` 9, and rewraps an
   `UnknownError`, and a `SecurityError` whose host or `rpId` is wrong, under its own string codes
@@ -6763,16 +6764,23 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`throw {`, `reject({`) found two, both carrying a string `code`; the grep does not see an object
   thrown through a variable or a conditional. The login page was opened on 2026-09-29, before the
   review fixes, in light and dark, English and Spanish, 1280 and 390 wide: no banner on first load.
-  - **Left OPEN by #843's review (reported by the review seat, not re-run here):** if the passkey
-    options request gets a 200 answer whose body is not JSON (a proxy's error page, say), the first
-    load still shows "Could not verify the passkey". The reviewer reported `main` behaving the same
-    before the branch. A fix would make the automatic attempt quiet for that case too, or have the
-    request helper refuse an unreadable success body with a code; the second touches every request.
-    Queued as C58 (owner chose (a), 2026-09-29): the automatic attempt stays quiet for that case.
+  - **DONE (C58, 2026-09-29):** the automatic attempt on page load stays quiet when the passkey
+    options request gets a successful (2xx) answer that is not the expected data. Reproduced first
+    in real Chromium through the real `DashboardApi`: an HTML body and a JSON `null` body each
+    showed "Could not verify the passkey" on first load before the change. The login screen now ends
+    the automatic attempt quietly when parsing the options answer throws a `SyntaxError`, or the
+    answer is `null` or empty (`createRequest` returns an empty body as `undefined`). Review found
+    that the empty 200 and 204 answers still showed the message, and that catching every `Error`
+    also silenced a body that broke off while being read. A server refusal of the options request,
+    an unreachable server and a body that fails while being read still show their message on load:
+    the refusal and unreachable-server tests went red when the catch swallowed every failure, and
+    the read-failure test when it swallowed every `Error`. The shared request helper is unchanged
+    (the owner declined that option); a press of the passkey button still shows the message.
   - **DONE (C57, #854, 2026-09-29):** the passkey button's sign-in sorts a failed attempt
     through `classifyPasskeySignInError` (`apps/dashboard/src/passkey-errors.ts`), beside the
-    registration helper, instead of inline in the login screen; the automatic attempt on page load
-    is unchanged (C58). No visible change: the login and profile screen suites pass unedited.
+    registration helper, instead of inline in the login screen. C57 left the automatic attempt on
+    page load unchanged; C58, above, later changed it. No visible change: the login and profile
+    screen suites pass unedited.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
