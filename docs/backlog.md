@@ -3569,9 +3569,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       picked by comparing the stored times as text, which is right only while every writer stores
       the same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a
       dish recalled and fired again carries its new fire time but its old group's firer.
-    - **For the owner:** an arriving held group prints no HOLD ticket in advance, though every
-      other way of making a held group prints one; with "Print held groups in advance" on, it prints an
-      ordinary ticket when fired, not a FIRE slip.
+    - **DONE (C79, 2026-09-29): an arriving held group prints its HOLD ticket in advance and a
+      FIRE slip when fired**, where "Print held groups in advance" is on, as every other way of
+      making a held group does. Move a bill (`moveBill`, `apps/server/src/move-bill.ts`) and Split
+      a table (`splitTable`, `apps/server/src/table-actions.ts`) hand the held groups
+      `groupArrivingDishes` made to the same `printHoldTickets`; Move a bill prints after any
+      merge, so the ticket names the main bill the dishes are now on. Firing is unchanged: a group
+      whose HOLD ticket was queued already fires with a FIRE slip. With the setting off, the
+      dishes in those held groups print nothing at the move: no HOLD ticket. Tests:
+      `apps/server/src/party-arriving-dishes.test.ts`. No migration.
     - **Which dishes arrive unsent changed with Task 7.** An open counter order moved into table
       service has its dishes sent at the move (Task 7), so it arrives in a FIRED group, not the
       held group the plan's Task 9 expected; a later course's dish, held for its course, arrives

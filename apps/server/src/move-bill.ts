@@ -14,7 +14,7 @@ import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { groupArrivingDishes } from "./order-groups.js";
+import { groupArrivingDishes, printHoldTickets } from "./order-groups.js";
 import {
   checkAndBumpParty,
   openParty,
@@ -98,6 +98,7 @@ export async function moveBill(
   const before = await readSentWork(tx, cfg, billId);
 
   let result: MoveBillResult;
+  let held: string[] = [];
   if (destination.kind === "counter") {
     if (source === null) throw new AppError("management.request_invalid", { field: "to" });
     await tx
@@ -117,7 +118,7 @@ export async function moveBill(
       tableId: destination.tableId,
     });
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
-    await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers);
+    ({ held } = await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers));
     if (open) await setMainBill(tx, partyId, billId);
     result = { partyId, billId, merged: false };
   } else {
@@ -125,7 +126,7 @@ export async function moveBill(
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.
-    await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers);
+    ({ held } = await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers));
     const main = await readMainBill(tx, partyId);
     if (
       options.bills === "merge" &&
@@ -146,6 +147,8 @@ export async function moveBill(
     }
   }
 
+  // After any merge, so the tickets name the bill the dishes are now on.
+  await printHoldTickets(tx, cfg, held);
   await enqueueMovedSlips(tx, cfg, before, result.billId, new Map(), {
     force: source === null || result.partyId === null,
   });
