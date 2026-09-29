@@ -3136,7 +3136,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A party's receipt and payment slip read "Ana · Mesa 4, 5" for a named party and "Mesa 4, 5"
       for an unnamed one (`partyReceiptLabel`). A receipt already issued keeps the label frozen at
       issuance. A counter order still names its delivery table.
-    - Joining, unjoining and moving a table, and merging bills, send a MOVED notice and slip for
+    - Joining, unjoining and moving a table, and merging tabs, send a MOVED notice and slip for
       the sent dishes on every open, placed or settled bill of the parties involved whose tables
       changed (`readPartiesSentWork`, `enqueueMovedSlipsFor` in
       `apps/server/src/kitchen-print.ts`). Before, a join sent none, and a move, unjoin or merge
@@ -3210,6 +3210,54 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       cleared and the server ignores a clear whose time no longer matches.
     - New names say "cleaning" (`table.needs_cleaning`, `needs_cleaning_since`), older ones
       "clearing" (`clearing_workflow`, "Mark cleared"). Free to rename until a venue is live.
+  - **Task 5 DONE (PR pending, 2026-09-29): split, merge and transfer between a party's bills,
+    on the server.** Nothing changes on the till yet: it keeps using the old tab routes until
+    Task 10. Three new routes land beside them (`apps/server/src/bill-actions.ts`,
+    `apps/server/src/till-api.ts`):
+    - `POST /api/bills/:id/split` puts chosen items on a new bill of the same party, from any open
+      bill, including one no table points at and a counter order (whose new bill has no party). A
+      presented bill is refused `bill.presented`, a paid one `bill.paid`; items already paid for
+      stay (`bill.line_paid`); held work stays (`tab.split_held_line`). A split that leaves the
+      source fully paid issues its invoice, as the tab split does.
+    - `POST /api/bills/:id/merge` (the path is the bill merged into) and
+      `POST /api/bills/:id/transfer` (the path is the bill the items leave) work only between two
+      untouched bills of one party: neither presented, partly paid, paid, nor holding a payment
+      given back in full (`bill.presented`, `bill.payments_received`, `bill.paid`). Bills of two
+      parties, or a party's bill and a counter order, are `bill.other_party`. Merging the main bill
+      away makes the surviving bill the main bill; no table joins or leaves the party.
+    - For a bill of a party, each checks and moves on the party's revision before looking at the
+      bills' own state, so the second of two tills acting from the same read is told
+      `party.out_of_date`, not a code describing what the first till did. Checked before the
+      revision: whether the path bill exists, a merge or transfer onto the same bill, and for split
+      an empty or repeated batch of items. Transfer checks for repeated items after the bills and,
+      like the old tab transfer, does not refuse an empty batch. A counter order has no party and so
+      no revision. A till may also
+      send `partyId`, the party it read the bill under; a bill that has since left that party is
+      `party.out_of_date`.
+    - Merging bills, or transferring items between them, sends the kitchen no MOVED slip while
+      the party holds a table: every bill of such a party names the same tables
+      (`orderTableLabels`), and `enqueueMovedSlips` sends a slip only when the tables named change.
+      The party-wide notices in the Task 4 entry above are for merging tabs.
+    Tests: `apps/server/src/party-bill-actions.test.ts` (each refusal reads back that the party,
+    its tables, and each bill's row, lines and payments are unchanged; the two-tills cases run in
+    both orders, except the two `partyId` cases, which run once each) and
+    `apps/server/src/till-api.bill-actions.test.ts` (the HTTP surface). No new error code, no
+    migration.
+    Found while building it, and handled:
+    - A dish in a held group that the kitchen has no ticket for (a product with no preparation,
+      such as bottled water) passes the OLD tab split's held check, which looks only at unfired
+      tickets. The new split also refuses a line whose group is held. The old tab split is left as
+      it is; the plan's Task 13 deletes it.
+    - Two bills of one party can carry different service modes today: the old tab move retargets
+      only the bill it moves. A throwaway test while building it, and the review's reproduction,
+      each put a party's main bill at a counter-zone table with `moveTab`: that bill's mode read
+      `prepay` and the party's other bill's `table_tab`. The merge and the transfer refuse two bills whose service modes differ, with
+      `service_zone.mode_incompatible`, before changing either bill, as the old tab transfer does.
+      Why: in the same reproduction, merging or transferring already-fired items onto the `prepay`
+      bill succeeded, but paying that bill then failed with `ticket.already_fired`, because paying
+      a `prepay` bill fires its items again.
+    - A table of the party still pointing at the merged-away bill is pointed at the surviving one,
+      so the old till screens do not show an abandoned bill; its membership is unchanged.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
@@ -3217,6 +3265,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 `placeGroups` naming no bill) starts a new main bill. A round sent with `addTabRound` to the paid
 bill is refused.
   Decide whether a paid party should be mergeable before the till offers it.
+  _(2026-09-29, plan Task 5: the new bill routes refuse a paid bill with `bill.paid`; the old tab
+  routes keep `tab.not_open` until they are retired. Spec decision 5 settles it: "A paid bill is
+  done: it neither merges nor moves.")_
 - **An invoiced but unpaid bill on a party cannot be charged from the table screen (plan Task 2,
   2026-09-26).** In a venue that issues the invoice first, a party merged into another can bring a
   bill whose invoice is issued but not yet paid. The table screen lists it with what it owes, but
