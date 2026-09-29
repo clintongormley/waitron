@@ -1099,7 +1099,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
   const shown: CurrentOrderGroup[] = groups.map(({ createdAt, ...group }) => ({
     ...group,
     state: group.state as "held" | "fired",
-    // `order_groups_fired_at_ck` sets `fired_at` exactly when the group is fired.
+    // `order_groups_fired_at_ck` requires `fired_at` exactly when the group is fired.
     sentAt: group.state === "fired" ? group.firedAt! : createdAt,
     rows: [],
   }));
