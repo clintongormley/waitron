@@ -4405,33 +4405,23 @@ approved.
 
 ### B9. CI and test infra
 
-- **`scripts/migration-upgrade.test.ts` stalled past its 120-second bound once in CI (2026-09-28).**
-  In run 36401947339 (the `lint` job, on #803's docs-only head `b3768ddb3`) it failed
-  `Test timed out in 120000ms` while every other root suite ran at its usual speed; the same test
-  took 16 to 31 seconds in the `lint` jobs of the four `main` runs before it. Not reproduced
-  locally: 25 runs of the file alone took 6 to 7 seconds each, and three
-  `pnpm vitest run --coverage` runs of the root project passed. The CI log showed nothing about
-  which step stalled. **The reporting half is DONE (lane A's A112, 2026-09-28):** the test now fails
-  at 110 seconds naming the migration step and phase it was on, the process's active resources
-  and how long every earlier phase took; a stall inside a synchronous call is reported by a second
-  thread one second after the deadline; and a healthy run prints its five slowest phases
-  ([ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-names-the-phase-it-stalled-in)).
-  Next: when it stalls again, read that report and
-  locate the stalled operation before naming a cause. First seen in the last 60 CI runs.
-  _(Second failure, 2026-09-28: run 36471580455, the `lint` job on #817, a till-only branch. The
-  report named `core/0031_order_drafts: close after 7 ms` with active resources `PipeWrap` ×4,
-  `MessagePort` and `Timeout`. It does not read as one stalled operation: the migrate and
-  change-feed phases listed before it took 200 to 4,979 ms each, all the way from the first
-  baseline, while `main`'s healthy run 36466135605 took 21,969 ms for all 244 phases with its
-  slowest at 263 ms. The other root suites in the failing job ran at their usual speed
-  (`ci-workflow.test.mjs` 11.9 s there, 21.1 s in the healthy run). So this one suite ran several
-  times slower from its start and reached the deadline partway through; why is still unknown.)_
-  _(Third and fourth failures, 2026-09-29: `main`'s own run 36544133895 on `5582a138b`, stalled
-  in `core/0036_party_rename`; and run 36550884979, the `lint` job on #851's docs-only head
-  `9b68be49b`, stalled in `venue-service/0009_kitchen_notice_sold_in_each` with `PipeWrap` ×4,
-  `MessagePort` and `Timeout` active. In #851's report every earlier phase was slow from the first
-  baseline — migrate 174 to 2,632 ms and change feed 301 to 3,358 ms — the same shape as the second
-  failure. Queued as lane A's A122 to find the cause and fix it.)_
+- **`scripts/migration-upgrade.test.ts` ran several times slower in some CI runs — DONE (lane A's
+  A122, 2026-09-29).** It failed its 110-second deadline in four `lint` jobs (runs 36401947339,
+  36471580455, 36544133895 on `main` and 36550884979 on #851), slow from its first phase rather than
+  stuck in one; A112 had added the per-phase report that showed it. The cause was the runner's disk:
+  the test commits hundreds of times with SQLite's `synchronous` at full, and in a CI probe of 20
+  runners the same test took 17 to 34 seconds on the disk against 4 to 8 in memory. It now makes its
+  scratch directory under `/dev/shm` when that exists (`scripts/scratch-dir.mjs`), and in a second
+  probe of 20 runners running the `lint` job's own command it took 6.2 to 11.5 seconds. The 60-to-112
+  second runs, all in `centralus`, were not reproduced by either probe. Receipts:
+  [ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
+- **Would the package suites' databases gain from memory too?** `useVenueDb`
+  (`packages/db/src/testing/venue-db.ts`) makes each suite's venue folder under the system temporary
+  directory, so every database suite in CI commits to the runner's disk, the cost A122 measured for
+  the upgrade test. Not measured for the package suites. Next action: time one database-heavy
+  package's `test:coverage` in CI with its folders on the disk and under `/dev/shm`
+  (`scratchParent()` in `scripts/scratch-dir.mjs` is the choice the upgrade test makes), and adopt
+  it in `useVenueDb` only if the shard times move.
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →

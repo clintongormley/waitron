@@ -793,6 +793,11 @@ browser test** — most of these rules exist because a test passed while proving
   does not cover this** — it reads a `scripts/` suite's own declared waits, never the child's, so
   nothing guards the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
   [testing-guide.md](docs/developers/testing-guide.md).
+- **A suite that commits to SQLite many times is timed by the CI runner's DISK, not its CPU.**
+  The store leaves `synchronous` at full, so every commit waits for a flush: the upgrade test took
+  17 to 112 seconds in `lint` jobs on the disk and 6 to 12 under `/dev/shm`, where it now runs
+  (`scratchParent()`, `scripts/scratch-dir.mjs`). `useVenueDb` still uses the disk. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only where the stubs are a large share of
   the runtime, and only on macOS (no Linux penalty), so it speeds the local hook and not CI — measure
