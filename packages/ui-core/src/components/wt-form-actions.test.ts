@@ -102,6 +102,21 @@ test("on a narrow row, keeps cancel level with the primary action below the mess
   expect(cancel.bottom).toBe(primary.bottom);
 });
 
+test("centres a message beside a lone cancel action on it", async () => {
+  const el = (await mount(
+    '<wt-form-actions><wt-button slot="cancel">Close</wt-button></wt-form-actions>',
+  )) as WtFormActions;
+  host.style.width = "800px";
+  el.error = "That agent was already paired.";
+  await el.updateComplete;
+
+  const message = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-error]")!
+    .getBoundingClientRect();
+  const cancel = el.querySelector<HTMLElement>('[slot="cancel"]')!.getBoundingClientRect();
+  expect(message.top + message.height / 2).toBeCloseTo(cancel.top + cancel.height / 2, 0);
+});
+
 test("paints the message from the danger token", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',

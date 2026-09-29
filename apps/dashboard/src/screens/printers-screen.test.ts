@@ -2,7 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
@@ -4931,6 +4931,30 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
     expect(probe).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the address check's refusal and button at the right when they wrap under the fields", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    await page.viewport(1280, 900);
+    try {
+      const { el } = await mounted({
+        probePrinterAddress: vi.fn().mockRejectedValue({ code: "printer.probe_busy" }),
+      });
+      await openDiscovery(el);
+      (q(el, "[data-test=probe-panel]") as HTMLDetailsElement).open = true;
+      typeField(el, "[data-test=probe-host]", "10.0.0.50");
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      expect(await bottomOf(el, probeActions)).toBe(codeMessage("printer.probe_busy"));
+      const host = q(el, "[data-test=probe-host]")!.getBoundingClientRect();
+      const actions = q(el, probeActions)!.getBoundingClientRect();
+      const row = q(el, probeActions)!.parentElement!.getBoundingClientRect();
+      expect(actions.top).toBeGreaterThanOrEqual(host.bottom);
+      expect(actions.right).toBeCloseTo(row.right, 0);
+    } finally {
+      setLocale(before);
+    }
   });
 
   it("starts the address check again when Add printer is reopened", async () => {

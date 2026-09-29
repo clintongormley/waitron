@@ -14,9 +14,13 @@ export class WtFormActions extends LitElement {
 
       .actions {
         display: flex;
-        align-items: flex-end;
+        align-items: center;
         width: 100%;
         gap: var(--wt-space-2);
+      }
+
+      .cancel {
+        align-self: flex-end;
       }
 
       .primary {

@@ -242,6 +242,7 @@ export class PrintersScreen extends LitElement {
       .field-row > wt-form-actions {
         flex: 0 1 auto;
         width: auto;
+        margin-inline-start: auto;
       }
       fieldset {
         margin: 0;
