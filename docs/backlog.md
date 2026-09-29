@@ -3876,9 +3876,28 @@ ongoing overhaul listed at the top of Track A.
   at the bottom: `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate,
   base, tax or type, a variant price on the menu price window, `hours.N` on venue operations,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
-  (4) the backup screen's retention boxes send 0 when blank or zero and the server's
-  `backup.request_invalid` naming `retention` shows only in the page banner, because the form does
-  not check retention itself (read, not run); (5) the setup connect screen comes back EMPTY after a
+  (4) **DONE (C63, 2026-09-29):** the backup screen's retention boxes are checked by the form on
+  Apply and on Save. A box is valid when `Number()` reads its text as a whole number of at least 1
+  and no larger than JavaScript's safe-integer limit, so `7.0` and `1e2` are accepted and sent as 7
+  and 100. A blank, zero, negative or fractional box sends nothing and says "Enter a whole number of
+  at least 1." under itself; focus moves to the first such box, and the action is held until every
+  box is fixed. A box above the safe-integer limit, which the server would accept, gets the same
+  sentence. A
+  `backup.request_invalid` naming `retention` from the server puts that same sentence under both
+  boxes, moves focus to the first box, and leaves the action working. Tests:
+  `apps/dashboard/src/screens/backup-screen.test.ts`. A blank is read as invalid, not "keep the
+  current value", because the server's `readRetention` (`apps/server/src/backup-api.ts`) takes no
+  absent value. Still open there: a refusal naming `destinationDir` or `schedule` still shows in the
+  page banner rather than under the folder field or beside the button (both seen by running, in the
+  Codex run-it review of C63), and so, read and not run, does every other refusal; the backup folder is required but not
+  marked, and Turn on backups stays disabled before the first press until the folder is filled and
+  the key is saved — the same shape as (7) (both seen by running, in the Codex run-it review); and,
+  read and not run: the settings editor's Save changes is also disabled before any press while the
+  folder is blank (`#saveSettingsDisabled` in `apps/dashboard/src/screens/backup-screen.ts`); apart
+  from the two retention boxes and the configuration-export passphrases, the form's inputs (the
+  destination folder, the pasted key, the saved-it tick, and the day and time choices) carry no
+  `name`; and the screen does not submit on Enter (`submitOnEnter`, which design-system.md → "Submit
+  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); (5) the setup connect screen comes back EMPTY after a
   refusal — the shell rebuilds it — so the refused field is marked on an empty input (seen with a
   throwaway test during C54, `apps/setup/src/setup-app.ts` `#renderScreen` "connect"); (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
@@ -3914,8 +3933,10 @@ ongoing overhaul listed at the top of Track A.
   when a refusal is placed under the picker — a summary at the top, which Forms forbids; moving it
   beside the action (inside `wt-form-actions`' shadow root) changes two assertions older than
   C54 that read `p[role="alert"]` from the dialog (`apps/dashboard/src/screens/categories-screen.test.ts`),
-  so it waits for the owner. **Next action:** the owner decides which of the open points are worth
-  doing; (4), (5) and (13) look like defects.
+  and the owner decided to move it and let those assertions change (queued as C65). **Next
+  action:** the owner decided on 2026-09-29 that (5) is queued as C64, (13) as C65, and the setup
+  screens' wording under a refused field in (1) as C62; the other open points still wait for the
+  owner to say which are worth doing.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

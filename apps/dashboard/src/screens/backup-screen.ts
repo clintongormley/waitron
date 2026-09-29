@@ -19,6 +19,13 @@ import type {
  * feedback on a PASTED key; the server stays the authority. */
 const MIN_KEY_LENGTH = 12;
 
+/** A box's text as the number `Number()` reads from it, when that is a safe integer above 0
+ * (so `7.0` is 7 and `1e2` is 100); `null` for a blank box and for anything else. */
+function parseRetention(text: string): number | null {
+  const n = Number(text);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
 /** Monday-first display order; `n` is the `Date.getDay()` value the server's schedule expects. */
 const WEEKDAYS: { n: number; labelKey: Parameters<typeof t>[0] }[] = [
   { n: 1, labelKey: "backup.weekday.mon" },
@@ -151,6 +158,18 @@ export class BackupScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      input[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
+      .required {
+        margin-inline-start: var(--wt-space-1);
+        color: var(--wt-color-danger);
+      }
+      .field-error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -179,8 +198,11 @@ export class BackupScreen extends LitElement {
   @state() private weekdays: number[] = [1, 2, 3, 4, 5];
   @state() private timeMode: "auto" | "fixed" = "auto";
   @state() private atTime = "03:00";
-  @state() private retainCount = 7;
-  @state() private retainDays = 30;
+  @state() private retainCount = "7";
+  @state() private retainDays = "30";
+  @state() private policyAttempted = false;
+  /** The server refused the retention the boxes hold, and neither box has changed since. */
+  @state() private retentionRefused = false;
 
   @state() private submitting = false;
   @state() private configurationPassphrase = "";
@@ -277,10 +299,20 @@ export class BackupScreen extends LitElement {
     );
   }
 
+  get #retentionInvalid(): boolean {
+    return parseRetention(this.retainCount) === null || parseRetention(this.retainDays) === null;
+  }
+
+  get #policyHeld(): boolean {
+    return this.policyAttempted && this.#retentionInvalid;
+  }
+
   get #applyDisabled(): boolean {
-    if (this.#reusesHeldKey) return this.submitting || this.destinationDir.trim() === "";
+    if (this.#reusesHeldKey)
+      return this.submitting || this.destinationDir.trim() === "" || this.#policyHeld;
     return (
       this.submitting ||
+      this.#policyHeld ||
       !this.savedIt ||
       this.destinationDir.trim() === "" ||
       this.#effectiveKey === ""
@@ -294,7 +326,41 @@ export class BackupScreen extends LitElement {
   }
 
   get #saveSettingsDisabled(): boolean {
-    return this.submitting || this.destinationDir.trim() === "" || this.#reuseKey === null;
+    return (
+      this.submitting ||
+      this.destinationDir.trim() === "" ||
+      this.#reuseKey === null ||
+      this.#policyHeld
+    );
+  }
+
+  /** Marks the policy as submitted; `false` when a retention box fails the form's own check. */
+  #checkPolicy(): boolean {
+    this.policyAttempted = true;
+    this.retentionRefused = false;
+    if (!this.#retentionInvalid) return true;
+    this.#focusFirstInvalidBox();
+    return false;
+  }
+
+  #focusFirstInvalidBox(): void {
+    void this.updateComplete.then(() => {
+      const form = this.shadowRoot!.querySelector<HTMLElement>("#backup-body");
+      if (form) void focusFirstInvalid(form);
+    });
+  }
+
+  #retention(): { count: number; days: number } {
+    return { count: parseRetention(this.retainCount)!, days: parseRetention(this.retainDays)! };
+  }
+
+  #onApplyRefused(error: unknown): void {
+    const code = codeOf(error);
+    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+    if (code === "backup.request_invalid" && field === "retention") {
+      this.retentionRefused = true;
+      this.#focusFirstInvalidBox();
+    } else this.errorKey = code;
   }
 
   #buildSchedule(): BackupSchedule {
@@ -320,6 +386,7 @@ export class BackupScreen extends LitElement {
   async #apply(): Promise<void> {
     const sendsKey = !this.#reusesHeldKey;
     if (this.#applyDisabled || (sendsKey && this.#pastedKeyTooShort())) return;
+    if (!this.#checkPolicy()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
@@ -327,7 +394,7 @@ export class BackupScreen extends LitElement {
       destinationDir: this.destinationDir.trim(),
       ...(sendsKey ? { recoveryKey: this.#effectiveKey } : {}),
       schedule: this.#buildSchedule(),
-      retention: { count: this.retainCount, days: this.retainDays },
+      retention: this.#retention(),
     };
     try {
       this.status = await this.api.applyBackup(body);
@@ -338,7 +405,7 @@ export class BackupScreen extends LitElement {
       this.pastedKey = "";
       await this.#mint();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#onApplyRefused(error);
     } finally {
       this.submitting = false;
     }
@@ -385,6 +452,8 @@ export class BackupScreen extends LitElement {
         return;
       }
       this.#reuseKey = key;
+      this.policyAttempted = false;
+      this.retentionRefused = false;
       if (this.status) this.#prefillFromStatus(this.status);
       this.editSettings = true;
     } catch (error) {
@@ -394,6 +463,7 @@ export class BackupScreen extends LitElement {
 
   async #saveSettings(): Promise<void> {
     if (this.#saveSettingsDisabled || this.#reuseKey === null) return;
+    if (!this.#checkPolicy()) return;
     this.errorKey = null;
     this.refreshErrorKey = null;
     this.submitting = true;
@@ -401,14 +471,14 @@ export class BackupScreen extends LitElement {
       destinationDir: this.destinationDir.trim(),
       recoveryKey: this.#reuseKey,
       schedule: this.#buildSchedule(),
-      retention: { count: this.retainCount, days: this.retainDays },
+      retention: this.#retention(),
     };
     try {
       this.status = await this.api.applyBackup(body);
       this.editSettings = false;
       this.#reuseKey = null;
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#onApplyRefused(error);
     } finally {
       this.submitting = false;
     }
@@ -436,8 +506,8 @@ export class BackupScreen extends LitElement {
       }
     }
     if (s.retention) {
-      this.retainCount = s.retention.count;
-      this.retainDays = s.retention.days;
+      this.retainCount = String(s.retention.count);
+      this.retainDays = String(s.retention.days);
     }
   }
 
@@ -624,7 +694,7 @@ export class BackupScreen extends LitElement {
   #renderBody(s: BackupStatusView): TemplateResult {
     const writable = s.isPrimary && !s.managedByEnvironment;
     return html`
-      <div class="card">
+      <div class="card" id="backup-body">
         ${this.#renderStatus(s)}
         ${
           s.managedByEnvironment
@@ -740,13 +810,15 @@ export class BackupScreen extends LitElement {
       <h2>${t("backup.schedule.title")}</h2>
       ${this.#renderPolicy()}
 
-      <wt-button
-        variant="primary"
-        data-test="apply"
-        ?disabled=${this.#applyDisabled}
-        @click=${() => void this.#apply()}
-        >${t("backup.apply")}</wt-button
-      >
+      <wt-form-actions data-test="apply-actions" .error=${this.#policyBottom()}>
+        <wt-button
+          variant="primary"
+          data-test="apply"
+          ?disabled=${this.#applyDisabled}
+          @click=${() => void this.#apply()}
+          >${t("backup.apply")}</wt-button
+        >
+      </wt-form-actions>
     `;
   }
 
@@ -758,7 +830,14 @@ export class BackupScreen extends LitElement {
       <h2>${t("backup.schedule.title")}</h2>
       ${this.#renderPolicy()}
 
-      <div class="key-actions">
+      <wt-form-actions data-test="settings-actions" .error=${this.#policyBottom()}>
+        <wt-button
+          slot="cancel"
+          variant="ghost"
+          data-test="cancel-edit"
+          @click=${() => this.#cancelEdit()}
+          >${t("backup.edit.cancel")}</wt-button
+        >
         <wt-button
           variant="primary"
           data-test="save-settings"
@@ -766,10 +845,7 @@ export class BackupScreen extends LitElement {
           @click=${() => void this.#saveSettings()}
           >${t("backup.edit.save")}</wt-button
         >
-        <wt-button variant="ghost" data-test="cancel-edit" @click=${() => this.#cancelEdit()}
-          >${t("backup.edit.cancel")}</wt-button
-        >
-      </div>
+      </wt-form-actions>
     `;
   }
 
@@ -891,27 +967,49 @@ export class BackupScreen extends LitElement {
             </label>`
           : nothing
       }
+      ${this.#renderRetentionBox("count")} ${this.#renderRetentionBox("days")}
+    `;
+  }
 
-      <label class="field">
-        <span class="field-label">${t("backup.retention.count")}</span>
-        <input
-          type="number"
-          min="1"
-          data-test="retain-count"
-          .value=${String(this.retainCount)}
-          @input=${(e: Event) => (this.retainCount = Number((e.target as HTMLInputElement).value))}
-        />
-      </label>
-      <label class="field">
-        <span class="field-label">${t("backup.retention.days")}</span>
-        <input
-          type="number"
-          min="1"
-          data-test="retain-days"
-          .value=${String(this.retainDays)}
-          @input=${(e: Event) => (this.retainDays = Number((e.target as HTMLInputElement).value))}
-        />
-      </label>
+  #retentionMessage(text: string): string | null {
+    const invalid = this.policyAttempted && parseRetention(text) === null;
+    return invalid || this.retentionRefused ? t("backup.retention_invalid") : null;
+  }
+
+  #policyBottom(): string {
+    return this.#policyHeld || this.retentionRefused ? t("form.fix_fields") : "";
+  }
+
+  #renderRetentionBox(box: "count" | "days"): TemplateResult {
+    const text = box === "count" ? this.retainCount : this.retainDays;
+    const message = this.#retentionMessage(text);
+    const errorId = `retain-${box}-error`;
+    return html`
+      <div class="field">
+        <label class="field">
+          <span class="field-label"
+            >${t(`backup.retention.${box}`)}<span class="required" aria-hidden="true">*</span></span
+          >
+          <input
+            type="number"
+            min="1"
+            step="1"
+            required
+            name="retention-${box}"
+            data-test="retain-${box}"
+            aria-invalid=${message === null ? "false" : "true"}
+            aria-describedby=${message === null ? nothing : errorId}
+            .value=${text}
+            @input=${(e: Event) => {
+              const value = (e.target as HTMLInputElement).value;
+              if (box === "count") this.retainCount = value;
+              else this.retainDays = value;
+              this.retentionRefused = false;
+            }}
+          />
+        </label>
+        ${message === null ? nothing : html`<p class="field-error" id=${errorId} data-test=${errorId}>${message}</p>`}
+      </div>
     `;
   }
 

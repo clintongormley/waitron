@@ -1431,3 +1431,241 @@ it("keeps the minted key on screen when the clipboard refuses the copy", async (
     delete (navigator.clipboard as unknown as Record<string, unknown>)["writeText"];
   }
 });
+
+describe("backup-screen retention boxes", () => {
+  async function bottomOf(el: BackupScreen, id: string): Promise<string | null> {
+    const actions = q(el, `[data-test=${id}]`) as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await actions.updateComplete;
+    return actions.shadowRoot!.querySelector("[role=alert]")?.textContent ?? null;
+  }
+
+  const boxError = (el: BackupScreen, box: "count" | "days"): string | null =>
+    q(el, `[data-test=retain-${box}-error]`)?.textContent?.trim() ?? null;
+
+  async function readyToApply(api: DashboardApi): Promise<BackupScreen> {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    tickCheckbox(el, "[data-test=saved-it]");
+    await el.updateComplete;
+    return el;
+  }
+
+  it("a blank box sends nothing: the box says why, focus moves to it, and Apply waits until it is filled", async () => {
+    const api = stubApi();
+    const el = await readyToApply(api);
+    setNativeInput(el, "[data-test=retain-count]", "");
+    await el.updateComplete;
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(boxError(el, "count")).toBe(t("backup.retention_invalid"));
+    expect(q(el, "[data-test=retain-count]")!.getAttribute("aria-invalid")).toBe("true");
+    expect(boxError(el, "days")).toBeNull();
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=retain-count]"));
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
+    expect(alertText(el)).toBeUndefined();
+
+    setNativeInput(el, "[data-test=retain-count]", "5");
+    await el.updateComplete;
+    expect(boxError(el, "count")).toBeNull();
+    expect(await bottomOf(el, "apply-actions")).toBeNull();
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+    expect(api.applyBackup).toHaveBeenCalledWith(
+      expect.objectContaining({ retention: { count: 5, days: 30 } }),
+    );
+  });
+
+  it("zero, a negative and a fraction are refused by the form as a blank is", async () => {
+    for (const value of ["0", "-3", "2.5"]) {
+      const api = stubApi();
+      const el = await readyToApply(api);
+      setNativeInput(el, "[data-test=retain-days]", value);
+      q(el, "[data-test=apply]")!.click();
+      await flush(el);
+      expect(api.applyBackup, value).not.toHaveBeenCalled();
+      expect(boxError(el, "days"), value).toBe(t("backup.retention_invalid"));
+      cleanupWidgets();
+    }
+  });
+
+  it("turning backups on with a held key holds a blank box too", async () => {
+    const api = stubApi({}, { ...OFF, recoveryKeySet: true });
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+    setNativeInput(el, "[data-test=retain-count]", "");
+    await el.updateComplete;
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(boxError(el, "count")).toBe(t("backup.retention_invalid"));
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("the settings editor holds a blank box the same way", async () => {
+    const api = stubApi({}, ENABLED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    setNativeInput(el, "[data-test=retain-days]", "");
+    await el.updateComplete;
+
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(boxError(el, "days")).toBe(t("backup.retention_invalid"));
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("cancelling the settings editor starts it again with no messages", async () => {
+    const api = stubApi(
+      {
+        applyBackup: vi.fn().mockRejectedValue({
+          code: "backup.request_invalid",
+          params: { field: "retention" },
+          status: 400,
+        }),
+      },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+    expect(boxError(el, "days")).toBe(t("backup.retention_invalid"));
+
+    q(el, "[data-test=cancel-edit]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+
+    expect(boxError(el, "days")).toBeNull();
+    expect(await bottomOf(el, "settings-actions")).toBeNull();
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("the server's refusal of the retention shows under both boxes, moves focus to the first, and leaves Apply working", async () => {
+    const api = stubApi({
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "retention" },
+        status: 400,
+      }),
+    });
+    const el = await readyToApply(api);
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(boxError(el, "count")).toBe(t("backup.retention_invalid"));
+    expect(boxError(el, "days")).toBe(t("backup.retention_invalid"));
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=retain-count]"));
+    expect(await bottomOf(el, "apply-actions")).toBe(t("form.fix_fields"));
+    expect(alertText(el)).toBeUndefined();
+    expect(q(el, "[data-test=apply]")!.hasAttribute("disabled")).toBe(false);
+
+    setNativeInput(el, "[data-test=retain-count]", "8");
+    await el.updateComplete;
+    expect(boxError(el, "count")).toBeNull();
+    expect(boxError(el, "days")).toBeNull();
+    expect(await bottomOf(el, "apply-actions")).toBeNull();
+  });
+
+  it("the settings editor shows the server's refusal of the retention under both boxes and moves focus to the first", async () => {
+    const api = stubApi(
+      {
+        applyBackup: vi.fn().mockRejectedValue({
+          code: "backup.request_invalid",
+          params: { field: "retention" },
+          status: 400,
+        }),
+      },
+      ENABLED,
+    );
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+
+    expect(boxError(el, "count")).toBe(t("backup.retention_invalid"));
+    expect(boxError(el, "days")).toBe(t("backup.retention_invalid"));
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=retain-count]"));
+    expect(await bottomOf(el, "settings-actions")).toBe(t("form.fix_fields"));
+    expect(alertText(el)).toBeUndefined();
+    expect(q(el, "[data-test=save-settings]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("a whole number written as 7.0 or 1e2 is sent as 7 and 100 when turning backups on", async () => {
+    const api = stubApi();
+    const el = await readyToApply(api);
+    setNativeInput(el, "[data-test=retain-count]", "7.0");
+    setNativeInput(el, "[data-test=retain-days]", "1e2");
+    await el.updateComplete;
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(boxError(el, "count")).toBeNull();
+    expect(boxError(el, "days")).toBeNull();
+    expect(api.applyBackup).toHaveBeenCalledWith(
+      expect.objectContaining({ retention: { count: 7, days: 100 } }),
+    );
+  });
+
+  it("a whole number written as 7.0 or 1e2 is sent as 7 and 100 from the settings editor", async () => {
+    const api = stubApi({}, ENABLED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=edit-settings]")!.click();
+    await flush(el);
+    setNativeInput(el, "[data-test=retain-count]", "7.0");
+    setNativeInput(el, "[data-test=retain-days]", "1e2");
+    await el.updateComplete;
+
+    q(el, "[data-test=save-settings]")!.click();
+    await flush(el);
+
+    expect(boxError(el, "count")).toBeNull();
+    expect(boxError(el, "days")).toBeNull();
+    expect(api.applyBackup).toHaveBeenCalledWith(
+      expect.objectContaining({ retention: { count: 7, days: 100 } }),
+    );
+  });
+
+  it("a refusal naming another field stays in the page message, not under the boxes", async () => {
+    const api = stubApi({
+      applyBackup: vi.fn().mockRejectedValue({
+        code: "backup.request_invalid",
+        params: { field: "schedule" },
+        status: 400,
+      }),
+    });
+    const el = await readyToApply(api);
+
+    q(el, "[data-test=apply]")!.click();
+    await flush(el);
+
+    expect(alertText(el)).toBe(codeMessage("backup.request_invalid"));
+    expect(boxError(el, "count")).toBeNull();
+    expect(boxError(el, "days")).toBeNull();
+  });
+});
