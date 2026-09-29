@@ -6,6 +6,7 @@ import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, readSentWork } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { groupArrivingDishes } from "./order-groups.js";
 import {
   checkAndBumpParty,
   openParty,
@@ -107,11 +108,15 @@ export async function moveBill(
       tableId: destination.tableId,
     });
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
+    await groupArrivingDishes(tx, partyId, billId, options.operatorId);
     if (open) await setMainBill(tx, partyId, billId);
     result = { partyId, billId, merged: false };
   } else {
     const partyId = destination.partyId;
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
+    // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
+    // whose own lines keep theirs.
+    await groupArrivingDishes(tx, partyId, billId, options.operatorId);
     const main = await readMainBill(tx, partyId);
     if (
       options.bills === "merge" &&

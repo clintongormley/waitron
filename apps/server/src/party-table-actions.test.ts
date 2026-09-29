@@ -1163,7 +1163,8 @@ describe("split a table", () => {
 
     expect(result.mainBillId).toBeNull();
     expect(await billRow(v, b2)).toMatchObject({ status: "placed", partyId: result.partyId });
-    expect(await lineRows(b2)).toEqual(lines.map((line) => ({ ...line, groupId: null })));
+    const [arrived] = await groupsOf(result.partyId);
+    expect(await lineRows(b2)).toEqual(lines.map((line) => ({ ...line, groupId: arrived!.id })));
     expect(await ticketsOf(b2)).toEqual(tickets);
     expect((await partyRow(v, result.partyId)).mainBillId).toBeNull();
     const { tabId } = await orderForParty(v, result.partyId, ["Agua"]);
@@ -1171,7 +1172,7 @@ describe("split a table", () => {
     expect((await partyRow(v, result.partyId)).mainBillId).toBe(tabId);
   });
 
-  it("takes sent dishes out of their group, keeping their ticket state", async () => {
+  it("takes sent dishes out of their group into one of the new party's, keeping their ticket state", async () => {
     const [m4, m5] = await tables("Enviada", 4, 5);
     const ana = await seat(v, m4);
     await joinFree(ana.partyId, m5);
@@ -1183,9 +1184,10 @@ describe("split a table", () => {
     expect(tickets[0]!.firedAt).not.toBeNull();
 
     const splitting = await cmd(ana.partyId);
-    await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+    const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
 
-    expect(await lineRows(b2)).toEqual(lines.map((line) => ({ ...line, groupId: null })));
+    const [arrived] = await groupsOf(result.partyId);
+    expect(await lineRows(b2)).toEqual(lines.map((line) => ({ ...line, groupId: arrived!.id })));
     expect(await ticketsOf(b2)).toEqual(tickets);
   });
 

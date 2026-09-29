@@ -2508,7 +2508,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - Questions for the owner:
       - A party's dishes in no group (moved in from another party's bill or from a
         bill with no party) show at the pass in a section of their own with no Ready or Away
-        button, as dishes with no course did before.
+        button, as dishes with no course did before. _(2026-09-29: since Task 9 a whole bill moved
+        in by Move a bill or Split a table gets groups; the tab transfer (`transferLines`) and
+        `unjoinTable` still leave dishes in no group until Task 13.)_
       - The kitchen and pass screens offer Fire on every held group, as the Tab drawer and the
         course-era screens did, where the plan's text said "the first held group".
       - The table screen reads its printing problems in a second request beside the groups read on
@@ -3364,7 +3366,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 
     Open points: the move moves the bill's revision on, open or presented, without
     `bumpRevision`'s refusal of money in flight, since a move changes no amount (plan P19). Dishes
-    arriving in a party join no group until Task 9.
+    arriving in a party join no group until Task 9 _(2026-09-29: Task 9 gives them one; see its entry below)_.
   - **Task 8 DONE (#869, 2026-09-29): move guests, join tables and split a
     table, on the server.** Three new routes, `POST /api/parties/:id/move` (`{ toTableId }`),
     `POST /api/parties/:id/join` (`{ tableId }`) and `POST /api/parties/:id/split-table`
@@ -3434,6 +3436,39 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
     writes a merged party's tables in one statement, so they share a joining time and their order in
     its name is not fixed; it goes with Task 13.
+  - **Task 9 DONE (2026-09-29): dishes arriving in a party get a kitchen group, so the pass can
+    mark them.** A bill that arrives in a party by Move a bill (to a held table or a free one) or
+    by Split a table has each dish with no group put in a new group of the receiving party, after
+    its last group (`groupArrivingDishes`, `apps/server/src/order-groups.ts`): dishes already
+    released to the kitchen in ONE new fired group, and dishes not yet released in one new held
+    group PER COURSE, because firing a course releases whole every held group holding one of its
+    dishes on that bill; the waiter releases them as any held group. The new groups go fired first, then held
+    with no course, then by course. "Released" is what Current orders and serving already use
+    (`isReleased`, `apps/server/src/working-order.ts`): a kitchen item decides, fired or not; with no kitchen item, the line's `sent_at`. Nothing is sent or held by it, an extras line
+    takes its dish's group, and each group made records a `lines_moved` event with
+    `{ workingOrderId, arrived: true }`. A presented bill's lines change group only (migration
+    `0042` allows it). A bill merged into the main bill on a move is grouped before the merge, so
+    its dishes carry their group onto the main bill and the main bill's own lines keep theirs, a
+    dish with no group included. A bill leaving for the counter gets no group. Retires A96 as the
+    plan re-scoped it (Move a bill and Split a table); the tab transfer (`transferLines`) and
+    `unjoinTable` still leave arriving dishes in no group until Task 13 deletes them.
+    - **A plan default the owner may overturn (P16):** spec §15's "leaves with them outside any
+      group" is read as the side the bill leaves; the receiving party groups the dishes.
+    - **For the owner:** the new fired group's fired time and person are the move's, as the plan
+      said, so the table screen's group heading counts "Fired N min ago" from the move; each dish row
+      keeps its own kitchen item's time.
+    - **For the owner:** an arriving held group prints no HOLD ticket in advance, though every
+      other way of making a held group prints one; with "Print held groups in advance" on, it prints an
+      ordinary ticket when fired, not a FIRE slip.
+    - **Which dishes arrive unsent changed with Task 7.** An open counter order moved into table
+      service has its dishes sent at the move (Task 7), so it arrives in a FIRED group, not the
+      held group the plan's Task 9 expected; a later course's dish, held for its course, arrives
+      in its course's held group. Task 7's send at the move is kept (its FYI left the choice to this task).
+    - The party's revision is not moved on again: every caller has already moved it on, or has
+      just made the party, in the same transaction.
+    Tests: `apps/server/src/party-arriving-dishes.test.ts`. Seven cases in
+    `party-move-bill.test.ts` and `party-table-actions.test.ts` that pinned an arriving bill's
+    lines outside any group now expect the new group, every other value unchanged. No migration.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

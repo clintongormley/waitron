@@ -367,7 +367,8 @@ change the design most:
   the same invoice is settled, with one sale and one fiscal record.
 - A paid bill is refused by Move a bill, and stays on its original party when parties combine.
 - Kitchen groups: a bill holding held dishes cannot leave its party; a bill whose dishes were sent
-  leaves with them outside any group, keeping their preparation and service state.
+  leaves with them outside any group, keeping their preparation and service state. _(2026-09-29,
+  plan P16 and Task 9: read as the side the bill leaves; the receiving party groups the dishes.)_
 - MOVED notices: after a bill move, a deli move and a table action, only the dishes whose destination
   changed get a notice.
 - Service area: a deli bill moved into a table party keeps its existing item's price and VAT class,
