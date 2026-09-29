@@ -1650,9 +1650,15 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
       revision: revision + 1,
       reminder: { groupId: party.tarta.id, dueAt: null },
       groups: [
-        { id: party.fired.id, state: "fired", addedLater: false },
-        { id: party.tarta.id, state: "held", remindAt, addedLater: false },
-        { id: party.croquetas.id, state: "held", remindAt: null, addedLater: false },
+        { id: party.fired.id, state: "fired", sentAt: expect.any(String), sentBy: "Ana" },
+        { id: party.tarta.id, state: "held", remindAt, sentAt: expect.any(String), sentBy: "Ana" },
+        {
+          id: party.croquetas.id,
+          state: "held",
+          remindAt: null,
+          sentAt: expect.any(String),
+          sentBy: "Ana",
+        },
       ],
       ungrouped: [],
     });

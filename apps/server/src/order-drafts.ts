@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import {
   kitchenCourses,
   newId,
@@ -6,7 +6,6 @@ import {
   orderDraftEvents,
   orderDraftLines,
   orderDrafts,
-  orderGroups,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { readExtraSelections, readOptionSelections } from "@waitron/catalogue";
@@ -305,9 +304,6 @@ export async function submitDraft(
         operatorId,
         billId: input.billId,
         revisionMoved: true,
-        ...(joinGroupId === undefined
-          ? { addedLater: await startedAfterAGroup(tx, partyId, draft.createdAt) }
-          : {}),
       });
       const emptied = named.size === lines.length;
       await tx.delete(orderDraftLines).where(inArray(orderDraftLines.id, [...named]));
@@ -330,24 +326,6 @@ export async function submitDraft(
       return { ...placed, draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id) };
     },
   );
-}
-
-/**
- * Whether the party already had a group when a draft started at `startedAt` was started: its groups
- * are then a later addition, as the till decides for a draft. Partial sends of a draft started first
- * all belong to the party's order.
- */
-async function startedAfterAGroup(
-  tx: Transaction,
-  partyId: string,
-  startedAt: string,
-): Promise<boolean> {
-  const [group] = await tx
-    .select({ id: orderGroups.id })
-    .from(orderGroups)
-    .where(and(eq(orderGroups.partyId, partyId), lt(orderGroups.createdAt, startedAt)))
-    .limit(1);
-  return group !== undefined;
 }
 
 /** Each party's open drafts holding at least one line, oldest first, in one query. */

@@ -2362,8 +2362,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     2026-09-28: each line now shows once, inside its course section)_; the held-groups
     list shows each group's summary and then its lines _(Task 9, 2026-09-28: the list is now
     Current orders — every group of the party with each dish from every bill of the party, paid
-    ones included and abandoned ones left out, an "Added later" mark on a group started as a later
-    addition, and the serving controls; a group's summary shows only when Current orders cannot be
+    ones included and abandoned ones left out, a header on each group showing when it was sent and
+    who sent it (campaign item A119; owner 2026-09-28: "show when and who"), and the serving
+    controls; a group's summary shows only when Current orders cannot be
     read)_; group numbers are the server's positions,
     so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
     older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
@@ -2810,9 +2811,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `0033`), and on a second venue in two steps (`0033` as it stood at `c1a1c667f`, then `0034`).
       Every row was kept; tables (148), triggers (72) and indexes (291) were the same before and
       after, with only that trigger's text changed; `pragma foreign_key_check` found nothing.
-      Existing groups read `added_later` false and existing lines `served_quantity` 0, so a line
-      marked served before the upgrade keeps `served_at` with a served count of 0 (no backfill, by
-      the pre-live rule).
+      Groups existing at that upgrade read `added_later` false and existing lines `served_quantity`
+      0, so a line marked served before the upgrade keeps `served_at` with a served count of 0 (no
+      backfill, by the pre-live rule). `0034`'s column is dropped again by core
+      `0040_drop_order_group_added_later` (campaign item A119), a plain `DROP COLUMN` that rebuilds
+      no table. Measured 2026-09-29: a scratch venue migrated at main `c46cc8f2c`, holding one party
+      with four groups (two fired, one of them marked added later, one held, one removed), six
+      group events and four lines, then migrated with the branch's sets: the groups and group
+      events read the same but for the dropped column, every line kept its group, tables (149),
+      triggers (419, with the change feed installed) and indexes (294) were the same by name, and
+      `pragma foreign_key_check` found nothing.
     - Left open:
       - Once a venue's invoice languages change, marking a line served on a paid bill is refused.
         The two locale triggers on order lines (`working_order_lines_check_locales_update` and

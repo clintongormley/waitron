@@ -11,6 +11,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { persons } from "@waitron/identity";
 import { AppError, stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
 import { enqueueHoldCorrections, enqueueKitchenTickets } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
@@ -119,8 +120,6 @@ export type PlaceGroupsInput = Pick<
   SubmitGroupsInput,
   "groups" | "joinGroupId" | "operatorId" | "billId"
 > & {
-  /** Whether the groups it starts are a later addition; by default, whether the party had a group. */
-  addedLater?: boolean;
   /** The command has already moved the party's revision on, so making a main bill does not. */
   revisionMoved?: boolean;
 };
@@ -167,9 +166,8 @@ export async function placeGroups(
   const groupIds: string[] = [];
   if (input.joinGroupId !== undefined) groupIds.push(input.joinGroupId);
   else {
-    const addedLater = input.addedLater ?? (await partyHasGroup(tx, partyId));
     for (const group of input.groups) {
-      groupIds.push(await startGroup(tx, partyId, group.release, operatorId, addedLater));
+      groupIds.push(await startGroup(tx, partyId, group.release, operatorId));
     }
   }
   // The k-th parent row is input line k; an extras child goes with its dish.
@@ -589,7 +587,6 @@ export async function moveLinesToGroup(
           quantity: workingOrderLines.quantity,
           groupId: workingOrderLines.groupId,
           groupState: orderGroups.state,
-          groupAddedLater: orderGroups.addedLater,
           billStatus: workingOrders.status,
         })
         .from(workingOrderLines)
@@ -628,15 +625,7 @@ export async function moveLinesToGroup(
         moves.map((m) => m.lineId),
       );
       const targetId =
-        target === "new"
-          ? await startGroup(
-              tx,
-              partyId,
-              "hold",
-              args.operatorId,
-              lines.some((line) => line.groupAddedLater),
-            )
-          : target.groupId;
+        target === "new" ? await startGroup(tx, partyId, "hold", args.operatorId) : target.groupId;
       const sources = new Set<string>();
       const splitsByBill = new Map<string, { lineNo: number; quantity: string }[]>();
       for (const { lineId, quantity } of moves) {
@@ -708,7 +697,6 @@ export async function startGroup(
   partyId: string,
   release: GroupRelease,
   operatorId: string,
-  addedLater: boolean,
 ): Promise<string> {
   const fire = release === "fire";
   const [group] = await tx
@@ -720,7 +708,6 @@ export async function startGroup(
       firedAt: fire ? nowIso() : null,
       firedBy: fire ? operatorId : null,
       submittedBy: operatorId,
-      addedLater,
     })
     .returning({ id: orderGroups.id });
   return group!.id;
@@ -766,16 +753,6 @@ export async function removeEmptiedHeldGroups(
     if (!emptied.has(groupId)) continue;
     await recordGroupEvent(tx, { partyId, groupId, kind: "removed", actorId, detail: {} });
   }
-}
-
-/** Whether the party has ever had a group, a removed one included. */
-export async function partyHasGroup(tx: Transaction, partyId: string): Promise<boolean> {
-  const [group] = await tx
-    .select({ id: orderGroups.id })
-    .from(orderGroups)
-    .where(eq(orderGroups.partyId, partyId))
-    .limit(1);
-  return group !== undefined;
 }
 
 /** The operator a group write names, else `management.request_invalid`: an event needs one. */
@@ -1017,8 +994,10 @@ export interface CurrentOrderGroup {
   firedAt: string | null;
   /** A snooze's time, until the group fires, empties or moves in a reorder. */
   remindAt: string | null;
-  /** Recorded when the group was started (`order_groups.added_later`). */
-  addedLater: boolean;
+  /** A fired group's firing; a held group's holding. */
+  sentAt: string;
+  /** The display name of whoever fired or held it; null when no person record matches. */
+  sentBy: string | null;
   rows: CurrentOrderRow[];
 }
 
@@ -1060,9 +1039,17 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       state: orderGroups.state,
       firedAt: orderGroups.firedAt,
       remindAt: orderGroups.remindAt,
-      addedLater: orderGroups.addedLater,
+      createdAt: orderGroups.createdAt,
+      sentBy: persons.displayName,
     })
     .from(orderGroups)
+    .leftJoin(
+      persons,
+      eq(
+        persons.id,
+        sql`case when ${orderGroups.state} = 'fired' then ${orderGroups.firedBy} else ${orderGroups.submittedBy} end`,
+      ),
+    )
     .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
     .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id));
   const lines = await tx
@@ -1109,9 +1096,11 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       },
     ]);
   }
-  const shown: CurrentOrderGroup[] = groups.map((group) => ({
+  const shown: CurrentOrderGroup[] = groups.map(({ createdAt, ...group }) => ({
     ...group,
     state: group.state as "held" | "fired",
+    // `order_groups_fired_at_ck` sets `fired_at` exactly when the group is fired.
+    sentAt: group.state === "fired" ? group.firedAt! : createdAt,
     rows: [],
   }));
   const byId = new Map(shown.map((group) => [group.id, group]));
