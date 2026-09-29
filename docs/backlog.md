@@ -3065,11 +3065,30 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       confirm the completed refund with a manager's PIN. The server records it on the bill and the
       manual payment in one transaction. Task 15 must put the terminal-refund instruction beside
       the manager-PIN confirmation on the till; the till has no bill-refund action yet.
-    - **Investigate bill receipt tender order under close payment timings.** On B14a, the focused
-      two-file server refund run twice printed the first cash tender before the earlier card tender
-      in `bill-refunds.card.test.ts`'s invoice case, then passed on a later run. The same case passed
-      alone. `readBillTenderLines` orders by settlement timestamp and tender id; capture the
-      timestamps and ids in a failing run before choosing a fix. No receipt assertion was changed.
+    - **A bill receipt's payments keep the order they were taken in — DONE (A123, 2026-09-29).**
+      `bill-refunds.card.test.ts`'s invoice case ("design §8 test 23") printed the cash tender
+      before the earlier card tender now and then (on B14a, and again on lane B's T5, #852).
+      `readBillTenderLines` broke a tie on the millisecond timestamp with a random id, so two
+      payments taken in the same millisecond, or two refunds completed in one, printed in a random
+      order. It now breaks the tie by the order the rows were written (`rowid`). Guard: the two
+      "taken within one millisecond" cases in `apps/server/src/bill-payments.test.ts`, whose ids are
+      made to sort against the taking order; each failed on every run with its half of the old
+      tie-break restored (3 of 3 runs for refunds, 5 of 5 for payments).
+      **OPEN:** the review found the same random tie-break in other places, left alone because they
+      are outside this item. Each breaks a same-millisecond tie with a row id that is a random UUID
+      (`newId` in `packages/db/src/schema/columns.ts`), so two rows from one millisecond come back
+      in a random order:
+      - `readPaymentRows` in `apps/server/src/bill-payments.ts` orders a bill's payments by when
+        they were created, then by id, and `readPaymentsAndRefunds` in the same file orders the
+        refunds the same way.
+      - `apps/server/src/payment-slip-print.ts` orders a sale's card payments by when they settled,
+        then by id, so two cards settled in one millisecond print their slips in a random order.
+      - `readTenderBlock` in `apps/server/src/till-sale.ts` orders a sale's tenders by when they
+        settled, then by id, and keeps the first, so with two in one millisecond it can name a
+        different payment from the receipt's first payment line. The printed receipt
+        (`apps/server/src/receipt-ticket.ts`) prints the payments list instead whenever it has one,
+        but the till's on-screen ticket (`apps/till/src/screens/till-ticket-view.ts`) shows only
+        that one tender, so the random pick shows there.
     - **Dashboard recovery for a bill's unsettled card payment or refund is done** (lane D item
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome

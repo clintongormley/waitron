@@ -1,6 +1,7 @@
-import { randomUUID } from "node:crypto";
+import crypto, { randomUUID } from "node:crypto";
+import { syncBuiltinESMExports } from "node:module";
 import { eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -12,6 +13,7 @@ import {
   diningTables,
   printJobs,
   sales,
+  tenders,
   triggerRaised,
   withTransaction,
   workingOrderLines,
@@ -33,6 +35,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  saleId as brandSaleId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -53,7 +56,7 @@ import { createTable } from "./tables.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
-import { collectOrder, payWorkingOrder } from "./till-sale.js";
+import { collectOrder, payWorkingOrder, readBillTenderLines } from "./till-sale.js";
 import {
   abandonHeldOrder,
   joinTable,
@@ -713,5 +716,103 @@ describe("the invoice at full payment", () => {
         .where(eq(billPaymentLines.billPaymentId, paid.payment.id)),
     );
     expect(rows).toEqual([{ quantity: 1000, amount: 1800 }]);
+  });
+});
+
+describe("the receipt's payments, taken within one millisecond", () => {
+  const AMOUNTS = [100, 200, 300, 400, 500, 2800];
+
+  // Ids that sort against the order they are made in, so a tie broken by id gives the reverse of
+  // the taking order on every run rather than by chance.
+  function descendingIds() {
+    const real = crypto.randomUUID.bind(crypto);
+    let made = 0;
+    return () =>
+      `${(0xffffffff - made++).toString(16)}${real().slice(8)}` as ReturnType<typeof randomUUID>;
+  }
+
+  async function tenderLinesOf(billId: string) {
+    const [sale] = await inTx((tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, billId)),
+    );
+    return inTx((tx) => readBillTenderLines(tx, brandSaleId(sale!.id)));
+  }
+
+  it("lists the payments in the order they were taken", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const start = Date.now();
+    const receivedAt = new Date(start + AMOUNTS.length).toISOString();
+    const paymentId = descendingIds();
+    for (const [taken, applied] of AMOUNTS.entries()) {
+      await insertPayment(billId, {
+        id: paymentId(),
+        applied,
+        state: "received",
+        createdAt: new Date(start + taken).toISOString(),
+        receivedAt,
+      });
+    }
+
+    const tenderId = descendingIds();
+    const tenderIds = vi.spyOn(crypto, "randomUUID").mockImplementation(tenderId);
+    syncBuiltinESMExports();
+    try {
+      await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    } finally {
+      tenderIds.mockRestore();
+      syncBuiltinESMExports();
+    }
+
+    const tenderIdsTaken = (
+      await inTx((tx) =>
+        tx
+          .select({ id: tenders.id })
+          .from(tenders)
+          .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
+          .where(eq(billPayments.workingOrderId, billId))
+          .orderBy(billPayments.createdAt),
+      )
+    ).map((row) => row.id);
+    // Sorting by tender id, the old tie-break, would reverse the taking order.
+    expect(tenderIdsTaken).toEqual([...tenderIdsTaken].sort().reverse());
+    expect((await tenderLinesOf(billId)).map((line) => line.amount)).toEqual(
+      AMOUNTS.map((cents) => (cents / 100).toFixed(2)),
+    );
+  });
+
+  it("lists a payment's refunds in the order they were asked for", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const refunded = AMOUNTS.reduce((sum, cents) => sum + cents, 0);
+    const paymentId = await insertPayment(billId, {
+      applied: 4300 + refunded,
+      state: "received",
+      receivedAt: new Date().toISOString(),
+    });
+    const completedAt = new Date().toISOString();
+    const refundId = descendingIds();
+    for (const appliedAmount of AMOUNTS) {
+      await inTx((tx) =>
+        tx.insert(billPaymentRefunds).values({
+          id: refundId(),
+          billPaymentId: paymentId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount,
+          reason: "error",
+          authorizedBy: OPERATOR,
+          requestedBy: OPERATOR,
+          tillId: venue.cfg.tillId,
+          state: "completed",
+          completedAt,
+        }),
+      );
+    }
+
+    await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+
+    const [line] = await tenderLinesOf(billId);
+    expect(line!.refunds.map((refund) => refund.amount)).toEqual(
+      AMOUNTS.map((cents) => (cents / 100).toFixed(2)),
+    );
   });
 });

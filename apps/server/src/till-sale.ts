@@ -259,7 +259,9 @@ export async function readBillTenderLines(
       and(eq(payments.billPaymentId, billPayments.id), eq(payments.provider, "manual")),
     )
     .where(eq(tenders.saleId, saleId))
-    .orderBy(tenders.settledAt, tenders.id);
+    // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
+    // written in.
+    .orderBy(tenders.settledAt, sql`${billPayments}.rowid`);
   const refundRows =
     rows.length === 0
       ? []
@@ -279,7 +281,7 @@ export async function readBillTenderLines(
               eq(billPaymentRefunds.state, "completed"),
             ),
           )
-          .orderBy(billPaymentRefunds.completedAt, billPaymentRefunds.id);
+          .orderBy(billPaymentRefunds.completedAt, sql`${billPaymentRefunds}.rowid`);
   return rows.map((row) => {
     const amount = centsToDecimal(row.amount);
     const tip = centsToDecimal(row.tip);
