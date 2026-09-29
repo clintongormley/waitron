@@ -1,6 +1,7 @@
 import {
   type BluetoothCommandResult,
   type DiscoveredDevice,
+  type HostLog,
   type PairResult,
   isBluetoothAddress,
 } from "@waitron/print-agent";
@@ -31,7 +32,9 @@ export interface BluetoothHost {
 }
 
 /** `info` is asked of at most this many listed devices per scan, all at once, so the command's own
- * deadline bounds the whole batch. Devices past it stay in the scan, unmarked. */
+ * deadline bounds the whole batch. Unmarked devices are asked never-asked first, then asked longest
+ * ago, and named before unnamed among equals, then in listing order; the rest wait for a later
+ * scan. */
 export const MAX_BLUETOOTH_INFO_DEVICES = 8;
 
 const DEVICE_LINE = /Device\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?:\s+(.*))?$/;
@@ -99,6 +102,20 @@ export function parseBluetoothctlInfo(text: string): { printerLike?: true } {
   return printerLike ? { printerLike: true } : {};
 }
 
+/** What tells one failed `info` from another: the run's own message carries neither its standard
+ * output nor how the run ended. */
+function infoFailure(reason: unknown): Record<string, unknown> {
+  const failed = reason as { stdout?: unknown; code?: unknown; killed?: unknown } | null;
+  const printed =
+    typeof failed?.stdout === "string" ? cleanLines(failed.stdout).join("\n").trim() : "";
+  return {
+    error: reason instanceof Error ? reason.message : String(reason),
+    ...(printed !== "" ? { printed } : {}),
+    ...(typeof failed?.code === "number" ? { exitCode: failed.code } : {}),
+    ...(failed?.killed === true ? { killed: true } : {}),
+  };
+}
+
 const REMOVAL_INCOMPLETE = "removal did not complete";
 
 /** Success is the removal line at exit 0, or this address reported unknown at exit 1: gone is what
@@ -129,8 +146,17 @@ export function createBluetoothctlHost(opts: {
   pair?: (mac: string, pin?: string) => Promise<PairResult>;
   scanSeconds?: number;
   listTimeoutMs?: number;
+  log?: HostLog;
 }): BluetoothHost {
   const scanSeconds = opts.scanSeconds ?? 6;
+  // Per listed address: whether it was marked, the scan that last asked, and the failure last
+  // logged for it, so a repeating failure is logged once. A marked address is not asked again while
+  // listed.
+  const readings = new Map<
+    string,
+    { printerLike: boolean; askedAt: number; lastFailure?: string }
+  >();
+  let scans = 0;
   const pair = opts.pair ?? pairWithBluetoothctl;
   const listOpts = opts.listTimeoutMs === undefined ? undefined : { timeoutMs: opts.listTimeoutMs };
   return {
@@ -141,13 +167,36 @@ export function createBluetoothctlHost(opts: {
       );
       if (failure) throw new Error(failure[0]);
       const listed = parseBluetoothctlDevices(await opts.run(["devices"]));
-      const inspected = await Promise.allSettled(
-        listed.slice(0, MAX_BLUETOOTH_INFO_DEVICES).map((d) => opts.run(["info", d.mac])),
-      );
-      return listed.map((d, i) => {
-        const info = inspected[i];
-        const printerLike =
-          info?.status === "fulfilled" && parseBluetoothctlInfo(info.value).printerLike === true;
+      const scan = ++scans;
+      const macs = new Set(listed.map((d) => d.mac));
+      for (const mac of readings.keys()) if (!macs.has(mac)) readings.delete(mac);
+      const toAsk = listed
+        .filter((d) => readings.get(d.mac)?.printerLike !== true)
+        .map((d) => ({ d, askedAt: readings.get(d.mac)?.askedAt ?? -1 }))
+        .sort(
+          (a, b) =>
+            a.askedAt - b.askedAt ||
+            Number(a.d.name === undefined) - Number(b.d.name === undefined),
+        )
+        .slice(0, MAX_BLUETOOTH_INFO_DEVICES)
+        .map(({ d }) => d.mac);
+      const answers = await Promise.allSettled(toAsk.map((mac) => opts.run(["info", mac])));
+      toAsk.forEach((mac, i) => {
+        const answer = answers[i]!;
+        if (answer.status === "fulfilled") {
+          const printerLike = parseBluetoothctlInfo(answer.value).printerLike === true;
+          readings.set(mac, { printerLike, askedAt: scan });
+          return;
+        }
+        const failure = infoFailure(answer.reason);
+        const lastFailure = JSON.stringify(failure);
+        if (lastFailure !== readings.get(mac)?.lastFailure) {
+          opts.log?.warn("bluetooth info failed", { address: mac, ...failure });
+        }
+        readings.set(mac, { printerLike: false, askedAt: scan, lastFailure });
+      });
+      return listed.map((d) => {
+        const printerLike = readings.get(d.mac)?.printerLike === true;
         return {
           transport: "bluetooth",
           localKey: d.mac,

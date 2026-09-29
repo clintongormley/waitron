@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import type { BluetoothHost } from "./bluetooth.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredDevice, WireJob } from "@waitron/print-agent";
@@ -337,6 +337,71 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     expect(await listed).toStrictEqual([{ localKey: "5A:4A:45:D4:FB:BB" }]);
     expect(visible.map((d) => d.localKey)).toStrictEqual(["B120300001", "5A:4A:45:D4:FB:BB"]);
     expect(paired).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("createLinuxDevices — scan() through the real runBluetoothctl", () => {
+  const OWNER = "5A:4A:45:D4:FB:BB";
+  let dir: string;
+  let savedPath: string | undefined;
+
+  // `info <address>` prints the owner's printer's recorded Class and Icon lines (owner's box,
+  // BlueZ 5.82, 2026-09-29), or, when WT_BT_INFO_EXIT is non-zero, exits with it after printing
+  // `Device <address> not available`, one of the lines `info` of an address BlueZ did not know
+  // printed in probe run 36629179144.
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "print-agent-bt-scan-"));
+    savedPath = process.env.PATH;
+    process.env.PATH = `${dir}${delimiter}${savedPath ?? ""}`;
+    await writeFile(
+      join(dir, "bluetoothctl"),
+      [
+        "#!/bin/sh",
+        `if [ "$1" = devices ]; then echo "Device ${OWNER} BlueTooth Printer"; exit 0; fi`,
+        `if [ "$1" = info ]; then`,
+        `  if [ "\${WT_BT_INFO_EXIT:-0}" != 0 ]; then echo "Device $2 not available"; exit "$WT_BT_INFO_EXIT"; fi`,
+        `  printf 'Device %s (public)\\n\\tName: BlueTooth Printer\\n\\tClass: 0x00040680 (263808)\\n\\tIcon: printer\\n' "$2"`,
+        `  exit 0`,
+        `fi`,
+        `exit 0`,
+      ].join("\n"),
+    );
+    await chmod(join(dir, "bluetoothctl"), 0o755);
+  });
+  afterEach(async () => {
+    process.env.PATH = savedPath;
+    delete process.env.WT_BT_INFO_EXIT;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("marks the owner's printer from its recorded `info`", async () => {
+    const devices = createLinuxDevices({ sysfsRoot: root });
+    expect(await devices.scan(["bluetooth"])).toStrictEqual([
+      { transport: "bluetooth", localKey: OWNER, name: "BlueTooth Printer", printerLike: true },
+    ]);
+  });
+
+  it("logs an `info` that failed, with the device's address, what bluetoothctl printed and its exit code", async () => {
+    process.env.WT_BT_INFO_EXIT = "1";
+    const warn = vi.fn();
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      log: { info: vi.fn(), warn, error: vi.fn() },
+    });
+    expect(await devices.scan(["bluetooth"])).toStrictEqual([
+      { transport: "bluetooth", localKey: OWNER, name: "BlueTooth Printer" },
+    ]);
+    expect(warn.mock.calls).toStrictEqual([
+      [
+        "bluetooth info failed",
+        {
+          address: OWNER,
+          error: expect.stringContaining(`bluetoothctl info ${OWNER}`),
+          printed: `Device ${OWNER} not available`,
+          exitCode: 1,
+        },
+      ],
+    ]);
   });
 });
 

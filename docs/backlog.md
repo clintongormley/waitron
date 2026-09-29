@@ -2279,10 +2279,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   agent now does. The unit tests of `apps/print-agent` and
   `packages/print-agent` pass on this branch (run 2026-09-29, against a fake host, not a radio);
   the real-hardware evidence is the paragraph after this list:
-  - It asks `bluetoothctl info` about the first eight devices a Bluetooth scan finds, all at the
+  - It asks `bluetoothctl info` about up to eight of the devices a Bluetooth scan finds, all at the
     same time, and marks one as looking like a printer when it shows a printer icon, a device class
     of "imaging" with the printer bit set, or the Serial Port profile (the standard way a Bluetooth
-    printer offers a plain data channel). Devices past the eighth stay in the scan unmarked.
+    printer offers a plain data channel). Since A137 (below) the next scan asks about the devices
+    this one did not reach, and a mark is kept while the device stays listed.
   - Each job pull (the agent's regular request to the server for print work) now reports the
     devices the box is paired with, separately from the devices that can take print jobs. A paired
     printer still takes no jobs (read, not run: see Bluetooth delivery, below).
@@ -2418,6 +2419,28 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   not allow and the stand-in never sends; and printing over RFCOMM (Bluetooth's serial-cable
   channel) from INSIDE the print-agent container — the owner printed from the host only. The last
   belongs with Bluetooth delivery, below, still unbuilt.
+- **The owner's Bluetooth printer was listed only under Show all devices (A137, owner 2026-09-29)
+  — FIXED where the tests reach; the cause on the box is not confirmed.** The agent's scan asked
+  `bluetoothctl info` about the first eight devices listed and no others, and each scan's answer
+  replaced the last, so a printer listed ninth or later was never marked, and one whose `info` failed
+  once lost its mark until the next scan. Now each scan asks first about the devices it has never
+  asked about, named ones before unnamed ones, then about the ones asked longest ago; a device once
+  marked stays marked while it stays listed; and a failed `info` is logged as
+  `bluetooth info failed` with the device's address, the command's error message (which holds what
+  bluetoothctl printed to standard error), what it printed to standard output (`printed`, when that
+  was not blank), its exit code (`exitCode`, when it exited with
+  one) and `killed` when the agent killed the run. The same failure for the same device is logged
+  once, until an `info` about it succeeds or it drops out of the listing. The shipped AppArmor
+  profile was ruled out on the CI stand-in only: probe run 36629179144 asked `info` of its four
+  printers at once under the profile and each printed its class and icon, and image-smoke now asks
+  it of one. How many devices the owner's box lists, and where the printer falls among them, was not
+  recorded, so which of these hid it there is not known. Box check still owed, and it needs the
+  fixed image on the box first: run
+  `docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
+  `docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
+  and where the printer falls among them; then open Add a printer repeatedly, record on which scan
+  the printer is first marked, and look for `bluetooth info failed` lines in
+  `docker compose logs print-agent`.
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.

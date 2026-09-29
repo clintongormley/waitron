@@ -297,7 +297,7 @@ describe("createBluetoothctlHost — scan() marks printer-like devices", () => {
     ]);
   });
 
-  it("starts the first eight `info` calls together, never asks about a ninth, and keeps all nine", async () => {
+  it("starts the first eight `info` calls together, in one scan never asks about a ninth, and keeps all nine", async () => {
     expect(MAX_BLUETOOTH_INFO_DEVICES).toBe(8);
     const macs = Array.from({ length: 9 }, (_, i) => `AA:BB:CC:DD:EE:0${i + 1}`);
     const pending = new Map<string, ReturnType<typeof deferred>>();
@@ -321,6 +321,231 @@ describe("createBluetoothctlHost — scan() marks printer-like devices", () => {
       macs[0],
     ]);
     expect(run).not.toHaveBeenCalledWith(["info", macs[8]]);
+  });
+
+  // A listing can hold more devices than one scan asks about.
+  const OWNER = "5A:4A:45:D4:FB:BB";
+  const phones = Array.from({ length: 8 }, (_, i) => `AA:BB:CC:DD:EE:0${i + 1}`);
+  const listing = (macs: string[]) =>
+    macs.map((m) => `Device ${m} Thing ${m.slice(-2)}`).join("\n");
+
+  it("asks next about the devices a scan did not reach, so a printer listed ninth is marked on the second scan", async () => {
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return listing([...phones, OWNER]);
+      return args[1] === OWNER ? OWNER_PRINTER_INFO : info("Icon: phone");
+    });
+    const host = createBluetoothctlHost({ run });
+    expect((await host.scan()).some((d) => d.printerLike === true)).toBe(false);
+    const second = await host.scan();
+    expect(second.filter((d) => d.printerLike === true).map((d) => d.localKey)).toStrictEqual([
+      OWNER,
+    ]);
+    expect(second).toHaveLength(9);
+  });
+
+  it("keeps a marked device marked without asking about it again", async () => {
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return `Device ${OWNER} BlueTooth Printer\n`;
+      return OWNER_PRINTER_INFO;
+    });
+    const host = createBluetoothctlHost({ run });
+    expect((await host.scan())[0]?.printerLike).toBe(true);
+    expect((await host.scan())[0]?.printerLike).toBe(true);
+    expect(run.mock.calls.filter(([args]) => args[0] === "info")).toStrictEqual([
+      [["info", OWNER]],
+    ]);
+  });
+
+  it("retries a failed device after those asked before it, so a printer listed last is marked two scans after its failure", async () => {
+    const nine = Array.from({ length: 9 }, (_, i) => `AA:BB:CC:DD:EE:1${i + 1}`);
+    let printerAsks = 0;
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return listing([...nine, OWNER]);
+      if (args[1] !== OWNER) return info("Icon: phone");
+      if (++printerAsks === 1) throw new Error("killed");
+      return OWNER_PRINTER_INFO;
+    });
+    const host = createBluetoothctlHost({ run });
+    const marked = async () =>
+      (await host.scan()).filter((d) => d.printerLike === true).map((d) => d.localKey);
+    // Scan 1 reaches the first eight; scan 2 asks the two never asked, the printer's fails, and six
+    // more. Scan 3 asks the two last asked on scan 1, then six of the seven others asked on scan 2:
+    // the printer ties with those seven and is left out by being listed last. Scan 4 reaches it.
+    expect(await marked()).toStrictEqual([]);
+    expect(await marked()).toStrictEqual([]);
+    expect(printerAsks).toBe(1);
+    expect(await marked()).toStrictEqual([]);
+    expect(printerAsks).toBe(1);
+    expect(await marked()).toStrictEqual([OWNER]);
+    expect(printerAsks).toBe(2);
+  });
+
+  it("asks about named devices before unnamed ones", async () => {
+    const unnamed = Array.from({ length: 9 }, (_, i) => `BB:BB:CC:DD:EE:0${i + 1}`);
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices")
+        return [
+          ...unnamed.map((m) => `Device ${m} ${m.replaceAll(":", "-")}`),
+          `Device ${OWNER} BlueTooth Printer`,
+        ].join("\n");
+      return args[1] === OWNER ? OWNER_PRINTER_INFO : info("Icon: phone");
+    });
+    const found = await createBluetoothctlHost({ run }).scan();
+    expect(found.find((d) => d.localKey === OWNER)?.printerLike).toBe(true);
+    expect(found).toHaveLength(10);
+  });
+
+  it("forgets a device once a listing no longer holds it", async () => {
+    let listed = true;
+    let fail = false;
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return listed ? `Device ${OWNER} BlueTooth Printer\n` : "";
+      if (fail) throw new Error("killed");
+      return OWNER_PRINTER_INFO;
+    });
+    const host = createBluetoothctlHost({ run });
+    expect((await host.scan())[0]?.printerLike).toBe(true);
+    listed = false;
+    expect(await host.scan()).toStrictEqual([]);
+    listed = true;
+    fail = true;
+    expect((await host.scan())[0]?.printerLike).toBeUndefined();
+  });
+
+  it("logs an `info` that failed, naming the device", async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return `Device ${OWNER} BlueTooth Printer\n`;
+      throw new Error("org.freedesktop.DBus.Error.AccessDenied");
+    });
+    await createBluetoothctlHost({ run, log }).scan();
+    expect(log.warn).toHaveBeenCalledWith("bluetooth info failed", {
+      address: OWNER,
+      error: "org.freedesktop.DBus.Error.AccessDenied",
+    });
+  });
+
+  it("logs a failure that is not an Error by its text", async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return `Device ${OWNER} BlueTooth Printer\n`;
+      throw "not an Error";
+    });
+    await createBluetoothctlHost({ run, log }).scan();
+    expect(log.warn.mock.calls).toStrictEqual([
+      ["bluetooth info failed", { address: OWNER, error: "not an Error" }],
+    ]);
+  });
+
+  it("logs what tells failures apart: what bluetoothctl printed, its exit code and a kill", async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return `Device ${OWNER} BlueTooth Printer\n`;
+      throw Object.assign(new Error(`Command failed: bluetoothctl info ${OWNER}\n`), {
+        code: 1,
+        killed: false,
+        signal: null,
+        stdout: `\u001b[0;94mDevice ${OWNER} not available\u001b[0m\r\n`,
+      });
+    });
+    await createBluetoothctlHost({ run, log }).scan();
+    expect(log.warn.mock.calls).toStrictEqual([
+      [
+        "bluetooth info failed",
+        {
+          address: OWNER,
+          error: `Command failed: bluetoothctl info ${OWNER}\n`,
+          printed: `Device ${OWNER} not available`,
+          exitCode: 1,
+        },
+      ],
+    ]);
+  });
+
+  it("logs the same address failing with the same message again when what else it carries differs", async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const message = `Command failed: bluetoothctl info ${OWNER}\n`;
+    const gone = `Device ${OWNER} not available\n`;
+    let failure: object = { code: 1, killed: false, signal: null, stdout: gone };
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return `Device ${OWNER} BlueTooth Printer\n`;
+      throw Object.assign(new Error(message), failure);
+    });
+    const host = createBluetoothctlHost({ run, log });
+    await host.scan();
+    await host.scan();
+    failure = {
+      code: 1,
+      killed: false,
+      signal: null,
+      stdout: "Failed: org.bluez.Error.NotReady\n",
+    };
+    await host.scan();
+    failure = {
+      code: 2,
+      killed: false,
+      signal: null,
+      stdout: "Failed: org.bluez.Error.NotReady\n",
+    };
+    await host.scan();
+    failure = { code: null, killed: false, signal: "SIGTERM", stdout: "" };
+    await host.scan();
+    failure = { code: null, killed: true, signal: "SIGKILL", stdout: "" };
+    await host.scan();
+    await host.scan();
+    const fields = { address: OWNER, error: message };
+    expect(log.warn.mock.calls.map(([, logged]) => logged)).toStrictEqual([
+      { ...fields, printed: gone.trim(), exitCode: 1 },
+      { ...fields, printed: "Failed: org.bluez.Error.NotReady", exitCode: 1 },
+      { ...fields, printed: "Failed: org.bluez.Error.NotReady", exitCode: 2 },
+      fields,
+      { ...fields, killed: true },
+    ]);
+  });
+
+  it("logs a device's failed `info` again only when its error changes, after an answer, or after it left the listing", async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    let listed = true;
+    let answer: string | Error = new Error("killed");
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices") return listed ? `Device ${OWNER} BlueTooth Printer\n` : "";
+      if (answer instanceof Error) throw answer;
+      return answer;
+    });
+    const host = createBluetoothctlHost({ run, log });
+    const warned = () =>
+      log.warn.mock.calls.map(([, fields]) => (fields as { error: string }).error);
+    await host.scan();
+    await host.scan();
+    expect(warned()).toStrictEqual(["killed"]);
+    answer = new Error("org.bluez.Error.NotReady");
+    await host.scan();
+    await host.scan();
+    expect(warned()).toStrictEqual(["killed", "org.bluez.Error.NotReady"]);
+    answer = info("Icon: phone");
+    await host.scan();
+    answer = new Error("org.bluez.Error.NotReady");
+    await host.scan();
+    expect(warned()).toStrictEqual([
+      "killed",
+      "org.bluez.Error.NotReady",
+      "org.bluez.Error.NotReady",
+    ]);
+    listed = false;
+    await host.scan();
+    listed = true;
+    await host.scan();
+    expect(warned()).toHaveLength(4);
   });
 });
 

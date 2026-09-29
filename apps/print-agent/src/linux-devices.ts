@@ -68,6 +68,7 @@ export function createLinuxDevices(
     createBluetoothctlHost({
       run: runBluetoothctl,
       listTimeoutMs: opts.bluetoothListTimeoutMs ?? LIST_TIMEOUT_MS,
+      ...(opts.log !== undefined ? { log: opts.log } : {}),
     });
   const btDevicePath = opts.btDevicePath ?? liveBtDevicePath;
   const scanNetwork = opts.scanNetwork ?? liveNetworkScan;

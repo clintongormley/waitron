@@ -245,6 +245,9 @@ jobs:
           grep -q "Controller 00:11:22:33:44:55 waitron-ci" "$RUNNER_TEMP/bt-list.txt"
           docker exec "$agent" bluetoothctl --timeout 5 devices Paired | tee "$RUNNER_TEMP/bt-paired.txt"
           grep -q "Device 66:55:44:33:22:11 CI Printer" "$RUNNER_TEMP/bt-paired.txt"
+          # What the agent's scan asks of a listed device, to tell a printer from other devices.
+          docker exec "$agent" bluetoothctl info 66:55:44:33:22:11 | tee "$RUNNER_TEMP/bt-info.txt"
+          grep -q "Icon: printer" "$RUNNER_TEMP/bt-info.txt"
           # A device found during a scan, and a changed property, arrive only as BlueZ's signals.
           docker exec "$agent" bluetoothctl --timeout 3 scan on | tee "$RUNNER_TEMP/bt-scan.txt"
           grep -q "Device 11:22:33:44:55:66 Found" "$RUNNER_TEMP/bt-scan.txt"

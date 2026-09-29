@@ -325,7 +325,11 @@ template plus bus rules for the messages `bluetoothctl list`, `devices Paired`, 
 pairing with a PIN through its interactive agent, and `remove` were seen to send and receive
 against a stand-in BlueZ (`scripts/fake-bluez.py`), and for the `Disconnected` signals the owner's
 printer sent after its pairing (the owner's box, 2026-09-29); every other bus message is refused, `trust` and
-`disconnect` among them (probe run 36585218089 on a CI runner; `trust` again in 36617716323). `waitron.sh install` loads it where AppArmor is on and only then writes
+`disconnect` among them (probe run 36585218089 on a CI runner; `trust` again in 36617716323).
+`bluetoothctl info` worked under these rules: probe run 36629179144, a CI runner against the
+stand-in, asked it of the stand-in's four printers at once and each exited 0 printing its class and
+icon; that run stopped before its refusal check, so whether `info` drew any refusal was not read.
+`waitron.sh install` loads it where AppArmor is on and only then writes
 `WAITRON_PRINT_AGENT_APPARMOR` to `.env`; `deploy/compose.yml` falls back to `docker-default`
 without it. The order matters because Docker refuses to start a container naming a profile the host
 has not loaded — measured 2026-09-29 on a GitHub runner (Ubuntu 24.04.5, Docker 28.0.4, AppArmor
