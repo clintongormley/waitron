@@ -251,6 +251,12 @@ hook, or how tests are scheduled:
   [conventions-data.md](docs/developers/conventions-data.md)). Cost: an earlier bricked box that
   was wiped, and a box that failed three starts on 2026-09-26. See
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
+- **The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`),
+  which picks `/dev/shm` when it exists, because every commit waits for the disk** — the store
+  leaves `synchronous` at full. Cost: it timed out in CI five times; on CI's disk it ran 2.5 to 6
+  times slower than in memory, the inferred but unreproduced cause. Whether other database suites
+  would gain is not measured (`docs/backlog.md`, B9). Nothing guards it. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the

@@ -1,5 +1,4 @@
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
@@ -11,6 +10,7 @@ import {
   resolveMigrationsFolder,
 } from "../packages/migrations/src/manifest.js";
 import { orderedMigrationSets } from "../packages/module/src/module.js";
+import { scratchParent } from "./scratch-dir.mjs";
 import { createStepWatch, reportStallAfter } from "./step-watch.mjs";
 
 /**
@@ -45,6 +45,7 @@ const FLOOR = { set: "core", tag: "0003_variant_inherited_nullable" };
 
 const TEST_BOUND_MS = 120_000;
 const STALL_DEADLINE_MS = TEST_BOUND_MS - 10_000;
+const SCRATCH_PARENT = scratchParent();
 
 const scratch: string[] = [];
 afterAll(() => {
@@ -61,7 +62,7 @@ describe("upgrading a venue one migration at a time", () => {
     async () => {
       const watch = createStepWatch();
       await reportStallAfter(watch, STALL_DEADLINE_MS, () => upgradeOneStepAtATime(watch));
-      console.log(watch.summary(5));
+      console.log(`${watch.summary(5)}\nScratch directory under ${SCRATCH_PARENT}.`);
     },
     TEST_BOUND_MS,
   );
@@ -71,7 +72,7 @@ async function upgradeOneStepAtATime(watch: ReturnType<typeof createStepWatch>) 
   const sets = orderedMigrationSets(ALL_MODULES);
   const sources = ALL_MODULES.flatMap((module) => module.changes ?? []);
 
-  const root = mkdtempSync(join(tmpdir(), "wt-migration-upgrade-"));
+  const root = mkdtempSync(join(SCRATCH_PARENT, "wt-migration-upgrade-"));
   scratch.push(root);
   const staged = join(root, "migrations");
   const venueDir = join(root, "venue");
