@@ -764,7 +764,7 @@ The Cloud services screen's two reads of undeclared names (its labels' weight an
 now read declared tokens. The guard, `scripts/style-token-names.test.ts`, is weaker than its name
 in the ways its header states, and excuses the five till reads under A4 in its `FALLBACK_READS`; an
 entry that is no longer needed fails the guard, and nothing stops one being added, so keeping the
-list from growing is a job for review. **Settled (owner, 2026-09-29: "B"; fixed in C75):** the Cloud
+list from growing is a job for review. **Settled (owner, 2026-09-29: "B"; fixed in C75, #867):** the Cloud
 services screen now follows design-system.md's "Typography roles" table, as
 `content-languages-screen.ts` does: each field label small, normal weight and muted, each value
 bold. A computed-style case in `cloud-services-screen.test.ts` checks every label and value on a
