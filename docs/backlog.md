@@ -2371,6 +2371,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the first one detached, and a language switch rebuilds the screen through
     `keyed(currentLocale(), …)` in `apps/dashboard/src/dashboard-app.ts` (read, not run). It matters
     only if the app starts keeping screen elements.
+  - A failed Pair or Forget shows the agent's reason as the agent wrote it, in English on both
+    languages' screens (read, not run: a wrong PIN would read "No se pudo emparejar: wrong PIN").
+    Most of what the agent reports for a pair is a fixed phrase
+    (`apps/print-agent/src/bluetooth-command.ts`), among them "wrong PIN" (BlueZ's
+    `org.bluez.Error.AuthenticationFailed` after the PIN was sent), "the printer stopped waiting for
+    the PIN", "printer is off or out of range", "printer not found — scan first", "this printer
+    needs a PIN", "pairing timed out", "bluetooth unavailable", and "pairing failed: <D-Bus error
+    name>" for an error name it does not recognise. A follow-up could translate the known phrases into
+    dashboard wording in both languages and keep the raw text as a detail. The photographed failure
+    used a made-up reason ("Failed to pair: org.bluez.Error.AuthenticationFailed"), not one the
+    agent sends; nothing here says what a given BlueZ error always means on a real printer.
   - Seen while photographing, and older than P2c: the printers table's empty message is the English
     "No matches" on a Spanish dashboard, because the screen sets no `noMatchesMessage` and
     `wt-data-table` falls back to English (checked on `main`); and at phone width a Bluetooth
