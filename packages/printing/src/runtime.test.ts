@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, printAgents, printJobs, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -170,6 +170,41 @@ describe("runAgentOnce (pull → push → report)", () => {
       expect(row.status).toBe("failed");
       expect(row.lastError).toBe("drawer jammed");
     });
+  });
+
+  it("does not record a sent job as failed when its done report is refused; the refusal propagates", async () => {
+    const cfg = await setup();
+    const agentId = await seedAgent(cfg);
+    await suite.db.run(sql`create trigger refuse_done before update on print_jobs
+      when new.status = 'done' begin select raise(abort, 'done report refused'); end`);
+    try {
+      await withTransaction(suite.db, async (tx) => {
+        const printerId = await seedPrinter(tx, cfg);
+        const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]));
+
+        const sink = new FakeSink();
+        await expect(
+          runAgentOnce({
+            tx,
+            agentId,
+            locationId: cfg.locationId,
+            visibleKeys: [],
+            transport: sink,
+          }),
+        ).rejects.toThrow("done report refused");
+
+        expect(sink.written).toEqual([{ printerId, bytes: new Uint8Array([7]) }]);
+        const row = await jobRow(tx, jobId);
+        expect(row).toEqual({
+          status: "printing",
+          attempts: 0,
+          lastError: null,
+          deliveredAt: null,
+        });
+      });
+    } finally {
+      await suite.db.run(sql`drop trigger refuse_done`);
+    }
   });
 
   it("retries a failed job on a later run, up to the attempt cap", async () => {
