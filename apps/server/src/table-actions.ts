@@ -15,7 +15,7 @@ import {
   type OtherPartyRead,
 } from "./move-bill.js";
 import { moveDraftsToParty } from "./order-drafts.js";
-import { groupArrivingDishes, moveGroupsToParty } from "./order-groups.js";
+import { groupArrivingDishes, moveGroupsToParty, printHoldTickets } from "./order-groups.js";
 import {
   checkAndBumpParty,
   leaveForClearing,
@@ -280,7 +280,8 @@ export async function splitTable(
     mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
   } else {
     const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-    await groupArrivingDishes(tx, newParty, billId, options.operatorId, firers);
+    const { held } = await groupArrivingDishes(tx, newParty, billId, options.operatorId, firers);
+    await printHoldTickets(tx, cfg, held);
     if (status === "open") {
       await setMainBill(tx, newParty, billId);
       mainBillId = billId;

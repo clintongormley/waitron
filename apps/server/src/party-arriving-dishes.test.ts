@@ -1,16 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   floorZones,
+  kitchenStations,
   orderGroupEvents,
   orderGroups,
+  printJobs,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
+import { writePrintHeldWork } from "@waitron/venue-service";
 import { splitBill } from "./bill-actions.js";
 import { createCourse } from "./kitchen.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
@@ -20,8 +24,10 @@ import {
   groupArrivingDishes,
   readCurrentOrders,
 } from "./order-groups.js";
+import { attachPrinterToStation } from "./station-printers.js";
 import { joinTables, splitTable } from "./table-actions.js";
 import { addTabRound, fireCourse, listExpoQueue, parkOrder, placeOrder } from "./working-order.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   OPERATOR,
@@ -599,5 +605,186 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await move(b2, { counter: { zoneId: null } });
 
     expect((await lineRows(b2)).map((l) => l.groupId)).toEqual([null]);
+  });
+});
+
+describe("an arriving held group's advance HOLD ticket", () => {
+  const TIME = expect.stringMatching(/^\d\d:\d\d$/);
+  let printerId: string | undefined;
+
+  async function defaultStation() {
+    const [station] = await inTx(v, (tx) =>
+      tx
+        .select({ id: kitchenStations.id, name: kitchenStations.name })
+        .from(kitchenStations)
+        .where(
+          and(
+            eq(kitchenStations.locationId, v.cfg.locationId),
+            eq(kitchenStations.isDefault, true),
+          ),
+        ),
+    );
+    return station!;
+  }
+
+  /** What a ticket for `billId` at table `label` prints under its mark: station, table, bill, time. */
+  async function head(label: string, billId: string): Promise<unknown[]> {
+    return [
+      (await defaultStation()).name,
+      label,
+      String((await billRow(v, billId)).orderNumber),
+      TIME,
+    ];
+  }
+
+  /** The default station's printer, attached on first use. */
+  async function kitchenPrinter(): Promise<string> {
+    if (printerId === undefined) {
+      const station = await defaultStation();
+      printerId = await inTx(v, async (tx) => {
+        const { id } = await createPrinter(
+          tx,
+          { locationId: v.cfg.locationId },
+          { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        );
+        await attachPrinterToStation(tx, { stationId: station.id, printerId: id });
+        return id;
+      });
+    }
+    return printerId;
+  }
+
+  /** Every job the kitchen printer holds, oldest first: its kind and its printed lines. */
+  async function jobs() {
+    const printer = await kitchenPrinter();
+    const rows = await inTx(v, (tx) =>
+      tx
+        .select({ kind: printJobs.kind, payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, printer))
+        .orderBy(sql`rowid`),
+    );
+    return rows.map((row) => ({
+      kind: row.kind,
+      lines: printedLines(row.payload).filter((text) => text !== ""),
+    }));
+  }
+
+  const printHeldWork = (on: boolean) => inTx(v, (tx) => writePrintHeldWork(tx, on));
+
+  async function heldGroupOf(partyId: string) {
+    const [group] = await inTx(v, (tx) =>
+      tx
+        .select({ id: orderGroups.id, holdPrintedAt: orderGroups.holdPrintedAt })
+        .from(orderGroups)
+        .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held"))),
+    );
+    return group!;
+  }
+
+  afterEach(() => printHeldWork(false));
+
+  it("with Print held groups in advance on, a moved bill's waiting dish prints a HOLD ticket at the move and a FIRE slip when its group is fired", async () => {
+    await printHeldWork(true);
+    const ana = await coursedBill("Aviso 1");
+    const mesa = await v.table("Aviso 2");
+    const luis = await seat(v, mesa);
+    const before = (await jobs()).length;
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    const held = await heldGroupOf(luis.partyId);
+    const header = await head("Aviso 2", ana.tabId);
+    const atMove = (await jobs()).slice(before);
+    expect(atMove.filter((job) => job.lines[0] === "*** HOLD ***")).toEqual([
+      {
+        kind: "document",
+        lines: ["*** HOLD ***", ...header, "GROUP 2", "1.000 x FLAN"],
+      },
+    ]);
+    expect(held.holdPrintedAt).not.toBeNull();
+
+    const fired = (await jobs()).length;
+    const fire = await command(luis.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, held.id, fire));
+
+    expect((await jobs()).slice(fired)).toEqual([
+      {
+        kind: "document",
+        lines: ["*** FIRE ***", ...header, "GROUP 2", "1.000 x FLAN"],
+      },
+    ]);
+  });
+
+  it("names on the HOLD ticket the main bill a moved bill merged into, where its waiting dish now is", async () => {
+    await printHeldWork(true);
+    const ana = await coursedBill("Aviso 7");
+    const mesa = await v.table("Aviso 8");
+    const luis = await seat(v, mesa);
+    const before = (await jobs()).length;
+
+    const result = await move(ana.tabId, { tableId: mesa }, { bills: "merge" });
+
+    expect(result).toMatchObject({ billId: luis.tabId, merged: true });
+    const holds = (await jobs()).slice(before).filter((job) => job.lines[0] === "*** HOLD ***");
+    expect(holds).toEqual([
+      {
+        kind: "document",
+        lines: ["*** HOLD ***", ...(await head("Aviso 8", luis.tabId)), "GROUP 2", "1.000 x FLAN"],
+      },
+    ]);
+  });
+
+  it("with Print held groups in advance off, a moved bill's waiting dish prints nothing at the move and an ordinary ticket when its group is fired", async () => {
+    const ana = await coursedBill("Aviso 3");
+    const mesa = await v.table("Aviso 4");
+    const luis = await seat(v, mesa);
+    const before = (await jobs()).length;
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    const held = await heldGroupOf(luis.partyId);
+    expect(
+      (await jobs()).slice(before).filter((job) => job.lines.some((text) => text.includes("FLAN"))),
+    ).toEqual([]);
+    expect(held.holdPrintedAt).toBeNull();
+
+    const fired = (await jobs()).length;
+    const fire = await command(luis.partyId);
+    await inTx(v, (tx) => fireGroup(tx, v.cfg, luis.partyId, held.id, fire));
+
+    const atFire = (await jobs()).slice(fired);
+    expect(atFire).toEqual([{ kind: "document", lines: expect.arrayContaining(["1.000 x FLAN"]) }]);
+    expect(atFire[0]!.lines[0]).not.toMatch(/\*\*\*/);
+  });
+
+  it("with Print held groups in advance on, a waiting dish on the bill Split a table takes prints a HOLD ticket", async () => {
+    await printHeldWork(true);
+    const [m4, m5] = [await v.table("Aviso 5"), await v.table("Aviso 6")];
+    const ana = await seat(v, m4);
+    await nextMillisecond();
+    const joining = { ...(await commandFor(v, ana.partyId)), bills: "merge" as const };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
+    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, b2, [
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+        { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+      ]),
+    );
+    const before = (await jobs()).length;
+
+    const splitting = await commandFor(v, ana.partyId);
+    const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+    const held = await heldGroupOf(result.partyId);
+    expect((await jobs()).slice(before).filter((job) => job.lines[0] === "*** HOLD ***")).toEqual([
+      {
+        kind: "document",
+        lines: ["*** HOLD ***", ...(await head("Aviso 6", b2)), "GROUP 2", "1.000 x FLAN"],
+      },
+    ]);
+    expect(held.holdPrintedAt).not.toBeNull();
   });
 });
