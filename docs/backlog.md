@@ -3399,18 +3399,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       a main bill merged away when parties combine (it is told once, on the bill it merged into).
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
       Split a table too.
+    - A paid bill left on the absorbed party names, in the kitchen, the tables of the party its
+      guests went to: `orderTableLabels` follows the chain of merges (`partySurvivors`,
+      `apps/server/src/parties.ts`) to its last party and reads that party's tables, and the sent
+      work read before a table action includes the bills of every party merged into the acting one
+      (`partyFamilies`). The bill's party, label, lines and payments do not change. Run in
+      `apps/server/src/party-table-actions.test.ts`: the paid bill's sent dish gets a MOVED notice
+      naming the new tables after its guests move to a held table, after its table is joined to
+      another party, after the old merge (`mergeTabs`) combines its party, and after the party that
+      took the guests later moves, joins a table and splits it off, including through two merges;
+      the notice names the new tables when the bill was paid under another table's name; and after
+      a move to a held table the pass names the new table. A one-off probe (not kept as a test)
+      marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
+      neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels` (read, not run).
     Tests: `apps/server/src/party-table-actions.test.ts` and
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
     Open points: `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
-    which Split a table choosing the main bill need not satisfy. A paid bill left on the absorbed
-    party, with sent dishes still in the kitchen, is named by the label it was given when paid,
-    because `orderTableLabels` reads the bill's own label once its party holds no table. When that
-    label matches the tables its dishes were at, the kitchen gets no MOVED notice although the
-    guests moved; when it differs, the notice names that old label, not the table the guests went
-    to. The matching case was run; the differing one was not. The old merge (`mergeTabs`) reads
-    these parties the same way (read, not run). That old path also still writes a merged party's
-    tables in one statement, so they share a joining time and their order in its name is not
-    fixed; it goes with Task 13.
+    which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
+    writes a merged party's tables in one statement, so they share a joining time and their order in
+    its name is not fixed; it goes with Task 13.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

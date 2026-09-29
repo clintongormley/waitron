@@ -21,7 +21,7 @@ import { placeGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { finishTable, readPartyBills, setPartyName } from "./parties.js";
 import { deactivateTable } from "./tables.js";
-import { moveTab } from "./working-order.js";
+import { listExpoQueue, mergeTabs, moveTab } from "./working-order.js";
 import {
   combineParties,
   joinTables,
@@ -640,8 +640,8 @@ describe("a paid bill stays on its original party", () => {
       status: "settled",
       partyId: ana.partyId,
     });
-    // The paid bill's label was frozen as "Pagada 4" when it was paid, which is where its dish was.
     expect(noticesOn([ana.tabId, second])).toEqual([
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "Pagada 7" },
       { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Pagada 7" },
     ]);
     expect(await billRow(v, second)).toMatchObject({ status: "open", partyId: luis.partyId });
@@ -665,6 +665,180 @@ describe("a paid bill stays on its original party", () => {
     const finish = await cmd(luis.partyId);
     await act((tx) => finishTable(tx, { partyId: luis.partyId, ...finish }));
     expect((await partyRow(v, luis.partyId)).state).toBe("closed");
+  });
+});
+
+describe("MOVED notices for a paid bill left on a party combined away", () => {
+  /** The paid bill's stored row, lines and payments, which combining its party must not change. */
+  async function paidBill(billId: string) {
+    return {
+      row: await billRow(v, billId),
+      lines: await lineRows(billId),
+      payments: await paymentsOf(v, billId),
+    };
+  }
+
+  it("tells the kitchen where a paid bill's sent dish went when its guests move to a held table", async () => {
+    const [m4, m7] = await tables("PagoM", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const paid = await paidBill(ana.tabId);
+    expect(paid.row).toMatchObject({ status: "settled", partyId: ana.partyId, label: "PagoM 4" });
+
+    const moving = await opts(ana.partyId, luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+
+    expect((await partyRow(v, ana.partyId)).mergedIntoPartyId).toBe(luis.partyId);
+    expect(noticesOn([ana.tabId])).toEqual([
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoM 7" },
+    ]);
+    const onPass = (await act((tx) => listExpoQueue(tx, v.cfg))).find(
+      (entry) => entry.orderId === ana.tabId,
+    );
+    expect(onPass?.tableLabel).toBe("PagoM 7");
+    expect(await paidBill(ana.tabId)).toEqual(paid);
+  });
+
+  it("tells the kitchen where a paid bill's sent dish went when its table joins another party", async () => {
+    const [m4, m7] = await tables("PagoJ", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const paid = await paidBill(ana.tabId);
+
+    await nextMillisecond();
+    const joining = await opts(luis.partyId, ana.partyId);
+    await act((tx) => joinTables(tx, v.cfg, luis.partyId, m4, joining));
+
+    expect((await partyRow(v, ana.partyId)).mergedIntoPartyId).toBe(luis.partyId);
+    expect(noticesOn([ana.tabId])).toEqual([
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoJ 7, 4" },
+    ]);
+    expect(await paidBill(ana.tabId)).toEqual(paid);
+  });
+
+  it("names the tables the guests went to, not the label the bill was paid under", async () => {
+    const [m4, m5, m7] = await tables("PagoE", 4, 5, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const toFive = await opts(ana.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m5, toFive));
+    const earlier = noticesOn([ana.tabId]);
+    const paid = await paidBill(ana.tabId);
+    // The bill still carries the label it was paid under, though its guests now sit at 5.
+    expect(paid.row.label).toBe("PagoE 4");
+
+    const moving = await opts(ana.partyId, luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+
+    expect(noticesOn([ana.tabId])).toEqual([
+      ...earlier,
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoE 7" },
+    ]);
+    expect(await paidBill(ana.tabId)).toEqual(paid);
+  });
+
+  it("tells the kitchen again when the party that took the guests moves on", async () => {
+    const [m4, m7, m9] = await tables("PagoL", 4, 7, 9);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const moving = await opts(ana.partyId, luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+    const earlier = noticesOn([ana.tabId]);
+    const paid = await paidBill(ana.tabId);
+
+    const onward = await opts(luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, luis.partyId, m9, onward));
+
+    expect(noticesOn([ana.tabId])).toEqual([
+      ...earlier,
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoL 9" },
+    ]);
+    expect(await paidBill(ana.tabId)).toEqual(paid);
+  });
+
+  it("tells the kitchen when the party that took the guests joins a table and splits it off again", async () => {
+    const [m4, m7, m9] = await tables("PagoS", 4, 7, 9);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await pay(v, ana.tabId, "12.00");
+    const moving = await opts(ana.partyId, luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+    const earlier = noticesOn([ana.tabId]);
+    const paid = await paidBill(ana.tabId);
+
+    await joinFree(luis.partyId, m9);
+    const splitting = await cmd(luis.partyId);
+    await act((tx) => splitTable(tx, v.cfg, luis.partyId, m9, null, splitting));
+
+    expect(noticesOn([ana.tabId])).toEqual([
+      ...earlier,
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoS 7, 9" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoS 7" },
+    ]);
+    expect(await paidBill(ana.tabId)).toEqual(paid);
+  });
+
+  it("tells the kitchen where a paid bill's sent dish went when the old merge combines its party", async () => {
+    const [m4, m7] = await tables("PagoT", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const second = await splitOff(ana.partyId, ana.tabId, [2]);
+    await pay(v, second, "30.00");
+    const paid = await paidBill(second);
+
+    const command = {
+      expectedPartyRevision: await revisionOf(v, luis.partyId),
+      expectedSourcePartyRevision: await revisionOf(v, ana.partyId),
+      operatorId: OPERATOR,
+    };
+    await act((tx) =>
+      mergeTabs(tx, v.cfg, luis.tabId, ana.tabId, { freeSourceTable: true, ...command }),
+    );
+
+    expect((await partyRow(v, ana.partyId)).mergedIntoPartyId).toBe(luis.partyId);
+    expect(noticesOn([second])).toEqual([
+      { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "PagoT 7" },
+    ]);
+    expect(await paidBill(second)).toEqual(paid);
+  });
+
+  it("follows two merges to the party still seated", async () => {
+    const [m3, m4, m7, m9] = await tables("PagoC", 3, 4, 7, 9);
+    const eva = await seat(v, m3);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, eva.tabId, "Burger");
+    await pay(v, eva.tabId, "12.00");
+    const first = await opts(eva.partyId, ana.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, eva.partyId, m4, first));
+    const second = await opts(ana.partyId, luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, second));
+    const earlier = noticesOn([eva.tabId]);
+    const paid = await paidBill(eva.tabId);
+
+    const onward = await opts(luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, luis.partyId, m9, onward));
+
+    expect(earlier).toEqual([
+      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoC 4" },
+      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoC 7" },
+    ]);
+    expect(noticesOn([eva.tabId])).toEqual([
+      ...earlier,
+      { working_order_id: eva.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoC 9" },
+    ]);
+    expect((await paidBill(eva.tabId)).row.partyId).toBe(eva.partyId);
+    expect(await paidBill(eva.tabId)).toEqual(paid);
   });
 });
 

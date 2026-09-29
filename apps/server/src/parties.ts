@@ -424,6 +424,26 @@ export async function partyFamilies(
   return families;
 }
 
+/**
+ * The party each of `partyIds` was merged into, following the chain of merges to its end, keyed by
+ * each party asked about; a party never merged answers itself. The reverse of {@link partyFamilies}.
+ */
+export async function partySurvivors(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string>> {
+  const { rows } = await tx.execute<{ start: string; id: string }>(sql`
+    with recursive chain(start, id, next) as (
+      select p.id, p.id, p.merged_into_party_id from parties p
+      where p.id in (select value from json_each(${JSON.stringify(partyIds)}))
+      union
+      select c.start, p.id, p.merged_into_party_id from parties p join chain c on p.id = c.next
+    )
+    select start, id from chain where next is null
+  `);
+  return new Map(rows.map((row) => [row.start, row.id]));
+}
+
 async function readParty(
   tx: Transaction,
   partyId: string,
