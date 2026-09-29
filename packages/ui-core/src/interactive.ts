@@ -40,32 +40,27 @@ export function dispatchWtChange<T>(host: HTMLElement, event: Event, detail: T):
 
 type MaybeUpdating = Element & { isUpdatePending?: boolean; updateComplete?: Promise<unknown> };
 
-function* walk(root: ParentNode): Generator<Element> {
-  for (const child of Array.from(root.children)) {
-    yield child;
-    if (child.shadowRoot) yield* walk(child.shadowRoot);
-    yield* walk(child);
-  }
+/** A focus-delegating host counts as holding focus when its inner control took it. */
+function holdsFocus(el: HTMLElement): boolean {
+  return (el.getRootNode() as Document | ShadowRoot).activeElement === el;
 }
 
-/** Focuses the first control marked `aria-invalid="true"` under `root`, looking inside open shadow
- * roots in document order, once every Lit element there has rendered — so a field whose `error`
- * was set in the same turn is found. Returns the focused control, or null. */
+/** Focuses the first control marked `aria-invalid="true"` under `root` that takes focus, looking
+ * inside open shadow roots in document order and waiting for each Lit element's pending render as
+ * the walk reaches it — so a field whose `error` was set in the same turn is found. Returns the
+ * focused control, or null. */
 export async function focusFirstInvalid(root: ParentNode): Promise<HTMLElement | null> {
-  for (;;) {
-    const pending = [...walk(root)].filter((el: MaybeUpdating) => el.isUpdatePending === true);
-    if (pending.length === 0) break;
-    await Promise.all(pending.map((el: MaybeUpdating) => el.updateComplete));
-  }
-  for (const el of walk(root)) {
-    if (
-      el instanceof HTMLElement &&
-      el.getAttribute("aria-invalid") === "true" &&
-      !el.matches(":disabled")
-    ) {
-      el.focus();
-      return el;
+  for (const child of Array.from(root.children) as MaybeUpdating[]) {
+    // Awaited before descending: a render marks the children it passes values to as pending.
+    if (child.isUpdatePending === true) await child.updateComplete;
+    if (child instanceof HTMLElement && child.getAttribute("aria-invalid") === "true") {
+      child.focus();
+      if (holdsFocus(child)) return child;
     }
+    const found =
+      (child.shadowRoot && (await focusFirstInvalid(child.shadowRoot))) ??
+      (await focusFirstInvalid(child));
+    if (found) return found;
   }
   return null;
 }

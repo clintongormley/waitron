@@ -772,6 +772,21 @@ it("focuses the field a refusal names when the refusal arrives", async () => {
   );
 });
 
+it("focuses Choose image when a refusal names the image", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+  });
+  el.fieldErrors = { image: codeMessage("category.image_not_found") };
+  await el.updateComplete;
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  const choose = upload.shadowRoot!.querySelector("[data-test=choose-image]")!;
+
+  await vi.waitFor(() => expect(upload.shadowRoot!.activeElement).toBe(choose));
+  expect(choose.getAttribute("aria-invalid")).toBe("true");
+});
+
 it("leaves Save working on a refusal that names no field, and drops it on the next submission", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,

@@ -898,6 +898,7 @@ export class SectionsScreen extends LitElement {
         <dashboard-image-upload
           aria-describedby="section-image-error"
           .api=${this.api}
+          .invalid=${Boolean(errors.image)}
           .image=${this.image}
           @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
             event.stopPropagation();

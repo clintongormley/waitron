@@ -28,7 +28,9 @@ or Waitron source alias is needed. Raw token CSS is also exported at
 The controls use shadow DOM and are not native form-associated elements. Listen
 for `wt-change` and the action button's click; bind `submitOnEnter` at the form
 boundary. Give inputs a semantic name, an autocomplete purpose and visible labels.
-Use field `error` properties and `wt-form-error-summary.errors` for validation.
+Use field `error` properties, `wt-form-actions`'s `error` property and
+`focusFirstInvalid` for validation, as Waitron's `docs/developers/design-system.md`
+→ Forms describes.
 
 ## Develop and verify
 

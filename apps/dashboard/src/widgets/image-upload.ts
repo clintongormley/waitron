@@ -27,6 +27,9 @@ export class ImageUpload extends LitElement {
         gap: var(--wt-space-2);
         align-items: center;
       }
+      wt-button[aria-invalid="true"]::part(button) {
+        border-color: var(--wt-color-danger);
+      }
       .preview {
         display: block;
         margin-top: var(--wt-space-3);
@@ -44,6 +47,8 @@ export class ImageUpload extends LitElement {
   @property() image: string | null = null;
   /** The photo a blank `image` falls back to — a variant's parent's — shown as a hint, not stored. */
   @property() inheritedImage: string | null = null;
+  /** Marks Choose image invalid, so `focusFirstInvalid` lands on it. */
+  @property({ type: Boolean }) invalid = false;
   @state() private pickerOpen = false;
   @state() private altText: Record<string, string> = {};
   #selectedFilename: string | null = null;
@@ -66,7 +71,11 @@ export class ImageUpload extends LitElement {
   override render() {
     return html`<p>${t("image.label")}</p>
       <div class="actions">
-        <wt-button data-test="choose-image" variant="secondary" @click=${() => this.#setOpen(true)}
+        <wt-button
+          data-test="choose-image"
+          variant="secondary"
+          aria-invalid=${this.invalid ? "true" : nothing}
+          @click=${() => this.#setOpen(true)}
           >${t("image.choose")}</wt-button
         >
         ${

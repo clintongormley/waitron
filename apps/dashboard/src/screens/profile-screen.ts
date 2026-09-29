@@ -488,7 +488,8 @@ export class ProfileScreen extends LitElement {
 
   #focusFirstInvalid(): void {
     void this.updateComplete.then(() => {
-      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+      const dialog = this.isConnected ? this.shadowRoot!.querySelector("wt-modal") : null;
+      if (dialog) void focusFirstInvalid(dialog);
     });
   }
 

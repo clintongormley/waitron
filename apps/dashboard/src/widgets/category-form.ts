@@ -295,6 +295,7 @@ export class CategoryForm extends LitElement {
         <dashboard-image-upload
           aria-describedby="category-image-error"
           .api=${this.api}
+          .invalid=${Boolean(errors.image)}
           .image=${this.image}
           @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
             event.stopPropagation();

@@ -731,6 +731,27 @@ it("puts a server refusal beside the field it names, keeping the typed values", 
   expect(modal(el, "editor").open).toBe(true);
 });
 
+it("focuses Choose image when a refusal names the image", async () => {
+  const client = api({
+    updateSection: vi
+      .fn()
+      .mockRejectedValue({ code: "menu_section.invalid", params: { field: "image" } }),
+  });
+  const el = await mount(client);
+  await openEditor(el, "s-drinks");
+  click(el, '[data-test="editor-save"]');
+  const upload = inModal(el, "editor", "dashboard-image-upload")!;
+
+  await vi.waitFor(() =>
+    expect(upload.shadowRoot!.activeElement).toBe(
+      upload.shadowRoot!.querySelector("[data-test=choose-image]"),
+    ),
+  );
+  expect(
+    upload.shadowRoot!.querySelector("[data-test=choose-image]")!.getAttribute("aria-invalid"),
+  ).toBe("true");
+});
+
 it("says nothing about errors before the first Save, and Save works", async () => {
   const el = await mount();
   await openEditor(el, "s-drinks");

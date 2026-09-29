@@ -120,6 +120,7 @@ export class WtButton extends LitElement {
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
   @property({ attribute: "aria-haspopup" }) override ariaHasPopup: string | null = null;
   @property({ attribute: "aria-expanded" }) override ariaExpanded: string | null = null;
+  @property({ attribute: "aria-invalid" }) override ariaInvalid: string | null = null;
 
   // No `type` property: a shadow-DOM <button> is never form-associated (see
   // docs/developers/design-system.md, "Forms"), so a `type="submit"` here would be
@@ -140,6 +141,7 @@ export class WtButton extends LitElement {
         aria-label=${this.ariaLabel ?? nothing}
         aria-haspopup=${this.ariaHasPopup ?? nothing}
         aria-expanded=${this.ariaExpanded ?? nothing}
+        aria-invalid=${this.ariaInvalid ?? nothing}
       >
         ${this.loading ? html`<wt-spinner size="sm" decorative></wt-spinner>` : nothing}
         <slot></slot>

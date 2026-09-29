@@ -96,7 +96,10 @@ export class LabelsPanel extends LitElement {
   }
 
   #focusFirstInvalid(): void {
-    void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+    void this.updateComplete.then(() => {
+      const form = this.shadowRoot!.querySelector("[data-test=label-form]");
+      if (form) void focusFirstInvalid(form);
+    });
   }
 
   async #save(): Promise<void> {
