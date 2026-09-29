@@ -490,6 +490,8 @@ uuids.has("00001101-0000-1000-8000-00805f9b34fb")
 After `devices`, take at most `MAX_BLUETOOTH_INFO_DEVICES = 8` MACs and start their `info` calls together with `Promise.allSettled`; the existing 15-second command timeout therefore bounds the whole enrichment batch rather than multiplying by the device count. Devices beyond the cap stay in the scan unmarked, so **Show all devices** can still expose them. An unreadable `info` leaves that device unmarked; it does not remove it. `pairedBluetooth()` maps `devices Paired` without calling `liveBtDevicePath`. Implement Pair's trust step only if the measurement requires it. `forgetBluetooth()` runs the measured removal command and decodes only the observed success shape as success. Keep `visibleDevices()` unchanged so paired-but-undeliverable devices do not claim jobs.
 Export `PairedBluetoothDevice` and `BluetoothCommandResult` from `packages/print-agent/src/index.ts`.
 
+_2026-09-29 (A137): later scans now ask about the devices an earlier scan did not reach, and a mark is kept while the device stays listed (`createBluetoothctlHost` in `apps/print-agent/src/bluetooth.ts`)._
+
 - [ ] **Step 5: Prove the enrichment bound**
 
 Run the nine-device case with eight deferred `info` calls. Assert all eight start before any is released, the ninth is never inspected, and a rejected call still leaves all nine devices in the result. This distinguishes a concurrent fixed-size batch from a sequential 120-second path.
