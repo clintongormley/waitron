@@ -46,6 +46,20 @@ test("renders the table label", async () => {
   expect(el.shadowRoot!.querySelector(".label")?.textContent?.trim()).toBe("12");
 });
 
+test("names the party seated there under the table's label, and nothing for a table with none", async () => {
+  const named = await mountToken(table({ state: "open-tab", partyName: "Ana" }));
+  const unnamed = await mountToken(table({ state: "open-tab" }));
+  expect(named.shadowRoot!.querySelector("[data-party-name]")?.textContent?.trim()).toBe("Ana");
+  expect(unnamed.shadowRoot!.querySelector("[data-party-name]")).toBeNull();
+});
+
+test("the party's name wraps inside a token narrower than it is", async () => {
+  const el = await mountToken(table({ state: "open-tab", partyName: "Anastasiadoulopoulou" }));
+  el.style.width = "80px";
+  const name = el.shadowRoot!.querySelector<HTMLElement>("[data-party-name]")!;
+  expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+});
+
 test("carries the FP-1 state class so its accent colour matches the list card", async () => {
   const el = await mountToken(table({ state: "open-tab" }));
   expect(el.shadowRoot!.querySelector(".card")?.classList.contains("state-open-tab")).toBe(true);

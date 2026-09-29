@@ -167,6 +167,11 @@ export class WtTableToken extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      .party-name {
+        max-width: 100%;
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
+      }
 
       .occupancy {
         display: flex;
@@ -275,6 +280,11 @@ export class WtTableToken extends LitElement {
               : nothing
           }
         </span>
+        ${
+          t.partyName === undefined
+            ? nothing
+            : html`<span class="party-name" data-party-name>${t.partyName}</span>`
+        }
         ${this.#occupancy(t)}
         <span class="badges">
           ${

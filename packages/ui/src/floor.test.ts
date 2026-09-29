@@ -221,6 +221,28 @@ test("toFloorTable carries the reserved time through the occupancy half", () => 
   expect(table.reservedTime).toBe("20:30");
 });
 
+test("toFloorTable carries the party's name through the occupancy half", () => {
+  const placement = {
+    id: "t1",
+    label: "4",
+    capacity: 4,
+    posX: 200,
+    posY: 300,
+    shape: "rect" as const,
+    rotation: 0,
+    zoneId: "z1",
+  };
+  const named = toFloorTable(placement, {
+    state: "open-tab",
+    pendingToServe: 0,
+    status: null,
+    partyName: "Ana",
+  });
+  const free = toFloorTable(placement, { state: "free", pendingToServe: 0, status: null });
+  expect(named.partyName).toBe("Ana");
+  expect(free.partyName).toBeUndefined();
+});
+
 test("toFloorTable defaults null coordinates to 0 and a missing tab total to null", () => {
   const table = toFloorTable(
     {

@@ -28,6 +28,13 @@ test("forwards a semantic name and autocomplete purpose to the native input", as
   expect(input.id).toBe("email");
 });
 
+test("forwards a maximum length to the native input, and sets none by default", async () => {
+  const limited = await mount('<wt-input label="Name" name="partyName" maxlength="40"></wt-input>');
+  const open = await mount('<wt-input label="Name"></wt-input>');
+  expect(limited.shadowRoot!.querySelector("input")!.maxLength).toBe(40);
+  expect(open.shadowRoot!.querySelector("input")!.hasAttribute("maxlength")).toBe(false);
+});
+
 test("marks a required field visibly and in the native input contract", async () => {
   const el = await mount('<wt-input label="Email" name="email" required></wt-input>');
   const input = el.shadowRoot!.querySelector("input")!;
