@@ -4309,6 +4309,12 @@ approved.
   slowest at 263 ms. The other root suites in the failing job ran at their usual speed
   (`ci-workflow.test.mjs` 11.9 s there, 21.1 s in the healthy run). So this one suite ran several
   times slower from its start and reached the deadline partway through; why is still unknown.)_
+  _(Third and fourth failures, 2026-09-29: `main`'s own run 36544133895 on `5582a138b`, stalled
+  in `core/0036_party_rename`; and run 36550884979, the `lint` job on #851's docs-only head
+  `9b68be49b`, stalled in `venue-service/0009_kitchen_notice_sold_in_each` with `PipeWrap` ×4,
+  `MessagePort` and `Timeout` active. In #851's report every earlier phase was slow from the first
+  baseline — migrate 174 to 2,632 ms and change feed 301 to 3,358 ms — the same shape as the second
+  failure. Queued as lane A's A122 to find the cause and fix it.)_
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →
