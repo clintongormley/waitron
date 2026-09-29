@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import type { SetupApp, Screen } from "./setup-app.js";
 import type { SetupApi } from "./api/client.js";
+import { setLocale } from "./i18n/t.js";
 import "./setup-app.js";
 
 const mounted: HTMLElement[] = [];
@@ -11,6 +12,7 @@ afterEach(() => {
   for (const host of mounted.splice(0)) host.remove();
   document.scrollingElement!.scrollTop = 0;
   document.body.style.margin = "";
+  setLocale("en-GB");
 });
 
 function stubApi(): SetupApi {

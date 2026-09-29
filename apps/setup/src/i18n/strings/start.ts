@@ -131,6 +131,7 @@ export const startEn = {
 
   "server_fields.legal_name":
     "This name contains characters the tax agency's records cannot carry — they are invisible, so you will not see them. Typing the name out instead of pasting it usually clears them.",
+  // The message's 38 is `MAX_BASE_CODE_LENGTH` (`packages/fiscal-verifactu/src/reserved-series.ts`).
   "server_fields.series_code":
     "Use letters, numbers, and the characters / _ . and - only, up to 38 characters.",
   "server_fields.operation_description":

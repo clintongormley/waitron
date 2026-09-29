@@ -32,7 +32,6 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
       return t("server_fields.legal_name");
     },
   },
-  // The message's 38 is `MAX_BASE_CODE_LENGTH` (`packages/fiscal-verifactu/src/reserved-series.ts`).
   seriesCode: {
     key: "seriesCode",
     get message() {
