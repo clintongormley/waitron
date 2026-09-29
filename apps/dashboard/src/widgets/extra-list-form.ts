@@ -475,7 +475,9 @@ export class ExtraListForm extends LitElement {
   }
 
   #cancel(event: Event): void {
-    if (this.busy) {
+    // The dialog also reports a close it was told to make, a task later; by then the screen has
+    // closed this form and a second cancel would be about nothing.
+    if (this.busy || !this.open) {
       event.stopPropagation();
       return;
     }

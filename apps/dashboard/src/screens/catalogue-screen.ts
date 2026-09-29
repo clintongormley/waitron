@@ -567,10 +567,11 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * Honoured only while a form of that KIND is the open one. A dismissal produces a SECOND `wt-cancel`
-   * a task later (the closed `<dialog>`'s native `close`, which `wt-dialog.ts` turns into `wt-close`),
-   * and by then a different form can be open. The same kind reopened inside that task needs no check:
-   * `wt-dialog.ts` drops the late report for a dialog that is open again.
+   * Honoured only while a form of that KIND is the open one. A form that does not check its own
+   * `open` sends a SECOND `wt-cancel` a task later (the closed `<dialog>`'s native `close`, which
+   * `wt-dialog.ts` turns into `wt-close`), and by then a different form can be open. The same kind
+   * reopened inside that task needs no check: `wt-dialog.ts` drops the late report for a dialog
+   * that is open again.
    */
   #cancelChild(kind: ProductChildKind): void {
     if (this.#child.kind !== kind) return;
