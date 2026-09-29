@@ -18,6 +18,7 @@ import {
   orderGroup,
   row,
   salad,
+  snoozed,
   steak,
   tarta,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
@@ -504,17 +505,6 @@ describe("the release reminder in Current orders", () => {
     const { el } = await mountCurrent({ currentOrders: current({ reminder: null }) });
     expect(q(el, "[data-group-reminder]")).toBeNull();
   });
-
-  /** Current orders with group 3 snoozed until `dueAt`, the time its reminder then reads. */
-  function snoozed(dueAt: string | null = "2026-09-28T20:15:00.000Z") {
-    const shown = current({ reminder: { groupId: "g3", dueAt } });
-    return {
-      ...shown,
-      groups: shown.groups.map((group) =>
-        group.id === "g3" ? { ...group, remindAt: "2026-09-28T20:15:00.000Z" } : group,
-      ),
-    };
-  }
 
   it("offers Clear snooze beside Snooze on a due reminder that was snoozed", async () => {
     const { el } = await mountCurrent({ currentOrders: snoozed() });

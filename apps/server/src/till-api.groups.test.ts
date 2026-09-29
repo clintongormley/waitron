@@ -1832,6 +1832,11 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
 
   it("answers each unsnooze refusal with its status, writing nothing", async () => {
     const party = await withGroups();
+    const used = randomUUID();
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/unsnooze`, {
+      submissionId: used,
+      expectedPartyRevision: await revisionOf(party.partyId),
+    });
     await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`, {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
@@ -1871,10 +1876,22 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
         refusal("party.out_of_date", { partyId: party.partyId, revision }),
       ],
       [
+        `${base}/${party.croquetas.id}/unsnooze`,
+        { submissionId: used, expectedPartyRevision: revision },
+        409,
+        refusal("submission.id_reused", { submissionId: used }),
+      ],
+      [
         tarta,
         { expectedPartyRevision: revision },
         400,
         refusal("management.request_invalid", { field: "submissionId" }),
+      ],
+      [
+        tarta,
+        { submissionId: randomUUID() },
+        400,
+        refusal("management.request_invalid", { field: "expectedPartyRevision" }),
       ],
       [
         `/api/parties/not-a-party/groups/${party.tarta.id}/unsnooze`,

@@ -123,3 +123,14 @@ export function current(over: Partial<CurrentOrders> = {}): CurrentOrders {
     ...over,
   };
 }
+
+/** Current orders with group 3 snoozed until `dueAt`, the time its reminder then reads. */
+export function snoozed(dueAt: string | null = "2026-09-28T20:15:00.000Z"): CurrentOrders {
+  const shown = current({ reminder: { groupId: "g3", dueAt } });
+  return {
+    ...shown,
+    groups: shown.groups.map((group) =>
+      group.id === "g3" ? { ...group, remindAt: "2026-09-28T20:15:00.000Z" } : group,
+    ),
+  };
+}

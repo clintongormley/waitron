@@ -885,12 +885,23 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
     });
   });
 
-  it("refuses a group of another party and an unknown one (group.not_found), writing nothing", async () => {
+  it("refuses a group of another party, an unknown one and a removed one (group.not_found), writing nothing", async () => {
     const v = await setupVenue();
     const s = await fourGroups(v);
     const other = await fourGroups(v);
+    const command = await args(s.partyId);
+    await inTx((tx) =>
+      moveLinesToGroup(
+        tx,
+        v.cfg,
+        s.partyId,
+        [{ lineId: s.g3.lineIds[0]!, quantity: "1" }],
+        { groupId: s.g4.id },
+        command,
+      ),
+    );
 
-    for (const groupId of [other.g3.id, randomUUID()]) {
+    for (const groupId of [other.g3.id, randomUUID(), s.g3.id]) {
       await expectRefusedWithNothingWritten(s.partyId, () => unsnooze(v, s.partyId, groupId), {
         code: "group.not_found",
         params: { groupId },
