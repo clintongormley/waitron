@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 
@@ -207,6 +207,37 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       await el.updateComplete;
       expect(sidebar().hasAttribute("inert")).toBe(false);
       await expectNoA11yViolations(host);
+    } finally {
+      await page.viewport(width, height);
+    }
+  });
+
+  // Scoped to the box and its message: at 1280 px on the light theme axe fails the sidebar's group
+  // headers and current page on colour contrast — see docs/backlog.md's primary-blue entry.
+  it("the sidebar's page search box and its message are accessible empty, with matches and with none", async () => {
+    const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    try {
+      await page.viewport(1280, 800);
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+      await flush(el);
+      const box = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=nav-search]")!;
+      const status = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-search-empty]")!;
+      await expectNoA11yViolations(box);
+
+      for (const [term, message] of [
+        ["impres", ""],
+        ["zzz", "Ninguna página coincide."],
+      ]) {
+        box.focus();
+        box.select();
+        await userEvent.keyboard(term);
+        await flush(el);
+        expect(status.textContent!.trim()).toBe(message);
+        await expectNoA11yViolations(box);
+        await expectNoA11yViolations(status);
+      }
     } finally {
       await page.viewport(width, height);
     }
