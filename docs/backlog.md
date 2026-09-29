@@ -3836,7 +3836,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the old tab join and merge raise it, which the till no longer calls; it goes with Task 13. A table the server lists with no party opens no bill any more. On a
     390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines), and on the
     floor map a joined party's tables can break inside a word on a narrow table token.
-  - **Task 12 DONE (2026-09-29, branch `feat/party-till-move-bill`): the till moves a bill to
+  - **Task 12 DONE (2026-09-29, #888, main `ba1458c45`): the till moves a bill to
     another table or the counter, and a counter order to a table, through Task 7's
     `POST /api/bills/:id/move`; and it pays a moved bill the way the server takes it.** This is
     the till half of campaign items A81 and A82. What changes for a person using the till:
