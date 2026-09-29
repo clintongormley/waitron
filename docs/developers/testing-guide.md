@@ -2,8 +2,9 @@
 
 This file holds the evidence behind waitron's testing rules — the mechanism, the measurement, and
 the incident that paid for each one. The one-line rules themselves live in the repository root
-`CLAUDE.md`, section 4 ("Testing"), which points here. Read this before writing or debugging a
-test, especially one that touches a venue database or runs in browser mode.
+`CLAUDE.md`, section 4 ("Testing"), which points here. A few receipts that other sections of
+`CLAUDE.md` point at, beside the stream tests, are here too. Read this before writing or debugging
+a test, especially one that touches a venue database or runs in browser mode.
 
 **Asking for a database**
 
@@ -587,8 +588,9 @@ server's database, Litestream's files and versitygw's bucket, so all of them mov
 timing reproduced it on one runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill
 stage): that sale's commit took 1,017 ms. The next write waited 1,029 ms to begin, which the
 backlog's A130 entry infers was Litestream's own checkpoint (A133 later measured such checkpoints
-holding a write up, in the same entry), and Linux's pressure counters showed every process stalled
-on the disk for 1,094 ms of that sale. The write queue wait was 0 ms and nothing waited on the
+holding a write up: see
+[A sale can wait behind Litestream's own checkpoint](#a-sale-can-wait-behind-litestreams-own-checkpoint)),
+and Linux's pressure counters showed every process stalled on the disk for 1,094 ms of that sale. The write queue wait was 0 ms and nothing waited on the
 bucket. `node:sqlite` commits synchronously on the main thread of the process the test runs the
 server in, so while a commit stalls no other request is served. With the stream switched off, sales
 still reached 790 ms on slow-disk runners. With `TMPDIR=/dev/shm`, 58 runs across 20 runners
@@ -668,6 +670,17 @@ MD5-only checksums, eleven listening ports and three-second stop before swapping
 **An interrupted run can leave either binary running.** `pnpm reap` kills a parentless process whose
 command starts with a Waitron checkout's `.bin/litestream` or `.bin/versitygw`
 (`scripts/reap-testcontainers.mjs`, `isTestBinaryProcess`).
+
+## A sale can wait behind Litestream's own checkpoint
+
+CLAUDE.md §5 states the rule; these are its figures. Litestream 0.5.17 holds the write lock through
+each of its PASSIVE checkpoints. Measured 2026-09-29 with one seller through `POST /api/sales` (run
+36615242523): on a disk delayed 100 ms per flush, 14 writes in three runs waited 829–831 ms to
+begin; on a CI runner's normal disk, 288 writes waited 20 ms or more, most of them 33–105 ms and
+the longest 629 ms. Each such wait spanned a Litestream checkpoint log line; with streaming off no
+write waited over 1 ms. How long a write waits behind a checkpoint with several sellers at once,
+and on the box's own disk, is not measured. How the probe ran, and what taking those checkpoints
+away from Litestream would involve, are in `docs/backlog.md`, A130's entry, under A133.
 
 **What a test run prints**
 
