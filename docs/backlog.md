@@ -3626,6 +3626,12 @@ phone, so the narrow-viewport banner and drawer are unverified on hardware; that
 the display walkthrough in [ui-review.md](ui-review.md). The rest of the dashboard's screens are the
 ongoing overhaul listed at the top of Track A.
 
+- **Restaurant menus use “carta” throughout the Spanish dashboard, module and setup wording
+  — IN PROGRESS (C55, owner decision 2026-09-29).** The group renamed by C34 (#820) now reads “Productos y
+  cartas”, and the menus page reads “Cartas”. Menu prices, previews, shared-list usage, setup
+  guidance and the image library use the same noun and feminine agreement. Account and row-action
+  menus retain “menú”. Till wording remains C56, after the table-actions work.
+
 - **The sidebar's sections now open folded shut (C35, #822, owner decision 2026-09-28).** Two
   leftovers from its review, not fixed:
   (1) Outside a search, the header of the section holding the current page stays

@@ -89,7 +89,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "menu_section.not_library": {
     en: "A menu's own list cannot be used this way.",
-    es: "La lista propia de un menú no se puede usar de esta forma.",
+    es: "La lista propia de una carta no se puede usar de esta forma.",
   },
   "menu_section.membership_invalid": {
     en: "Some of the chosen items cannot be used. Refresh the list and try again.",
@@ -101,15 +101,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "menu.default_layout_required": {
     en: "A menu's default home page layout cannot be deleted. Make another layout the default first.",
-    es: "La página de inicio predeterminada de un menú no se puede eliminar. Haz predeterminada otra antes.",
+    es: "La página de inicio predeterminada de una carta no se puede eliminar. Haz predeterminada otra antes.",
   },
   "menu.shortcut_unreachable": {
     en: "Only products and sections that are on this menu can be shortcuts on its home page.",
-    es: "Solo los productos y secciones que están en este menú pueden ser accesos directos en su página de inicio.",
+    es: "Solo los productos y secciones que están en esta carta pueden ser accesos directos en su página de inicio.",
   },
   "menu.changed_since_preview": {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
-    es: "Este menú ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarlo.",
+    es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
   },
   "label.invalid": {
     en: "Enter a label name, and choose each label only once.",
@@ -158,7 +158,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "content.default_missing": {
     en: "Some products, categories, units, menu sections, modifiers or images need translating before this can become the default language.",
-    es: "Debes traducir algunos productos, categorías, unidades, secciones del menú, modificadores o imágenes antes de usar este idioma como predeterminado.",
+    es: "Debes traducir algunos productos, categorías, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
   },
   "unit.precision_invalid": {
     en: "Choose between 0 and 3 decimal places.",

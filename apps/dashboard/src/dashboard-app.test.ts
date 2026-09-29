@@ -1704,7 +1704,7 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    ["es-ES", "Productos y menús"],
+    ["es-ES", "Productos y cartas"],
     ["en-GB", "Products and menus"],
   ])("names the products group for menus as well as products (%s)", async (locale, heading) => {
     const me = { ...meResponse, venueLocale: locale, sessionDefault: locale };
