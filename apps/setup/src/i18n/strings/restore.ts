@@ -204,7 +204,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
 
   "live_source.heading": "Lleva tu restaurante preparado a producción",
   "live_source.intro":
-    "Copia menús, planos, perfiles del personal y ajustes de una exportación de preparación.",
+    "Copia cartas, planos, perfiles del personal y ajustes de una exportación de preparación.",
   "live_source.export": "Exportación de configuración",
   "live_source.export_help_label": "Ayuda sobre la exportación de configuración",
   "live_source.export_help":

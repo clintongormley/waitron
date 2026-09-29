@@ -223,8 +223,8 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
     ]),
   });
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual([
-    "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot — este menú",
-    "Ha cambiado el orden en el nivel principal — este menú",
+    "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot — esta carta",
+    "Ha cambiado el orden en el nivel principal — esta carta",
     "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
   ]);
 });
@@ -590,7 +590,7 @@ it("shows a never-published menu whole, as its first publish would make it live"
 it("names the whole-menu view in Spanish", async () => {
   setLocale("es-ES");
   const el = await mount({});
-  expect(text(q(el, '[data-test="document"] h2'))).toBe("El menú tal como se publicará");
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("La carta tal como se publicará");
 });
 
 it("names the whole-menu view in Spanish when there is nothing to publish", async () => {
@@ -602,7 +602,7 @@ it("names the whole-menu view in Spanish when there is nothing to publish", asyn
     hash: NEW_HASH,
   };
   const el = await mount({ status: current, preview: { ...preview([]), status: current } });
-  expect(text(q(el, '[data-test="document"] h2'))).toBe("El menú tal como está publicado");
+  expect(text(q(el, '[data-test="document"] h2'))).toBe("La carta tal como está publicada");
 });
 
 it("maps a document's lists to the tree, keyed by what each member names, with each name once", () => {

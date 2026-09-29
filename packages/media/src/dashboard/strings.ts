@@ -92,7 +92,7 @@ const es: Record<keyof typeof en, string> = {
   "image.page": "Imágenes",
   "image.default": "Predeterminado",
   "image.inactive": "Producto inactivo",
-  "image.published_menu": "Menú publicado",
+  "image.published_menu": "Carta publicada",
   "image.retry": "Reintentar",
 };
 export const MEDIA_STRINGS = { en, es };

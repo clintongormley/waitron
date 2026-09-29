@@ -203,7 +203,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "mode.demo.button": "Configurar un servidor de demostración",
   "mode.prepare.heading": "Prepara tu restaurante",
   "mode.prepare.copy":
-    "Introduce tus menús, tu personal y tus planos reales, y practica con pagos de prueba. No se envía nada a la AEAT.",
+    "Introduce tus cartas, tu personal y tus planos reales, y practica con pagos de prueba. No se envía nada a la AEAT.",
   "mode.prepare.button": "Preparar tu restaurante",
   "mode.live.heading": "En vivo",
   "mode.live.copy": "El de verdad. Cada venta se envía a la AEAT. Esta elección es permanente.",

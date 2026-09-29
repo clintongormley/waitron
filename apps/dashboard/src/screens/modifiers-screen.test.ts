@@ -691,8 +691,12 @@ it("counts in Spanish, with the singular forms", async () => {
     }),
   );
   await vi.waitFor(() => expect(table(el, "extra-lists").shadowRoot.textContent).toContain("Dips"));
-  expect(await usedByText(el, "extra-lists", "Breads")).toBe("2 productos · 1 elemento del menú");
-  expect(await usedByText(el, "extra-lists", "Sauces")).toBe("1 producto · 2 elementos del menú");
+  expect(await usedByText(el, "extra-lists", "Breads")).toBe(
+    "2 productos · 1 elemento de la carta",
+  );
+  expect(await usedByText(el, "extra-lists", "Sauces")).toBe(
+    "1 producto · 2 elementos de la carta",
+  );
   expect(await usedByText(el, "extra-lists", "Dips")).toBe("Sin usar");
   // "Usado en Breads" would read as used inside the list; the popup asks where the list is used.
   expect(t("modifiers.used_by")).toBe("Usado en");
@@ -702,7 +706,7 @@ it("counts in Spanish, with the singular forms", async () => {
     '[data-test="used-by-extra-e1"]',
   )!;
   expect(count.shadowRoot!.querySelector("button")!.getAttribute("aria-label")).toBe(
-    "Dónde se usa Breads: 2 productos · 1 elemento del menú",
+    "Dónde se usa Breads: 2 productos · 1 elemento de la carta",
   );
 });
 

@@ -139,7 +139,7 @@ type NavGroup = { id: NavGroupId; headerKey?: StringKey; icon?: string; items: N
 /** A nav row as shown: a core item or a module's screen, labelled in the current language. */
 type NavPage = { screen: ScreenId; label: string };
 
-/** Case- and accent-insensitive, so "menus" finds "Menús". */
+/** Case- and accent-insensitive. */
 function foldForSearch(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }

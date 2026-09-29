@@ -273,7 +273,7 @@ it("has English and Spanish copy for a publish refused because the menu changed"
     "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
   );
   expect(codeMessage(code, "es")).toBe(
-    "Este menú ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarlo.",
+    "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
   );
 });
 

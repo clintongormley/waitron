@@ -1409,7 +1409,7 @@ describe("variants", () => {
         expect(visibleText(muted), key).toBe(price);
         expect(getComputedStyle(muted).color).toBe(mutedColour(el));
         const hidden = muted.querySelector('[part~="visually-hidden"]')!;
-        expect(hidden.textContent!.trim(), key).toBe("(no se aplica ningún precio del menú)");
+        expect(hidden.textContent!.trim(), key).toBe("(no se aplica ningún precio de la carta)");
         expectClipped(hidden);
         expect(combined(el, key).querySelector("s")).toBeNull();
       }
@@ -1436,7 +1436,7 @@ describe("variants", () => {
         const muted = combined(el, key).querySelector("[part~=muted]")!;
         expect(visibleText(muted), key).toBe(price);
         expect(muted.querySelector('[part~="visually-hidden"]')!.textContent!.trim(), key).toBe(
-          "(no se aplica ningún precio del menú)",
+          "(no se aplica ningún precio de la carta)",
         );
       }
     });
