@@ -752,7 +752,8 @@ async function offersFor(
  * True when the line's menu item has no offer; the dish cannot be sold, or is not sold on its own;
  * its variant is not offered or cannot be sold; an extras pick is not an available item of that
  * extras list on the offer; or an option answer is not an available label of that options list on
- * the offer. Each of those is refused when the line is priced. An options list the line leaves unanswered is not checked.
+ * the offer. Each of those is refused when the line is priced. An options list the line leaves
+ * unanswered is not checked.
  */
 function unavailable(line: DraftLine, offer: ZoneMenuOffer | undefined): boolean {
   if (offer === undefined || !offer.available || offer.ordering === "not_sold_separately")
