@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
+import { blankComments } from "../packages/shared/src/source-comments.js";
 
 // A test may wait only as long as its per-test timeout allows, whatever the wait's own limit says.
 //
@@ -20,65 +21,6 @@ import { describe, expect, it } from "vitest";
 const VITEST_DEFAULT_TEST_TIMEOUT_MS = 5000;
 
 const SCRIPTS = import.meta.dirname;
-
-/**
- * Line and block comments blanked, so commented-out code cannot satisfy a check.
- *
- * Scanned rather than regexed because a `//` inside a string (`it("strips // comments", …)`) would
- * otherwise delete the rest of the line, losing a real bound and accusing a correct file. Strings,
- * template literals and regex literals are stepped over. A `/` is read as starting a regex only
- * where a value cannot already have ended, which is the usual heuristic and is not exact.
- */
-function withoutComments(source: string) {
-  let out = "";
-  let quote = "";
-  let previous = "";
-  for (let i = 0; i < source.length; i += 1) {
-    const char = source[i];
-    const next = source[i + 1];
-    if (quote !== "") {
-      out += char;
-      if (char === "\\") {
-        out += next ?? "";
-        i += 1;
-      } else if (char === quote) quote = "";
-      continue;
-    }
-    if (char === '"' || char === "'" || char === "`") {
-      quote = char;
-      out += char;
-      previous = char;
-      continue;
-    }
-    if (char === "/" && next === "/") {
-      while (i < source.length && source[i] !== "\n") i += 1;
-      out += "\n";
-      continue;
-    }
-    if (char === "/" && next === "*") {
-      const end = source.indexOf("*/", i + 2);
-      i = end === -1 ? source.length : end + 1;
-      out += " ";
-      continue;
-    }
-    if (char === "/" && "(,=:[!&|?{};+".includes(previous)) {
-      // A regex literal: copy it whole so a quote or `//` inside it cannot derail the scan.
-      let j = i + 1;
-      while (j < source.length && source[j] !== "\n") {
-        if (source[j] === "\\") j += 2;
-        else if (source[j] === "/") break;
-        else j += 1;
-      }
-      out += source.slice(i, j + 1);
-      i = j;
-      previous = "/";
-      continue;
-    }
-    out += char;
-    if (char.trim() !== "") previous = char;
-  }
-  return out;
-}
 
 /** `const NAME = <number>;` declarations, so a timeout written as a constant resolves. */
 function constants(source: string) {
@@ -152,7 +94,8 @@ function callArguments(source: string, open: number) {
  *  2. It reads TEXT, and does not know code from strings. A timeout from an environment variable,
  *     imported, or computed in a helper resolves to nothing; a number inside a FIXTURE STRING
  *     counts as though it were code, and so does a `timeout:` in an assertion ABOUT a mocked call,
- *     which waits for nothing.
+ *     which waits for nothing. Comment boundaries use the shared reader
+ *     `blankComments`, including its documented guesses about regular expressions.
  *  3. It is per FILE, not per test. It takes the LARGEST bound anywhere in the file, so a suite
  *     that raises the bound on its slow cases and waits a long time in an untouched one still
  *     passes.
@@ -160,7 +103,7 @@ function callArguments(source: string, open: number) {
  *     a false accusation stops every push. So an unreadable bound is a hole, deliberately.
  */
 export function budgets(rawSource: string) {
-  const source = withoutComments(rawSource);
+  const source = blankComments(rawSource);
   const consts = constants(source);
   const resolved = (expression: string) => resolve(expression, consts);
 
@@ -297,6 +240,11 @@ describe("the detector itself", () => {
   });
 
   const accuses: [string, string, ReturnType<typeof budgets>][] = [
+    [
+      "a commented-out bound after a returned regex does not count",
+      'function matcher() { return /"/; }\n// vi.setConfig({ testTimeout: 30000 });\nspawnSync(x, { timeout: 20000 });',
+      u(20000, 0),
+    ],
     [
       "a commented-out bound does not count",
       `// vi.setConfig({ testTimeout: 30000 });\nspawnSync(x, { timeout: 20000 });`,

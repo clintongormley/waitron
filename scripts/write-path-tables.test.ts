@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
+import { blankComments } from "../packages/shared/src/source-comments.js";
 import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected.js";
 
 /**
@@ -27,8 +28,9 @@ import { PRIVILEGES } from "../packages/fiscal-verifactu/src/privileges.expected
  *    that names the table somewhere this reader does not look, is invisible to it. So is any
  *    spelling the detector below does not list — it knows `insert into`, `delete from`, `truncate`,
  *    `update … set`, each optionally schema-qualified, and drizzle's three builder calls on a
- *    receiver whose name looks like a database handle. The notes on `withoutComments` and
- *    `detector` name what each of those gives up.
+ *    receiver whose name looks like a database handle. Comment boundaries use the shared
+ *    `blankComments` reader, including its documented guesses about regular expressions; the
+ *    notes on `detector` name the write spellings it gives up.
  * 2. **It judges a FILE, not a call chain.** An allowed file is allowed outright, so a request path
  *    that calls into one of them writes through it unseen.
  * 3. **It reads `<member>/src` under `apps` and `packages` only**, minus `*.test.ts` and everything
@@ -75,60 +77,6 @@ function schemaObject(table: string): string {
 }
 
 /**
- * Comments removed, line by line, including a comment that follows code on its own line: a comment
- * describing a write that lives elsewhere would otherwise be reported. The line in front of a
- * trailing comment is still read.
- *
- * A `//` that follows `:` is left alone, because that is a URL inside a string and cutting the line
- * there could drop a write sitting after it.
- *
- * Only a block opener that STARTS its line runs on to the lines below. A `"/*"` in the middle of a
- * line is nearly always a string, so an unclosed one ends its own line and nothing more.
- *
- * WHERE IT IS STILL WRONG, three ways. On one small input each (2026-09-27), the shared reader
- * `blankComments` (`packages/shared/src/source-comments.ts`) got all three right; adopting it is
- * queued in `docs/backlog.md`.
- * A block comment that opens at the END of a line of code and runs on is not followed, so its text
- * is read as code: a write written inside one is reported. A comment marker inside a string on a
- * line of code ends that line here, so a write after it on the same line is lost. And a line
- * inside a template literal whose first characters are `/*` still opens a block and swallows the
- * code below it, so a write can hide under one.
- */
-function withoutComments(source: string): string {
-  const kept: string[] = [];
-  let inBlock = false;
-  for (const line of source.split("\n")) {
-    let rest = line;
-    if (inBlock) {
-      const close = rest.indexOf("*/");
-      if (close === -1) continue;
-      inBlock = false;
-      rest = rest.slice(close + 2);
-    } else if (rest.trimStart().startsWith("/*")) {
-      const open = rest.indexOf("/*");
-      const close = rest.indexOf("*/", open + 2);
-      if (close === -1) {
-        inBlock = true;
-        continue;
-      }
-      rest = rest.slice(0, open) + " " + rest.slice(close + 2);
-    }
-    // Then any balanced block comment sitting inside a line of code: `foo(/* why */ a)` is code.
-    let open = rest.indexOf("/*");
-    while (open !== -1) {
-      const close = rest.indexOf("*/", open + 2);
-      rest = close === -1 ? rest.slice(0, open) : rest.slice(0, open) + " " + rest.slice(close + 2);
-      if (close === -1) break;
-      open = rest.indexOf("/*");
-    }
-    const lineComment = rest.search(/(^|[^:])\/\//);
-    if (lineComment !== -1) rest = rest.slice(0, lineComment);
-    kept.push(rest);
-  }
-  return kept.join("\n");
-}
-
-/**
  * How a write of `table` is spelled.
  *
  * `UPDATE` must carry its `SET`: `nodes` and `deployment` are ordinary English words, and a
@@ -163,7 +111,7 @@ const ANY_TABLE = new RegExp(TABLES.map((table) => detector(table)).join("|"), "
 
 /** Does this source write `table`? A comment is not code, wherever on its line it starts. */
 function writes(source: string, table: string): boolean {
-  return DETECTORS.get(table)!.test(withoutComments(source));
+  return DETECTORS.get(table)!.test(blankComments(source));
 }
 
 const SOURCE_EXTENSIONS = [".ts", ".mts", ".cts", ".tsx"];
@@ -227,7 +175,7 @@ describe("no source writes a table the application role may only read", () => {
   it("finds no forbidden write", () => {
     const offenders: string[] = [];
     for (const file of SOURCES) {
-      const text = withoutComments(readFileSync(join(REPO_ROOT, file), "utf8"));
+      const text = blankComments(readFileSync(join(REPO_ROOT, file), "utf8"));
       if (!ANY_TABLE.test(text)) continue;
       for (const table of TABLES) {
         if (ALLOWANCES.get(table)!.has(file)) continue;
@@ -290,6 +238,21 @@ describe("no source writes a table the application role may only read", () => {
 });
 
 describe("the detector itself", () => {
+  it("ignores a multiline block comment that opens after code", () => {
+    const source = "const n = 1; /*\nawait tx.insert(tenants).values(row);\n*/";
+    expect(writes(source, "tenants")).toBe(false);
+  });
+
+  it.each(["/*", "//"])("reads a write after a string containing %s", (marker) => {
+    const source = `const marker = "${marker}"; await tx.insert(tenants).values(row);`;
+    expect(writes(source, "tenants")).toBe(true);
+  });
+
+  it("reads a write after a template line beginning with a block opener", () => {
+    const source = "const marker = `\n/*\n`;\nawait tx.insert(tenants).values(row);";
+    expect(writes(source, "tenants")).toBe(true);
+  });
+
   it("reports an insert, an update, a delete and a truncate written as SQL", () => {
     expect(writes("insert into tenants (id) values (1)", "tenants")).toBe(true);
     expect(writes("update nodes set name = 'x'", "nodes")).toBe(true);
