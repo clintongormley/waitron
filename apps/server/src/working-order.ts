@@ -177,8 +177,9 @@ import type { TillSaleResult } from "./till-sale.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
+  outstandingOf,
   readPaidQuantities,
-  readReceivedByBill,
+  readPaymentsByBill,
   refuseBillHoldingMoney,
   refuseBillWithPayments,
   refusePaidLines,
@@ -3726,10 +3727,6 @@ export async function listHeldOrders(
         itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
-        hasPayments: sql<number>`exists (
-          select 1 from ${billPayments}
-          where ${billPayments.workingOrderId} = ${workingOrders.id}
-            and ${billPayments.state} in ('pending', 'received'))`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
@@ -3744,24 +3741,17 @@ export async function listHeldOrders(
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
-    const received = await readReceivedByBill(
+    const { received, holding } = await readPaymentsByBill(
       tx,
       rows.map((row) => row.id),
     );
-    return rows.map(({ id, orderNumber, label, partyId, itemCount, openedAt, ...money }) => {
-      const total = rawCentsToDecimal(money.total);
-      const paid = received.get(id);
+    return rows.map((row) => {
+      const total = rawCentsToDecimal(row.total);
       return {
-        id,
-        orderNumber,
-        label,
-        itemCount,
+        ...row,
         total,
-        outstanding:
-          paid === undefined ? total : toScale(subtractDecimal(total, paid), MONEY_SCALE),
-        hasPayments: money.hasPayments === 1,
-        partyId,
-        openedAt,
+        outstanding: outstandingOf(total, received.get(row.id)),
+        hasPayments: holding.has(row.id),
       };
     });
   });

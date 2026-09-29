@@ -528,6 +528,7 @@ describe("GET /api/parties/:id/bills", () => {
         status: "open",
         total: "0.00",
         outstanding: "0.00",
+        hasPayments: false,
         receiptAvailable: false,
       },
     ]);

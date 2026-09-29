@@ -45,7 +45,7 @@ import {
   failBillPayment,
   issueIfFullyPaid,
   readBillBalance,
-  readReceivedByBill,
+  readPaymentsByBill,
   takeBillPayment,
   type BillPaymentRequest,
 } from "./bill-payments.js";
@@ -558,9 +558,29 @@ describe("the money a bill has received", () => {
       failedAt: new Date().toISOString(),
     });
 
-    const byBill = await inTx((tx) => readReceivedByBill(tx, [billId, other]));
+    const { received: byBill } = await inTx((tx) => readPaymentsByBill(tx, [billId, other]));
 
     expect([...byBill]).toEqual([[billId, "4.00"]]);
+  });
+
+  it("holds a bill with a received or a pending payment, and not one whose only payment failed", async () => {
+    const received = await tabWith("Chuletón");
+    const pending = await tabWith("Tarta");
+    const failed = await tabWith("Caña");
+    const none = await tabWith("Caña");
+    await take(received, cash("5.00"));
+    await insertPayment(pending, { applied: 100 });
+    await insertPayment(failed, {
+      applied: 100,
+      state: "failed",
+      failedAt: new Date().toISOString(),
+    });
+
+    const { holding } = await inTx((tx) =>
+      readPaymentsByBill(tx, [received, pending, failed, none]),
+    );
+
+    expect([...holding].sort()).toEqual([received, pending].sort());
   });
 });
 

@@ -5,6 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPaymentRefunds,
+  billPayments,
   captureError,
   diningTables,
   serviceCommands,
@@ -218,6 +219,7 @@ describe("related bills", () => {
         status: "open",
         total: "14.00",
         outstanding: "14.00",
+        hasPayments: false,
         receiptAvailable: false,
       },
       {
@@ -228,6 +230,7 @@ describe("related bills", () => {
         status: "open",
         total: "30.00",
         outstanding: "30.00",
+        hasPayments: false,
         receiptAvailable: false,
       },
     ]);
@@ -2169,6 +2172,45 @@ describe("money received against a bill before its invoice", () => {
       { workingOrderId: tabId, total: "42.00", outstanding: "22.00" },
     ]);
     expect((await floorRow(venue, mesa4)).party).toMatchObject({ outstanding: "22.00" });
+  });
+
+  it("says which bills hold a payment: one received, or a card's still pending, but not one that failed", async () => {
+    const venue = await setupPartyVenue(suite.db);
+    const mesa4 = await venue.table("Mesa 4");
+    const { partyId, tabId } = await seat(venue, mesa4, 2);
+    await order(venue, tabId, "Burger", "Vino", "Agua");
+    const pendingId = await split(venue, partyId, tabId, [2]);
+    const failedId = await split(venue, partyId, tabId, [3]);
+    await contribute(venue, tabId, "5.00");
+    const card = (billId: string, state: "pending" | "failed") =>
+      inTx(suite, (tx) =>
+        tx.insert(billPayments).values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          kind: "contribution",
+          method: "card",
+          applied: 1000,
+          state,
+          ...(state === "failed" ? { failedAt: new Date().toISOString() } : {}),
+          requestedBy: OPERATOR,
+          tillId: venue.cfg.tillId,
+        }),
+      );
+    await card(pendingId, "pending");
+    await card(failedId, "failed");
+
+    const bills = await inTx(suite, (tx) => readPartyBills(tx, partyId));
+
+    expect(bills.map((bill) => [bill.workingOrderId, bill.hasPayments])).toEqual([
+      [tabId, true],
+      [pendingId, true],
+      [failedId, false],
+    ]);
+    expect(bills.find((bill) => bill.workingOrderId === pendingId)).toMatchObject({
+      total: "30.00",
+      outstanding: "30.00",
+    });
   });
 
   it("will not abandon an emptied bill that still holds a tip, and finishes once it is given back", async () => {
