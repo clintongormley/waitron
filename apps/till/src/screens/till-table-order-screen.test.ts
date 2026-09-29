@@ -3,6 +3,7 @@ import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type {
   OfferedModifier,
   OrderGroup,
@@ -3018,70 +3019,313 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("move → free-table picker → dispatches move-tab { toTableId } and closes", async () => {
-      const free = tableState({ id: "t9", label: "9", state: "free" });
-      const occupied = tableState({ id: "t8", state: "open-tab", hasOpenTab: true, tabId: "wo-8" });
-      const { el } = await mount({
-        lines: [pendingLine],
-        orderId: "wo-7",
-        tables: [free, occupied],
+    /** Ana at Mesa 4 (and Mesa 5 with `atTwo`), and the floor around her. */
+    const partyTables = (atTwo = false) => {
+      const ana: TableParty = {
+        ...anaParty,
+        tableIds: atTwo ? ["t4", "t5"] : ["t4"],
+      };
+      const luis: TableParty = {
+        ...anaParty,
+        id: "v7",
+        revision: 9,
+        name: "Luis",
+        displayName: "Luis",
+        mainBillId: "wo-7",
+        tableIds: ["t7"],
+      };
+      const held = (id: string, label: string, party: TableParty) =>
+        tableState({ id, label, state: "open-tab", condition: "held", party });
+      return {
+        party: ana,
+        tables: [
+          held("t4", "Mesa 4", ana),
+          ...(atTwo ? [held("t5", "Mesa 5", ana)] : []),
+          held("t7", "Mesa 7", luis),
+          tableState({ id: "t6", label: "Mesa 6", condition: "needs_clearing" }),
+          tableState({ id: "t9", label: "Mesa 9" }),
+        ],
+      };
+    };
+    const target = (el: TillTableOrderScreen, id: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-target="${id}"]`);
+    const billChoice = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement & { scope: string }>("till-bill-choice-dialog");
+    function heard(el: TillTableOrderScreen, type: string): unknown[] {
+      const details: unknown[] = [];
+      el.addEventListener(type, (event) => {
+        expect((event as CustomEvent).bubbles && (event as CustomEvent).composed).toBe(true);
+        details.push((event as CustomEvent).detail);
       });
+      return details;
+    }
+
+    it("offers Split a table only when the party holds two or more tables, and Name the party with a party", async () => {
+      const alone = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+      await toMenu(alone.el);
+      expect(alone.el.shadowRoot!.querySelector('[data-action="move"]')!.textContent!.trim()).toBe(
+        t("table.action_move_guests"),
+      );
+      expect(alone.el.shadowRoot!.querySelector('[data-action="split-table"]')).toBeNull();
+      expect(alone.el.shadowRoot!.querySelector('[data-action="name"]')).not.toBeNull();
+
+      const atTwo = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      await toMenu(atTwo.el);
+      expect(
+        atTwo.el.shadowRoot!.querySelector('[data-action="split-table"]')!.textContent!.trim(),
+      ).toBe(t("table.action_split_table"));
+    });
+
+    it("Move guests lists every other table with its condition, a table needing clearing disabled with its reason", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
       click(el, '[data-action="move"]');
       await el.updateComplete;
-      // The picker lists only FREE tables (the occupied one is not a move target).
-      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-target="t8"]')).toBeNull();
 
-      let captured: CustomEvent | undefined;
-      el.addEventListener("move-tab", (e) => (captured = e as CustomEvent));
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.move_guests_heading").replace("{party}", "Ana (Mesa 4)"),
+      );
+      expect(targetIds(el)).toEqual(["t7", "t6", "t9"]);
+      expect(target(el, "t9")!.textContent).toContain("Mesa 9");
+      expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
+      expect(target(el, "t7")!.textContent).toContain(
+        t("table.held_by").replace("{party}", "Luis"),
+      );
+      expect(target(el, "t6")!.disabled).toBe(true);
+      expect(el.shadowRoot!.querySelector('[data-target-reason="t6"]')!.textContent!.trim()).toBe(
+        codeMessage("table.needs_clearing"),
+      );
+      const moved = heard(el, "move-guests");
+      target(el, "t6")!.click();
+      await el.updateComplete;
+      expect(moved).toEqual([]);
+      expect(billChoice(el)).toBeNull();
+    });
+
+    it("Move guests to a free table dispatches move-guests { toTableId, bills } at once and closes", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+      const moved = heard(el, "move-guests");
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
       click(el, '[data-target="t9"]');
       await el.updateComplete;
-      expect(captured).toBeInstanceOf(CustomEvent);
-      expect(captured!.composed).toBe(true);
-      expect(captured!.bubbles).toBe(true);
-      expect(captured!.detail).toEqual({ toTableId: "t9" });
-      // The flow closes back to the trigger.
+
+      expect(moved).toEqual([{ toTableId: "t9", bills: "merge" }]);
+      expect(billChoice(el)).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
 
-    it.each(["move", "join"])(
-      "%s → the free-table picker leaves out a table that needs clearing",
-      async (action) => {
-        const free = tableState({ id: "t9", label: "9", state: "free" });
-        const uncleared = tableState({
-          id: "t6",
-          label: "6",
-          state: "free",
-          condition: "needs_clearing",
-        });
-        const { el } = await mount({
-          lines: [pendingLine],
-          orderId: "wo-7",
-          tables: [free, uncleared],
-        });
-        await toMenu(el);
-        click(el, `[data-action="${action}"]`);
-        await el.updateComplete;
-        expect(el.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
-        expect(el.shadowRoot!.querySelector('[data-target="t6"]')).toBeNull();
-      },
-    );
+    it("Move guests to a seated table asks about the bills first, stating who joins whom, and sends the choice", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      const moved = heard(el, "move-guests");
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
 
-    it("join → free-table picker → dispatches join-table { tableId } and closes", async () => {
-      const free = tableState({ id: "t9", state: "free" });
-      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [free] });
+      click(el, '[data-target="t7"]');
+      await el.updateComplete;
+
+      expect(moved).toEqual([]);
+      expect(billChoice(el)!.scope).toBe(
+        t("table.combine_scope")
+          .replace("{from}", "Ana (Mesa 4, 5)")
+          .replace("{into}", "Luis (Mesa 7)"),
+      );
+      billChoice(el)!.dispatchEvent(
+        new CustomEvent("bills-choose", {
+          detail: { bills: "separate" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(moved).toEqual([{ toTableId: "t7", bills: "separate" }]);
+      expect(billChoice(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+    });
+
+    it("cancelling the bill choice sends nothing and leaves the table list open", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+      const moved = heard(el, "move-guests");
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      click(el, '[data-target="t7"]');
+      await el.updateComplete;
+
+      billChoice(el)!.dispatchEvent(
+        new CustomEvent("bills-cancel", { bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+
+      expect(moved).toEqual([]);
+      expect(billChoice(el)).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-target-picker]")).not.toBeNull();
+    });
+
+    it("Join a table to a seated table asks with the other party joining this one, and dispatches join-tables", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+      const joined = heard(el, "join-tables");
       await toMenu(el);
       click(el, '[data-action="join"]');
       await el.updateComplete;
-      let captured: CustomEvent | undefined;
-      el.addEventListener("join-table", (e) => (captured = e as CustomEvent));
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.join_heading").replace("{party}", "Ana (Mesa 4)"),
+      );
+
       click(el, '[data-target="t9"]');
       await el.updateComplete;
-      expect(captured!.detail).toEqual({ tableId: "t9" });
-      expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      click(el, "[data-move-split]");
+      await el.updateComplete;
+      click(el, '[data-action="join"]');
+      await el.updateComplete;
+      click(el, '[data-target="t7"]');
+      await el.updateComplete;
+      expect(billChoice(el)!.scope).toBe(
+        t("table.combine_scope")
+          .replace("{from}", "Luis (Mesa 7)")
+          .replace("{into}", "Ana (Mesa 4)"),
+      );
+      billChoice(el)!.dispatchEvent(
+        new CustomEvent("bills-choose", {
+          detail: { bills: "merge" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(joined).toEqual([
+        { tableId: "t9", bills: "merge" },
+        { tableId: "t7", bills: "merge" },
+      ]);
+    });
+
+    it("Join a table leaves out the party's own tables; Move guests offers them, as these guests, only when the party holds two", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      await toMenu(el);
+      click(el, '[data-action="join"]');
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t7", "t6", "t9"]);
+
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t4", "t5", "t7", "t6", "t9"]);
+      expect(target(el, "t5")!.textContent).toContain(t("table.this_party"));
+      const moved = heard(el, "move-guests");
+      click(el, '[data-target="t5"]');
+      await el.updateComplete;
+      expect(billChoice(el)).toBeNull();
+      expect(moved).toEqual([{ toTableId: "t5", bills: "merge" }]);
+    });
+
+    it("Split a table picks one of the party's tables, then one of its open or presented bills other than the main one, or none", async () => {
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        ...partyTables(true),
+        bills: partyBills().bills,
+      });
+      const split = heard(el, "split-table");
+      await toMenu(el);
+      click(el, '[data-action="split-table"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-split-table] h2")!.textContent!.trim()).toBe(
+        t("table.split_table_heading").replace("{party}", "Ana (Mesa 4, 5)"),
+      );
+      expect(targetIds(el)).toEqual(["t4", "t5"]);
+
+      click(el, '[data-target="t5"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-split-table] h2")!.textContent!.trim()).toBe(
+        t("table.split_table_bill_heading")
+          .replace("{table}", "Mesa 5")
+          .replace("{party}", "Ana (Mesa 4, 5)"),
+      );
+      expect(targetIds(el)).toEqual(["wo-check", "wo-placed", "wo-part", "none"]);
+      expect(target(el, "none")!.textContent!.trim()).toBe(t("table.split_no_bill"));
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+
+      click(el, "[data-move-split]");
+      await el.updateComplete;
+      click(el, '[data-action="split-table"]');
+      await el.updateComplete;
+      click(el, '[data-target="t5"]');
+      await el.updateComplete;
+      click(el, '[data-target="none"]');
+      await el.updateComplete;
+
+      expect(split).toEqual([
+        { tableId: "t5", billId: "wo-check" },
+        { tableId: "t5", billId: null },
+      ]);
+    });
+
+    it("Back from choosing Split a table's bill returns to its tables", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      await toMenu(el);
+      click(el, '[data-action="split-table"]');
+      await el.updateComplete;
+      click(el, '[data-target="t5"]');
+      await el.updateComplete;
+
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      expect(targetIds(el)).toEqual(["t4", "t5"]);
+      click(el, "[data-action-back]");
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+    });
+
+    it("Name the party opens the name dialog with the party's name, and sends name-party { name }", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables(true) });
+      const named = heard(el, "name-party");
+      await toMenu(el);
+      click(el, '[data-action="name"]');
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; tables: string; refusal: string }
+      >("till-party-name-dialog")!;
+      expect(dialog.value).toBe("Ana");
+      expect(dialog.tables).toBe("Mesa 4, 5");
+      expect(dialog.refusal).toBe("");
+
+      dialog.dispatchEvent(
+        new CustomEvent("party-name-confirm", {
+          detail: { name: "Ana B" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await el.updateComplete;
+
+      expect(named).toEqual([{ name: "Ana B" }]);
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
+    });
+
+    it("reopens the name dialog with the name sent and the refusal beside the field when the app hands one back", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
+
+      el.nameRefusal = { name: "Ana de la mesa del fondo", message: t("table.name_too_long") };
+      await el.updateComplete;
+
+      const dialog = el.shadowRoot!.querySelector<HTMLElement & { value: string; refusal: string }>(
+        "till-party-name-dialog",
+      )!;
+      expect(dialog.value).toBe("Ana de la mesa del fondo");
+      expect(dialog.refusal).toBe(t("table.name_too_long"));
+      dialog.dispatchEvent(new CustomEvent("party-name-cancel", { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
     });
 
     it("merge lists the party's other untouched bills only, and dispatches merge-bills { fromBillId }", async () => {
@@ -3277,13 +3521,13 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-transfer-line="2"]')).toBeNull();
     });
 
-    it("shows an empty-state when there are no free tables to move to", async () => {
+    it("shows an empty-state when there are no other tables to move to", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [] });
       await toMenu(el);
       click(el, '[data-action="move"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")!.textContent).toContain(
-        t("table.no_free_tables"),
+        t("table.no_other_tables"),
       );
     });
 

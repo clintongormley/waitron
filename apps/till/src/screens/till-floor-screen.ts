@@ -40,6 +40,13 @@ function unsentText({ ownerName, lineCount }: UnsentDraft): string {
   );
 }
 
+/** The party's name when it says more than the table's own label: a name staff gave, or a joined
+ * party's tables. */
+function shownPartyName(table: TableState): string | undefined {
+  const name = table.party?.displayName;
+  return name === undefined || name === table.label ? undefined : name;
+}
+
 /** Nothing of the party is left to pay, and no tab is open that could still take a round. */
 function partyPaid(table: TableState): boolean {
   return (
@@ -229,6 +236,12 @@ export class TillFloorScreen extends LitElement {
       .capacity {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      .party-name {
+        max-width: 100%;
+        font-weight: var(--wt-font-weight-bold);
+        overflow-wrap: anywhere;
       }
 
       .occupancy {
@@ -490,6 +503,7 @@ export class TillFloorScreen extends LitElement {
       status,
       reservedTime: table.nextReservation?.time ?? null,
       unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
+      partyName: shownPartyName(table),
     });
   }
 
@@ -758,7 +772,7 @@ export class TillFloorScreen extends LitElement {
             : nothing
         }
       </span>
-      ${this.#occupancy(table)} ${this.#unsent(table.party)}
+      ${this.#partyName(table)} ${this.#occupancy(table)} ${this.#unsent(table.party)}
       <span class="badges">
         ${this.#hint(table)}
         ${
@@ -787,6 +801,13 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
     </button>`;
+  }
+
+  #partyName(table: TableState): TemplateResult | typeof nothing {
+    const name = shownPartyName(table);
+    return name === undefined
+      ? nothing
+      : html`<span class="party-name" data-party-name>${name}</span>`;
   }
 
   #unsent(party: TableParty | null): TemplateResult | typeof nothing {

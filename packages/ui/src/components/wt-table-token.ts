@@ -169,6 +169,7 @@ export class WtTableToken extends LitElement {
       }
       .party-name {
         max-width: 100%;
+        font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
       }

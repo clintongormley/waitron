@@ -1315,7 +1315,6 @@ describe("TillApi", () => {
         state: "open-tab",
         condition: "free",
         hasOpenTab: true,
-        tabId: "wo9",
         tabLineCount: 3,
         tabTotal: "12.50",
         pendingDeliveries: 0,
@@ -1675,38 +1674,123 @@ describe("TillApi", () => {
     });
   });
 
-  // --- Table actions: move, join, merge, transfer and split, each POSTing to /api/tabs/:tabId/<verb> ---
+  // --- Table actions on a party (/api/parties/:id/<verb>) and bill actions (/api/bills/:id/<verb>) ---
 
-  it("moveTab POSTs { toTableId } to the tab's /move route (empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("moveGuests POSTs the target table, the bill choice and both parties read to the party's /move route", async () => {
+    const answer = { partyId: "v7", mainBillId: "wo-7", merged: true };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
-    await expect(new TillApi("", fetchStub).moveTab("wo-1", "tbl-9")).resolves.toBeUndefined();
+    await expect(
+      new TillApi("", fetchStub).moveGuests("v1", "tbl-7", "merge", {
+        expectedPartyRevision: 3,
+        otherPartyId: "v7",
+        expectedOtherPartyRevision: 9,
+      }),
+    ).resolves.toEqual(answer);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tabs/wo-1/move",
+      "/api/parties/v1/move",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ toTableId: "tbl-9" }),
+        body: JSON.stringify({
+          toTableId: "tbl-7",
+          bills: "merge",
+          expectedPartyRevision: 3,
+          otherPartyId: "v7",
+          expectedOtherPartyRevision: 9,
+        }),
       }),
     );
   });
 
-  it("joinTable POSTs { tableId } to the tab's /join route (empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("joinTables POSTs the table, the bill choice and a table read free as otherPartyId null to the party's /join route", async () => {
+    const answer = { partyId: "v1", mainBillId: "wo-4", merged: false };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
 
-    await expect(new TillApi("", fetchStub).joinTable("wo-1", "tbl-9")).resolves.toBeUndefined();
+    await expect(
+      new TillApi("", fetchStub).joinTables("v1", "tbl-9", "separate", {
+        expectedPartyRevision: 3,
+        otherPartyId: null,
+      }),
+    ).resolves.toEqual(answer);
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tabs/wo-1/join",
+      "/api/parties/v1/join",
       expect.objectContaining({
         method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ tableId: "tbl-9" }),
+        body: JSON.stringify({
+          tableId: "tbl-9",
+          bills: "separate",
+          expectedPartyRevision: 3,
+          otherPartyId: null,
+        }),
       }),
     );
+  });
+
+  it("splitTable POSTs the table, the chosen bill or null, and the revision to the party's /split-table route", async () => {
+    const answer = { partyId: "v-new", mainBillId: null };
+    const fetchStub = vi.fn(async () => jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.splitTable("v1", "tbl-5", "wo-check", 3)).resolves.toEqual(answer);
+    await api.splitTable("v1", "tbl-5", null, 4);
+
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      1,
+      "/api/parties/v1/split-table",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ tableId: "tbl-5", billId: "wo-check", expectedPartyRevision: 3 }),
+      }),
+    );
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      2,
+      "/api/parties/v1/split-table",
+      expect.objectContaining({
+        body: JSON.stringify({ tableId: "tbl-5", billId: null, expectedPartyRevision: 4 }),
+      }),
+    );
+  });
+
+  it("setPartyName PUTs the name, or null to clear it, and the revision to the party's /name route", async () => {
+    const fetchStub = vi.fn(async () => jsonResponse({ revision: 4, name: "Ana" }));
+    const api = new TillApi("", fetchStub);
+
+    await expect(api.setPartyName("v1", "Ana", 3)).resolves.toEqual({ revision: 4, name: "Ana" });
+    await api.setPartyName("v1", null, 4);
+
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      1,
+      "/api/parties/v1/name",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        body: JSON.stringify({ name: "Ana", expectedPartyRevision: 3 }),
+      }),
+    );
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      2,
+      "/api/parties/v1/name",
+      expect.objectContaining({ body: JSON.stringify({ name: null, expectedPartyRevision: 4 }) }),
+    );
+  });
+
+  it("setPartyName surfaces a refusal naming the field as { code, field }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "management.request_invalid", params: { field: "name" } } },
+          400,
+        ),
+      );
+
+    await expect(
+      new TillApi("", fetchStub).setPartyName("v1", "x".repeat(41), 3),
+    ).rejects.toMatchObject({ code: "management.request_invalid", field: "name" });
   });
 
   it("mergeBills POSTs { fromBillId } to the /merge route of the bill merged into, and answers nothing", async () => {
@@ -1783,18 +1867,6 @@ describe("TillApi", () => {
     await expect(
       new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {}),
     ).rejects.toMatchObject({ code: "bill.presented", workingOrderId: "wo-from" });
-  });
-
-  it("moveTab surfaces { code } when the target table is occupied", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ error: { code: "table.occupied" } }), { status: 409 }),
-      );
-
-    await expect(new TillApi("", fetchStub).moveTab("wo-1", "tbl-busy")).rejects.toMatchObject({
-      code: "table.occupied",
-    });
   });
 
   // --- Floor-plan placement (the on-till routes, not the management ones) ---
@@ -2525,16 +2597,16 @@ describe("TillApi: a seated party", () => {
 
   it.each([
     [
-      "moveTab",
-      (api: TillApi) => api.moveTab("wo-1", "tbl-9", { expectedPartyRevision: 3 }),
-      "/api/tabs/wo-1/move",
-      { toTableId: "tbl-9", expectedPartyRevision: 3 },
+      "moveGuests",
+      (api: TillApi) => api.moveGuests("v1", "tbl-9", "merge", { expectedPartyRevision: 3 }),
+      "/api/parties/v1/move",
+      { toTableId: "tbl-9", bills: "merge", expectedPartyRevision: 3 },
     ],
     [
-      "joinTable",
-      (api: TillApi) => api.joinTable("wo-1", "tbl-9", { expectedPartyRevision: 3 }),
-      "/api/tabs/wo-1/join",
-      { tableId: "tbl-9", expectedPartyRevision: 3 },
+      "joinTables",
+      (api: TillApi) => api.joinTables("v1", "tbl-9", "merge", { expectedPartyRevision: 3 }),
+      "/api/parties/v1/join",
+      { tableId: "tbl-9", bills: "merge", expectedPartyRevision: 3 },
     ],
     [
       "mergeBills",

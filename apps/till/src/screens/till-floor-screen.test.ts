@@ -109,7 +109,6 @@ describe("till-floor-screen", () => {
           zoneId: "z1",
           state: "open-tab",
           hasOpenTab: true,
-          tabId: "wo-9",
           tabLineCount: 3,
           tabTotal: "47.50",
           pendingToServe: 2,
@@ -134,7 +133,6 @@ describe("till-floor-screen", () => {
           zoneId: "z1",
           state: "open-tab",
           hasOpenTab: true,
-          tabId: "wo-9",
           tabLineCount: 3,
           tabTotal: "47.50",
           pendingToServe: 1,
@@ -254,7 +252,6 @@ describe("till-floor-screen", () => {
           id: "t7",
           state: "open-tab",
           hasOpenTab: true,
-          tabId: "wo-7",
           tabLineCount: 1,
           tabTotal: "9.00",
         }),
@@ -267,7 +264,7 @@ describe("till-floor-screen", () => {
 
   it("emits a composed, bubbling open-table event (it must reach the app)", async () => {
     const { el } = await mount({
-      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true, tabId: "wo-1" })],
+      tables: [table({ id: "t1", state: "open-tab", hasOpenTab: true })],
     });
     let captured: Event | undefined;
     el.addEventListener("open-table", (event) => (captured = event));
@@ -485,7 +482,6 @@ describe("till-floor-screen", () => {
           zoneId: "ghost",
           state: "open-tab",
           hasOpenTab: true,
-          tabId: "wo-g",
           tabLineCount: 1,
           tabTotal: "20.00",
         }),
@@ -664,7 +660,6 @@ describe("till-floor-screen — FP-2 map/list toggle, tray, Editar plano", () =>
         placed("t1", {
           state: "open-tab",
           hasOpenTab: true,
-          tabId: "wo-1",
           tabLineCount: 1,
           tabTotal: "9.00",
         }),

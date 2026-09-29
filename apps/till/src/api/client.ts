@@ -1213,9 +1213,23 @@ export interface PartyBill {
   receiptAvailable: boolean;
 }
 
-/** The party revision a table move or join sends (D19); left out of the body when absent. */
-export interface PartyRevisions {
-  expectedPartyRevision?: number;
+/**
+ * What Move guests and Join tables send of the parties the till read (D19): the moving party's
+ * revision, and what it read at the target table. `otherPartyId` is the party seated there, sent with
+ * its revision, or null for a table read free; both are left out for a table of the party itself.
+ */
+export interface TableActionRevisions {
+  expectedPartyRevision: number;
+  otherPartyId?: string | null;
+  expectedOtherPartyRevision?: number;
+}
+
+/** A move or join's answer: the party the guests are in now, its main bill, and whether the two
+ * main bills were merged. */
+export interface TableActionResult {
+  partyId: string;
+  mainBillId: string | null;
+  merged: boolean;
 }
 
 /** What a bill action sends of the party the till read the bill under: its revision and its id. Both
@@ -1228,8 +1242,7 @@ export interface BillRevisions {
 /**
  * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
  * `"open-tab"` while a party holds it, paid or not. `tabLineCount`/`tabTotal` are present iff a tab
- * is open; `tabId` names the open tab, or the tab a seated party's table still points at once that
- * tab is no longer open.
+ * is open.
  * `tabTotal` is the tab's gross draft total as a two-place decimal string. `status` is the table's MANUAL service status,
  * independent of occupancy. `pendingToServe` counts the open tab's lines still to deliver,
  * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
@@ -1246,7 +1259,6 @@ export interface TableState {
   /** `held` while a party holds the table; `needs_clearing` after Finish table with the clearing
    * setting on, until Mark cleared. */
   condition: "free" | "held" | "needs_clearing";
-  tabId?: string;
   tabLineCount?: number;
   tabTotal?: string;
   pendingDeliveries: number;
@@ -2160,23 +2172,63 @@ export class TillApi {
   }
 
   /**
-   * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
-   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`,
-   * `table.needs_clearing`, `tab.not_open`, and
-   * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
-   * missing revision.
+   * The party moves off all its tables to `toTableId` → `POST /api/parties/:id/move`. At a table
+   * another party holds the two become one, and `bills` says whether their main bills merge. Rejects,
+   * among others, `table.needs_clearing`, `table.already_in_party`, `table.inactive`,
+   * `service_zone.mode_incompatible`, `party.not_open` and `party.out_of_date`.
    */
-  async moveTab(orderId: string, toTableId: string, revisions: PartyRevisions = {}): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/move`, "POST", { toTableId, ...revisions });
+  moveGuests(
+    partyId: string,
+    toTableId: string,
+    bills: "merge" | "separate",
+    revisions: TableActionRevisions,
+  ): Promise<TableActionResult> {
+    return this.#request(`/api/parties/${partyId}/move`, "POST", {
+      toTableId,
+      bills,
+      ...revisions,
+    });
   }
 
   /**
-   * Extend this tab onto an ADDITIONAL free table → `POST /api/tabs/:tabId/join`. No line moves;
-   * PRE-FISCAL. Same rejection codes as {@link moveTab}, and `tab.not_table_tab` or
-   * `service_zone.join_mismatch`.
+   * `tableId` joins the party → `POST /api/parties/:id/join`; a party seated there joins with every
+   * table it holds. Rejects as {@link moveGuests} does, and `service_zone.join_mismatch`.
    */
-  async joinTable(orderId: string, tableId: string, revisions: PartyRevisions = {}): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/join`, "POST", { tableId, ...revisions });
+  joinTables(
+    partyId: string,
+    tableId: string,
+    bills: "merge" | "separate",
+    revisions: TableActionRevisions,
+  ): Promise<TableActionResult> {
+    return this.#request(`/api/parties/${partyId}/join`, "POST", { tableId, bills, ...revisions });
+  }
+
+  /**
+   * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
+   * when it is null → `POST /api/parties/:id/split-table`. Rejects, among others, `table.not_shared`,
+   * `table.not_joined`, `party.main_bill_stays`, `group.held_leaves_party` and `party.out_of_date`.
+   */
+  splitTable(
+    partyId: string,
+    tableId: string,
+    billId: string | null,
+    expectedPartyRevision: number,
+  ): Promise<{ partyId: string; mainBillId: string | null }> {
+    return this.#request(`/api/parties/${partyId}/split-table`, "POST", {
+      tableId,
+      billId,
+      expectedPartyRevision,
+    });
+  }
+
+  /** Name the party, or clear its name with null → `PUT /api/parties/:id/name`. A name over 40
+   * characters is `management.request_invalid` naming the field `name`. */
+  setPartyName(
+    partyId: string,
+    name: string | null,
+    expectedPartyRevision: number,
+  ): Promise<{ revision: number; name: string | null }> {
+    return this.#request(`/api/parties/${partyId}/name`, "PUT", { name, expectedPartyRevision });
   }
 
   /**

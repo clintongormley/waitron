@@ -293,3 +293,18 @@ it("words Split a table's refusals of a table the party does not hold, or its on
     "Es la única mesa de estos clientes, así que no se puede separar",
   );
 });
+
+it("says in both languages why a table cannot be joined across service areas, or seats no guests", () => {
+  expect(codeMessage("service_zone.join_mismatch", "en")).toBe(
+    "Those tables are in different service areas, so they cannot be joined",
+  );
+  expect(codeMessage("service_zone.join_mismatch", "es")).toBe(
+    "Esas mesas están en zonas de servicio distintas, así que no se pueden unir",
+  );
+  expect(codeMessage("service_zone.mode_incompatible", "en")).toBe(
+    "That table is in an area that does not seat guests. Choose another table",
+  );
+  expect(codeMessage("service_zone.mode_incompatible", "es")).toBe(
+    "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",
+  );
+});

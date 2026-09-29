@@ -719,7 +719,7 @@ table; recording each ticket's printed table would fix it. A party's bill names 
 instead (the table-actions "Task 4 DONE" entry below). Outside tests, `openTab`'s one caller is
 `seatTable` (`apps/server/src/parties.ts`), which opens the tab on a new party. Whether a tab of no
 party can reach a join in production is not established: `moveTab` of an open parked order onto a
-table is an unchecked path to one.
+table is an unchecked path to one. _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
 
 **The owner decided a split check gets no Void; the server now allows one.** Since
 table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
@@ -1375,6 +1375,7 @@ What B4 leaves open:
   take a round. **Next action:**
   the same owner decision as the entry above; if tabs on tables in no zone stay allowed, `moveTab`
   and `joinTable` must create the zone record rather than only re-point one.
+  _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
 - **Two branches still read a held line that names no menu offer, and only an order parked before
   B4 should have one.** `getHeldOrder` (`apps/server/src/working-order.ts`, its
   `context === undefined || line.productId === null` arm) returns such a line by its product alone,
@@ -3216,6 +3217,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       it, and no notice on a join. Outside tests, `openTab`'s one caller is `seatTable`, which
       opens the tab on a new party. Whether a tab of no party can reach a join in production is
       not established: `moveTab` of an open parked order onto a table is an unchecked path to one.
+      _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
     Tests changed by spec decision 9: `apps/server/src/print-problems.test.ts` "follows the held
     dishes when their bill is merged into another table's, and clears by that bill's reprint"
     matched one table in the reprint header and now matches the party's two.
@@ -3357,7 +3359,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       must still be held by the party the till read there, or the move is `party.out_of_date`
       naming that party, because a party seated there since can carry the same revision number and
       the move would otherwise land with strangers. A revision sent without the id is
-      `management.request_invalid` `{ field: "otherPartyId" }`.)_
+      `management.request_invalid` `{ field: "otherPartyId" }`.)_ _(2026-09-29, Task 11:
+      `otherPartyId: null` now says the till read the table free; a party seated there since is
+      `party.out_of_date` naming that party, where it was 400.)_
     - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
       bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
       that party, before any revision is asked for; a `partyId` naming a party the bill has since
@@ -3438,7 +3442,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     table, on the server.** Three new routes, `POST /api/parties/:id/move` (`{ toTableId }`),
     `POST /api/parties/:id/join` (`{ tableId }`) and `POST /api/parties/:id/split-table`
     (`{ tableId, billId }`, the bill null for none), in `apps/server/src/table-actions.ts`. The till
-    keeps the old tab routes until Task 11.
+    keeps the old tab routes until Task 11. _(2026-09-29: Task 11's till uses these routes.)_
     - Move guests takes the party off all its tables. To a free table, the table joins the party
       and any manual status it had goes; the tables left behind need clearing when the venue's
       clearing setting is on, and are free at once when it is off. Moved to a free table in another
@@ -3474,6 +3478,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       number, and without the id a stale move would combine the guests with strangers, or a stale
       join land on a table now free. A revision sent without the id is
       `management.request_invalid` `{ field: "otherPartyId" }`. The plan's Tasks 11 and 12 have the till send both.
+      _(2026-09-29, Task 11: the till sends both, and `otherPartyId: null` for a table it read
+      free, which the server now refuses as `party.out_of_date` once a party is seated there; see
+      Task 11's entry.)_
     - The kitchen gets a MOVED notice for each sent dish whose tables change, including a dish on
       a main bill merged away when parties combine (it is told once, on the bill it merged into).
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
@@ -3583,7 +3590,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `bill.line_paid` show in their own words, and so does `tab.not_open` on a send that named a
       bill (every other path shows it as it did before); `tab.merge_leaves_no_table` is no
       longer shown.
-    - Move and Join still use the old tab routes until Task 11.
+    - Move and Join still use the old tab routes until Task 11. _(2026-09-29: Task 11 moved them
+      to `POST /api/parties/:id/move` and `/join`.)_
     - The server refuses a transfer carrying no items with `sale.empty_basket` (400), as a split
       with none already was, and the till never sends one.
     Tests: `apps/till/src/till-app-parties.test.ts`, `till-app-table-service.test.ts`,
@@ -3597,6 +3605,62 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     message stays in `apps/till/src/i18n/codes.ts`, read by nothing else under `apps/till/src`
     but its test. All three go with Task 13. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
     on the dark dialog (seen in the 390 px Spanish dark screenshot).
+  - **Task 11 DONE (2026-09-29, branch `feat/party-till-tables`): the till moves guests, joins
+    tables, splits a table and names the party, through Task 8's routes and Task 2's
+    `PUT /api/parties/:id/name`.** What changes for a person using the till:
+    - The table screen's actions offer Move guests, Join a table, Split a table (only while the
+      party holds two or more tables) and Name the party, beside Merge bills, Transfer items and
+      Split by item.
+    - Move guests and Join a table list every table but the party's own, each with its state:
+      free, "Seated: Luis" (that party's display name), or needing clearing, shown disabled with
+      `table.needs_clearing`'s sentence under it. Move guests also lists the party's own tables,
+      as "These guests", while it holds more than one. The heading states the scope: "Move Ana
+      (Mesa 4, 5) to:".
+    - A table another party holds first asks what happens to the bills: "Merge the bills" (the
+      default, focused) or "Keep separate bills", under a heading saying who joins whom ("Ana
+      (Mesa 4, 5) joins Luis (Mesa 7)"; for Join a table the other party joins this one). Cancel
+      or Escape sends nothing. A free table, or one of the party's own, acts at once.
+    - After a move into another party the till follows the guests to the table they moved to,
+      opening the party's main bill, or with none its first unpaid bill, else its latest. When
+      Merge was chosen and the answer says `merged: false`, the till says "The bills were kept
+      separate: one has already been paid towards or presented".
+    - Split a table picks one of the party's tables, then the bill that goes with it: the party's
+      open or presented bills other than its main one, or "No bill, start an empty one". The till
+      stays with the party, at another of its tables when the open one left, and on its main bill
+      when the bill on screen left with the table.
+    - Name the party is a form with one optional field (`name="partyName"`, `maxlength` 40 on the
+      native input): trimmed, and empty clears the name. A value over 40 characters is refused
+      beside the field without a request; the server's own refusal (`management.request_invalid`
+      `{ field: "name" }`) reopens the dialog with the name sent and the refusal under the field.
+    - The floor's card and map token show the party's display name when it says more than the
+      table's label: a name staff gave, or a joined party's tables ("Mesa 4, 5").
+    - Opening a seated table opens its party's main bill, else its first unpaid bill, else its
+      latest. `tabId` is gone from the till's `TableState` type, so the till reads it nowhere and
+      Task 13 can drop it; `moveTab` and `joinTable` are gone from `apps/till/src/api/client.ts`.
+    - The till sends `otherPartyId` with `expectedOtherPartyRevision` for a table another party
+      holds, and `otherPartyId: null` for a table it read free. The server now takes null as "read
+      free" (`readTargetTable`, `apps/server/src/move-bill.ts`, shared by move, join and move a
+      bill): a party seated there since is `party.out_of_date` naming that party, with nothing
+      written, where it was 400 `management.request_invalid` (Task 8's open point 2). The till
+      reloads and says the table changed.
+    - `table.already_in_party`, `table.not_joined`, `table.inactive`, `party.main_bill_stays`,
+      `service_zone.join_mismatch` and `service_zone.mode_incompatible` show in their own words;
+      the last two gained English and Spanish wording.
+    - Shared UI: `wt-input` (`packages/ui-core`) gained `maxlength`; `FloorTable` and
+      `wt-table-token` (`packages/ui`) gained `partyName`.
+    Tests: `apps/till/src/till-app-parties.test.ts`, `till-app.test.ts`,
+    `till-app-table-service.test.ts`, `till-app-drafts.test.ts`, `till-app-menu-refresh.test.ts`,
+    `till-app.a11y.test.ts`, `screens/till-table-order-screen.test.ts` and `.a11y.test.ts`,
+    `screens/till-floor-screen*.test.ts`, `widgets/bill-choice-dialog.test.ts` and `.a11y.test.ts`,
+    `widgets/party-name-dialog.test.ts` and `.a11y.test.ts`, `api/client.test.ts`,
+    `i18n/codes.test.ts`; server `till-api.table-actions.test.ts` and `till-api.move-bill.test.ts`;
+    `packages/ui-core/src/components/wt-input.test.ts`, `packages/ui/src/floor.test.ts` and
+    `wt-table-token.test.ts`. No migration.
+    Open points: the till also sends `otherPartyId: null` when its floor does not list the target
+    table at all (a failed floor read empties the list); a held table is then refused as out of
+    date, never combined. A table the server lists with no party opens no bill any more. On a
+    390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines), and on the
+    floor map a joined party's tables can break inside a word on a narrow table token.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
@@ -3633,6 +3697,7 @@ bill is refused.
   **Next action:** owner decision on whether `moveTab` should refuse a counter order, and whether a
   table joined to the party's own bill should stay in the party when that bill is merged into a
   check at another table (today it is freed and leaves, A111).
+  _(2026-09-29, table actions Task 11: the till no longer calls `moveTab` or `joinTable`; the routes stay until Task 13.)_
 - **A merge within one party with `freeSourceTable: true` frees the source bill's tables AND takes
   them out of the party — done (A111).** The owner's rule of 2026-09-28: a split-off bill has its
   own table because those guests moved there, so merging it back with `freeSourceTable: true` (what

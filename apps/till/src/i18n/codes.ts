@@ -63,6 +63,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That would leave these guests without a table, so these bills cannot be merged this way",
     es: "Así estos clientes se quedarían sin mesa, así que estas cuentas no se pueden combinar de esta forma",
   },
+  "service_zone.join_mismatch": {
+    en: "Those tables are in different service areas, so they cannot be joined",
+    es: "Esas mesas están en zonas de servicio distintas, así que no se pueden unir",
+  },
+  "service_zone.mode_incompatible": {
+    en: "That table is in an area that does not seat guests. Choose another table",
+    es: "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",
+  },
   "table.not_shared": {
     en: "This is the only table these guests have, so it cannot be split off",
     es: "Es la única mesa de estos clientes, así que no se puede separar",

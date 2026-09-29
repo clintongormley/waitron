@@ -12,6 +12,7 @@ import type {
   OrderGroup,
   TabLine,
   TableParty,
+  TableState,
   TillProduct,
   TillZoneMenu,
   PartyBill,
@@ -580,6 +581,90 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     el.shadowRoot!.querySelector<HTMLElement>('[data-transfer-line="1"]')!.click();
     await el.updateComplete;
     await expectNoA11yViolations(host);
+  });
+
+  describe("the table actions", () => {
+    const tableRow = (id: string, label: string, over: Partial<TableState> = {}): TableState => ({
+      id,
+      label,
+      zoneId: null,
+      capacity: null,
+      state: "free",
+      condition: "free",
+      hasOpenTab: false,
+      pendingDeliveries: 0,
+      pendingToServe: 0,
+      readyToServe: 0,
+      enRoute: 0,
+      timingBand: "fresh",
+      status: null,
+      nextReservation: null,
+      posX: null,
+      posY: null,
+      shape: null,
+      rotation: null,
+      party: null,
+      ...over,
+    });
+    const ana: TableParty = { ...party, tableIds: ["t4", "t5"] };
+    const luis: TableParty = {
+      ...party,
+      id: "v7",
+      name: "Luis",
+      displayName: "Luis",
+      tableIds: ["t7"],
+    };
+    const tables = [
+      tableRow("t4", "Mesa 4", { state: "open-tab", condition: "held", party: ana }),
+      tableRow("t5", "Mesa 5", { state: "open-tab", condition: "held", party: ana }),
+      tableRow("t7", "Mesa 7", { state: "open-tab", condition: "held", party: luis }),
+      tableRow("t6", "Mesa 6", { condition: "needs_clearing" }),
+      tableRow("t9", "Mesa 9"),
+    ];
+
+    async function toAction(action: string) {
+      const mounted = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        { products, lines, statuses, orderId: "wo-1", party: ana, bills: partyBills, tables },
+        theme,
+      );
+      const { el } = mounted;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>(`[data-action="${action}"]`)!.click();
+      await el.updateComplete;
+      return mounted;
+    }
+
+    it("has no violations in the table list, with a free, a seated and a disabled table needing clearing", async () => {
+      const { el, host } = await toAction("move");
+      if (el.shadowRoot!.querySelector('[data-target-reason="t6"]') === null)
+        throw new Error("the scan must include the table needing clearing");
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in the bill choice over the table screen", async () => {
+      const { el, host } = await toAction("move");
+      el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("till-bill-choice-dialog");
+      if (dialog === null) throw new Error("the scan must include the bill choice");
+      await dialog.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in Split a table's choice of bill", async () => {
+      const { el, host } = await toAction("split-table");
+      el.shadowRoot!.querySelector<HTMLElement>('[data-target="t5"]')!.click();
+      await el.updateComplete;
+      if (el.shadowRoot!.querySelector('[data-target="none"]') === null)
+        throw new Error("the scan must include the bills to choose from");
+      await expectNoA11yViolations(host);
+    });
   });
 
   it("has no violations in the split quantity picker", async () => {

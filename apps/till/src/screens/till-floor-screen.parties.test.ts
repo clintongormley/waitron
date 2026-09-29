@@ -54,7 +54,6 @@ function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> =
     state: "open-tab",
     condition: "held",
     hasOpenTab: true,
-    tabId: "wo-4",
     tabLineCount: 2,
     tabTotal: "14.00",
     party: party(partyOver),
@@ -231,6 +230,36 @@ describe("till-floor-screen: what a seated party owes", () => {
 
     const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
     expect(canvas.tables[0]!.tabTotal).toBe("30.00");
+  });
+});
+
+describe("till-floor-screen: the party's name", () => {
+  const partyName = (el: TillFloorScreen, id: string) =>
+    card(el, id).querySelector("[data-party-name]")?.textContent?.trim() ?? null;
+  const placed = { posX: 200, posY: 200, shape: "round" as const, rotation: 0 };
+
+  it("shows a named party's name on its card and its map token", async () => {
+    const list = await mountFloor([seated({}, { name: "Ana", displayName: "Ana" })]);
+    expect(partyName(list, "t4")).toBe("Ana");
+
+    const map = await mountFloor([seated(placed, { name: "Ana", displayName: "Ana" })]);
+    expect(map.shadowRoot!.querySelector("wt-floor-canvas")!.tables[0]!.partyName).toBe("Ana");
+  });
+
+  it("shows a joined party's tables, and nothing more for a party named after its one table", async () => {
+    const joined = await mountFloor([
+      seated({}, { displayName: "4, 5", tableIds: ["t4", "t5"] }),
+      seated({ id: "t5", label: "5" }, { displayName: "4, 5", tableIds: ["t4", "t5"] }),
+    ]);
+    expect(partyName(joined, "t4")).toBe("4, 5");
+    expect(partyName(joined, "t5")).toBe("4, 5");
+
+    const alone = await mountFloor([seated()]);
+    expect(partyName(alone, "t4")).toBeNull();
+    const aloneOnMap = await mountFloor([seated(placed)]);
+    expect(
+      aloneOnMap.shadowRoot!.querySelector("wt-floor-canvas")!.tables[0]!.partyName,
+    ).toBeUndefined();
   });
 });
 
