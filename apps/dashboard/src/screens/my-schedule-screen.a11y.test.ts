@@ -45,7 +45,7 @@ const absences: MyAbsence[] = [
   },
 ];
 
-function stubApi(): DashboardApi {
+function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     getStaffRoster: vi.fn().mockResolvedValue(roster),
     listMyShifts: vi.fn().mockResolvedValue(shifts),
@@ -54,6 +54,7 @@ function stubApi(): DashboardApi {
     requestSwap: vi.fn(),
     acceptSwap: vi.fn(),
     requestAbsence: vi.fn(),
+    ...overrides,
   } as unknown as DashboardApi;
 }
 
@@ -72,6 +73,22 @@ describe.each(["light", "dark"] as const)("my-schedule-screen a11y (%s theme)", 
       theme,
     );
     await flush(el);
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a list's load-failed notice and the retry", async () => {
+    const { el, host } = await mountWidget<MyScheduleScreen>(
+      "dashboard-my-schedule-screen",
+      {
+        api: stubApi({ listMySwaps: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+        myPersonId: "me",
+      },
+      theme,
+    );
+    await flush(el);
+    if (el.shadowRoot!.querySelector("[data-test=swaps-failed]") === null) {
+      throw new Error("the swaps list's load-failed notice did not render");
+    }
     await expectNoA11yViolations(host);
   });
 });

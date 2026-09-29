@@ -529,3 +529,167 @@ describe("my-schedule-screen — dropdowns that keep their choice", () => {
     expect(select.selectedOptions[0]?.value).toBe("sick_leave");
   });
 });
+
+describe("my-schedule-screen — each list's own load failure", () => {
+  const lists = [
+    ["shifts", "listMyShifts", "No se pudieron cargar tus turnos"],
+    ["swaps", "listMySwaps", "No se pudieron cargar tus cambios de turno"],
+    ["absences", "listMyAbsences", "No se pudieron cargar tus ausencias"],
+  ] as const;
+
+  it.each(lists)(
+    "says under %s, and only there, that its read failed",
+    async (list, method, text) => {
+      const { el } = await mount(
+        stubApi({ [method]: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+      );
+      await flush(el);
+      const notice = el.shadowRoot!.querySelector(`section.${list} [data-test=${list}-failed]`);
+      expect(notice?.textContent ?? "").toContain(text);
+      expect(notice?.getAttribute("role")).toBe("alert");
+      for (const [other] of lists) {
+        if (other !== list) {
+          expect(el.shadowRoot!.querySelector(`[data-test=${other}-failed]`)).toBeNull();
+        }
+      }
+    },
+  );
+
+  it("clears a list's notice, and the page's, when a later refresh delivers its rows", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        listMySwaps: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue([offeredToMe]),
+      }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=swaps-failed]")).not.toBeNull();
+    liveData.invalidate([{ type: "shift_swaps", id: "changed-elsewhere" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=swap-sw-offered]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=swaps-failed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
+  });
+
+  it("keeps a sibling's notice when another list's refresh arrives", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({ listMyAbsences: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    await flush(el);
+    vi.mocked(api.listMySwaps).mockResolvedValue([]);
+    liveData.invalidate([{ type: "shift_swaps", id: "changed-elsewhere" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=swaps-empty]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=absences-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).not.toBeNull();
+  });
+
+  it("says so under a list whose refresh fails after it had loaded, keeping its rows", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(stubApi(), { liveData });
+    const { el } = await mount(api);
+    await flush(el);
+    vi.mocked(api.listMySwaps).mockRejectedValue({ code: "server.internal" });
+    liveData.invalidate([{ type: "shift_swaps", id: "changed-elsewhere" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=swaps-failed]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=shifts-failed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=absences-failed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=swap-sw-offered]")).not.toBeNull();
+  });
+
+  it("offers a retry that reads the failed list again and clears its notice", async () => {
+    const api = stubApi({
+      listMyAbsences: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(absences),
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    const retry = el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]");
+    expect(retry?.textContent ?? "").toContain("Reintentar");
+    retry!.click();
+    await flush(el);
+    expect(api.listMyAbsences).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[data-test=absence-a1]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=absences-failed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=retry]")).toBeNull();
+  });
+
+  it("says a retried list is loading again, not failed, while its second read is open", async () => {
+    const api = stubApi({
+      listMyAbsences: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockReturnValue(new Promise(() => {})),
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=absences-loading]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=absences-failed]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
+  });
+
+  it("retries the roster, and then the lists, after the roster read failed", async () => {
+    const api = stubApi({
+      getStaffRoster: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue(roster),
+    });
+    const { el } = await mount(api);
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
+    await flush(el);
+    expect(api.getStaffRoster).toHaveBeenCalledTimes(2);
+    expect(api.listMyShifts).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
+  });
+
+  it("reads the lists once the roster arrives on a later refresh after its first read failed", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getStaffRoster: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue(roster),
+      }),
+      { liveData },
+    );
+    const { el } = await mount(api);
+    await flush(el);
+    expect(api.listMyShifts).not.toHaveBeenCalled();
+    liveData.invalidate([{ type: "persons", id: "col1" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=shift-s1]")).not.toBeNull(),
+    );
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=swap-sw-offered]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=absence-a1]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=loading]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=load-failed]")).toBeNull();
+    liveData.invalidate([{ type: "persons", id: "col1" }]);
+    await vi.waitFor(() => expect(api.getStaffRoster).toHaveBeenCalledTimes(3));
+    await flush(el);
+    expect(api.listMyShifts).toHaveBeenCalledTimes(1);
+    expect(api.listMySwaps).toHaveBeenCalledTimes(1);
+    expect(api.listMyAbsences).toHaveBeenCalledTimes(1);
+  });
+});
