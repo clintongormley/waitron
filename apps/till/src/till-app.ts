@@ -314,8 +314,8 @@ function partyChangeMessage(change: PartyChange): string {
   ].join(" ");
 }
 
-/** Refusals of sending, changing, recalling or cancelling tab lines, shown in their code's own words:
- * each says what the operator can still do. */
+/** Refusals of a tab-line or group command, shown in their code's own words: each says what the
+ * operator can still do. */
 const LINE_REFUSALS = new Set([
   "product.unavailable",
   "ticket.already_started",
@@ -323,6 +323,7 @@ const LINE_REFUSALS = new Set([
   "tab.void_quantity_invalid",
   "tab.serve_quantity_invalid",
   "group.not_held",
+  "group.not_waiting",
   "group.not_found",
   "group.line_held",
   "submission.id_reused",

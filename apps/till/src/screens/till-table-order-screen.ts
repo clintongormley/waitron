@@ -236,7 +236,7 @@ export interface ServeGroupDetail {
   groupId: string;
 }
 
-/** `snooze-group`: a held group's release reminder, put off by `minutes`. */
+/** `snooze-group`: the waiting group's release reminder, put off by `minutes`. */
 export interface SnoozeGroupDetail {
   groupId: string;
   minutes: number;
