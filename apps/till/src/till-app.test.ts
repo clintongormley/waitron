@@ -8423,6 +8423,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     const { el, c } = await counterWith({ listWorkingOrders: vi.fn().mockResolvedValue([moved]) });
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
+    expect(tenderPay(el).busy).toBe(false);
 
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
@@ -8451,6 +8452,7 @@ describe("the counter's held orders: moving one to a table, and paying a moved b
     expect(said).toContain(
       t("table.bill_to_pay").replace("{amount}", formatMoney("1.00", currentLocale())),
     );
+    expect(tenderPay(el).busy).toBe(true);
     expect(currentApi.recordSale).not.toHaveBeenCalled();
     expect(currentApi.pay).not.toHaveBeenCalled();
     expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));

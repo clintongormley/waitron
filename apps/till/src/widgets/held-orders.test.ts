@@ -111,6 +111,49 @@ describe("till-held-orders", () => {
   });
 });
 
+describe("till-held-orders: a narrow card", () => {
+  it("keeps each order's count, total and what it still owes on one line at a phone's width, with the controls below", async () => {
+    const partlyPaid = { ...mesa, outstanding: "1.00", hasPayments: true };
+    const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [partlyPaid, barra],
+    });
+    host.style.width = "333px";
+    await el.updateComplete;
+
+    for (const meta of el.shadowRoot!.querySelectorAll<HTMLElement>(".meta")) {
+      const range = document.createRange();
+      range.selectNodeContents(meta);
+      const lines = new Set([...range.getClientRects()].map((rect) => Math.round(rect.top)));
+      expect(lines.size, meta.textContent!).toBe(1);
+    }
+  });
+
+  it.each([320, 110])(
+    "keeps each order's controls clear of its summary at %ipx wide",
+    async (width) => {
+      const partlyPaid = { ...mesa, outstanding: "1.00", hasPayments: true };
+      const { el, host } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [partlyPaid, barra],
+      });
+      host.style.width = `${width}px`;
+      await el.updateComplete;
+
+      for (const order of el.shadowRoot!.querySelectorAll<HTMLElement>(".order")) {
+        const summary = order.querySelector(".summary")!.getBoundingClientRect();
+        for (const control of order.querySelectorAll("wt-button")) {
+          const box = control.getBoundingClientRect();
+          const apart =
+            box.left >= summary.right ||
+            box.right <= summary.left ||
+            box.top >= summary.bottom ||
+            box.bottom <= summary.top;
+          expect(apart, `${control.className} overlaps the summary`).toBe(true);
+        }
+      }
+    },
+  );
+});
+
 describe("till-held-orders: moving a counter order to a table", () => {
   beforeEach(() => setLocale("en"));
 
@@ -281,6 +324,36 @@ describe("till-held-orders: moving a counter order to a table", () => {
     expect(moved).toEqual([{ orderId: "wo-1", tableId: "t7", bills: "separate" }]);
     expect(billChoice(el)).toBeNull();
     expect(picker(el)).toBeNull();
+  });
+
+  it("closes the picker, sending nothing, when its dialog is dismissed", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables,
+    });
+    const moved = heard(el, "move-held-order");
+    await openPicker(el);
+
+    picker(el)!.dispatchEvent(new CustomEvent("wt-close"));
+    await el.updateComplete;
+
+    expect(picker(el)).toBeNull();
+    expect(moved).toEqual([]);
+  });
+
+  it("names a seated party with no name by the tables the floor lists for it", async () => {
+    const unnamed = { ...luis, name: null, displayName: "Mesa 7", tableIds: ["t7", "t-gone"] };
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables: [{ ...tables[0]!, party: unnamed }, tables[2]!],
+    });
+    await openPicker(el);
+    target(el, "t7")!.click();
+    await el.updateComplete;
+
+    expect(billChoice(el)!.scope).toBe(
+      t("table.move_bill_scope").replace("{bill}", "#5 Mesa 4").replace("{into}", "Mesa 7"),
+    );
   });
 
   it("goes back to the tables when the bill choice is cancelled, and Cancel there sends nothing", async () => {

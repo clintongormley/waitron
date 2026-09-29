@@ -45,10 +45,13 @@ export class TillHeldOrders extends LitElement {
         text-align: center;
       }
 
+      /* The controls drop below the summary once both do not fit on one line, rather than
+         squeezing the summary into a column a word wide. */
       .order {
-        display: grid;
-        grid-template-columns: 1fr auto;
+        display: flex;
+        flex-wrap: wrap;
         align-items: center;
+        justify-content: space-between;
         gap: var(--wt-space-3);
         padding: var(--wt-space-2) 0;
         border-bottom: 1px solid var(--wt-color-border);
@@ -56,6 +59,7 @@ export class TillHeldOrders extends LitElement {
 
       .summary {
         display: flex;
+        flex: 1 1 auto;
         flex-direction: column;
         gap: var(--wt-space-1);
         min-width: 0;
@@ -63,9 +67,11 @@ export class TillHeldOrders extends LitElement {
 
       .controls {
         display: flex;
+        flex: 0 1 auto;
         flex-wrap: wrap;
         justify-content: flex-end;
         gap: var(--wt-space-2);
+        margin-inline-start: auto;
       }
 
       .number {
