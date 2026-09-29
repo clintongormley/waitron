@@ -1,5 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
-import { createBluetoothctlHost, parseBluetoothctlDevices, parsePairResult } from "./bluetooth.js";
+import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  MAX_BLUETOOTH_INFO_DEVICES,
+  createBluetoothctlHost,
+  parseBluetoothctlDevices,
+  parseBluetoothctlInfo,
+  parsePairResult,
+  parseRemoveResult,
+} from "./bluetooth.js";
+import { runBluetoothctl } from "./bluetooth-command.js";
 
 // Synthesised in the tool's documented format (ANSI colour codes and \r included), NOT a real
 // capture.
@@ -115,5 +126,318 @@ describe("createBluetoothctlHost", () => {
     const host = createBluetoothctlHost({ run });
     expect(await host.paired()).toEqual([{ mac: "AA:BB:CC:DD:EE:FF", name: "Star TSP100" }]);
     expect(run).toHaveBeenCalledWith(["devices", "Paired"]);
+  });
+});
+
+// Sources: BlueZ's bluetoothctl manual (https://github.com/bluez/bluez/blob/master/doc/bluetoothctl.rst),
+// its RemoveDevice contract (https://github.com/bluez/bluez/blob/master/doc/org.bluez.Adapter.rst),
+// and the Bluetooth SIG Assigned Numbers (https://www.bluetooth.com/specifications/assigned-numbers/):
+// major device class 0x06 is Imaging (bits 12-8 of the class), minor bit 7 is Printer, and
+// 00001101-0000-1000-8000-00805f9b34fb is the Serial Port profile.
+//
+// The owner's box, BlueZ 5.82, 2026-09-29: `info` for the owner's printer before pairing. The
+// Name/Class/Icon/Paired/Bonded/Trusted/LegacyPairing/UUID values and RSSI -78 were recorded there;
+// the column spacing of the UUID lines, the Alias/Blocked/RSSI hex lines and the AdvertisingFlags
+// layout are synthesised in bluetoothctl's documented shape.
+const OWNER_PRINTER_INFO =
+  "Device 5A:4A:45:D4:FB:BB (public)\n" +
+  "\tName: BlueTooth Printer\n" +
+  "\tAlias: BlueTooth Printer\n" +
+  "\tClass: 0x00040680 (263808)\n" +
+  "\tIcon: printer\n" +
+  "\tPaired: no\n" +
+  "\tBonded: no\n" +
+  "\tTrusted: no\n" +
+  "\tBlocked: no\n" +
+  "\tConnected: no\n" +
+  "\tLegacyPairing: no\n" +
+  "\tUUID: Serial Port               (00001101-0000-1000-8000-00805f9b34fb)\n" +
+  "\tUUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)\n" +
+  "\tUUID: Unknown                   (000018f0-0000-1000-8000-00805f9b34fb)\n" +
+  "\tUUID: Vendor specific           (e7810a71-73ae-499d-8c15-faa9aef0c3f2)\n" +
+  "\tRSSI: 0xffffffb2 (-78)\n" +
+  "\tAdvertisingFlags:\n" +
+  "  02                                               .\n";
+
+/** Synthesised: a device header plus the given lines, none of which marks it a printer unless the
+ * case adds one. */
+function info(...lines: string[]): string {
+  return ["Device 11:22:33:44:55:66 (public)", "\tName: Thing", ...lines.map((l) => `\t${l}`)]
+    .join("\n")
+    .concat("\n");
+}
+
+describe("parseBluetoothctlInfo", () => {
+  it("marks the owner's printer, which carries all three signs", () => {
+    expect(parseBluetoothctlInfo(OWNER_PRINTER_INFO)).toStrictEqual({ printerLike: true });
+  });
+
+  it("marks a device by its printer icon alone", () => {
+    expect(parseBluetoothctlInfo(info("Icon: printer"))).toStrictEqual({ printerLike: true });
+  });
+
+  it("marks a device whose class is imaging with the printer bit set, and no other sign", () => {
+    // 0x040680 is the owner's class; 0x0680 is the class with no service bits at all.
+    expect(parseBluetoothctlInfo(info("Class: 0x00000680 (1664)"))).toStrictEqual({
+      printerLike: true,
+    });
+  });
+
+  it("does not mark an imaging device without the printer bit, nor a printer bit in another major class", () => {
+    // 0x0620: imaging, camera bit. 0x0580: peripheral (major 0x05), mouse — bit 7 set, wrong major.
+    expect(parseBluetoothctlInfo(info("Class: 0x00000620 (1568)"))).toStrictEqual({});
+    expect(parseBluetoothctlInfo(info("Class: 0x00000580 (1408)"))).toStrictEqual({});
+  });
+
+  it("marks a device by the Serial Port UUID alone", () => {
+    expect(
+      parseBluetoothctlInfo(
+        info("UUID: Serial Port               (00001101-0000-1000-8000-00805F9B34FB)"),
+      ),
+    ).toStrictEqual({ printerLike: true });
+  });
+
+  it("leaves a device with none of the three signs unmarked", () => {
+    expect(
+      parseBluetoothctlInfo(
+        info(
+          "Class: 0x00240404 (2360324)",
+          "Icon: audio-headset",
+          "UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)",
+          "Modalias: usb:v05ACp0239d0644",
+        ),
+      ),
+    ).toStrictEqual({});
+  });
+
+  it("reads coloured, CR-terminated lines and ignores malformed ones", () => {
+    const text =
+      "\x1b[0;94mDevice 11:22:33:44:55:66\x1b[0m (public)\r\n" +
+      "\tClass: not-a-number\r\n" +
+      "\tIcon:\r\n" +
+      "\tUUID: Serial Port\r\n" +
+      "garbage without a colon\r\n" +
+      "\t\x1b[1;39mIcon: printer\x1b[0m\r\n";
+    expect(parseBluetoothctlInfo(text)).toStrictEqual({ printerLike: true });
+    expect(parseBluetoothctlInfo(text.replace("Icon: printer", "Icon: phone"))).toStrictEqual({});
+  });
+});
+
+describe("parseRemoveResult", () => {
+  const MAC = "5A:4A:45:D4:FB:BB";
+
+  // The owner's box, BlueZ 5.82, 2026-09-29: removing a paired printer, exit 0.
+  it("reads the measured removal as success", () => {
+    expect(
+      parseRemoveResult(`[DEL] Device ${MAC} BlueTooth Printer\nDevice has been removed\n`, MAC),
+    ).toStrictEqual({ ok: true });
+  });
+
+  // The owner's box, BlueZ 5.82, 2026-09-29: removing an address BlueZ no longer knows, exit 1.
+  it("reads an address already gone as success, because gone is what Forget wants", () => {
+    expect(parseRemoveResult(`Device ${MAC} not available\n`, MAC)).toStrictEqual({ ok: true });
+    expect(parseRemoveResult(`Device ${MAC} not available\n`, MAC.toLowerCase())).toStrictEqual({
+      ok: true,
+    });
+  });
+
+  it("does not read another address being unavailable as this one gone", () => {
+    expect(parseRemoveResult("Device 11:22:33:44:55:66 not available\n", MAC)).toStrictEqual({
+      ok: false,
+      error: "removal did not complete",
+    });
+  });
+
+  // Synthesised in bluetoothctl's documented `Failed to remove device: <error>` shape.
+  it("reports a refused removal with BlueZ's reason", () => {
+    expect(
+      parseRemoveResult(
+        "\x1b[0;91mFailed to remove device: org.freedesktop.DBus.Error.AccessDenied\x1b[0m\r\n",
+        MAC,
+      ),
+    ).toStrictEqual({ ok: false, error: "org.freedesktop.DBus.Error.AccessDenied" });
+  });
+
+  it("reports no output as a removal that did not complete", () => {
+    expect(parseRemoveResult("", MAC)).toStrictEqual({
+      ok: false,
+      error: "removal did not complete",
+    });
+  });
+});
+
+type Run = (args: string[], opts?: { timeoutMs?: number }) => Promise<string>;
+
+function deferred(): {
+  promise: Promise<string>;
+  resolve: (v: string) => void;
+  reject: (e: Error) => void;
+} {
+  let resolve!: (v: string) => void;
+  let reject!: (e: Error) => void;
+  const promise = new Promise<string>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+describe("createBluetoothctlHost — scan() marks printer-like devices", () => {
+  it("asks `info` for a listed device and marks it when it looks like a printer", async () => {
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "Discovery started\n";
+      if (args[0] === "devices") return "Device 5A:4A:45:D4:FB:BB BlueTooth Printer\n";
+      return OWNER_PRINTER_INFO;
+    });
+    expect(await createBluetoothctlHost({ run }).scan()).toStrictEqual([
+      {
+        transport: "bluetooth",
+        localKey: "5A:4A:45:D4:FB:BB",
+        name: "BlueTooth Printer",
+        printerLike: true,
+      },
+    ]);
+    expect(run).toHaveBeenCalledWith(["info", "5A:4A:45:D4:FB:BB"]);
+  });
+
+  it("keeps a device whose `info` fails, unmarked, while another still comes back marked", async () => {
+    const run = vi.fn<Run>(async (args) => {
+      if (args.includes("scan")) return "";
+      if (args[0] === "devices")
+        return "Device 11:22:33:44:55:66 Gone\nDevice 5A:4A:45:D4:FB:BB BlueTooth Printer\n";
+      if (args[1] === "11:22:33:44:55:66")
+        throw new Error("Device 11:22:33:44:55:66 not available");
+      return OWNER_PRINTER_INFO;
+    });
+    expect(await createBluetoothctlHost({ run }).scan()).toStrictEqual([
+      { transport: "bluetooth", localKey: "11:22:33:44:55:66", name: "Gone" },
+      {
+        transport: "bluetooth",
+        localKey: "5A:4A:45:D4:FB:BB",
+        name: "BlueTooth Printer",
+        printerLike: true,
+      },
+    ]);
+  });
+
+  it("starts the first eight `info` calls together, never asks about a ninth, and keeps all nine", async () => {
+    expect(MAX_BLUETOOTH_INFO_DEVICES).toBe(8);
+    const macs = Array.from({ length: 9 }, (_, i) => `AA:BB:CC:DD:EE:0${i + 1}`);
+    const pending = new Map<string, ReturnType<typeof deferred>>();
+    const run = vi.fn<Run>((args) => {
+      if (args.includes("scan")) return Promise.resolve("");
+      if (args[0] === "devices")
+        return Promise.resolve(macs.map((m) => `Device ${m} P${m.slice(-1)}`).join("\n"));
+      const d = deferred();
+      pending.set(args[1]!, d);
+      return d.promise;
+    });
+    const scanning = createBluetoothctlHost({ run }).scan();
+    await vi.waitFor(() => expect(pending.size).toBe(8));
+    expect([...pending.keys()]).toStrictEqual(macs.slice(0, 8));
+    pending.get(macs[0]!)!.resolve(info("Icon: printer"));
+    pending.get(macs[1]!)!.reject(new Error("killed"));
+    for (const mac of macs.slice(2, 8)) pending.get(mac)!.resolve(info("Icon: phone"));
+    const found = await scanning;
+    expect(found.map((d) => d.localKey)).toStrictEqual(macs);
+    expect(found.filter((d) => d.printerLike === true).map((d) => d.localKey)).toStrictEqual([
+      macs[0],
+    ]);
+    expect(run).not.toHaveBeenCalledWith(["info", macs[8]]);
+  });
+});
+
+describe("createBluetoothctlHost — forget()", () => {
+  const MAC = "5A:4A:45:D4:FB:BB";
+
+  it("runs `remove` and decodes the removal", async () => {
+    const run = vi.fn<Run>(
+      async () => `[DEL] Device ${MAC} BlueTooth Printer\nDevice has been removed\n`,
+    );
+    expect(await createBluetoothctlHost({ run }).forget(MAC)).toStrictEqual({ ok: true });
+    expect(run).toHaveBeenCalledWith(["remove", MAC]);
+  });
+
+  it("decodes the output a failed exit carries, not only its message", async () => {
+    const run = vi.fn<Run>(async () => {
+      throw Object.assign(new Error("Command failed: bluetoothctl remove"), {
+        stdout: `Device ${MAC} not available\n`,
+      });
+    });
+    expect(await createBluetoothctlHost({ run }).forget(MAC)).toStrictEqual({ ok: true });
+  });
+
+  it("reports BlueZ's reason when a failed exit printed one", async () => {
+    const run = vi.fn<Run>(async () => {
+      throw Object.assign(new Error("Command failed: bluetoothctl remove"), {
+        stdout: "Failed to remove device: org.bluez.Error.NotReady\n",
+      });
+    });
+    expect(await createBluetoothctlHost({ run }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: "org.bluez.Error.NotReady",
+    });
+  });
+
+  it("reports the command's own error when it printed nothing, as a kill or a missing binary does", async () => {
+    const run = vi.fn<Run>(async () => {
+      throw Object.assign(new Error("spawn bluetoothctl ENOENT"), { stdout: "" });
+    });
+    expect(await createBluetoothctlHost({ run }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: "spawn bluetoothctl ENOENT",
+    });
+    const bare = vi.fn<Run>(async () => {
+      throw "not an Error";
+    });
+    expect(await createBluetoothctlHost({ run: bare }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: "not an Error",
+    });
+  });
+});
+
+// A stand-in `bluetoothctl` on PATH, so forget() runs through the real `runBluetoothctl` and the
+// real `execFile`: a non-zero exit rejects, and the output has to survive that rejection.
+describe("forget() through the real runBluetoothctl", () => {
+  const MAC = "5A:4A:45:D4:FB:BB";
+  let dir: string;
+  let savedPath: string | undefined;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "print-agent-bt-remove-"));
+    savedPath = process.env.PATH;
+    process.env.PATH = `${dir}${delimiter}${savedPath ?? ""}`;
+  });
+  afterEach(async () => {
+    process.env.PATH = savedPath;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function fake(body: string): Promise<void> {
+    await writeFile(join(dir, "bluetoothctl"), `#!/bin/sh\n${body}\n`);
+    await chmod(join(dir, "bluetoothctl"), 0o755);
+  }
+
+  it("reads the measured exit-1 'not available' as success", async () => {
+    await fake(`echo "Device $2 not available"; exit 1`);
+    expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
+      ok: true,
+    });
+  });
+
+  it("reads the measured exit-0 removal as success", async () => {
+    await fake(`echo "[DEL] Device $2 BlueTooth Printer"; echo "Device has been removed"; exit 0`);
+    expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
+      ok: true,
+    });
+  });
+
+  it("reads an exit-1 refusal as failure with BlueZ's reason", async () => {
+    await fake(`echo "Failed to remove device: org.freedesktop.DBus.Error.AccessDenied"; exit 1`);
+    expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: "org.freedesktop.DBus.Error.AccessDenied",
+    });
   });
 });

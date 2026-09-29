@@ -49,4 +49,17 @@ describe("runBluetoothctl", () => {
       await expect(runBluetoothctl(["scan", "on"])).rejects.toBe(error);
     },
   );
+
+  // Measured 2026-09-29 on Node v26.7.0: execFile's callback error carries `code`, `killed`,
+  // `signal` and `cmd`, and no `stdout`; the output arrives only as the callback's second argument.
+  it("keeps what a failed command printed on the error it rejects with", async () => {
+    const error = new Error("Command failed: bluetoothctl remove");
+    vi.mocked(execFile).mockImplementationOnce((...args: unknown[]) => {
+      (args[3] as (error: Error, stdout: string) => void)(error, "Device X not available\n");
+      return undefined as never;
+    });
+    await expect(runBluetoothctl(["remove", "X"])).rejects.toMatchObject({
+      stdout: "Device X not available\n",
+    });
+  });
 });

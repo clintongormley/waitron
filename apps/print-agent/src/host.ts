@@ -93,6 +93,8 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     visibleDevices: devices.visibleDevices,
     scan: devices.scan,
     pair: devices.pair,
+    pairedBluetooth: devices.pairedBluetooth,
+    forgetBluetooth: devices.forgetBluetooth,
     resolve: devices.resolve,
   };
 }

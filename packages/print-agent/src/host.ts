@@ -61,6 +61,9 @@ export interface DiscoveredDevice {
   /** Set when the device answered an IPP paper-size query listing A4 or US letter, so it is an office
    * printer, not an ESC/POS receipt printer. Absent means unknown or not a page printer. */
   pagePrinter?: true;
+  /** Set on a Bluetooth device whose `bluetoothctl info` shows a printer icon, an imaging class with
+   * the printer bit, or the Serial Port profile. Absent means not inspected or none of the three. */
+  printerLike?: true;
 }
 
 /** The outcome of a {@link Host.pair} attempt — `ok` with the paired device's `localKey` on success,
@@ -68,6 +71,17 @@ export interface DiscoveredDevice {
 export interface PairResult {
   ok: boolean;
   localKey?: string;
+  error?: string;
+}
+
+/** A device BlueZ holds a bond with, whether or not the agent can deliver to it yet. */
+export interface PairedBluetoothDevice {
+  localKey: string;
+  name?: string;
+}
+
+export interface BluetoothCommandResult {
+  ok: boolean;
   error?: string;
 }
 
@@ -112,4 +126,9 @@ export interface Host {
   resolve(job: WireJob): Promise<PrinterTarget>;
   /** Attempts to pair a Bluetooth printer by MAC, returning its `localKey` on success. */
   pair(mac: string): Promise<PairResult>;
+  /** Every bonded Bluetooth device. Throws when the Bluetooth side cannot be listed. Unlike
+   * {@link visibleDevices}, it includes devices no job can be delivered to yet. */
+  pairedBluetooth(): Promise<PairedBluetoothDevice[]>;
+  /** Removes the bond; an address BlueZ no longer knows counts as removed. */
+  forgetBluetooth(mac: string): Promise<BluetoothCommandResult>;
 }

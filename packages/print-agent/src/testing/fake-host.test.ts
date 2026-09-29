@@ -84,4 +84,19 @@ describe("fakeHost", () => {
       'error tick failed {"error":"bug"}',
     ]);
   });
+
+  it("lists no paired Bluetooth devices and refuses to forget one unless told otherwise", async () => {
+    const host = fakeHost();
+    expect(await host.pairedBluetooth()).toStrictEqual([]);
+    expect(await host.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({
+      ok: false,
+      error: "not implemented in fake host",
+    });
+    const told = fakeHost({
+      pairedBluetooth: async () => [{ localKey: "AA:BB:CC:DD:EE:FF" }],
+      forgetBluetooth: async () => ({ ok: true }),
+    });
+    expect(await told.pairedBluetooth()).toStrictEqual([{ localKey: "AA:BB:CC:DD:EE:FF" }]);
+    expect(await told.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({ ok: true });
+  });
 });

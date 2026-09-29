@@ -1,10 +1,12 @@
 import type {
   AgentConfig,
   AgentStatus,
+  BluetoothCommandResult,
   DiscoveredDevice,
   Host,
   NetworkProbe,
   PairResult,
+  PairedBluetoothDevice,
   TransportKind,
   VisibleDevice,
 } from "../host.js";
@@ -25,6 +27,8 @@ export function fakeHost(
     markPagePrinters: (devices: DiscoveredDevice[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
     pair: (mac: string) => Promise<PairResult>;
+    pairedBluetooth: () => Promise<PairedBluetoothDevice[]>;
+    forgetBluetooth: (mac: string) => Promise<BluetoothCommandResult>;
     now: () => number;
     sleep: (ms: number) => Promise<void>;
   }> = {},
@@ -86,5 +90,9 @@ export function fakeHost(
         devicePath: job.localKey,
       })),
     pair: overrides.pair ?? (async () => ({ ok: false, error: "not implemented in fake host" })),
+    pairedBluetooth: overrides.pairedBluetooth ?? (async () => []),
+    forgetBluetooth:
+      overrides.forgetBluetooth ??
+      (async () => ({ ok: false, error: "not implemented in fake host" })),
   };
 }

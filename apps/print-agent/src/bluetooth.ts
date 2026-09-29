@@ -1,9 +1,10 @@
-import type { DiscoveredDevice, PairResult } from "@waitron/print-agent";
+import type { BluetoothCommandResult, DiscoveredDevice, PairResult } from "@waitron/print-agent";
 import type { BluetoothctlRunOptions } from "./bluetooth-command.js";
 
 /**
- * The decoders are tested against fixtures synthesised in `bluetoothctl`'s documented output shape,
- * not captured from a real adapter.
+ * The `devices` and `pair` decoders are tested against fixtures synthesised in `bluetoothctl`'s
+ * documented output shape. The `info` and `remove` ones are tested against output recorded on the
+ * owner's box (BlueZ 5.82, 2026-09-29), with the synthesised parts marked beside each fixture.
  */
 
 export interface BluetoothDevice {
@@ -15,7 +16,12 @@ export interface BluetoothHost {
   scan(): Promise<DiscoveredDevice[]>;
   pair(mac: string): Promise<PairResult>;
   paired(): Promise<BluetoothDevice[]>;
+  forget(mac: string): Promise<BluetoothCommandResult>;
 }
+
+/** `info` is asked of at most this many listed devices per scan, all at once, so the command's own
+ * deadline bounds the whole batch. Devices past it stay in the scan, unmarked. */
+export const MAX_BLUETOOTH_INFO_DEVICES = 8;
 
 const DEVICE_LINE = /Device\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?:\s+(.*))?$/;
 // eslint-disable-next-line no-control-regex -- bluetoothctl colours its output; strip CSI SGR codes.
@@ -55,6 +61,56 @@ export function parsePairResult(text: string, mac: string): PairResult {
   return { ok: false, error: "pairing did not complete" };
 }
 
+const SERIAL_PORT_UUID = "00001101-0000-1000-8000-00805f9b34fb";
+const MAJOR_CLASS_MASK = 0x1f00;
+const IMAGING_MAJOR_CLASS = 0x0600;
+const PRINTER_MINOR_BIT = 0x0080;
+const INFO_FIELD = /^(\w+):\s*(.*)$/;
+
+function cleanLines(text: string): string[] {
+  return text.split("\n").map((line) => line.replace(ANSI, "").replace(/\r$/, "").trim());
+}
+
+/** Modalias is never read: once paired, the owner's printer reported Apple's vendor id (owner's box,
+ * BlueZ 5.82, 2026-09-29). */
+export function parseBluetoothctlInfo(text: string): { printerLike?: true } {
+  let icon: string | undefined;
+  let classOfDevice = 0;
+  const uuids = new Set<string>();
+  for (const line of cleanLines(text)) {
+    const field = INFO_FIELD.exec(line);
+    if (field === null) continue;
+    const [, key, value] = field as unknown as [string, string, string];
+    if (key === "Icon") icon = value;
+    else if (key === "Class") {
+      const hex = /^0x([0-9a-f]+)/i.exec(value);
+      if (hex !== null) classOfDevice = Number.parseInt(hex[1]!, 16);
+    } else if (key === "UUID") {
+      const uuid = /\(([0-9a-f-]{36})\)$/i.exec(value);
+      if (uuid !== null) uuids.add(uuid[1]!.toLowerCase());
+    }
+  }
+  const printerLike =
+    icon === "printer" ||
+    ((classOfDevice & MAJOR_CLASS_MASK) === IMAGING_MAJOR_CLASS &&
+      (classOfDevice & PRINTER_MINOR_BIT) !== 0) ||
+    uuids.has(SERIAL_PORT_UUID);
+  return printerLike ? { printerLike: true } : {};
+}
+
+const REMOVAL_INCOMPLETE = "removal did not complete";
+
+/** An address BlueZ no longer knows is success: gone is what Forget asked for. */
+export function parseRemoveResult(text: string, mac: string): BluetoothCommandResult {
+  const gone = `DEVICE ${mac.toUpperCase()} NOT AVAILABLE`;
+  for (const line of cleanLines(text)) {
+    if (line === "Device has been removed" || line.toUpperCase() === gone) return { ok: true };
+    const failed = /^Failed to remove device:\s*(.+)$/.exec(line);
+    if (failed !== null) return { ok: false, error: failed[1]! };
+  }
+  return { ok: false, error: REMOVAL_INCOMPLETE };
+}
+
 const NO_CONTROLLER = "No default controller available";
 
 /** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. `listTimeoutMs`
@@ -77,14 +133,33 @@ export function createBluetoothctlHost(opts: {
       );
       if (failure) throw new Error(failure[0]);
       const listed = parseBluetoothctlDevices(await opts.run(["devices"]));
-      return listed.map((d) => ({
-        transport: "bluetooth",
-        localKey: d.mac,
-        ...(d.name !== undefined ? { name: d.name } : {}),
-      }));
+      const inspected = await Promise.allSettled(
+        listed.slice(0, MAX_BLUETOOTH_INFO_DEVICES).map((d) => opts.run(["info", d.mac])),
+      );
+      return listed.map((d, i) => {
+        const info = inspected[i];
+        const printerLike =
+          info?.status === "fulfilled" && parseBluetoothctlInfo(info.value).printerLike === true;
+        return {
+          transport: "bluetooth",
+          localKey: d.mac,
+          ...(d.name !== undefined ? { name: d.name } : {}),
+          ...(printerLike ? { printerLike: true as const } : {}),
+        };
+      });
     },
     async pair(mac: string): Promise<PairResult> {
       return parsePairResult(await opts.run(["pair", mac]), mac);
+    },
+    async forget(mac: string): Promise<BluetoothCommandResult> {
+      try {
+        return parseRemoveResult(await opts.run(["remove", mac]), mac);
+      } catch (error) {
+        const printed = (error as { stdout?: unknown } | null)?.stdout;
+        const result = parseRemoveResult(typeof printed === "string" ? printed : "", mac);
+        if (result.ok || result.error !== REMOVAL_INCOMPLETE) return result;
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
     },
     async paired(): Promise<BluetoothDevice[]> {
       const args = ["devices", "Paired"];

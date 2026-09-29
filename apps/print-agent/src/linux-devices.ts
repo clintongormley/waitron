@@ -2,10 +2,12 @@ import dgram from "node:dgram";
 import { connectTcp } from "./tcp-probe.js";
 import { networkInterfaces } from "node:os";
 import type {
+  BluetoothCommandResult,
   DiscoveredDevice,
   Host,
   HostLog,
   PairResult,
+  PairedBluetoothDevice,
   PrinterTarget,
   VisibleDevice,
   WireJob,
@@ -42,7 +44,10 @@ const LIST_TIMEOUT_MS = 3_000;
 
 type LocalDevice = VisibleDevice & { devicePath: string };
 
-export type LinuxDevices = Pick<Host, "visibleDevices" | "scan" | "pair" | "resolve">;
+export type LinuxDevices = Pick<
+  Host,
+  "visibleDevices" | "scan" | "pair" | "pairedBluetooth" | "forgetBluetooth" | "resolve"
+>;
 
 export interface BluetoothStatusSource {
   /** Undefined until the first check. */
@@ -87,7 +92,7 @@ export function createLinuxDevices(
       return paired;
     } catch (error) {
       record(classifyBluetoothFailure(error));
-      return [];
+      throw error;
     }
   };
   // One listing at a time: the timer's check and the job poll share one already running.
@@ -121,14 +126,16 @@ export function createLinuxDevices(
     bluetoothAvailability: () => availability,
 
     async checkBluetooth(): Promise<void> {
-      if (listing !== undefined || recheckDue()) await sharedListing();
+      if (listing !== undefined || recheckDue()) await sharedListing().catch(() => []);
     },
 
     async visibleDevices(): Promise<VisibleDevice[]> {
       const usbDevices = (await usb()).map(dropPath);
       // A Bluetooth failure must never suppress the USB inventory.
       const paired =
-        availability?.available === false && !recheckDue() ? [] : await sharedListing();
+        availability?.available === false && !recheckDue()
+          ? []
+          : await sharedListing().catch(() => []);
       // While `liveBtDevicePath` throws, this catch drops EVERY paired Bluetooth device in production.
       let btDevices: VisibleDevice[];
       try {
@@ -159,6 +166,19 @@ export function createLinuxDevices(
 
     pair(mac): Promise<PairResult> {
       return bluetooth.pair(mac);
+    },
+
+    async pairedBluetooth(): Promise<PairedBluetoothDevice[]> {
+      const known = availability;
+      if (known?.available === false && !recheckDue()) throw new Error(known.detail);
+      return (await sharedListing()).map((d) => ({
+        localKey: d.mac,
+        ...(d.name !== undefined ? { name: d.name } : {}),
+      }));
+    },
+
+    forgetBluetooth(mac): Promise<BluetoothCommandResult> {
+      return bluetooth.forget(mac);
     },
 
     async resolve(job: WireJob): Promise<PrinterTarget> {
