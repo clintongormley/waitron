@@ -196,7 +196,11 @@ describe("setup-cert-screen", () => {
     expect(events).toEqual([]);
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=passphrase]")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=passphrase-field-error]")).not.toBeNull();
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe(
+      "Enter the certificate passphrase.",
+    );
+    // `wt-input` shows its `error` under itself, in its own shadow root; the screen repeats nothing.
+    expect(el.shadowRoot!.textContent).not.toContain("Enter the certificate passphrase.");
   });
 
   it("clears the bottom message once a file and passphrase are supplied and Next succeeds", async () => {
@@ -287,7 +291,7 @@ describe("setup-cert-screen", () => {
     expect(events).toEqual([{ kind: "goto", detail: { screen: "venue" } }]);
   });
 
-  it("explains a failed read under the file field and stays blocked when the FileReader fails, without an unhandled rejection", async () => {
+  it("explains a failed read under the file field once Next is pressed, and stays blocked, without an unhandled rejection", async () => {
     const rejections: PromiseRejectionEvent[] = [];
     const onReject = (e: PromiseRejectionEvent) => rejections.push(e);
     window.addEventListener("unhandledrejection", onReject);
@@ -308,14 +312,14 @@ describe("setup-cert-screen", () => {
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
 
-      expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain(
-        "couldn't read that file",
-      );
       expect(q(el, "[data-test=file-status]")).toBeNull();
 
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
       expect(events).toEqual([]);
+      expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain(
+        "couldn't read that file",
+      );
     } finally {
       globalThis.FileReader = RealFileReader;
       window.removeEventListener("unhandledrejection", onReject);
@@ -376,10 +380,10 @@ describe("setup-cert-screen form errors", () => {
     expect(events.map(({ kind }) => kind)).toEqual(["patch", "goto"]);
   });
 
-  it("drops a failed read's message once the operator chooses a file that reads", async () => {
+  /** Chooses a file with every read failing, and waits for the failure to settle. */
+  async function chooseUnreadableFile(el: SetupCertScreen): Promise<void> {
     const RealFileReader = globalThis.FileReader;
     globalThis.FileReader = FailingFileReader as unknown as typeof FileReader;
-    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     try {
       const input = q(el, "[data-test=pfx]") as HTMLInputElement;
       const dt = new DataTransfer();
@@ -388,13 +392,31 @@ describe("setup-cert-screen form errors", () => {
       input.dispatchEvent(new Event("change"));
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
-      expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain(
-        "couldn't read that file",
-      );
-      expect(next(el).hasAttribute("disabled")).toBe(true);
     } finally {
       globalThis.FileReader = RealFileReader;
     }
+  }
+
+  it("says nothing about a failed read, and leaves Next working, before the first press", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    await chooseUnreadableFile(el);
+    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=pfx]")!.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("drops a failed read's message once the operator chooses a file that reads", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    await typePassphrase(el, "unlock-2026");
+    await chooseUnreadableFile(el);
+    next(el).click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain("couldn't read that file");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+
     await chooseFile(el, PFX_SOURCE);
     expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
     expect(await bottomOf(el)).toBe("");

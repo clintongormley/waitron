@@ -772,6 +772,36 @@ it("maps a Demo legal-name refusal to the visible location name", async () => {
   expect(name.getAttribute("error")).toContain("characters");
 });
 
+it.each([
+  ["seriesCode", "server_fields.series_code"],
+  ["rectificativeSeriesCode", "server_fields.series_code"],
+  ["location.operationDescription", "server_fields.operation_description"],
+] as const)(
+  "shows a Demo refusal of the hidden %s beside Next, and pressing Next tries again",
+  async (invalidField, message) => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo" },
+      defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
+      invalidField,
+    });
+    const events = collect(host);
+    for (const [field, value] of Object.entries({
+      name: "Calle Mayor",
+      addressLine1: "Calle Mayor 1",
+      postalCode: "28013",
+      city: "Madrid",
+    }))
+      await type(el, field, value);
+    expect(await bottomOf(el)).toBe(t(message));
+    expect(q(el, "[data-test=next]")!.hasAttribute("disabled")).toBe(false);
+
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+    expect(await bottomOf(el)).toBe("");
+  },
+);
+
 it("explains an unsupported Demo province instead of asking to reload defaults", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },

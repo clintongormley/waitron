@@ -154,15 +154,13 @@ export class SetupCertScreen extends LitElement {
     this.certKind = (event.target as HTMLSelectElement).value as AeatCertDraft["certKind"];
   }
 
-  /** A failed read is the file field's error from the moment it happens, until another file is
-   * chosen. */
   #errors(): Partial<Record<"pfx" | "passphrase", string>> {
     const errors: Partial<Record<"pfx" | "passphrase", string>> = {};
-    if (this.fileReadFailed) errors.pfx = t("cert.file_unreadable");
-    else if (this.attempted && this.pfxBase64 === "") errors.pfx = t("cert.file_required");
-    if (this.attempted && this.passphrase.trim() === "") {
-      errors.passphrase = t("cert.passphrase_required");
+    if (!this.attempted) return errors;
+    if (this.pfxBase64 === "") {
+      errors.pfx = this.fileReadFailed ? t("cert.file_unreadable") : t("cert.file_required");
     }
+    if (this.passphrase.trim() === "") errors.passphrase = t("cert.passphrase_required");
     return errors;
   }
 
@@ -253,11 +251,6 @@ export class SetupCertScreen extends LitElement {
           >${passwordIcon(this.passphraseVisible)}</wt-button
         >
       </wt-input>
-      ${
-        errors.passphrase === undefined
-          ? nothing
-          : html`<p class="error" data-test="passphrase-field-error">${errors.passphrase}</p>`
-      }
       <label class="field select">
         <span
           >${t("cert.kind_label")} *

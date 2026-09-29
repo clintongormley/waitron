@@ -251,7 +251,6 @@ export class SetupVenueScreen extends LitElement {
 
   @state() private refusalDismissed = false;
 
-  // Keep server refusals separate: local validation rebuilds its own set on every submission.
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
   @state() private serverInvalid?: { readonly key: TextField; readonly refusal: ServerField };
 
@@ -288,8 +287,8 @@ export class SetupVenueScreen extends LitElement {
   }
 
   /**
-   * Focus the refused field when the shell hands it down: the screen renders no banner for it, and
-   * the field may be off-screen, so moving focus is what tells the operator where they landed.
+   * Focus the refused field when the shell hands it down: the field may be off-screen, so moving
+   * focus is what tells the operator where they landed.
    */
   override updated(changed: PropertyValues<this>): void {
     if (!changed.has("invalidField") || this.serverInvalid === undefined) return;
@@ -412,7 +411,6 @@ export class SetupVenueScreen extends LitElement {
     return !(this.#demo && DEMO_HIDDEN.has(key));
   }
 
-  /** Every field whose current value would be refused. */
   #invalidFields(): Set<FieldKey> {
     const invalid = new Set<FieldKey>();
     for (const key of REQUIRED_TEXT_FIELDS) {
@@ -484,6 +482,10 @@ export class SetupVenueScreen extends LitElement {
     }
     this.attempted = true;
     this.refusalDismissed = true;
+    // Nothing on the form can fix a refusal of a field it does not show, so it must not block.
+    if (this.serverInvalid !== undefined && !this.#shows(this.serverInvalid.key)) {
+      this.serverInvalid = undefined;
+    }
     if (this.#invalidFields().size > 0 || this.serverInvalid !== undefined) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
