@@ -3934,13 +3934,13 @@ ongoing overhaul listed at the top of Track A.
   (13) **DONE (C65, 2026-09-29):** the categories screen's change-main-category dialog now says its
   message beside Save, through `wt-form-actions`' `error`, instead of above the picker: a refusal
   naming no field shows its own sentence there, and one placed under the picker shows "Correct the
-  highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`.
-  Still open there, read and not run: the same screen's delete dialog draws its message in the
-  dialog's body, below the preview, rather than beside Delete (`#dialogMessage` in
-  `apps/dashboard/src/screens/categories-screen.ts`). **Next action:** the owner decided on
-  2026-09-29 that (5) is queued as C64 and the setup screens' wording under a refused field in (1)
-  as C62; the other open points, and the delete dialog's message above, still wait for the owner to
-  say which are worth doing.
+  highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`
+  and `apps/dashboard/src/screens/categories-screen.a11y.test.ts`. Still open there, read and not
+  run: the same screen's delete dialog draws its message in the dialog's body, below the preview,
+  rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`).
+  **Next action:** the owner decided on 2026-09-29 that (5) is queued as C64 and the setup screens'
+  wording under a refused field in (1) as C62; the other open points, and the delete dialog's
+  message noted above, still wait for the owner to say which are worth doing.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
