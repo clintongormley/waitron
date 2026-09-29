@@ -4639,14 +4639,10 @@ approved.
   values every caller passes, or, if a record path is meant to use it, wire it up and say where.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
-- **Server shutdown can skip closing its database pools.** In `makeStartedServer`
-  (`apps/server/src/boot.ts`), the step that stops background work (`stopWork`) runs outside the
-  try/finally that closes the pools, so if it ever rejected, `closePools` would be skipped and the
-  pools left open. Trading mode's version awaits the main loop and the backup supervisor's `stop()`
-  without catching a failure; the tunnel worker's settle is the one that is caught. The live change
-  feed is no longer among them: it runs in process, so shutdown unsubscribes it with a synchronous
-  call and there is no connection to close. From reading the code these are believed not to reject
-  today; that has not been tested.
+- **Fixed (C71): server shutdown closes the database even when stopping background work fails**
+  (`apps/server/src/boot.ts`). One consequence: if stopping Litestream itself fails, the store is
+  now closed while Litestream may still be running, where before it was left open; nothing tests
+  that case.
 - **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
   pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
   says in as many words that callers must serialise provisioning, and nothing enforces it — the

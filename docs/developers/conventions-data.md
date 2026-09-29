@@ -1033,8 +1033,8 @@ copy to the owner's bucket, the server runs Litestream as its own child process
 (`packages/stream/src/supervisor.ts`), and Litestream reads and writes `venue.db` without
 `venue.lock`; it adds `_litestream_seq` and `_litestream_lock` tables inside the file and a
 `.venue.db-litestream/` folder beside it (the last section of this file). It is only
-ever started by the server that holds the lock, and `stopWork` stops it before the store closes
-(`apps/server/src/boot.ts`).
+ever started by the server that holds the lock, and the server's shutdown awaits its stop before
+closing the store, closing the store even if that stop fails (`apps/server/src/boot.ts`).
 
 **The mechanism: a SQLite transaction on an empty file, not a lock file.** `venue.lock` is opened
 with `node:sqlite`, `pragma busy_timeout = 0`, and `begin immediate` is left open. It is the same

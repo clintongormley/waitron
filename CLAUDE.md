@@ -516,17 +516,17 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `lockVenueDatabase` turn into `provisioning.database_in_use`; opens inside one process share the
   hold. A tool documented to run beside the server passes `exclusive: false`; a command that changes
   the folder's files takes `lockVenueDatabase` before its first change. Never unlink `venue.lock`.
-  The server's own Litestream child also opens `venue.db` and takes no lock; the server stops it
-  before the store closes. Every holder also writes `venue.holder.json`, and a watchdog thread,
-  while it runs, SIGKILLs the process about `WATCHDOG_KILL_MS` (two minutes,
-  `packages/store/src/venue-liveness.ts`) after its main thread's last timer turn. An entry point
-  names itself with `setVenueHolderIdentity` (`packages/db/src/venue-holder-identity.ts`); nothing
-  checks that a new one does. Guard: `packages/store/src/venue-lock.test.ts`, weaker than its name —
-  it proves the lock, not that each caller takes it, so a caller passing `exclusive: false` wrongly
-  is seen by nothing. Every change to `recovery.json` goes through `updateRecoveryState` under
-  `recovery.lock`; never unlink `recovery.lock` either. Guard:
-  `apps/server/src/recovery-race.test.ts`, weaker than its name — it proves the lock, not that every
-  writer of the file takes it. Receipt:
+  The server's own Litestream child also opens `venue.db` and takes no lock; the server awaits its
+  stop before closing the store, and closes the store even if that stop fails. Every holder also
+  writes `venue.holder.json`, and a watchdog thread, while it runs, SIGKILLs the process about
+  `WATCHDOG_KILL_MS` (two minutes, `packages/store/src/venue-liveness.ts`) after its main thread's
+  last timer turn. An entry point names itself with `setVenueHolderIdentity`
+  (`packages/db/src/venue-holder-identity.ts`); nothing checks that a new one does. Guard:
+  `packages/store/src/venue-lock.test.ts`, weaker than its name — it proves the lock, not that each
+  caller takes it, so a caller passing `exclusive: false` wrongly is seen by nothing. Every change
+  to `recovery.json` goes through `updateRecoveryState` under `recovery.lock`; never unlink
+  `recovery.lock` either. Guard: `apps/server/src/recovery-race.test.ts`, weaker than its name — it
+  proves the lock, not that every writer of the file takes it. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md).
 - **A duty `bootServer` starts pushes its stop onto `undoOnFailure` as soon as it exists, before
   the next step that can throw** (`apps/server/src/boot.ts`), or a failed start leaves it running on

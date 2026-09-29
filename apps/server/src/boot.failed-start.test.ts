@@ -22,6 +22,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { runCloudSnapshotLoop } from "./cloud-snapshot-loop.js";
 import { runCloudWorker } from "./cloud-worker.js";
 import { PENDING_ADOPTION_FILE } from "./finish-adoption.js";
+import { LiveEvents } from "./live-api.js";
 import { startMdnsResponder } from "./mdns.js";
 import { freePorts } from "./testing/free-ports.js";
 
@@ -34,6 +35,8 @@ import { freePorts } from "./testing/free-ports.js";
  * removes on the last release (`packages/store/src/venue-liveness.ts`). So every folder here is
  * seeded through a handle closed BEFORE `startServer` runs: a handle the suite kept open would keep
  * the file whatever boot did.
+ *
+ * A started server's `close()` must give the folder back too, even when a stop inside it fails.
  */
 
 vi.mock("@waitron/db", async (importOriginal) => {
@@ -464,4 +467,95 @@ describe("a start that fails after the venue folder is opened gives the folder b
       expect(mdnsStop).toHaveBeenCalledOnce();
     }, 60_000);
   });
+});
+
+describe("closing a started server", () => {
+  it("when stopping one background task fails, still stops the rest and gives the folder back", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    const env = {
+      ...(await tradingEnv(venueDir, state)),
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example",
+    };
+    const failure = new Error("snapshot loop failed to stop");
+    // Second in trading mode's teardown, after the cloud worker, so most stops come after it.
+    vi.mocked(runCloudSnapshotLoop).mockImplementationOnce(
+      ({ signal }) =>
+        new Promise<void>((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(failure), { once: true });
+        }),
+    );
+    const server = await startServer(env);
+    expect(readVenueHolder(venueDir)?.pid).toBe(process.pid);
+
+    const events = await withLoggedEvents(async () => {
+      await expect(server.close()).rejects.toBe(failure);
+    });
+    expect(events).toContain("loop.stopped");
+    // The last stop in trading mode's teardown.
+    expect(events).toContain("stream.stopped");
+    expect(readVenueHolder(venueDir)).toBeNull();
+    await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
+  }, 60_000);
+
+  it("when unsubscribing from the change feed throws, still closes the tunnel and gives the folder back", async () => {
+    const venueDir = await seededVenueDir();
+    const state = await stateDir(undefined, { leaf: true });
+    // Reads and never answers, so a tunnel nobody aborts keeps a connection open.
+    const open = new Set<Socket>();
+    let firstAccept!: () => void;
+    const accepted = new Promise<void>((resolve) => (firstAccept = resolve));
+    const relay = createNetServer((socket) => {
+      open.add(socket);
+      socket.resume();
+      socket.on("close", () => open.delete(socket));
+      socket.on("error", () => socket.destroy());
+      firstAccept();
+    });
+    await new Promise<void>((resolve) => relay.listen(0, "127.0.0.1", resolve));
+    const relayPort = (relay.address() as AddressInfo).port;
+    const env = {
+      ...(await tradingEnv(venueDir, state)),
+      WAITRON_TUNNEL_RELAY_URL: `tcp://127.0.0.1:${relayPort}`,
+      WAITRON_TUNNEL_BOX_ID: "box-close",
+      WAITRON_TUNNEL_TOKEN: "tunnel-secret",
+      WAITRON_TUNNEL_POOL_SIZE: "1",
+    };
+    const failure = new Error("unsubscribe threw");
+    const { subscribeToChanges: realSubscribe } =
+      await vi.importActual<typeof import("@waitron/db")>("@waitron/db");
+    vi.mocked(subscribeToChanges).mockImplementationOnce((listener) => {
+      const off = realSubscribe(listener);
+      return () => {
+        off();
+        throw failure;
+      };
+    });
+    const liveEventsClose = vi.spyOn(LiveEvents.prototype, "close");
+
+    let server: Awaited<ReturnType<typeof startServer>> | undefined;
+    try {
+      server = await startServer(env);
+      await Promise.race([accepted, delay(10_000)]);
+      expect(open.size).toBe(1);
+
+      const settled = await Promise.race([
+        server.close().then(
+          () => "resolved",
+          (error: unknown) => error,
+        ),
+        delay(15_000, "close() had not settled after 15s"),
+      ]);
+      expect(settled).toBe(failure);
+      expect(liveEventsClose).toHaveBeenCalled();
+      await vi.waitFor(() => expect(open.size).toBe(0), { timeout: 2_000 });
+      expect(readVenueHolder(venueDir)).toBeNull();
+      await expect(bindAndRelease(Number(env.WAITRON_HTTP_PORT))).resolves.toBeUndefined();
+    } finally {
+      await server?.close().catch(() => {});
+      liveEventsClose.mockRestore();
+      for (const socket of open) socket.destroy();
+      await new Promise<void>((resolve) => relay.close(() => resolve()));
+    }
+  }, 60_000);
 });
