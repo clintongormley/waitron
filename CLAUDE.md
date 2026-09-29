@@ -652,12 +652,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   alone, and only the dashboard's stored hash is tried as a token
   (`packages/identity/src/management-session.test.ts`); a new login table is seen by nothing.
 - **A module depends on another migration set when its SQL `REFERENCES` one of that set's tables,
-  puts a `CREATE TRIGGER … ON` one of them, or names one inside a trigger's body — and its
-  descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has
+  puts a `CREATE TRIGGER … ON` one of them, names one inside a trigger's body, or writes one
+  at top level — and its descriptor's `requires` must name it.** `packages/media/drizzle/0001_image_references.sql` has
   triggers on tables core and catalogue create, and others whose bodies read them. Guard:
   `scripts/module-graph-honesty.test.ts`, weaker than its name — it reads SQL as TEXT and recognizes
-  `FROM`, `JOIN`, `INSERT INTO`, `UPDATE` and `DELETE FROM` in a trigger body, not arbitrary SQL
-  syntax or top-level migration writes. The engine will not catch a missing body target either: measured 2026-09-23 on `node:sqlite` (Node
+  `FROM`, `JOIN`, `INSERT INTO`, `UPDATE` and `DELETE FROM` in a trigger body, plus plain
+  `INSERT INTO`, `UPDATE` and `DELETE FROM` at the start of a top-level statement. It does not
+  recognize arbitrary SQL, top-level reads, WITH-prefixed writes, REPLACE or INSERT/UPDATE OR
+  variants. The engine will not catch a missing body target either: measured 2026-09-23 on `node:sqlite` (Node
   v26.7.0), a trigger whose body names a missing table is created without complaint and fails only
   when it fires, with `no such table`. Cost: the first `requires` graph was derived from `REFERENCES`
   alone and missed two edges made by triggers ON another module's tables, caught by hand in review. See

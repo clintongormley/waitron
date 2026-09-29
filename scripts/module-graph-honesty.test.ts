@@ -7,7 +7,7 @@ import { packageDirOf } from "../packages/module/src/module.js";
 /**
  * Every module descriptor's `requires` must NAME every cross-module dependency its migrations
  * create in SQL. A module depends on another when its `drizzle/*.sql` names a table the other
- * module owns in an FK, a trigger's ON clause, or a trigger's body.
+ * module owns in an FK, a trigger's ON clause, a trigger's body, or a top-level write.
  *
  * It reads SQL as TEXT, never executing it: it maps every `CREATE TABLE <name>` to its owning
  * module, resolves each edge's target table to its owner, drops same-module targets, and asserts
@@ -32,8 +32,9 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * - The stripping is single-pass and naive: `--` is treated as a comment start even inside a
  *   string literal (line comments are blanked before strings), so a migration mixing the two on one
  *   line could confuse it.
- * - Body matching counts `CASE`/`END` tokens but does not parse SQL. A table reached through syntax
- *   outside the five named statement shapes, or from top-level migration DML, is not detected.
+ * - Body matching counts `CASE`/`END` tokens but does not parse SQL. Top-level writes recognize
+ *   plain INSERT INTO, UPDATE and DELETE FROM at a statement's start, not WITH-prefixed writes,
+ *   REPLACE or INSERT/UPDATE OR variants. Other SQL syntax and top-level reads are not detected.
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..");
@@ -54,6 +55,8 @@ const CREATE_TRIGGER =
 const TRIGGER_START = /\bcreate\s+(?:constraint\s+)?trigger\s+\S+\s+.*?\bbegin\b/gis;
 const BODY_TABLE =
   /\b(from|join|insert\s+into|update|delete\s+from)\s+["`]?(?:public["`]?\.)?["`]?(\w+)["`]?/gi;
+const MIGRATION_WRITE =
+  /(?:^|;)\s*(insert\s+into|update|delete\s+from)\s+["`]?(?:public["`]?\.)?["`]?(\w+)["`]?/gi;
 
 const EDGE_KINDS = [
   ["FK reference", REFERENCES],
@@ -72,9 +75,11 @@ function stripSql(source: string): string {
 }
 
 /** A CASE's END may end a statement; only an END outside CASE closes the trigger body. */
-function* triggerBodies(sql: string): Iterable<string> {
+function* triggerRanges(sql: string): Iterable<{ start: number; end: number; body: string }> {
   for (const trigger of sql.matchAll(TRIGGER_START)) {
-    const remaining = sql.slice((trigger.index ?? 0) + trigger[0].length);
+    const start = trigger.index ?? 0;
+    const bodyStart = start + trigger[0].length;
+    const remaining = sql.slice(bodyStart);
     let caseDepth = 0;
     for (const token of remaining.matchAll(/\bcase\b|\bend\b/gi)) {
       if (token[0].toLowerCase() === "case") {
@@ -82,7 +87,11 @@ function* triggerBodies(sql: string): Iterable<string> {
       } else if (caseDepth > 0) {
         caseDepth--;
       } else if (/^\s*;/.test(remaining.slice((token.index ?? 0) + token[0].length))) {
-        yield remaining.slice(0, token.index);
+        yield {
+          start,
+          end: bodyStart + (token.index ?? 0) + token[0].length,
+          body: remaining.slice(0, token.index),
+        };
         break;
       }
     }
@@ -153,7 +162,7 @@ function edgeDetails(rawSql: string, moduleName: string, owner: Map<string, stri
       if (dep !== undefined && dep !== moduleName) edges.push({ dep, kind, target });
     }
   }
-  for (const body of triggerBodies(sql)) {
+  for (const { body } of triggerRanges(sql)) {
     for (const match of body.matchAll(BODY_TABLE)) {
       const target = match[2]?.toLowerCase();
       if (target === undefined) continue;
@@ -179,6 +188,25 @@ function edgeDetails(rawSql: string, moduleName: string, owner: Map<string, stri
 /** The set of module NAMES `moduleName` depends on, per this SQL — the `dep` field of its edges. */
 function edgesFor(rawSql: string, moduleName: string, owner: Map<string, string>): Set<string> {
   return new Set(edgeDetails(rawSql, moduleName, owner).map((edge) => edge.dep));
+}
+
+function migrationEdges(rawSql: string, moduleName: string, owner: Map<string, string>): Edge[] {
+  const edges = edgeDetails(rawSql, moduleName, owner);
+  let topLevel = stripSql(rawSql);
+  // A trigger's event and semicolon-delimited body statements are not top-level writes.
+  for (const { start, end } of [...triggerRanges(topLevel)].reverse()) {
+    topLevel = topLevel.slice(0, start) + " ".repeat(end - start) + topLevel.slice(end);
+  }
+  for (const match of topLevel.matchAll(MIGRATION_WRITE)) {
+    const target = match[2]?.toLowerCase();
+    if (target === undefined) continue;
+    const dep = owner.get(target);
+    if (dep !== undefined && dep !== moduleName) {
+      const kind = `migration ${match[1]?.replace(/\s+/g, " ").toUpperCase()}`;
+      edges.push({ dep, kind, target });
+    }
+  }
+  return edges;
 }
 
 /** The dependency names a descriptor DECLARES: `requires.core` (as "core") plus `requires.modules`. */
@@ -248,6 +276,57 @@ describe("the detector itself", () => {
     ["DELETE FROM", "DELETE FROM `gadgets`"],
   ])("ignores %s outside a trigger body", (_kind, statement) => {
     expect([...edgesFor(`${statement};`, "alpha", OWNER)]).toEqual([]);
+  });
+
+  it.each([
+    ["INSERT INTO", "INSERT INTO `gadgets` (id) VALUES (1)"],
+    ["UPDATE", "UPDATE `gadgets` SET id = 1"],
+    ["DELETE FROM", "DELETE FROM `gadgets`"],
+  ])("flags a cross-module top-level %s migration write", (_kind, statement) => {
+    expect(migrationEdges(`${statement};`, "alpha", OWNER)).toEqual([
+      { dep: "beta", kind: `migration ${_kind}`, target: "gadgets" },
+    ]);
+  });
+
+  it.each(["gadgets", "`gadgets`", '"gadgets"', '"public"."gadgets"'])(
+    "finds a top-level write to %s after another statement",
+    (target) => {
+      const sql = `CREATE TABLE widgets (id text);\n uPdAtE ${target} SET id = 1;`;
+      expect(migrationEdges(sql, "alpha", OWNER)).toEqual([
+        { dep: "beta", kind: "migration UPDATE", target: "gadgets" },
+      ]);
+    },
+  );
+
+  it("keeps trigger events and body writes separate from top-level writes", () => {
+    const sql = `CREATE TRIGGER t AFTER UPDATE OF gadgets ON widgets BEGIN
+      SELECT CASE WHEN new.id IS NULL THEN 0 ELSE 1 END;
+      UPDATE gadgets SET id = new.id;
+    END;
+    DELETE FROM gadgets;`;
+    expect(migrationEdges(sql, "alpha", OWNER)).toEqual([
+      { dep: "beta", kind: "trigger body UPDATE", target: "gadgets" },
+      { dep: "beta", kind: "migration DELETE FROM", target: "gadgets" },
+    ]);
+  });
+
+  it("does not call a cross-module trigger header a migration write", () => {
+    const sql = "CREATE TRIGGER t AFTER UPDATE ON gadgets BEGIN SELECT 1; END;";
+    expect(migrationEdges(sql, "alpha", OWNER)).toEqual([
+      { dep: "beta", kind: "trigger", target: "gadgets" },
+    ]);
+  });
+
+  it("ignores comments, literals, reads, own tables and unknown write targets", () => {
+    const sql = `-- INSERT INTO gadgets (id) VALUES (1);
+      /* UPDATE gadgets SET id = 1; DELETE FROM gadgets; */
+      INSERT INTO widgets (id) VALUES ('; DELETE FROM gadgets;');
+      UPDATE widgets SET id = 1;
+      DELETE FROM widgets;
+      INSERT INTO unknown_table (id) VALUES (1);
+      SELECT * FROM gadgets;
+      SELECT * FROM widgets JOIN gadgets ON widgets.id = gadgets.id;`;
+    expect(migrationEdges(sql, "alpha", OWNER)).toEqual([]);
   });
 
   it("ignores a commented body reference and a table-valued function", () => {
@@ -335,7 +414,7 @@ describe("the tree's module graph is honest", () => {
   const foundEdgeDetails = new Set<string>();
   for (const pkg of discovered) {
     for (const raw of pkg.sqls) {
-      for (const edge of edgeDetails(raw, pkg.moduleName, owner)) {
+      for (const edge of migrationEdges(raw, pkg.moduleName, owner)) {
         foundEdgeDetails.add(`${pkg.moduleName}→${edge.dep} via ${edge.kind} on ${edge.target}`);
       }
     }
@@ -357,12 +436,12 @@ describe("the tree's module graph is honest", () => {
     );
   });
 
-  it("every FK/trigger edge in the SQL is named in the depending descriptor's requires", () => {
+  it("every migration edge in the SQL is named in the depending descriptor's requires", () => {
     const violations: string[] = [];
     for (const pkg of discovered) {
       const declared = declaredDepsOf(pkg.moduleName);
       for (const raw of pkg.sqls) {
-        for (const edge of edgeDetails(raw, pkg.moduleName, owner)) {
+        for (const edge of migrationEdges(raw, pkg.moduleName, owner)) {
           if (declared.has(edge.dep)) continue;
           const message = `${pkg.moduleName} depends on ${edge.dep} via ${edge.kind} on ${edge.target} — not in requires`;
           if (!violations.includes(message)) violations.push(message);
