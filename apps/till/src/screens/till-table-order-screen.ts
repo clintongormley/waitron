@@ -708,6 +708,11 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      /* Stays at the trailing edge when it wraps below the name. */
+      .group-head .group-state {
+        margin-inline-start: auto;
+      }
+
       .ungrouped {
         display: flex;
         flex-direction: column;

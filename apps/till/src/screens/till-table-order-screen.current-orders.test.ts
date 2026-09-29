@@ -95,14 +95,24 @@ describe("Current orders in the Tab drawer", () => {
       ["g1", "g2", "g3", "g4"].map((id) =>
         text(q(el, `[data-group="${id}"] .group-head [data-group-sent]`)!),
       );
+    // Group 1's sent time differs from its fired time, so showing the one for the other fails.
+    const sentBeforeFired = "2026-09-28T19:45:00.000Z";
+    const mountSent = () =>
+      mountCurrent({
+        currentOrders: current({
+          groups: current().groups.map((group) =>
+            group.id === "g1" ? { ...group, sentAt: sentBeforeFired } : group,
+          ),
+        }),
+      });
     const previous = currentLocale();
     afterEach(() => setLocale(previous));
 
     it("in English: fired groups say Sent, held ones Held, and a sender with no name is left out", async () => {
       setLocale("en");
-      const { el } = await mountCurrent();
+      const { el } = await mountSent();
       expect(sentOf(el)).toEqual([
-        `Sent ${clock(fired)} by Luis`,
+        `Sent ${clock(sentBeforeFired)} by Luis`,
         `Sent ${clock(fired)}`,
         `Held ${clock(heldAt)} by Ana`,
         `Held ${clock(laterHeldAt)}`,
@@ -111,9 +121,9 @@ describe("Current orders in the Tab drawer", () => {
 
     it("in Spanish", async () => {
       setLocale("es");
-      const { el } = await mountCurrent();
+      const { el } = await mountSent();
       expect(sentOf(el)).toEqual([
-        `Enviado a las ${clock(fired)} por Luis`,
+        `Enviado a las ${clock(sentBeforeFired)} por Luis`,
         `Enviado a las ${clock(fired)}`,
         `En espera desde las ${clock(heldAt)}, por Ana`,
         `En espera desde las ${clock(laterHeldAt)}`,
