@@ -6770,7 +6770,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
     before the branch. A fix would make the automatic attempt quiet for that case too, or have the
     request helper refuse an unreadable success body with a code; the second touches every request.
     Queued as C58 (owner chose (a), 2026-09-29): the automatic attempt stays quiet for that case.
-  - **DONE (C57, PR pending, 2026-09-29):** the passkey button's sign-in sorts a failed attempt
+  - **DONE (C57, #854, 2026-09-29):** the passkey button's sign-in sorts a failed attempt
     through `classifyPasskeySignInError` (`apps/dashboard/src/passkey-errors.ts`), beside the
     registration helper, instead of inline in the login screen; the automatic attempt on page load
     is unchanged (C58). No visible change: the login and profile screen suites pass unedited.
