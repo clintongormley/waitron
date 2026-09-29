@@ -256,9 +256,10 @@ export async function splitTable(
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
   const partyMain = await readMainBill(tx, partyId);
+  let firers: ReadonlyMap<string, string> = new Map();
   if (billId !== null) {
     await refuseUnsplittableBill(tx, partyId, partyMain, billId);
-    await leaveParty(tx, billId);
+    firers = await leaveParty(tx, billId);
     await repointSourceTables(tx, { id: partyId, mainBillId: partyMain }, billId);
   }
 
@@ -279,7 +280,7 @@ export async function splitTable(
     mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
   } else {
     const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-    await groupArrivingDishes(tx, newParty, billId, options.operatorId);
+    await groupArrivingDishes(tx, newParty, billId, options.operatorId, firers);
     if (status === "open") {
       await setMainBill(tx, newParty, billId);
       mainBillId = billId;

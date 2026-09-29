@@ -3506,6 +3506,8 @@ group, so the pass renders no Ready or Away lever for them (`till-expo-screen.ts
   2. If any are sent, `startGroup(tx, partyId, "fire", operatorId)`, then set its `state` to
      `fired` with `fired_at` now and `fired_by` the operator. Check whether `startGroup` can make a
      fired group directly, and use it if so.
+     - (2026-09-29, C78: the fired group now takes its earliest-fired dish's fire time and firer;
+       see docs/backlog.md.)
   3. If any are unsent, `startGroup(tx, partyId, "hold", operatorId)`.
   4. Set `group_id` on each line and on its extras children (`parent_line_id`), as `clearGroups`
      clears them.

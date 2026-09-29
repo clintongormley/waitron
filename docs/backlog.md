@@ -3554,9 +3554,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `unjoinTable` still leave arriving dishes in no group until Task 13 deletes them.
     - **A plan default the owner may overturn (P16):** spec §15's "leaves with them outside any
       group" is read as the side the bill leaves; the receiving party groups the dishes.
-    - **For the owner:** the new fired group's fired time and person are the move's, as the plan
-      said, so the table screen's group heading counts "Fired N min ago" from the move; each dish row
-      keeps its own kitchen item's time.
+    - **DONE (C78, 2026-09-29): the new fired group takes its earliest-fired dish's fire time and
+      firer, not the move's** — the time is that dish's kitchen item's `fired_at`, else its
+      `sent_at` when it has no kitchen item; "fired by" is whoever fired that dish's group in the
+      party the bill left (`leaveParty`, `apps/server/src/move-bill.ts`, reads it before the link
+      is cleared), else the person who moved the bill, when that dish was in no group of a party
+      it left. It reaches the table screen's "Fired N min ago", read through `listOrderGroups` and
+      `readGroups`, which read the time but not the firer; and the "Sent {time} by {name}" label, read through
+      `readCurrentOrders`, which for a fired group shows its fire time and firer. It does not
+      reach release reminders (`remind_at` and served times), the pass (`listExpoQueue`: the
+      group's id, position, state and creation time) or the slow-orders list
+      (`ticket_items.queued_at`). Tests: `apps/server/src/party-arriving-dishes.test.ts`. No
+      migration.
     - **For the owner:** an arriving held group prints no HOLD ticket in advance, though every
       other way of making a held group prints one; with "Print held groups in advance" on, it prints an
       ordinary ticket when fired, not a FIRE slip.
