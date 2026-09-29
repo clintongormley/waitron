@@ -525,6 +525,8 @@ export class PrintersScreen extends LitElement {
   #commandTimer?: ReturnType<typeof setInterval>;
   #commandReadInFlight = false;
   #commandEpoch = 0;
+  /** The refresh error a failed status read showed, so the next good read can take it back. */
+  #commandReadError: string | null = null;
   /** Not `submitting`: the listen runs for seconds and must not block Add or Register. */
   @state() private scanning = false;
   @state() private probeHost = "";
@@ -1081,7 +1083,7 @@ export class PrintersScreen extends LitElement {
     };
     if (status.error !== undefined) tracked.error = status.error;
     this.commands = { ...this.commands, [commandKey(agentId, status.address)]: tracked };
-    if (status.state === "pending" && this.#commandTimer === undefined)
+    if (status.state === "pending" && this.#commandTimer === undefined && this.isConnected)
       this.#commandTimer = setInterval(() => void this.#commandTick(), SCAN_POLL_MS);
   }
 
@@ -1116,12 +1118,19 @@ export class PrintersScreen extends LitElement {
     try {
       devices = await (this.api.background ?? this.api).listDiscoveredPrinters();
     } catch (error) {
-      if (epoch === this.#commandEpoch) this.refreshErrorKey = codeOf(error);
+      if (epoch === this.#commandEpoch) {
+        this.#commandReadError = codeOf(error);
+        this.refreshErrorKey = this.#commandReadError;
+      }
     }
     if (epoch !== this.#commandEpoch) return;
     this.#commandReadInFlight = false;
-    if (devices) this.#setDiscovered(devices);
-    else this.#absorbCommands([]);
+    if (devices) {
+      if (this.#commandReadError !== null && this.refreshErrorKey === this.#commandReadError)
+        this.refreshErrorKey = null;
+      this.#commandReadError = null;
+      this.#setDiscovered(devices);
+    } else this.#absorbCommands([]);
     this.#settleCommandPoll();
   }
 
@@ -1200,8 +1209,8 @@ export class PrintersScreen extends LitElement {
     );
   }
 
-  /** Forgetting cannot be undone from here (pairing again needs the printer's PIN), so it takes a
-   * second, confirming click. */
+  /** Undoing a forget needs the printer in pairing mode and its PIN, so it takes a second,
+   * confirming click. */
   #onForget(p: Printer, device: DiscoveredPrinter): void {
     if (this.armedForgetId !== p.id) {
       this.armedForgetId = p.id;
@@ -1782,6 +1791,9 @@ export class PrintersScreen extends LitElement {
   #forgetAction(p: Printer): TemplateResult | typeof nothing {
     const device = this.#pairedReport(p);
     if (device === undefined) return nothing;
+    // The agent's pairing report can outlast a successful forget by up to the list's 15 seconds.
+    const sent = this.commands[this.#commandKeyOf(device)];
+    if (sent?.kind === "forget" && sent.state === "succeeded") return nothing;
     const armed = this.armedForgetId === p.id;
     return html`<wt-button
       variant="danger"

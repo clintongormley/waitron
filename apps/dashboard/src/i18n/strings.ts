@@ -2760,7 +2760,7 @@ export const es: Record<StringKey, string> = {
     "Empareja aquí una impresora Bluetooth con Emparejar, junto a ella en la lista. Aún no se puede imprimir en una impresora Bluetooth, aunque esté emparejada.",
   "printers.bluetooth_pair": "Emparejar",
   "printers.bluetooth_forget": "Olvidar emparejamiento",
-  "printers.bluetooth_forget_confirm": "¿Confirmar olvidar el emparejamiento?",
+  "printers.bluetooth_forget_confirm": "¿Olvidar el emparejamiento?",
   "printers.bluetooth_show_all": "Mostrar todos los dispositivos",
   "printers.bluetooth_hide_others": "Ocultar otros dispositivos",
   "printers.bluetooth_pair_title": "Emparejar un dispositivo Bluetooth",
@@ -2770,7 +2770,7 @@ export const es: Record<StringKey, string> = {
   "printers.bluetooth_pin_invalid":
     "Escribe de 1 a 16 letras, números o símbolos, sin espacios ni acentos.",
   "printers.bluetooth_pairing": "Emparejando…",
-  "printers.bluetooth_paired": "Emparejado",
+  "printers.bluetooth_paired": "Emparejamiento completado",
   "printers.bluetooth_pair_failed": "No se pudo emparejar",
   "printers.bluetooth_forgetting": "Olvidando el emparejamiento…",
   "printers.bluetooth_forgotten": "Emparejamiento olvidado",

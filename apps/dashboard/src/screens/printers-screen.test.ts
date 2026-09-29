@@ -5535,12 +5535,10 @@ describe("printers-screen Bluetooth pairing", () => {
 
     it("shows a refused forget on the page", async () => {
       const { el } = await mountForget([[reported]], {
-        forgetBluetoothPairing: vi
-          .fn()
-          .mockRejectedValue({
-            code: "printer.bluetooth_not_paired",
-            params: { address: ADDRESS },
-          }),
+        forgetBluetoothPairing: vi.fn().mockRejectedValue({
+          code: "printer.bluetooth_not_paired",
+          params: { address: ADDRESS },
+        }),
       });
       await forget(el);
       expect(text(el, "[role=alert]")).toBe(codeMessage("printer.bluetooth_not_paired"));
@@ -5604,6 +5602,88 @@ describe("printers-screen Bluetooth pairing", () => {
       const calls = passive.mock.calls.length;
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
       expect(passive).toHaveBeenCalledTimes(calls);
+    });
+
+    it("clears the refresh error its own failed read set once a read succeeds", async () => {
+      const passive = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue([{ ...reported, bluetoothCommand: pendingCommand("forget") }]);
+      const { el } = await mountForget(passive);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgetting"));
+    });
+
+    it("leaves a refresh error another read set after its own read succeeds", async () => {
+      const passive = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue([{ ...reported, bluetoothCommand: pendingCommand("forget") }]);
+      let finishLoad!: (error: unknown) => void;
+      const listPrinters = vi.fn().mockResolvedValue([...printers, stored]);
+      const { el } = await mountForget(passive, {
+        background: stubApi({
+          listPrinters,
+          listDiscoveredPrinters: passive,
+          listAgents: vi.fn().mockImplementation(
+            () =>
+              new Promise((_, reject) => {
+                finishLoad = reject;
+              }),
+          ),
+        }),
+      });
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      q(el, "[data-test=refresh-printer-lists]")!.click();
+      await flush(el);
+      finishLoad({ code: "management_session.expired" });
+      await flush(el);
+      expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+        codeMessage("management_session.expired"),
+      );
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, "[data-test=printer-refresh-error]")).toContain(
+        codeMessage("management_session.expired"),
+      );
+    });
+
+    it("hides Forget pairing while a forget it sent has succeeded, though the pairing report lingers", async () => {
+      const done = {
+        ...reported,
+        bluetoothCommand: { ...pendingCommand("forget"), state: "succeeded" as const },
+      };
+      const { el } = await mountForget([[done]]);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+      expect(q(el, sel("forget-pairing-p4"))).toBeNull();
+    });
+
+    it("starts no status poll for a forget answered after the screen went away", async () => {
+      let answer!: (value: unknown) => void;
+      const { el, passive } = await mountForget([[reported]], {
+        forgetBluetoothPairing: vi.fn().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              answer = resolve;
+            }),
+        ),
+      });
+      await forget(el);
+      el.remove();
+      answer({ command: pendingCommand("forget") });
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 3);
+      expect(passive).not.toHaveBeenCalled();
     });
 
     it("waits for this command's own outcome, not an earlier one still listed for the device", async () => {
