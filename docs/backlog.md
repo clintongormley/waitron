@@ -3278,11 +3278,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       party's revision, and a move to a table another party holds sends that party's revision too
       (`expectedOtherPartyRevision`). Both are checked before the bill's or the table's own state,
       so of two tills acting from one read the second is told `party.out_of_date`.
-    - The bill keeps its id, so its payments, a card payment still at the reader and its retry,
-      its refunds and an invoice already issued all stay with it. Nothing is repriced. A paid
-      bill is refused `bill.paid`; a merged-away one `tab.not_open`.
-    - Into a party: merged into that party's main bill only when both bills are untouched AND in
-      the same service mode once the moved bill has taken the party's zone; otherwise it stays a
+    - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
+      bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
+      that party, before any revision is asked for; a `partyId` naming a party the bill has since
+      left is refused the same way. A request with no `partyId` and no revision for a party's bill
+      stays `management.request_invalid` `{ field: "expectedPartyRevision" }`. **Task 12's till
+      must send `partyId: null` when it moves a counter order**, or a second till moving the same
+      order is told its request is malformed rather than out of date.
+    - A bill holding a payment, a card at the reader or an invoice is never merged, so it keeps
+      its id, and its payments, a card payment still at the reader and its retry, its refunds and
+      its invoice all stay with it. Nothing is repriced. A paid bill is refused `bill.paid`; a
+      merged-away one `tab.not_open`.
+    - Into a party: merged into that party's main bill only when both bills are untouched (open,
+      holding no payment, one being given back included, and not being paid in full at a reader)
+      AND in the same service mode once the moved bill has taken the party's zone; otherwise it stays a
       separate bill and the answer says `merged: false`. A move is never refused because the two
       bills' modes differ (plan P15); merging across modes would make a pay-first bill unpayable, as Task 5
       found. To a free table: a new unnamed party opens there with the bill as its main bill. To
@@ -3323,9 +3332,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the same rows, and both then moved into another party, still `placed`, the split bill's line
     now outside its group. The server was not booted on it.
 
-    Open points: the move bumps an open bill's revision without `bumpRevision`'s refusal of money
-    in flight, since a move changes no amount (plan P19); a presented bill's revision is not moved
-    on, though the trigger now allows it. Dishes arriving in a party join no group until Task 9.
+    Open points: the move moves the bill's revision on, open or presented, without
+    `bumpRevision`'s refusal of money in flight, since a move changes no amount (plan P19). Dishes
+    arriving in a party join no group until Task 9.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

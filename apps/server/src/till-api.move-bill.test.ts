@@ -18,9 +18,8 @@ import {
 } from "./testing/bill-venue.js";
 import "./errors.js";
 
-// Money through `POST /api/bills/:id/move` (table actions plan, Task 7; spec §7, §9, §15): a moved
-// bill keeps its id, so its payments, a card still at the reader, its refunds and its invoice stay
-// with it. The move itself is tested in `party-move-bill.test.ts`.
+// Money through `POST /api/bills/:id/move` (table actions plan, Task 7; spec §7, §9, §15). The move
+// itself is tested in `party-move-bill.test.ts`.
 let venue: BillVenue;
 let invoiceFirstZone: string;
 
@@ -105,19 +104,67 @@ async function splitAtTwoParties(names: string[], lineNos: number[]) {
   return { ana, luis, billId: split.json.billId as string };
 }
 
-function moveTo(billId: string, tableId: string, extra: Record<string, unknown> = {}) {
+function moveTo(
+  billId: string,
+  tableId: string,
+  extra: Record<string, unknown> = {},
+  cookie = venue.cookie,
+) {
   const partyOf = venue.db.all<{ party_id: string | null }>(
     sql`select party_id from working_orders where id = ${billId}`,
   )[0]!.party_id;
   const holder = venue.db.all<{ party_id: string }>(
     sql`select party_id from party_tables where table_id = ${tableId} and left_at is null`,
   )[0]?.party_id;
-  return post(`/api/bills/${billId}/move`, {
-    to: { tableId },
-    ...(partyOf === null ? {} : { expectedPartyRevision: revisionOf(partyOf) }),
-    ...(holder === undefined ? {} : { expectedOtherPartyRevision: revisionOf(holder) }),
-    ...extra,
+  return post(
+    `/api/bills/${billId}/move`,
+    {
+      to: { tableId },
+      ...(partyOf === null ? {} : { expectedPartyRevision: revisionOf(partyOf) }),
+      ...(holder === undefined ? {} : { expectedOtherPartyRevision: revisionOf(holder) }),
+      ...extra,
+    },
+    cookie,
+  );
+}
+
+function linesNamed(billId: string): string[] {
+  return venue.db
+    .all<{ name: string }>(
+      sql`select name from working_order_lines where working_order_id = ${billId} order by line_no`,
+    )
+    .map((row) => row.name);
+}
+
+function partyOfBill(billId: string): string | null {
+  return venue.db.all<{ party_id: string | null }>(
+    sql`select party_id from working_orders where id = ${billId}`,
+  )[0]!.party_id;
+}
+
+/** An open counter order in the tables' zone, so its service mode matches a party's main bill. */
+async function counterOrder(...names: string[]): Promise<string> {
+  const id = randomUUID();
+  await parkOrder({ db: venue.db }, venue.cfg, {
+    id,
+    lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+    zoneId: venue.zoneId,
+    operatorId: venue.operatorId,
   });
+  return id;
+}
+
+/** Starts paying the whole bill by card at the reader, and answers once the reader is running. */
+async function wholeBillAtReader(billId: string) {
+  const calls = venue.card.collectCalls.length;
+  const release = venue.card.holdNextCollect();
+  const paying = post("/api/pay", { id: billId, lines: [] });
+  await vi.waitFor(() => expect(venue.card.collectCalls.length).toBe(calls + 1));
+  const [row] = venue.db.all<{ payment_attempt_at: string | null }>(
+    sql`select payment_attempt_at from working_orders where id = ${billId}`,
+  );
+  expect(row!.payment_attempt_at).not.toBeNull();
+  return { release, paying };
 }
 
 describe("money on a moved bill", () => {
@@ -276,6 +323,178 @@ describe("money on a moved bill", () => {
     expect(venue.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual(issued);
     expect(registroCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");
+  });
+});
+
+describe("a move while a whole bill is being paid by card at the reader", () => {
+  it("keeps the moved bill separate from a receiving main bill being paid in full, and both complete", async () => {
+    const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const { release, paying } = await wholeBillAtReader(luis.tabId);
+
+    const moved = await moveTo(billId, luis.tableId, {}, venue.cookie2);
+    release();
+    const paid = await paying;
+
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(await statusOf(venue, luis.tabId)).toBe("settled");
+    expect(registroCount(venue, luis.tabId)).toBe(1);
+    expect(linesNamed(luis.tabId)).toEqual(["Caña"]);
+    expect(await statusOf(venue, billId)).toBe("open");
+    expect(partyOfBill(billId)).toBe(luis.partyId);
+    expect(linesNamed(billId)).toEqual(["Pulpo"]);
+  });
+
+  it("keeps a counter order being paid in full separate from the party's main bill, and its card completes on it", async () => {
+    const luis = await seatedWith(venue, "Caña");
+    const orderId = await counterOrder("Tarta");
+    const { release, paying } = await wholeBillAtReader(orderId);
+
+    const moved = await moveTo(orderId, luis.tableId, {}, venue.cookie2);
+    release();
+    const paid = await paying;
+
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId: orderId, merged: false });
+    expect(paid.json).toMatchObject({ outcome: "captured" });
+    expect(await statusOf(venue, orderId)).toBe("settled");
+    expect(registroCount(venue, orderId)).toBe(1);
+    expect(partyOfBill(orderId)).toBe(luis.partyId);
+    expect(linesNamed(orderId)).toEqual(["Tarta"]);
+    expect(await statusOf(venue, luis.tabId)).toBe("open");
+    expect(linesNamed(luis.tabId)).toEqual(["Caña"]);
+  });
+
+  it("keeps the moved bill separate from a receiving main bill with a card refund in progress", async () => {
+    const ana = await seatedWith(venue, "Tarta", "Pulpo");
+    const luis = await seatedWith(venue, "Croquetas");
+    const split = await post(`/api/bills/${ana.tabId}/split`, {
+      transfers: [{ lineNo: 2 }],
+      expectedPartyRevision: ana.revision,
+    });
+    const billId = split.json.billId as string;
+    const card = await cardContribution(luis.tabId, "3.00");
+    const paymentId = (card.json.payment as { id: string }).id;
+    const release = venue.card.holdNextRefund();
+    const refunding = post(`/api/working-orders/${luis.tabId}/payments/${paymentId}/refunds`, {
+      submissionId: randomUUID(),
+      appliedAmount: "3.00",
+      tipAmount: "0.00",
+      reason: "Se equivocó de cuenta",
+      override: { personId: venue.adminId, pin: "1234" },
+    });
+    await vi.waitFor(() =>
+      expect(
+        venue.db.all(
+          sql`select id from bill_payment_refunds where bill_payment_id = ${paymentId} and state = 'pending'`,
+        ),
+      ).toHaveLength(1),
+    );
+
+    const moved = await moveTo(billId, luis.tableId, {}, venue.cookie2);
+    release();
+    const refunded = await refunding;
+
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(refunded.status).toBe(200);
+    expect(linesNamed(luis.tabId)).toEqual(["Croquetas"]);
+    expect(await statusOf(venue, billId)).toBe("open");
+    expect(partyOfBill(billId)).toBe(luis.partyId);
+  });
+});
+
+describe("two tills moving one counter order", () => {
+  for (const first of ["A", "B"] as const) {
+    it(`refuses the second till's move, read with no party, as party.out_of_date (till ${first} first)`, async () => {
+      const ana = await seatedWith(venue, "Caña");
+      const luis = await seatedWith(venue, "Caña");
+      const orderId = await counterOrder("Tarta");
+      // Each till read the order at the counter, with no party.
+      const tillA = () =>
+        post(
+          `/api/bills/${orderId}/move`,
+          {
+            to: { tableId: ana.tableId },
+            bills: "separate",
+            partyId: null,
+            expectedOtherPartyRevision: ana.revision,
+          },
+          venue.cookie,
+        );
+      const tillB = () =>
+        post(
+          `/api/bills/${orderId}/move`,
+          {
+            to: { tableId: luis.tableId },
+            bills: "separate",
+            partyId: null,
+            expectedOtherPartyRevision: luis.revision,
+          },
+          venue.cookie2,
+        );
+      const [winner, loser] = first === "A" ? [tillA, tillB] : [tillB, tillA];
+      const winnerParty = first === "A" ? ana : luis;
+
+      const won = await winner();
+      const revisions = [revisionOf(ana.partyId), revisionOf(luis.partyId)];
+      const lost = await loser();
+
+      expect(won.status).toBe(200);
+      expect(won.json).toEqual({ partyId: winnerParty.partyId, billId: orderId, merged: false });
+      expect(lost.status).toBe(409);
+      expect(lost.json).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: winnerParty.partyId, revision: revisionOf(winnerParty.partyId) },
+      });
+      expect([revisionOf(ana.partyId), revisionOf(luis.partyId)]).toEqual(revisions);
+      expect(partyOfBill(orderId)).toBe(winnerParty.partyId);
+    });
+  }
+
+  it("refuses a move naming a party for a bill another till has taken to the counter", async () => {
+    const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const read = revisionOf(ana.partyId);
+    const toCounter = await post(
+      `/api/bills/${billId}/move`,
+      { to: { counter: { zoneId: null } }, partyId: ana.partyId, expectedPartyRevision: read },
+      venue.cookie,
+    );
+
+    const lost = await post(
+      `/api/bills/${billId}/move`,
+      {
+        to: { tableId: luis.tableId },
+        partyId: ana.partyId,
+        expectedPartyRevision: read,
+        expectedOtherPartyRevision: revisionOf(luis.partyId),
+      },
+      venue.cookie2,
+    );
+
+    expect(toCounter.status).toBe(200);
+    expect(lost.status).toBe(409);
+    expect(lost.json).toMatchObject({
+      code: "party.out_of_date",
+      params: { partyId: ana.partyId, revision: revisionOf(ana.partyId) },
+    });
+    expect(partyOfBill(billId)).toBeNull();
+  });
+
+  it("still refuses a party's bill sent with neither a party nor its revision", async () => {
+    const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: luis.tableId },
+      expectedOtherPartyRevision: revisionOf(luis.partyId),
+    });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "expectedPartyRevision" },
+    });
   });
 });
 

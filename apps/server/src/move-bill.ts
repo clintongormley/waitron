@@ -23,8 +23,8 @@ export interface MoveBillOptions {
   bills: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
   expectedPartyRevision?: number;
-  /** The party the till read the bill under. */
-  partyId?: string;
+  /** The party the till read the bill under; null when it read the bill with no party. */
+  partyId?: string | null;
   /** The party holding the target table's, required when one does. */
   expectedOtherPartyRevision?: number;
   operatorId: string;
@@ -45,10 +45,8 @@ type Destination =
 
 /**
  * Move a whole bill to another party, a free table (a new party) or the counter, or a counter order
- * into a party. The bill keeps its id, so its payments, a card still at the reader and its invoice
- * are untouched, and no line is repriced. Both parties' revisions are checked before either the
- * bill's or the table's own state, so of two tills acting from one read the second is refused
- * `party.out_of_date`.
+ * into a party. Both parties' revisions are checked before either the bill's or the table's own
+ * state, so of two tills acting from one read the second is refused `party.out_of_date`.
  */
 export async function moveBill(
   tx: Transaction,
@@ -91,10 +89,8 @@ export async function moveBill(
       .update(workingOrders)
       .set(open ? { partyId: null, label } : { partyId: null })
       .where(eq(workingOrders.id, billId));
-    if (open) {
-      await moveRevisionOn(tx, billId);
-      if (destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
-    }
+    await moveRevisionOn(tx, billId);
+    if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
     result = { partyId: null, billId, merged: false };
   } else if (destination.kind === "free") {
     const { partyId } = await openParty(tx, {
@@ -212,19 +208,22 @@ async function refuseMainBillLeaving(
   if (other !== undefined) throw new AppError("party.main_bill_stays", { partyId });
 }
 
-/** Whether the bill is untouched: open, and holding no payment, one given back in full included. */
+/**
+ * Whether the bill is untouched: open, not being paid in full at a reader, and holding no payment,
+ * one given back in full or being given back included.
+ */
 export async function isUntouched(tx: Transaction, billId: string): Promise<boolean> {
   const [bill] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  return bill!.status === "open" && !(await holdsPayment(tx, billId));
+  return bill!.status === "open" && bill!.attemptAt === null && !(await holdsPayment(tx, billId));
 }
 
 /**
- * The bill joins the party: no longer delivered to a table, and, while it is open, its revision
- * moved on and its service context taking `zoneId` for what is added later. A presented bill keeps
- * its own zone, since its collection settles the invoice it already has.
+ * The bill joins the party: no longer delivered to a table, its revision moved on, and, while it is
+ * open, its service context taking `zoneId` for what is added later. A presented bill keeps its own
+ * zone, since its collection settles the invoice it already has.
  */
 export async function takeIntoParty(
   tx: Transaction,
@@ -238,9 +237,8 @@ export async function takeIntoParty(
     .set({ partyId, deliveryTableId: null })
     .where(eq(workingOrders.id, billId))
     .returning({ status: workingOrders.status });
-  if (bill!.status !== "open") return;
   await moveRevisionOn(tx, billId);
-  if (zoneId !== null) await adoptZone(tx, cfg, billId, zoneId);
+  if (bill!.status === "open" && zoneId !== null) await adoptZone(tx, cfg, billId, zoneId);
 }
 
 /**
@@ -266,8 +264,8 @@ export async function leaveParty(tx: Transaction, billId: string): Promise<void>
 }
 
 /**
- * Counts one more write on an open bill without `bumpRevision`'s refusal of money in flight: a move
- * changes no amount, and a card at the reader completes on the bill wherever it now is.
+ * Counts one more write on an open or presented bill without `bumpRevision`'s refusal of money in
+ * flight: a move changes no amount, and a card at the reader completes on the bill wherever it now is.
  */
 async function moveRevisionOn(tx: Transaction, billId: string): Promise<void> {
   await tx

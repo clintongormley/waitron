@@ -75,12 +75,13 @@ async function refuseTouched(tx: Transaction, billId: string, status: BillStatus
 /**
  * The party of the path bill, checked and moved on (`party.not_open`, then `party.out_of_date`).
  * A command naming a party the bill is no longer in is `party.out_of_date` whatever revision it
- * sends. A bill of no party has no revision.
+ * sends, and so is one that read the bill with no party (`partyId: null`) once it has one, naming
+ * that party. A bill of no party has no revision.
  */
 export async function guardPathParty(
   tx: Transaction,
   billId: string,
-  command: BillCommand,
+  command: Omit<BillCommand, "partyId"> & { partyId?: string | null },
 ): Promise<PathBill> {
   const [bill] = await tx
     .select({ partyId: workingOrders.partyId, status: workingOrders.status })
@@ -88,15 +89,13 @@ export async function guardPathParty(
     .where(eq(workingOrders.id, billId));
   if (bill === undefined) throw new AppError("tab.not_open", { tabId: billId });
   if (command.partyId !== undefined && command.partyId !== bill.partyId) {
+    const named = command.partyId ?? bill.partyId!;
     const [read] = await tx
       .select({ revision: parties.revision })
       .from(parties)
-      .where(eq(parties.id, command.partyId));
-    if (read === undefined) throw new AppError("party.not_open", { partyId: command.partyId });
-    throw new AppError("party.out_of_date", {
-      partyId: command.partyId,
-      revision: read.revision,
-    });
+      .where(eq(parties.id, named));
+    if (read === undefined) throw new AppError("party.not_open", { partyId: named });
+    throw new AppError("party.out_of_date", { partyId: named, revision: read.revision });
   }
   if (bill.partyId !== null) await guardParties(tx, bill.partyId, null, command);
   return bill;

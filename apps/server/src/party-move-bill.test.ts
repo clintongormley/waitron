@@ -870,6 +870,31 @@ describe("a presented party bill leaves its party", () => {
     expect((await partyRow(v, result.partyId!)).mainBillId).toBe(tabId);
   });
 
+  it("moves a presented bill's revision on, to another party, a free table or the counter", async () => {
+    const toParty = await presentedSplit("Mesa presentada 5");
+    const luisTable = await v.table("Mesa presentada 5 L");
+    await seat(v, luisTable);
+    const toFree = await presentedSplit("Mesa presentada 6");
+    const toCounter = await presentedSplit("Mesa presentada 7");
+    const before = [
+      (await billRow(v, toParty.second)).revision,
+      (await billRow(v, toFree.second)).revision,
+      (await billRow(v, toCounter.second)).revision,
+    ];
+
+    await move(toParty.second, { tableId: luisTable });
+    await move(toFree.second, { tableId: await v.table("Mesa presentada 6 libre") });
+    await move(toCounter.second, { counter: { zoneId: null } });
+
+    const after = [
+      await billRow(v, toParty.second),
+      await billRow(v, toFree.second),
+      await billRow(v, toCounter.second),
+    ];
+    expect(after.map((row) => row.status)).toEqual(["placed", "placed", "placed"]);
+    expect(after.map((row) => row.revision)).toEqual(before.map((revision) => revision + 1));
+  });
+
   it("keeps its label, frozen when it was presented, when it goes to the counter", async () => {
     const { ana, second, lines, tickets } = await presentedSplit("Mesa presentada 3");
     const label = (await billRow(v, second)).label;
@@ -1000,6 +1025,85 @@ describe("two tills at once", () => {
       const row = await billRow(v, second);
       if (first === "move") expect(row.partyId).toBe(luis.partyId);
       else expect(row.status).toBe("abandoned");
+    });
+  }
+
+  for (const first of ["A", "B"] as const) {
+    it(`refuses the second till's move of a counter order it read with no party (till ${first} first)`, async () => {
+      const anaTable = await v.table(`Mesa barra ${first} A`);
+      const luisTable = await v.table(`Mesa barra ${first} L`);
+      const ana = await seat(v, anaTable);
+      const luis = await seat(v, luisTable);
+      const orderId = await counterOrder(v, "Tarta");
+      const read = [await revisionOf(v, ana.partyId), await revisionOf(v, luis.partyId)];
+      const tillMoves = (tableId: string, otherRevision: number) => () =>
+        inTx(v, (tx) =>
+          moveBill(
+            tx,
+            v.cfg,
+            orderId,
+            { tableId },
+            {
+              bills: "separate",
+              partyId: null,
+              expectedOtherPartyRevision: otherRevision,
+              operatorId: OPERATOR,
+            },
+          ),
+        );
+      const tillA = tillMoves(anaTable, read[0]!);
+      const tillB = tillMoves(luisTable, read[1]!);
+      const [winner, loser, winnerParty] =
+        first === "A" ? [tillA, tillB, ana.partyId] : [tillB, tillA, luis.partyId];
+
+      await winner();
+      const bills = [ana.tabId, luis.tabId, orderId];
+      const afterFirst = await snapshot([ana.partyId, luis.partyId], bills);
+      const error = await captureError(loser);
+
+      expect(error).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: winnerParty, revision: await revisionOf(v, winnerParty) },
+      });
+      expect(await snapshot([ana.partyId, luis.partyId], bills)).toEqual(afterFirst);
+      expect((await billRow(v, orderId)).partyId).toBe(winnerParty);
+    });
+
+    it(`refuses the second till's move of a party's bill that the first took to the counter or another party (till ${first} first)`, async () => {
+      const { ana, luis, luisTable, second } = await splitAtTwoTables(`Mesa vuelta ${first}`);
+      const read = {
+        partyId: ana.partyId,
+        expectedPartyRevision: await revisionOf(v, ana.partyId),
+        operatorId: OPERATOR,
+      };
+      const luisRead = await revisionOf(v, luis.partyId);
+      const toCounter = () =>
+        inTx(v, (tx) =>
+          moveBill(tx, v.cfg, second, { counter: { zoneId: null } }, { ...read, bills: "merge" }),
+        );
+      const toLuis = () =>
+        inTx(v, (tx) =>
+          moveBill(
+            tx,
+            v.cfg,
+            second,
+            { tableId: luisTable },
+            { ...read, bills: "separate", expectedOtherPartyRevision: luisRead },
+          ),
+        );
+      const [winner, loser] = first === "A" ? [toCounter, toLuis] : [toLuis, toCounter];
+
+      await winner();
+      const bills = [ana.tabId, luis.tabId, second];
+      const afterFirst = await snapshot([ana.partyId, luis.partyId], bills);
+      const error = await captureError(loser);
+
+      expect(error).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: ana.partyId, revision: await revisionOf(v, ana.partyId) },
+      });
+      expect(await snapshot([ana.partyId, luis.partyId], bills)).toEqual(afterFirst);
+      expect((await billRow(v, second)).partyId).toBe(first === "A" ? null : luis.partyId);
     });
   }
 

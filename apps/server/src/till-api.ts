@@ -540,11 +540,18 @@ function requireMoveTarget(value: unknown): MoveTarget {
   throw invalid("to");
 }
 
-/** A move's command: {@link billCommand}'s, the bill choice (merge by default), and the other party's revision. */
+/**
+ * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, the
+ * bill choice (merge by default), and the other party's revision.
+ */
 function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
-  const { bills } = body;
+  const { bills, partyId, ...rest } = body;
   if (bills !== undefined && bills !== "merge" && bills !== "separate") throw invalid("bills");
-  const command: MoveBillOptions = { ...billCommand(personId, body), bills: bills ?? "merge" };
+  const command: MoveBillOptions = {
+    ...billCommand(personId, partyId === null ? rest : body),
+    bills: bills ?? "merge",
+  };
+  if (partyId === null) command.partyId = null;
   if (body.expectedOtherPartyRevision !== undefined) {
     command.expectedOtherPartyRevision = requireRevision(
       body.expectedOtherPartyRevision,
