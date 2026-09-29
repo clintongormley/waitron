@@ -4,7 +4,7 @@ import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
-import type { DashboardApi } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
 import { LoginScreen } from "./login-screen.js";
 
 // Keep the real WebAuthn library; stub only the hardware boundary so an earlier
@@ -2178,6 +2178,18 @@ describe("login-screen: signing in with a passkey", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
+  it.each(["NotSupportedError", "SecurityError", "UnknownError"])(
+    "says the passkey could not be verified when the browser refuses the prompt with %s",
+    async (name) => {
+      vi.mocked(navigator.credentials.get).mockRejectedValueOnce(new DOMException("Refused", name));
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await openPasskey(el);
+      click(el, "passkey-login");
+      await flush(el);
+      expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed"));
+    },
+  );
+
   it("returns to the password without an error when the passkey prompt is aborted", async () => {
     vi.mocked(navigator.credentials.get).mockRejectedValueOnce(
       new DOMException("Aborted", "AbortError"),
@@ -2280,6 +2292,67 @@ describe("login-screen: passkey autofill on the email step", () => {
     await flush(el);
     expect(await bottomOf(el)).toBe("");
     expect(field(el, "email")).not.toBeNull();
+  });
+
+  it.each([
+    [
+      "NotSupportedError",
+      "Resident credentials or empty 'allowCredentials' lists are not supported",
+    ],
+    ["SecurityError", "The operation is insecure."],
+    ["UnknownError", "The authenticator failed."],
+  ])(
+    "shows no error on first load when the browser refuses autofill with %s",
+    async (name, msg) => {
+      conditionalMediationAvailable.mockResolvedValue(true);
+      vi.mocked(navigator.credentials.get).mockRejectedValueOnce(new DOMException(msg, name));
+      const api = stubApi();
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+      await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
+      await flush(el);
+      expect(await bottomOf(el)).toBe("");
+      expect(field(el, "email")).not.toBeNull();
+    },
+  );
+
+  it("still shows the server's refusal of an autofilled passkey", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const api = stubApi({
+      passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.verification_failed" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed"));
+  });
+
+  it("says the passkey could not be verified when the server's answer to an autofilled passkey cannot be read", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    let readFailed = false;
+    const real = new DashboardApi("", async (path) =>
+      String(path).endsWith("verify")
+        ? new Response(
+            new ReadableStream({
+              pull(controller) {
+                readFailed = true;
+                controller.error(new TypeError("network connection lost while reading response"));
+              },
+            }),
+            { status: 200 },
+          )
+        : new Response(JSON.stringify({ challengeHandle: "h1", options: { challenge: "AQID" } })),
+    );
+    const api = stubApi({
+      passkeyAuthOptions: real.passkeyAuthOptions.bind(real),
+      passkeyAuthVerify: real.passkeyAuthVerify.bind(real),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    const loggedIn = vi.fn();
+    el.addEventListener("logged-in", loggedIn);
+    await vi.waitFor(() => expect(readFailed).toBe(true));
+    await flush(el);
+    expect(loggedIn).not.toHaveBeenCalled();
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed"));
   });
 
   it("shows no error for an autofill failure that arrives after the screen is removed", async () => {

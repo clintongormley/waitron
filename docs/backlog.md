@@ -6476,29 +6476,25 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   late answer.
 - **An imported configuration no longer carries "already offered a passkey"**: a configuration
   transfer strips `passkey_offered_at` on export and refuses a bundle that still carries it.
-- **The login screen's automatic passkey attempt can show "Something went wrong, try again" on load**
-  (seen 2026-09-14 while taking screenshots for the dashboard alerts branch; the same happens on
-  `main`, so it is not that branch's bug). Playwright's headless Chromium 149 refuses the attempt
-  with a `NotSupportedError`; installed Chrome 153 left it pending with no error. Whether a real
-  person's browser ever hits it is untested. Mechanism: the attempt's `catch`
-  (`apps/dashboard/src/screens/login-screen.ts:680-687`, from #305) stays quiet only for
-  `NotAllowedError` and `AbortError`, and `codeOf` (`packages/dashboard-kit/src/codes.ts:36-38`)
-  returns any `code` it finds, so a browser error's old numeric `code` (9 for `NotSupportedError`)
-  wins over the fallback and, matching no registered message, shows the generic sentence. The
-  passkey button's `catch` (`:643-645`) has the same flaw. **Fix direction:** the automatic attempt stays silent on every browser-side failure, and
-  `codeOf` accepts only a string code (check its other callers first). Seen again on 2026-09-16
-  while running #378 for real: the red banner is there on a clean first load of the
-  login page, before anyone types anything. It predates that branch — the swallow list it comes from
-  is on `main`.
-  2026-09-19: the browser moved and the refusal did not, so the version is not the cause. Playwright
-  1.63 ships Chromium 153.0.8010.12 (build 1243) where 1.61 shipped 149.0.7827.55 (build 1228) —
-  the same major as the installed Chrome this entry contrasts it with. Probed in that new build,
-  headless, over `http://localhost` so the page is a secure context:
-  `PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()` returns `false`, and a
-  `navigator.credentials.get` with an empty `allowCredentials` still throws
-  `NotSupportedError: Resident credentials or empty 'allowCredentials' lists are not supported`.
-  What the headless browser lacks is a platform authenticator, which no version bump supplies, so
-  expect the banner to still be there. The screen itself has not been re-opened on the new build.
+- **A browser refusing the login screen's automatic passkey attempt no longer shows "Something went
+  wrong, try again" on load — DONE (C8, 2026-09-29).** Any rejection from the browser's passkey
+  prompt (`startAuthentication`) ends the automatic attempt silently; a failure of the options or
+  verify request still shows its banner. The passkey button shows "Could not verify the passkey,
+  try again" for a browser refusal instead of the generic sentence. Measured in real Chromium with
+  `navigator.credentials.get` stubbed to reject: a `NotSupportedError`, a `SecurityError` and an
+  `UnknownError` each showed the generic sentence on the button before the change.
+  `@simplewebauthn/browser` 14.0.0 (`helpers/identifyAuthenticationError.js`) passes a
+  `NotSupportedError` through with the `DOMException`'s numeric `code` 9, and rewraps an
+  `UnknownError`, and a `SecurityError` whose host or `rpId` is wrong, under its own string codes
+  (`ERROR_AUTHENTICATOR_GENERAL_ERROR`, `ERROR_INVALID_RP_ID`), none of which has a sentence. `codeOf`
+  (`packages/dashboard-kit/src/codes.ts`) now returns only a string code and takes the fallback for
+  anything else, including a `null` or `undefined` rejection, which used to throw. Its callers on
+  2026-09-29: 229 calls in non-test files of `apps/dashboard` and six packages (`adjustments`,
+  `bookings`, `media`, `payments-stripe`, `payments-sumup`, `venue-service`). A grep of the non-test
+  files in those trees and `packages/dashboard-kit` for a thrown or rejected object literal
+  (`throw {`, `reject({`) found two, both carrying a string `code`; the grep does not see an object
+  thrown through a variable or a conditional. The login page was opened on 2026-09-29, before the
+  review fixes, in light and dark, English and Spanish, 1280 and 390 wide: no banner on first load.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish

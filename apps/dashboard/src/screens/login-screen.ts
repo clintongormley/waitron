@@ -709,7 +709,11 @@ export class LoginScreen extends LitElement {
         this.step = "password";
         this.#focusField("password");
       } else {
-        this.errorKey = codeOf(error, "passkey.verification_failed");
+        // A browser refusal can carry the WebAuthn library's own code, which has no sentence.
+        this.errorKey =
+          error instanceof Error
+            ? "passkey.verification_failed"
+            : codeOf(error, "passkey.verification_failed");
       }
     } finally {
       if (attempt === this.passkeyAttempt) this.busy = false;
@@ -728,14 +732,15 @@ export class LoginScreen extends LitElement {
     try {
       const { challengeHandle, options } = await this.api.passkeyAuthOptions();
       if (!this.isConnected || attempt !== this.passkeyAttempt || this.step !== "email") return;
+      // Nobody asked for this attempt, so any rejection from the passkey prompt ends it quietly.
       const response = await startAuthentication({
         optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
         useBrowserAutofill: true,
         // The eligible email input lives in this component's shadow root, which the library's
         // document-level query cannot see. The component renders that input before this call.
         verifyBrowserAutofillInput: false,
-      });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      }).catch(() => null);
+      if (response === null || !this.isConnected || attempt !== this.passkeyAttempt) return;
       const out = await this.api.passkeyAuthVerify({ challengeHandle, response });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
       this.dispatchEvent(
@@ -747,12 +752,7 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      if (!(
-        error instanceof Error &&
-        (error.name === "NotAllowedError" || error.name === "AbortError")
-      )) {
-        this.errorKey = codeOf(error, "passkey.verification_failed");
-      }
+      this.errorKey = codeOf(error, "passkey.verification_failed");
     }
   }
 
