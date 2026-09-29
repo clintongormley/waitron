@@ -3535,7 +3535,7 @@ ongoing overhaul listed at the top of Track A.
   because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image
   library's delete confirmation also keeps its refusal in the dialog's body. Left open, not done: (1) the dashboard module screens
   (adjustments reasons, Stripe and SumUp connect and add-reader, venue operations) still show
-  `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's screens — C47s, lane C; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
+  `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's forms follow it too (C47s): the admin, connect, reset, venue, certificate, restore, bucket-restore, Cloud-restore and live-source screens. The wizard's screens with no fields — review, fiscal test, connection and provisioning — keep their refusal paragraph, as the cloud services screen does. Left open there: the certificate screen shows the passphrase message twice, in the field and in the paragraph under it (`passphrase-field-error`, which a test pins), and a certificate file that cannot be read is marked under the file field as soon as the read fails, before any press; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
   nothing uses it — besides the module screens, the `packages/ui` workbench demo
   (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
   which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it; (5) the profile
