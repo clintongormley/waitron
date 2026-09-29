@@ -6764,7 +6764,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`throw {`, `reject({`) found two, both carrying a string `code`; the grep does not see an object
   thrown through a variable or a conditional. The login page was opened on 2026-09-29, before the
   review fixes, in light and dark, English and Spanish, 1280 and 390 wide: no banner on first load.
-  - **DONE (C58, 2026-09-29):** the automatic attempt on page load stays quiet when the passkey
+  - **DONE (C58, #857, 2026-09-29):** the automatic attempt on page load stays quiet when the passkey
     options request gets a successful (2xx) answer that is not the expected data. Reproduced first
     in real Chromium through the real `DashboardApi`: an HTML body and a JSON `null` body each
     showed "Could not verify the passkey" on first load before the change. The login screen now ends
