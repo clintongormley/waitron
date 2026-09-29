@@ -654,6 +654,61 @@ describe("catalogue-screen", () => {
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
+  it("leaves a nested form's Save working on a refusal beside a field, which stays gone once that field changes", async () => {
+    const api = stubApi({
+      createUnit: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "unit.precision_invalid", params: {}, status: 400 }),
+    });
+    const el = await openNested(api, "unit");
+    const form = el.shadowRoot!.querySelector("dashboard-unit-form")!;
+    await submitNested(el, form, {
+      name: { es: "ración" },
+      abbreviation: { es: "ra" },
+      precision: 2,
+    });
+    const save =
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!;
+    expect(form.shadowRoot!.querySelector("#precision-error")).not.toBeNull();
+    expect(save.disabled).toBe(false);
+
+    const precision = form.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=precision]")!;
+    precision.value = "1";
+    precision.dispatchEvent(new Event("change", { bubbles: true }));
+    await form.updateComplete;
+    expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    // The screen redrawing for its own reasons does not bring the dismissed refusal back.
+    el.requestUpdate();
+    await el.updateComplete;
+    await form.updateComplete;
+    expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
+  });
+
+  it("puts a nested category create's missing parent beside the parent it chose", async () => {
+    const api = stubApi({
+      getContentLanguages: vi
+        .fn()
+        .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+      createCategory: vi.fn().mockRejectedValueOnce({
+        code: "category.not_found",
+        params: { categoryId: "c1" },
+        status: 404,
+      }),
+    });
+    const el = await openNested(api, "category");
+    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+    await submitNested(el, form, {
+      name: { es: "Postres", en: "" },
+      parentId: "c1",
+      image: null,
+      color: null,
+    });
+    expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
+      codeMessage("category.not_found"),
+    );
+    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
+  });
+
   it("still says a nested unit or category refusal that names no field of the form, beside its Save", async () => {
     const api = stubApi({
       createUnit: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
@@ -769,6 +824,90 @@ describe("catalogue-screen", () => {
     expect(editor(el).fieldErrors).toEqual({});
   });
 
+  // Each of these codes names the missing thing by id; the editor holds the one field that chose it.
+  it.each([
+    ["category.not_found", { categoryId: "c1" }, "primary"],
+    ["label.not_found", { labelId: "l1" }, "labels"],
+    ["unit.not_found", { unitId: "u1" }, "unit"],
+    ["station.not_found", { stationId: "s1" }, "product-station"],
+    ["course.not_found", { courseId: "k1" }, "product-course"],
+    ["product.variant_not_found", { variantId: "v2" }, "variant-1-name"],
+  ])(
+    "puts %s beside the editor field that chose it, leaving Save working",
+    async (code, params, field) => {
+      const variant = {
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: null,
+        available: true,
+        active: true,
+      };
+      const sent = {
+        ...value,
+        labelIds: ["l1"],
+        stationId: "s1",
+        courseId: "k1",
+        variants: [
+          { ...variant, id: "v1", name: "Media" },
+          { ...variant, id: "v2", name: "Entera" },
+        ],
+      };
+      const api = stubApi({
+        getProductEditor: vi.fn().mockResolvedValue(sent),
+        updateProductEditor: vi.fn().mockRejectedValue({ code, params, status: 404 }),
+      });
+      const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      emit(editor(el), "wt-submit", { value: sent });
+      await flush(el);
+      expect(editor(el).fieldErrors).toEqual({ [field]: codeMessage(code) });
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+      await editor(el).updateComplete;
+      expect(
+        editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+          "[data-test=save]",
+        )!.disabled,
+      ).toBe(false);
+    },
+  );
+
+  it("keeps a missing id the save did not send for the screen's banner", async () => {
+    const api = stubApi({
+      updateProductEditor: vi
+        .fn()
+        .mockRejectedValue({ code: "category.not_found", params: { categoryId: "c9" } }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).fieldErrors).toEqual({});
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toBeTruthy();
+  });
+
+  it("puts a malformed station the request check names beside the station select", async () => {
+    const api = stubApi({
+      updateProductEditor: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "stationId" },
+        status: 400,
+      }),
+    });
+    const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await flush(el);
+    emit(editor(el), "wt-submit", { value });
+    await flush(el);
+    expect(editor(el).fieldErrors).toEqual({ "product-station": t("editor.field_rejected") });
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
   it("falls back to the screen's banner when a refusal names a field with no error display", async () => {
     const api = stubApi({
       updateProductEditor: vi.fn().mockRejectedValue({
@@ -829,9 +968,10 @@ describe("catalogue-screen", () => {
       invalid: true,
     });
     expect(await bottomOf(editor(el))).toBe(t("form.fix_fields"));
-    expect(editor(el).shadowRoot!.querySelector("[data-test=save]")!.hasAttribute("disabled")).toBe(
-      true,
-    );
+    expect(
+      editor(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!
+        .disabled,
+    ).toBe(false);
   });
 
   it("marks the variant whose translation the save refused, and reaches its window", async () => {

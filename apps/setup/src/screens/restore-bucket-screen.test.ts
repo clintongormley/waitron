@@ -326,6 +326,69 @@ describe("SetupRestoreBucketScreen", () => {
     expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
   });
 
+  describe("a refusal about one field", () => {
+    const REQUEST: BucketRestoreRequestDetail = {
+      kit: "WAITRON-RECOVERY-KIT-1:abc",
+      environment: "production",
+      oldBoxGone: false,
+      venueConfirmed: null,
+    };
+    const REFUSAL =
+      "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.";
+
+    it("shows it under that field and focuses it, leaving Restore working", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        request: REQUEST,
+        errorMessage: REFUSAL,
+        invalidField: "kit",
+      });
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=kit]")));
+      expect(fieldMessages(el)).toEqual([REFUSAL]);
+      expect(q(el, "[data-test=kit]")!.getAttribute("aria-invalid")).toBe("true");
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      expect(q<HTMLElement & { disabled: boolean }>(el, "[data-test=restore]")!.disabled).toBe(
+        false,
+      );
+
+      paste(el, "WAITRON-RECOVERY-KIT-1:def");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
+    });
+
+    it("marks the environment when it names the environment, and drops it when that changes", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        request: REQUEST,
+        errorMessage:
+          "The copy comes from the other environment. Choose the environment it came from.",
+        invalidField: "environment",
+      });
+      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
+      expect(environment.getAttribute("aria-invalid")).toBe("true");
+      expect(fieldMessages(el)).toEqual([
+        "The copy comes from the other environment. Choose the environment it came from.",
+      ]);
+      environment.value = "preproduction";
+      environment.dispatchEvent(new Event("change"));
+      await el.updateComplete;
+      expect(environment.getAttribute("aria-invalid")).toBe("false");
+      expect(fieldMessages(el)).toEqual([]);
+    });
+
+    it("drops it on the next press and sends the request again", async () => {
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+        "setup-restore-bucket-screen",
+        { request: REQUEST, errorMessage: REFUSAL, invalidField: "kit" },
+      );
+      const sent = requested(host);
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expect((await sent).kit).toBe(REQUEST.kit);
+      expect(fieldMessages(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
+    });
+  });
+
   describe("messages beside Restore (owner's forms rule, 2026-09-28)", () => {
     it("says nothing and leaves Restore working before the first press", async () => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {

@@ -1129,8 +1129,13 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveButton().hasAttribute("disabled")).toBe(true);
 });
 
-it.each(["image.too_large", "image.invalid_file", "image.too_many_pixels"])(
-  "puts a refused %s under the photo until another photo is chosen",
+it.each([
+  "image.too_large",
+  "image.invalid_file",
+  "image.too_many_pixels",
+  "media.unsupported_type",
+])(
+  "puts a refused %s under the photo until another photo is chosen, and leaves Save working",
   async (code) => {
     const client = api();
     client.uploadImage.mockRejectedValueOnce({ code, params: {}, status: 400 });
@@ -1145,13 +1150,13 @@ it.each(["image.too_large", "image.invalid_file", "image.too_many_pixels"])(
     await vi.waitFor(() => expect(fileError()).toBe(codeMessage(code)));
     expect(fileInput().getAttribute("aria-invalid")).toBe("true");
     expect(await bottomOf()).toBe(FIX_FIELDS);
-    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(fileInput()));
 
     field("name-es", "Pan blanco");
     await el.updateComplete;
     expect(fileError()).toBe(codeMessage(code));
-    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
 
     chooseFile([new File(["smaller"], "small.jpg", { type: "image/jpeg" })]);
     await el.updateComplete;
@@ -1178,7 +1183,7 @@ it("puts a refused translation under that language's name until the name changes
   const message = codeMessage("image.translation_required");
   await vi.waitFor(() => expect(nameInput("es").error).toBe(message));
   expect(await bottomOf()).toBe(FIX_FIELDS);
-  expect(saveButton().hasAttribute("disabled")).toBe(true);
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
   await vi.waitFor(() =>
     expect(nameInput("es").shadowRoot!.activeElement).toBe(
       nameInput("es").shadowRoot!.querySelector("input"),
@@ -1188,13 +1193,37 @@ it("puts a refused translation under that language's name until the name changes
   field("name-fr", "Pain");
   await el.updateComplete;
   expect(nameInput("es").error).toBe(message);
-  expect(saveButton().hasAttribute("disabled")).toBe(true);
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
 
   field("name-es", "Pan blanco");
   await el.updateComplete;
   expect(nameInput("es").error).toBe("");
   expect(await bottomOf()).toBe("");
   expect(saveButton().hasAttribute("disabled")).toBe(false);
+});
+
+it("sends again when Save is pressed with a refused field unchanged, and drops the refusal", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce({
+    code: "image.translation_required",
+    params: { field: "names", language: "es" },
+    status: 400,
+  });
+  await mount(client);
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await vi.waitFor(() =>
+    expect(nameInput("es").error).toBe(codeMessage("image.translation_required")),
+  );
+
+  const retry = deferred<never>();
+  client.updateImage.mockReturnValueOnce(retry.promise);
+  click("[data-test=save]");
+  await el.updateComplete;
+  expect(client.updateImage).toHaveBeenCalledTimes(2);
+  expect(nameInput("es").error).toBe("");
+  expect(await bottomOf()).toBe("");
 });
 
 it("says a refused translation in a language the form does not show beside Save, and leaves Save working", async () => {

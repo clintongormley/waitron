@@ -371,11 +371,6 @@ export class AdjustmentReasonsScreen extends LitElement {
     return errors;
   }
 
-  /** What each field shows: its refusal, and once Save has been pressed, what the check finds. */
-  #fieldErrors(): FieldErrors {
-    return { ...this.refusedFields, ...(this.attempted ? this.#check() : {}) };
-  }
-
   /** The body to send; call it only once `#check` finds nothing. */
   #input(): AdjustmentReasonInput {
     const draft = this.draft!;
@@ -744,11 +739,12 @@ export class AdjustmentReasonsScreen extends LitElement {
     const heading = deactivating
       ? t("adjustments.deactivate_heading")
       : t(reason ? "adjustments.edit_heading" : "adjustments.new");
-    const errors = this.#fieldErrors();
-    const invalid = Object.keys(errors).length > 0;
+    const checked = this.attempted ? this.#check() : {};
+    const errors = { ...this.refusedFields, ...checked };
+    const invalid = Object.keys(checked).length > 0;
     const bottom = [
       ...(this.editorError ? [this.editorError] : []),
-      ...(invalid ? [t("adjustments.fix_fields")] : []),
+      ...(Object.keys(errors).length > 0 ? [t("adjustments.fix_fields")] : []),
     ].join(" ");
     return keyed(
       editor,

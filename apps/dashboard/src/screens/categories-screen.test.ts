@@ -682,7 +682,7 @@ it.each([
   ["category.image_not_found", "image", "dashboard-image-upload"],
   ["category.color_invalid", "color", "input[type=color]"],
 ])(
-  "explains %s beside the rejected field, and says to correct it beside a disabled Save",
+  "explains %s beside the rejected field, and says to correct it beside a Save that still works",
   async (code, field, selector) => {
     const { el, api } = await mount();
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
@@ -718,11 +718,38 @@ it.each([
       t("form.fix_fields"),
     );
     expect(
-      form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.hasAttribute("disabled"),
-    ).toBe(true);
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
+        .disabled,
+    ).toBe(false);
     expect(form.open).toBe(true);
   },
 );
+
+it("puts a missing parent beside the parent field when it is the parent the save named", async () => {
+  const { el, api } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+  api.createCategory.mockRejectedValueOnce({
+    code: "category.not_found",
+    params: { categoryId: "food" },
+  });
+  form.dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { name: { en: "New" }, parentId: "food", image: null, color: null } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(form.fieldErrors).toEqual({ parent: codeMessage("category.not_found") }),
+  );
+  await form.updateComplete;
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
+      .disabled,
+  ).toBe(false);
+});
 
 it("shows an Add category button and two labelled view-mode buttons in the header", async () => {
   setLocale("en-GB");
@@ -2100,6 +2127,67 @@ it("puts a refused destination beside the picker it names", async () => {
   );
   await el.updateComplete;
   expect(picker("children-to").error).toBe("");
+});
+
+it("puts a refused destination the request check names beside its picker", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue(everything);
+  api.deleteCategory.mockRejectedValueOnce({
+    code: "management.request_invalid",
+    params: { field: "productsTo" },
+  });
+  const { picker, remove } = await openFoodDelete(el);
+  remove.click();
+  await vi.waitFor(() =>
+    expect(picker("products-to").error).toBe(codeMessage("management.request_invalid")),
+  );
+  expect(picker("children-to").error).toBe("");
+  expect(remove.disabled).toBe(false);
+});
+
+it("puts a missing destination category beside the picker that chose it", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue(everything);
+  api.deleteCategory.mockRejectedValueOnce({
+    code: "category.not_found",
+    params: { categoryId: "drink" },
+  });
+  const { picker, remove } = await openFoodDelete(el);
+  picker("children-to").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  remove.click();
+  await vi.waitFor(() =>
+    expect(picker("children-to").error).toBe(codeMessage("category.not_found")),
+  );
+  expect(picker("products-to").error).toBe("");
+  expect(remove.disabled).toBe(false);
+});
+
+it.each([
+  [{ code: "management.request_invalid", params: { field: "primaryCategoryId" } }],
+  [{ code: "category.not_found", params: { categoryId: "food" } }],
+])("puts a refused main category beside its picker, leaving Save working", async (refusal) => {
+  const { el, api } = await mount();
+  api.setMainCategory.mockRejectedValueOnce(refusal);
+  await openProducts(el, "food");
+  const dialog = await openMainCategory(el, false);
+  const save = dialog.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="save-main-category"]',
+  )!;
+  save.click();
+  const picker = mainCategoryCombobox(el) as ReturnType<typeof mainCategoryCombobox> & {
+    error: string;
+  };
+  await vi.waitFor(() => expect(picker.error).toBe(codeMessage(refusal.code)));
+  expect(save.disabled).toBe(false);
+  // Choosing again clears the refusal it was about.
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(picker.error).toBe("");
 });
 
 it("retries a failed load from the Retry button", async () => {

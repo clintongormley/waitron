@@ -399,7 +399,7 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(attestDisabled(el)).toBe(false);
   });
 
-  it("clears a refused PIN when the PIN changes, focusing it when the refusal arrives", async () => {
+  it("keeps a refused PIN, with Record working, until the PIN changes, focusing it when the refusal arrives", async () => {
     const el = await mount(
       stubApi({ attestStuckBillPayment: vi.fn().mockRejectedValue({ code: "pin.invalid" }) }),
     );
@@ -417,11 +417,12 @@ describe("bill payment recovery on the Payments screen", () => {
     );
     expect(errorOf(el, "bill-attest-pin")).toBe(codeMessage("pin.invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(attestDisabled(el)).toBe(true);
+    expect(attestDisabled(el)).toBe(false);
 
     change(el, "[data-test=bill-attest-note]", "Provider says no charge today");
     await flush(el);
-    expect(attestDisabled(el)).toBe(true);
+    expect(errorOf(el, "bill-attest-pin")).toBe(codeMessage("pin.invalid"));
+    expect(attestDisabled(el)).toBe(false);
 
     change(el, "[data-test=bill-attest-pin]", "1234");
     await flush(el);

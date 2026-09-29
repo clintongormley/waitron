@@ -403,10 +403,6 @@ export class StreamSettingsPanel extends LitElement {
     };
   }
 
-  #errors(): Partial<Record<Field, string>> {
-    return { ...this.refused, ...(this.attempted ? this.#validate() : {}) };
-  }
-
   #resetForm(): void {
     this.attempted = false;
     this.refused = {};
@@ -653,8 +649,10 @@ export class StreamSettingsPanel extends LitElement {
 
   #renderForm(canCancel: boolean): TemplateResult {
     const save = () => this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]");
-    const errors = this.#errors();
-    const invalid = FIELDS.some((f) => errors[f.field] !== undefined);
+    const checked = this.attempted ? this.#validate() : {};
+    const errors = { ...this.refused, ...checked };
+    const marked = FIELDS.some((f) => errors[f.field] !== undefined);
+    const invalid = Object.keys(checked).length > 0;
     return html`
       <div class="form" @keydown=${(event: KeyboardEvent) => submitOnEnter(event, save())}>
         ${FIELDS.map((f) => this.#renderField(f, errors[f.field] ?? ""))}
@@ -665,7 +663,7 @@ export class StreamSettingsPanel extends LitElement {
               </p>`
             : nothing
         }
-        <wt-form-actions .error=${invalid ? t("form.fix_fields") : ""}>
+        <wt-form-actions .error=${marked ? t("form.fix_fields") : ""}>
           ${
             canCancel
               ? html`<wt-button

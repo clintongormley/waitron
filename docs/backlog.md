@@ -3579,11 +3579,10 @@ ongoing overhaul listed at the top of Track A.
   2026-09-28).** `deriveDisplayName` (`packages/shared/src/derive-display-name.ts`) takes the first
   word of each field, so "María José" + "García López" gives "María García". Shorter names collide
   more often, so the add-person, edit-person and profile forms now show `person.display_name_taken`
-  beside the display-name field. Left open, not fixed: on the add-person and edit-person forms
-  (`apps/dashboard/src/widgets/person-form.ts`, `person-edit.ts`) a `person.email_taken` refusal still
-  shows only in the form's bottom message, not beside the email field as the form rule in
-  [design-system.md](developers/design-system.md) asks; the profile screen already places it. Also
-  left as they were, from #827's review: unlike the two staff forms, the profile screen keeps a
+  beside the display-name field. Since C54 the add-person and edit-person forms
+  (`apps/dashboard/src/widgets/person-form.ts`, `person-edit.ts`) also put `person.email_taken`,
+  `person.email_invalid` and `person.telephone_invalid` under their field, with the action still
+  working. Left as they were, from #827's review: unlike the two staff forms, the profile screen keeps a
   taken-name message beside the display name when a first- or last-name change regenerates that
   name (`apps/dashboard/src/screens/profile-screen.ts` drops only the changed field's refusal); and the
   two staff forms turn the refusal into a field message inside the form, where other dashboard forms
@@ -3675,8 +3674,9 @@ ongoing overhaul listed at the top of Track A.
   `docs/developers/design-system.md` → Forms states the rule. **The owner restated the rule on
   2026-09-29:** the button works until the first press; a form validation error (a field the form
   itself finds wrong) keeps it disabled until fixed; an error that comes back from a request (the
-  server refused, or it could not be reached) leaves it enabled. Queued item C54 is to make the code
-  and `docs/developers/design-system.md` match it. Deliberate exceptions in
+  server refused, or it could not be reached) leaves it enabled. **Done by C54:** no form outside the
+  till lets a request's refusal disable its action any more, a refusal that names a shown field is
+  said under that field, and `docs/developers/design-system.md` → Forms and CLAUDE.md §3 state it. Deliberate exceptions in
   `apps/dashboard`: the add-to-menus dialog (`apps/dashboard/src/widgets/add-to-menus.ts`) keeps its
   list of places that failed, and its menu-load error, at the top of the dialog; the backups panel's
   refusal paragraph (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays directly under the
@@ -3762,8 +3762,7 @@ ongoing overhaul listed at the top of Track A.
   beside the control and in the screen's alert (`#pageAlert`,
   `packages/venue-service/src/dashboard/venue-operations-screen.ts`), as it did before part 2, and
   existing tests pin both; (d) `wt-switch` cannot be marked invalid, so a server refusal of an
-  adjustment reason's note-required switch would show its message and hold Save but move focus
-  nowhere — though the server refuses `noteRequired` only when it is not a true/false value
+  adjustment reason's note-required switch would show its message but move focus nowhere — though the server refuses `noteRequired` only when it is not a true/false value
   (`requireFlag`, `packages/adjustments/src/routes.ts`) and the screen always sends one from its
   switch, so the refusal is not expected from this screen; (e) in a screenshot of a `wt-modal`
   editor after a refusal that names no field, a blue line runs along the top of the footer, which
@@ -3772,6 +3771,35 @@ ongoing overhaul listed at the top of Track A.
   `packages/adjustments/src/dashboard/reasons-screen.test.ts` failed twice in about five runs while
   other browser suites ran beside it, then passed 27 times in a row; the failure text was not kept
   and the cause is not established. (e) and (f) are observations from the implementer's session.
+
+- **Request refusals that still land in the bottom message, or under a field in generic words —
+  OPEN (left by C54).** C54 made every form outside the till keep its action working after a
+  request's refusal and put a refusal naming a shown field under that field. What it left, each
+  because the form has no single field to put it under or it would widen the item: (1) the product
+  editor and the venue operations editors put a refused field's message under it in their generic
+  words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts` `#rejectedField`;
+  `venue.field_refused` in `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not
+  the refusal's own sentence; (2) controls with no place for an error keep their refusal in the
+  bottom message — `wt-switch` (`active` on the ingredient, extras, options and menu-price forms;
+  `available` on the product editor), the allergen and dietary-origin pickers on the ingredient
+  form, the purchase form's VAT regime select, and the profile screen's language select
+  (`locale.unsupported`); (3) refusals naming two fields or a row the refusal does not number stay
+  at the bottom: `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate,
+  base, tax or type, a variant price on the menu price window, `hours.N` on venue operations,
+  `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
+  (4) the backup screen's retention boxes send 0 when blank or zero and the server's
+  `backup.request_invalid` naming `retention` shows only in the page banner, because the form does
+  not check retention itself (read, not run); (5) the setup connect screen comes back EMPTY after a
+  refusal — the shell rebuilds it — so the refused field is marked on an empty input (seen with a
+  throwaway test during C54, `apps/setup/src/setup-app.ts` `#renderScreen` "connect"); (6) the setup
+  live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
+  code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
+  Save disabled when required details are missing — the form's own check, before any press (also
+  point (4) of the entry above); (8) on the add-person and edit-person forms `profile.invalid` reads
+  "Check your profile details", which is about someone else's details there; (9) after a refusal
+  under a field the bottom message still reads "Correct the highlighted fields to continue" while
+  the action works — kept as it was. **Next action:** the owner decides which of (1)–(9) are worth
+  doing; (4) and (5) look like defects.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

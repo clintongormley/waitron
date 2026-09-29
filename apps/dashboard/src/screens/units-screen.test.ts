@@ -307,6 +307,10 @@ describe("units-screen", () => {
     const { form, bottom } = await refusedCreate({ code: "unit.precision_invalid" });
     expect(form.fieldErrors).toEqual({ precision: codeMessage("unit.precision_invalid") });
     expect(bottom).toBe(t("form.fix_fields"));
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!
+        .disabled,
+    ).toBe(false);
   });
 
   it("puts a refused abbreviation beside the abbreviation, not the name", async () => {

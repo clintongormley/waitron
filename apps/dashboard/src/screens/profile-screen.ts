@@ -215,9 +215,10 @@ export class ProfileScreen extends LitElement {
   @state() private mode: Mode = "view";
   @state() private fields = emptyFields();
   @state() private attempted = false;
-  /** Field messages that stand until the operator changes that field: a server refusal naming it,
-   * or a required field an incomplete profile is opened to complete. */
+  /** Required fields an incomplete profile is opened to complete, until the operator changes them. */
   @state() private refused: Partial<Record<Field, string>> = {};
+  /** A request refusal naming a shown field, until the operator changes that field. */
+  @state() private requestRefused: Partial<Record<Field, string>> = {};
   /** The message beside the action that names no field this form shows. */
   @state() private error = "";
   #fieldErrors: Partial<Record<Field, string>> = {};
@@ -297,6 +298,7 @@ export class ProfileScreen extends LitElement {
     this.removingId = id;
     this.attempted = false;
     this.refused = {};
+    this.requestRefused = {};
     this.error = "";
     this.saved = false;
     this.visible = new Set();
@@ -364,6 +366,7 @@ export class ProfileScreen extends LitElement {
           this.refused = Object.fromEntries(
             Object.entries(this.refused).filter(([key]) => key !== field),
           );
+        if (field in this.requestRefused) this.requestRefused = {};
         // deriveDisplayName leaves a customised display name alone, judged from the previous values.
         if (field === "firstNames" || field === "lastNames") {
           const nextFirst = field === "firstNames" ? value : prev.firstNames;
@@ -467,9 +470,13 @@ export class ProfileScreen extends LitElement {
   }
 
   /** Each shown field's message, the one message beside the action, and whether the action waits
-   * for a field to be corrected. */
+   * for a field to be corrected. A request refusal never makes it wait. */
   #formState(): { fields: Partial<Record<Field, string>>; bottom: string; blocked: boolean } {
-    const errors = { ...(this.attempted ? this.#validate() : {}), ...this.refused };
+    const errors = {
+      ...(this.attempted ? this.#validate() : {}),
+      ...this.refused,
+      ...this.requestRefused,
+    };
     const shown = this.#shownFields();
     const fields: Partial<Record<Field, string>> = {};
     const messages = this.error === "" ? [] : [this.error];
@@ -478,11 +485,11 @@ export class ProfileScreen extends LitElement {
       if (shown.has(key)) fields[key] = message;
       else messages.push(message);
     }
-    const blocked = Object.keys(fields).length > 0;
+    const marked = Object.keys(fields).length > 0;
     return {
       fields,
-      bottom: [...new Set(messages), ...(blocked ? [t("form.fix_fields")] : [])].join(" "),
-      blocked,
+      bottom: [...new Set(messages), ...(marked ? [t("form.fix_fields")] : [])].join(" "),
+      blocked: Object.keys(fields).some((key) => !(key in this.requestRefused)),
     };
   }
 
@@ -498,6 +505,7 @@ export class ProfileScreen extends LitElement {
     const f = this.fields;
     this.attempted = true;
     this.refused = {};
+    this.requestRefused = {};
     this.error = "";
     if (Object.keys(this.#validate()).length) {
       this.#focusFirstInvalid();
@@ -583,22 +591,29 @@ export class ProfileScreen extends LitElement {
       const code =
         this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
       const message = codeMessage(code);
+      const paramsField = (error as { params?: { field?: unknown } } | null)?.params?.field;
       const field =
-        code === "password.invalid"
-          ? "currentPassword"
-          : code === "totp.invalid"
-            ? "totp"
-            : code === "person.email_taken" || code === "person.email_invalid"
-              ? "email"
-              : code === "person.display_name_taken"
-                ? "displayName"
-                : code === "password.too_short"
-                  ? "password"
-                  : code === "pin.too_short"
-                    ? "pin"
-                    : undefined;
+        code === "profile.invalid" && typeof paramsField === "string"
+          ? (paramsField as Field)
+          : code === "password.invalid"
+            ? "currentPassword"
+            : code === "totp.invalid"
+              ? this.mode === "totp" && this.totpSetup !== null
+                ? "setupCode"
+                : "totp"
+              : code === "person.email_taken" || code === "person.email_invalid"
+                ? "email"
+                : code === "person.display_name_taken"
+                  ? "displayName"
+                  : code === "person.telephone_invalid"
+                    ? "telephone"
+                    : code === "password.too_short"
+                      ? "password"
+                      : code === "pin.too_short"
+                        ? "pin"
+                        : undefined;
       if (field !== undefined && this.#shownFields().has(field)) {
-        this.refused = { [field]: message };
+        this.requestRefused = { [field]: message };
         this.#focusFirstInvalid();
       } else this.error = message;
     } finally {

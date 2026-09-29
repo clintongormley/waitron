@@ -270,7 +270,7 @@ describe("setup-reset-screen", () => {
     expect(events).toHaveLength(1);
   });
 
-  it("holds the reset button while a refused login is unchanged, and focuses the person ID when it arrives", async () => {
+  it("leaves the reset button working under a refused login, and focuses the person ID when it arrives", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
     await fillValid(el);
@@ -280,9 +280,46 @@ describe("setup-reset-screen", () => {
 
     const personId = q(el, "[data-test=personId]")!;
     expect(personId.shadowRoot!.activeElement).toBe(personId.shadowRoot!.querySelector("input"));
-    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
+    expect((q(el, "[data-test=reset]") as HTMLElement & { disabled: boolean }).disabled).toBe(
+      false,
+    );
     q(el, "[data-test=reset]")!.click();
-    expect(events).toEqual([]);
+    await el.updateComplete;
+    expect(events).toEqual([{ credential: { personId: "op-1", password: "correct horse" } }]);
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("shows a request refusal of one field under that field, leaving the reset button working", async () => {
+    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    const events = collect(host);
+    await fillValid(el);
+    el.invalidField = "password";
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const password = q(el, "[data-test=password]")!;
+    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
+    expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
+    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect((q(el, "[data-test=reset]") as HTMLElement & { disabled: boolean }).disabled).toBe(
+      false,
+    );
+
+    await type(el, "password", "battery staple");
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    el.invalidField = undefined;
+    await el.updateComplete;
+    el.invalidField = "personId";
+    await el.updateComplete;
+    q(el, "[data-test=reset]")!.click();
+    await el.updateComplete;
+    expect(events).toHaveLength(1);
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
   });
 
   it("withdraws a refused login from both fields once either changes, and the reset works again", async () => {

@@ -288,6 +288,11 @@ describe("recipe-screen", () => {
     ).toBe(codeMessage("management.request_invalid"));
     expect(await bottomOf(form(el))).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(
+      form(el).shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-test=confirm]",
+      )!.disabled,
+    ).toBe(false);
   });
 
   it("does not carry a refusal into the form's next opening", async () => {

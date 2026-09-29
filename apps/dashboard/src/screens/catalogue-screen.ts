@@ -45,7 +45,7 @@ import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/product-list.js";
-import { unitRefusalErrors } from "../widgets/unit-form.js";
+import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 
 /** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
 function extraListNames(error: unknown): string[] {
@@ -128,6 +128,11 @@ export class CatalogueScreen extends LitElement {
   @state() private placementBusy = false;
   #editorGeneration = 0;
   #linkedProduct: string | null = null;
+  /** The parent the last nested category create named, to place a `category.not_found` about it. */
+  #submittedParent: string | null = null;
+  /** Rebuilt only when a new refusal arrives: a form takes a new `fieldErrors` object as a new
+   * refusal and shows again the ones the operator had since dismissed. */
+  #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
 
   readonly #queries = new DashboardQueries(
     this,
@@ -451,9 +456,8 @@ export class CatalogueScreen extends LitElement {
   }
 
   /**
-   * A refusal carries either the FIELD it is about or, for the content languages, the LANGUAGE whose
-   * text is missing. Which refusals carry which is pinned by `packages/catalogue/src/product-editor.test.ts`;
-   * one carrying neither reaches the screen's banner.
+   * A refusal carries the FIELD it is about, the LANGUAGE whose text is missing, or the id of a
+   * choice that no longer exists; one that points at no field reaches the screen's banner.
    */
   #rejectedField(error: unknown, submitted: ProductEditorInput): Record<string, string> {
     const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
@@ -473,23 +477,31 @@ export class CatalogueScreen extends LitElement {
       const name = productEditorTranslationField(submitted, params.language);
       return name === null ? {} : { [name]: codeMessage(code) };
     }
-    return {};
+    const name = missingChoiceField(code, error, submitted);
+    return name === null ? {} : { [name]: codeMessage(code) };
   }
 
-  /**
-   * Keyed by the field path the server named, or `_form` when it names none. Empty while nothing has
-   * been refused: the create controller clears its error whenever a form opens or is cancelled.
-   */
-  #childFieldErrors(): Record<string, string> {
-    const error = this.#child.error;
-    if (error === null || error === undefined) return {};
-    const params = (error as { params?: { field?: unknown } }).params ?? {};
-    const field = typeof params.field === "string" ? params.field : "_form";
-    return { [field]: codeMessage(codeOf(error)) };
-  }
-
-  #childRefusal(kind: ProductChildKind): unknown {
-    return this.#child.kind === kind ? (this.#child.error ?? null) : null;
+  /** Empty while nothing has been refused: the create controller clears its error whenever a form
+   * opens or is cancelled. */
+  #childRefusalErrors(): ChildRefusals {
+    const error = this.#child.error ?? null;
+    if (this.#childRefusals?.error === error) return this.#childRefusals.errors;
+    const errors: ChildRefusals = { unit: {}, category: {}, lists: {} };
+    if (error !== null && this.#child.kind === "unit") errors.unit = unitRefusalErrors(error);
+    if (error !== null && this.#child.kind === "category" && this.contentLanguages)
+      errors.category = categoryRefusalErrors(
+        error,
+        this.contentLanguages.defaultLanguage,
+        this.#submittedParent,
+      );
+    if (error !== null && (this.#child.kind === "extras" || this.#child.kind === "options")) {
+      // Keyed by the field path the server named, or `_form` when it names none.
+      const params = (error as { params?: { field?: unknown } }).params ?? {};
+      const field = typeof params.field === "string" ? params.field : "_form";
+      errors.lists = { [field]: codeMessage(codeOf(error)) };
+    }
+    this.#childRefusals = { error, errors };
+    return errors;
   }
 
   async #refreshRelated(kind: ProductChildKind): Promise<void> {
@@ -499,9 +511,15 @@ export class CatalogueScreen extends LitElement {
     if (kind === "options") this.optionLists = await this.api.background.listOptionLists();
   }
 
+  /** Every submission is a new refusal, even one the API answers with an identical error object. */
+  #submitChild(write: () => Promise<{ id: string }>): Promise<void> {
+    this.#childRefusals = null;
+    return this.#child.submit(write);
+  }
+
   #submitUnit(event: CustomEvent<{ value: UnitInput }>): void {
     event.stopPropagation();
-    void this.#child.submit(async () => {
+    void this.#submitChild(async () => {
       const value = await this.api.createUnit(event.detail.value);
       return { id: value.id, name: value.name };
     });
@@ -509,7 +527,8 @@ export class CatalogueScreen extends LitElement {
 
   #submitCategory(event: CustomEvent<{ value: CategoryInput }>): void {
     event.stopPropagation();
-    void this.#child.submit(async () => {
+    this.#submittedParent = event.detail.value.parentId ?? null;
+    void this.#submitChild(async () => {
       const value = await this.api.createCategory(event.detail.value);
       return { id: value.id, name: value.name };
     });
@@ -518,7 +537,7 @@ export class CatalogueScreen extends LitElement {
   #submitExtraList(event: CustomEvent<{ value: ExtraListInput }>): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "extras" ? this.editingList.value : null;
-    void this.#child.submit(async () =>
+    void this.#submitChild(async () =>
       editing
         ? await this.api.updateExtraList(editing.id, event.detail.value)
         : await this.api.createExtraList(event.detail.value),
@@ -528,7 +547,7 @@ export class CatalogueScreen extends LitElement {
   #submitOptionList(event: CustomEvent<{ value: OptionListInput }>): void {
     event.stopPropagation();
     const editing = this.editingList?.kind === "options" ? this.editingList.value : null;
-    void this.#child.submit(async () =>
+    void this.#submitChild(async () =>
       editing
         ? await this.api.updateOptionList(editing.id, event.detail.value)
         : await this.api.createOptionList(event.detail.value),
@@ -561,9 +580,7 @@ export class CatalogueScreen extends LitElement {
 
   override render() {
     const locales = this.contentLanguages?.languages ?? [];
-    const childErrors = this.#childFieldErrors();
-    const unitRefusal = this.#childRefusal("unit");
-    const categoryRefusal = this.#childRefusal("category");
+    const refusals = this.#childRefusalErrors();
     return html`
       <div class="header">
         <h1>${t("nav.catalogue")}</h1>
@@ -694,7 +711,7 @@ export class CatalogueScreen extends LitElement {
         .open=${this.#child.kind === "unit"}
         .busy=${this.#child.busy}
         .locales=${locales}
-        .fieldErrors=${unitRefusal === null ? {} : unitRefusalErrors(unitRefusal)}
+        .fieldErrors=${refusals.unit}
         @wt-submit=${this.#submitUnit}
         @wt-cancel=${() => this.#cancelChild("unit")}
       ></dashboard-unit-form>
@@ -708,11 +725,7 @@ export class CatalogueScreen extends LitElement {
               .languages=${this.contentLanguages}
               .categories=${this.categories}
               .api=${this.api}
-              .fieldErrors=${
-                categoryRefusal === null
-                  ? {}
-                  : categoryRefusalErrors(categoryRefusal, this.contentLanguages.defaultLanguage)
-              }
+              .fieldErrors=${refusals.category}
               @wt-submit=${this.#submitCategory}
               @wt-cancel=${() => this.#cancelChild("category")}
             ></dashboard-category-form>`
@@ -728,7 +741,7 @@ export class CatalogueScreen extends LitElement {
                 .languages=${this.contentLanguages}
                 .value=${this.editingList?.kind === "extras" ? (this.editingList.value as ExtraList) : null}
                 .products=${this.products}
-                .fieldErrors=${childErrors}
+                .fieldErrors=${refusals.lists}
                 @wt-submit=${this.#submitExtraList}
                 @wt-cancel=${() => this.#cancelChild("extras")}
               ></dashboard-extra-list-form>
@@ -741,7 +754,7 @@ export class CatalogueScreen extends LitElement {
                     ? (this.editingList.value as OptionList)
                     : null
                 }
-                .fieldErrors=${childErrors}
+                .fieldErrors=${refusals.lists}
                 @wt-submit=${this.#submitOptionList}
                 @wt-cancel=${() => this.#cancelChild("options")}
               ></dashboard-option-list-form>`
@@ -749,6 +762,37 @@ export class CatalogueScreen extends LitElement {
       }
     `;
   }
+}
+
+/** The editor field that chose the id a not-found refusal names, or null when the save sent no such
+ * id there. */
+function missingChoiceField(
+  code: string,
+  error: unknown,
+  submitted: ProductEditorInput,
+): string | null {
+  const params = (error as { params?: Record<string, unknown> }).params ?? {};
+  const named = (key: string, sent: string | null | undefined) =>
+    typeof params[key] === "string" && params[key] === sent;
+  if (code === "category.not_found" && named("categoryId", submitted.primaryCategoryId))
+    return "primary";
+  if (code === "unit.not_found" && named("unitId", submitted.unitId)) return "unit";
+  if (code === "station.not_found" && named("stationId", submitted.stationId))
+    return "product-station";
+  if (code === "course.not_found" && named("courseId", submitted.courseId)) return "product-course";
+  if (code === "label.not_found" && submitted.labelIds.some((id) => named("labelId", id)))
+    return "labels";
+  if (code === "product.variant_not_found") {
+    const index = submitted.variants.findIndex((variant) => named("variantId", variant.id));
+    if (index !== -1) return `variant-${index}-name`;
+  }
+  return null;
+}
+
+interface ChildRefusals {
+  unit: UnitFormErrors;
+  category: Record<string, string>;
+  lists: Record<string, string>;
 }
 
 declare global {

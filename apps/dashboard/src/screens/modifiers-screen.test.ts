@@ -823,6 +823,10 @@ it("keeps a refused save in the form and puts the refusal beside the field it na
   expect(
     (form.shadowRoot!.querySelector('[name="name"]') as unknown as { error: string }).error,
   ).toBe(message);
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
+      .disabled,
+  ).toBe(false);
   // The second attempt succeeds: the editor closes even though the reload then fails, because a
   // failed refresh after a successful write is a LOAD failure, not a failed save.
   vi.mocked(client.listExtraLists).mockRejectedValue(new Error("load failed"));

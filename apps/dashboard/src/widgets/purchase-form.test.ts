@@ -735,7 +735,7 @@ describe("purchase-form — a server refusal", () => {
     expect(purchaseRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
   });
 
-  it("shows a refused field's message under it, focuses it, and disables Create until it changes", async () => {
+  it("shows a refused field's message under it, focuses it, and leaves Create working", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     el.fieldErrors = { "deductible-proportion": "Refused proportion" };
@@ -744,7 +744,7 @@ describe("purchase-form — a server refusal", () => {
 
     expect(errorOf(el, "deductible-proportion")).toBe("Refused proportion");
     expect((await bottomOf(el))?.textContent).toBe(t("form.fix_fields"));
-    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
     const field = el.shadowRoot!.querySelector("[data-test=deductible-proportion]")!;
     expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
 
@@ -786,7 +786,7 @@ describe("purchase-form — a server refusal", () => {
     expect(el.shadowRoot!.querySelector("[data-test=lines-error]")?.textContent).toBe(
       "Refused lines",
     );
-    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
 
     await click(el, "add-line");
     expect(el.shadowRoot!.querySelector("[data-test=lines-error]")).toBeNull();

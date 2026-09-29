@@ -619,7 +619,7 @@ describe("setup-venue-screen form errors", () => {
     expect(await bottomOf(el)).toBe(`The country must match the fiscal territory. ${FIX_FIELDS}`);
   });
 
-  it("treats a refusal naming a field as that field's error until the operator changes it", async () => {
+  it("shows a refusal naming a field under that field until the operator changes it, leaving Next working", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       invalidField: "seriesCode",
     });
@@ -628,12 +628,44 @@ describe("setup-venue-screen form errors", () => {
     }
     expect(errorOf(el, "seriesCode")).toContain("letters, numbers");
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
-    expect(next(el).hasAttribute("disabled")).toBe(true);
+    expect((next(el) as HTMLElement & { disabled: boolean }).disabled).toBe(false);
 
     await type(el, "seriesCode", "FA");
     expect(errorOf(el, "seriesCode")).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("drops a field refusal on the next press and sends the form again, unchanged", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "seriesCode",
+    });
+    const events = collect(host);
+    for (const [key, value] of Object.entries(VALID)) {
+      if (key !== "seriesCode") await type(el, key, value);
+    }
+    next(el).click();
+    await el.updateComplete;
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+    expect(errorOf(el, "seriesCode")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("keeps Next disabled for a validation error while a field refusal is also shown", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "seriesCode",
+    });
+    const events = collect(host);
+    for (const [key, value] of Object.entries({ ...VALID, city: "" })) {
+      if (key !== "seriesCode") await type(el, key, value);
+    }
+    next(el).click();
+    await el.updateComplete;
+    expect(events).toEqual([]);
+    expect(errorOf(el, "city")).not.toBe("");
+    expect((next(el) as HTMLElement & { disabled: boolean }).disabled).toBe(true);
+    await type(el, "city", "Madrid");
+    expect((next(el) as HTMLElement & { disabled: boolean }).disabled).toBe(false);
   });
 
   it("says the bottom message in Spanish", async () => {

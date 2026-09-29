@@ -2447,6 +2447,10 @@ it("keeps the settings open and says why when the server refuses the price, send
   );
   expect(pricesModal(el).open).toBe(true);
   expect(offerField(el, "grossPrice").value).toBe("2.80");
+  expect(
+    pricesModal(el).querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="offer-save"]')!
+      .disabled,
+  ).toBe(false);
   expect(client.setMenuVariants).not.toHaveBeenCalled();
   await inOffer(el, "offer-cancel");
   expect(pricesModal(el).open).toBe(false);
@@ -4159,28 +4163,25 @@ describe("the name forms", () => {
     },
   );
 
-  it.each(forms)(
-    "$form focuses a refused name and holds Save until the name changes",
-    async (form) => {
-      const client = api({
-        [form.write]: vi
-          .fn()
-          .mockRejectedValue({ code: "management.request_invalid", params: { field: form.field } }),
-      });
-      const { el, name, save } = await opened(form, client);
-      await rename(el, name(), "Terrace");
-      save().click();
-      await vi.waitFor(() => expect(name().error).toBe(codeMessage("management.request_invalid")));
-      await vi.waitFor(() => expect(focusedIn(name())).toBe(true));
-      expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
-      expect(save().disabled).toBe(true);
+  it.each(forms)("$form focuses a refused name and leaves Save working", async (form) => {
+    const client = api({
+      [form.write]: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", params: { field: form.field } }),
+    });
+    const { el, name, save } = await opened(form, client);
+    await rename(el, name(), "Terrace");
+    save().click();
+    await vi.waitFor(() => expect(name().error).toBe(codeMessage("management.request_invalid")));
+    await vi.waitFor(() => expect(focusedIn(name())).toBe(true));
+    expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+    expect(save().disabled).toBe(false);
 
-      await rename(el, name(), "Terrace two");
-      expect(name().error).toBe("");
-      expect(await bottom(el, form.form)).toBe("");
-      expect(save().disabled).toBe(false);
-    },
-  );
+    await rename(el, name(), "Terrace two");
+    expect(name().error).toBe("");
+    expect(await bottom(el, form.form)).toBe("");
+    expect(save().disabled).toBe(false);
+  });
 
   it.each(forms)(
     "$form leaves Save working after a refusal naming no field, and drops it on the next Save",

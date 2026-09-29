@@ -951,6 +951,10 @@ describe("setup-app", () => {
     await (input as unknown as { updateComplete: Promise<unknown> }).updateComplete;
     expect(input.hasAttribute("invalid")).toBe(true);
     expect((input as unknown as { error: string }).error).not.toBe("");
+    const next = venue.shadowRoot!.querySelector("[data-test=next]") as HTMLElement & {
+      disabled: boolean;
+    };
+    expect(next.disabled).toBe(false);
   });
 
   it("still routes a field the fiscal seat does not refuse to the review banner", async () => {
@@ -1292,6 +1296,64 @@ describe("setup-app", () => {
       expect(await bottomOf(await screenHost(el, "connect"))).toContain(fragment);
     },
   );
+
+  it.each([
+    ["mirror.primary_url_invalid", {}, "primaryUrl", "Check the primary server address."],
+    [
+      "setup.request_invalid",
+      { field: "primaryUrl" },
+      "primaryUrl",
+      "Check the primary server address.",
+    ],
+    [
+      "setup.request_invalid",
+      { field: "credential.personId" },
+      "personId",
+      "Check the admin login (person id).",
+    ],
+    [
+      "setup.request_invalid",
+      { field: "credential.password" },
+      "password",
+      "Check the admin password.",
+    ],
+    [
+      "setup.request_invalid",
+      { field: "credential.totp" },
+      "totp",
+      "Check the authenticator code (if required).",
+    ],
+  ])(
+    "sends the adopt refusal %s %o back to connect under its field, leaving Connect working",
+    async (code, params, field, message) => {
+      const adopt = vi.fn().mockRejectedValue({ code, params, status: 400 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      adoptRequest(el);
+      await flush(el);
+      const connect = await screenHost(el, "connect");
+      const input = connect.shadowRoot!.querySelector(`[data-test=${field}]`)!;
+      expect(input.getAttribute("error")).toBe(message);
+      expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
+      const button = connect.shadowRoot!.querySelector("[data-test=connect]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(button.disabled).toBe(false);
+    },
+  );
+
+  it("keeps an adopt refusal of a field the connect form does not show beside Connect", async () => {
+    const adopt = vi.fn().mockRejectedValue({
+      code: "setup.request_invalid",
+      params: { field: "credential" },
+      status: 400,
+    });
+    const el = await mountSetupApp(stubApi({ adopt }));
+    adoptRequest(el);
+    await flush(el);
+    const connect = await screenHost(el, "connect");
+    expect(await bottomOf(connect)).toContain("rejected the details");
+    expect(connect.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
+  });
 
   it.each([
     ["a bare TypeError (network drop mid-adopt)", new TypeError("network")],
@@ -1761,7 +1823,34 @@ describe("resetting a join that stopped partway", () => {
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
       "That person ID and password are not the admin login used to connect this server. Check them and try again.",
     );
+    const reset = screen.shadowRoot!.querySelector("[data-test=reset]") as HTMLElement & {
+      disabled: boolean;
+    };
+    expect(reset.disabled).toBe(false);
   });
+
+  it.each([
+    ["personId", "Check the admin person ID."],
+    ["password", "Check the admin password."],
+  ])(
+    "marks the %s field a setup.request_invalid names, leaving the reset working",
+    async (field, message) => {
+      const resetIncompleteAdopt = vi
+        .fn()
+        .mockRejectedValue({ code: "setup.request_invalid", params: { field }, status: 400 });
+      const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+      await openReset(el);
+      await submitReset(el);
+      const screen = await screenHost(el, "reset");
+      const input = screen.shadowRoot!.querySelector(`[data-test=${field}]`)!;
+      expect(input.getAttribute("error")).toBe(message);
+      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      const reset = screen.shadowRoot!.querySelector("[data-test=reset]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(reset.disabled).toBe(false);
+    },
+  );
 
   it("names a second refused login after the operator corrects the password", async () => {
     const resetIncompleteAdopt = vi
@@ -2384,6 +2473,12 @@ describe("restore from my bucket", () => {
 
   // Review Focus 2: the wrong kit is refused before anything changes, and the owner is told which
   // way it is wrong. (The server refuses; these pin the words the wizard puts on each refusal.)
+  // A refusal about a field the screen shows is told under that field.
+  const FIELD_OF_BUCKET_REFUSAL: Record<string, string | undefined> = {
+    "backup.stream_kit_invalid": "kit",
+    "restore.environment_mismatch": "environment",
+    "setup.request_invalid": "kit",
+  };
   it.each([
     [
       "backup.stream_kit_invalid",
@@ -2504,7 +2599,17 @@ describe("restore from my bucket", () => {
   ])("explains %s (%o) and stays on the bucket screen", async (code, params, message) => {
     const screen = await refusedWith({ code, params, status: 400 });
     expect(screen.errorMessage).toBe(message);
-    expect(await bottomOf(screen)).toBe(message);
+    const field = FIELD_OF_BUCKET_REFUSAL[code];
+    if (field === undefined) {
+      expect(await bottomOf(screen)).toBe(message);
+    } else {
+      expect(screen.shadowRoot!.querySelector(`#${field}-error`)!.textContent).toBe(message);
+      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(button.disabled).toBe(false);
+    }
   });
 
   // Review Focus 5, the wizard's half.
@@ -2678,6 +2783,50 @@ describe("restoring a backup file whose old server may still be running", () => 
       expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
     },
   );
+
+  it.each([
+    ["recovery.passphrase_invalid", {}, "recoveryKey"],
+    [
+      "restore.environment_mismatch",
+      { backup: "preproduction", target: "production" },
+      "environment",
+    ],
+    ["setup.request_invalid", { field: "artifact" }, "artifact"],
+    ["setup.request_invalid", { field: "recoveryKey" }, "recoveryKey"],
+    ["setup.request_invalid", { field: "environment" }, "environment"],
+  ])(
+    "returns the archive refusal %s %o under the %s field, leaving Restore working",
+    async (code, params, field) => {
+      const el = await mountSetupApp(
+        stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 400 }) }),
+      );
+      restoreRequest(el, backup);
+      await flush(el);
+      const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+      expect(screen.invalidField).toBe(field);
+      expect(screen.errorMessage).toContain(code);
+      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(button.disabled).toBe(false);
+    },
+  );
+
+  it("keeps an archive refusal of a field the form does not show beside Restore", async () => {
+    const el = await mountSetupApp(
+      stubApi({
+        restore: vi
+          .fn()
+          .mockRejectedValue({ code: "setup.request_invalid", params: { field: "oldBoxGone" } }),
+      }),
+    );
+    restoreRequest(el, backup);
+    await flush(el);
+    const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
+    expect(screen.invalidField).toBeUndefined();
+    expect(await bottomOf(screen)).toContain("setup.request_invalid");
+  });
 
   it("does not stay on the provisioning screen when the rejection carries nothing", async () => {
     const el = await mountSetupApp(stubApi({ restore: vi.fn().mockRejectedValue(undefined) }));

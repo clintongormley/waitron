@@ -35,6 +35,11 @@ const errorOf = (el: LocationSettingsScreen) =>
   q(el, "[name=operationDescription]").getAttribute("error");
 const saveDisabled = (el: LocationSettingsScreen) =>
   q(el, "[data-test=save]").hasAttribute("disabled");
+async function nativeSaveDisabled(el: LocationSettingsScreen): Promise<boolean> {
+  const button = q(el, "[data-test=save]") as HTMLElement & { updateComplete: Promise<unknown> };
+  await button.updateComplete;
+  return button.shadowRoot!.querySelector("button")!.disabled;
+}
 const focusedInput = (el: LocationSettingsScreen) => {
   const field = q(el, "[name=operationDescription]");
   return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
@@ -244,7 +249,7 @@ describe("location invoice description", () => {
     expect(errorOf(el)).toBe(t("location_settings.required"));
     expect(saveDisabled(el)).toBe(true);
   });
-  it("keeps a refused description's message until the field changes, focusing it when the refusal arrives", async () => {
+  it("keeps a refused description's message until the field changes, focusing it when the refusal arrives, with Save working", async () => {
     const client = api({
       putLocationSettings: vi.fn().mockRejectedValue({
         code: "management.request_invalid",
@@ -261,7 +266,7 @@ describe("location invoice description", () => {
     await vi.waitFor(() => expect(focusedInput(el)).toBe(true));
     expect(errorOf(el)).toBe(t("location_settings.invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(saveDisabled(el)).toBe(true);
+    expect(await nativeSaveDisabled(el)).toBe(false);
     edit(el, "x".repeat(500));
     await el.updateComplete;
     expect(errorOf(el)).toBe("");
@@ -282,6 +287,23 @@ describe("location invoice description", () => {
     await flush(el);
     expect(await bottomOf(el)).toBe(`${t("location_settings.save_error")} ${t("form.fix_fields")}`);
     expect(saveDisabled(el)).toBe(true);
+  });
+  it("puts a refusal naming a field the form does not show in the bottom message, leaving Save working", async () => {
+    const client = api({
+      putLocationSettings: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "locationId" },
+      }),
+    });
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: client,
+    });
+    await flush(el);
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    expect(errorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(t("location_settings.save_error"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
   });
   it("leaves Save working after a refusal that names no field", async () => {
     const client = api({

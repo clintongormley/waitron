@@ -17,6 +17,12 @@ import { t } from "../i18n/t.js";
 /** The refusals that are about the name the form holds, so they belong beside that field. */
 const NAME_CODES = new Set(["label.name_taken", "label.invalid"]);
 
+function namesTheName(error: unknown): boolean {
+  const code = codeOf(error);
+  const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+  return NAME_CODES.has(code) || (code === "management.request_invalid" && field === "name");
+}
+
 /**
  * The Categories screen's Labels tab: flat, staff-facing labels a product can carry any number of.
  * A null `editing.label` is a create.
@@ -107,6 +113,7 @@ export class LabelsPanel extends LitElement {
     if (!editing || this.busy) return;
     const name = this.name.trim();
     this.saveError = "";
+    this.nameRefusal = "";
     this.attempted = true;
     if (!name) {
       this.#focusFirstInvalid();
@@ -118,7 +125,7 @@ export class LabelsPanel extends LitElement {
       else await this.api.createLabel(name);
     } catch (error) {
       const code = codeOf(error);
-      if (NAME_CODES.has(code)) {
+      if (namesTheName(error)) {
         this.nameRefusal = codeMessage(code);
         this.#focusFirstInvalid();
       } else this.saveError = codeMessage(code);
@@ -279,7 +286,7 @@ export class LabelsPanel extends LitElement {
             data-test="save-label"
             variant="primary"
             .loading=${this.busy}
-            .disabled=${this.busy || !!nameError}
+            .disabled=${this.busy || (this.attempted && !this.name.trim())}
             @click=${() => void this.#save()}
             >${t("action.save")}</wt-button
           ></wt-form-actions

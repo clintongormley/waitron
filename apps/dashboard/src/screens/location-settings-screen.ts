@@ -84,7 +84,8 @@ export class LocationSettingsScreen extends LitElement {
       this.saved = true;
       this.attempted = false;
     } catch (error) {
-      if (codeOf(error) === "management.request_invalid")
+      const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+      if (codeOf(error) === "management.request_invalid" && field === "operationDescription")
         this.refusal = t("location_settings.invalid");
       else this.saveFailed = true;
     } finally {
@@ -144,7 +145,7 @@ export class LocationSettingsScreen extends LitElement {
                   data-test="save"
                   variant="primary"
                   ?loading=${this.saving}
-                  ?disabled=${fieldError !== ""}
+                  ?disabled=${this.attempted && this.#validate() !== ""}
                   @click=${() => void this.#save()}
                   >${t("action.save")}</wt-button
                 ></wt-form-actions

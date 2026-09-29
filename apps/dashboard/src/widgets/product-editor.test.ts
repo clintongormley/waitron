@@ -89,8 +89,8 @@ async function input(el: ProductEditor, name: string, value: string) {
 function save(el: ProductEditor) {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
 }
-function saveButton(el: ProductEditor): HTMLElement {
-  return el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!;
+function saveButton(el: ProductEditor): HTMLElementTagNameMap["wt-button"] {
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
 }
 async function bottomOf(el: ProductEditor): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -568,16 +568,80 @@ it("puts a refusal for a folded field under it, opening its section, until that 
     .poll(() => el.shadowRoot!.activeElement?.getAttribute("name"))
     .toBe("description-en");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  expect(saveButton(el).disabled).toBe(false);
 
   await input(el, "name", "Coffee grande");
-  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  expect(description.getAttribute("aria-invalid")).toBe("true");
+  expect(saveButton(el).disabled).toBe(false);
 
   await input(el, "description-en", "Roasted this morning");
   expect(description.getAttribute("aria-invalid")).toBe("false");
   expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).hasAttribute("disabled")).toBe(false);
 });
+
+it("submits past a refusal beside a field or on a variant's row, which then go", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, large] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.fieldErrors = {
+    "kitchen-name": t("editor.field_rejected"),
+    "variant-1-price": t("editor.field_rejected"),
+  };
+  await el.updateComplete;
+  expect(errorOf(el, "kitchen-name")).toBe(t("editor.field_rejected"));
+  expect(variantTable(el)!.errors).toEqual({ 1: t("editor.field_rejected") });
+  expect(saveButton(el).disabled).toBe(false);
+
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  await el.updateComplete;
+  expect(submit).toHaveBeenCalledOnce();
+  expect(errorOf(el, "kitchen-name")).toBe("");
+  expect(variantTable(el)!.errors).toEqual({});
+  expect(await bottomOf(el)).toBe("");
+});
+
+it.each([
+  ["product-station", "stationId"],
+  ["product-course", "courseId"],
+])(
+  "puts a refused %s under its select, opening the kitchen section, until it changes",
+  async (name) => {
+    const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: product,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+      stations: [{ id: "station-1", name: "Bar" }],
+      courses: [{ id: "course-1", name: "Starters" }],
+    });
+    el.fieldErrors = { [name]: "That one is gone" };
+    await el.updateComplete;
+    await section(el, "kitchen").updateComplete;
+    expect(section(el, "kitchen").open).toBe(true);
+    const select = el.shadowRoot!.querySelector<HTMLSelectElement>(`[name=${name}]`)!;
+    expect(select.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent,
+    ).toBe("That one is gone");
+    await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe(name);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveButton(el).disabled).toBe(false);
+
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    await el.updateComplete;
+    expect(select.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottomOf(el)).toBe("");
+  },
+);
 
 it("keeps a refusal that names no field of the form in the bottom message, leaving Save working", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
@@ -1118,15 +1182,15 @@ it("associates server and client errors with native selects", async () => {
     locales: ["en"],
     fieldErrors: { tax: "Tax is no longer available" },
   });
-  save(el);
-  await el.updateComplete;
   const select = el.shadowRoot!.querySelector(`[name=tax]`)!;
   expect(select.getAttribute("aria-invalid")).toBe("true");
-  const error = el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!);
-  expect(error?.textContent?.trim()).toBeTruthy();
-  expect(el.shadowRoot!.getElementById("tax-error")!.textContent).toBe(
+  expect(el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent).toBe(
     "Tax is no longer available",
   );
+  // Submitting again is past the refusal.
+  save(el);
+  await el.updateComplete;
+  expect(select.getAttribute("aria-invalid")).toBe("false");
 });
 
 it("saves a variant with no price of its own, which sells at the product's", async () => {
@@ -1574,6 +1638,8 @@ it("maps a rejected product body's field onto the editor field that holds it", (
   // control, so every position reports there.
   expect(productEditorField("modifiers.0.id", "es")).toBe("modifier");
   expect(productEditorField("modifiers.11.id", "es")).toBe("modifier");
+  expect(productEditorField("stationId", "es")).toBe("product-station");
+  expect(productEditorField("courseId", "es")).toBe("product-course");
   // A field with no error display on this form maps to nothing rather than to a guess, and the
   // refusal falls back to the screen's own banner. The product's availability IS on the form (a
   // `name="available"` switch) but has no error slot wired to it; a variant's has neither.

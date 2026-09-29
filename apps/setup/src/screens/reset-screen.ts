@@ -11,7 +11,7 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
-type ResetField = "personId" | "password";
+export type ResetField = "personId" | "password";
 
 const FIELDS: readonly ResetField[] = ["personId", "password"];
 
@@ -52,8 +52,11 @@ export class SetupResetScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
 
   /** The server refused the person ID and password as a pair, so both fields are marked until
-   * either changes, and the reset waits for that change. */
+   * either changes or the reset is asked for again. */
   @property({ type: Boolean }) credentialsRejected = false;
+
+  /** A field the server refused on its own (`setup.request_invalid`'s `params.field`). */
+  @property() invalidField?: ResetField;
 
   /** A refusal the operator cannot correct in the fields; it never disables the reset. */
   @property() errorMessage?: string;
@@ -69,6 +72,8 @@ export class SetupResetScreen extends LitElement {
 
   @state() private rejectionDismissed = false;
 
+  @state() private fieldRefusalDismissed = false;
+
   @state() private refusalDismissed = false;
 
   @state() private passwordVisible = false;
@@ -80,11 +85,16 @@ export class SetupResetScreen extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("credentialsRejected")) this.rejectionDismissed = false;
+    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("errorMessage")) this.refusalDismissed = false;
   }
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has("credentialsRejected") && this.#rejected()) this.#focusFirstInvalid();
+    if (
+      (changed.has("credentialsRejected") && this.#rejected()) ||
+      (changed.has("invalidField") && this.#refusedField() !== undefined)
+    )
+      this.#focusFirstInvalid();
   }
 
   #focusFirstInvalid(): void {
@@ -97,6 +107,10 @@ export class SetupResetScreen extends LitElement {
     return this.credentialsRejected && !this.rejectionDismissed;
   }
 
+  #refusedField(): ResetField | undefined {
+    return this.fieldRefusalDismissed ? undefined : this.invalidField;
+  }
+
   #missing(): Set<ResetField> {
     if (!this.attempted) return new Set();
     return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
@@ -106,12 +120,15 @@ export class SetupResetScreen extends LitElement {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
     this.rejectionDismissed = true;
+    if (key === this.invalidField) this.fieldRefusalDismissed = true;
   }
 
   #reset(): void {
-    if (this.busy || this.#rejected()) return;
+    if (this.busy) return;
     this.attempted = true;
     this.refusalDismissed = true;
+    this.rejectionDismissed = true;
+    this.fieldRefusalDismissed = true;
     if (this.#missing().size > 0) {
       this.#focusFirstInvalid();
       return;
@@ -124,7 +141,11 @@ export class SetupResetScreen extends LitElement {
   }
 
   #field(label: string, key: ResetField, missing: Set<ResetField>): TemplateResult {
-    const error = missing.has(key) ? t(MISSING[key]) : this.#rejected() ? t(CHECK[key]) : "";
+    const error = missing.has(key)
+      ? t(MISSING[key])
+      : this.#rejected() || this.#refusedField() === key
+        ? t(CHECK[key])
+        : "";
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]"))}
       class="field"
@@ -177,7 +198,7 @@ export class SetupResetScreen extends LitElement {
     const bottom = [
       ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
       ...(rejected ? [t("reset.rejected")] : []),
-      ...(missing.size > 0 ? [t("reset.fix_fields")] : []),
+      ...(missing.size > 0 || this.#refusedField() !== undefined ? [t("reset.fix_fields")] : []),
     ].join(" ");
     return html`
       <h1>${t("reset.heading")}</h1>
@@ -196,7 +217,7 @@ export class SetupResetScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="reset"
-          ?disabled=${this.busy || rejected || missing.size > 0}
+          ?disabled=${this.busy || missing.size > 0}
           @click=${() => this.#reset()}
           >${t(this.busy ? "reset.busy" : "reset.submit")}</wt-button
         >

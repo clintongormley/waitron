@@ -32,7 +32,12 @@ function usageHref(use: ImageUsage): string {
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
 }
 
-const PHOTO_REFUSALS = new Set(["image.too_large", "image.invalid_file", "image.too_many_pixels"]);
+const PHOTO_REFUSALS = new Set([
+  "image.too_large",
+  "image.invalid_file",
+  "image.too_many_pixels",
+  "media.unsupported_type",
+]);
 
 /** The editor field a refused save names — `file` or `name-<language>` — or `_form` for none. */
 function refusalField(error: unknown): string {
@@ -165,7 +170,7 @@ export class ImageLibrary extends LitElement {
   } | null = null;
   @state() private attempted = false;
   @state() private previewUrl: string | null = null;
-  /** The last save's refusal; a field's lasts until that field changes, any other's until Save. */
+  /** The last save's refusal, until Save is pressed again or, for a field's, that field changes. */
   @state() private refusal: { field: string; code: string } | null = null;
   @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
@@ -304,16 +309,14 @@ export class ImageLibrary extends LitElement {
       ...config.languages.filter((code) => code !== config.defaultLanguage),
     ];
   }
-  /** The fields the editor shows, each with its message when it has one. */
-  #fieldErrors(): Map<string, string> {
+  /** The fields the editor shows, each with what the form's own check finds once Save was pressed. */
+  #checked(): Map<string, string> {
     const editor = this.editor!;
     const config = currentContentLanguages();
     const errors = new Map<string, string>([
       ...(editor.image === null ? [["file", ""] as const] : []),
       ...this.#languages().map((language) => [`name-${language}`, ""] as const),
     ]);
-    if (this.refusal && errors.has(this.refusal.field))
-      errors.set(this.refusal.field, codeMessage(this.refusal.code));
     if (!this.attempted) return errors;
     // Alt text is optional; only a file (for a new image) and a default-language name are required.
     if (editor.image === null && editor.file === null) errors.set("file", t("image.file_required"));
@@ -329,9 +332,8 @@ export class ImageLibrary extends LitElement {
     const editor = this.editor;
     if (editor === null || this.busy) return;
     this.attempted = true;
-    const errors = this.#fieldErrors();
-    if (this.refusal && !errors.has(this.refusal.field)) this.refusal = null;
-    if ([...errors.values()].some(Boolean)) {
+    this.refusal = null;
+    if ([...this.#checked().values()].some(Boolean)) {
       void this.#focusFirstInvalid();
       return;
     }
@@ -401,14 +403,20 @@ export class ImageLibrary extends LitElement {
     const config = currentContentLanguages();
     const languages = this.#languages();
     const languageNames = new Intl.DisplayNames([currentLocale()], { type: "language" });
-    const errors = this.#fieldErrors();
+    const checked = this.#checked();
+    const invalid = [...checked.values()].some(Boolean);
+    const refusal = this.refusal;
+    const refusedField = refusal !== null && checked.has(refusal.field);
+    const errors = new Map(checked);
+    if (refusedField && !checked.get(refusal.field))
+      errors.set(refusal.field, codeMessage(refusal.code));
     const fileError = errors.get("file") ?? "";
-    const invalid = [...errors.values()].some(Boolean);
+    const marked = [...errors.values()].some(Boolean);
     const bottom = [
-      ...(this.refusal && !errors.has(this.refusal.field)
-        ? [`${t("image.save_error")} ${codeMessage(this.refusal.code)}`]
+      ...(refusal && !refusedField
+        ? [`${t("image.save_error")} ${codeMessage(refusal.code)}`]
         : []),
-      ...(invalid ? [t("image.fix_fields")] : []),
+      ...(marked ? [t("image.fix_fields")] : []),
     ].join(" ");
     const preview =
       editor.file !== null

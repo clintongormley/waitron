@@ -16,8 +16,20 @@ import { t } from "../i18n/t.js";
 type Field = "firstNames" | "lastNames" | "displayName" | "email" | "telephone";
 const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "email", "telephone"];
 
-/** The one refusal shown beside a field; every other code goes in the bottom message. */
-const DISPLAY_NAME_TAKEN = "person.display_name_taken";
+const CODE_FIELDS: Readonly<Record<string, Field>> = {
+  "person.display_name_taken": "displayName",
+  "person.email_taken": "email",
+  "person.email_invalid": "email",
+  "person.telephone_invalid": "telephone",
+};
+
+/** The field of the add or edit person form a refusal belongs under, or undefined for the bottom
+ * message. */
+export function refusedField(code: string | null, paramsField: string | null): string | undefined {
+  if (code === null) return undefined;
+  if (paramsField !== null && FIELDS.includes(paramsField)) return paramsField;
+  return CODE_FIELDS[code];
+}
 
 @customElement("dashboard-person-form")
 export class PersonForm extends LitElement {
@@ -45,6 +57,8 @@ export class PersonForm extends LitElement {
 
   @property({ type: Boolean, reflect: true }) open = false;
   @property() error: string | null = null;
+  /** The refused request's `params.field`, when it named one. */
+  @property({ attribute: false }) errorField: string | null = null;
 
   @state() private firstNames = "";
   @state() private lastNames = "";
@@ -68,7 +82,7 @@ export class PersonForm extends LitElement {
 
   override updated(changed: PropertyValues<this>): void {
     if (this.#roleSelect.value) this.#roleSelect.value.value = this.selectedRole;
-    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN)
+    if (changed.has("error") && refusedField(this.error, this.errorField) !== undefined)
       void focusFirstInvalid(this.shadowRoot!);
   }
 
@@ -78,10 +92,9 @@ export class PersonForm extends LitElement {
 
   #refused(): Record<string, string> {
     if (!this.error) return {};
-    const refused =
-      this.error === DISPLAY_NAME_TAKEN
-        ? { displayName: codeMessage(DISPLAY_NAME_TAKEN) }
-        : { _form: codeMessage(this.error) };
+    const refused = {
+      [refusedField(this.error, this.errorField) ?? "_form"]: codeMessage(this.error),
+    };
     return Object.fromEntries(Object.entries(refused).filter(([key]) => !this.dismissed.has(key)));
   }
 
@@ -216,7 +229,7 @@ export class PersonForm extends LitElement {
           <wt-button
             variant="primary"
             data-test="confirm"
-            ?disabled=${fieldKeys.size > 0}
+            ?disabled=${this.attempted && Object.keys(this.#validate()).length > 0}
             @click=${(event: Event) => this.#confirm(event)}
             >${t("action.create")}</wt-button
           >

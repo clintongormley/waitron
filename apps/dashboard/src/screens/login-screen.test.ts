@@ -2454,6 +2454,13 @@ describe("login-screen: errors beside the action, not above the form", () => {
   ];
   const action = (el: LoginScreen, test: string) =>
     el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
+  const nativeDisabled = async (el: LoginScreen, test: string): Promise<boolean> => {
+    const button = action(el, test) as ReturnType<typeof action> & {
+      updateComplete: Promise<unknown>;
+    };
+    await button.updateComplete;
+    return button.shadowRoot!.querySelector("button")!.disabled;
+  };
 
   it.each(forms)(
     "$name: says nothing until submitted, then marks the field, focuses it and waits for it",
@@ -2542,15 +2549,54 @@ describe("login-screen: errors beside the action, not above the form", () => {
       action: "complete-account",
       code: "password.too_short",
     },
+    {
+      name: "a short new PIN",
+      open: async () => {
+        history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+          api: stubApi({
+            completeAccountAction: vi
+              .fn()
+              .mockRejectedValue({ code: "pin.too_short", params: { min: 4 } }),
+          }),
+        });
+        await flush(el);
+        input(el, "new-password", "new password");
+        input(el, "new-pin", "4321");
+        click(el, "complete-account");
+        await flush(el);
+        return el;
+      },
+      field: "new-pin",
+      action: "complete-account",
+      code: "pin.too_short",
+    },
+    {
+      name: "a refused passkey name",
+      open: async () => {
+        const { el } = await mountPasskeyOffer({
+          passkeyRegisterOptions: vi
+            .fn()
+            .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } }),
+        });
+        input(el, "passkey-name", "Work laptop");
+        click(el, "setup-passkey");
+        await flush(el);
+        return el;
+      },
+      field: "passkey-name",
+      action: "setup-passkey",
+      code: "profile.invalid",
+    },
   ];
 
   it.each(refusals)(
-    "$name: shows the refusal under its field, focuses it, and waits until that field changes",
+    "$name: shows the refusal under its field, focuses it, and leaves the action working until that field changes",
     async (refusal) => {
       const el = await refusal.open();
       expect(field(el, refusal.field).error).toBe(codeMessage(refusal.code));
       expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-      expect(action(el, refusal.action).disabled).toBe(true);
+      expect(await nativeDisabled(el, refusal.action)).toBe(false);
       await vi.waitFor(() =>
         expect(field(el, refusal.field).shadowRoot!.activeElement).toBe(
           field(el, refusal.field).shadowRoot!.querySelector("input"),
@@ -2573,7 +2619,7 @@ describe("login-screen: errors beside the action, not above the form", () => {
     await flush(el);
     expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(action(el, "setup-passkey").disabled).toBe(true);
+    expect(await nativeDisabled(el, "setup-passkey")).toBe(false);
     input(el, "one-time-code", "654321");
     await el.updateComplete;
     expect(field(el, "one-time-code").error).toBe("");
@@ -2622,6 +2668,19 @@ describe("login-screen: errors beside the action, not above the form", () => {
     await flush(el);
     expect(await bottomOf(el)).toBe(codeMessage("account_action.invalid"));
     expect(action(el, "complete-account").disabled).toBe(false);
+  });
+
+  it("keeps a passkey-offer refusal naming a field the offer does not show in the bottom message", async () => {
+    const { el } = await mountPasskeyOffer({
+      passkeyRegisterOptions: vi
+        .fn()
+        .mockRejectedValue({ code: "profile.invalid", params: { field: "displayName" } }),
+    });
+    click(el, "setup-passkey");
+    await flush(el);
+    expect(field(el, "passkey-name").error).toBe("");
+    expect(await bottomOf(el)).toBe(codeMessage("profile.invalid"));
+    expect(await nativeDisabled(el, "setup-passkey")).toBe(false);
   });
 
   it("leaves Add passkey working after a refusal that names no field", async () => {

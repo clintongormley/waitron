@@ -289,9 +289,9 @@ export class ExtraListForm extends LitElement {
   }
 
   /**
-   * Every message on screen, keyed as the form shows it, and the keys among them that are a field's
-   * and so hold Save back. A refusal held for an item the operator has since removed is shown under
-   * the items table but holds nothing back: removing the item was the change to it. `active`, `_form`
+   * Every message on screen, keyed as the form shows it, and the keys among them that are a field's.
+   * A refusal held for an item the operator has since removed is shown under the items table but
+   * marks no field: removing the item was the change to it. `active`, `_form`
    * and an item's preselection (`wt-switch` draws no error text) name nothing this form shows a
    * message under.
    */
@@ -682,6 +682,7 @@ export class ExtraListForm extends LitElement {
         .map(([, message]) => message),
       ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
+    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`<wt-modal
       .open=${this.open}
       heading=${t(this.value ? "extras.edit" : "extras.create")}
@@ -772,7 +773,7 @@ export class ExtraListForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy || fieldKeys.size > 0}
+          .disabled=${this.busy || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

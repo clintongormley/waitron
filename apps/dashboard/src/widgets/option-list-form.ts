@@ -228,9 +228,9 @@ export class OptionListForm extends LitElement {
   }
 
   /**
-   * Every message on screen, keyed as the form shows it, and the keys among them that are a field's
-   * and so hold Save back. A refusal held for an option the operator has since removed is shown
-   * under the options table but holds nothing back: removing the option was the change to it.
+   * Every message on screen, keyed as the form shows it, and the keys among them that are a field's.
+   * A refusal held for an option the operator has since removed is shown under the options table but
+   * marks no field: removing the option was the change to it.
    * `active` and `_form` name nothing this form shows a message under.
    */
   #messages(): { errors: Record<string, string>; fieldKeys: Set<string> } {
@@ -563,6 +563,7 @@ export class OptionListForm extends LitElement {
         .map(([, message]) => message),
       ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
+    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`<wt-modal
         .open=${this.open}
         heading=${t(this.value ? "options.edit" : "options.create")}
@@ -618,7 +619,7 @@ export class OptionListForm extends LitElement {
           <wt-button
             data-test="save"
             variant="primary"
-            .disabled=${this.busy || fieldKeys.size > 0}
+            .disabled=${this.busy || invalid}
             @click=${(event: Event) => this.#submit(event)}
             >${t("action.save")}</wt-button
           ></wt-form-actions

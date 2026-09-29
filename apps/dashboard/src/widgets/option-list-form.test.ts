@@ -102,8 +102,8 @@ async function bottomOf(el: OptionListForm): Promise<string> {
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
-const saveOf = (el: OptionListForm): HTMLElement =>
-  el.shadowRoot!.querySelector<HTMLElement>('wt-modal [data-test="save"]')!;
+const saveOf = (el: OptionListForm): HTMLElementTagNameMap["wt-button"] =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('wt-modal [data-test="save"]')!;
 
 function editor(el: OptionListForm): OptionLabelForm {
   return el.shadowRoot!.querySelector<OptionLabelForm>("dashboard-option-label-form")!;
@@ -546,7 +546,7 @@ it("shows a refusal naming an option's field under its row, and beside the field
   expect(rowErrors(el, 1)).toEqual(["Already used."]);
   expect(rowErrors(el, 0)).toEqual([]);
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   const form = await openEditor(el, 1);
   expect(form.errors).toEqual({ "label-name": "Already used." });
@@ -692,7 +692,7 @@ it.each([
 
   expect(text(el, "labels-error")).toBe("Something is wrong.");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 });
 
 it("moves a rejected option's message under the options table once that option is removed", async () => {
@@ -1031,11 +1031,11 @@ it("re-checks every change after a failed submission, and Save works again once 
 
 it("clears a field's refusal when that field changes, and Save works again", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { kitchenName: "Too long." } });
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "name", "Cooking");
   expect(field(el, "kitchen-name").error).toBe("Too long.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "kitchen-name", "CK");
   expect(field(el, "kitchen-name").error).toBe("");
@@ -1051,7 +1051,7 @@ it("clears a translated name's refusal only when that language's value changes",
 
   await type(el, "customer-name-es", "¿Cómo lo quiere?");
   expect(field(el, "customer-name-en").error).toBe("Rejected English.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "customer-name-en", "How do you like it?");
   expect(field(el, "customer-name-en").error).toBe("");
@@ -1060,7 +1060,7 @@ it("clears a translated name's refusal only when that language's value changes",
 
 it("clears a refusal about the options as a whole once the options change", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { labels: "Something is wrong." } });
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await click(el, "label-0-default");
 

@@ -40,8 +40,8 @@ const nameOf = (el: CategoryForm, locale: string) =>
     `wt-input[name="category-name-${locale}"]`,
   )!;
 
-const saveOf = (el: CategoryForm): HTMLElement =>
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+const saveOf = (el: CategoryForm): HTMLElementTagNameMap["wt-button"] =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
 
 function typeName(el: CategoryForm, locale: string, value: string): void {
   nameOf(el, locale).dispatchEvent(
@@ -630,6 +630,10 @@ it("puts a refused category write beside the form field it concerns", () => {
     expect(categoryRefusalErrors(refusal("management.request_invalid", { field }), "es")).toEqual({
       [key]: codeMessage("management.request_invalid"),
     });
+  // A missing category is the chosen parent only when it is the one the write named as parent.
+  expect(
+    categoryRefusalErrors(refusal("category.not_found", { categoryId: "c1" }), "es", "c1"),
+  ).toEqual({ parent: codeMessage("category.not_found") });
 });
 
 it("keeps a refused category write that names no field of the form for the bottom message alone", () => {
@@ -640,8 +644,12 @@ it("keeps a refused category write that names no field of the form for the botto
     refusal("management.request_invalid"),
     refusal("toString"),
     refusal("server.internal"),
+    refusal("category.not_found", { categoryId: "c1" }),
   ])
     expect(categoryRefusalErrors(error, "es")).toEqual({ _form: codeMessage(error.code) });
+  expect(
+    categoryRefusalErrors(refusal("category.not_found", { categoryId: "c2" }), "es", "c1"),
+  ).toEqual({ _form: codeMessage("category.not_found") });
 });
 
 it("says nothing about errors before the first submission, and Save works", async () => {
@@ -715,11 +723,12 @@ it("clears a field's refusal when that field changes, and Save works again", asy
   )!;
   expect(parent.error).toBe(message);
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   typeName(el, "en", "Toasties");
   await el.updateComplete;
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(parent.error).toBe(message);
+  expect(saveOf(el).disabled).toBe(false);
 
   parent.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
@@ -747,7 +756,8 @@ it("clears a refused colour or image when that field changes", async () => {
   el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.click();
   await el.updateComplete;
   expect(said("category-color-error")).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(said("category-image-error")).toBe(codeMessage("category.image_not_found"));
+  expect(saveOf(el).disabled).toBe(false);
 
   el.shadowRoot!.querySelector("dashboard-image-upload")!.dispatchEvent(
     new CustomEvent("image-changed", { detail: { image: null }, bubbles: true, composed: true }),
@@ -755,6 +765,28 @@ it("clears a refused colour or image when that field changes", async () => {
   await el.updateComplete;
   expect(said("category-image-error")).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("submits past a field's refusal, which goes until the next refusal arrives", async () => {
+  const message = codeMessage("category.parent_cycle");
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: child,
+    categories: [food, child],
+    fieldErrors: { parent: message },
+  });
+  const submit = vi.fn();
+  host.addEventListener("wt-submit", submit);
+  const parent = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="category-parent"]',
+  )!;
+
+  saveOf(el).click();
+  await el.updateComplete;
+  expect(submit).toHaveBeenCalledOnce();
+  expect(parent.error).toBe("");
+  expect(await bottomOf(el)).toBe("");
 });
 
 it("focuses the field a refusal names when the refusal arrives", async () => {

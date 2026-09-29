@@ -51,8 +51,9 @@ type EditorContent = {
   check: () => Record<string, string>;
   save: () => void;
 };
-/** A `management.request_invalid` refusal's `field`, onto the control that holds it. */
-type ServerFields = Record<string, string>;
+/** A `management.request_invalid` refusal's `field`, or a refusal's code that can only mean one
+ * control, onto the control that holds it. */
+type ServerFields = { fields?: Record<string, string>; codes?: Record<string, string> };
 
 @customElement("dashboard-venue-operations-screen")
 export class VenueOperationsScreen extends LitElement {
@@ -246,15 +247,19 @@ export class VenueOperationsScreen extends LitElement {
         ? t("venue.department_has_zones")
         : t("venue.save_error");
   }
-  #refused(error: unknown, fields: ServerFields): void {
+  #refused(error: unknown, { fields = {}, codes = {} }: ServerFields): void {
     const code = codeOf(error ?? {});
     const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
-    if (
-      code === "management.request_invalid" &&
-      typeof field === "string" &&
-      Object.hasOwn(fields, field)
-    ) {
-      this.refusedFields = { [fields[field]!]: t("venue.field_refused") };
+    const control =
+      code === "management.request_invalid"
+        ? typeof field === "string" && Object.hasOwn(fields, field)
+          ? fields[field]
+          : undefined
+        : Object.hasOwn(codes, code)
+          ? codes[code]
+          : undefined;
+    if (control !== undefined) {
+      this.refusedFields = { [control]: t("venue.field_refused") };
       this.#focusInvalid();
     } else {
       this.editorError = this.#refusal(code);
@@ -910,9 +915,11 @@ export class VenueOperationsScreen extends LitElement {
                   ? this.api.updateDepartment(editor.row.id, input)
                   : this.api.createDepartment(input),
               {
-                name: "department-name",
-                tradingName: "trading-name",
-                defaultServiceMode: "department-mode",
+                fields: {
+                  name: "department-name",
+                  tradingName: "trading-name",
+                  defaultServiceMode: "department-mode",
+                },
               },
             );
           },
@@ -944,9 +951,11 @@ export class VenueOperationsScreen extends LitElement {
               ...this.#hours(departmentId, editor.index),
               { weekday: Number(this.#value("hours-weekday")), opensAt, closesAt },
             ];
-            // The server names the list sent (`hours`) or an interval of it (`hours.N`), never one of
-            // these controls.
-            void this.#save(() => this.api.replaceHours(departmentId, hours));
+            // A `request_invalid` names the list sent (`hours`) or an interval of it (`hours.N`),
+            // never one of these controls.
+            void this.#save(() => this.api.replaceHours(departmentId, hours), {
+              codes: { "department.not_found": "hours-department" },
+            });
           },
         };
       case "zone": {
@@ -967,8 +976,11 @@ export class VenueOperationsScreen extends LitElement {
               serviceMode: serviceMode === "" ? null : (serviceMode as ServiceMode),
             };
             void this.#save(() => this.api.configureZone(editor.row.id, input), {
-              departmentId: `zone-department-${editor.row.id}`,
-              serviceMode: `zone-mode-${editor.row.id}`,
+              fields: {
+                departmentId: `zone-department-${editor.row.id}`,
+                serviceMode: `zone-mode-${editor.row.id}`,
+              },
+              codes: { "department.not_found": `zone-department-${editor.row.id}` },
             });
           },
         };
@@ -1010,7 +1022,10 @@ export class VenueOperationsScreen extends LitElement {
             )!.checked;
             void this.#save(
               () => this.api.allowMenu(editor.zoneId, menuId, { displayOrder, makeDefault }),
-              { displayOrder: "assignment-order" },
+              {
+                fields: { displayOrder: "assignment-order" },
+                codes: { "catalogue.not_found": "assignment-menu" },
+              },
             );
           },
         };
@@ -1032,12 +1047,19 @@ export class VenueOperationsScreen extends LitElement {
             void this.#save(
               () => (row ? this.api.updateRoute(row.id, input) : this.api.createRoute(input)),
               {
-                subject: "route-subject",
-                categoryId: "route-subject",
-                productId: "route-subject",
-                zoneId: "route-zone",
-                target: "route-target",
-                stationId: "route-target",
+                fields: {
+                  subject: "route-subject",
+                  categoryId: "route-subject",
+                  productId: "route-subject",
+                  zoneId: "route-zone",
+                  target: "route-target",
+                  stationId: "route-target",
+                },
+                codes: {
+                  "route.subject_not_found": "route-subject",
+                  "service_zone.not_found": "route-zone",
+                  "route.station_inactive": "route-target",
+                },
               },
             );
           },
@@ -1082,7 +1104,8 @@ export class VenueOperationsScreen extends LitElement {
     if (!this.editor) return nothing;
     const editor = this.editor;
     const content = this.#editorContent(editor);
-    const invalid = Object.keys(this.#errors()).length > 0;
+    const marked = Object.keys(this.#errors()).length > 0;
+    const invalid = Object.keys(this.fieldErrors).length > 0;
     const recheck = (event: Event) => {
       // A field that holds focus as the editor closes reports its change after the editor has gone.
       if (this.editor !== editor) return;
@@ -1113,7 +1136,7 @@ export class VenueOperationsScreen extends LitElement {
         <div class="form" @input=${recheck} @change=${recheck}>${content.body}</div>
         <wt-form-actions
           slot="footer"
-          .error=${[...(this.editorError ? [this.editorError] : []), ...(invalid ? [t("venue.fix_fields")] : [])].join(" ")}
+          .error=${[...(this.editorError ? [this.editorError] : []), ...(marked ? [t("venue.fix_fields")] : [])].join(" ")}
           ><wt-button
             slot="cancel"
             variant="secondary"

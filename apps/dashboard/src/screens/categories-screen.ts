@@ -173,6 +173,7 @@ export class CategoriesScreen extends LitElement {
   /** The product whose main category the change dialog is editing, and the category chosen. */
   @state() private mainCategoryProduct: Product | null = null;
   @state() private mainCategory: string | null = null;
+  @state() private mainCategoryError = "";
   @state() private busy = false;
   #queries = new DashboardQueries(
     this,
@@ -266,7 +267,11 @@ export class CategoriesScreen extends LitElement {
       else await this.api.createCategory(event.detail.value);
       this.editorOpen = false;
     } catch (error) {
-      this.fieldErrors = categoryRefusalErrors(error, this.languages.defaultLanguage);
+      this.fieldErrors = categoryRefusalErrors(
+        error,
+        this.languages.defaultLanguage,
+        event.detail.value.parentId ?? null,
+      );
       return;
     } finally {
       this.busy = false;
@@ -313,9 +318,17 @@ export class CategoriesScreen extends LitElement {
       this.#closeDelete();
     } catch (error) {
       this.saveError = this.#error(error);
-      const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
-      if (codeOf(error) === "category.reassign_invalid" && typeof field === "string")
-        this.reassignErrors = { [field]: this.saveError };
+      const params =
+        (error as { params?: { field?: unknown; categoryId?: unknown } } | null)?.params ?? {};
+      const code = codeOf(error);
+      const fields = (["productsTo", "childrenTo"] as const).filter((field) =>
+        code === "category.reassign_invalid" || code === "management.request_invalid"
+          ? params.field === field
+          : code === "category.not_found" &&
+            params.categoryId !== this.deleting?.id &&
+            params.categoryId === this.reassign[field],
+      );
+      this.reassignErrors = Object.fromEntries(fields.map((field) => [field, this.saveError]));
       return;
     } finally {
       this.busy = false;
@@ -358,6 +371,7 @@ export class CategoriesScreen extends LitElement {
   #openMainCategory(product: Product, remove = false): void {
     this.mainCategoryProduct = product;
     this.mainCategory = remove ? null : product.primaryCategoryId;
+    this.mainCategoryError = "";
     this.saveError = "";
   }
   /** A refused save's message belongs to this window, so it goes with it rather than reappearing in
@@ -371,11 +385,22 @@ export class CategoriesScreen extends LitElement {
     if (this.busy || !product) return;
     this.busy = true;
     this.saveError = "";
+    this.mainCategoryError = "";
     try {
       await this.api.setMainCategory(product.id, this.mainCategory);
       this.mainCategoryProduct = null;
     } catch (error) {
       this.saveError = this.#error(error);
+      const params =
+        (error as { params?: { field?: unknown; categoryId?: unknown } } | null)?.params ?? {};
+      const code = codeOf(error);
+      if (
+        (code === "management.request_invalid" && params.field === "primaryCategoryId") ||
+        (code === "category.not_found" &&
+          this.mainCategory !== null &&
+          params.categoryId === this.mainCategory)
+      )
+        this.mainCategoryError = this.saveError;
       return;
     } finally {
       this.busy = false;
@@ -974,9 +999,11 @@ export class CategoriesScreen extends LitElement {
                   languages: this.languages,
                   value: this.mainCategory,
                   noneLabel: t("categories.uncategorised"),
+                  error: this.mainCategoryError,
                   disabled: this.busy,
                   change: (id) => {
                     this.mainCategory = id;
+                    this.mainCategoryError = "";
                   },
                 })}`
             : nothing
