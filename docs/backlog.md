@@ -3904,7 +3904,7 @@ ongoing overhaul listed at the top of Track A.
   `management.request_invalid` naming `passphrase` would read only "The configuration export could not be created." at the bottom — read,
   not run, as unreachable from this form, because the client refuses a passphrase shorter than 12
   (`MIN_KEY_LENGTH`) before sending and the server's check is the same `length < 12`
-  (`apps/server/src/configuration-export-api.ts`); (12) **DONE (C61, 2026-09-29):** the profile screen's two refusals
+  (`apps/server/src/configuration-export-api.ts`); (12) **DONE (C61, #859, 2026-09-29):** the profile screen's two refusals
   placed under a field now read as that field's — `account_action.invalid` under the emailed code
   says the code is incorrect or no longer valid and how to get a new one (`profile.email_code_refused`, used only in the
   screen's email mode; the code's own link sentence stays for the login screen's links), and
@@ -5991,11 +5991,19 @@ lives in `packages/shared/src/sql-literal.ts`.
 **Finishing an account action refuses a person who has lost their login email — DONE (2026-09-27,
 #773).**
 
-**The dashboard calls a mistyped email-change code an invalid link — DONE (C61, 2026-09-29).**
+**The dashboard calls a mistyped email-change code an invalid link — DONE (C61, #859, 2026-09-29).**
 In the Profile screen's email mode, a refused code now reads `profile.email_code_refused` under the
 code field. `apps/dashboard/src/i18n/codes.ts` keeps its link sentence for `account_action.invalid`,
 because the login screen shows it for emailed links. The refused code was opened and screenshotted
 in the screen's email mode at 390 and 1280 px wide, light and dark, in English and Spanish.
+
+**The email-change form calls an empty code field an "authentication code" — OPEN (found by C61's
+review, #859, 2026-09-29; read, not run).** In the Profile screen's email mode, leaving the email
+confirmation code blank shows `profile.code_required` ("Enter your authentication code"), the
+wording for the authenticator-app code (`apps/dashboard/src/screens/profile-screen.ts`, the
+`setupCode` check in the form's own validation). `git blame` puts it at `a10e1cd28` (2026-09-10).
+**Next action:** give email mode its own "Enter the code from your email" sentence in `en` and `es`,
+test first, and LOOK at it in both themes and languages at 390 and 1280 px.
 
 **The tunnel's stand-in relay pairs with sockets that have already gone — OPEN (found 2026-09-23,
 writing tunnel's coverage tests, PR #506).** `packages/tunnel/src/testing/relay.ts` is test-only:
