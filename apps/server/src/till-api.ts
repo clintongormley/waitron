@@ -525,16 +525,22 @@ function hasExactly(value: unknown, keys: string[]): value is Record<string, unk
   return own.length === keys.length && keys.every((key) => own.includes(key));
 }
 
-/** A move's target: exactly one of a table's id, or the counter with its zone id or null. */
+/**
+ * A move's target: exactly one of a table's id, or the counter with its zone id or null. A
+ * malformed table id is refused as the seat and tab routes refuse one, a zone id as the sale route.
+ */
 function requireMoveTarget(value: unknown): MoveTarget {
   if (hasExactly(value, ["tableId"])) {
     const { tableId } = value;
-    if (typeof tableId === "string" && isUuid(tableId)) return { tableId: tableId.toLowerCase() };
+    if (typeof tableId === "string") {
+      if (!isUuid(tableId)) throw new AppError("table.not_found", { tableId });
+      return { tableId: tableId.toLowerCase() };
+    }
   } else if (hasExactly(value, ["counter"]) && hasExactly(value.counter, ["zoneId"])) {
     const { zoneId } = value.counter;
     if (zoneId === null) return { counter: { zoneId: null } };
-    if (typeof zoneId === "string" && isUuid(zoneId)) {
-      return { counter: { zoneId: zoneId.toLowerCase() } };
+    if (typeof zoneId === "string") {
+      return { counter: { zoneId: requireUuidParam(zoneId, "ServiceZoneId").toLowerCase() } };
     }
   }
   throw invalid("to");

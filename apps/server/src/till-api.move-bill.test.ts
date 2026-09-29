@@ -663,11 +663,10 @@ describe("the move route", () => {
     "counter",
     [],
     {},
-    { tableId: "not-a-uuid" },
     { tableId: 7 },
     { counter: null },
     { counter: {} },
-    { counter: { zoneId: "not-a-uuid" } },
+    { counter: { zoneId: 7 } },
     { counter: { zoneId: null, extra: 1 } },
     { tableId: randomUUID(), counter: { zoneId: null } },
     { tableId: randomUUID(), extra: 1 },
@@ -692,6 +691,40 @@ describe("the move route", () => {
       expect(revisionOf(ana.partyId)).toBe(revision);
     },
   );
+
+  it("answers a malformed table id as the seat and tab routes do, with 404 table.not_found", async () => {
+    const { ana, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const revision = revisionOf(ana.partyId);
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: "not-a-uuid" },
+      expectedPartyRevision: revision,
+    });
+
+    expect(answer.status).toBe(404);
+    expect(answer.json).toMatchObject({
+      code: "table.not_found",
+      params: { tableId: "not-a-uuid" },
+    });
+    expect(revisionOf(ana.partyId)).toBe(revision);
+  });
+
+  it("answers a malformed counter zone id as the sale route does, with 400 shared.invalid_id", async () => {
+    const { ana, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const revision = revisionOf(ana.partyId);
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { counter: { zoneId: "not-a-uuid" } },
+      expectedPartyRevision: revision,
+    });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "shared.invalid_id",
+      params: { kind: "ServiceZoneId", value: "not-a-uuid" },
+    });
+    expect(revisionOf(ana.partyId)).toBe(revision);
+  });
 
   it.each([["together"], [null], [1]])(
     "answers the bill choice %j with 400 management.request_invalid",

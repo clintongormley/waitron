@@ -1034,14 +1034,8 @@ export async function openTab(
     }
   }
 
-  if (table.tabId !== null) {
-    const [openTabRow] = await tx
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
-    if (openTabRow !== undefined) {
-      throw new AppError("tab.already_open", { tableId: req.tableId });
-    }
+  if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
+    throw new AppError("tab.already_open", { tableId: req.tableId });
   }
   // A party still holds the table after its tabs settle, until Finish table.
   if (await tableHeld(tx, req.tableId)) {
@@ -1407,7 +1401,7 @@ async function assertSendable(tx: Transaction, lineIds: readonly string[]): Prom
   }
 }
 
-async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
+export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
   const [order] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
@@ -2774,14 +2768,8 @@ async function assertTableAvailable(
   if (table.needsClearingSince !== null) {
     throw new AppError("table.needs_clearing", { tableId });
   }
-  if (table.tabId !== null) {
-    const [pointed] = await tx
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
-    if (pointed !== undefined) {
-      throw new AppError("table.occupied", { tableId });
-    }
+  if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
+    throw new AppError("table.occupied", { tableId });
   }
   // Checked here so the partial unique index on active memberships never refuses with an engine error.
   if (await tableHeld(tx, tableId)) {

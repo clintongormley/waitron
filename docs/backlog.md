@@ -3314,7 +3314,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       otherwise), and the party's next order then starts a new one. A table the bill's own party
       holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is
       refused as seating refuses it, and so is a free table in a zone that seats no one
-      (`service_zone.mode_incompatible`).
+      (`service_zone.mode_incompatible`). A table no party holds that still shows an open order is
+      `table.occupied`, as a tab move refuses it: the old tab move can put a counter order there.
+      At the route a malformed table id is `table.not_found` and a malformed counter zone id
+      `shared.invalid_id`, as the seat, tab and sale routes answer them.
     - Held dishes cannot leave a party (`group.held_leaves_party`); sent dishes leave their kitchen
       group and keep their ticket and served state. The kitchen gets a MOVED notice for each sent
       dish whose table changes, and always for a move to or from the counter, even when the label

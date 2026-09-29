@@ -22,6 +22,7 @@ import {
   createOpenOrder,
   listHeldOrders,
   markServed,
+  moveTab,
   parkOrder,
   placeOrder,
 } from "./working-order.js";
@@ -457,6 +458,22 @@ describe("what a move refuses, changing nothing", () => {
 
     expect(inactive).toMatchObject({ code: "table.inactive", params: { tableId: retired } });
     expect(absent).toMatchObject({ code: "table.not_found", params: { tableId: missing } });
+  });
+
+  it("refuses a table no party holds that shows an open order, as a tab move refuses it", async () => {
+    const p = await twoParties("Mesa ocupada");
+    const taken = await v.table("Mesa ocupada C");
+    const counter = await counterOrder(v, "Tarta");
+    await inTx(v, (tx) => moveTab(tx, v.cfg, counter, taken));
+    expect((await tableRow(v, taken)).tabId).toBe(counter);
+    expect(await partyAt(v, taken)).toBeNull();
+
+    const error = await refused(p, [p.second, counter], () => move(p.second, { tableId: taken }), [
+      taken,
+    ]);
+
+    expect(error).toMatchObject({ code: "table.occupied", params: { tableId: taken } });
+    expect(await partyAt(v, taken)).toBeNull();
   });
 
   it("refuses a free table in a zone that seats no one, as seating does", async () => {
@@ -1047,6 +1064,24 @@ describe("MOVED notices", () => {
     expect(noticesOn([second])).toEqual([
       { working_order_id: second, kind: "moved", line_name: "BURG", moved_to: "Mesa aviso 2 A" },
       { working_order_id: second, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 2 A" },
+    ]);
+    expect(noticesOn([ana.tabId])).toEqual(mainNotices);
+  });
+
+  it("tells the kitchen once of each sent dish of a bill merged into another party's main bill", async () => {
+    const { ana, second, mainNotices } = await sentSplit("Mesa aviso 4");
+    const luisTable = await v.table("Mesa aviso 8");
+    const luis = await seat(v, luisTable);
+    await order(v, luis.tabId, "Paella");
+    const luisNotices = noticesOn([luis.tabId]);
+
+    const result = await move(second, { tableId: luisTable });
+
+    expect(result).toEqual({ partyId: luis.partyId, billId: luis.tabId, merged: true });
+    expect(noticesOn([second, luis.tabId])).toEqual([
+      ...luisNotices,
+      { working_order_id: luis.tabId, kind: "moved", line_name: "BURG", moved_to: "Mesa aviso 8" },
+      { working_order_id: luis.tabId, kind: "moved", line_name: "TINTO", moved_to: "Mesa aviso 8" },
     ]);
     expect(noticesOn([ana.tabId])).toEqual(mainNotices);
   });

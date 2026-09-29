@@ -206,7 +206,9 @@ export async function mergeBills(
 
 /**
  * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
- * untouched bills of `partyId`, in one service mode.
+ * untouched bills of `partyId`, in one service mode. `known.mainBillId` is the party's main bill as
+ * the caller has just read it. `known.kitchenTold` is set by a caller that tells the kitchen of
+ * `fromBillId`'s sent dishes itself, from what it read before `fromBillId` joined the party.
  */
 export async function mergeCheckedBills(
   tx: Transaction,
@@ -214,12 +216,11 @@ export async function mergeCheckedBills(
   partyId: string,
   intoBillId: string,
   fromBillId: string,
+  known: { mainBillId?: string | null; kitchenTold?: boolean } = {},
 ): Promise<void> {
-  const [party] = await tx
-    .select({ mainBillId: parties.mainBillId })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  const before = await readSentWork(tx, cfg, fromBillId);
+  const mainBillId =
+    known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
+  const before = known.kitchenTold === true ? null : await readSentWork(tx, cfg, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, { modesChecked: true });
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
@@ -233,8 +234,16 @@ export async function mergeCheckedBills(
     .update(diningTables)
     .set({ tabId: intoBillId })
     .where(eq(diningTables.tabId, fromBillId));
-  if (party!.mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
-  await enqueueMovedSlips(tx, cfg, before, intoBillId);
+  if (mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
+  if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
+}
+
+async function readMainBill(tx: Transaction, partyId: string): Promise<string | null> {
+  const [party] = await tx
+    .select({ mainBillId: parties.mainBillId })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!.mainBillId;
 }
 
 /**

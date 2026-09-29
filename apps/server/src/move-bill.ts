@@ -17,6 +17,7 @@ import type { TillConfig } from "./till-config.js";
 import {
   clearGroups,
   fireLines,
+  isOpenOrder,
   refuseHeldLeavingParty,
   serviceModesMatch,
   unsentDishLines,
@@ -62,40 +63,32 @@ export async function moveBill(
   options: MoveBillOptions,
 ): Promise<MoveBillResult> {
   const path = await guardPathParty(tx, billId, options);
-  const source = path.partyId;
-  const destination = await resolveDestination(tx, cfg, source, to, options);
+  const destination = await resolveDestination(tx, cfg, path.partyId, to, options);
 
-  const [bill] = await tx
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, billId));
-  if (bill!.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
-  if (bill!.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
-  if (source === null && destination.kind === "counter") {
-    throw new AppError("management.request_invalid", { field: "to" });
-  }
-  const open = bill!.status === "open";
+  if (path.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
+  if (path.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
+  const open = path.status === "open";
 
-  let label: string | null = null;
+  // Read before the bill's party changes, which clears the party's main bill when it is this bill.
+  const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
   if (source !== null) {
     await refuseMainBillLeaving(tx, source, billId);
     await leaveParty(tx, billId);
     await repointSourceTables(tx, source, billId);
-    const [party] = await tx
-      .select({ name: parties.name })
-      .from(parties)
-      .where(eq(parties.id, source));
-    label = partyDisplayName(party!.name, (await partyTableLabels(tx, [source])).get(source)!);
   }
   const before = await readSentWork(tx, cfg, billId);
 
   let result: MoveBillResult;
   if (destination.kind === "counter") {
+    if (source === null) throw new AppError("management.request_invalid", { field: "to" });
     await tx
       .update(workingOrders)
-      .set(open ? { partyId: null, label } : { partyId: null })
+      .set({
+        partyId: null,
+        revision: movedRevision,
+        ...(open ? { label: await counterLabel(tx, source) } : {}),
+      })
       .where(eq(workingOrders.id, billId));
-    await moveRevisionOn(tx, billId);
     if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
     result = { partyId: null, billId, merged: false };
   } else if (destination.kind === "free") {
@@ -109,7 +102,7 @@ export async function moveBill(
     result = { partyId, billId, merged: false };
   } else {
     const partyId = destination.partyId;
-    await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
+    const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     const [party] = await tx
       .select({ mainBillId: parties.mainBillId })
       .from(parties)
@@ -118,13 +111,17 @@ export async function moveBill(
     if (
       options.bills === "merge" &&
       main !== null &&
-      (await isUntouched(tx, billId)) &&
+      (await isUntouched(tx, billId, moved)) &&
       (await isUntouched(tx, main)) &&
       // A pay-first bill's unsent dishes go when it is paid, and a table bill sends none when it is
       // paid.
       (await serviceModesMatch(tx, cfg, billId, main))
     ) {
-      await mergeCheckedBills(tx, cfg, partyId, main, billId);
+      // `before` was read while the bill was still at its old tables, so the kitchen is told below.
+      await mergeCheckedBills(tx, cfg, partyId, main, billId, {
+        mainBillId: main,
+        kitchenTold: true,
+      });
       result = { partyId, billId: main, merged: true };
     } else {
       if (main === null && open) await setMainBill(tx, partyId, billId);
@@ -140,7 +137,8 @@ export async function moveBill(
 
 /**
  * The destination, with the revision of a party holding the target table checked and moved on
- * first; then the table's own state, refused as seating refuses it.
+ * first; then the table's own state. A free table is refused as a tab move refuses it, and one in a
+ * zone that seats no one as seating refuses it.
  */
 async function resolveDestination(
   tx: Transaction,
@@ -165,6 +163,7 @@ async function resolveDestination(
   const [table] = await tx
     .select({
       active: diningTables.active,
+      tabId: diningTables.tabId,
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
@@ -177,6 +176,9 @@ async function resolveDestination(
     throw new AppError("table.already_in_party", { tableId });
   }
   if (holding !== null) return { kind: "party", partyId: holding };
+  if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
+    throw new AppError("table.occupied", { tableId });
+  }
   if (table.zoneId !== null) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
     if (context.serviceMode !== "table_tab") {
@@ -190,17 +192,33 @@ async function resolveDestination(
   return { kind: "free", tableId, zoneId: table.zoneId };
 }
 
+interface SourceParty {
+  id: string;
+  mainBillId: string | null;
+  name: string | null;
+}
+
+async function readSourceParty(tx: Transaction, partyId: string): Promise<SourceParty> {
+  const [party] = await tx
+    .select({ id: parties.id, mainBillId: parties.mainBillId, name: parties.name })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!;
+}
+
+/** What a bill taken from the party to the counter is labelled: the party's display name. */
+async function counterLabel(tx: Transaction, party: SourceParty): Promise<string> {
+  return partyDisplayName(party.name, (await partyTableLabels(tx, [party.id])).get(party.id)!);
+}
+
 /** The party's main bill leaves only as its last unpaid bill (spec §13 item 5). */
 async function refuseMainBillLeaving(
   tx: Transaction,
-  partyId: string,
+  party: SourceParty,
   billId: string,
 ): Promise<void> {
-  const [party] = await tx
-    .select({ mainBillId: parties.mainBillId })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  if (party!.mainBillId !== billId) return;
+  if (party.mainBillId !== billId) return;
+  const partyId = party.id;
   const [other] = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
@@ -215,22 +233,44 @@ async function refuseMainBillLeaving(
   if (other !== undefined) throw new AppError("party.main_bill_stays", { partyId });
 }
 
+/** A bill's status and when a payment in full at a reader began, as {@link takeIntoParty} answers. */
+export interface BillState {
+  status: (typeof workingOrders.$inferSelect)["status"];
+  attemptAt: string | null;
+}
+
 /**
  * Whether the bill is untouched: open, not being paid in full at a reader, and holding no payment,
- * one given back in full or being given back included.
+ * one given back in full or being given back included. `known` is the bill's state when the caller
+ * has just read it.
  */
-export async function isUntouched(tx: Transaction, billId: string): Promise<boolean> {
+export async function isUntouched(
+  tx: Transaction,
+  billId: string,
+  known?: BillState,
+): Promise<boolean> {
+  const bill = known ?? (await readBillState(tx, billId));
+  return bill.status === "open" && bill.attemptAt === null && !(await holdsPayment(tx, billId));
+}
+
+async function readBillState(tx: Transaction, billId: string): Promise<BillState> {
   const [bill] = await tx
     .select({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  return bill!.status === "open" && bill!.attemptAt === null && !(await holdsPayment(tx, billId));
+  return bill!;
 }
+
+/**
+ * One more write on an open or presented bill, without `bumpRevision`'s refusal of money in flight:
+ * a move changes no amount, and a card at the reader completes on the bill wherever it now is.
+ */
+const movedRevision = sql`${workingOrders.revision} + 1`;
 
 /**
  * The bill joins the party: no longer delivered to a table, its revision moved on, and, while it is
  * open, its service context taking `zoneId` for what is added later. A presented bill keeps its own
- * zone, since its collection settles the invoice it already has.
+ * zone, since its collection settles the invoice it already has. Answers the bill's state.
  */
 export async function takeIntoParty(
   tx: Transaction,
@@ -238,14 +278,14 @@ export async function takeIntoParty(
   billId: string,
   partyId: string,
   zoneId: string | null,
-): Promise<void> {
+): Promise<BillState> {
   const [bill] = await tx
     .update(workingOrders)
-    .set({ partyId, deliveryTableId: null })
+    .set({ partyId, deliveryTableId: null, revision: movedRevision })
     .where(eq(workingOrders.id, billId))
-    .returning({ status: workingOrders.status });
-  await moveRevisionOn(tx, billId);
+    .returning({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt });
   if (bill!.status === "open" && zoneId !== null) await adoptZone(tx, cfg, billId, zoneId);
+  return bill!;
 }
 
 /**
@@ -268,17 +308,6 @@ export async function leaveParty(tx: Transaction, billId: string): Promise<void>
     tx,
     lines.filter((line) => line.groupId !== null).map((line) => line.id),
   );
-}
-
-/**
- * Counts one more write on an open or presented bill without `bumpRevision`'s refusal of money in
- * flight: a move changes no amount, and a card at the reader completes on the bill wherever it now is.
- */
-async function moveRevisionOn(tx: Transaction, billId: string): Promise<void> {
-  await tx
-    .update(workingOrders)
-    .set({ revision: sql`${workingOrders.revision} + 1` })
-    .where(eq(workingOrders.id, billId));
 }
 
 /**
@@ -309,14 +338,10 @@ async function adoptZone(
  */
 async function repointSourceTables(
   tx: Transaction,
-  partyId: string,
+  party: SourceParty,
   billId: string,
 ): Promise<void> {
-  const [party] = await tx
-    .select({ mainBillId: parties.mainBillId })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  const main = party!.mainBillId === billId ? null : party!.mainBillId;
+  const main = party.mainBillId === billId ? null : party.mainBillId;
   await tx
     .update(diningTables)
     .set({ tabId: main })
@@ -328,7 +353,7 @@ async function repointSourceTables(
           tx
             .select({ id: partyTables.tableId })
             .from(partyTables)
-            .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt))),
+            .where(and(eq(partyTables.partyId, party.id), isNull(partyTables.leftAt))),
         ),
       ),
     );
