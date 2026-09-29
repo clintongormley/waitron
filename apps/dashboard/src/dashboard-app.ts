@@ -4,6 +4,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
 import { live } from "lit/directives/live.js";
+import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
@@ -140,7 +141,7 @@ type NavPage = { screen: ScreenId; label: string };
 
 /** Case- and accent-insensitive, so "menus" finds "Menús". */
 function foldForSearch(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase();
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -300,12 +301,13 @@ export class DashboardApp extends LitElement {
         color: var(--wt-color-text-muted);
       }
 
-      /* Group header: a toggle button (collapses/expands its own items), small caps (uppercase,
-         letter-spacing) — makes it unmistakably a label rather than a fainter link, which plain
-         small+muted text didn't. Uses the primary accent rather than muted grey so
-         it doesn't read as the same weight of "quiet" as a resting nav item beneath it; sharing the
-         accent hue with the current-page indicator is fine here because a header is never itself the
-         current page, so there's no ambiguity about what the colour is pointing at. */
+      /* Group header: a toggle button (collapses/expands its own items; a plain label while a
+         search term is typed), small caps (uppercase, letter-spacing) — makes it unmistakably a
+         label rather than a fainter link, which plain small+muted text didn't. Uses the primary
+         accent rather than muted grey so it doesn't read as the same weight of "quiet" as a resting
+         nav item beneath it; sharing the accent hue with the current-page indicator is fine here
+         because a header is never itself the current page, so there's no ambiguity about what the
+         colour is pointing at. */
       .nav-group {
         display: flex;
         align-items: center;
@@ -326,8 +328,18 @@ export class DashboardApp extends LitElement {
         cursor: pointer;
       }
 
-      .nav-group:hover {
+      button.nav-group:hover {
         background: var(--wt-color-surface);
+      }
+
+      div.nav-group {
+        cursor: default;
+      }
+
+      /* Holds the chevron's place, so a header does not shift sideways when a search starts. */
+      .nav-group .chevron-space {
+        flex-shrink: 0;
+        width: var(--wt-font-size-md);
       }
 
       /* Points down at rest ("expand downward"); rotated to point up when expanded ("collapse"),
@@ -1378,7 +1390,7 @@ export class DashboardApp extends LitElement {
 
   /** A no-op when the drawer is closed, so it never swallows Escape from anything else. */
   #onLayoutKeydown(e: KeyboardEvent): void {
-    if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
+    if (e.key === "Escape" && !e.isComposing && this.drawerOpen) this.drawerOpen = false;
   }
 
   /** The pages this person may open, group by group in nav order, each labelled in the current
@@ -1413,8 +1425,10 @@ export class DashboardApp extends LitElement {
     this.#selectScreen(screen);
   }
 
-  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer. */
+  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer.
+   * A key reported with isComposing set belongs to an input method's composition, not the box. */
   #onNavSearchKeydown(e: KeyboardEvent): void {
+    if (e.isComposing) return;
     if (e.key === "Enter" && this.navSearch.trim() !== "") {
       const first = this.#shownNav().find((section) => section.pages?.length)?.pages?.[0];
       if (first) this.#openFromNav(first.screen);
@@ -1446,30 +1460,39 @@ export class DashboardApp extends LitElement {
         />
         ${sections.map(({ group, holdsCurrent, pages }) => {
           if (pages === undefined) return nothing;
-          // A search shows its matches open without touching `collapsedGroups`, so clearing it
-          // brings back the nav exactly as it was.
+          // A search shows its matches open without touching `collapsedGroups`, and its headers
+          // are plain labels rather than toggles, so clearing it brings back the nav exactly as it
+          // was.
           const collapsed = !searching && this.collapsedGroups.has(group.id) && !holdsCurrent;
           const panelId = `nav-group-panel-${group.id}`;
           return html`
             ${
-              group.headerKey
-                ? html`<button
-                    type="button"
-                    class="nav-group"
-                    aria-expanded=${!collapsed}
-                    aria-controls=${panelId}
-                    data-test="nav-group-${group.id}"
-                    @click=${(e: MouseEvent) =>
-                      this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
-                  >
-                    <wt-icon name="chevron-down" class="chevron"></wt-icon>
-                    ${group.icon ? html`<wt-icon name=${group.icon}></wt-icon>` : nothing}
-                    ${t(group.headerKey)}
-                  </button>`
-                : nothing
+              group.headerKey === undefined
+                ? nothing
+                : searching
+                  ? html`<div class="nav-group" data-test="nav-group-${group.id}">
+                      <span class="chevron-space"></span>
+                      ${group.icon ? html`<wt-icon name=${group.icon}></wt-icon>` : nothing}
+                      ${t(group.headerKey)}
+                    </div>`
+                  : html`<button
+                      type="button"
+                      class="nav-group"
+                      aria-expanded=${!collapsed}
+                      aria-controls=${panelId}
+                      data-test="nav-group-${group.id}"
+                      @click=${(e: MouseEvent) =>
+                        this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
+                    >
+                      <wt-icon name="chevron-down" class="chevron"></wt-icon>
+                      ${group.icon ? html`<wt-icon name=${group.icon}></wt-icon>` : nothing}
+                      ${t(group.headerKey)}
+                    </button>`
             }
             <div id=${panelId} ?hidden=${collapsed}>
-              ${pages.map(
+              ${repeat(
+                pages,
+                (page) => page.screen,
                 (page) =>
                   html`<button
                     type="button"
@@ -1485,7 +1508,7 @@ export class DashboardApp extends LitElement {
           `;
         })}
         <p class="nav-search-empty" role="status" data-test="nav-search-empty">
-          ${noMatch ? t("nav.search_empty") : nothing}
+          ${noMatch ? t("nav.no_matches") : nothing}
         </p>
       </nav>
     `;

@@ -770,17 +770,18 @@ visible here because the sidebar itself sits on `--wt-color-bg`, unlike `wt-butt
 variant (see `--wt-opacity-hover` above). A `.nav-group` header takes a small-caps treatment
 (uppercase, `letter-spacing: 0.04em`) so it reads as a label, not a fainter link.
 
-A headed group (the pinned first group — Overview, Sales — has no header and is never
-collapsible) is also its own disclosure toggle: the header is a `<button>` with `aria-expanded` and
-`aria-controls` pointing at its item list, a `chevron-down` `wt-icon` that rotates 180° when
-expanded (pointing down at rest — "expand this way" — up when open — "collapse"). Every headed
-group starts collapsed (owner decision 2026-09-28, replacing expanded-by-default). Collapsed state
-is a plain `Set<NavGroupId>` in component state, not persisted, so each load starts collapsed again.
-A group that contains the CURRENT screen always renders expanded regardless of that set, so opening
-the dashboard on a page shows that page's group open and the rest closed. A header click records
-the opposite of what the header shows. The group holding the current screen always shows open, so
-clicking its header leaves a collapse recorded that a further click cannot clear; the collapse shows
-once you open a screen outside that group, and never hides the page you are on.
+A headed group (the pinned first group — Overview, Sales — has no header and is never collapsible)
+is also its own disclosure toggle, except while a search term is typed (below): the header is a
+`<button>` with `aria-expanded` and `aria-controls` pointing at its item list, a `chevron-down`
+`wt-icon` that rotates 180° when expanded (pointing down at rest — "expand this way" — up when open
+— "collapse"). Every headed group starts collapsed (owner decision 2026-09-28, replacing
+expanded-by-default). Collapsed state is a plain `Set<NavGroupId>` in component state, not
+persisted, so each load starts collapsed again. A group that contains the CURRENT screen always
+renders expanded regardless of that set, so opening the dashboard on a page shows that page's group
+open and the rest closed. A header click records the opposite of what the header shows. The group
+holding the current screen always shows open, so clicking its header leaves a collapse recorded that
+a further click cannot clear; the collapse shows once you open a screen outside that group, and
+never hides the page you are on.
 
 A search box sits at the top of the sidebar, above the groups: a native `<input type="search">`
 named `nav-search`, whose accessible name and placeholder are both **Search pages**. A staff session
@@ -789,13 +790,19 @@ shows only the pages whose label in the current language contains it, ignoring c
 ("categorias" finds "Categorías"), plus every page of a group whose header contains it. The search
 narrows the rows the nav would already show, so a page this person may not open never appears,
 however exactly its name is typed. A group with no match is hidden, header and all. A group with a
-match shows open whatever its collapsed state, and the search does not change that state, so
-clearing the term brings the nav back exactly as it was. When nothing matches, the nav says **No
-pages match** in a `role="status"` message. Enter opens the first page shown, in nav order, and
-does nothing when nothing matches or the box is blank. Opening a page from a search, by Enter or
-by click, clears the term and closes the phone-width drawer, as any nav click does. Escape clears a
-term and goes no further, so an open drawer stays open; Escape in an empty box closes the drawer as
-it does anywhere else in the shell. A language switch keeps the term and searches the new
+match shows open whatever its collapsed state. While a term is typed each shown header stops being a
+collapse control: it is a plain `<div>` with no `aria-expanded`, no click handler and no chevron (an
+empty space of the chevron's width keeps the label where it was). Nothing clicked during a search
+can therefore change the recorded collapsed state, so clearing the term brings the nav back exactly
+as it was. When nothing matches, the nav says **No pages match.** in a `role="status"` message. Enter
+opens the first page shown, in nav order, and does nothing when nothing matches or the box is blank.
+Opening a page from a search, by Enter or by click, clears the term and closes the phone-width
+drawer, as any nav click does. Escape clears a term and goes no further, so an open drawer stays
+open; Escape in an empty box closes the drawer as it does anywhere else in the shell. An Enter or
+Escape reported with `isComposing` set (an input method's composition) is left alone: it opens no
+page, clears no term, and the shell's Escape handler does not close the drawer for it. The rows are
+keyed by page, so at desktop width a result row pressed with Enter or Space keeps focus once the
+full list comes back. A language switch keeps the term and searches the new
 language's labels, and signing out empties the box.
 
 A group that has ITS OWN scrolled-to items shrink when collapsed can leave the sidebar's

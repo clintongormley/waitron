@@ -4104,7 +4104,7 @@ describe("the nav search", () => {
       .filter((item) => item.checkVisibility())
       .map((item) => item.dataset.test);
   const shownHeaders = (el: DashboardApp) =>
-    [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")]
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-group")]
       .filter((header) => header.checkVisibility())
       .map((header) => header.dataset.test);
   const expandedHeaders = (el: DashboardApp) =>
@@ -4199,7 +4199,7 @@ describe("the nav search", () => {
     expect(expandedHeaders(el)).toEqual([]);
 
     await search(el, "print");
-    expect(expandedHeaders(el)).toEqual(["nav-group-configuration"]);
+    expect(shownHeaders(el)).toEqual(["nav-group-configuration"]);
     expect(
       el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-configuration")!.hidden,
     ).toBe(false);
@@ -4237,7 +4237,7 @@ describe("the nav search", () => {
     expect(shownHeaders(el)).toEqual([]);
     const status = emptyStatus(el)!;
     expect(status.getAttribute("role")).toBe("status");
-    expect(status.textContent!.trim()).toBe("No pages match");
+    expect(status.textContent!.trim()).toBe("No pages match.");
 
     await search(el, "print");
     expect(emptyStatus(el)?.textContent?.trim() ?? "").toBe("");
@@ -4330,4 +4330,76 @@ describe("the nav search", () => {
     expect(searchBox(el).value).toBe("");
     expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
   });
+
+  it("keeps the folds a header click made before a search, when a header is clicked during it", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    const settings = () =>
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-configuration]")!;
+    settings().click();
+    await flush(el);
+    expect(settings().getAttribute("aria-expanded")).toBe("true");
+
+    await search(el, "print");
+    settings().click();
+    await flush(el);
+    await search(el, "");
+
+    expect(settings().getAttribute("aria-expanded")).toBe("true");
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-configuration")!.hidden,
+    ).toBe(false);
+  });
+
+  it("shows a group header as a label, not a collapse control, while a term is typed", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "print");
+    const header = el.shadowRoot!.querySelector<HTMLElement>(
+      "[data-test=nav-group-configuration]",
+    )!;
+    expect(header.checkVisibility()).toBe(true);
+    expect(header.textContent!.trim()).toBe("Settings");
+    expect(header.tagName).not.toBe("BUTTON");
+    expect(header.hasAttribute("aria-expanded")).toBe(false);
+    expect(header.hasAttribute("aria-controls")).toBe(false);
+    expect(header.querySelector(".chevron")).toBeNull();
+  });
+
+  it("ignores Enter and Escape that belong to a text composition", async () => {
+    const el = await mountSession(sessionIn("en-GB"), 390);
+    await openDrawer(el);
+    const path = new URL(location.href).pathname;
+    await search(el, "print");
+
+    for (const key of ["Enter", "Escape"]) {
+      searchBox(el).dispatchEvent(
+        new KeyboardEvent("keydown", { key, isComposing: true, bubbles: true, composed: true }),
+      );
+      await flush(el);
+      expect(overview(el)).toBeTruthy();
+      expect(new URL(location.href).pathname).toBe(path);
+      expect(searchBox(el).value).toBe("print");
+      expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+      expect(layout(el).classList.contains("drawer-open")).toBe(true);
+    }
+  });
+
+  for (const [key, typed] of [
+    ["Enter", "{Enter}"],
+    ["Space", "[Space]"],
+  ]) {
+    it(`leaves focus on the opened page's row after a match is chosen with ${key}`, async () => {
+      const el = await mountSession(sessionIn("en-GB"));
+      await search(el, "print");
+      navPrinters(el)!.focus();
+      await userEvent.keyboard(typed);
+      await flush(el);
+
+      expect(screenPrinters(el)).toBeTruthy();
+      expect(searchBox(el).value).toBe("");
+      const focused = el.shadowRoot!.activeElement as HTMLElement | null;
+      expect(focused?.dataset.test).toBe("nav-printers");
+      expect(focused?.getAttribute("aria-current")).toBe("page");
+      expect(focused?.textContent!.trim()).toBe("Printers");
+    });
+  }
 });

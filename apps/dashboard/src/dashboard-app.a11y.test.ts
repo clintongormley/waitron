@@ -212,10 +212,9 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     }
   });
 
-  // Scoped to the box and its status message: at this width, on the light theme, axe already
-  // reports the group headers and the current page failing colour contrast (4.32:1, primary on the
-  // page background) without the search.
-  it("the sidebar's page search is accessible empty, with matches and with none", async () => {
+  // Scoped to the box and its message: at 1280 px on the light theme axe fails the sidebar's group
+  // headers and current page on colour contrast — see docs/backlog.md's primary-blue entry.
+  it("the sidebar's page search box and its message are accessible empty, with matches and with none", async () => {
     const api = stubApi({ listStaff: vi.fn().mockResolvedValue(people) });
     const width = window.innerWidth,
       height = window.innerHeight;
@@ -229,7 +228,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
 
       for (const [term, message] of [
         ["impres", ""],
-        ["zzz", "Ninguna página coincide"],
+        ["zzz", "Ninguna página coincide."],
       ]) {
         box.focus();
         box.select();

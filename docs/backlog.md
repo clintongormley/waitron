@@ -3398,11 +3398,12 @@ ongoing overhaul listed at the top of Track A.
 
 - **The sidebar's sections now open folded shut (C35, #822, owner decision 2026-09-28).** Two
   leftovers from its review, not fixed:
-  (1) **Owner question:** the header of the section holding the current page stays clickable, but a
-  click changes nothing on screen until you open a page outside that section (the section shows open
-  because it holds the current page; the click only records a collapse for later). The old code had
-  the same no-op. `wt-disclosure` and `wt-data-table` instead hide or disable a collapse control that
-  would do nothing. Should this header do the same?
+  (1) **Owner question:** outside a search, the header of the section holding the current page stays
+  clickable (during a nav search the headers are plain labels, C46), but a click changes nothing on
+  screen until you open a page outside that section (the section shows open because it holds the
+  current page; the click only records a collapse for later). The old code had the same no-op.
+  `wt-disclosure` and `wt-data-table` instead hide or disable a collapse control that would do
+  nothing. Should this header do the same?
   (2) **A test that guards nothing:** "keeps the clicked group header at the same on-screen position…"
   in `apps/dashboard/src/dashboard-app.test.ts` still passes with the scroll correction in
   `#toggleGroup` deleted — on `main` at 55504ee1b too, before C35. Making it catch a missing correction
@@ -3479,13 +3480,17 @@ ongoing overhaul listed at the top of Track A.
 - **A search box at the top of the dashboard sidebar finds a page by its name or its group's name
   (C46, owner request 2026-09-28).** It lists only the pages the person may open (the same checks
   the sidebar already applies), ignores case and accents, opens a group with a match without
-  changing which groups are folded, says "No pages match" when nothing does, and opens the first
+  changing which groups are folded, says "No pages match." when nothing does, and opens the first
   match on Enter; opening a page empties the box. `docs/developers/design-system.md` → "Dashboard
-  sidebar navigation" describes it. Left open, not fixed: (1) clicking a group header while a term
-  is typed records a fold that shows only once the term is cleared; (2) the new accessibility case
-  checks the search box and its message only, because the light theme's sidebar headers and current
-  page already fail the colour-contrast rule — the primary-blue entry under "Also open, and
-  product-wide" above.
+  sidebar navigation" describes it. Left open, not fixed: the new accessibility case checks the
+  search box and its message only, because at desktop width (1280 px) the light theme's sidebar
+  headers and current page already fail the colour-contrast rule — the primary-blue entry under "Also
+  open, and product-wide" above, which computes the pair as 4.33:1 from the token values; axe reports
+  the same pair as 4.32:1 because axe truncates to two places (axe-core computes
+  `Math.floor(contrast * 100) / 100`) while the older entry rounds. Measured 2026-09-29 by running
+  axe at 1280 px over the dashboard with this branch's production changes reverted to a5474be6e: six
+  colour-contrast failures at 4.32:1 in the light theme, none in the dark; the narrow-drawer cases
+  pass.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
