@@ -303,9 +303,9 @@ export const en = {
   "table.group_ready": "Ready",
   "table.group_away": "En route",
   "table.group_sent": "Sent {time} by {name}",
-  "table.group_sent_time": "Sent {time}",
+  "table.group_sent_unnamed": "Sent {time}",
   "table.group_held_since": "Held {time} by {name}",
-  "table.group_held_since_time": "Held {time}",
+  "table.group_held_since_unnamed": "Held {time}",
   "table.ungrouped_title": "Not in a group",
   "table.current_orders_unread":
     "Current orders could not be read, so nothing can be marked served. Open the table again to retry.",
@@ -832,9 +832,9 @@ export const es: Record<StringKey, string> = {
   "table.group_ready": "Listo",
   "table.group_away": "En camino",
   "table.group_sent": "Enviado a las {time} por {name}",
-  "table.group_sent_time": "Enviado a las {time}",
+  "table.group_sent_unnamed": "Enviado a las {time}",
   "table.group_held_since": "En espera desde las {time}, por {name}",
-  "table.group_held_since_time": "En espera desde las {time}",
+  "table.group_held_since_unnamed": "En espera desde las {time}",
   "table.ungrouped_title": "Sin grupo",
   "table.current_orders_unread":
     "No se pudieron leer los pedidos en curso, así que no se puede marcar nada como servido. Vuelve a abrir la mesa para reintentarlo.",

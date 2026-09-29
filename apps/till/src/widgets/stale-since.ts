@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { countText, currentLocale, t } from "../i18n/t.js";
+import { clockTime, countText, t } from "../i18n/t.js";
 
 const MINUTE_MS = 60_000;
 
@@ -41,10 +41,7 @@ export class TillStaleSince extends LitElement {
   }
 
   protected override render(): string {
-    const time = new Intl.DateTimeFormat(currentLocale(), {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(this.since);
+    const time = clockTime(this.since);
     const minutes = this.#minutes();
     const ago =
       minutes === 0

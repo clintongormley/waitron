@@ -20,7 +20,7 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { countText, currentLocale, named, t } from "../i18n/t.js";
+import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { selectStyles } from "../select-styles.js";
@@ -185,12 +185,6 @@ interface HeldRow {
   name: string;
   quantity: string;
   splits: boolean;
-}
-
-function clockTime(at: number): string {
-  return new Intl.DateTimeFormat(currentLocale(), { hour: "2-digit", minute: "2-digit" }).format(
-    new Date(at),
-  );
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
@@ -2860,8 +2854,8 @@ export class TillTableOrderScreen extends LitElement {
     const time = clockTime(Date.parse(group.sentAt));
     const [withName, unnamed] =
       group.state === "held"
-        ? (["table.group_held_since", "table.group_held_since_time"] as const)
-        : (["table.group_sent", "table.group_sent_time"] as const);
+        ? (["table.group_held_since", "table.group_held_since_unnamed"] as const)
+        : (["table.group_sent", "table.group_sent_unnamed"] as const);
     const at = (key: StringKey) => t(key).replace("{time}", () => time);
     return html`<span class="group-sent" data-group-sent
       >${named(group.sentBy ?? "", at(withName), at(unnamed))}</span

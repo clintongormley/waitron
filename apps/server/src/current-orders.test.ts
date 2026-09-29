@@ -33,6 +33,7 @@ import {
 import { writeReleaseReminderMinutes } from "@waitron/venue-service";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
+import { saveDraft, submitDraft, type Draft, type DraftLineInput } from "./order-drafts.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -1105,6 +1106,94 @@ describe("a party that has left", () => {
     expect(read.groups.map((g) => [g.id, g.state])).toEqual([
       [starters.id, "fired"],
       [desserts.id, "held"],
+    ]);
+  });
+});
+
+describe("where each submission's groups go (spec §3)", () => {
+  const item = (v: Venue, dish: Dish): DraftLineInput => ({
+    menuItemId: v.offer(dish),
+    variantId: null,
+    menuVersionId: null,
+    options: [],
+    extras: [],
+    note: null,
+    quantity: "1",
+    courseId: null,
+    noMerge: false,
+  });
+  const save = (v: Venue, partyId: string, operatorId: string, lines: DraftLineInput[]) =>
+    inTx((tx) => saveDraft(tx, v.cfg, partyId, operatorId, { draftId: null, revision: 0, lines }));
+  const submit = async (
+    v: Venue,
+    partyId: string,
+    draft: Draft,
+    groups: { lineIds: string[]; release: GroupRelease }[],
+  ) => {
+    const expectedPartyRevision = await revisionOf(partyId);
+    return inTx((tx) =>
+      submitDraft(tx, v.cfg, partyId, draft.id, {
+        operatorId: draft.ownerId,
+        submissionId: randomUUID(),
+        draftRevision: draft.revision,
+        expectedPartyRevision,
+        groups,
+      }),
+    );
+  };
+  const placed = async (partyId: string) =>
+    (await currentOrders(partyId)).groups.map((g) => [
+      g.position,
+      g.state,
+      g.rows.map((r) => r.name),
+    ]);
+
+  it("numbers a draft's partial sends, and drafts sent after them, in the order they were sent", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const alex = await save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
+    const mia = await save(v, s.partyId, MIA, [item(v, "water")]);
+    const { draft: rest } = await submit(v, s.partyId, alex, [
+      { lineIds: [alex.lines[0]!.id], release: "fire" },
+    ]);
+    await submit(v, s.partyId, mia, [{ lineIds: [mia.lines[0]!.id], release: "fire" }]);
+    await submit(v, s.partyId, rest!, [{ lineIds: [rest!.lines[0]!.id], release: "hold" }]);
+    const dessert = await save(v, s.partyId, ALEX, [item(v, "flan")]);
+    await submit(v, s.partyId, dessert, [{ lineIds: [dessert.lines[0]!.id], release: "hold" }]);
+
+    expect(await placed(s.partyId)).toEqual([
+      [1, "fired", ["croquetas"]],
+      [2, "fired", ["water"]],
+      [3, "held", ["steak"]],
+      [4, "held", ["flan"]],
+    ]);
+  });
+
+  it("puts a later submission joined to a held group in that group, starting none", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const first = await args(s.partyId);
+    const { groups } = await inTx((tx) =>
+      submitGroups(tx, v.cfg, s.partyId, {
+        ...first,
+        groups: [
+          { release: "fire", lines: [line(v, "croquetas")] },
+          { release: "hold", lines: [line(v, "steak")] },
+        ],
+      }),
+    );
+    const command = await args(s.partyId);
+    await inTx((tx) =>
+      submitGroups(tx, v.cfg, s.partyId, {
+        ...command,
+        groups: [{ release: "hold", lines: [line(v, "flan")] }],
+        joinGroupId: groups[1]!.id,
+      }),
+    );
+
+    expect(await placed(s.partyId)).toEqual([
+      [1, "fired", ["croquetas"]],
+      [2, "held", ["steak", "flan"]],
     ]);
   });
 });

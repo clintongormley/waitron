@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
@@ -22,6 +22,7 @@ import {
   tarta,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 
+beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
@@ -105,11 +106,8 @@ describe("Current orders in the Tab drawer", () => {
           ),
         }),
       });
-    const previous = currentLocale();
-    afterEach(() => setLocale(previous));
 
     it("in English: fired groups say Sent, held ones Held, and a sender with no name is left out", async () => {
-      setLocale("en");
       const { el } = await mountSent();
       expect(sentOf(el)).toEqual([
         `Sent ${clock(sentBeforeFired)} by Luis`,
