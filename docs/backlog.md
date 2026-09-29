@@ -6316,7 +6316,7 @@ reading unless marked run:
   first read failed but arrives on a later live refresh shows its rows under a banner that never
   clears. Clearing the flag in each list's callback would bring back a stuck "Loading…" for a list
   that did fail; the fix is failure state per list, plus a retry as `menus-screen.ts` offers. Found
-  2026-09-27 in review; by reading, not run. **DONE (C73, 2026-09-29):** each read (the roster and
+  2026-09-27 in review; by reading, not run. **DONE (C73, #876, 2026-09-29):** each read (the roster and
   the three lists) has its own query controller, because a controller's error callback does not say
   which read failed; a failure, including a later live refresh's, is recorded against its own read,
   and that read's next delivery clears it. Each list says under its own heading when it failed; the
