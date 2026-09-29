@@ -8,6 +8,7 @@ import {
   saleLines,
   sales,
   withTransaction,
+  ticketItems,
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
@@ -705,6 +706,45 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     expect(await refused.json()).toMatchObject({
       error: { code: "product.not_sold_separately" },
     });
+  });
+
+  // A line already stored was already ordered: a later publish stops new standalone lines, not it.
+  it("pays and sends a held order's standalone line after a publish makes it not sold separately", async () => {
+    const v = await setupLunch();
+    const bacon = await withBacon(v, "public");
+    const id = randomUUID();
+    const parked = await send(v, "POST", "/api/working-orders", {
+      id,
+      zoneId: v.zoneId,
+      lines: [baconLine(bacon)],
+      label: "Mesa 5",
+    });
+    expect(parked.status).toBe(200);
+    await withTransaction(suite.db, (tx) =>
+      updateProduct(tx, bacon.productId, { ordering: "not_sold_separately" }),
+    );
+    await publish(v.menuId);
+    expect(await servedOrdering(v, bacon.offerId)).toBe("not_sold_separately");
+    const [stored] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+
+    const paid = await send(v, "POST", "/api/sales", {
+      workingOrderId: id,
+      zoneId: v.zoneId,
+      lines: [{ workingOrderLineId: stored!.id, ...baconLine(bacon) }],
+      tender: { method: "cash", amount: "50.00" },
+    });
+    expect(paid.status).toBe(200);
+    expect(((await paid.json()) as { total: string }).total).toBe("2.00");
+    const sent = await send(v, "POST", `/api/working-orders/${id}/prep`);
+    expect(sent.status).toBe(200);
+    const tickets = await suite.db
+      .select({ lineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id));
+    expect(tickets).toEqual([{ lineId: stored!.id }]);
   });
 });
 
