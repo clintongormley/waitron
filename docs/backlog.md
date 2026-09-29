@@ -3273,7 +3273,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       kitchen, because a table bill sends nothing when it is paid.)
     - A table of the party still pointing at the merged-away bill is pointed at the surviving one,
       so the old till screens do not show an abandoned bill; its membership is unchanged.
-  - **Task 7 built on the server (branch `feat/party-move-bill`, 2026-09-29): move a whole bill to
+  - **Task 7 DONE (#864, 2026-09-29): move a whole bill to
     another party, to a free table, to the counter, or from the counter into a party.** This is the
     server half of campaign items A81 (a counter order seated at a table) and A82 (a table's bill
     taken to the counter); the till half is Task 12. One new route, `POST /api/bills/:id/move`
