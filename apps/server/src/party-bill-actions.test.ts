@@ -202,7 +202,7 @@ async function counterOrder(...names: string[]): Promise<string> {
 }
 
 describe("split a bill", () => {
-  it("puts the chosen items on a new bill of the same party, from a bill no table points at", async () => {
+  it("puts the chosen items on a new bill of the same party, from a bill that was itself split off", async () => {
     const mesa4 = await v.table("Mesa 4");
     const { partyId, tabId } = await seat(v, mesa4);
     await order(v, tabId, "Burger", "Vino", "Agua");

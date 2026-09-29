@@ -308,7 +308,7 @@ describe("openTab", () => {
   });
 });
 
-/** An open walk-up order that no table points at. */
+/** An open walk-up order of no party and no delivery table. */
 async function bareOpenOrder(cfg: TillConfig, id: string): Promise<void> {
   // Through the table definition: `working_orders.opened_at` is a `$defaultFn` generator.
   await db

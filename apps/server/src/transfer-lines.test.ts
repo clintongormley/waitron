@@ -293,7 +293,7 @@ describe("transfer — whole line", () => {
   it("refuses when the destination is not an open tab (tab.not_open)", async () => {
     const { cfg, tableAId, cafeOffer } = await setupVenue();
     const tabA = await openTabWith(cfg, tableAId, [{ menuItemId: cafeOffer, quantity: "2" }]);
-    const notATab = randomUUID(); // no working_orders row, no dining_tables back-pointer
+    const notATab = randomUUID(); // no working_orders row
     await expect(
       asApp(cfg, (tx) => transfer(tx, cfg, tabA, notATab, [{ lineNo: 1 }])),
     ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: notATab } });
