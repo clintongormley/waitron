@@ -3,6 +3,7 @@ import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import type {
   CatalogueSummary,
   DashboardApi,
@@ -88,6 +89,14 @@ const editor = (el: RecipeScreen): RecipeEditor =>
   el.shadowRoot!.querySelector("dashboard-recipe-editor")!;
 const errorKey = (el: RecipeScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
+
+/** The one message the form shows beside its action, or "" when it shows none. */
+async function bottomOf(form: IngredientForm): Promise<string> {
+  await form.updateComplete;
+  const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
 
 function emit(source: Element, type: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -221,7 +230,7 @@ describe("recipe-screen", () => {
     expect(api.createIngredient).not.toHaveBeenCalled();
   });
 
-  it("keeps the form open and shows the error when a create fails", async () => {
+  it("keeps the form open and says a create refusal beside Create, not on the page", async () => {
     const api = stubApi({
       createIngredient: vi.fn().mockRejectedValue({ code: "allergen.invalid_code" }),
     });
@@ -233,12 +242,14 @@ describe("recipe-screen", () => {
     emit(form(el), "create-ingredient", { name: "Azúcar" });
     await flush(el);
 
-    expect(errorKey(el)).toBe("allergen.invalid_code");
+    expect(await bottomOf(form(el))).toBe(codeMessage("allergen.invalid_code"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(errorKey(el)).toBeNull();
     expect(form(el).open).toBe(true);
     expect(api.listIngredients).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the form open and shows the fallback error when an update fails without a code", async () => {
+  it("keeps the form open and says the fallback beside Save when an update fails without a code", async () => {
     const api = stubApi({ updateIngredient: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
     await flush(el);
@@ -251,8 +262,76 @@ describe("recipe-screen", () => {
     });
     await flush(el);
 
-    expect(errorKey(el)).toBe("server.internal");
+    expect(await bottomOf(form(el))).toBe(codeMessage("server.internal"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     expect(form(el).open).toBe(true);
+  });
+
+  it("puts a refused name under the form's name field", async () => {
+    const api = stubApi({
+      createIngredient: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", params: { field: "name" } }),
+    });
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!.click();
+    await el.updateComplete;
+    emit(form(el), "create-ingredient", { name: "Azúcar" });
+    await flush(el);
+    await form(el).updateComplete;
+
+    expect(
+      form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>("[data-test=name]")!
+        .error,
+    ).toBe(codeMessage("management.request_invalid"));
+    expect(await bottomOf(form(el))).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("does not carry a refusal into the form's next opening", async () => {
+    const api = stubApi({
+      createIngredient: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!.click();
+    await el.updateComplete;
+    emit(form(el), "create-ingredient", { name: "Azúcar" });
+    await flush(el);
+    expect(await bottomOf(form(el))).toBe(codeMessage("server.internal"));
+
+    emit(form(el), "wt-close");
+    await el.updateComplete;
+    emit(list(el), "edit-ingredient", { id: "i1" });
+    await el.updateComplete;
+    await form(el).updateComplete;
+    expect(await bottomOf(form(el))).toBe("");
+  });
+
+  it("closes the form after a successful create whose refresh fails, and says the load failure on the page", async () => {
+    const api = stubApi({
+      listIngredients: vi
+        .fn()
+        .mockResolvedValueOnce(ingredients)
+        .mockRejectedValueOnce({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
+    await flush(el);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=new-ingredient]")!.click();
+    await el.updateComplete;
+    emit(form(el), "create-ingredient", { name: "Azúcar" });
+    await flush(el);
+
+    expect(api.createIngredient).toHaveBeenCalledTimes(1);
+    expect(form(el).open).toBe(false);
+    expect(await bottomOf(form(el))).toBe("");
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("server.internal"),
+    );
   });
 
   it("files at most one ingredient when create-ingredient fires twice (single-flight)", async () => {

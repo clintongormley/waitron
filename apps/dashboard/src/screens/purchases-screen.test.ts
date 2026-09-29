@@ -2,6 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
+import { t } from "../i18n/t.js";
 import type { DashboardApi, PurchaseInvoice } from "../api/client.js";
 import type { PurchaseList } from "../widgets/purchase-list.js";
 import type { PurchaseForm } from "../widgets/purchase-form.js";
@@ -60,6 +61,14 @@ const list = (el: PurchasesScreen): PurchaseList | null =>
   el.shadowRoot!.querySelector("dashboard-purchase-list");
 const form = (el: PurchasesScreen): PurchaseForm =>
   el.shadowRoot!.querySelector("dashboard-purchase-form")!;
+
+/** The one message the form shows beside its action, or "" when it shows none. */
+async function bottomOf(form: PurchaseForm): Promise<string> {
+  await form.updateComplete;
+  const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
 
 function emitFromChild(child: Element, type: string, detail: unknown): void {
   child.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -160,7 +169,7 @@ describe("purchases-screen", () => {
     expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the form open and shows the error when a create fails", async () => {
+  it("keeps the form open and says a create refusal beside Create, not on the page", async () => {
     const api = stubApi({
       createPurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.duplicate" }),
     });
@@ -171,11 +180,11 @@ describe("purchases-screen", () => {
     emitFromChild(form(el), "create-purchase", createDetail());
     await flush(el);
     expect(form(el).open).toBe(true);
-    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("purchase.duplicate", "es-ES"));
+    expect(await bottomOf(form(el))).toBe(codeMessage("purchase.duplicate", "es-ES"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
-  it("keeps the form open and shows the error when an update fails", async () => {
+  it("keeps the form open and says an update refusal beside Save, not on the page", async () => {
     const api = stubApi({
       updatePurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.not_found" }),
     });
@@ -186,8 +195,70 @@ describe("purchases-screen", () => {
     emitFromChild(form(el), "update-purchase", { id: "pi-1", patch: { header: { note: "x" } } });
     await flush(el);
     expect(form(el).open).toBe(true);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("purchase.not_found", "es-ES"),
+    expect(await bottomOf(form(el))).toBe(codeMessage("purchase.not_found", "es-ES"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("puts a refusal naming a field under that field of the form", async () => {
+    const api = stubApi({
+      createPurchaseInvoice: vi.fn().mockRejectedValue({
+        code: "purchase.invalid",
+        params: { reason: "proportion_out_of_range" },
+      }),
+    });
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
+    await el.updateComplete;
+    emitFromChild(form(el), "create-purchase", createDetail());
+    await flush(el);
+    await form(el).updateComplete;
+    expect(
+      form(el).shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "[data-test=deductible-proportion]",
+      )!.error,
+    ).toBe(codeMessage("purchase.invalid", "es-ES"));
+    expect(await bottomOf(form(el))).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+  });
+
+  it("does not carry a refusal into the form's next opening", async () => {
+    const api = stubApi({
+      createPurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.duplicate" }),
+    });
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
+    await el.updateComplete;
+    emitFromChild(form(el), "create-purchase", createDetail());
+    await flush(el);
+    expect(await bottomOf(form(el))).toBe(codeMessage("purchase.duplicate", "es-ES"));
+
+    form(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    emitFromChild(list(el)!, "edit-purchase", { id: "pi-1" });
+    await el.updateComplete;
+    expect(await bottomOf(form(el))).toBe("");
+  });
+
+  it("closes the form after a successful create whose refresh fails, and says the load failure on the page", async () => {
+    const api = stubApi({
+      listPurchaseInvoices: vi
+        .fn()
+        .mockResolvedValueOnce(invoices)
+        .mockRejectedValueOnce({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<PurchasesScreen>("dashboard-purchases-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add-purchase]")!.click();
+    await el.updateComplete;
+    emitFromChild(form(el), "create-purchase", createDetail());
+    await flush(el);
+    expect(api.createPurchaseInvoice).toHaveBeenCalledTimes(1);
+    expect(form(el).open).toBe(false);
+    expect(await bottomOf(form(el))).toBe("");
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("server.internal", "es-ES"),
     );
   });
 

@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { contentLanguageChoices, type ContentLanguages } from "@waitron/shared";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -72,8 +72,12 @@ export class ContentLanguageEditor extends LitElement {
   }
 
   #add(): void {
+    if (this.busy) return;
     this.addError = this.additionalLanguage === "";
-    if (this.addError || this.busy) return;
+    if (this.addError) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
     this.languages = [...this.languages, this.additionalLanguage];
     this.additionalLanguage = "";
   }
@@ -117,8 +121,6 @@ export class ContentLanguageEditor extends LitElement {
       }}
     >
       <p>${t("content_languages.help")}</p>
-      ${this.addError ? html`<p class="error" role="alert">${t("content_languages.problem")}</p>` : nothing}
-      ${this.error ? html`<p class="error" role="alert">${codeMessage(this.error)}</p>` : nothing}
       <label
         >${t("content_languages.default")} *
         <select
@@ -173,11 +175,11 @@ export class ContentLanguageEditor extends LitElement {
       <wt-button
         data-test="add-language"
         variant="secondary"
-        ?disabled=${this.busy}
+        ?disabled=${this.busy || this.addError}
         @click=${() => this.#add()}
         >${t("content_languages.add")}</wt-button
       >
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${this.error ? codeMessage(this.error) : ""}>
         <wt-button
           slot="cancel"
           variant="secondary"

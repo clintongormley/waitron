@@ -2,7 +2,8 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { IngredientForm } from "./ingredient-form.js";
+import { t } from "../i18n/t.js";
+import { IngredientForm, ingredientRefusalErrors } from "./ingredient-form.js";
 import type { AllergenDeclaration, DietaryOrigin, Ingredient } from "../api/client.js";
 
 afterEach(cleanupWidgets);
@@ -48,6 +49,18 @@ async function emitOrigin(el: IngredientForm, origin: DietaryOrigin | null): Pro
 function confirm(el: IngredientForm): void {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
 }
+
+async function bottomOf(el: IngredientForm): Promise<Element | null> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]");
+}
+
+const nameErrorOf = (el: IngredientForm): string | null =>
+  el.shadowRoot!.querySelector("[data-test=name]")!.getAttribute("error");
+
+const confirmOf = (el: IngredientForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!;
 
 function nextEvent<T>(el: IngredientForm, type: string): Promise<CustomEvent<T>> {
   return new Promise((resolve) =>
@@ -122,18 +135,20 @@ describe("ingredient-form", () => {
     expect("dietaryOrigin" in body).toBe(false);
   });
 
-  it("blocks confirm and shows an error when the name is empty", async () => {
+  it("blocks confirm and shows the name's error under it and one message beside Create", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     let fired = false;
     el.addEventListener("create-ingredient", () => (fired = true));
     confirm(el);
     await el.updateComplete;
     expect(fired).toBe(false);
-    const alert = el.shadowRoot!.querySelector("[data-test=error]");
+    expect(nameErrorOf(el)).toBe(codeMessage("ingredient.name_required", "es-ES"));
+    expect(nameErrorOf(el)).not.toContain("ingredient.name_required");
+    const alert = await bottomOf(el);
     expect(alert).not.toBe(null);
     expect(alert!.getAttribute("role")).toBe("alert");
-    expect(alert!.textContent).toContain(codeMessage("ingredient.name_required", "es-ES"));
-    expect(alert!.textContent).not.toContain("ingredient.name_required");
+    expect(alert!.textContent).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBe(null);
   });
 
   it("treats a whitespace-only name as empty", async () => {
@@ -150,9 +165,59 @@ describe("ingredient-form", () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     confirm(el);
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=error]")).not.toBe(null);
+    expect(nameErrorOf(el)).not.toBe("");
+    expect(await bottomOf(el)).not.toBe(null);
     await setInput(el, "name", "Sal");
-    expect(el.shadowRoot!.querySelector("[data-test=error]")).toBe(null);
+    expect(nameErrorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(null);
+  });
+
+  it("marks the name required and gives it a semantic name", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    const name = el.shadowRoot!.querySelector("[data-test=name]")!;
+    expect(name.hasAttribute("required")).toBe(true);
+    expect(name.getAttribute("name")).toBe("name");
+  });
+
+  it("says nothing about errors before the first submission, and Create works", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "");
+    expect(nameErrorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(null);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on an invalid submission focuses the name and disables Create until it is fixed", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    confirm(el);
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+    const name = el.shadowRoot!.querySelector("[data-test=name]")!;
+    expect(name.shadowRoot!.activeElement).toBe(name.shadowRoot!.querySelector("input"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    await setInput(el, "name", "  ");
+    expect(nameErrorOf(el)).toBe(codeMessage("ingredient.name_required", "es-ES"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    await setInput(el, "name", "Sal");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+    const created = nextEvent(el, "create-ingredient");
+    confirm(el);
+    expect((await created).detail).toEqual({ name: "Sal" });
+  });
+
+  it("starts again when reopened: no messages and Create working", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    confirm(el);
+    await el.updateComplete;
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    expect(nameErrorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(null);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
   it("emits create-ingredient as a bubbling, composed event", async () => {
@@ -354,4 +419,75 @@ it("Enter saves an edit with the current name and respects busy", async () => {
   input.focus();
   await userEvent.keyboard("{Enter}");
   expect(updates).toHaveLength(1);
+});
+
+describe("ingredient-form — a server refusal", () => {
+  it("keys a refusal by the field it names, and anything else to the form", () => {
+    const named = { code: "management.request_invalid", params: { field: "name" } };
+    expect(ingredientRefusalErrors(named)).toEqual({
+      name: codeMessage("management.request_invalid"),
+    });
+    expect(ingredientRefusalErrors({ code: "allergen.invalid_code", params: {} })).toEqual({
+      _form: codeMessage("allergen.invalid_code"),
+    });
+    expect(
+      ingredientRefusalErrors({ code: "management.request_invalid", params: { field: "active" } }),
+    ).toEqual({ _form: codeMessage("management.request_invalid") });
+    expect(ingredientRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
+  });
+
+  it("shows a refused name under it, focuses it, and disables Create until the name changes", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "Sal");
+    el.fieldErrors = { name: "Refused name" };
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(nameErrorOf(el)).toBe("Refused name");
+    expect((await bottomOf(el))?.textContent).toBe(t("form.fix_fields"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    const name = el.shadowRoot!.querySelector("[data-test=name]")!;
+    expect(name.shadowRoot!.activeElement).toBe(name.shadowRoot!.querySelector("input"));
+
+    await setInput(el, "name", "Sal fina");
+    expect(nameErrorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe(null);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says a refusal naming no field beside Create, leaves Create working, and drops it on the next submit", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    await setInput(el, "name", "Sal");
+    el.fieldErrors = { _form: codeMessage("server.internal") };
+    await el.updateComplete;
+
+    expect(nameErrorOf(el)).toBe("");
+    const bottom = await bottomOf(el);
+    expect(bottom?.getAttribute("role")).toBe("alert");
+    expect(bottom?.textContent).toBe(codeMessage("server.internal"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+
+    const created = nextEvent(el, "create-ingredient");
+    confirm(el);
+    expect((await created).detail).toEqual({ name: "Sal" });
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(null);
+  });
+
+  it("says a refusal and the field errors one after the other when they meet", async () => {
+    const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
+    el.fieldErrors = { _form: codeMessage("server.internal") };
+    await el.updateComplete;
+    await setInput(el, "name", "");
+    confirm(el);
+    await el.updateComplete;
+    // The submit drops the old refusal; the name's own error remains.
+    expect((await bottomOf(el))?.textContent).toBe(t("form.fix_fields"));
+
+    el.fieldErrors = { _form: codeMessage("server.internal") };
+    await el.updateComplete;
+    expect((await bottomOf(el))?.textContent).toBe(
+      `${codeMessage("server.internal")} ${t("form.fix_fields")}`,
+    );
+  });
 });
