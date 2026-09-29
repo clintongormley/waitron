@@ -797,10 +797,9 @@ export class ProfileScreen extends LitElement {
               : p.passkeys.map((key, index) => {
                   const name =
                     key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
+                  const created = new Date(key.createdAt).toLocaleDateString(currentLocale());
                   return html`<div class="action-row passkey-item">
-                    <span class="passkey-text"
-                      >${name} · ${new Date(key.createdAt).toLocaleDateString(currentLocale())}</span
-                    >
+                    <span class="passkey-text">${name} · ${created}</span>
                     ${
                       p.hasPassword
                         ? html`<wt-button
