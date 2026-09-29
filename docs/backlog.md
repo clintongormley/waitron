@@ -3074,7 +3074,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the new cases in `apps/server/src/collect-by-invoice.test.ts` reach this path.
       - **The ticket still shows the original invoice total.** `collectOrder` queues no receipt on
         this path, only the cash drawer job (read, not run: the receipt is queued at placing by
-        `placeOrder`, `apps/server/src/working-order.ts`). The ticket `collectOrder` returns to the
+        `placeOrder`, `apps/server/src/working-order.ts`), and for a bill that owes nothing it
+        queues neither (C59). The ticket `collectOrder` returns to the
         till's screen, the original receipt that screen offers when the till's own order flow is not
         invoice-first (`#showTicket`, `apps/till/src/till-app.ts`), and any reprint are all built by
         `readSettledTicket` (`apps/server/src/till-sale.ts`) and show the invoice's original total.
@@ -3085,18 +3086,37 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `formatReceipt` print `TOTAL 18,00`, `Efectivo 22,20` and `Cambio 4,20`. **PARKED (owner,
         2026-09-29)** until the product can issue a corrective invoice; the owner's points for that
         design are on the corrective-invoice entry (R5, above).
-      - **A bill corrected to zero cannot be collected, and one corrected below zero probably cannot
-        either.** Measured 2026-09-29 with a temporary test that corrected the 18.00 bill by -18.00
-        and collected it in cash: with C50's change it fails with
-        `CHECK constraint failed: tenders_amount_ck`, a raw database error with no domain code; on
-        the code before C50 it was refused with `sale.tender_shortfall` (due 0.00, charged 18.00).
-        So C50 turned a domain refusal into an unclassified error for this case, and neither version
-        collected it. Read, not run: neither `recordCorrection`
-        (`packages/core/src/record-correction.ts`) nor the Verifactu backend's correction path
-        checks a correction's size against the invoice, and with a negative amount due
-        `settlementFor` settles at that amount and the payment insert meets the same
-        `tenders_amount_ck`. **DECIDED (owner, 2026-09-29): just close the bill** — collecting a
-        bill that owes nothing is queued as C59.
+      - **DONE (C59, 2026-09-29): a bill corrected to zero is collected in cash or by manual card,
+        and closes.** The owner's
+        answer (2026-09-29): "yes just close the bill". When corrections bring the amount due to
+        zero, `collectOrder` (`apps/server/src/till-sale.ts`) settles the sale with no tender row,
+        and writes no manual card `payments` row and no cash drawer opening, since no money changes
+        hands. The bill becomes `settled` with its `collected_at` stamped, as an ordinary
+        collection does, and no second fiscal record is filed. The ticket it returns has the tender
+        `{ method: "unpaid" }`, which the till's ticket screen shows as no payment line
+        (`apps/till/src/screens/till-ticket-view.ts:100`; pinned by the case "renders no tender
+        extras for an invoice issued before payment" in
+        `apps/till/src/screens/till-ticket-view.test.ts`, run 2026-09-29, passed). New cases in
+        `apps/server/src/collect-by-invoice.test.ts` correct the 18.00 bill by -18.00 and collect
+        it in cash and by manual card; both failed with `CHECK constraint failed:
+        tenders_amount_ck` before the change. A control case shows an ordinary cash collection of
+        a corrected bill does open the drawer.
+        **Still open: a bill corrected BELOW zero** (the customer is owed money), collected in
+        cash or by manual card, is refused and stays open, now with the domain code `sale.tender_shortfall` (due -2.00, charged 0) where
+        it failed with the raw `tenders_amount_ck` error; measured by a case correcting the bill by
+        -20.00. That case records a correction larger than the invoice through `recordCorrection`
+        on the Verifactu backend, and nothing refuses it. **Next action:** decide what should
+        happen to such a bill (an owner call): refuse the over-sized correction when it is
+        recorded, or pay the difference back at collection.
+        **Still open: the card-reader path.** `payWorkingOrderIntegrated`
+        (`apps/server/src/till-sale.ts`) is unchanged: for a bill with a sale it asks the card
+        reader to collect the amount due plus any tip, so on a bill corrected to zero it would ask
+        for 0.00 (plus tip), and on one corrected below zero for a negative amount (plus tip).
+        What the payment provider does with either was not run. **Next action:** a test driving
+        `payWorkingOrderIntegrated` on a bill corrected to zero, then close such a bill without
+        asking the reader, as `collectOrder` does (the owner's answer "just close the bill" covers
+        it); and a test on a bill corrected below zero, refused as `collectOrder` refuses it until
+        the owner decides the below-zero case above.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
