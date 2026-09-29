@@ -217,6 +217,36 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
+  it("shows a refused main-category save beside Save accessibly", async () => {
+    const api = {
+      ...membersApi(),
+      setMainCategory: () =>
+        Promise.reject({
+          code: "management.request_invalid",
+          params: { field: "primaryCategoryId" },
+        }),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<CategoriesScreen>(
+      "dashboard-categories-screen",
+      { api },
+      theme,
+    );
+    await openFood(el);
+    const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      '[data-test="category-products"]',
+    )!;
+    await members.updateComplete;
+    members.shadowRoot!.querySelector<HTMLElement>('[data-test="change-main"]')!.click();
+    await el.updateComplete;
+    const dialog = el.shadowRoot!.querySelector('wt-modal[data-test="main-category-dialog"]')!;
+    dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
+    const actions = dialog.querySelector("wt-form-actions")!;
+    await vi.waitFor(() =>
+      expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("shows the Labels tab accessibly", async () => {
     history.replaceState(null, "", "/manage/categories/view/labels");
     const { el, host } = await mountWidget<CategoriesScreen>(
