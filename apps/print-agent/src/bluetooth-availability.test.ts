@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostLog } from "@waitron/print-agent";
 import {
   type BluetoothAvailability,
@@ -268,11 +268,31 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
   });
 
   it("shares a listing already running rather than starting a second", async () => {
-    mode("ok");
-    const d = devices();
-    const [devicesSeen] = await Promise.all([d.visibleDevices(), d.checkBluetooth()]);
+    let listings = 0;
+    let answer!: (devices: { mac: string; name?: string }[]) => void;
+    const d = createLinuxDevices({
+      sysfsRoot: sysfs,
+      devRoot: "/dev",
+      bluetooth: {
+        scan: async () => [],
+        pair: async () => ({ ok: false, error: "unused" }),
+        paired: () => {
+          listings += 1;
+          return new Promise((resolve) => {
+            answer = resolve;
+          });
+        },
+      },
+      btDevicePath: () => "/dev/rfcomm0",
+      now: () => clock,
+    });
+    const seen = d.visibleDevices();
+    await vi.waitFor(() => expect(listings).toBe(1));
+    const checked = d.checkBluetooth();
+    answer([{ mac: "66:55:44:33:22:11", name: "CI Printer" }]);
+    const [devicesSeen] = await Promise.all([seen, checked]);
     expect(devicesSeen).toContainEqual(expect.objectContaining({ transport: "bluetooth" }));
-    expect(await calls()).toHaveLength(1);
+    expect(listings).toBe(1);
   });
 
   it("starts a fresh listing once the last one has finished, even one that threw at once", async () => {
