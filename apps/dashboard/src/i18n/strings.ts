@@ -831,7 +831,7 @@ export const en = {
   "printers.page_printer_hint": "Office printer — not supported for receipts",
   "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
-    "Add a Bluetooth printer with Pair and add, beside it in the list: it asks for the printer's PIN, pairs it, then opens the form to add it. Printing to a Bluetooth printer is not available yet, even once it is paired.",
+    "To add a Bluetooth printer that is not paired yet, press Pair and add beside it in the list: it asks for the printer's PIN, pairs it, then opens the form to add it. Printing to a Bluetooth printer is not available yet, even once it is paired.",
   "printers.bluetooth_pair": "Pair and add",
   "printers.bluetooth_forget": "Forget pairing",
   "printers.bluetooth_forget_confirm": "Confirm forget pairing?",
@@ -2759,7 +2759,7 @@ export const es: Record<StringKey, string> = {
   "printers.page_printer_hint": "Impresora de oficina: no sirve para imprimir recibos",
   "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
-    "Añade una impresora Bluetooth con Emparejar y añadir, junto a ella en la lista: pide el PIN de la impresora, la empareja y luego abre el formulario para añadirla. Aún no se puede imprimir en una impresora Bluetooth, aunque esté emparejada.",
+    "Para añadir una impresora Bluetooth que aún no está emparejada, pulsa Emparejar y añadir junto a ella en la lista: pide el PIN de la impresora, la empareja y luego abre el formulario para añadirla. Aún no se puede imprimir en una impresora Bluetooth, aunque esté emparejada.",
   "printers.bluetooth_pair": "Emparejar y añadir",
   "printers.bluetooth_forget": "Olvidar emparejamiento",
   "printers.bluetooth_forget_confirm": "¿Olvidar el emparejamiento?",
@@ -2772,7 +2772,7 @@ export const es: Record<StringKey, string> = {
   "printers.bluetooth_pin_invalid":
     "Escribe de 1 a 16 letras, números o símbolos, sin espacios ni acentos.",
   "printers.bluetooth_pairing":
-    "Emparejando… Puede tardar hasta dos minutos. Cuando termine, se abrirá el formulario para añadir la impresora.",
+    "Emparejando… Puede tardar hasta dos minutos. Cuando se empareje, se abrirá el formulario para añadir la impresora.",
   "printers.bluetooth_paired": "Emparejamiento completado",
   "printers.bluetooth_pair_failed": "No se pudo emparejar",
   "printers.bluetooth_forgetting": "Olvidando el emparejamiento…",

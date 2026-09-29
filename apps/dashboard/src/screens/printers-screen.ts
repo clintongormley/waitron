@@ -517,6 +517,9 @@ export class PrintersScreen extends LitElement {
   @state() private pairSubmitting = false;
   #pairEpoch = 0;
   @state() private commands: Record<string, TrackedCommand> = {};
+  /** Command key to answerBy for each pairing that succeeded while Add a printer is open. Kept apart
+   * from `commands`, so dismissing the Paired status leaves the device counted as paired. */
+  @state() private pairedDevices: Record<string, number> = {};
   @state() private armedForgetId: string | null = null;
   /** Separate from `armedForgetId`, so a listed device's arm never matches a printer id. */
   @state() private armedForgetDevice: string | null = null;
@@ -1109,7 +1112,13 @@ export class PrintersScreen extends LitElement {
       answerBy: Date.now() + (expiresInMs ?? 0),
       ...(device && { device }),
     };
-    this.commands = { ...this.commands, [commandKey(agentId, status.address)]: tracked };
+    const key = commandKey(agentId, status.address);
+    this.commands = { ...this.commands, [key]: tracked };
+    if (key in this.pairedDevices) {
+      const rest = { ...this.pairedDevices };
+      delete rest[key];
+      this.pairedDevices = rest;
+    }
     if (status.state === "pending" && this.#commandTimer === undefined && this.isConnected)
       this.#commandTimer = setInterval(() => void this.#commandTick(), SCAN_POLL_MS);
   }
@@ -1127,7 +1136,7 @@ export class PrintersScreen extends LitElement {
     const now = Date.now();
     const next = { ...this.commands };
     let changed = false;
-    let paired: [string, TrackedCommand] | undefined;
+    const paired: [string, TrackedCommand][] = [];
     for (const [key, tracked] of pending) {
       // Matched by id: a read sent before this command existed can still carry an earlier outcome.
       // Within one read an outcome wins over the deadline (answerBy is never before the server's own
@@ -1141,24 +1150,32 @@ export class PrintersScreen extends LitElement {
           ...(reported.error !== undefined && { error: reported.error }),
         };
         changed = true;
-        if (tracked.kind === "pair" && reported.state === "succeeded") paired ??= [key, tracked];
+        if (tracked.kind === "pair" && reported.state === "succeeded") paired.push([key, tracked]);
       } else if (now >= tracked.answerBy) {
         next[key] = { ...tracked, state: "no_answer" };
         changed = true;
       }
     }
     if (changed) this.commands = next;
-    if (paired) this.#addPaired(...paired);
+    if (paired.length === 0) return;
+    this.pairedDevices = {
+      ...this.pairedDevices,
+      ...Object.fromEntries(paired.map(([key, { answerBy }]) => [key, answerBy])),
+    };
+    for (const [key, tracked] of paired) if (this.#addPaired(key, tracked)) break;
   }
 
   /** Carries a successful pairing straight on into the form to add the device, unless another dialog
-   * is in the way; its row then offers Add. */
-  #addPaired(key: string, tracked: TrackedCommand): void {
+   * is in the way (its row then offers Add) or the device can no longer be added. Returns whether the
+   * form opened. */
+  #addPaired(key: string, tracked: TrackedCommand): boolean {
     const device = this.#listedDevice(key) ?? tracked.device!;
-    if (this.namingPrinter !== null || this.pairingDevice !== null || !this.#canAdd(device)) return;
+    if (this.namingPrinter !== null || this.pairingDevice !== null || !this.#canAdd(device))
+      return false;
     this.formAttempted = false;
     this.errorKey = null;
     this.namingPrinter = device;
+    return true;
   }
 
   #listedDevice(key: string): DiscoveredPrinter | undefined {
@@ -1174,6 +1191,7 @@ export class PrintersScreen extends LitElement {
       this.#settleCommandPoll();
       return;
     }
+    if (!this.#commandPollNeeded()) return this.#stopCommandPoll();
     this.#commandReadInFlight = true;
     const epoch = this.#commandEpoch;
     let devices: DiscoveredPrinter[] | undefined;
@@ -1196,19 +1214,21 @@ export class PrintersScreen extends LitElement {
     this.#settleCommandPoll();
   }
 
-  /** Keeps reading while a command waits, and after a pairing succeeds until the agent reports the
-   * device paired, so Forget pairing can appear; never past the pairing's own deadline. */
-  #settleCommandPoll(): void {
+  /** Reads continue while a command waits, and after a pairing succeeds until the agent reports the
+   * device paired, so Forget pairing can appear; no read starts for it past that pairing's own
+   * deadline. */
+  #commandPollNeeded(): boolean {
     const now = Date.now();
-    const waiting = Object.entries(this.commands).some(
-      ([key, { kind, state, answerBy }]) =>
-        state === "pending" ||
-        (kind === "pair" &&
-          state === "succeeded" &&
-          now < answerBy &&
-          this.#listedDevice(key)?.paired !== true),
+    return (
+      Object.values(this.commands).some(({ state }) => state === "pending") ||
+      Object.entries(this.pairedDevices).some(
+        ([key, answerBy]) => now < answerBy && this.#listedDevice(key)?.paired !== true,
+      )
     );
-    if (!waiting) this.#stopCommandPoll();
+  }
+
+  #settleCommandPoll(): void {
+    if (!this.#commandPollNeeded()) this.#stopCommandPoll();
   }
 
   #stopCommandPoll(): void {
@@ -1312,7 +1332,7 @@ export class PrintersScreen extends LitElement {
     >`;
     if (command.kind === "pair" && command.state === "pending")
       return html`<span part="bluetooth-progress"
-        ><wt-spinner decorative size="sm" data-test=${`${test}-progress`}></wt-spinner
+        ><wt-spinner decorative size="sm" data-test=${`progress-${test}`}></wt-spinner
         >${status}</span
       >`;
     return html`${status}${
@@ -2868,8 +2888,7 @@ export class PrintersScreen extends LitElement {
           );
           if (lost.has(d)) return html`<div part="bluetooth-actions">${status}</div>`;
           // A succeeded pairing counts as paired before the agent's own paired report arrives.
-          const paired =
-            d.paired === true || (command?.kind === "pair" && command.state === "succeeded");
+          const paired = d.paired === true || key in this.pairedDevices;
           return html`<div part="bluetooth-actions">
             ${
               paired
@@ -2906,6 +2925,7 @@ export class PrintersScreen extends LitElement {
         this.commands = Object.fromEntries(
           Object.entries(this.commands).filter(([, command]) => command.kind !== "pair"),
         );
+        this.pairedDevices = {};
         this.#settleCommandPoll();
       }}
     >

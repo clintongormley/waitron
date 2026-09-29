@@ -5053,7 +5053,7 @@ describe("printers-screen Bluetooth pairing", () => {
       required: boolean;
     };
 
-  it("offers Pair, not Add, for an unpaired printer-like device, and Add for a paired one", async () => {
+  it("offers Pair and add, not Add, for an unpaired printer-like device, and Add for a paired one", async () => {
     const paired: DiscoveredPrinter = { ...barPrinter, localKey: OTHER, paired: true };
     const { el } = await mountPairing([barPrinter, paired]);
     await openDiscovery(el);
@@ -5061,7 +5061,8 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
     expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
     expect(q(el, sel(`pair-${OTHER}`))).toBeNull();
-    // Pairing is not delivery: the note says so, and Pair opens no naming form.
+    // Pairing is not delivery: the note says so. Pressing Pair and add asks for the PIN first; no
+    // naming form until the pairing succeeds.
     expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
     await openPair(el);
     expect(q(el, sel("name-printer-modal"))).toBeNull();
@@ -5283,7 +5284,7 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
-  it("shows pairing success, then offers Add for the now-paired device", async () => {
+  it("shows pairing success and offers Add on the now-paired device's row", async () => {
     const background = stubApi({
       listDiscoveredPrinters: vi.fn().mockResolvedValue([
         {
@@ -5645,20 +5646,20 @@ describe("printers-screen Bluetooth pairing", () => {
       const status = text(el, sel(`discovered-command-${ADDRESS}`));
       expect(status).toBe(t("printers.bluetooth_pairing"));
       expect(status).toBe(
-        "Emparejando… Puede tardar hasta dos minutos. Cuando termine, se abrirá el formulario para añadir la impresora.",
+        "Emparejando… Puede tardar hasta dos minutos. Cuando se empareje, se abrirá el formulario para añadir la impresora.",
       );
       expect(t("printers.bluetooth_pairing", "en")).toBe(
         "Pairing… This can take up to two minutes. The form to add the printer opens once it is paired.",
       );
-      expect(q(el, sel(`discovered-command-${ADDRESS}-progress`))?.tagName).toBe("WT-SPINNER");
+      expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))?.tagName).toBe("WT-SPINNER");
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
-      expect(q(el, sel(`discovered-command-${ADDRESS}-progress`))).not.toBeNull();
+      expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))).not.toBeNull();
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
       await flush(el);
       expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
-      expect(q(el, sel(`discovered-command-${ADDRESS}-progress`))).toBeNull();
+      expect(q(el, sel(`progress-discovered-command-${ADDRESS}`))).toBeNull();
     });
 
     it("pairs and then opens the form to add the device, which adds it with no second click on its row", async () => {
@@ -5867,6 +5868,155 @@ describe("printers-screen Bluetooth pairing", () => {
       const calls = passive.mock.calls.length;
       await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
       expect(passive).toHaveBeenCalledTimes(calls);
+    });
+
+    it("keeps Add and the reads for the paired report after a pairing's Paired status is dismissed", async () => {
+      const { el, passive } = await mountQuiet([barPrinter]);
+      passive.mockResolvedValue([succeeded()]);
+      await submitPair(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      q(el, sel("cancel-printer-name"))!.click();
+      await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
+      q(el, sel(`dismiss-discovered-command-${ADDRESS}`))!.click();
+      await flush(el);
+      expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
+      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+      passive
+        .mockResolvedValueOnce([barPrinter])
+        .mockResolvedValue([{ ...barPrinter, paired: true }]);
+      const calls = passive.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(passive).toHaveBeenCalledTimes(calls + 2);
+      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
+      expect(text(el, sel(`forget-device-${ADDRESS}`))).toBe(t("printers.bluetooth_forget"));
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledTimes(calls + 2);
+    });
+
+    it("offers Pair and add again once a device paired in this dialog is forgotten and reported unpaired", async () => {
+      const { el, passive } = await mountQuiet([barPrinter]);
+      passive
+        .mockResolvedValueOnce([succeeded()])
+        .mockResolvedValue([{ ...barPrinter, paired: true }]);
+      await submitPair(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      q(el, sel("cancel-printer-name"))!.click();
+      await vi.waitFor(() => expect(q(el, sel("name-printer-modal"))).toBeNull());
+      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      await flush(el);
+      q(el, sel(`forget-device-${ADDRESS}`))!.click();
+      await flush(el);
+      passive.mockResolvedValue([
+        { ...barPrinter, bluetoothCommand: finishedCommand("forget", "succeeded") },
+      ]);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+        t("printers.bluetooth_forgotten"),
+      );
+      expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+      expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+    });
+
+    it("opens the form for the next device whose pairing succeeded when the first can no longer be added", async () => {
+      const { el, api, passive } = await mountQuiet([barPrinter, second]);
+      vi.mocked(api.pairBluetooth).mockImplementation(async (_agent, address) => ({
+        command: { ...pendingCommand("pair", address), id: address },
+      }));
+      await submitPair(el);
+      await submitPair(el, OTHER);
+      passive.mockResolvedValue([
+        {
+          ...succeeded(true),
+          alreadyRegistered: true,
+          printerId: "p9",
+          bluetoothCommand: { ...finishedCommand("pair", "succeeded"), id: ADDRESS },
+        },
+        {
+          ...second,
+          paired: true,
+          bluetoothCommand: {
+            ...finishedCommand("pair", "succeeded"),
+            id: OTHER,
+            address: OTHER,
+          },
+        },
+      ]);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(nameField(el, OTHER)).not.toBeNull();
+      expect(nameField(el)).toBeNull();
+    });
+
+    it("opens no form when the device was registered elsewhere by the time its pairing succeeds", async () => {
+      const { el, passive } = await mountQuiet([barPrinter]);
+      passive.mockResolvedValue([{ ...succeeded(true), alreadyRegistered: true, printerId: "p9" }]);
+      await submitPair(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
+      expect(q(el, sel("name-printer-modal"))).toBeNull();
+    });
+
+    it("starts no read for the paired report once the pairing's own deadline has passed", async () => {
+      const { el, api, passive } = await mountQuiet([barPrinter]);
+      vi.mocked(api.pairBluetooth).mockResolvedValue({
+        command: { ...pendingCommand("pair"), expiresInMs: 5_000 },
+      });
+      const started = Date.now();
+      const reads: number[] = [];
+      passive.mockImplementation(async () => {
+        reads.push(Date.now() - started);
+        return [succeeded()];
+      });
+      await submitPair(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(reads).toEqual([SCAN_POLL_MS, SCAN_POLL_MS * 2]);
+    });
+
+    it("keeps reading for another pending command after a succeeded pairing's deadline passes", async () => {
+      const { el, api, passive } = await mountQuiet([barPrinter, second]);
+      vi.mocked(api.pairBluetooth).mockImplementation(async (_agent, address) => ({
+        command: {
+          ...pendingCommand("pair", address),
+          id: address,
+          ...(address === ADDRESS && { expiresInMs: 5_000 }),
+        },
+      }));
+      passive.mockResolvedValue([
+        {
+          ...succeeded(),
+          bluetoothCommand: { ...finishedCommand("pair", "succeeded"), id: ADDRESS },
+        },
+        second,
+      ]);
+      await submitPair(el);
+      await submitPair(el, OTHER);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledTimes(5);
+      expect(text(el, sel(`discovered-command-${OTHER}`))).toBe(t("printers.bluetooth_pairing"));
+    });
+
+    it("stops reading for a succeeded pairing's paired report when Add a printer closes, and offers Pair and add on reopening", async () => {
+      const { el, passive } = await mountQuiet([barPrinter]);
+      passive.mockResolvedValue([succeeded()]);
+      await submitPair(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(passive).toHaveBeenCalledTimes(1);
+      q(el, "[data-test=cancel-new-printer]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledTimes(1);
+      passive.mockResolvedValue([barPrinter]);
+      q(el, "[data-test=open-add-printer]")!.click();
+      await flush(el);
+      expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+      expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
     });
   });
 
