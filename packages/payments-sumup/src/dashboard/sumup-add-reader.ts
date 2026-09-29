@@ -19,14 +19,6 @@ export const PAIRING_POLL_MS = 2_000;
  * each offering _try again_. */
 type Phase = "form" | "pairing" | "expired" | "failed";
 
-/**
- * The SumUp ADD-READER DIALOG (`readerAdd.kind === "pairing-poll"`). Pressing _Pair_ POSTs the code;
- * the dialog then polls the reader's status until it pairs, the code's lifetime runs out, or a read
- * fails. The `processing` reader row an accepted attempt created is unpaired when the attempt expires,
- * fails, or the dialog is closed or removed before a status read reports it paired — even if the reader
- * has just paired on the device — so no un-paired orphan lingers to be picked as a device default. A
- * pair request that answers `paired` after the dialog closed is still reported through `onAdded`.
- */
 @customElement("sumup-add-reader")
 export class SumUpAddReader extends LitElement {
   static override styles = [
@@ -130,7 +122,7 @@ export class SumUpAddReader extends LitElement {
     }
     this.#readerId = result.id;
     if (!this.isConnected || this.#closed) {
-      void this.#unpairOrphan();
+      void this.#unpairOrphan(this.#closed);
       return;
     }
     this.#pairUntil = Date.now() + PAIRING_LIFETIME_MS;
@@ -169,10 +161,10 @@ export class SumUpAddReader extends LitElement {
   }
 
   #close(): void {
-    this.#endPoll();
-    void this.#unpairOrphan();
     if (this.#closed) return;
     this.#closed = true;
+    this.#endPoll();
+    void this.#unpairOrphan(true);
     this.onClose();
   }
 
@@ -187,10 +179,22 @@ export class SumUpAddReader extends LitElement {
   /** Best-effort unpair of the row the successful POST created, at most once. A failed unpair must not
    * hang the dialog — the orphan can still be unpaired from the readers list — so its rejection is
    * swallowed. */
-  async #unpairOrphan(): Promise<void> {
+  async #unpairOrphan(checkPaired = false): Promise<void> {
     const id = this.#readerId;
     if (id === "") return;
     this.#readerId = "";
+    if (checkPaired) {
+      let status;
+      try {
+        status = await this.#client().readerStatus(id);
+      } catch {
+        // Unknown pairing status still takes the cleanup path.
+      }
+      if (status?.pairingStatus === "paired") {
+        this.onAdded();
+        return;
+      }
+    }
     try {
       await this.#client().unpairReader(id);
     } catch {
