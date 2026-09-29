@@ -3102,6 +3102,28 @@ describe("till-table-order-screen", () => {
       expect(billChoice(el)).toBeNull();
     });
 
+    it("names a seated party with no name of its own by the name the floor shows for it", async () => {
+      const floor = partyTables();
+      const unnamed = floor.tables.map((table) =>
+        table.id === "t7"
+          ? { ...table, party: { ...table.party!, name: null, displayName: "Mesa 7" } }
+          : table,
+      );
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        ...floor,
+        tables: unnamed,
+      });
+      await toMenu(el);
+      click(el, '[data-action="move"]');
+      await el.updateComplete;
+
+      expect(target(el, "t7")!.textContent).toContain(
+        t("table.held_by").replace("{party}", "Mesa 7"),
+      );
+    });
+
     it("Move guests to a free table dispatches move-guests { toTableId, bills } at once and closes", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       const moved = heard(el, "move-guests");
@@ -3135,7 +3157,7 @@ describe("till-table-order-screen", () => {
           .replace("{into}", "Luis (Mesa 7)"),
       );
       billChoice(el)!.dispatchEvent(
-        new CustomEvent("bills-choose", {
+        new CustomEvent("bill-choice-confirm", {
           detail: { bills: "separate" },
           bubbles: true,
           composed: true,
@@ -3158,7 +3180,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
 
       billChoice(el)!.dispatchEvent(
-        new CustomEvent("bills-cancel", { bubbles: true, composed: true }),
+        new CustomEvent("bill-choice-cancel", { bubbles: true, composed: true }),
       );
       await el.updateComplete;
 
@@ -3191,7 +3213,7 @@ describe("till-table-order-screen", () => {
           .replace("{into}", "Ana (Mesa 4)"),
       );
       billChoice(el)!.dispatchEvent(
-        new CustomEvent("bills-choose", {
+        new CustomEvent("bill-choice-confirm", {
           detail: { bills: "merge" },
           bubbles: true,
           composed: true,

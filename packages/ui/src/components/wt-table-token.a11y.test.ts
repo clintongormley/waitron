@@ -105,6 +105,11 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("a token naming the party seated there is accessible", async () => {
+    await mountToken(tableData({ state: "open-tab", tabTotal: "12.00", partyName: "Ana" }), theme);
+    await expectNoA11yViolations(host);
+  });
+
   test("a forgotten-band token with a LABELLED marker (app-supplied accessible name) is accessible", async () => {
     const el = await mountToken(tableData({ state: "open-tab", timingBand: "forgotten" }), theme);
     el.labels = { ...el.labels, forgotten: "Olvidada" };

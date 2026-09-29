@@ -21,10 +21,10 @@ const button = (el: TillBillChoiceDialog, name: string) =>
 
 function captured(el: TillBillChoiceDialog) {
   const seen: { chose: BillChoiceDetail[]; cancelled: number } = { chose: [], cancelled: 0 };
-  el.addEventListener("bills-choose", (event) =>
+  el.addEventListener("bill-choice-confirm", (event) =>
     seen.chose.push((event as CustomEvent<BillChoiceDetail>).detail),
   );
-  el.addEventListener("bills-cancel", () => (seen.cancelled += 1));
+  el.addEventListener("bill-choice-cancel", () => (seen.cancelled += 1));
   return seen;
 }
 

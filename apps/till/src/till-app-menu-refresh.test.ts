@@ -1748,11 +1748,17 @@ describe("a round that got no answer while the party moved on to its next tab", 
     api.getTablesState.mockResolvedValue([{ ...table, party: null }]);
     emit(tableScreen(el), "merge-bills", { fromBillId: "wo-9" });
     await flush(el);
+    api.getTablesState.mockResolvedValue([
+      { ...seated, party: { ...party, id: "party-b", mainBillId: "wo-other" } },
+    ]);
+    const floorReads = api.getTablesState.mock.calls.length;
     await sendLemonadeRound(el);
     await flush(el);
 
     expect(api.submitDraft).not.toHaveBeenCalled();
     expect(shownTab(el)).toBe("wo-7");
+    expect(api.getTabLines).not.toHaveBeenCalledWith("wo-other");
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
     expect(roundStore(el).lineCount).toBe(1);
   });
 

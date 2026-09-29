@@ -33,7 +33,7 @@ export class TillBillChoiceDialog extends LitElement {
 
   #choose(bills: BillChoiceDetail["bills"]): void {
     this.dispatchEvent(
-      new CustomEvent<BillChoiceDetail>("bills-choose", {
+      new CustomEvent<BillChoiceDetail>("bill-choice-confirm", {
         detail: { bills },
         bubbles: true,
         composed: true,
@@ -42,7 +42,7 @@ export class TillBillChoiceDialog extends LitElement {
   }
 
   #cancel(): void {
-    this.dispatchEvent(new CustomEvent("bills-cancel", { bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent("bill-choice-cancel", { bubbles: true, composed: true }));
   }
 
   override render() {

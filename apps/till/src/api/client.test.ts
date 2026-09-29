@@ -1720,6 +1720,8 @@ describe("TillApi", () => {
       "/api/parties/v1/join",
       expect.objectContaining({
         method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
         body: JSON.stringify({
           tableId: "tbl-9",
           bills: "separate",

@@ -3642,8 +3642,8 @@ export class TillTableOrderScreen extends LitElement {
       .scope=${t("table.combine_scope")
         .replace("{from}", () => from)
         .replace("{into}", () => into)}
-      @bills-choose=${(event: Event) => this.#onBillChoice(event)}
-      @bills-cancel=${(event: Event) => {
+      @bill-choice-confirm=${(event: Event) => this.#onBillChoice(event)}
+      @bill-choice-cancel=${(event: Event) => {
         event.stopPropagation();
         this.billChoice = null;
       }}

@@ -60,6 +60,15 @@ test("the party's name wraps inside a token narrower than it is", async () => {
   expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
 });
 
+test("the party's name paints from the small-font and bold-weight tokens", async () => {
+  const el = await mountToken(table({ state: "open-tab", partyName: "Ana" }));
+  host.style.setProperty("--wt-font-size-sm", "11px");
+  host.style.setProperty("--wt-font-weight-bold", "300");
+  const name = el.shadowRoot!.querySelector<HTMLElement>("[data-party-name]")!;
+  expect(getComputedStyle(name).fontSize).toBe("11px");
+  expect(getComputedStyle(name).fontWeight).toBe("300");
+});
+
 test("carries the FP-1 state class so its accent colour matches the list card", async () => {
   const el = await mountToken(table({ state: "open-tab" }));
   expect(el.shadowRoot!.querySelector(".card")?.classList.contains("state-open-tab")).toBe(true);

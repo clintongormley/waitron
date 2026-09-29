@@ -2389,7 +2389,7 @@ export class TillApp extends LitElement {
   }
 
   /** A free table seats a party with the guest count given; a seated one resumes its party
-   * ({@link #billToOpen}). */
+   * ({@link billToOpen}). */
   async #onOpenTable(event: Event): Promise<void> {
     const { tableId, seated, guestCount } = (
       event as CustomEvent<{ tableId: string; seated: boolean; guestCount?: number | null }>
@@ -3507,11 +3507,13 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  /** A refusal of the name itself goes back to the screen's field; any other is said on the banner. */
+  /** A refusal of the name itself goes back to the screen's field, unless the waiter has left the
+   * party since; any other is said on the banner. */
   async #onNameParty(event: Event): Promise<void> {
     const { name } = (event as CustomEvent<{ name: string | null }>).detail;
     const party = this.orderParty;
     if (party === null) return;
+    const visit = this.#orderVisit;
     this.errorKey = undefined;
     this.nameRefusal = null;
     try {
@@ -3520,13 +3522,22 @@ export class TillApp extends LitElement {
     } catch (error) {
       const refused = error as { code?: string; field?: string } | undefined;
       if (refused?.code === "management.request_invalid" && refused.field === "name") {
-        this.nameRefusal = { name: name ?? "", message: t("table.name_too_long") };
+        if (visit === this.#orderVisit && this.orderParty?.id === party.id)
+          this.nameRefusal = { name: name ?? "", message: t("table.name_too_long") };
         return;
       }
       await this.#onTableRefusal(error);
       return;
     }
     await this.#reloadOrder();
+  }
+
+  /** `service_zone.mode_incompatible`'s own words are about a table; between two bills it means
+   * the two are served in different ways. */
+  async #onBillPairRefusal(error: unknown): Promise<void> {
+    if ((error as { code?: string } | undefined)?.code === "service_zone.mode_incompatible")
+      this.errorKey = "table.bills_served_differently";
+    else await this.#onTableRefusal(error);
   }
 
   async #onMergeBills(event: Event): Promise<void> {
@@ -3536,7 +3547,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.mergeBills(this.activeTabId, fromBillId, this.#billRevisions());
     } catch (error) {
-      await this.#onTableRefusal(error);
+      await this.#onBillPairRefusal(error);
       return;
     }
     await this.#reloadOrder();
@@ -3551,7 +3562,7 @@ export class TillApp extends LitElement {
     try {
       await this.api.transferItems(this.activeTabId, toBillId, transfers, this.#billRevisions());
     } catch (error) {
-      await this.#onTableRefusal(error);
+      await this.#onBillPairRefusal(error);
       return;
     }
     await this.#reloadOrder();

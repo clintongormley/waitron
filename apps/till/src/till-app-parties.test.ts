@@ -1490,6 +1490,25 @@ describe("till-app: table actions on the party", () => {
     expect(banner(el)!.textContent).toContain(codeMessage(code));
   });
 
+  it.each([
+    ["merge-bills", { fromBillId: "wo-check" }, "mergeBills"],
+    ["transfer-lines", { toBillId: "wo-check", transfers: [{ lineNo: 1 }] }, "transferItems"],
+  ] as const)(
+    "says the two bills are served differently when %s is refused for their service modes",
+    async (type, detail, method) => {
+      const { el } = await mountApp({
+        [method]: vi.fn().mockRejectedValue({ code: "service_zone.mode_incompatible" }),
+      });
+      const order = await openMesa(el);
+
+      emit(order, type, detail);
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(t("table.bills_served_differently"));
+      expect(banner(el)!.textContent).not.toContain(codeMessage("service_zone.mode_incompatible"));
+    },
+  );
+
   it("names the party at the revision it read, and the floor then shows the name", async () => {
     const named = seated({}, { revision: 4, name: "Ana", displayName: "Ana" });
     const reads = floorThat([mesa4, mesa7, mesa9], [named, mesa7, mesa9]);
@@ -1557,6 +1576,34 @@ describe("till-app: table actions on the party", () => {
     await flush(el);
 
     expect(tableOrder(el)!.nameRefusal).toBeNull();
+  });
+
+  it("drops a refusal of the name that arrives after the waiter has opened another party's table", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      setPartyName: vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "name-party", { name: "Ana" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    refuse({ code: "management.request_invalid", field: "name" });
+    await flush(el);
+
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(tableOrder(el)!.nameRefusal).toBeNull();
+    expect(tableOrder(el)!.shadowRoot!.querySelector("till-party-name-dialog")).toBeNull();
+    expect(api.setPartyName).toHaveBeenCalledOnce();
+    expect(banner(el)).toBeNull();
   });
 
   it("reloads and says what changed when another device changed the party before the name arrived", async () => {

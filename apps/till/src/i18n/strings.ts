@@ -379,7 +379,9 @@ export const en = {
   "table.bills_merge": "Merge the bills",
   "table.bills_separate": "Keep separate bills",
   "table.bills_kept_separate":
-    "The bills were kept separate: one has already been paid towards or presented",
+    "The bills were kept separate: they are merged only when both parties have a main bill, neither has been presented, is being paid or has a payment on it, and both are served the same way",
+  "table.bills_served_differently":
+    "These bills are served in different ways, so items cannot move between them",
   "table.split_table_heading": "Split a table off {party}:",
   "table.split_table_bill_heading": "{table} leaves {party}. Which bill goes with it?",
   "table.split_no_bill": "No bill, start an empty one",
@@ -930,7 +932,9 @@ export const es: Record<StringKey, string> = {
   "table.bills_merge": "Juntar las cuentas",
   "table.bills_separate": "Mantener cuentas separadas",
   "table.bills_kept_separate":
-    "Las cuentas se han mantenido separadas: una ya tiene pagos o se ha presentado",
+    "Las cuentas se han mantenido separadas: solo se juntan si los dos grupos de clientes tienen cuenta principal, ninguna se ha presentado, se está cobrando ni tiene pagos, y las dos se sirven de la misma forma",
+  "table.bills_served_differently":
+    "Estas cuentas se sirven de forma distinta, así que los artículos no pueden pasar de una a otra",
   "table.split_table_heading": "Separar una mesa de {party}:",
   "table.split_table_bill_heading": "{table} se separa de {party}. ¿Qué cuenta se lleva?",
   "table.split_no_bill": "Sin cuenta, empezar una vacía",

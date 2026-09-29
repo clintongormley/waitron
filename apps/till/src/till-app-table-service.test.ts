@@ -79,25 +79,7 @@ const openTable: TableState = {
   },
 };
 
-/** {@link openTable} with a party seated at it: a round goes to the party. */
-const seatedTable: TableState = {
-  ...openTable,
-  party: {
-    id: "v-2",
-    revision: 3,
-    guestCount: 2,
-    state: "open",
-    name: null,
-    displayName: "2",
-    mainBillId: "wo-7",
-    outstanding: "12.00",
-    billCount: 1,
-    tableIds: ["t2"],
-    unsentDrafts: [],
-    reminder: null,
-  },
-};
-const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([seatedTable]) });
+const seatedFloor = () => ({ getTablesState: vi.fn().mockResolvedValue([openTable]) });
 
 const tabLine: TabLine = {
   id: "line-1",
