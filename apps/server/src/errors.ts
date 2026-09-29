@@ -353,8 +353,8 @@ declare module "@waitron/shared" {
      */
     "group.not_held": { groupId: string };
     /**
-     * A snooze named a held group that is not the one waiting: the party's first held group is.
-     * `groupId` is the group named.
+     * A snooze, or clearing one, named a held group that is not the one waiting: the party's first
+     * held group is. `groupId` is the group named.
      */
     "group.not_waiting": { groupId: string };
     /**

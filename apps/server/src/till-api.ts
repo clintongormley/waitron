@@ -114,6 +114,7 @@ import {
   readCurrentOrders,
   reorderHeldGroups,
   snoozeReminder,
+  unsnoozeReminder,
   submitGroups,
 } from "./order-groups.js";
 import type { GroupLine, SubmitGroupsInput, PartyCommandArgs } from "./order-groups.js";
@@ -1673,6 +1674,20 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const minutes = body.minutes;
       const answer = await withTransaction(deps.db, (tx) =>
         snoozeReminder(tx, deps.cfg, partyId, groupId, minutes, args),
+      );
+      return c.json(answer);
+    }),
+  );
+
+  app.post("/api/parties/:id/groups/:gid/unsnooze", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const partyId = requirePartyParam(c.req.param("id"));
+      const groupId = c.req.param("gid");
+      if (!isUuid(groupId)) throw new AppError("group.not_found", { groupId });
+      const args = groupCommand(personId, asObject(await readRawJsonBody<unknown>(c)));
+      const answer = await withTransaction(deps.db, (tx) =>
+        unsnoozeReminder(tx, deps.cfg, partyId, groupId, args),
       );
       return c.json(answer);
     }),

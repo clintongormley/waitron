@@ -2866,10 +2866,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         behind the other party's held groups with its snooze intact. Measured 2026-09-29 with a
         throwaway test on the A116 branch, reminder at 10 minutes: once the group ahead was fired
         and served at 20:30, the moved group became the waiting one due at its leftover 20:20, not
-        the 20:40 it would have without the snooze. It predates A116. **Next action:** campaign item
-        A120 — a server command beside `group.snooze` that clears the snooze, and a Clear snooze
-        action on the till's Current orders; like a snooze, it applies only to the group the
-        reminder is waiting on, so a moved group can be cleared once it becomes the waiting one.
+        the 20:40 it would have without the snooze. It predates A116. **DONE (campaign item
+        A120):** staff clear a snooze with Clear snooze on Current orders
+        (`POST /api/parties/:id/groups/:gid/unsnooze`, `unsnoozeReminder` in
+        `apps/server/src/order-groups.ts`). Like a snooze, it applies only to the group the reminder
+        is waiting on, so a moved group is cleared once it becomes the waiting one; the reminder then
+        falls due as if it had never been snoozed. Clearing a group with no snooze is accepted and
+        changes nothing but the party's revision.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

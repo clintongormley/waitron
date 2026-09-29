@@ -1807,3 +1807,107 @@ describe("POST /api/parties/:id/groups/:gid/snooze and GET /api/parties/:id/curr
     );
   });
 });
+
+describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
+  it("clears the waiting group's snooze, answering the party's revision", async () => {
+    const party = await withGroups();
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      minutes: 5,
+    });
+    expect((await remindAts(party.partyId))[party.tarta.id]).not.toBeNull();
+    const revision = await revisionOf(party.partyId);
+
+    const cleared = await call(
+      "POST",
+      `/api/parties/${party.partyId}/groups/${party.tarta.id}/unsnooze`,
+      { submissionId: randomUUID(), expectedPartyRevision: revision },
+    );
+
+    expect(cleared.status).toBe(200);
+    expect(cleared.json).toEqual({ revision: revision + 1 });
+    expect((await remindAts(party.partyId))[party.tarta.id]).toBeNull();
+  });
+
+  it("answers each unsnooze refusal with its status, writing nothing", async () => {
+    const party = await withGroups();
+    await call("POST", `/api/parties/${party.partyId}/groups/${party.tarta.id}/snooze`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+      minutes: 5,
+    });
+    const before = { ...(await snapshot(party)), remindAts: await remindAts(party.partyId) };
+    const revision = await revisionOf(party.partyId);
+    const at = () => ({ submissionId: randomUUID(), expectedPartyRevision: revision });
+    const base = `/api/parties/${party.partyId}/groups`;
+    const tarta = `${base}/${party.tarta.id}/unsnooze`;
+    const unknown = randomUUID();
+
+    const cases: [string, unknown, number, unknown][] = [
+      [
+        `${base}/not-a-uuid/unsnooze`,
+        at(),
+        404,
+        refusal("group.not_found", { groupId: "not-a-uuid" }),
+      ],
+      [`${base}/${unknown}/unsnooze`, at(), 404, refusal("group.not_found", { groupId: unknown })],
+      [
+        `${base}/${party.fired.id}/unsnooze`,
+        at(),
+        409,
+        refusal("group.not_held", { groupId: party.fired.id }),
+      ],
+      [
+        `${base}/${party.croquetas.id}/unsnooze`,
+        at(),
+        409,
+        refusal("group.not_waiting", { groupId: party.croquetas.id }),
+      ],
+      [
+        tarta,
+        { submissionId: randomUUID(), expectedPartyRevision: revision - 1 },
+        409,
+        refusal("party.out_of_date", { partyId: party.partyId, revision }),
+      ],
+      [
+        tarta,
+        { expectedPartyRevision: revision },
+        400,
+        refusal("management.request_invalid", { field: "submissionId" }),
+      ],
+      [
+        `/api/parties/not-a-party/groups/${party.tarta.id}/unsnooze`,
+        at(),
+        409,
+        refusal("party.not_open", { partyId: "not-a-party" }),
+      ],
+    ];
+    for (const [path, body, status, error] of cases) {
+      const answer = await call("POST", path, body);
+      expect([path, body, answer.status, answer.json]).toEqual([path, body, status, error]);
+    }
+    expect({ ...(await snapshot(party)), remindAts: await remindAts(party.partyId) }).toEqual(
+      before,
+    );
+  });
+
+  it("refuses 401 session.required without a session, writing nothing", async () => {
+    const party = await withGroups();
+    const before = { ...(await snapshot(party)), remindAts: await remindAts(party.partyId) };
+
+    const answer = await send(
+      venue.app,
+      "",
+      "POST",
+      `/api/parties/${party.partyId}/groups/${party.tarta.id}/unsnooze`,
+      { submissionId: randomUUID(), expectedPartyRevision: await revisionOf(party.partyId) },
+    );
+
+    expect(answer.status).toBe(401);
+    expect(answer.json).toMatchObject({ code: "session.required" });
+    expect({ ...(await snapshot(party)), remindAts: await remindAts(party.partyId) }).toEqual(
+      before,
+    );
+  });
+});

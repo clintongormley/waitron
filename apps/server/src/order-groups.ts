@@ -535,18 +535,38 @@ export async function snoozeReminder(
       if (!Number.isInteger(minutes) || minutes < 1 || minutes > MAX_SNOOZE_MINUTES) {
         throw new AppError("management.request_invalid", { field: "minutes" });
       }
-      await requireHeldGroup(tx, partyId, groupId);
-      const [waiting] = await tx
-        .select({ id: orderGroups.id })
-        .from(orderGroups)
-        .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held")))
-        .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id))
-        .limit(1);
-      if (waiting!.id !== groupId) throw new AppError("group.not_waiting", { groupId });
+      await requireWaitingGroup(tx, partyId, groupId);
       await tx
         .update(orderGroups)
         .set({ remindAt: new Date(Date.now() + minutes * 60_000).toISOString() })
         .where(eq(orderGroups.id, groupId));
+      return { revision };
+    },
+  );
+}
+
+/**
+ * Clear the snooze of the group waiting, so its reminder falls due as if never snoozed. A group
+ * with no snooze is accepted and left as it is.
+ */
+export async function unsnoozeReminder(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  groupId: string,
+  args: PartyCommandArgs,
+): Promise<{ revision: number }> {
+  void cfg;
+  return runServiceCommand(
+    tx,
+    { kind: "visit", partyId },
+    args.submissionId,
+    "group.unsnooze",
+    { partyId, groupId, operatorId: args.operatorId },
+    async () => {
+      const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
+      await requireWaitingGroup(tx, partyId, groupId);
+      await tx.update(orderGroups).set({ remindAt: null }).where(eq(orderGroups.id, groupId));
       return { revision };
     },
   );
@@ -1297,6 +1317,18 @@ async function billsOfGroups(tx: Transaction, groupIds: readonly string[]): Prom
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.groupId, [...groupIds]));
   return rows.map((row) => row.workingOrderId);
+}
+
+/** The group is the party's first held one, the one its release reminder waits on. */
+async function requireWaitingGroup(tx: Transaction, partyId: string, groupId: string) {
+  await requireHeldGroup(tx, partyId, groupId);
+  const [waiting] = await tx
+    .select({ id: orderGroups.id })
+    .from(orderGroups)
+    .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held")))
+    .orderBy(asc(orderGroups.position), asc(orderGroups.createdAt), asc(orderGroups.id))
+    .limit(1);
+  if (waiting!.id !== groupId) throw new AppError("group.not_waiting", { groupId });
 }
 
 async function requireHeldGroup(tx: Transaction, partyId: string, groupId: string): Promise<void> {
