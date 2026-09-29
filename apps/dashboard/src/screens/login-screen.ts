@@ -15,7 +15,7 @@ import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
+import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
 import type { DashboardApi } from "../api/client.js";
 import {
   forgetLoginPreference,
@@ -707,17 +707,14 @@ export class LoginScreen extends LitElement {
       );
     } catch (error) {
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      if (
-        error instanceof Error &&
-        (error.name === "NotAllowedError" || error.name === "AbortError")
-      ) {
+      const passkey = classifyPasskeySignInError(error);
+      if (passkey === "cancelled") {
         this.errorKey = null;
         this.step = "password";
         this.#focusField("password");
       } else {
-        // A browser refusal can carry the WebAuthn library's own code, which has no sentence.
         this.errorKey =
-          error instanceof Error
+          passkey === "failed"
             ? "passkey.verification_failed"
             : codeOf(error, "passkey.verification_failed");
       }

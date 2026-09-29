@@ -6770,10 +6770,10 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
     before the branch. A fix would make the automatic attempt quiet for that case too, or have the
     request helper refuse an unreadable success body with a code; the second touches every request.
     Queued as C58 (owner chose (a), 2026-09-29): the automatic attempt stays quiet for that case.
-  - **Left OPEN by #843's review:** sign-in has no classifier for passkey errors like the one
-    registration uses (`classifyPasskeyRegistrationError`); the button now tells a browser refusal
-    from a server refusal inline. A shared helper would restructure code beyond C8. Queued as C57
-    (owner, 2026-09-29).
+  - **DONE (C57, PR pending, 2026-09-29):** the passkey button's sign-in sorts a failed attempt
+    through `classifyPasskeySignInError` (`apps/dashboard/src/passkey-errors.ts`), beside the
+    registration helper, instead of inline in the login screen; the automatic attempt on page load
+    is unchanged (C58). No visible change: the login and profile screen suites pass unedited.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
