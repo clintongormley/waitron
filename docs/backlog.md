@@ -2867,7 +2867,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         behind the other party's held groups with its snooze intact. Measured 2026-09-29 with a
         throwaway test on the A116 branch, reminder at 10 minutes: once the group ahead was fired
         and served at 20:30, the moved group became the waiting one due at its leftover 20:20, not
-        the 20:40 it would have without the snooze. It predates A116. **DONE (campaign item
+        the 20:40 it would have without the snooze. It predates A116. **DONE (#850, campaign item
         A120):** staff clear a snooze with Clear snooze on Current orders
         (`POST /api/parties/:id/groups/:gid/unsnooze`, `unsnoozeReminder` in
         `apps/server/src/order-groups.ts`). Like a snooze, it applies only to the group the reminder
