@@ -143,15 +143,33 @@ load_print_agent_apparmor() {
 #     asked and the printer bonded. The plugin does this for a device whose class marks it as a
 #     printer (read in plugins/autopair.c, BlueZ 5.82). This drop-in re-runs the unit's own
 #     ExecStart with the plugin off. Bluetooth is restarted only when the drop-in changed, and a
-#     failure never stops the install.
-BLUETOOTH_DROPIN="${WAITRON_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
+#     failure never stops the install. It reads ExecStart from the unit file alone, so when another
+#     drop-in sets ExecStart, writing ours would either discard that drop-in's arguments or be
+#     overridden by it; then nothing is changed, not even a drop-in of ours already there.
+# WAITRON_SH_BLUETOOTH_DROPIN is a test override: scripts/waitron-sh.test.mjs points it inside each
+# case's own directory, so no test can see the shipped path — it is pinned as text by
+# scripts/deploy-image-env.test.ts instead.
+BLUETOOTH_DROPIN="${WAITRON_SH_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
 disable_bluetooth_autopair() {
-  local unit exec_start tmp
+  local unit exec_start tmp dropins dropin kept=""
   unit="$(systemctl show -p FragmentPath --value bluetooth.service 2>/dev/null || true)"
   if [ -z "$unit" ] || [ ! -r "$unit" ]; then
     echo "waitron.sh: no bluetooth.service on this host — Bluetooth pairing left as it is"
     return 0
   fi
+  read -ra dropins <<< "$(systemctl show -p DropInPaths --value bluetooth.service 2>/dev/null || true)"
+  [ -f "$BLUETOOTH_DROPIN" ] && kept=" ($BLUETOOTH_DROPIN is still in place from an earlier install)"
+  for dropin in ${dropins[@]+"${dropins[@]}"}; do
+    [ "$dropin" = "$BLUETOOTH_DROPIN" ] && continue
+    if [ ! -r "$dropin" ]; then
+      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — could not read $dropin, which may set bluetooth.service's ExecStart; left as it is$kept" >&2
+      return 0
+    fi
+    if grep -Eq '^[[:space:]]*ExecStart[[:space:]]*=' "$dropin"; then
+      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $dropin also sets bluetooth.service's ExecStart; left as it is$kept" >&2
+      return 0
+    fi
+  done
   exec_start="$(sed -nE 's/^[[:space:]]*ExecStart[[:space:]]*=[[:space:]]*//p' "$unit" | tail -n 1)"
   if [ -z "$exec_start" ]; then
     echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $unit names no ExecStart" >&2

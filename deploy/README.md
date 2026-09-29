@@ -70,7 +70,10 @@ the file changed, so installing again does not interrupt it. A box with no `blue
 gets one line saying so. If the file cannot be written or Bluetooth will not restart, `install`
 says so, removes the file again and restarts Bluetooth without it, and carries on; the next
 `install` tries again. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
-so. To undo it, delete the file, then run `systemctl daemon-reload` and
+so. It also changes nothing when another drop-in of `bluetooth.service` sets the daemon command
+(`ExecStart`), or cannot be read, and names that file: writing its own would drop that file's
+options or be overridden by it. A `waitron-noautopair.conf` an earlier `install` wrote stays in
+place then, and the message says so. To undo it, delete the file, then run `systemctl daemon-reload` and
 `systemctl restart bluetooth`.
 
 A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it

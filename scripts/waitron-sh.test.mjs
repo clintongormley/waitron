@@ -44,9 +44,10 @@ afterEach(() => {
 // `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
 // which is where each case points the Bluetooth drop-in. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
-// does; WT_BT_RESTART_FAIL=1 makes every `systemctl restart bluetooth` fail, and =first only the
-// first one in a case. `rm` is logged and then run for real. `mktemp` fails when its
-// arguments contain WT_MKTEMP_FAIL, and otherwise runs the real one.
+// does, and `systemctl show … DropInPaths` answers WT_BT_DROPINS; WT_BT_RESTART_FAIL=1 makes every
+// `systemctl restart bluetooth` fail, and =first only the first one in a case. `rm` is logged and
+// then run for real. `mktemp` fails when its arguments contain WT_MKTEMP_FAIL, and otherwise runs
+// the real one.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 
@@ -167,6 +168,7 @@ stub(
   `
 case "$*" in
   "show -p FragmentPath --value bluetooth.service") [ -n "\${WT_BT_UNIT}" ] && echo "\${WT_BT_UNIT}" ;;
+  "show -p DropInPaths --value bluetooth.service") echo "\${WT_BT_DROPINS}" ;;
   "restart bluetooth")
     n=$(cat "\${WT_LOG}.restarts" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.restarts"
     [ "\${WT_BT_RESTART_FAIL}" = "1" ] && exit 1
@@ -219,7 +221,7 @@ function sandbox({
       WT_BT_UNIT: unit,
       WT_BT_RESTART_FAIL: bluetoothRestartFail === true ? "1" : bluetoothRestartFail || "0",
       WT_MKTEMP_FAIL: mktempFail,
-      WAITRON_BLUETOOTH_DROPIN: dropIn,
+      WAITRON_SH_BLUETOOTH_DROPIN: dropIn,
       WT_LOG: log,
       WT_TRADING_ENV: tradingEnv,
       WT_DB_STAMP: dbStamp,
@@ -485,6 +487,94 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 
+  // Another drop-in's ExecStart is the one in effect when ours is absent or sorts before it; writing
+  // ours would discard its arguments or be overridden by it.
+  const otherDropIn = (sb, name, body) => {
+    const path = join(sb.root, "other.d", name);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, body);
+    return path;
+  };
+
+  it("leaves Bluetooth alone, and names the file, when another drop-in sets ExecStart", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    const other = otherDropIn(
+      sb,
+      "override.conf",
+      "[Service]\nExecStart=\nExecStart=/usr/libexec/bluetooth/bluetoothd --experimental\n",
+    );
+    sb.env.WT_BT_DROPINS = `${other} ${sb.dropIn}`;
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain(
+      `could not switch off bluetoothd's autopair plugin — ${other} also sets bluetooth.service's ExecStart; left as it is`,
+    );
+    expect(existsSync(sb.dropIn)).toBe(false);
+    const log = calls(sb);
+    expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
+    expect(log).not.toContain("systemctl daemon-reload");
+    expect(log).not.toContain("systemctl restart bluetooth");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+
+  it("keeps a drop-in an earlier install wrote, and says so, when another drop-in sets ExecStart", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    mkdirSync(dirname(sb.dropIn), { recursive: true });
+    const ours = "[Service]\nExecStart=\nExecStart=/usr/sbin/bluetoothd --noplugin=autopair\n";
+    writeFileSync(sb.dropIn, ours);
+    const other = otherDropIn(
+      sb,
+      "zz-override.conf",
+      "[Service]\nExecStart = /usr/sbin/bluetoothd -E\n",
+    );
+    sb.env.WT_BT_DROPINS = `${sb.dropIn} ${other}`;
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain(`${other} also sets bluetooth.service's ExecStart`);
+    expect(r.stderr).toContain(`${sb.dropIn} is still in place`);
+    expect(readFileSync(sb.dropIn, "utf8")).toBe(ours);
+    const log = calls(sb);
+    expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
+    expect(log).not.toContain("systemctl daemon-reload");
+    expect(log).not.toContain("systemctl restart bluetooth");
+  });
+
+  // Root reads a file whatever its mode, so the case cannot make an unreadable one there.
+  it.skipIf(process.getuid?.() === 0)(
+    "leaves Bluetooth alone when it cannot read another drop-in, and says so",
+    () => {
+      const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+      const other = otherDropIn(sb, "secret.conf", "[Service]\nExecStart=\nExecStart=/bin/true\n");
+      chmodSync(other, 0o000);
+      sb.env.WT_BT_DROPINS = other;
+      const r = run(sb, ["install"]);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain(`could not read ${other}`);
+      expect(existsSync(sb.dropIn)).toBe(false);
+      expect(calls(sb)).not.toContain("systemctl restart bluetooth");
+    },
+  );
+
+  it("writes its drop-in when the other drop-ins set no ExecStart, and ignores its own", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    const other = otherDropIn(sb, "limits.conf", "[Service]\nLimitNOFILE=4096\n");
+    mkdirSync(dirname(sb.dropIn), { recursive: true });
+    writeFileSync(
+      sb.dropIn,
+      "[Service]\nExecStart=\nExecStart=/usr/sbin/bluetoothd --noplugin=autopair\n",
+    );
+    sb.env.WT_BT_DROPINS = `${other} ${sb.dropIn}`;
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).not.toContain("autopair");
+    expect(
+      readFileSync(sb.dropIn, "utf8").endsWith(dropInFor("/usr/libexec/bluetooth/bluetoothd")),
+    ).toBe(true);
+    const log = calls(sb);
+    expect(log).toContain("systemctl daemon-reload");
+    expect(log).toContain("systemctl restart bluetooth");
+  });
+
   it("carries on with the install when Bluetooth will not restart, and says so", () => {
     const sb = sandbox({
       bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
@@ -522,7 +612,7 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     const retried = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
     writeFileSync(retried.log, "");
     // The same directory the failed run left: nothing there, so this install writes and restarts.
-    retried.env.WAITRON_BLUETOOTH_DROPIN = failed.dropIn;
+    retried.env.WAITRON_SH_BLUETOOTH_DROPIN = failed.dropIn;
     retried.env.WT_SANDBOX = failed.root;
     expect(run(retried, ["install"]).status).toBe(0);
     expect(existsSync(failed.dropIn)).toBe(true);

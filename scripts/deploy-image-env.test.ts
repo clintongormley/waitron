@@ -334,6 +334,14 @@ describe("the waitron.sh box command", () => {
     expect(WAITRON_SH).toMatch(/WAITRON_SH_HEALTH_DELAY:-5\}/);
   });
 
+  // `scripts/waitron-sh.test.mjs` points the drop-in inside each case's own directory, so no
+  // behaviour there would notice a typo in the path a box gets.
+  it("ships the Bluetooth drop-in to systemd's folder for bluetooth.service", () => {
+    expect(WAITRON_SH).toContain(
+      "WAITRON_SH_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}",
+    );
+  });
+
   it("reports a script-prefixed error to stderr when misused", () => {
     expect(WAITRON_SH).toMatch(/echo "waitron\.sh: [^\n]*>&2/);
   });
