@@ -82,6 +82,9 @@ const heldSummary: HeldOrderSummary = {
   label: "Mesa 4",
   itemCount: 2,
   total: "3.00",
+  outstanding: "3.00",
+  hasPayments: false,
+  partyId: null,
   openedAt: "2026-08-05T10:00:00.000Z",
 };
 
@@ -8240,5 +8243,245 @@ describe("a counter pay, place or hold refused for a reason the operator can act
     const banner = el.shadowRoot!.querySelector('[role="alert"]')!;
     expect(banner.textContent).toContain(t("sale.error"));
     expect(banner.textContent).not.toContain(codeMessage("order.payment_in_flight"));
+  });
+});
+
+describe("the counter's held orders: moving one to a table, and paying a moved bill", () => {
+  const counterOrder: HeldOrderSummary = {
+    ...heldSummary,
+    id: "wo-12",
+    orderNumber: 12,
+    label: "Ana",
+  };
+  const luisParty = {
+    id: "v7",
+    revision: 9,
+    guestCount: 2,
+    state: "open" as const,
+    name: "Luis",
+    displayName: "Luis",
+    mainBillId: "wo-7",
+    outstanding: "12.00",
+    billCount: 1,
+    tableIds: ["t7"],
+    unsentDrafts: [],
+    reminder: null,
+  };
+  const mesa9: TableState = { ...freeTable, id: "t9", label: "Mesa 9" };
+  const mesa7: TableState = {
+    ...openTable,
+    id: "t7",
+    label: "Mesa 7",
+    condition: "held",
+    party: luisParty,
+  };
+  const heldList = (el: TillApp) =>
+    counterGrid(el)!.shadowRoot!.querySelector<HTMLElement & { tables: TableState[] }>(
+      "till-held-orders",
+    )!;
+  const toast = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { open: boolean; message: string }>(
+      "wt-toast[data-submitted-toast]",
+    )!;
+  const alert = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
+
+  async function counterWith(overrides: Record<string, unknown> = {}) {
+    const mounted = await mountApp({
+      listWorkingOrders: vi.fn().mockResolvedValue([counterOrder]),
+      getTablesState: vi.fn().mockResolvedValue([mesa7, mesa9]),
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v-new", billId: "wo-12", merged: false }),
+      ...overrides,
+    });
+    const c = await toCounter(mounted.el);
+    return { ...mounted, c };
+  }
+
+  it("reads the floor when Move to table opens, and gives it to the held orders", async () => {
+    const { el, c } = await counterWith();
+    const reads = vi.mocked(currentApi.getTablesState).mock.calls.length;
+
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+
+    expect(currentApi.getTablesState).toHaveBeenCalledTimes(reads + 1);
+    expect(heldList(el).tables).toEqual([mesa7, mesa9]);
+  });
+
+  it("moves a counter order to a table read free as a bill read with no party, stays on the counter and says where it went", async () => {
+    const { el, c } = await counterWith();
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+    const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t9" }, "merge", {
+      partyId: null,
+      otherPartyId: null,
+    });
+    expect(counter(el)).not.toBeNull();
+    expect(toast(el).open).toBe(true);
+    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 9"));
+    expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
+    expect(alert(el)).toBeNull();
+  });
+
+  it("sends the party it read at a seated table, with that party's revision", async () => {
+    const { el, c } = await counterWith();
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t7", bills: "separate" });
+    await flush(el);
+
+    expect(currentApi.moveBill).toHaveBeenCalledWith("wo-12", { tableId: "t7" }, "separate", {
+      partyId: null,
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+    });
+    expect(toast(el).message).toBe(t("counter.moved_to_table").replace("{table}", "Mesa 7"));
+  });
+
+  it("empties the basket when the order moved is the one retrieved into it", async () => {
+    const { el, c } = await counterWith({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        id: "wo-12",
+        orderNumber: 12,
+        label: "Ana",
+        revision: 3,
+        lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
+      }),
+    });
+    emit(c, "retrieve-order", { id: "wo-12" });
+    await flush(el);
+    expect(c.store.id).toBe("wo-12");
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(c.store.lines).toHaveLength(0);
+    expect(c.store.id).not.toBe("wo-12");
+  });
+
+  it("keeps the basket when another order is moved", async () => {
+    const { el, c } = await counterWith();
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+    const id = c.store.id;
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(c.store.id).toBe(id);
+    expect(c.store.lines).toHaveLength(1);
+  });
+
+  it.each(["table.needs_clearing", "table.inactive", "service_zone.mode_incompatible"])(
+    "shows %s in its own words and reads the held orders again",
+    async (code) => {
+      const { el, c } = await counterWith({ moveBill: vi.fn().mockRejectedValue({ code }) });
+      const heldReads = vi.mocked(currentApi.listWorkingOrders).mock.calls.length;
+
+      emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", bills: "merge" });
+      await flush(el);
+
+      expect(alert(el)!.textContent).toContain(codeMessage(code));
+      expect(toast(el).open).toBe(false);
+      expect(currentApi.listWorkingOrders).toHaveBeenCalledTimes(heldReads + 1);
+    },
+  );
+
+  it("says the table changed when a party sat there since it was read free", async () => {
+    const reads = vi
+      .fn()
+      .mockResolvedValueOnce([mesa7, mesa9])
+      .mockResolvedValue([
+        mesa7,
+        { ...mesa9, condition: "held", party: { ...luisParty, id: "v9", tableIds: ["t9"] } },
+      ]);
+    const { el, c } = await counterWith({
+      getTablesState: reads,
+      moveBill: vi
+        .fn()
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v9", revision: 1 }),
+    });
+    emit(c, "move-held-order-open", { orderId: "wo-12" });
+    await flush(el);
+
+    emit(c, "move-held-order", { orderId: "wo-12", tableId: "t9", bills: "merge" });
+    await flush(el);
+
+    expect(alert(el)!.textContent).toContain(codeMessage("party.out_of_date"));
+    expect(counter(el)).not.toBeNull();
+  });
+
+  it("pays a bill moved to the counter, with nothing paid on it, as the one sale of that bill", async () => {
+    const moved: HeldOrderSummary = { ...heldSummary, label: "4" };
+    const { el, c } = await counterWith({ listWorkingOrders: vi.fn().mockResolvedValue([moved]) });
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(currentApi.recordSale).toHaveBeenCalledOnce();
+    expect(currentApi.recordSale).toHaveBeenCalledWith(
+      [{ menuItemId: "menu-item-cafe-0", quantity: "2" }],
+      { method: "cash", amount: "5" },
+      "wo-1",
+    );
+  });
+
+  it("shows what a partly paid bill still owes and to take the rest as a bill payment, and takes no single payment", async () => {
+    const partly: HeldOrderSummary = { ...heldSummary, outstanding: "1.00", hasPayments: true };
+    const { el, c } = await counterWith({ listWorkingOrders: vi.fn().mockResolvedValue([partly]) });
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    const said = alert(el)!.textContent!;
+    emit(c, "confirm-payment", { method: "cash", amount: "1.00" });
+    await flush(el);
+    emit(c, "collect-card", {});
+    await flush(el);
+
+    expect(said).toContain(t("bill.pay_with_bill_payments"));
+    expect(said).toContain(
+      t("table.bill_to_pay").replace("{amount}", formatMoney("1.00", currentLocale())),
+    );
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(currentApi.pay).not.toHaveBeenCalled();
+    expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+    expect(c.store.id).toBe("wo-1");
+  });
+
+  it("treats a card payment still at the reader as a payment on the bill", async () => {
+    const pending: HeldOrderSummary = { ...heldSummary, hasPayments: true };
+    const { el, c } = await counterWith({
+      listWorkingOrders: vi.fn().mockResolvedValue([pending]),
+    });
+
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    emit(c, "confirm-payment", { method: "cash", amount: "3.00" });
+    await flush(el);
+
+    expect(currentApi.recordSale).not.toHaveBeenCalled();
+    expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it("says to take the rest as a bill payment when the single payment is refused for money on the bill", async () => {
+    const { el, c } = await counterWith({
+      recordSale: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
+    });
+    c.store.addProduct(cafe, "1");
+    await el.updateComplete;
+
+    emit(c, "confirm-payment", { method: "cash", amount: "5" });
+    await flush(el);
+
+    expect(alert(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
 });

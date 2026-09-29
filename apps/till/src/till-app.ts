@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  compareDecimal,
   decimal,
   formatMoney,
   resolveActiveLocale,
@@ -72,6 +73,7 @@ import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
 import "./widgets/card-grid.js";
 import type { StringKey } from "./i18n/strings.js";
+import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   BillParty,
@@ -109,6 +111,8 @@ import type {
   TableActionResult,
   TableActionRevisions,
   BillRevisions,
+  MoveBillRevisions,
+  MoveBillResult,
   TillZoneMenu,
   ZoneOfferCatalogue,
 } from "./api/client.js";
@@ -240,6 +244,24 @@ const TABLE_REFUSALS = new Set([
   "bill.line_paid",
 ]);
 
+/** A bill the single payment refuses because money is already on it (`bill.payments_received`):
+ * one that has received part of its total, or, from the held list, one holding any payment. */
+function paidInPart(bill: {
+  status?: string;
+  total: string;
+  outstanding: string;
+  hasPayments?: boolean;
+}): boolean {
+  if (bill.status !== undefined && bill.status !== "open") return false;
+  return (
+    bill.hasPayments === true || compareDecimal(decimal(bill.outstanding), decimal(bill.total)) < 0
+  );
+}
+
+function isPaymentsReceived(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "bill.payments_received";
+}
+
 /** The bill a seated party opens on when it has no main bill: its first unpaid, else its latest. */
 function billToOpen(bills: readonly PartyBill[]): string | undefined {
   const unpaid = bills.find((bill) => bill.status === "open" || bill.status === "placed");
@@ -366,6 +388,7 @@ const ACTIONABLE_REFUSALS = new Set(["order.payment_in_flight", "product.unavail
 
 /** A counter pay, place or hold refusal: its own message when it is actionable, else `fallback`. */
 function counterError(error: unknown, fallback: StringKey): CounterError {
+  if (isPaymentsReceived(error)) return "bill.pay_with_bill_payments";
   const code = (error as { code?: string } | undefined)?.code;
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
@@ -402,6 +425,7 @@ function lateChangeMessage(late: LateChange): string {
 type CounterError =
   | StringKey
   | { code: string }
+  | { billPayments: string }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
   | { lateChange: LateChange; also?: StringKey };
@@ -431,6 +455,13 @@ function errorText(error: CounterError): string | TemplateResult {
           t("table.draft_taken_over_unsaved_unnamed"),
         );
   if ("partyChanged" in error) return partyChangeMessage(error.partyChanged);
+  if ("billPayments" in error)
+    return [
+      t("table.bill_to_pay").replace("{amount}", () =>
+        formatMoney(error.billPayments, currentLocale()),
+      ),
+      t("bill.pay_with_bill_payments"),
+    ].join(". ");
   const late = lateChangeMessage(error.lateChange);
   return error.also === undefined
     ? late
@@ -1774,7 +1805,7 @@ export class TillApp extends LitElement {
    */
   async #onConfirmPayment(event: Event, retried = false): Promise<void> {
     // Single-flight (see `submitting`): set before the first await.
-    if (this.submitting) return;
+    if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
@@ -1820,7 +1851,7 @@ export class TillApp extends LitElement {
    * {@link cardOutcome} and the basket stays, with no error banner.
    */
   async #onCollectCard(event: Event, retried = false): Promise<void> {
-    if (this.submitting) return;
+    if (this.submitting || this.#refusePaidInPart()) return;
     this.submitting = true;
     const detail = (event as CustomEvent<CollectCardDetail>).detail;
     const id = this.#store.id;
@@ -1866,6 +1897,21 @@ export class TillApp extends LitElement {
     }
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onCollectCard(event, true));
+  }
+
+  /** The retrieved order in the basket, when the held list says money is already on it. */
+  #basketPaidInPart(): HeldOrderSummary | undefined {
+    if (!this.#store.persisted) return undefined;
+    return this.heldOrders.find((order) => order.id === this.#store.id && paidInPart(order));
+  }
+
+  /** The single payment refuses a bill with money on it, so the counter says to take the rest as a
+   * bill payment instead of sending one. */
+  #refusePaidInPart(): boolean {
+    const held = this.#basketPaidInPart();
+    if (held === undefined) return false;
+    this.errorKey = { billPayments: held.outstanding };
+    return true;
   }
 
   /** Never carries a price: the server re-prices. */
@@ -2084,6 +2130,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       await this.#loadHeldOrder(id);
+      this.#refusePaidInPart();
     } catch {
       // Paid or discarded on another till; the basket is untouched.
       this.errorKey = "held.stale";
@@ -3449,6 +3496,108 @@ export class TillApp extends LitElement {
     this.#sayBillsKeptApart(revisions, bills, result);
   }
 
+  /** What a move to `tableId` sends of the party the floor showed there: its id and revision, null
+   * when it read free, and nothing for a table of the moving party itself. */
+  #targetRead(tableId: string, ownPartyId: string | null): MoveBillRevisions {
+    const other = this.tables.find((table) => table.id === tableId)?.party ?? null;
+    if (other === null) return { otherPartyId: null };
+    if (other.id === ownPartyId) return {};
+    return { otherPartyId: other.id, expectedOtherPartyRevision: other.revision };
+  }
+
+  /**
+   * The bill on screen moves whole to another table or to the counter, in the zone the counter's
+   * orders are made in. The screen stays with this party, on its main bill or {@link billToOpen}'s,
+   * and goes back to the floor when the party has no bill left.
+   */
+  async #onMoveBill(event: Event): Promise<void> {
+    const { to, bills } = (
+      event as CustomEvent<{
+        to: { tableId: string } | { counter: true };
+        bills: "merge" | "separate";
+      }>
+    ).detail;
+    const billId = this.activeTabId;
+    const party = this.orderParty;
+    if (billId === undefined || party === null) return;
+    this.errorKey = undefined;
+    const toTable = "tableId" in to;
+    const revisions: MoveBillRevisions = {
+      expectedPartyRevision: party.revision,
+      partyId: party.id,
+      ...(toTable ? this.#targetRead(to.tableId, party.id) : {}),
+    };
+    let result: MoveBillResult;
+    try {
+      result = await this.api.moveBill(
+        billId,
+        toTable
+          ? { tableId: to.tableId }
+          : { counter: { zoneId: this.counterServiceZoneId || null } },
+        bills,
+        revisions,
+      );
+    } catch (error) {
+      await this.#onTableRefusal(error);
+      return;
+    }
+    await this.#reloadTables();
+    this.#rememberOrderParty();
+    const { bills: read } = await this.#loadPartyBills();
+    const next = this.#billAfterMove(billId, read);
+    if (next === undefined) this.#leaveTable();
+    else {
+      this.activeTabId = next;
+      await this.#loadTabLines();
+    }
+    if (!toTable) await this.#refreshHeldOrders();
+    if (typeof revisions.otherPartyId === "string" && bills === "merge" && !result.merged)
+      this.errorKey = "table.bills_kept_separate";
+  }
+
+  /** The party's bill to show once `moved` has left it: its main bill while that is still among
+   * its bills, else {@link billToOpen}'s; none when the party has no bill left, or its bills could
+   * not be read and it has no other main bill. */
+  #billAfterMove(moved: string, read: PartyBill[] | null): string | undefined {
+    const main = this.orderParty?.mainBillId ?? undefined;
+    if (read === null) return main === moved ? undefined : main;
+    const left = read.filter((bill) => bill.workingOrderId !== moved);
+    if (left.some((bill) => bill.workingOrderId === main)) return main;
+    return billToOpen(left);
+  }
+
+  /** A held order's Move to table lists the floor as it is now. */
+  async #onMoveHeldOrderOpen(): Promise<void> {
+    await this.#reloadTables();
+  }
+
+  /**
+   * A counter order, read with no party, moves to a table. The counter stays on screen and says
+   * where it went; a basket holding that order is emptied, since it is now the table's bill.
+   */
+  async #onMoveHeldOrder(event: Event): Promise<void> {
+    const { orderId, tableId, bills } = (event as CustomEvent<MoveHeldOrderDetail>).detail;
+    const label = this.tables.find((table) => table.id === tableId)?.label ?? "";
+    this.errorKey = undefined;
+    try {
+      await this.api.moveBill(orderId, { tableId }, bills, {
+        partyId: null,
+        ...this.#targetRead(tableId, null),
+      });
+    } catch (error) {
+      await this.#onTableRefusal(error);
+      await this.#refreshHeldOrders();
+      return;
+    }
+    if (this.#store.id === orderId) {
+      this.#store.clear();
+      this.cardOutcome = undefined;
+    }
+    this.submittedNotice = t("counter.moved_to_table").replace("{table}", () => label);
+    this.renderRoot.querySelector<WtToast>("wt-toast[data-submitted-toast]")?.show();
+    await this.#refreshHeldOrders();
+  }
+
   /** The chosen table joins the party; a party seated there joins it with all its tables. */
   async #onJoinTables(event: Event): Promise<void> {
     const { tableId, bills } = (
@@ -3682,20 +3831,31 @@ export class TillApp extends LitElement {
    */
   async #onPayTab(event: Event): Promise<void> {
     if (this.submitting || this.activeTabId === undefined) return;
-    this.submitting = true;
     const id = this.activeTabId;
+    const bill = this.partyBills.find((row) => row.workingOrderId === id);
+    if (bill !== undefined && paidInPart(bill)) {
+      this.errorKey = { billPayments: bill.outstanding };
+      return;
+    }
+    this.submitting = true;
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const presented = bill?.status === "placed";
     this.errorKey = undefined;
     try {
-      this.result = await this.api.recordSale([], tender, id);
-      this.#showTicket(id);
+      // The bill's id is the idempotency key on both paths, so a retry replays the first answer.
+      this.result = presented
+        ? await this.api.collectOrder(id, tender)
+        : await this.api.recordSale([], tender, id);
+      this.#showTicket(id, !presented);
     } catch (error) {
       // No preliminary save, so any network failure may have filed.
-      this.errorKey = isPermanentSaleRefusal(error)
-        ? "sale.refused"
-        : isNetworkFailure(error)
-          ? "sale.unconfirmed"
-          : "sale.error";
+      this.errorKey = isPaymentsReceived(error)
+        ? "bill.pay_with_bill_payments"
+        : isPermanentSaleRefusal(error)
+          ? "sale.refused"
+          : isNetworkFailure(error)
+            ? "sale.unconfirmed"
+            : "sale.error";
     } finally {
       this.submitting = false;
     }
@@ -3885,6 +4045,7 @@ export class TillApp extends LitElement {
         .selectedServiceZoneId=${this.counterServiceZoneId}
         .selectedDiet=${this.selectedDiet}
         .heldOrders=${this.heldOrders}
+        .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.#defaultStationId()}
         .operatorName=${this.operatorName}
@@ -3892,7 +4053,7 @@ export class TillApp extends LitElement {
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
         .busy=${this.submitting || this.placing}
-        .payHeld=${this.basketHeld}
+        .payHeld=${this.basketHeld || this.#basketPaidInPart() !== undefined}
         .counterTab=${tab}
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
@@ -4096,6 +4257,9 @@ export class TillApp extends LitElement {
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-guests=${(event: Event) => void this.#onMoveGuests(event)}
+        @move-bill=${(event: Event) => void this.#onMoveBill(event)}
+        @move-held-order-open=${() => void this.#onMoveHeldOrderOpen()}
+        @move-held-order=${(event: Event) => void this.#onMoveHeldOrder(event)}
         @join-tables=${(event: Event) => void this.#onJoinTables(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}

@@ -727,6 +727,12 @@ export interface HeldOrderSummary {
   label: string | null;
   itemCount: number;
   total: string;
+  /** `total` less the money the bill has received. */
+  outstanding: string;
+  /** A payment is pending or received on the bill, which the counter's single payment refuses. */
+  hasPayments: boolean;
+  /** Null for a counter order; a party's own bill is listed too. */
+  partyId: string | null;
   openedAt: string;
 }
 
@@ -1237,6 +1243,29 @@ export interface TableActionResult {
 export interface BillRevisions {
   expectedPartyRevision?: number;
   partyId?: string;
+}
+
+/** Where Move a bill sends a bill: a table, or the counter in the counter's zone (null for none). */
+export type MoveBillTarget = { tableId: string } | { counter: { zoneId: string | null } };
+
+/**
+ * What Move a bill sends of the parties the till read: the bill's party and its revision
+ * (`partyId: null` for a bill read with no party, as a counter order), and what it read at a target
+ * table, as {@link TableActionRevisions} does.
+ */
+export interface MoveBillRevisions {
+  expectedPartyRevision?: number;
+  partyId?: string | null;
+  otherPartyId?: string | null;
+  expectedOtherPartyRevision?: number;
+}
+
+/** A move's answer: the party the bill is in now (null at the counter), and the bill it ended up
+ * as, the receiving main bill when `merged`. */
+export interface MoveBillResult {
+  partyId: string | null;
+  billId: string;
+  merged: boolean;
 }
 
 /**
@@ -2188,6 +2217,20 @@ export class TillApi {
       bills,
       ...revisions,
     });
+  }
+
+  /**
+   * Move a whole bill to a table or the counter → `POST /api/bills/:id/move`. Rejects, among others,
+   * `bill.paid`, `party.main_bill_stays`, `group.held_leaves_party`, `table.needs_clearing`,
+   * `table.already_in_party` and `party.out_of_date`.
+   */
+  moveBill(
+    billId: string,
+    to: MoveBillTarget,
+    bills: "merge" | "separate",
+    revisions: MoveBillRevisions,
+  ): Promise<MoveBillResult> {
+    return this.#request(`/api/bills/${billId}/move`, "POST", { to, bills, ...revisions });
   }
 
   /**

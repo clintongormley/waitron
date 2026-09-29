@@ -9,6 +9,7 @@ import type {
   DietProfile,
   HeldOrderSummary,
   StationQueueGroup,
+  TableState,
   TillProduct,
   TillZoneMenu,
 } from "../api/client.js";
@@ -33,6 +34,9 @@ const mesa: HeldOrderSummary = {
   label: "Mesa 4",
   itemCount: 2,
   total: "3.00",
+  outstanding: "3.00",
+  hasPayments: false,
+  partyId: null,
   openedAt: "2026-08-05T10:00:00.000Z",
 };
 
@@ -42,6 +46,9 @@ const barra: HeldOrderSummary = {
   label: null,
   itemCount: 1,
   total: "1.50",
+  outstanding: "1.50",
+  hasPayments: false,
+  partyId: null,
   openedAt: "2026-08-05T10:05:00.000Z",
 };
 
@@ -174,6 +181,20 @@ describe("till-card-grid", () => {
       heldOrders: [mesa],
     });
     expect(el.shadowRoot!.querySelector("till-held-orders")).not.toBeNull();
+  });
+
+  it("gives the held-orders card the floor's tables, which its Move to table lists", async () => {
+    const store = new WorkingOrderStore();
+    const tables = [{ id: "t9", label: "Mesa 9" }] as unknown as TableState[];
+    const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+      tab: heldTab,
+      store,
+      heldOrders: [mesa],
+      tables,
+    });
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { tables: unknown }>("till-held-orders")!.tables,
+    ).toBe(tables);
   });
 
   it("lets a held-orders retrieve event bubble through the grid host", async () => {

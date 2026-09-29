@@ -15,6 +15,7 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   StationQueueGroup,
+  TableState,
   TillActiveReader,
   TillApi,
   TillProduct,
@@ -100,6 +101,8 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
+  /** The floor, which a held order's Move to table lists. */
+  @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   /** Absent when the venue has no default station configured. */
   @property({ attribute: false }) defaultStationId?: string;
@@ -256,6 +259,7 @@ export class TillCounterScreen extends LitElement {
         .selectedDiet=${this.selectedDiet}
         .handheld=${this.handheld}
         .heldOrders=${this.heldOrders}
+        .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}
         .busy=${this.busy}

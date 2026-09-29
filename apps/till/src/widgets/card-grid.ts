@@ -197,7 +197,10 @@ export class TillCardGrid extends LitElement {
           .defaultReaderId=${this.defaultReaderId}
         ></till-tender-pay>`;
       case "held-orders":
-        return html`<till-held-orders .orders=${this.heldOrders}></till-held-orders>`;
+        return html`<till-held-orders
+          .orders=${this.heldOrders}
+          .tables=${this.tables}
+        ></till-held-orders>`;
       case "prep-queue":
         return html`<till-station-queue
           .groups=${this.stationQueue}

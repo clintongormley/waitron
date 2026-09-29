@@ -532,6 +532,19 @@ export const en = {
   "table.take_payment": "Take payment",
   "table.still_to_pay": "Still to pay at this table",
   "table.finish": "Finish table",
+  "table.action_move_bill": "Move this bill",
+  // `{party}` is the party's display name with its tables, as `table.party_scope` gives it.
+  "table.bill_scope": "Bill {n} of {party}",
+  "table.move_bill_heading": "Move {bill} to:",
+  "table.move_bill_scope": "{bill} to {into}",
+  "table.bill_move_question":
+    "Merge this bill into their main bill, or keep it as a separate bill?",
+  "table.to_counter": "The counter",
+  "held.move_to_table": "Move to table",
+  "held.no_tables": "The floor lists no tables to move it to",
+  "counter.moved_to_table": "Moved to {table}",
+  "bill.pay_with_bill_payments":
+    "Part of this bill is already paid: take the rest as a bill payment",
   // Said after a table action was refused because another device changed the party first.
   "party.changed": "Another device changed table {table}, so it has been reloaded.",
   "party.changed_tables": "The party is now at tables {tables}.",
@@ -1078,6 +1091,18 @@ export const es: Record<StringKey, string> = {
   "table.take_payment": "Cobrar esta cuenta",
   "table.still_to_pay": "Pendiente de pago en la mesa",
   "table.finish": "Cerrar mesa",
+  "table.action_move_bill": "Mover esta cuenta",
+  "table.bill_scope": "Cuenta {n} de {party}",
+  "table.move_bill_heading": "Mover {bill} a:",
+  "table.move_bill_scope": "{bill} a {into}",
+  "table.bill_move_question":
+    "¿Juntar esta cuenta con su cuenta principal o mantenerla como una cuenta aparte?",
+  "table.to_counter": "La barra",
+  "held.move_to_table": "Pasar a mesa",
+  "held.no_tables": "El plano no tiene mesas a las que pasarlo",
+  "counter.moved_to_table": "Pasada a {table}",
+  "bill.pay_with_bill_payments":
+    "Parte de esta cuenta ya está pagada: cobra el resto como pago de cuenta",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",
   "party.changed_tables": "Los clientes están ahora en las mesas {tables}.",
   "party.changed_bills": "Sus cuentas han cambiado y quedan {amount} por pagar.",

@@ -523,6 +523,26 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     });
   });
 
+  it("has no violations with a partly paid bill on screen, saying to take the rest as a bill payment", async () => {
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      {
+        products,
+        lines,
+        statuses,
+        orderId: "wo-2",
+        party,
+        bills: [partyBills[0]!, { ...partyBills[1]!, outstanding: "10.00" }],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    if (el.shadowRoot!.querySelector("[data-bill-payments]") === null)
+      throw new Error("the scan must include the bill-payments sentence");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations in the merge picker listing the party's other bills", async () => {
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
@@ -622,10 +642,10 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       tableRow("t9", "Mesa 9"),
     ];
 
-    async function toAction(action: string) {
+    async function toAction(action: string, orderId = "wo-1") {
       const mounted = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
-        { products, lines, statuses, orderId: "wo-1", party: ana, bills: partyBills, tables },
+        { products, lines, statuses, orderId, party: ana, bills: partyBills, tables },
         theme,
       );
       const { el } = mounted;
@@ -647,6 +667,27 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
 
     it("has no violations in the bill choice over the table screen", async () => {
       const { el, host } = await toAction("move");
+      el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
+      await el.updateComplete;
+      const dialog = el.shadowRoot!.querySelector<
+        HTMLElement & { updateComplete: Promise<unknown> }
+      >("till-bill-choice-dialog");
+      if (dialog === null) throw new Error("the scan must include the bill choice");
+      await dialog.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in Move this bill's list, with the counter, a free, a seated and a disabled table", async () => {
+      const { el, host } = await toAction("move-bill", "wo-2");
+      if (el.shadowRoot!.querySelector('[data-target="counter"]') === null)
+        throw new Error("the scan must include the counter");
+      if (el.shadowRoot!.querySelector('[data-target-reason="t6"]') === null)
+        throw new Error("the scan must include the table needing clearing");
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations in the bill choice for a bill moving to a seated table", async () => {
+      const { el, host } = await toAction("move-bill", "wo-2");
       el.shadowRoot!.querySelector<HTMLElement>('[data-target="t7"]')!.click();
       await el.updateComplete;
       const dialog = el.shadowRoot!.querySelector<

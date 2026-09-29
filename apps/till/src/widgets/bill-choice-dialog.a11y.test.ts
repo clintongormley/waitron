@@ -16,4 +16,18 @@ describe.each(["light", "dark"] as const)("till-bill-choice-dialog a11y (%s them
     );
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations when it asks about a bill moving into a party", async () => {
+    setLocale("es-ES");
+    const { host } = await mountWidget<TillBillChoiceDialog>(
+      "till-bill-choice-dialog",
+      {
+        scope: "Cuenta 2 de Ana (Mesa 4) a Luis (Mesa 7)",
+        question:
+          "¿Juntar esta cuenta con su cuenta principal o mantenerla como una cuenta aparte?",
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
 });
