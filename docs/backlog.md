@@ -4429,7 +4429,7 @@ ongoing overhaul listed at the top of Track A.
   alert where the summary was; an open editor keeps its own refusal beside Save, apart from a failed
   list refresh, and puts a server refusal that names a field under that field. Left open, not done:
   (1) the setup wizard's Demo gaps, listed under *Demo gaps on the setup wizard's venue screen*
-  earlier in this file; (2) **done by C48:** three of the till's forms follow the rule — the seat
+  earlier in this file; (2) **done by C48 (#892):** three of the till's forms follow the rule — the seat
   dialog, the device join screen and the bill split step (the split step's top summary, from Task
   10's #875, included). The join screen's refusals, which named no field, moved from a banner at the top
   to the message beside Ask to join, where each now stays until the next press rather than going
