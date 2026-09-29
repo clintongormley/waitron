@@ -836,6 +836,33 @@ describe("the stream loop and pause tests' own job", () => {
     }
   });
 
+  it("runs them with their temporary files in memory, not on the runner's disk", () => {
+    const body = stream().body;
+    const run = body.findIndex(
+      (line) => !line.trim().startsWith("#") && line.includes("test:shard"),
+    );
+    const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
+    expect(stepStart, "no step runs the stream tests").toBeGreaterThan(-1);
+    const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
+    expect(
+      runKey,
+      "the step's own run: key must come at or before its test:shard line",
+    ).toBeGreaterThan(stepStart);
+    expect(
+      runKey,
+      "the step's own run: key must come at or before its test:shard line",
+    ).toBeLessThanOrEqual(run);
+    const keys = body.slice(stepStart, runKey);
+    const env = keys.findIndex((line) => /^ {8}env:\s*$/.test(line));
+    expect(env, "the step needs an env: key of its own, before its run: key").toBeGreaterThan(-1);
+    const after = keys.slice(env + 1);
+    const end = after.findIndex((line) => !/^ {10}/.test(line));
+    const mapping = end === -1 ? after : after.slice(0, end);
+    expect(mapping, "the step's env: must set TMPDIR to the in-memory /dev/shm").toContain(
+      "          TMPDIR: /dev/shm",
+    );
+  });
+
   it("is the only job that installs the binaries", () => {
     for (const { id, body } of jobs.filter(({ id }) => id !== STREAM_JOB)) {
       const code = body.filter((line) => !line.trim().startsWith("#")).join("\n");

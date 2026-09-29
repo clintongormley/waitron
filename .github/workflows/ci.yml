@@ -823,7 +823,12 @@ jobs:
           node scripts/setup-s3-test-server.mjs
 
       # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
+      # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
+      # commit for about a second and put a sale past the pause test's 1000 ms bound (testing-guide.md,
+      # "In CI their temporary files are in memory").
       - name: Run the stream loop and pause tests
+        env:
+          TMPDIR: /dev/shm
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \

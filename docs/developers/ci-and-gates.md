@@ -694,7 +694,9 @@ for linux/amd64 (the release APIs' `size` fields, read 2026-09-25), from GitHub'
 each checked against a pinned SHA-256. Run locally with `CI=true` on the owner's Mac (2026-09-26),
 that job's command took 72 seconds: the loop test 13 and the pause test 70, the two files running
 side by side (`apps/server/vitest.config.ts` sets `maxWorkers: 4`). Guard:
-`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT.
+`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT. Its test step sets `TMPDIR=/dev/shm`
+([testing-guide.md](testing-guide.md), "In CI their temporary files are in memory"); the
+2026-09-26 timings in this section were taken before that setting existed.
 
 Measured on CI, one run each side (2026-09-26). After: run 36231025265, PR #682 at `81b07b698`.
 Before: run 36229776393, `main` at `1821da0e0`, the last run before the change to execute the
