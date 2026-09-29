@@ -125,7 +125,9 @@ describe("location invoice description", () => {
     await flush(el);
     q(el, "[data-test=save]").click();
     await flush(el);
-    expect(q(el, "[role=alert]").textContent).toBe(t("location_settings.save_error"));
+    expect(await bottomOf(el)).toBe(t("location_settings.save_error"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(saveDisabled(el)).toBe(false);
     expect(q(el, "[name=operationDescription]").getAttribute("error")).toBe("");
     expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
   });

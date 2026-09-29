@@ -54,7 +54,6 @@ export const en = {
   "cloud.not_configured": "Cloud services are not available on this server yet.",
   "cloud.not_primary": "Open this page on your serving primary server to connect the venue.",
   "cloud.loading": "Checking Cloud connection…",
-  "cloud.error_heading": "Check the connection",
 
   "categories.actions": "Actions",
   "nav.categories": "Categories",
@@ -370,7 +369,6 @@ export const en = {
   "mode.prepare": "Preparation",
   "mode.live": "Live",
   "account.privacy_notice": "Privacy notice",
-  "form.error_heading": "There is a problem with this form",
   "form.fix_fields": "Correct the highlighted fields to continue.",
   "form.name_required": "Enter a name",
   "form.first_names_required": "Enter the first name or names",
@@ -1946,7 +1944,6 @@ export const es: Record<StringKey, string> = {
   "cloud.not_configured": "Los servicios Cloud aún no están disponibles en este servidor.",
   "cloud.not_primary": "Abre esta página en el servidor principal activo para conectar el local.",
   "cloud.loading": "Comprobando la conexión con Cloud…",
-  "cloud.error_heading": "Revisa la conexión",
 
   "categories.actions": "Acciones",
   "nav.categories": "Categorías",
@@ -2265,7 +2262,6 @@ export const es: Record<StringKey, string> = {
   "mode.prepare": "Preparación",
   "mode.live": "En vivo",
   "account.privacy_notice": "Aviso de privacidad",
-  "form.error_heading": "Hay un problema con este formulario",
   "form.fix_fields": "Corrige los campos marcados para continuar.",
   "form.name_required": "Introduce un nombre",
   "form.first_names_required": "Introduce el nombre o los nombres",

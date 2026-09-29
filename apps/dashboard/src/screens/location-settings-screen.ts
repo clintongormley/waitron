@@ -129,9 +129,9 @@ export class LocationSettingsScreen extends LitElement {
                   >${t("location_settings.help")}</wt-help-tooltip
                 >
               </wt-input>
-              ${this.saveFailed ? html`<p role="alert">${t("location_settings.save_error")}</p>` : nothing}
               ${this.saved ? html`<p role="status">${t("location_settings.saved")}</p>` : nothing}
-              <wt-form-actions .error=${fieldError === "" ? "" : t("form.fix_fields")}
+              <wt-form-actions
+                .error=${fieldError !== "" ? t("form.fix_fields") : this.saveFailed ? t("location_settings.save_error") : ""}
                 ><wt-button
                   data-test="save"
                   variant="primary"
