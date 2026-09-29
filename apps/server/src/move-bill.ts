@@ -138,8 +138,7 @@ export async function moveBill(
 
 /**
  * The destination, with the revision of a party holding the target table checked and moved on
- * first; then the table's own state. A free table is refused as a tab move refuses it, and one in a
- * zone that seats no one as seating refuses it.
+ * first; then the table's own state.
  */
 async function resolveDestination(
   tx: Transaction,
@@ -150,16 +149,45 @@ async function resolveDestination(
 ): Promise<Destination> {
   if ("counter" in to) return { kind: "counter", zoneId: to.counter.zoneId };
   const { tableId } = to;
+  const table = await readTargetTable(tx, cfg, tableId, source, options.expectedOtherPartyRevision);
+  if (table.holding !== null && table.holding === source) {
+    throw new AppError("table.already_in_party", { tableId });
+  }
+  if (table.holding !== null) return { kind: "party", partyId: table.holding };
+  await refuseUnseatable(tx, cfg, tableId, table);
+  return { kind: "free", tableId, zoneId: table.zoneId };
+}
+
+/** A table an action names, as {@link readTargetTable} answers it. */
+export interface TargetTable {
+  /** The party holding the table now, or null. */
+  holding: string | null;
+  tabId: string | null;
+  zoneId: string | null;
+}
+
+/**
+ * The table an action moves to or joins: the revision of a party holding it, other than `source`,
+ * checked and moved on first (P27), then refused when it does not exist, is out of use or needs
+ * clearing.
+ */
+export async function readTargetTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  source: string | null,
+  expectedOtherPartyRevision: number | undefined,
+): Promise<TargetTable> {
   const [holder] = await tx
     .select({ partyId: partyTables.partyId })
     .from(partyTables)
     .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
   const holding = holder?.partyId ?? null;
   if (holding !== null && holding !== source) {
-    if (options.expectedOtherPartyRevision === undefined) {
+    if (expectedOtherPartyRevision === undefined) {
       throw new AppError("management.request_invalid", { field: "expectedOtherPartyRevision" });
     }
-    await checkAndBumpParty(tx, holding, options.expectedOtherPartyRevision, "open");
+    await checkAndBumpParty(tx, holding, expectedOtherPartyRevision, "open");
   }
   const [table] = await tx
     .select({
@@ -173,10 +201,19 @@ async function resolveDestination(
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   if (!table.active) throw new AppError("table.inactive", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
-  if (holding !== null && holding === source) {
-    throw new AppError("table.already_in_party", { tableId });
-  }
-  if (holding !== null) return { kind: "party", partyId: holding };
+  return { holding, tabId: table.tabId, zoneId: table.zoneId };
+}
+
+/**
+ * A table no party holds, refused as a tab move refuses it while it shows an open order, and as
+ * seating refuses one in a zone that seats no one.
+ */
+export async function refuseUnseatable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  table: TargetTable,
+): Promise<void> {
   if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
     throw new AppError("table.occupied", { tableId });
   }
@@ -190,7 +227,6 @@ async function resolveDestination(
       });
     }
   }
-  return { kind: "free", tableId, zoneId: table.zoneId };
 }
 
 interface SourceParty {

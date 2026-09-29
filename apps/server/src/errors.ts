@@ -292,20 +292,23 @@ declare module "@waitron/shared" {
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
     "table.needs_clearing": { tableId: string };
-    /** A bill was moved to a table its own party already holds. */
+    /**
+     * A bill was moved to a table its own party already holds, a party joined a table it holds, or
+     * guests were moved to the only table their party holds.
+     */
     "table.already_in_party": { tableId: string };
     /**
      * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
-     * at a closed one, at none, or the id names no table. One code for all, so the answer does not
-     * confirm another tab's table exists.
+     * at a closed one, at none, or the id names no table; or Split a table named a table the party
+     * does not hold. One code for all, so the answer does not confirm another tab's table exists.
      */
-    "table.not_joined": { tableId: string; tabId: string };
+    "table.not_joined": { tableId: string; tabId: string } | { tableId: string; partyId: string };
     /**
      * An un-join named the SOLE table anchoring the tab, so there is no join to carve it out of; or
-     * an un-join with no items named the party's only member table. Refused because the un-join
-     * would otherwise leave the tab, or the party, with no table.
+     * an un-join with no items, or Split a table, named the party's only member table. Refused
+     * because it would otherwise leave the tab, or the party, with no table.
      */
-    "table.not_shared": { tableId: string; tabId: string };
+    "table.not_shared": { tableId: string; tabId: string } | { tableId: string; partyId: string };
     /**
      * A table's `tab_id` already points at an OPEN working order, or a party still holds the table
      * (an active `party_tables` row) whatever its `tab_id` points at, so a second tab may not be

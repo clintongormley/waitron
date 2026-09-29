@@ -3350,6 +3350,51 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Open points: the move moves the bill's revision on, open or presented, without
     `bumpRevision`'s refusal of money in flight, since a move changes no amount (plan P19). Dishes
     arriving in a party join no group until Task 9.
+  - **Task 8 (branch `feat/party-table-actions`, 2026-09-29): move guests, join tables and split a
+    table, on the server.** Three new routes, `POST /api/parties/:id/move` (`{ toTableId }`),
+    `POST /api/parties/:id/join` (`{ tableId }`) and `POST /api/parties/:id/split-table`
+    (`{ tableId, billId }`, the bill null for none), in `apps/server/src/table-actions.ts`. The till
+    keeps the old tab routes until Task 11.
+    - Move guests takes the party off all its tables. To a free table, the table joins the party
+      and any manual status it had goes; the tables left behind need clearing when the venue's
+      clearing setting is on, and are free at once when it is off. Moved to a free table in another
+      zone, the party's open bills take that zone for what is ordered next. Moving to one of the
+      party's own tables is allowed while it holds another (that one leaves); its only table is
+      `table.already_in_party`.
+    - Join tables adds a table; both stay and neither's status changes. A table in another service
+      zone is `service_zone.join_mismatch`, one the party holds `table.already_in_party`.
+    - Moving guests to, or joining, a table another party holds combines the two parties
+      (`combineParties`): the absorbed party's kitchen groups and drafts move, its open and
+      presented bills move across whole, and it closes, recorded as merged. Its paid bills stay on
+      it and are listed through the family. When moving, its tables need clearing; when joining,
+      they join the other party and keep their status, because their memberships end before the
+      absorbed party closes. The bill choice is `bills: "merge" | "separate"`, merge by default:
+      the incoming main bill merges into the receiving one only when both are untouched and in one
+      service mode; otherwise both stay (`merged: false`). The receiving main bill stays main; with
+      none, the incoming one becomes main if it is open; with neither, the next order makes one.
+    - Split a table starts a new unnamed party on that table, taking the chosen bill (open or
+      presented, not the main bill) as its main bill when it is open, or a new empty main bill when
+      none is chosen. A presented bill goes with its lines unchanged except their kitchen group,
+      and the new party has no main bill until it orders. Refusals: `table.not_joined` and
+      `table.not_shared` (now with `{ tableId, partyId }`), `bill.other_party`, `bill.paid`,
+      `tab.not_open`, `party.main_bill_stays` and `group.held_leaves_party`.
+    - Every action checks the path party's revision, then the revision of the party holding the
+      target table, before any table or bill, so of two tills acting from one read the second is
+      `party.out_of_date`. A party already combined into another is `party.not_open`.
+    - The kitchen gets a MOVED notice for each sent dish whose tables change, including a dish on
+      a main bill merged away when parties combine (it is told once, on the bill it merged into).
+    - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
+      Split a table too.
+    Tests: `apps/server/src/party-table-actions.test.ts` and
+    `apps/server/src/till-api.table-actions.test.ts`. No migration.
+    Open points: `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
+    which Split a table choosing the main bill need not satisfy. A paid bill left on the absorbed
+    party gets a MOVED notice only if the label it was given when paid differs from the tables it
+    was at, and then that notice names the label, not the table the guests went to:
+    `orderTableLabels` reads the bill's own label once its party holds no table. A case where the
+    two match (no notice) was run; one where they differ was not. The tables a joined party brings are
+    written in one statement, so they share a joining time and their order in the party's name
+    is not fixed.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
