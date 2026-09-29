@@ -280,9 +280,11 @@ results, and wherever the device's home layout places it. The exception is a pro
 standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
 extras list still offers it. Staff only gets a button like Public, because there is no guest
-ordering yet. A line not yet sent that holds a dish now sold only as an extra is marked "Only sold
-as an extra" (`lineBlock`, `apps/till/src/state/menu-refresh.ts`); in a draft it is left out of what
-is sent and offered for removal. The server refuses a standalone line for such a dish
+ordering yet. A draft line, or a counter basket line not yet saved, that holds a dish now sold only
+as an extra is marked "Only sold as an extra" (`lineBlock`, `apps/till/src/state/menu-refresh.ts`):
+a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
+is removed. A line already stored on a held order or tab is not marked, and still sends and pays,
+because it was already ordered. The server refuses a new standalone line for such a dish with
 `product.not_sold_separately`, by the same published setting. A diet filter that staff turn on
 hides the dishes it rejects. One that cannot be sold now keeps its button, greyed, and a tap on it
 does nothing (`hasSomethingToSell`, `apps/till/src/widgets/product-pick.ts`), so the buttons around

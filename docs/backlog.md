@@ -3167,16 +3167,35 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `0046`–`0048`; `products.sold_alone` is dropped). The published menu carries it, the server
     refuses a standalone line for a dish the live version publishes as Not sold separately
     (`product.not_sold_separately`, 409), and being offered as an extra ignores it. The till's home
-    page and search leave such a dish out, and mark a line not yet sent that holds one; the product
-    editor has the three-way choice and the products list a three-way column and filter. Staff only
+    page and search leave such a dish out, and mark a draft line or an unsaved counter line holding
+    one; the product editor has the three-way choice and the products list a three-way column and
+    filter. Staff only
     behaves exactly as Public until guest ordering exists. **Upgrading a venue sets every product to
     Public** (no data is carried across before production), so a venue must set again any product it
     had as not sold on its own. **After the upgrade every published menu shows as changed**, listing
     each product's "how it is sold", until it is published again: documents published before the
     change carry no setting (measured on a seeded scratch venue, 2026-09-30). A standalone line
     already stored on a held order or tab still sends and pays after a publish makes its dish Not
-    sold separately, because it was already ordered; the same line in a draft is refused when the
-    draft is sent or saved, and the till marks it for removal.
+    sold separately, because it was already ordered (held order: "pays and sends a held order's
+    standalone line after a publish makes it not sold separately",
+    `apps/server/src/till-api.sell-published.test.ts`, which pays it and then sends it to the
+    kitchen; no test covers the tab); the same line in a draft is refused when the draft is sent or
+    saved, and the till marks it for removal.
+  - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). Each
+    sleeps `2 * SUBMIT_RETRY_PAUSE_MS + 50` ms while the retries pause on real time; one more test of
+    that shape, "takes the party's revision from the floor read after a round that got no answer"
+    (`apps/till/src/till-app-parties.test.ts`), failed once during a till coverage run beside the
+    dashboard's and now waits for the "round unconfirmed" message instead (B13 branch). The eight,
+    not changed: in `apps/till/src/till-app-drafts.test.ts` "sends the same request again when no
+    answer comes, and takes the answer it then gets", "gives up after two more tries, reads the draft
+    again and says to check the tab", "shows the draft as the server holds it after a reply that
+    never came", "does not send again as the next person a Send whose reply was lost after sign-out"
+    and "says nothing to the next person when the read after a lost reply answers after sign-out"; in
+    `apps/till/src/till-app-menu-refresh.test.ts` "reads the table's party again and shows the tab the
+    table now points at" and "does not follow the table onto a new party's tab"; in
+    `apps/till/src/till-app-parties.test.ts` "shows the chosen bill when a send to it got no answer".
+    None of the eight failed in this branch's runs. **Next action:** wait for what each asserts on instead
+    of a fixed time.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
