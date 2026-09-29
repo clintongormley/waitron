@@ -75,9 +75,8 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
 /** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
-  kitchen: ["kitchen-name", "product-station", "product-course"],
+  kitchen: ["kitchen-name"],
   descriptors: ["customer-name-", "description-", "image"],
-  nutrition: ["allergens", "dietary"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
 
@@ -160,10 +159,6 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   primaryCategoryId: "primary",
   labelIds: "labels",
   modifiers: "modifier",
-  stationId: "product-station",
-  courseId: "product-course",
-  allergens: "allergens",
-  dietaryDeclarations: "dietary",
 };
 
 function emptyDraft(): ProductEditorDraft {
@@ -362,6 +357,8 @@ export class ProductEditor extends LitElement {
   #focusField: string | null = null;
   /** The standing messages, keyed by field, as of this render; what `error` reads. */
   #errorsNow: Record<string, string> = {};
+  /** The keys of `#errorsNow` shown under a field, as of this render. */
+  #fieldKeysNow: readonly string[] = [];
   /** The variant rows marked as of this render. */
   #rowsNow: Record<number, string> = {};
   #listNames: ReadonlyMap<string, string> = new Map();
@@ -469,9 +466,8 @@ export class ProductEditor extends LitElement {
     return this.#errorsNow[name] ?? "";
   }
   private sectionHasError(section: SectionName): boolean {
-    const shown = this.shownFields();
-    return Object.keys(this.#errorsNow).some(
-      (key) => shown.has(key) && SECTION_FIELDS[section].some((field) => key.startsWith(field)),
+    return this.#fieldKeysNow.some((key) =>
+      SECTION_FIELDS[section].some((field) => key.startsWith(field)),
     );
   }
   /** The keys this form shows a message under a field for. A variant's problems are shown on its
@@ -512,13 +508,13 @@ export class ProductEditor extends LitElement {
     const errors = this.standingErrors(local);
     const rows = this.variantRows(local);
     const shown = this.shownFields();
+    const fieldKeys = Object.keys(errors).filter((key) => shown.has(key));
     const formMessages = Object.entries(errors)
       .filter(([key]) => !shown.has(key))
       .map(([, message]) => message);
-    const blocked =
-      Object.keys(errors).some((key) => shown.has(key)) || Object.keys(rows).length > 0;
+    const blocked = fieldKeys.length > 0 || Object.keys(rows).length > 0;
     const bottom = [...formMessages, ...(blocked ? [t("form.fix_fields")] : [])].join(" ");
-    return { errors, rows, blocked, bottom };
+    return { errors, fieldKeys, rows, blocked, bottom };
   }
   /**
    * The reported problems that belong to a variant ROW, against the variant OBJECT rather than its
@@ -660,10 +656,10 @@ export class ProductEditor extends LitElement {
   private save(event: Event, restore = false) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
-    if (this.assess(this.attempted ? this.validate() : {}).blocked) return;
+    const errors = this.validate();
+    if (this.assess(this.attempted ? errors : {}).blocked) return;
     this.attempted = true;
     this.dismiss(...Object.keys(this.fieldErrors));
-    const errors = this.validate();
     if (Object.keys(errors).length) {
       this.#focusField = Object.keys(errors)[0]!;
       return;
@@ -987,7 +983,6 @@ export class ProductEditor extends LitElement {
       data-section="nutrition"
       heading=${t("editor.section_nutrition")}
       summary=${summary}
-      ?has-error=${this.sectionHasError("nutrition")}
     >
       <dashboard-allergen-dietary-picker
         .busy=${this.suspended}
@@ -1013,7 +1008,6 @@ export class ProductEditor extends LitElement {
           // On a variant an empty choice is blank, which reads the parent's: saved as an empty
           // overlay it would declare the variant free of every allergen its parent contains.
           const variantPage = this.inherited !== null;
-          this.dismiss("allergens", "dietary");
           this.draft = {
             ...this.draft,
             allergens: variantPage && !codes.length ? null : allergens,
@@ -1362,8 +1356,11 @@ export class ProductEditor extends LitElement {
   }
 
   override render() {
-    const { errors, rows, blocked, bottom } = this.assess(this.attempted ? this.validate() : {});
+    const { errors, fieldKeys, rows, blocked, bottom } = this.assess(
+      this.attempted ? this.validate() : {},
+    );
     this.#errorsNow = errors;
+    this.#fieldKeysNow = fieldKeys;
     this.#rowsNow = rows;
     const fields = this.fields();
     return html`<wt-modal

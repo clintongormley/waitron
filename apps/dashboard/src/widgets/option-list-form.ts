@@ -417,7 +417,9 @@ export class OptionListForm extends LitElement {
           (customerName) =>
             this.#edit(
               () => (this.customerName = customerName),
-              ...locales.map((locale) => `customer-name-${locale}`),
+              ...locales
+                .filter((locale) => customerName[locale] !== this.customerName[locale])
+                .map((locale) => `customer-name-${locale}`),
             ),
           this.name,
         )}

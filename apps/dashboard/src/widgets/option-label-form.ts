@@ -9,6 +9,7 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { optionalTextFields, switchField, textField, type FieldContext } from "./form-fields.js";
+import { sameValue } from "./product-editor-model.js";
 import { t } from "../i18n/t.js";
 
 export interface DraftLabel {
@@ -54,7 +55,7 @@ export class OptionLabelForm extends LitElement {
   @property({
     attribute: false,
     hasChanged: (next: Record<string, string>, previous?: Record<string, string>) =>
-      !sameMessages(next, previous),
+      !sameValue(next, previous),
   })
   errors: Record<string, string> = {};
   @state() private name = "";
@@ -195,7 +196,9 @@ export class OptionLabelForm extends LitElement {
           (customerName) =>
             this.#edit(
               () => (this.customerName = customerName),
-              ...locales.map((locale) => `label-customer-name-${locale}`),
+              ...locales
+                .filter((locale) => customerName[locale] !== this.customerName[locale])
+                .map((locale) => `label-customer-name-${locale}`),
             ),
           this.name,
         )}
@@ -272,16 +275,6 @@ export class OptionLabelForm extends LitElement {
       >
     </wt-modal>`;
   }
-}
-function sameMessages(
-  next: Record<string, string>,
-  previous: Record<string, string> | undefined,
-): boolean {
-  if (previous === undefined) return false;
-  const keys = Object.keys(next);
-  return (
-    keys.length === Object.keys(previous).length && keys.every((key) => next[key] === previous[key])
-  );
 }
 
 declare global {

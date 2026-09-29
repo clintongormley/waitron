@@ -1043,6 +1043,21 @@ it("clears a field's refusal when that field changes, and Save works again", asy
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
+it("clears a translated name's refusal only when that language's value changes", async () => {
+  const { el } = await mount({
+    value: cooked,
+    fieldErrors: { customerName: "Rejected English." },
+  });
+
+  await type(el, "customer-name-es", "¿Cómo lo quiere?");
+  expect(field(el, "customer-name-en").error).toBe("Rejected English.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "customer-name-en", "How do you like it?");
+  expect(field(el, "customer-name-en").error).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
 it("clears a refusal about the options as a whole once the options change", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { labels: "Something is wrong." } });
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);

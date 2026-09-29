@@ -339,6 +339,34 @@ it("clears a field's refusal when that field changes, and Save works again", asy
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
+it("clears a translated name's refusal only when that language's value changes", async () => {
+  const { el } = await mount({
+    value: rare,
+    errors: { "label-customer-name-en": "Rejected English." },
+  });
+
+  await type(el, "label-customer-name-es", "Muy poco hecho");
+  expect(field(el, "label-customer-name-en").error).toBe("Rejected English.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "label-customer-name-en", "Very rare");
+  expect(field(el, "label-customer-name-en").error).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("keeps a dismissed refusal dismissed when handed the same messages as a new object", async () => {
+  const { el } = await mount({ value: rare, errors: { "label-kitchen-name": "Too long." } });
+  await type(el, "label-kitchen-name", "VR");
+
+  el.errors = { "label-kitchen-name": "Too long." };
+  await el.updateComplete;
+  expect(field(el, "label-kitchen-name").error).toBe("");
+
+  el.errors = { "label-kitchen-name": "Still too long." };
+  await el.updateComplete;
+  expect(field(el, "label-kitchen-name").error).toBe("Still too long.");
+});
+
 it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
   const { el } = await mount({ value: rare });
   el.errors = { "label-kitchen-name": "Too long." };

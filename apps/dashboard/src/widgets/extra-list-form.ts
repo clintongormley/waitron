@@ -326,7 +326,7 @@ export class ExtraListForm extends LitElement {
     }
     if (removed.length > 0 && errors.items === undefined) errors.items = removed.at(-1)!;
     if (this.attempted)
-      for (const [key, message] of Object.entries(this.#check().validation)) {
+      for (const [key, message] of Object.entries(this.#validate())) {
         errors[key] = message;
         fieldKeys.add(key);
       }
@@ -399,16 +399,15 @@ export class ExtraListForm extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  /** The client's own refusals, and the list they would send when there are none. */
-  #check(): { validation: Record<string, string>; value: ExtraListInput | null } {
+  #validate(): Record<string, string> {
     const validation: Record<string, string> = {};
     if (!this.name.trim()) validation.name = t("extras.name_required");
     // A blank minimum is the contract's own default of 0 (`row.minPicks === undefined ? 0`), which
     // makes the list optional.
-    const minPicks = wholeWithin(this.minPicks.trim() || "0", 0);
+    const minPicks = this.#minPicks();
     if (minPicks === null) validation["min-picks"] = t("extras.picks_invalid");
     const capped = this.maxPicks.trim() !== "";
-    const maxPicks = capped ? wholeWithin(this.maxPicks.trim(), 0) : null;
+    const maxPicks = this.#maxPicks();
     if (capped && maxPicks === null) validation["max-picks"] = t("extras.picks_invalid");
     // The cap is what is wrong when the pair cannot both hold, so the message goes there rather
     // than on the minimum — the field `parseExtraListInput` names, and for the reason it states.
@@ -416,9 +415,8 @@ export class ExtraListForm extends LitElement {
       validation["max-picks"] = t("extras.max_picks_too_low");
 
     const offered = new Set<string>();
-    const items = this.items.map((item, index) => {
-      const maxQuantity = wholeWithin(item.maxQuantity.trim(), 1);
-      if (maxQuantity === null)
+    this.items.forEach((item, index) => {
+      if (wholeWithin(item.maxQuantity.trim(), 1) === null)
         validation[`item-${index}-max-quantity`] = t("extras.quantity_invalid");
       const price = item.price.trim();
       if (price !== "" && !isProductPrice(price))
@@ -429,31 +427,38 @@ export class ExtraListForm extends LitElement {
       if (offered.has(item.productId))
         validation[`item-${index}-product`] = t("extras.duplicate_product");
       offered.add(item.productId);
-      return {
-        id: item.id,
-        productId: item.productId,
-        maxQuantity: maxQuantity ?? 1,
-        preselected: item.preselected,
-        price: price || null,
-      };
     });
     // An active list is asked on every order of a dish carrying it and there is nothing to answer
     // it with when it offers no product. An inactive list is never asked, so it may be empty — the
     // same split the server makes.
-    if (this.active && items.length === 0) validation.items = t("extras.items_required");
+    if (this.active && this.items.length === 0) validation.items = t("extras.items_required");
+    return validation;
+  }
 
-    if (minPicks === null || Object.keys(validation).length) return { validation, value: null };
+  #minPicks(): number | null {
+    return wholeWithin(this.minPicks.trim() || "0", 0);
+  }
+
+  #maxPicks(): number | null {
+    return this.maxPicks.trim() === "" ? null : wholeWithin(this.maxPicks.trim(), 0);
+  }
+
+  /** The list to send; only called once `#validate` finds nothing wrong. */
+  #value(): ExtraListInput {
     return {
-      validation,
-      value: {
-        name: this.name.trim(),
-        customerName: translations(this.customerName),
-        kitchenName: this.kitchenName.trim() || null,
-        minPicks,
-        maxPicks,
-        active: this.active,
-        items,
-      },
+      name: this.name.trim(),
+      customerName: translations(this.customerName),
+      kitchenName: this.kitchenName.trim() || null,
+      minPicks: this.#minPicks()!,
+      maxPicks: this.#maxPicks(),
+      active: this.active,
+      items: this.items.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        maxQuantity: wholeWithin(item.maxQuantity.trim(), 1)!,
+        preselected: item.preselected,
+        price: item.price.trim() || null,
+      })),
     };
   }
 
@@ -462,12 +467,11 @@ export class ExtraListForm extends LitElement {
     if (this.busy) return;
     this.attempted = true;
     this.dismissed = new Set(Object.keys(this.serverErrors));
-    const { value } = this.#check();
-    if (value === null) {
+    if (Object.keys(this.#validate()).length) {
       void this.#focusFirstInvalid();
       return;
     }
-    this.#emit(event, "wt-submit", { value });
+    this.#emit(event, "wt-submit", { value: this.#value() });
   }
 
   #cancel(event: Event): void {
@@ -510,7 +514,9 @@ export class ExtraListForm extends LitElement {
           (customerName) =>
             this.#edit(
               () => (this.customerName = customerName),
-              ...locales.map((locale) => `customer-name-${locale}`),
+              ...locales
+                .filter((locale) => customerName[locale] !== this.customerName[locale])
+                .map((locale) => `customer-name-${locale}`),
             ),
           this.name,
         )}

@@ -779,7 +779,7 @@ describe("reader dialog request lifetime", () => {
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
   });
 
-  it("keeps an unpair failure in the confirmation dialog and permits retry", async () => {
+  it("shows an unpair failure beside the confirmation's action, not above it, and permits retry", async () => {
     const { el, api } = await mount(
       stubApi({
         unpairReader: vi
@@ -792,7 +792,9 @@ describe("reader dialog request lifetime", () => {
     await flush(el);
     q(el, "[data-test=confirm-unpair]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=reader-editor] [role=alert]")).not.toBeNull();
+    expect(await bottomOf(el, "reader-editor")).toBe(codeMessage("server.internal"));
+    expect(q(el, "[data-test=reader-editor] [role=alert]")).toBeNull();
+    expect(isDisabled(el, "confirm-unpair")).toBe(false);
     q(el, "[data-test=confirm-unpair]")!.click();
     await flush(el);
     expect(api.unpairReader).toHaveBeenCalledTimes(2);

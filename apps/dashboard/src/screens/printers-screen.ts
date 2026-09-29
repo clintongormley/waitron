@@ -1858,12 +1858,6 @@ export class PrintersScreen extends LitElement {
     await closed;
   }
 
-  /** A refused action outside any dialog; a dialog shows its refusal beside its own action. */
-  #renderError(): TemplateResult {
-    return html`${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
-    ${this.#renderRefreshError()}`;
-  }
-
   /** A failed read, with its own retry, stays at the top of the page or the dialog. */
   #renderRefreshError(): TemplateResult | typeof nothing {
     if (!this.refreshErrorKey) return nothing;
@@ -2523,6 +2517,9 @@ export class PrintersScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    // Each of these dialogs shows the refusal beside its own action, and the failed read itself.
+    const dialogOpen =
+      this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter;
     return html`${
         this.selectedPrinterId
           ? this.#renderPrinterStatus()
@@ -2545,7 +2542,12 @@ export class PrintersScreen extends LitElement {
                 <div slot="printers">${this.#renderPrintersSection()}</div>
                 <div slot="agents">${this.#renderAgentsSection()}</div>
               </wt-tabs>`
-      }${this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter ? nothing : this.#renderError()}
+      }${
+        dialogOpen
+          ? nothing
+          : html`${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+            ${this.#renderRefreshError()}`
+      }
       ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}
       <dashboard-print-job-preview
         .preview=${this.preview}

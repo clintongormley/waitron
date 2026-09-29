@@ -1264,6 +1264,21 @@ it("clears a field's refusal when that field changes, and Save works again", asy
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
+it("clears a translated name's refusal only when that language's value changes", async () => {
+  const { el } = await mount({
+    value: addons,
+    fieldErrors: { customerName: "Rejected English." },
+  });
+
+  await type(el, "customer-name-es", "Ponle algo");
+  expect(errorOf(el, "customer-name-en")).toBe("Rejected English.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "customer-name-en", "Add something");
+  expect(errorOf(el, "customer-name-en")).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
 it("clears a refusal about the items as a whole once the items change", async () => {
   const { el } = await mount({ value: addons, fieldErrors: { items: "Something is wrong." } });
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);

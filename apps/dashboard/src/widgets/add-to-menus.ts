@@ -322,7 +322,7 @@ export class AddToMenus extends LitElement {
 
   override render() {
     const choosing = this.menus !== null && this.loadError === null;
-    const attempted = this.failures.length > 0 || this.loadError !== null;
+    const failed = this.failures.length > 0 || this.loadError !== null;
     return html`<wt-modal
       .open=${this.open}
       heading=${t("add_to_menus.heading").replace("{name}", this.productName)}
@@ -343,7 +343,7 @@ export class AddToMenus extends LitElement {
           data-test="skip"
           .disabled=${this.busy}
           @click=${(event: Event) => this.#cancel(event)}
-          >${attempted ? t("action.close") : t("add_to_menus.skip")}</wt-button
+          >${failed ? t("action.close") : t("add_to_menus.skip")}</wt-button
         >${
           choosing
             ? html`<wt-button

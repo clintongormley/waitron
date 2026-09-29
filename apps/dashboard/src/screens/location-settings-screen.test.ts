@@ -268,6 +268,21 @@ describe("location invoice description", () => {
     expect(await bottomOf(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
   });
+  it("says a failed save and the generic sentence together when the field then breaks", async () => {
+    const client = api({
+      putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: client,
+    });
+    await flush(el);
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    edit(el, " ");
+    await flush(el);
+    expect(await bottomOf(el)).toBe(`${t("location_settings.save_error")} ${t("form.fix_fields")}`);
+    expect(saveDisabled(el)).toBe(true);
+  });
   it("leaves Save working after a refusal that names no field", async () => {
     const client = api({
       putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),

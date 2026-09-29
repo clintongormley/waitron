@@ -1369,7 +1369,6 @@ export class PaymentsScreen extends LitElement {
       heading=${`${heading}: ${reader.name}`}
       @wt-close=${() => void this.#closeEditor()}
     >
-      ${this.dialogError && mode !== "edit" ? html`<p class="error" role="alert">${codeMessage(this.dialogError)}</p>` : nothing}
       ${
         mode === "edit"
           ? html`<wt-input
@@ -1400,7 +1399,7 @@ export class PaymentsScreen extends LitElement {
                     : html`<p>${t("payments.details_empty")}</p>`
                 }`
       }
-      <wt-form-actions slot="footer" .error=${mode === "edit" ? bottom : ""}>
+      <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
           slot="cancel"
           variant="secondary"

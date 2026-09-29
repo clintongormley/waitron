@@ -329,7 +329,7 @@ async function bottomOf(el: PrintersScreen, actions: string): Promise<string> {
 }
 /** A dialog's own action row, in its footer; the address check keeps a second row in the body. */
 const footerOf = (modal: string): string => `[data-test=${modal}] > wt-form-actions[slot=footer]`;
-/** A refusal paragraph at the top of a dialog, where the forms rule no longer puts one. */
+/** A refusal paragraph at the top of a dialog. */
 const topAlertOf = (el: PrintersScreen, modal: string) =>
   q(el, `[data-test=${modal}] p[role=alert]`);
 const errorOf = (el: PrintersScreen, sel: string): string =>
