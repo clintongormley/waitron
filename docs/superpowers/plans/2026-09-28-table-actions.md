@@ -3912,10 +3912,14 @@ only, consuming Task 8's routes.
 > free): the table screen's "move-bill" sends `{ to: { tableId, seated } | { counter: true }, bills }`
 > and held-orders' "move-held-order" sends `{ orderId, tableId, seated, bills }`; held-orders'
 > "move-held-order-open" carries no `{orderId}`. There is no `#payBill(bill)`: the table screen's
-> Take payment runs through `#onPayTab`, and a retrieved counter order through the counter's own
-> pay handlers, which refuse through `#refusePaidInPart`. The bill-payment path is chosen by the
-> server's `hasPayments` on an open bill (`paidInPart`, `apps/till/src/state/bill-state.ts`), not
-> by `outstanding` below `total` or a payment pending. Merge and transfer offer only the party's
+> Take payment opens the bill (`#onTakePayment`), and paying it runs through `#onPayTab`, which
+> refuses a bill `paidInPart` marks. For a retrieved counter order, `#onConfirmPayment` and
+> `#onCollectCard` refuse through `#refusePaidInPart`, and `#onRetrieveOrder` only shows its
+> message; `#onPlaceOrder` and `#onCollectOrder` do not check it, and are held back only by the
+> pay card being disabled (`payHeld`) and by the server's refusal. The bill-payment path is chosen
+> by the server's `hasPayments` on an open bill, which a pending or received payment sets
+> (`paidInPart`, `apps/till/src/state/bill-state.ts`), rather than the plan's check of
+> `outstanding` below `total`. Merge and transfer offer only the party's
 > other open bills with no payment on them (`!hasPayments`), so a bill holding a pending payment
 > is not offered.
 

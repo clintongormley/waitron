@@ -3898,6 +3898,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     bills first or merge them". The plan's `table.move_to_counter` ("Move to counter") string was
     not added: the counter is a target in Move this bill's list, named `table.to_counter`, so
     nothing would read it.
+  - **Open: a sent order with no answer can put back an older copy of the party.** When a sent
+    order gets no answer, the till calls `#retakePartyFromFloor()`, whose floor read can fail and
+    keep the last floor, and then, when the order landed on a different bill from the one it was
+    sent from, `#followDraft` → `#rememberOrderParty()`, which copies the party from that floor
+    without comparing revisions (`apps/till/src/till-app.ts`). Found by reading during Task 12's
+    review (2026-09-29), not reproduced; the same calls are on `main` before that branch (a6de0cde3).
+    Task 12 fixed the same shape in `#onMoveBill` (7f82c958a) by taking the party only when the
+    floor read worked.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
