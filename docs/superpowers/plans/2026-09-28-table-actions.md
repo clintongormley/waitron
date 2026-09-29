@@ -49,6 +49,19 @@ The owner answered the four rulings this plan was written with. Each task that d
 4. **A pending card payment does not stop a bill moving** (P19, spec §7), which overrides A82's text.
    A fully paid bill still never moves (decision 5).
 
+**2026-09-29 (C60): "cleaning" became "clearing".** The owner chose "clearing", the word the older
+names already used (`clearing_workflow`, Mark cleared, the till's "Needs clearing"). Task 3 shipped
+`table.needs_cleaning`, `dining_tables.needs_cleaning_since`, the table condition `needs_cleaning`
+and `leaveForCleaning`; they are now `table.needs_clearing`, `needs_clearing_since` (core migration
+`0041_table_needs_clearing`), `needs_clearing` and `leaveForClearing`. Tasks 7–13 below use the new
+names; the text before Task 7 and the self-review notes keep the names as they were written. The
+table condition now shares the literal `needs_clearing` with the party state, so Task 13, which
+drops that state from `partyState`, must leave the table condition alone. Three hand-written
+copies of the party-state list also carry it, and Task 13 does not mention them:
+`TableParty.state` in `apps/server/src/working-order.ts` and `apps/till/src/api/client.ts`, and a
+return type in `apps/server/src/parties.ts`. The owner also kept P9 as written: a stale Mark
+cleared is accepted.
+
 ---
 
 ## What this plan measured before it was written
@@ -421,7 +434,7 @@ flagged for the owner in their PRs.**
   | `bill.paid` | `{ workingOrderId }` | merging or moving a paid bill |
   | `bill.other_party` | `{ workingOrderId }` | merging or transferring between bills of two parties, or a counter order and a party |
   | `party.main_bill_stays` | `{ partyId }` | moving the main bill away while the party holds another unpaid bill, or choosing it for Split a table |
-  | `table.needs_cleaning` | `{ tableId }` | seating, moving guests to or joining a table that needs cleaning |
+  | `table.needs_cleaning` (renamed `table.needs_clearing` 2026-09-29, C60) | `{ tableId }` | seating, moving guests to or joining a table that needs cleaning |
   | `table.already_in_party` | `{ tableId }` | joining a table the party already holds, or moving guests to the party's only table |
 
   **Renamed** (Task 1): `visit.*` → `party.*`, plus the three codes listed in P1.
@@ -1805,6 +1818,9 @@ harness), as the existing party tests do.
 
 ## Task 3: A table needs cleaning, not its party — slug `party-table-cleaning`
 
+> 2026-09-29 (C60): the names this task introduced say "clearing" now; see the note after the
+> owner rulings.
+
 Spec decision 6, §5 ("Needs cleaning moves from the party … to the table", room for "reserved")
 and §6 (Finish, Cleared); P8, P9, P10. Branch `feat/party-table-cleaning`. Full review wave (a
 migration, and the configuration export's column list).
@@ -2631,7 +2647,7 @@ paid bill, kitchen groups, MOVED, service area).
   - `apps/server/src/testing/bill-venue.ts`: a `seatedWith(venue, ...names)` helper that seats a
     party through the route and orders through `/api/parties/:id/groups`.
   - `apps/server/src/errors.ts`: `party.main_bill_stays` and `table.already_in_party`
-    (`table.needs_cleaning` exists from Task 3).
+    (`table.needs_clearing` exists from Task 3).
   - `apps/till/src/i18n/codes.ts`: their wording, and `table.inactive`'s, which a move to a table
     can now meet. On `f19768b3e` `codes.ts` has only two `table.*` entries, `table.occupied` and
     `table.not_shared`. `table.inactive` has its 409 in `STATUS` (`till-api.ts:328`), and
@@ -2641,7 +2657,7 @@ paid bill, kitchen groups, MOVED, service area).
 **Interfaces:**
 - Consumes:
   - Task 2's `setMainBill`, `partyMainBill` and `partyZone`;
-  - Task 3's `table.needs_cleaning` check;
+  - Task 3's `table.needs_clearing` check;
   - Task 4's `readSentWork` and `enqueueMovedSlips`, per bill;
   - Task 5's `requireUntouched` and `mergeBills`;
   - Task 1's `openParty`, `checkAndBumpParty`, `refuseHeldLeavingParty` and `clearGroups`.
@@ -2774,7 +2790,7 @@ paid bill, kitchen groups, MOVED, service area).
     party's ONLY unpaid bill, which is main, moves. Ana's `main_bill_id` is then null, and her next
     order (`orderForParty`) makes a new main bill (spec §15, the main bill).
   - **Moving to a table of the bill's own party** is `table.already_in_party`. Moving to a table
-    that needs cleaning is `table.needs_cleaning`.
+    that needs clearing is `table.needs_clearing`.
   - **Held dishes cannot leave:** a bill holding a line in a held group is refused
     `group.held_leaves_party`, and nothing moves (spec §15, kitchen groups).
   - **Sent dishes leave their group:** a bill whose dishes were fired moves. Each moved line's
@@ -2988,8 +3004,8 @@ paid bill, kitchen groups, MOVED, service area).
      - `{ tableId }`: read the table and its holding party (an active `party_tables` row).
        - When another party holds it:
          `checkAndBumpParty(target, expectedOtherPartyRevision, "open")`.
-       - Then `table.not_found` or `table.inactive`, and `table.needs_cleaning` when
-         `needs_cleaning_since` is set.
+       - Then `table.not_found` or `table.inactive`, and `table.needs_clearing` when
+         `needs_clearing_since` is set.
        - A table held by the bill's own party is `table.already_in_party`.
        - A free table in a zone whose mode is not `table_tab` is `service_zone.mode_incompatible`,
          exactly as seating refuses it (`openTab`, `working-order.ts:1002-1010`). This is the seat
@@ -3083,7 +3099,7 @@ Task 11.
 **Interfaces:**
 - Consumes:
   - Task 7's `takeIntoParty`, `leaveParty` and `isUntouched`, and the merge internals of Task 5;
-  - Task 3's `leaveForCleaning`; Task 2's `setMainBill`, `partyMainBill` and `partyZone`;
+  - Task 3's `leaveForClearing`; Task 2's `setMainBill`, `partyMainBill` and `partyZone`;
   - Task 4's `readPartiesSentWork` and `enqueueMovedSlipsFor`;
   - Task 1's `moveGroupsToParty`, `moveDraftsToParty`, `openParty` and `checkAndBumpParty`.
 - Produces:
@@ -3130,7 +3146,7 @@ Task 11.
   **Move guests:**
   ```ts
   describe("move guests", () => {
-    it("moves the party off all its tables to a free one, and the tables left behind need cleaning", async () => {
+    it("moves the party off all its tables to a free one, and the tables left behind need clearing", async () => {
       await act((tx) => writeClearingWorkflow(tx, true));
       const [m4, m5, m9] = [await v.table("Mesa 4"), await v.table("Mesa 5"), await v.table("Mesa 9")];
       const ana = await seat(v, m4);
@@ -3145,7 +3161,7 @@ Task 11.
       expect(await activeTablesOf(v, ana.partyId)).toEqual([m9]);
       for (const left of [m4, m5]) {
         const row = await tableRow(v, left);
-        expect(row.needsCleaningSince).not.toBeNull();
+        expect(row.needsClearingSince).not.toBeNull();
         expect(row.statusId).toBeNull();
       }
       expect((await billRow(v, ana.tabId)).partyId).toBe(ana.partyId);
@@ -3179,9 +3195,9 @@ Task 11.
     - `bills: "separate"` keeps both main bills, and Luis's stays main;
     - Ana's main bill has a €5.00 contribution, so `"merge"` still keeps them separate, with
       `merged: false`;
-    - to a table that needs cleaning is `table.needs_cleaning`;
+    - to a table that needs clearing is `table.needs_clearing`;
     - to the party's own only table is `table.already_in_party`;
-    - to one of its own tables while it holds two: the other leaves and needs cleaning;
+    - to one of its own tables while it holds two: the other leaves and needs clearing;
     - to an inactive table is `table.inactive`;
     - to a FREE table in a zone whose service mode is not `table_tab` (a counter zone) is
       `service_zone.mode_incompatible`, as seating refuses it (`openTab`, `working-order.ts:1002-1010`)
@@ -3212,7 +3228,7 @@ Task 11.
     - the bill choice as for Move guests;
     - a table in another zone is `service_zone.join_mismatch`;
     - a table the party holds is `table.already_in_party`;
-    - a table that needs cleaning is `table.needs_cleaning`.
+    - a table that needs clearing is `table.needs_clearing`.
   - **Split a table:**
     - Ana at Mesa 4 and Mesa 5, with a split bill B2. Split Mesa 5 with B2: a new party on Mesa 5
       with `name` null, B2 its main, B2's `party_id` the new party, and Ana keeping Mesa 4 and her
@@ -3285,8 +3301,8 @@ Task 11.
     4. the bill choice (P12): merge `from`'s main bill into `into`'s when `bills === "merge"`, both
        exist, and both are `isUntouched`. Otherwise, when `into` has no main bill and `from`'s is
        open, `setMainBill(into, fromMain)`;
-    5. the tables: `"leave"` calls `leaveForCleaning(from's tables)`, so every table left behind
-       needs cleaning when the venue's clearing setting is on (P8); and `"join"` calls
+    5. the tables: `"leave"` calls `leaveForClearing(from's tables)`, so every table left behind
+       needs clearing when the venue's clearing setting is on (P8); and `"join"` calls
        `leaveTables(from's tables)` and inserts a `party_tables` row for `into` for each. Both happen
        BEFORE `from` closes, so closing clears no status of a table that joins (Step 0);
     6. close `from`: `state: "closed"`, `closedAt`, `closedBy`, `mergedIntoPartyId: into`;
@@ -3309,9 +3325,9 @@ Task 11.
       - a free table whose zone's service mode is not `table_tab` is refused
         `service_zone.mode_incompatible` before anything is written, with the check `openTab` makes
         (`working-order.ts:1002-1010`), as Task 7 does for a bill;
-      - `leaveForCleaning` of the party's other tables (they need cleaning when the venue's
+      - `leaveForClearing` of the party's other tables (they need clearing when the venue's
         clearing setting is on, P8), then insert the new membership. Add a Move guests case with
-        the setting off: the tables left behind read free and `needsCleaningSince` stays null;
+        the setting off: the tables left behind read free and `needsClearingSince` stays null;
       - when the free table's zone differs from `partyZone`, `takeIntoParty` each open bill of the
         party, again to the same party, with the new zone. That is the area rule (P15), as
         `moveTab` retargets today.
@@ -3697,7 +3713,7 @@ only, consuming Task 8's routes.
     - the action menu gains Move guests, Join a table, Split a table (shown when the party holds
       two or more tables) and Name the party;
     - the target list shows every other table with its condition: free; held, with that party's
-      display name; or needs cleaning, disabled, with `table.needs_cleaning`'s sentence;
+      display name; or needs clearing, disabled, with `table.needs_clearing`'s sentence;
     - picking a held table opens the bill choice dialog;
     - Split a table picks one of the party's tables, then a bill: its open or placed bills other
       than the main one, or "No bill, start an empty one".
@@ -3796,9 +3812,9 @@ only, consuming Task 8's routes.
     bill" sends `null`. The main bill is not offered.
   - **The bill choice dialog** opens only for a held target. It shows the scope ("Ana (Mesa 4) joins
     Luis (Mesa 7)"), "Merge the bills" is focused, and Escape cancels without a call.
-  - **The target list:** a needs-cleaning table is listed disabled, with its reason, and cannot be
+  - **The target list:** a needs-clearing table is listed disabled, with its reason, and cannot be
     chosen. A held table shows "Seated: Luis".
-  - **Refusals in their own words:** `table.needs_cleaning`, `table.already_in_party`,
+  - **Refusals in their own words:** `table.needs_clearing`, `table.already_in_party`,
     `table.not_shared`, `party.main_bill_stays`, `group.held_leaves_party`,
     `service_zone.join_mismatch` and `party.not_open`. `party.out_of_date` reloads and says what
     changed (`#onPartyOutOfDate`).
@@ -3952,7 +3968,7 @@ sits.** Read from the code, not run:
     counter order has no party and Mesa 9 is free. To Mesa 7 (Luis) the bill choice dialog opens
     first, and the call carries `{ expectedOtherPartyRevision: 9 }`.
   - **Refusals in their own words:** `party.main_bill_stays` ("move the other bills first or merge
-    them"), `bill.paid`, `group.held_leaves_party` and `table.needs_cleaning`.
+    them"), `bill.paid`, `group.held_leaves_party` and `table.needs_clearing`.
   - **After the move** (A82's shape): the held orders list on the counter shows the moved bill,
     under the label the server set (P18), and the table screen no longer lists it.
   - **Money on the moved bill:** a bill with a card payment pending shows "Move this bill" enabled,

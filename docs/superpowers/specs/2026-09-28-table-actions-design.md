@@ -119,7 +119,9 @@ not run.
    "a partly paid bill can merge, taking its payments".)
 6. **A table the guests have left needs cleaning before it is free.** (Narrowed by the owner on
    2026-09-28, plan ruling 3: only when the venue's clearing setting is on; with it off, the
-   table is free at once.)
+   table is free at once.) (2026-09-29, C60: the owner chose "clearing" over "cleaning" for this
+   state, so the code says `table.needs_clearing` and `needs_clearing_since`; the text below keeps
+   the word it was written with.)
 7. **After tables are joined, new orders go to the main bill by default**; the waiter can send them
    to another bill of the party.
 8. **Two bills in one party** must each be paid, or be merged back before payment starts. There is

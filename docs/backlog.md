@@ -3182,34 +3182,44 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       read the same column. **DECIDED (owner, 2026-09-29): leave it** — after payment the
       station queue card, later kitchen notices and the till's list of a party's bills keep
       showing the receipt label with the party's name, rather than reading the tables alone.
-  - **Task 3 DONE (#844, 2026-09-29, main `6736159a2`): a table needs cleaning, not its
+  - **Task 3 DONE (#844, 2026-09-29, main `6736159a2`): a table needs clearing, not its
     party.** What changes for a person using the till:
     - Finish closes the party at once. Where the venue's clearing setting is on, each of its tables
       then reads "Needs clearing" on the floor with no party on it, and Mark cleared frees that one
       table (`POST /api/tables/:id/cleared`, which answers 204 even for a table that needs nothing,
       and `table.not_found` for an unknown one). With the setting off, Finish frees the tables at
       once, as before. The per-party `POST /api/parties/:id/cleared` is gone.
-    - Seating, moving to or joining a table that needs cleaning is refused `table.needs_cleaning`
-      (409, including the bookings seat route), where seating one was refused `tab.already_open`.
+    - Seating, moving to or joining a table that needs clearing is refused `table.needs_clearing`
+      (409, including the bookings seat route; named `table.needs_cleaning` until C60), where
+      seating one was refused `tab.already_open`.
       The till's Move and Join table picker no longer offers such a table, and the floor map no
       longer paints it with the free colour.
-    - Core migration `0039_table_needs_cleaning` adds `dining_tables.needs_cleaning_since`; the
-      configuration export leaves it out, like `tab_id`. The party state `needs_clearing` is no
-      longer written; Task 13 removes it.
+    - Core migration `0039_table_needs_cleaning` adds `dining_tables.needs_cleaning_since`, which
+      core `0041_table_needs_clearing` renames `needs_clearing_since` (C60); the configuration
+      export leaves it out, like `tab_id`. The party state `needs_clearing` is no longer written;
+      Task 13 drops it from the schema, and the table condition of the same name stays.
     - Upgrade, measured on a scratch venue seeded by the previous `main`: every row kept, only
       `dining_tables` and its change-feed trigger changed, `foreign_key_check` empty. **A dev venue
       holding a party already in `needs_clearing` keeps that party's tables held, and nothing on
       this branch frees them** (Finish answers `party.not_open`, seating `tab.already_open`, Mark
       cleared changes nothing). `wa-wt reset demo <name>` gives a clean venue; no data migration
       (CLAUDE.md §3).
-    Left open, raised by #844's review and not changed there:
+    Raised by #844's review and not changed there:
     - A stale Mark cleared can free a table a LATER party has left: party A finishes and its table
       is cleared, party B sits and finishes, and a second clear from a floor screen that had not
       refreshed removes B's mark (reproduced by the Codex review). Clearing takes no revision by the
-      plan's P9. **Next action, if the owner wants it:** the till sends the mark's time with Mark
-      cleared and the server ignores a clear whose time no longer matches.
-    - New names say "cleaning" (`table.needs_cleaning`, `needs_cleaning_since`), older ones
-      "clearing" (`clearing_workflow`, "Mark cleared"). Free to rename until a venue is live.
+      plan's P9. **DECIDED (owner, 2026-09-29): (a), keep the plan's P9** — a stale Mark cleared
+      is accepted, and nothing changes.
+    - **DONE (C60, PR pending, 2026-09-29): the new names say "clearing", like the older ones**
+      (`clearing_workflow`, "Mark cleared", the till's "Needs clearing"), by the owner's choice.
+      `table.needs_cleaning` is now `table.needs_clearing`, `dining_tables.needs_cleaning_since` is
+      `needs_clearing_since` (core migration `0041_table_needs_clearing`, one
+      `ALTER TABLE … RENAME COLUMN`), the table condition the till reads is `needs_clearing`, and
+      `leaveForCleaning` is `leaveForClearing`. What staff read did not change: the English and
+      Spanish sentences already said "needs clearing" / "por recoger". Upgrade, measured with the
+      product's `applyMigrations` on a scratch venue migrated to core `0040`, holding one table
+      with `needs_cleaning_since` set, then migrated to `0041`: the column read
+      `needs_clearing_since` and kept the value. Tasks 7–13 of the plan use the new names.
   - **Task 5 DONE (#852, 2026-09-29): split, merge and transfer between a party's bills,
     on the server.** Nothing changes on the till yet: it keeps using the old tab routes until
     Task 10. Three new routes land beside them (`apps/server/src/bill-actions.ts`,
