@@ -130,12 +130,15 @@ export function createLinuxDevices(
     },
 
     async visibleDevices(): Promise<VisibleDevice[]> {
-      const usbDevices = (await usb()).map(dropPath);
-      // A Bluetooth failure must never suppress the USB inventory.
-      const paired =
+      // Joined before the USB read, so a listing `pairedBluetooth()` just started is shared rather
+      // than finishing during the read and being run again. A Bluetooth failure must never
+      // suppress the USB inventory.
+      const listing =
         availability?.available === false && !recheckDue()
-          ? []
-          : await sharedListing().catch(() => []);
+          ? Promise.resolve([])
+          : sharedListing().catch(() => []);
+      const usbDevices = (await usb()).map(dropPath);
+      const paired = await listing;
       // While `liveBtDevicePath` throws, this catch drops EVERY paired Bluetooth device in production.
       let btDevices: VisibleDevice[];
       try {

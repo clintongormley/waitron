@@ -43,7 +43,8 @@ const REGISTER_TIMEOUT_MS = 10_000;
  * bluetoothd retries a bonding after a refused automatic PIN (research-pin-report.md, step 4). */
 const PAIR_TIMEOUT_MS = 75_000;
 const EXIT_GRACE_MS = 5_000;
-// bluez 5.82 client/agent.c: every agent question is "[agent] <text>:" with no newline after it.
+// READ, bluez 5.82 client/agent.c (the PIN prompt also measured): every agent question is
+// "[agent] <text>:" with no newline after it.
 const AGENT_PROMPT = /^\[agent\] .*:$/;
 const PIN_PROMPT = "[agent] Enter PIN code:";
 const SHELL_PROMPT = "[bluetoothctl]>";
@@ -62,7 +63,9 @@ function spawnBluetoothctl(): ChildProcessWithoutNullStreams {
  * image's bluetoothctl 5.82 (P2b research-pin-report.md); the lines the tests mark READ (a refused
  * agent, no controller, the non-PIN prompts) come from the bluez 5.82 source and were not run. The
  * exit status is ignored: it was 0 whatever the outcome once `quit` was written. bluetoothctl echoes
- * the PIN to stdout, so every error that carries printed text has the PIN masked.
+ * the PIN to stdout on a line of its own, so no line printed after the PIN was written is quoted in
+ * an error; nothing quoted is masked either, because gaps in a line the reader can rebuild (the
+ * address) would spell the PIN out.
  */
 export function pairWithBluetoothctl(
   mac: string,
@@ -73,15 +76,19 @@ export function pairWithBluetoothctl(
   if (pin !== undefined && !isBluetoothPin(pin))
     return Promise.resolve({ ok: false, error: BAD_PIN });
   const address = mac.toUpperCase();
-  /** For text bluetoothctl printed, which can carry the PIN it echoed; never the runner's own words. */
-  const mask = (printed: string): string =>
-    pin === undefined ? printed : printed.replaceAll(pin, "****");
   const fail = (error: string): PairResult => ({ ok: false, error });
 
   return new Promise((resolve) => {
-    const child = (opts.spawn ?? spawnBluetoothctl)();
+    let child: ChildProcessWithoutNullStreams;
+    try {
+      child = (opts.spawn ?? spawnBluetoothctl)();
+    } catch (error) {
+      resolve(fail(error instanceof Error ? error.message : String(error)));
+      return;
+    }
     let phase: "registering" | "pairing" | "closing" = "registering";
     let pinWritten = false;
+    let canceled = false;
     let pending = "";
     let lastLine: string | undefined;
     let outcome: PairResult | undefined;
@@ -122,7 +129,8 @@ export function pairWithBluetoothctl(
 
     const onPairingLine = (line: string): void => {
       if (AGENT_PROMPT.test(line)) return onPrompt(line);
-      if (!line.startsWith(SHELL_PROMPT)) lastLine = line;
+      if (!pinWritten && !line.startsWith(SHELL_PROMPT)) lastLine = line;
+      if (line === "Request canceled") canceled = true;
       if (line === "Pairing successful") return finish({ ok: true, localKey: address }, "quit");
       if (line === NO_CONTROLLER) return finish(fail(NO_CONTROLLER), "quit");
       if (line.toUpperCase() === `DEVICE ${address} NOT AVAILABLE`)
@@ -131,11 +139,14 @@ export function pairWithBluetoothctl(
       if (failed === null) return;
       const name = failed[1]!;
       if (name === "org.bluez.Error.AlreadyExists") finish({ ok: true, localKey: address }, "quit");
+      // bluetoothd cancels the request when our answer is late (research-pin-report.md, step 4).
+      else if (name === "org.bluez.Error.AuthenticationFailed" && canceled)
+        finish(fail("the printer stopped waiting for the PIN"), "quit");
       else if (name === "org.bluez.Error.AuthenticationFailed" && pinWritten)
         finish(fail("wrong PIN"), "quit");
       else if (name === "org.bluez.Error.ConnectionAttemptFailed")
         finish(fail("printer is off or out of range"), "quit");
-      else finish(fail(`pairing failed: ${mask(name)}`), "quit");
+      else finish(fail(`pairing failed: ${name}`), "quit");
     };
 
     const onLine = (line: string): void => {
@@ -149,7 +160,7 @@ export function pairWithBluetoothctl(
         return;
       }
       const refused = /^Failed to register agent: (.+)$/.exec(line);
-      if (refused !== null) finish(fail(`bluetooth agent refused: ${mask(refused[1]!)}`), "quit");
+      if (refused !== null) finish(fail(`bluetooth agent refused: ${refused[1]!}`), "quit");
     };
 
     const clean = (fragment: string): string =>
@@ -177,10 +188,7 @@ export function pairWithBluetoothctl(
     child.on("close", () => {
       if (phase === "registering") finish(fail(UNAVAILABLE), "end");
       else if (phase === "pairing")
-        finish(
-          fail(lastLine === undefined ? INCOMPLETE : `${INCOMPLETE}: ${mask(lastLine)}`),
-          "end",
-        );
+        finish(fail(lastLine === undefined ? INCOMPLETE : `${INCOMPLETE}: ${lastLine}`), "end");
       settle();
     });
   });

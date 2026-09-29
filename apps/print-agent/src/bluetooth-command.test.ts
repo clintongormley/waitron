@@ -5,6 +5,10 @@ import { pairWithBluetoothctl, runBluetoothctl } from "./bluetooth-command.js";
 
 vi.mock("node:child_process", () => ({ execFile: vi.fn(), spawn: vi.fn() }));
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("runBluetoothctl", () => {
   it("bounds the command and returns its output", async () => {
     vi.mocked(execFile).mockImplementationOnce((...args: unknown[]) => {
@@ -167,7 +171,10 @@ describe("pairWithBluetoothctl — the conversation", () => {
         event("Failed to pair: org.bluez.Error.AuthenticationFailed"),
     );
     expect(child.input.filter((line) => line === "1234\n")).toHaveLength(1);
-    await expect(result).resolves.toStrictEqual({ ok: false, error: "wrong PIN" });
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "the printer stopped waiting for the PIN",
+    });
   });
 
   it("pairs a printer that never asks for a PIN, with or without one given", async () => {
@@ -271,6 +278,8 @@ describe("pairWithBluetoothctl — outcomes", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(run.settled()).toBe(false);
     expect(child.input).toStrictEqual([`pair ${MAC}\n`]);
+    child.say(event("Pairing successful"));
+    await expect(result).resolves.toMatchObject({ ok: true });
   });
 
   // bluez 5.82 client/main.c: `pair` looks the device up through check_default_ctrl, which prints
@@ -345,6 +354,28 @@ describe("pairWithBluetoothctl — outcomes", () => {
     });
   });
 
+  // Measured 2026-09-29 on Node v26.7.0: spawn THROWS for an invalid argument (a null byte in the
+  // file name, ERR_INVALID_ARG_VALUE), while ENOENT and EMFILE arrive as an 'error' event.
+  it("reports a spawn that throws rather than rejecting", async () => {
+    const spawn = vi.fn((): never => {
+      throw new Error("The argument 'file' must be a string without null bytes");
+    });
+    await expect(pairWithBluetoothctl(MAC, "1234", { spawn })).resolves.toStrictEqual({
+      ok: false,
+      error: "The argument 'file' must be a string without null bytes",
+    });
+  });
+
+  it("reports a spawn that throws something other than an Error", async () => {
+    const spawn = vi.fn((): never => {
+      throw "no process slots";
+    });
+    await expect(pairWithBluetoothctl(MAC, "1234", { spawn })).resolves.toStrictEqual({
+      ok: false,
+      error: "no process slots",
+    });
+  });
+
   it("reports a bluetoothctl that could not be started", async () => {
     const child = new FakeBluetoothctl();
     const result = pairWithBluetoothctl(MAC, "1234", { spawn: child.spawn });
@@ -366,35 +397,48 @@ describe("pairWithBluetoothctl — outcomes", () => {
   });
 });
 
+// bluetoothctl echoes the PIN on a line of its own (every piped run in research-pin-report.md, Q2).
+// Nothing printed after the PIN was written is quoted, and nothing quoted is altered: a masked copy of
+// a line the reader can reconstruct (the address) would give the PIN away by its gaps.
 describe("pairWithBluetoothctl — the PIN never leaves the runner", () => {
   const PIN = "Zq7~";
 
-  it("masks the PIN bluetoothctl echoed when it is the last thing printed", async () => {
+  it("never quotes a line printed after the PIN was written, so the echo cannot reach an error", async () => {
     const { child, result } = registered(PIN);
     child.say(PIN_PROMPT, `${PIN}\n`);
     child.emit("close", 0, null);
     const outcome = await result;
-    expect(outcome).toStrictEqual({ ok: false, error: "pairing did not complete: ****" });
+    expect(outcome).toStrictEqual({
+      ok: false,
+      error: "pairing did not complete: Request PIN code",
+    });
     expect(JSON.stringify(outcome)).not.toContain(PIN);
   });
 
-  it("masks the PIN wherever it appears in a failure bluetoothctl printed", async () => {
-    const { child, result } = registered(PIN);
-    child.say(PIN_PROMPT, `${PIN}\n`, event(`Failed to pair: org.bluez.Error.${PIN}${PIN}`));
-    const outcome = await result;
-    expect(outcome).toStrictEqual({ ok: false, error: "pairing failed: org.bluez.Error.********" });
+  it("quotes an earlier line exactly as printed, even when the PIN occurs inside the address", async () => {
+    const { child, result } = registered("00");
+    child.emit("close", 0, null);
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: `pairing did not complete: Attempting to pair with ${MAC}`,
+    });
   });
 
-  it("masks only what bluetoothctl printed, never the runner's own words", async () => {
+  // A `Failed to pair: ` line holds spaces, which a PIN cannot, so it is never the echo; the name
+  // after it is BlueZ's (READ, bluez 5.82 client/main.c pair_reply prints error.name).
+  it("quotes BlueZ's error name exactly as printed, even when the PIN occurs inside it", async () => {
+    const { child, result } = registered("Progress");
+    child.say(PIN_PROMPT, "Progress\n", event("Failed to pair: org.bluez.Error.InProgress"));
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "pairing failed: org.bluez.Error.InProgress",
+    });
+  });
+
+  it("never alters the runner's own words, even when the PIN occurs in them", async () => {
     const { child, result } = registered("PIN");
     child.say(PIN_PROMPT, "PIN\n", event("Failed to pair: org.bluez.Error.AuthenticationFailed"));
     await expect(result).resolves.toStrictEqual({ ok: false, error: "wrong PIN" });
-  });
-
-  it("reads BlueZ's error name before masking it, so a PIN inside the name changes no outcome", async () => {
-    const { child, result } = registered("Exists");
-    child.say(event("Failed to pair: org.bluez.Error.AlreadyExists"));
-    await expect(result).resolves.toStrictEqual({ ok: true, localKey: MAC });
   });
 
   it("does not put a refused PIN in the error it reports", async () => {
@@ -435,10 +479,6 @@ describe("pairWithBluetoothctl — refused before spawning", () => {
 });
 
 describe("pairWithBluetoothctl — deadlines", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("gives up on a bluetoothctl that has not registered its agent after 10 seconds", async () => {
     vi.useFakeTimers();
     const child = new FakeBluetoothctl();

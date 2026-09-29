@@ -1,16 +1,28 @@
 import {
   createClient,
+  describeRejection,
   type AgentClient,
+  type BluetoothCommand,
+  type BluetoothCommandOutcome,
   type Failure,
   type JobOutcome,
   type WireJob,
 } from "./client.js";
-import type { AgentConfig, AgentStatus, DiscoveredDevice, Host, NetworkProbe } from "./host.js";
+import type {
+  AgentConfig,
+  AgentStatus,
+  DiscoveredDevice,
+  Host,
+  NetworkProbe,
+  PairedBluetoothDevice,
+} from "./host.js";
 import { Router } from "./router.js";
 
 /** A non-empty batch re-polls at once; only an empty pull sleeps. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
+/** The wire's own cap on commands per reply, so a reply never pushes out an id it also carries. */
+const REMEMBERED_BLUETOOTH_COMMANDS = 8;
 
 export interface AgentOptions {
   host: Host;
@@ -66,6 +78,9 @@ export function createAgent(opts: AgentOptions): Agent {
   let probeServer: string | undefined;
   let status: AgentStatus = { phase: "unconfigured", serverUrl: null, current: null };
   let lastPhaseLine = "";
+  // In memory only: a restart forgets both, so a command the server sends again after one runs again.
+  let bluetoothOutcomes: BluetoothCommandOutcome[] = [];
+  const executedBluetoothCommands = new Set<string>();
 
   function replaceWakeSignal(): void {
     wakePromise = new Promise((resolve) => {
@@ -99,6 +114,8 @@ export function createAgent(opts: AgentOptions): Agent {
     discoveryUntil = 0;
     networkProbes = [];
     probeServer = undefined;
+    bluetoothOutcomes = [];
+    executedBluetoothCommands.clear();
   }
 
   replaceWakeSignal();
@@ -167,6 +184,63 @@ export function createAgent(opts: AgentOptions): Agent {
       host.log.warn("report dropped", { job: job.id, failure: sent.failure });
     }
     return failed;
+  }
+
+  async function listPairedBluetooth(): Promise<PairedBluetoothDevice[]> {
+    try {
+      return await host.pairedBluetooth();
+    } catch (error) {
+      host.log.warn("paired bluetooth listing failed", { error: describeRejection(error) });
+      return [];
+    }
+  }
+
+  /** The PIN is removed from the error text before it is logged or queued. */
+  async function runBluetoothCommand(command: BluetoothCommand): Promise<void> {
+    let ok = false;
+    let error: string | undefined;
+    try {
+      const result =
+        command.kind === "pair"
+          ? await host.pair(command.address, command.pin)
+          : await host.forgetBluetooth(command.address);
+      ok = result.ok === true;
+      if (!ok && result.error !== undefined) error = describeRejection(result.error);
+    } catch (thrown) {
+      error = describeRejection(thrown);
+    }
+    if (error !== undefined && command.pin !== undefined) {
+      error = error.split(command.pin).join("[PIN]");
+    }
+    const outcome: BluetoothCommandOutcome = {
+      id: command.id,
+      ok,
+      ...(error === undefined ? {} : { error }),
+    };
+    if (!ok) {
+      host.log.warn("bluetooth command failed", {
+        id: command.id,
+        kind: command.kind,
+        address: command.address,
+        error,
+      });
+    }
+    bluetoothOutcomes = [...bluetoothOutcomes, outcome].slice(-REMEMBERED_BLUETOOTH_COMMANDS);
+  }
+
+  /** Runs each command not already run, one at a time; returns how many ran. */
+  async function runBluetoothCommands(commands: BluetoothCommand[]): Promise<number> {
+    let ran = 0;
+    for (const command of commands) {
+      if (executedBluetoothCommands.has(command.id)) continue;
+      executedBluetoothCommands.add(command.id);
+      if (executedBluetoothCommands.size > REMEMBERED_BLUETOOTH_COMMANDS) {
+        executedBluetoothCommands.delete(executedBluetoothCommands.values().next().value!);
+      }
+      await runBluetoothCommand(command);
+      ran += 1;
+    }
+    return ran;
   }
 
   /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
@@ -296,7 +370,11 @@ export function createAgent(opts: AgentOptions): Agent {
       }
     }
 
+    // Started before `visibleDevices`, and awaited after it, so the host's paired-device listing is
+    // already running when the visible-device read wants one and can be shared.
+    const pairedListing = listPairedBluetooth();
     const visible = await host.visibleDevices();
+    const pairedBluetooth = await pairedListing;
     // A throwing scan (a box with no Bluetooth adapter, say) must NEVER stop the job pull.
     let scanned: DiscoveredDevice[] = [];
     if (host.now() < discoveryUntil) {
@@ -346,11 +424,12 @@ export function createAgent(opts: AgentOptions): Agent {
     const hostname = host.hostname?.();
     const setupUrl = host.setupUrl?.();
     const setupPort = host.setupPort?.();
+    const sentOutcomes = bluetoothOutcomes;
     const pulled = await client.pullJobs(current, token, {
       visible,
       scanned,
-      pairedBluetooth: [],
-      bluetoothOutcomes: [],
+      pairedBluetooth,
+      bluetoothOutcomes: sentOutcomes,
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),
       ...(setupPort === undefined ? {} : { setupPort }),
@@ -371,6 +450,7 @@ export function createAgent(opts: AgentOptions): Agent {
     }
     outOfTouch = false;
     resetAt = undefined;
+    bluetoothOutcomes = bluetoothOutcomes.filter((outcome) => !sentOutcomes.includes(outcome));
     r.merge(pulled.value.servers);
     const servers = r
       .servers()
@@ -399,7 +479,9 @@ export function createAgent(opts: AgentOptions): Agent {
       verificationCode: undefined,
       ...(anyFailed ? {} : { lastError: undefined }),
     });
-    return pulled.value.jobs.length > 0;
+    // After the jobs, so a Pair's wait for the printer never holds up this reply's prints.
+    const ran = await runBluetoothCommands(pulled.value.bluetoothCommands ?? []);
+    return pulled.value.jobs.length > 0 || ran > 0;
   }
 
   async function runOnce(): Promise<boolean> {

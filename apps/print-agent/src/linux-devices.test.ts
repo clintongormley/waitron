@@ -322,6 +322,22 @@ describe("createLinuxDevices — pairedBluetooth()", () => {
     expect(await listed).toStrictEqual([{ localKey: "5A:4A:45:D4:FB:BB" }]);
     expect(paired).toHaveBeenCalledTimes(1);
   });
+
+  it("shares one listing with visibleDevices() started beside it, however fast the listing ends", async () => {
+    const paired = vi.fn(async () => [{ mac: "5A:4A:45:D4:FB:BB" }]);
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      bluetooth: fakeBluetooth({ paired }),
+      btDevicePath: () => "/dev/rfcomm0",
+    });
+    // The agent's order: the paired listing first, then the visible read, both in one turn.
+    const listed = devices.pairedBluetooth();
+    const visible = await devices.visibleDevices();
+    expect(await listed).toStrictEqual([{ localKey: "5A:4A:45:D4:FB:BB" }]);
+    expect(visible.map((d) => d.localKey)).toStrictEqual(["B120300001", "5A:4A:45:D4:FB:BB"]);
+    expect(paired).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("createLinuxDevices — forgetBluetooth()", () => {

@@ -1,7 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAgent } from "./agent.js";
-import type { AgentClient, Failure, JoinStatus, NodeProbe, PullReply, Result } from "./client.js";
-import type { DiscoveredDevice } from "./host.js";
+import type {
+  AgentClient,
+  AgentInventory,
+  BluetoothCommand,
+  Failure,
+  JoinStatus,
+  NodeProbe,
+  PullReply,
+  Result,
+  WireJob,
+} from "./client.js";
+import type { DiscoveredDevice, Host } from "./host.js";
 import { fakeHost } from "./testing/fake-host.js";
 import { FakeSink, type PrinterTarget } from "./transport.js";
 
@@ -1436,5 +1446,347 @@ describe("createAgent — start/stop and logging", () => {
       lastError: "socket hang up",
     });
     expect(host.logs).toContain('error tick failed {"error":"socket hang up"}');
+  });
+});
+
+describe("createAgent — Bluetooth commands", () => {
+  const MAC = "5A:4A:45:D4:FB:BB";
+  const MAC2 = "66:22:B3:9E:5C:01";
+  const PIN = "4821";
+  const job = (id: string): WireJob => ({
+    id,
+    printerId: "p1",
+    transport: "network_tcp",
+    host: "10.0.0.9",
+    port: 9100,
+    localKey: null,
+    payload: new Uint8Array([7]),
+  });
+  const reply = (over: Partial<PullReply> = {}): Result<PullReply> =>
+    okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null, ...over });
+  const pair = (id: string, pin?: string): BluetoothCommand => ({
+    id,
+    kind: "pair",
+    address: MAC,
+    ...(pin === undefined ? {} : { pin }),
+  });
+  const forget = (id: string): BluetoothCommand => ({ id, kind: "forget", address: MAC2 });
+  const sentOn = (c: AgentClient, pull: number) =>
+    (c.pullJobs as ReturnType<typeof vi.fn>).mock.calls[pull]![2] as AgentInventory;
+  const outcomesOn = (c: AgentClient, pull: number) => sentOn(c, pull).bluetoothOutcomes;
+  const scripted = (...replies: Result<PullReply>[]) => {
+    const pulls = vi.fn(async () => reply());
+    for (const r of replies) pulls.mockResolvedValueOnce(r);
+    return pulls;
+  };
+
+  it("sends the paired Bluetooth devices apart from the visible ones, listing them first, once per pull", async () => {
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      visibleDevices: async () => [{ transport: "usb", localKey: "SN-1" }],
+      pairedBluetooth: async () => [{ localKey: MAC, name: "BT-58" }],
+    });
+    const c = client();
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    for (const pull of [0, 1]) {
+      expect(sentOn(c, pull).visible).toStrictEqual([{ transport: "usb", localKey: "SN-1" }]);
+      expect(sentOn(c, pull).pairedBluetooth).toStrictEqual([{ localKey: MAC, name: "BT-58" }]);
+    }
+    expect(host.calls).toStrictEqual([
+      "pairedBluetooth",
+      "visibleDevices",
+      "pairedBluetooth",
+      "visibleDevices",
+    ]);
+  });
+
+  it.each([
+    [new Error("bluetoothctl: not found"), "bluetoothctl: not found"],
+    ["no adapter", "no adapter"],
+  ])(
+    "a paired listing that throws (%s) is logged and sent as none, and the reply's job still prints",
+    async (thrown, logged) => {
+      const sink = new FakeSink();
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        transport: sink,
+        pairedBluetooth: async () => {
+          throw thrown;
+        },
+      });
+      const c = client({ pullJobs: scripted(reply({ jobs: [job("j1")] })) });
+      await createAgent({ host, client: c }).runOnce();
+      expect(sentOn(c, 0).pairedBluetooth).toStrictEqual([]);
+      expect(host.logs).toContain(
+        `warn paired bluetooth listing failed ${JSON.stringify({ error: logged })}`,
+      );
+      expect(sink.written).toHaveLength(1);
+      expect(c.report).toHaveBeenCalledWith(A, "a1.s", "j1", { status: "done" });
+    },
+  );
+
+  it("a paired listing that throws synchronously is still sent as none", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    host.pairedBluetooth = () => {
+      throw new Error("sync");
+    };
+    const c = client();
+    await createAgent({ host, client: c }).runOnce();
+    expect(sentOn(c, 0).pairedBluetooth).toStrictEqual([]);
+    expect(host.statuses.at(-1)?.phase).toBe("running");
+  });
+
+  it("Pair and Forget reach the matching host method, and their outcomes ride the next pull only", async () => {
+    const pairFn = vi.fn(async () => ({ ok: true, localKey: MAC }));
+    const forgetFn = vi.fn(async () => ({ ok: true }));
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      pair: pairFn,
+      forgetBluetooth: forgetFn,
+    });
+    const c = client({
+      pullJobs: scripted(reply({ bluetoothCommands: [pair("c1", PIN), forget("c2")] })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    expect(pairFn).toHaveBeenCalledWith(MAC, PIN);
+    expect(forgetFn).toHaveBeenCalledWith(MAC2);
+    expect(outcomesOn(c, 0)).toStrictEqual([]);
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: true },
+      { id: "c2", ok: true },
+    ]);
+    await agent.runOnce();
+    expect(outcomesOn(c, 2)).toStrictEqual([]);
+  });
+
+  it("a refusal and a throw both become failed outcomes, and neither stops the jobs or the next command", async () => {
+    const sink = new FakeSink();
+    const pairFn = vi.fn(async () => ({ ok: false, error: "pairing timed out" }));
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      transport: sink,
+      pair: pairFn,
+      forgetBluetooth: async () => {
+        throw new Error("org.bluez.Error.NotReady");
+      },
+    });
+    const c = client({
+      pullJobs: scripted(
+        reply({ jobs: [job("j1")], bluetoothCommands: [forget("c1"), pair("c2"), forget("c3")] }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(sink.written).toHaveLength(1);
+    expect(pairFn).toHaveBeenCalledTimes(1);
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: false, error: "org.bluez.Error.NotReady" },
+      { id: "c2", ok: false, error: "pairing timed out" },
+      { id: "c3", ok: false, error: "org.bluez.Error.NotReady" },
+    ]);
+    expect(host.logs).toContain(
+      `warn bluetooth command failed ${JSON.stringify({ id: "c2", kind: "pair", address: MAC, error: "pairing timed out" })}`,
+    );
+  });
+
+  it("an outcome's error is always a string or absent, whatever the host produced", async () => {
+    const unprintable = Object.create(null) as object;
+    const host = fakeHost({ config: CONFIG, token: "a1.s" });
+    const results: (() => Promise<unknown>)[] = [
+      async () => {
+        throw "busy";
+      },
+      async () => {
+        throw unprintable;
+      },
+      async () => ({ ok: false }),
+      async () => ({ ok: false, error: new Error("wrapped") }),
+      async () => undefined,
+      async () => ({ ok: "yes" }),
+    ];
+    host.forgetBluetooth = vi.fn(() => results.shift()!()) as Host["forgetBluetooth"];
+    const c = client({
+      pullJobs: scripted(
+        reply({ bluetoothCommands: ["c1", "c2", "c3", "c4", "c5", "c6"].map(forget) }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: false, error: "busy" },
+      { id: "c2", ok: false, error: "unstringifiable rejection" },
+      { id: "c3", ok: false },
+      { id: "c4", ok: false, error: "wrapped" },
+      { id: "c5", ok: false, error: expect.any(String) },
+      { id: "c6", ok: false },
+    ]);
+  });
+
+  it("never lets the PIN reach an outcome or a log line, whether the host throws it or returns it", async () => {
+    const host = fakeHost({
+      config: CONFIG,
+      token: "a1.s",
+      pair: vi
+        .fn()
+        .mockRejectedValueOnce(new Error(`bluetoothctl echoed passkey ${PIN} and failed`))
+        .mockResolvedValueOnce({ ok: false, error: `wrong PIN ${PIN}; ${PIN} refused` }),
+    });
+    const c = client({
+      pullJobs: scripted(reply({ bluetoothCommands: [pair("c1", PIN), pair("c2", PIN)] })),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([
+      { id: "c1", ok: false, error: "bluetoothctl echoed passkey [PIN] and failed" },
+      { id: "c2", ok: false, error: "wrong PIN [PIN]; [PIN] refused" },
+    ]);
+    const sent = JSON.stringify((c.pullJobs as ReturnType<typeof vi.fn>).mock.calls);
+    expect(sent).not.toContain(PIN);
+    expect(host.logs.some((line) => line.includes("bluetooth command failed"))).toBe(true);
+    expect(host.logs.join("\n")).not.toContain(PIN);
+    expect(JSON.stringify(host.statuses)).not.toContain(PIN);
+  });
+
+  it("delivers and reports the reply's print jobs before running its commands", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: async () => ({ ok: true }) });
+    host.transport = {
+      send: async () => {
+        host.calls.push("send");
+      },
+    };
+    const c = client({
+      pullJobs: scripted(reply({ jobs: [job("j1")], bluetoothCommands: [pair("c1")] })),
+      report: vi.fn(async () => {
+        host.calls.push("report");
+        return okR(undefined);
+      }),
+    });
+    await createAgent({ host, client: c }).runOnce();
+    expect(host.calls.filter((call) => ["send", "report", "pair"].includes(call))).toStrictEqual([
+      "send",
+      "report",
+      "pair",
+    ]);
+  });
+
+  it("runs a command id it has already run only once, and reports it once", async () => {
+    const pairFn = vi.fn(async () => ({ ok: true }));
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: pairFn });
+    const c = client({
+      pullJobs: scripted(
+        reply({ bluetoothCommands: [pair("c1")] }),
+        reply({ bluetoothCommands: [pair("c1")] }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    for (let i = 0; i < 3; i++) await agent.runOnce();
+    expect(pairFn).toHaveBeenCalledTimes(1);
+    expect(outcomesOn(c, 1)).toStrictEqual([{ id: "c1", ok: true }]);
+    expect(outcomesOn(c, 2)).toStrictEqual([]);
+  });
+
+  it("keeps an outcome through a failed pull and drops it only after a successful pull carried it", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: async () => ({ ok: true }) });
+    const c = client({
+      pullJobs: scripted(
+        reply({ bluetoothCommands: [pair("c1")] }),
+        failR({ kind: "unreachable", detail: "status 503" }),
+        failR({ kind: "bad_reply", detail: "not json" }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    for (let i = 0; i < 5; i++) await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([{ id: "c1", ok: true }]);
+    expect(outcomesOn(c, 2)).toStrictEqual([{ id: "c1", ok: true }]);
+    expect(outcomesOn(c, 3)).toStrictEqual([{ id: "c1", ok: true }]);
+    expect(outcomesOn(c, 4)).toStrictEqual([]);
+  });
+
+  it("after a lost reply, resends the outcome but does not run the resent command again", async () => {
+    const pairFn = vi.fn(async () => ({ ok: false, error: "pairing timed out" }));
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: pairFn });
+    const c = client({
+      pullJobs: scripted(
+        reply({ bluetoothCommands: [pair("c1")] }),
+        // The server stored the outcome, but its reply never arrived.
+        failR({ kind: "unreachable", detail: "timeout" }),
+        // A server that had NOT stored it would send the command again.
+        reply({ bluetoothCommands: [pair("c1")] }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    for (let i = 0; i < 4; i++) await agent.runOnce();
+    const failed = { id: "c1", ok: false, error: "pairing timed out" };
+    expect(outcomesOn(c, 1)).toStrictEqual([failed]);
+    expect(outcomesOn(c, 2)).toStrictEqual([failed]);
+    expect(outcomesOn(c, 3)).toStrictEqual([]);
+    expect(pairFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("remembers the last eight command ids and outcomes: a ninth forgets the oldest", async () => {
+    const forgetFn = vi.fn(async () => ({ ok: true }));
+    const host = fakeHost({ config: CONFIG, token: "a1.s", forgetBluetooth: forgetFn });
+    const ids = Array.from({ length: 9 }, (_, i) => `c${i + 1}`);
+    const c = client({
+      pullJobs: scripted(
+        reply({ bluetoothCommands: ids.map(forget) }),
+        reply({ bluetoothCommands: [forget("c9"), forget("c1")] }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    for (let i = 0; i < 3; i++) await agent.runOnce();
+    expect(outcomesOn(c, 1).map((o) => o.id)).toStrictEqual(ids.slice(1));
+    // c9 is still remembered; c1 was forgotten, so it runs a second time.
+    expect(forgetFn).toHaveBeenCalledTimes(10);
+    expect(outcomesOn(c, 2)).toStrictEqual([{ id: "c1", ok: true }]);
+  });
+
+  it("re-polls at once after running a command, but not after a command it had already run", async () => {
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: async () => ({ ok: true }) });
+    const pulls = scripted(
+      reply({ bluetoothCommands: [pair("c1")] }),
+      reply({ bluetoothCommands: [pair("c1")] }),
+    );
+    const agent = createAgent({ host, client: client({ pullJobs: pulls }), intervalMs: 50 });
+    const originalSleep = host.sleep;
+    host.sleep = async (ms) => {
+      await originalSleep(ms);
+      agent.stop();
+    };
+    await agent.start();
+    expect(pulls).toHaveBeenCalledTimes(2);
+    expect(host.sleeps).toEqual([50]);
+  });
+
+  it("forgets queued outcomes and remembered ids when setup starts the agent over", async () => {
+    const pairFn = vi.fn(async () => ({ ok: true }));
+    const host = fakeHost({ config: CONFIG, token: "a1.s", pair: pairFn });
+    const c = client({
+      pullJobs: scripted(
+        reply({ bluetoothCommands: [pair("c1")] }),
+        failR({ kind: "unauthorized" }),
+        reply({ bluetoothCommands: [pair("c1")] }),
+      ),
+    });
+    const agent = createAgent({ host, client: c });
+    await agent.runOnce();
+    await agent.runOnce();
+    expect(outcomesOn(c, 1)).toStrictEqual([{ id: "c1", ok: true }]);
+    expect(await agent.configure({ serverUrl: A, name: "kitchen-pi" })).toBe(true);
+    await agent.runOnce(); // joins → pending
+    await agent.runOnce(); // approved → pulls
+    expect(outcomesOn(c, 2)).toStrictEqual([]);
+    expect(pairFn).toHaveBeenCalledTimes(2);
   });
 });

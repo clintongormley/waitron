@@ -105,7 +105,7 @@ export const DEFAULT_TIMEOUT_MS = 3_000;
 
 /** `String(value)` invokes a `toString` an object is free to implement badly, and that throw must not
  * escape this module. */
-function describeRejection(error: unknown): string {
+export function describeRejection(error: unknown): string {
   if (error instanceof Error) return error.message;
   try {
     return String(error);

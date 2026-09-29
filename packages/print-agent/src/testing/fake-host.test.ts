@@ -100,6 +100,20 @@ describe("fakeHost", () => {
     expect(await told.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({ ok: true });
   });
 
+  it("records each device-listing and Bluetooth-command call by name, in call order", async () => {
+    const host = fakeHost({ pair: async () => ({ ok: true }) });
+    await host.pairedBluetooth();
+    await host.visibleDevices();
+    await host.pair("AA:BB:CC:DD:EE:FF", "1234");
+    await host.forgetBluetooth("AA:BB:CC:DD:EE:FF");
+    expect(host.calls).toStrictEqual([
+      "pairedBluetooth",
+      "visibleDevices",
+      "pair",
+      "forgetBluetooth",
+    ]);
+  });
+
   it("hands an overriding pair the operator's PIN", async () => {
     const pair = vi.fn(async (mac: string, pin?: string) => ({
       ok: pin === "1234",
