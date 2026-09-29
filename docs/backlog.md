@@ -2248,8 +2248,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   [design](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and
   [implementation plan](superpowers/plans/2026-09-27-print-agent-setup-lockdown.md) split the
   work into three branches; the first is the lockdown above (#732).
-- **The print agent's Bluetooth side (P2b, the plan's second branch) — BUILT in this pull
-  request.** What the agent now does. The unit tests of `apps/print-agent` and
+- **The print agent's Bluetooth side (P2b, the plan's second branch) — BUILT (#877).** What the
+  agent now does. The unit tests of `apps/print-agent` and
   `packages/print-agent` pass on this branch (run 2026-09-29, against a fake host, not a radio);
   the real-hardware evidence is the paragraph after this list:
   - It asks `bluetoothctl info` about the first eight devices a Bluetooth scan finds, all at the
@@ -8512,7 +8512,7 @@ while it holds decisions still open.
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
-| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | two of three branches built (#732, and P2b in this pull request); P2c to go | A3 |
+| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | two of three branches built (#732, and P2b in #877); P2c to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
