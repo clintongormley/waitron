@@ -1,12 +1,18 @@
 import { html, nothing, type TemplateResult } from "lit";
+import { currentLocale, t } from "../i18n/t.js";
 
-/** The error line when the question is shown and not yet answered. */
-export const OLD_BOX_PROBLEM = "Confirm that the old server is switched off for good.";
+/** The error line when the question is shown and not yet answered, in the wizard's language. */
+export function oldBoxProblem(): string {
+  return t("old_box.problem");
+}
+
+/** @deprecated English only, so it cannot follow a language switch: call `oldBoxProblem()`. */
+export const OLD_BOX_PROBLEM = t("old_box.problem", "en-GB");
 
 function when(iso: string): TemplateResult {
   const at = new Date(iso);
   if (Number.isNaN(at.getTime())) return html`${iso}`;
-  const local = at.toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  const local = at.toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
   return html`<time datetime=${iso}>${local}</time> (${iso})`;
 }
 
@@ -29,11 +35,10 @@ export function oldBoxQuestion(opts: {
   return html`<p class="error" role="alert" data-test="live-warning">
       ${
         opts.liveSince !== undefined
-          ? html`The old server wrote to its bucket at ${when(opts.liveSince)}.`
-          : "Whether the old server is still writing to its bucket could not be checked."
+          ? html`${t("old_box.wrote_at")} ${when(opts.liveSince)}.`
+          : t("old_box.unchecked")
       }
-      If it is still running, two servers would sell from the same records, and that cannot be
-      undone. Switch it off for good before you go on.
+      ${t("old_box.consequence")}
     </p>
     <label class="field">
       <input
@@ -46,7 +51,7 @@ export function oldBoxQuestion(opts: {
         .checked=${opts.checked}
         @change=${(e: Event) => opts.onChange((e.currentTarget as HTMLInputElement).checked)}
       />
-      The old server is switched off for good.
+      ${t("old_box.gone")}
     </label>
-    ${opts.invalid ? html`<p class="error" id="old-box-gone-error">${OLD_BOX_PROBLEM}</p>` : nothing}`;
+    ${opts.invalid ? html`<p class="error" id="old-box-gone-error">${oldBoxProblem()}</p>` : nothing}`;
 }

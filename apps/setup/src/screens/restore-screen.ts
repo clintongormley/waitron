@@ -11,7 +11,9 @@ import {
   dispatchRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
-import { OLD_BOX_PROBLEM, oldBoxQuestion } from "./old-box-question.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { oldBoxProblem, oldBoxQuestion } from "./old-box-question.js";
 
 /**
  * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
@@ -45,6 +47,11 @@ export class SetupRestoreScreen extends LitElement {
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
   @state() private showError = false;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("request") && this.request !== undefined) {
@@ -100,22 +107,20 @@ export class SetupRestoreScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1>Restore from backup</h1>
+      <h1>${t("restore.heading")}</h1>
       <p>
         <wt-button
           variant="ghost"
           data-test="cloud-restore"
           @click=${() => dispatchSetupGoto(this, "cloud-restore")}
-          >Restore from Waitron Cloud</wt-button
+          >${t("restore.cloud_restore")}</wt-button
         >
       </p>
-      <p>
-        Use cold recovery only when no other server is still running with newer restaurant data.
-      </p>
+      <p>${t("restore.intro")}</p>
       <label class="field">
-        Backup file <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label="Help with backup file"
-          >Choose the encrypted backup from the server you are recovering.</wt-help-tooltip
+        ${t("restore.backup_file")} <span aria-hidden="true">*</span>
+        <wt-help-tooltip aria-label=${t("restore.backup_file_help_label")}
+          >${t("restore.backup_file_help")}</wt-help-tooltip
         >
         <input
           name="backup"
@@ -129,12 +134,11 @@ export class SetupRestoreScreen extends LitElement {
           }}
         />
       </label>
-      ${this.showError && this.artifact === undefined ? html`<p class="error" id="artifact-error">Choose a backup file.</p>` : nothing}
+      ${this.showError && this.artifact === undefined ? html`<p class="error" id="artifact-error">${t("restore.backup_file_missing")}</p>` : nothing}
       <label class="field">
-        Recovery key <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label="Help with recovery key"
-          >Enter the recovery key saved for this backup. It unlocks the encrypted
-          backup.</wt-help-tooltip
+        ${t("restore.recovery_key")} <span aria-hidden="true">*</span>
+        <wt-help-tooltip aria-label=${t("restore.recovery_key_help_label")}
+          >${t("restore.recovery_key_help")}</wt-help-tooltip
         >
         <input
           name="recovery-key"
@@ -150,12 +154,11 @@ export class SetupRestoreScreen extends LitElement {
           }}
         />
       </label>
-      ${this.showError && this.recoveryKey === "" ? html`<p class="error" id="recovery-key-error">Enter the recovery key.</p>` : nothing}
+      ${this.showError && this.recoveryKey === "" ? html`<p class="error" id="recovery-key-error">${t("restore.recovery_key_missing")}</p>` : nothing}
       <label class="field">
-        Backup environment <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label="Help with backup environment"
-          >Choose the environment the backup came from. A preparation or demo backup cannot become a
-          Live database.</wt-help-tooltip
+        ${t("restore.environment")} <span aria-hidden="true">*</span>
+        <wt-help-tooltip aria-label=${t("restore.environment_help_label")}
+          >${t("restore.environment_help")}</wt-help-tooltip
         >
         <select
           name="environment"
@@ -167,9 +170,11 @@ export class SetupRestoreScreen extends LitElement {
               "production" | "preproduction";
           }}
         >
-          <option value="production" .selected=${this.environment === "production"}>Live</option>
+          <option value="production" .selected=${this.environment === "production"}>
+            ${t("restore.environment_live")}
+          </option>
           <option value="preproduction" .selected=${this.environment === "preproduction"}>
-            Preparation or demo
+            ${t("restore.environment_preproduction")}
           </option>
         </select>
       </label>
@@ -186,13 +191,12 @@ export class SetupRestoreScreen extends LitElement {
             this.acknowledged = (event.currentTarget as HTMLInputElement).checked;
           }}
         />
-        I confirm no other running server has newer restaurant data.
-        <wt-help-tooltip aria-label="Help with recovery confirmation"
-          >Check every other server this restaurant still has before restoring. A backup may be
-          older than a server that is still running.</wt-help-tooltip
+        ${t("restore.acknowledge")}
+        <wt-help-tooltip aria-label=${t("restore.acknowledge_help_label")}
+          >${t("restore.acknowledge_help")}</wt-help-tooltip
         >
       </label>
-      ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">Confirm that no other running server has newer data.</p>` : nothing}
+      ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">${t("restore.acknowledge_missing")}</p>` : nothing}
       ${oldBoxQuestion({
         liveSince: this.#askingOldBox ? this.liveSince : undefined,
         liveUnknown: this.#askingOldBox && this.liveUnknown,
@@ -206,8 +210,8 @@ export class SetupRestoreScreen extends LitElement {
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
-              heading="There is a problem with this form"
-              .errors=${[this.artifact === undefined ? "Choose a backup file." : "", this.recoveryKey === "" ? "Enter the recovery key." : "", !this.acknowledged ? "Confirm that no other running server has newer data." : "", this.#oldBoxUnanswered ? OLD_BOX_PROBLEM : ""].filter(Boolean)}
+              heading=${t("restore.error_heading")}
+              .errors=${[this.artifact === undefined ? t("restore.backup_file_missing") : "", this.recoveryKey === "" ? t("restore.recovery_key_missing") : "", !this.acknowledged ? t("restore.acknowledge_missing") : "", this.#oldBoxUnanswered ? oldBoxProblem() : ""].filter(Boolean)}
             ></wt-form-error-summary>`
           : this.errorMessage === undefined
             ? html``
@@ -219,10 +223,10 @@ export class SetupRestoreScreen extends LitElement {
           slot="cancel"
           data-test="back"
           @click=${() => dispatchSetupGoto(this, "role")}
-          >Back</wt-button
+          >${t("restore.back")}</wt-button
         >
         <wt-button variant="primary" data-test="restore" @click=${() => this.#restore()}
-          >Restore backup</wt-button
+          >${t("restore.submit")}</wt-button
         >
       </wt-form-actions>
     `;

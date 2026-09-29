@@ -119,6 +119,18 @@ describe("SetupApi", () => {
     });
   });
 
+  it("provision asks for the admin's language in Accept-Language when it is given one", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ provisioned: true }));
+    const api = new SetupApi("", fetchImpl);
+    await api.provision(provisionBody, "es-ES");
+    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/provision", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json", "accept-language": "es-ES" },
+      body: JSON.stringify(provisionBody),
+    });
+  });
+
   it("surfaces BOTH the code and params.field on a 400 setup.request_invalid", async () => {
     const fetchImpl = vi
       .fn()

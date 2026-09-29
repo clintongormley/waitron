@@ -11,11 +11,9 @@ import {
   dispatchBucketRestoreRequested,
   dispatchSetupGoto,
 } from "../events.js";
-import { OLD_BOX_PROBLEM, oldBoxQuestion } from "./old-box-question.js";
-
-const KIT_PROBLEM = "Upload or paste the recovery kit.";
-const ACKNOWLEDGE_PROBLEM = "Confirm that no other running server has newer data.";
-const VENUE_PROBLEM = "Confirm that this is your business.";
+import { t, format } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { oldBoxProblem, oldBoxQuestion } from "./old-box-question.js";
 
 /** The restored copy's names, from `restore.stream_venue_unconfirmed` (#646). */
 export interface RestoredVenue {
@@ -84,6 +82,11 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private venueConfirmed = false;
   @state() private showError = false;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("request") && this.request !== undefined) {
       this.kit = this.request.kit;
@@ -136,10 +139,10 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   #problems(): string[] {
     return [
-      this.#kitMissing ? KIT_PROBLEM : "",
-      !this.acknowledged ? ACKNOWLEDGE_PROBLEM : "",
-      this.#oldBoxUnanswered ? OLD_BOX_PROBLEM : "",
-      this.#venueUnconfirmed ? VENUE_PROBLEM : "",
+      this.#kitMissing ? t("restore_bucket.kit_missing") : "",
+      !this.acknowledged ? t("restore_bucket.acknowledge_missing") : "",
+      this.#oldBoxUnanswered ? oldBoxProblem() : "",
+      this.#venueUnconfirmed ? t("restore_bucket.venue_missing") : "",
     ].filter(Boolean);
   }
 
@@ -167,8 +170,8 @@ export class SetupRestoreBucketScreen extends LitElement {
     if (venue === undefined) return nothing;
     const invalid = this.showError && this.#venueUnconfirmed;
     return html`<p data-test="venue">
-        The copy in the bucket belongs to <strong>${venue.legalName}</strong> (tax id
-        ${venue.taxId}), location ${venue.locationName}.
+        ${t("restore_bucket.venue_owner")} <strong>${venue.legalName}</strong>
+        ${format("restore_bucket.venue_details", { taxId: venue.taxId, location: venue.locationName })}
       </p>
       <label class="field">
         <input
@@ -183,26 +186,20 @@ export class SetupRestoreBucketScreen extends LitElement {
             this.venueConfirmed = (e.currentTarget as HTMLInputElement).checked;
           }}
         />
-        This is my business. Restore it onto this server.
+        ${t("restore_bucket.venue_confirm")}
       </label>
-      ${invalid ? html`<p class="error" id="venue-confirmed-error">${VENUE_PROBLEM}</p>` : nothing}`;
+      ${invalid ? html`<p class="error" id="venue-confirmed-error">${t("restore_bucket.venue_missing")}</p>` : nothing}`;
   }
 
   override render(): TemplateResult {
     const kitInvalid = this.showError && this.#kitMissing;
     const acknowledgeInvalid = this.showError && !this.acknowledged;
     return html`
-      <h1>Restore from my bucket</h1>
-      <p>
-        Rebuild this server from the copy the old server kept in your storage bucket. Use this only
-        when the old server is gone. You need the recovery kit, and nothing else.
-      </p>
-      <p class="sensitive" data-test="kit-sensitive">
-        The recovery kit is as sensitive as the recovery key: anyone holding it can read every sale
-        and every stored credential in the bucket copy. Enter it only here.
-      </p>
+      <h1>${t("restore_bucket.heading")}</h1>
+      <p>${t("restore_bucket.intro")}</p>
+      <p class="sensitive" data-test="kit-sensitive">${t("restore_bucket.sensitive")}</p>
       <label class="field">
-        Recovery kit file
+        ${t("restore_bucket.kit_file")}
         <input
           name="recovery-kit-file"
           type="file"
@@ -211,10 +208,9 @@ export class SetupRestoreBucketScreen extends LitElement {
         />
       </label>
       <label class="field">
-        Recovery kit <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label="Help with the recovery kit"
-          >Choose the kit file above, or paste the kit here: one long line starting with
-          WAITRON-RECOVERY-KIT-1.</wt-help-tooltip
+        ${t("restore_bucket.kit")} <span aria-hidden="true">*</span>
+        <wt-help-tooltip aria-label=${t("restore_bucket.kit_help_label")}
+          >${t("restore_bucket.kit_help")}</wt-help-tooltip
         >
         <textarea
           name="recovery-kit"
@@ -232,12 +228,11 @@ export class SetupRestoreBucketScreen extends LitElement {
           }}
         ></textarea>
       </label>
-      ${kitInvalid ? html`<p class="error" id="kit-error">${KIT_PROBLEM}</p>` : nothing}
+      ${kitInvalid ? html`<p class="error" id="kit-error">${t("restore_bucket.kit_missing")}</p>` : nothing}
       <label class="field">
-        Environment <span aria-hidden="true">*</span>
-        <wt-help-tooltip aria-label="Help with environment"
-          >Choose the environment the old server ran in. A preparation or demo copy cannot become a
-          Live database.</wt-help-tooltip
+        ${t("restore_bucket.environment")} <span aria-hidden="true">*</span>
+        <wt-help-tooltip aria-label=${t("restore_bucket.environment_help_label")}
+          >${t("restore_bucket.environment_help")}</wt-help-tooltip
         >
         <select
           name="environment"
@@ -248,9 +243,11 @@ export class SetupRestoreBucketScreen extends LitElement {
               "production" | "preproduction";
           }}
         >
-          <option value="production" .selected=${this.environment === "production"}>Live</option>
+          <option value="production" .selected=${this.environment === "production"}>
+            ${t("restore_bucket.environment_live")}
+          </option>
           <option value="preproduction" .selected=${this.environment === "preproduction"}>
-            Preparation or demo
+            ${t("restore_bucket.environment_preproduction")}
           </option>
         </select>
       </label>
@@ -267,9 +264,9 @@ export class SetupRestoreBucketScreen extends LitElement {
             this.acknowledged = (e.currentTarget as HTMLInputElement).checked;
           }}
         />
-        I confirm no other running server has newer restaurant data.
+        ${t("restore_bucket.acknowledge")}
       </label>
-      ${acknowledgeInvalid ? html`<p class="error" id="acknowledge-error">${ACKNOWLEDGE_PROBLEM}</p>` : nothing}
+      ${acknowledgeInvalid ? html`<p class="error" id="acknowledge-error">${t("restore_bucket.acknowledge_missing")}</p>` : nothing}
       ${oldBoxQuestion({
         liveSince: this.#askingOldBox ? this.liveSince : undefined,
         liveUnknown: this.#askingOldBox && this.liveUnknown,
@@ -284,7 +281,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
-              heading="There is a problem with this form"
+              heading=${t("restore_bucket.error_heading")}
               .errors=${this.#problems()}
             ></wt-form-error-summary>`
           : this.errorMessage === undefined
@@ -297,10 +294,10 @@ export class SetupRestoreBucketScreen extends LitElement {
           slot="cancel"
           data-test="back"
           @click=${() => dispatchSetupGoto(this, "role")}
-          >Back</wt-button
+          >${t("restore_bucket.back")}</wt-button
         >
         <wt-button variant="primary" data-test="restore" @click=${() => this.#restore()}
-          >Restore from my bucket</wt-button
+          >${t("restore_bucket.submit")}</wt-button
         >
       </wt-form-actions>
     `;

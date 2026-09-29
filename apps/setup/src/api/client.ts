@@ -194,8 +194,17 @@ export class SetupApi {
     return this.#request<SetupStatus>("/setup-api/status", "GET");
   }
 
-  provision(body: ProvisionBody): Promise<ProvisionResult> {
-    return this.#request<ProvisionResult>("/setup-api/provision", "POST", body);
+  /**
+   * The server takes the admin account's language from `Accept-Language`, so `locale` is sent there
+   * only when the operator chose one; otherwise the browser's own header stands.
+   */
+  provision(body: ProvisionBody, locale?: string): Promise<ProvisionResult> {
+    return this.#request<ProvisionResult>(
+      "/setup-api/provision",
+      "POST",
+      body,
+      locale === undefined ? {} : { "accept-language": locale },
+    );
   }
 
   adopt(body: AdoptBody): Promise<AdoptOutcome> {
@@ -282,7 +291,12 @@ export class SetupApi {
     return this.#request<FiscalReadinessResult>("/setup-api/fiscal-test", "POST", body);
   }
 
-  async #request<T>(path: string, method: string, body?: unknown): Promise<T> {
+  async #request<T>(
+    path: string,
+    method: string,
+    body?: unknown,
+    headers: Record<string, string> = {},
+  ): Promise<T> {
     const fetchImpl = this.#fetchImpl;
     const init: RequestInit =
       body === undefined
@@ -290,7 +304,7 @@ export class SetupApi {
         : {
             method,
             credentials: "include",
-            headers: { "content-type": "application/json" },
+            headers: { "content-type": "application/json", ...headers },
             body: JSON.stringify(body),
           };
     const res = await fetchImpl(this.#baseUrl + path, init);

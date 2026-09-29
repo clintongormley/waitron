@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./mode-screen.js";
 import type { SetupModeScreen } from "./mode-screen.js";
 
@@ -18,7 +19,10 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupModeScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 describe("setup-mode-screen", () => {
   it("renders the four top-level onboarding choices", async () => {
@@ -147,5 +151,52 @@ describe("setup-mode-screen", () => {
   it("shows no environment line before the shell has read the status", async () => {
     const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
     expect(q(el, "[data-test=environment]")).toBeNull();
+  });
+});
+
+describe("setup-mode-screen in Spanish", () => {
+  const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
+
+  it("offers every choice and the live warning in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      certificateNote: true,
+      environment: "production",
+    });
+    expect(text(q(el, "h1")!)).toBe("Configura este servidor Waitron");
+    expect(text(q(el, "[data-test=trust-help]")!)).toBe("abre la ayuda sobre el certificado");
+    expect(text(q(el, "[data-test=production-warning]")!)).toBe(
+      "Este servidor está marcado para producción: al configurarlo se envían registros reales a la AEAT.",
+    );
+    expect(text(q(el, "[data-test=choose-demo]")!)).toBe("Configurar un servidor de demostración");
+    q(el, "[data-test=choose-live]")!.click();
+    await el.updateComplete;
+    expect(text(q(el, "h2")!)).toBe("Esto es permanente");
+    expect(q(el, "[data-test=understand]")!.getAttribute("label")).toBe(
+      "Entiendo que no se puede deshacer",
+    );
+    expect(text(q(el, "[data-test=confirm-live]")!)).toBe("Configurar este servidor en vivo");
+  });
+
+  it("names the box environment in Spanish", async () => {
+    setLocale("es-ES");
+    const production = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      environment: "production",
+    });
+    expect(text(q(production.el, "[data-test=environment]")!)).toBe("producción");
+    const preproduction = await mountWidget<SetupModeScreen>("setup-mode-screen", {
+      environment: "preproduction",
+    });
+    expect(text(q(preproduction.el, "[data-test=environment]")!)).toBe("preproducción");
+  });
+
+  it("switches language while mounted and keeps the live confirm open", async () => {
+    const { el } = await mountWidget<SetupModeScreen>("setup-mode-screen", {});
+    q(el, "[data-test=choose-live]")!.click();
+    await el.updateComplete;
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(text(q(el, "h1")!)).toBe("Configura este servidor Waitron");
+    expect(text(q(el, "[data-test=live-cancel]")!)).toBe("Volver");
   });
 });

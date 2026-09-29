@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
 import "./cloud-restore-screen.js";
@@ -368,5 +369,35 @@ describe("Cloud restore screen listing what is still unanswered", () => {
     expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
     await tick(el, "[data-test=acknowledge]");
     expect(await summaryItems(el)).toEqual([]);
+  });
+});
+
+describe("Cloud restore screen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("walks through the approved snapshot in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+    });
+    expect(q(el, "h1")!.textContent).toBe("Restaurar desde Waitron Cloud");
+    expect(q(el, "[data-test=open-cloud]")!.textContent).toBe("Abrir Waitron Cloud");
+    expect(q(el, "[data-test=restore]")!.textContent).toBe("Restaurar esta instantánea");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([
+      "Confirma que el servidor anterior y los demás servidores que queden están detenidos, y que aceptas perder los cambios posteriores a esta instantánea.",
+    ]);
+  });
+
+  it("switches language live, keeping the acknowledgement already ticked", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+    });
+    await tick(el, "[data-test=acknowledge]");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent).toBe("Restaurar desde Waitron Cloud");
+    expect((q(el, "[data-test=acknowledge]") as HTMLInputElement).checked).toBe(true);
   });
 });

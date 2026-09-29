@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale, t } from "../i18n/t.js";
 import "./venue-screen.js";
 import type { SetupVenueScreen } from "./venue-screen.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -104,6 +105,19 @@ const EXPECTED_VENUE = {
 afterEach(cleanupWidgets);
 
 describe("setup-venue-screen", () => {
+  it("names the countries in the wizard's language", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+      const countries = [
+        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
+      ];
+      expect(countries.map((option) => option.textContent?.trim())).toEqual(["España"]);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
   it("collects every field and emits the nested venue patch, then a screen-agnostic advance", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
@@ -872,4 +886,60 @@ it("emits a country pack with no provinces or validators as the operator typed i
   } finally {
     packs.splice(packs.indexOf(SPARSE_PACK), 1);
   }
+});
+
+describe("setup-venue-screen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("shows its heading, labels, messages and buttons in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    expect(q(el, "h1")!.textContent).toBe("Tu tienda");
+    expect(q(el, "[data-test=legalName]")!.getAttribute("label")).toBe("Razón social");
+    expect(q(el, "[data-test=locale-ca-ES]")!.parentElement!.textContent!.trim()).toBe(
+      "Catalán (Català)",
+    );
+    q(el, "[data-test=next]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=legalName]")!.getAttribute("error")).toBe(
+      "Introduce la razón social.",
+    );
+    expect(q(el, "[data-test=legalName] wt-help-tooltip")!.getAttribute("aria-label")).toBe(
+      "Ayuda sobre la razón social",
+    );
+    expect(q(el, "[data-test=timeZone]")!.textContent).toBe("Zona horaria: Europe/Madrid");
+    expect(q(el, "[data-test=back]")!.textContent).toBe("Volver");
+  });
+
+  it("names English in Spanish followed by its own name, as it does the other languages", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    expect(q(el, "[data-test=locale-en-GB]")!.parentElement!.textContent!.trim()).toBe(
+      "Inglés (English)",
+    );
+  });
+
+  it("redraws a Demo legal-name refusal, shown on the location name, in Spanish", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      draft: { mode: "demo" },
+      invalidField: "legalName",
+    });
+    const english = q(el, "[data-test=name]")!.getAttribute("error");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "[data-test=name]")!.getAttribute("error")).toBe(t("server_fields.legal_name"));
+    expect(t("server_fields.legal_name")).not.toBe(english);
+  });
+
+  it("redraws in Spanish when the language is switched, keeping what was typed", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await type(el, "legalName", "Bar Pepe SL");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent).toBe("Tu tienda");
+    expect(q(el, "[data-test=legalName]")!.getAttribute("label")).toBe("Razón social");
+    expect((q(el, "[data-test=legalName]") as unknown as { value: string }).value).toBe(
+      "Bar Pepe SL",
+    );
+  });
 });

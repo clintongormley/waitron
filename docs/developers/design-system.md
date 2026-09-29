@@ -1380,3 +1380,4 @@ The till and dashboard language controls display the names from `SUPPORTED_LOCAL
 options load. Place the chooser at the bottom right, open its menu upwards, and leave enough bottom
 padding for the last content and action buttons to scroll clear of it. A signed-in operator's choice
 uses the existing preference write; login, pairing and kitchen-display choices are local UI changes.
+The setup wizard's chooser sits the same way, and its page's bottom margin gives the same clearance.

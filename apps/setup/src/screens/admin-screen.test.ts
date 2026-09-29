@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./admin-screen.js";
 import type { SetupAdminScreen } from "./admin-screen.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -28,7 +29,10 @@ async function type(el: SetupAdminScreen, field: string, value: string): Promise
   await el.updateComplete;
 }
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 describe("setup-admin-screen", () => {
   it("renders the email field as an email-typed wt-input", async () => {
@@ -402,5 +406,35 @@ it("resumes generating the display name after it is cleared", async () => {
   await type(el, "firstNames", "Alba");
   expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe(
     "Alba Gormley",
+  );
+});
+
+it("labels the account form and names a blank field in Spanish", async () => {
+  setLocale("es-ES");
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  expect(q(el, "h1")!.textContent!.trim()).toBe("Tu cuenta");
+  expect(q(el, "[data-test=firstNames]")!.getAttribute("label")).toBe("Nombre(s)");
+  expect(q(el, "[data-test=toggle-pin]")!.getAttribute("aria-label")).toBe("Mostrar PIN");
+  expect(q(el, "[data-test=next]")!.textContent!.trim()).toBe("Siguiente");
+  await type(el, "firstNames", "Clinton");
+  await type(el, "displayName", "Clinton");
+  await type(el, "email", "clinton@example.com");
+  await type(el, "password", "correct horse battery");
+  await type(el, "pin", "1234");
+  q(el, "[data-test=next]")!.click();
+  await el.updateComplete;
+  expect(await summaryItems(el)).toEqual(["Introduce tus apellidos."]);
+  expect(q(el, "[data-test=lastNames]")!.getAttribute("error")).toBe("Introduce tus apellidos.");
+});
+
+it("switches language while mounted and keeps what was typed", async () => {
+  const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+  await type(el, "email", "alba@example.com");
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(q(el, "h1")!.textContent!.trim()).toBe("Tu cuenta");
+  expect(q(el, "[data-test=email]")!.getAttribute("label")).toBe("Correo electrónico");
+  expect((q(el, "[data-test=email]") as HTMLElement & { value: string }).value).toBe(
+    "alba@example.com",
   );
 });

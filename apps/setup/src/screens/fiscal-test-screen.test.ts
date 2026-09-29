@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupFiscalTestScreen } from "./fiscal-test-screen.js";
 
@@ -53,5 +54,35 @@ describe("SetupFiscalTestScreen", () => {
     });
     const alert = el.shadowRoot!.querySelector("[role=alert]");
     expect(alert?.textContent).toBe("The fiscal test could not be started.");
+  });
+});
+
+describe("SetupFiscalTestScreen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("explains the test and its outcome in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupFiscalTestScreen>("setup-fiscal-test-screen", {
+      status: "rejected",
+    });
+    expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe("Comprueba la preparación fiscal");
+    expect(el.shadowRoot!.textContent).toContain("servicio de pruebas de la AEAT");
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      "La AEAT ha rechazado el envío de prueba.",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=run]")?.textContent).toBe(
+      "Hacer la prueba fiscal",
+    );
+  });
+
+  it("switches language live", async () => {
+    const { el } = await mountWidget<SetupFiscalTestScreen>("setup-fiscal-test-screen", {
+      running: true,
+    });
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=run]")?.textContent).toBe(
+      "Haciendo la prueba…",
+    );
   });
 });

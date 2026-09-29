@@ -7,16 +7,19 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
+import { format, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { certificateExportHelp } from "../certificate-export-help.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { AeatCertDraft, ProvisionBody } from "../api/client.js";
 
-/** The Spanish values are the server's contract (`isCertKind`); the labels gloss them in English. */
-const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: string }> = [
-  { value: "sello", label: "Company seal (sello)" },
-  { value: "representante", label: "Representative (representante)" },
+/** The Spanish values are the server's contract (`isCertKind`). */
+const CERT_KINDS: ReadonlyArray<{ value: AeatCertDraft["certKind"]; label: StringKey }> = [
+  { value: "sello", label: "cert.kind.sello" },
+  { value: "representante", label: "cert.kind.representante" },
 ];
 
 /** Everything after the first comma of the data URL is the base64 payload: the base64 alphabet has
@@ -101,6 +104,11 @@ export class SetupCertScreen extends LitElement {
 
   #seeded = false;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override willUpdate(): void {
     if (this.#seeded) return;
     this.#seeded = true;
@@ -177,18 +185,14 @@ export class SetupCertScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1>AEAT certificate</h1>
-      <p>
-        A live Spanish venue files invoices to AEAT with a certificate. Upload the certificate file
-        and enter its passphrase.
-      </p>
+      <h1>${t("cert.heading")}</h1>
+      <p>${t("cert.intro")}</p>
       ${certificateExportHelp(navigator.userAgent)}
       <label class="field file" ?invalid=${this.invalid.has("pfx")}>
         <span
-          >Certificate file (.pfx or .p12) *
-          <wt-help-tooltip aria-label="Help with certificate file"
-            >Choose the exported signing certificate, including its private key, so this server can
-            sign fiscal records.</wt-help-tooltip
+          >${t("cert.file_label")} *
+          <wt-help-tooltip aria-label=${t("cert.file_help_label")}
+            >${t("cert.file_help")}</wt-help-tooltip
           ></span
         >
         <input
@@ -205,40 +209,40 @@ export class SetupCertScreen extends LitElement {
       ${
         this.invalid.has("pfx")
           ? html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
-              Choose the certificate file.
+              ${t("cert.file_required")}
             </p>`
           : nothing
       }
       ${
         this.pfxBase64 !== ""
           ? html`<p class="file-status" data-test="file-status">
-              Certificate loaded${this.fileName === "" ? nothing : html` — ${this.fileName}`}.
+              ${this.fileName === "" ? t("cert.loaded") : format("cert.loaded_named", { name: this.fileName })}
             </p>`
           : nothing
       }
       <wt-input
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
         class="field"
-        label="Certificate passphrase"
+        label=${t("cert.passphrase_label")}
         name="certificate-passphrase"
         autocomplete="off"
         type=${this.passphraseVisible ? "text" : "password"}
         required
         data-test="passphrase"
-        error=${this.invalid.has("passphrase") ? "Enter the certificate passphrase." : ""}
+        error=${this.invalid.has("passphrase") ? t("cert.passphrase_required") : ""}
         ?invalid=${this.invalid.has("passphrase")}
         .value=${this.passphrase}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
       >
-        <wt-help-tooltip slot="help" aria-label="Help with certificate passphrase"
-          >Enter the password you chose when exporting this certificate file.</wt-help-tooltip
+        <wt-help-tooltip slot="help" aria-label=${t("cert.passphrase_help_label")}
+          >${t("cert.passphrase_help")}</wt-help-tooltip
         >
         <wt-button
           slot="end"
           variant="ghost"
           data-test="toggle-passphrase"
           aria-label=${
-            this.passphraseVisible ? "Hide certificate passphrase" : "Show certificate passphrase"
+            this.passphraseVisible ? t("cert.hide_passphrase") : t("cert.show_passphrase")
           }
           @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
           >${passwordIcon(this.passphraseVisible)}</wt-button
@@ -247,16 +251,15 @@ export class SetupCertScreen extends LitElement {
       ${
         this.invalid.has("passphrase")
           ? html`<p class="error" data-test="passphrase-field-error">
-              Enter the certificate passphrase.
+              ${t("cert.passphrase_required")}
             </p>`
           : nothing
       }
       <label class="field select">
         <span
-          >Certificate type *
-          <wt-help-tooltip aria-label="Help with certificate type"
-            >Select whether this is a company seal or representative certificate, matching the
-            certificate you exported.</wt-help-tooltip
+          >${t("cert.kind_label")} *
+          <wt-help-tooltip aria-label=${t("cert.kind_help_label")}
+            >${t("cert.kind_help")}</wt-help-tooltip
           ></span
         >
         <select
@@ -268,7 +271,7 @@ export class SetupCertScreen extends LitElement {
           ${CERT_KINDS.map(
             (kind) =>
               html`<option value=${kind.value} .selected=${kind.value === this.certKind}>
-                ${kind.label}
+                ${t(kind.label)}
               </option>`,
           )}
         </select>
@@ -277,16 +280,18 @@ export class SetupCertScreen extends LitElement {
         this.showError || this.fileReadFailed
           ? html`<wt-form-error-summary
               data-test="error"
-              heading="There is a problem with this form"
-              .errors=${this.fileReadFailed ? ["We couldn't read that file. Please choose the certificate file again."] : [...this.invalid].map((field) => (field === "pfx" ? "Choose the certificate file." : "Enter the certificate passphrase."))}
+              heading=${t("cert.error_heading")}
+              .errors=${this.fileReadFailed ? [t("cert.file_unreadable")] : [...this.invalid].map((field) => t(field === "pfx" ? "cert.file_required" : "cert.passphrase_required"))}
             ></wt-form-error-summary>`
           : nothing
       }
       <wt-form-actions>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-          >Back</wt-button
+          >${t("cert.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}>Next</wt-button>
+        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
+          >${t("cert.next")}</wt-button
+        >
       </wt-form-actions>
     `;
   }

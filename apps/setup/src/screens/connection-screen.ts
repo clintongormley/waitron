@@ -3,6 +3,8 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { helpLinkStyles, actionsStyles, errorStyles } from "../form-styles.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 /**
  * `isSecureContext` and a successful fetch cannot tell a trusted certificate from a warning the
@@ -44,14 +46,20 @@ export class SetupConnectionScreen extends LitElement {
    * still needs trusting to use this server. */
   @property({ type: Boolean }) setupUnavailable = false;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override render(): TemplateResult {
     return html`
-      <h1>Is your connection to this page secure?</h1>
+      <h1>${t("connection.heading")}</h1>
       <p>
-        Check your browser's address bar to see whether this page is secure or not. If it says
-        <span class="warning-words" data-test="warning-words">“not secure”</span>, then you need to
+        ${t("connection.check_address_bar")}
+        <span class="warning-words" data-test="warning-words">${t("connection.warning_words")}</span
+        >${t("connection.then_you_need_to")}
         <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-          >install this server's certificate</a
+          >${t("connection.install_certificate")}</a
         >.
       </p>
       ${this.errorMessage ? html`<p class="error" role="alert">${this.errorMessage}</p>` : nothing}
@@ -59,14 +67,14 @@ export class SetupConnectionScreen extends LitElement {
         this.setupUnavailable
           ? nothing
           : html`<div class="actions">
-              <p class="otherwise" data-test="otherwise">Otherwise:</p>
+              <p class="otherwise" data-test="otherwise">${t("connection.otherwise")}</p>
               <wt-button
                 variant="primary"
                 data-test="continue"
                 ?disabled=${this.checking}
                 @click=${() => this.dispatchEvent(new CustomEvent("connection-continue"))}
               >
-                ${this.checking ? "Checking connection…" : "Continue to setup"}
+                ${this.checking ? t("connection.checking") : t("connection.continue")}
               </wt-button>
             </div>`
       }

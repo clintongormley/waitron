@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { RestoreRequestDetail } from "../events.js";
 import { SetupRestoreScreen } from "./restore-screen.js";
@@ -243,5 +244,50 @@ describe("SetupRestoreScreen", () => {
     expect(goto.mock.calls.map(([event]) => (event as CustomEvent).detail.screen)).toEqual([
       "role",
     ]);
+  });
+});
+
+describe("SetupRestoreScreen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("asks for the backup, the key and the confirmation in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    expect(q(el, "h1")!.textContent).toBe("Restaurar desde una copia de seguridad");
+    expect(el.shadowRoot!.textContent).toContain("Archivo de copia de seguridad");
+    expect(q(el, "[data-test=restore]")!.textContent).toBe("Restaurar la copia");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([
+      "Elige un archivo de copia de seguridad.",
+      "Introduce la clave de recuperación.",
+      "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
+    ]);
+  });
+
+  it("asks the old-server question in Spanish, with the time in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+      liveSince: "2026-09-23T11:58:00.000Z",
+    });
+    const warning = q(el, "[data-test=live-warning]")!.textContent!;
+    expect(warning).toContain("El servidor anterior escribió en su bucket el");
+    expect(warning).toContain("Apágalo para siempre antes de continuar.");
+    expect(q(el, "[data-test=live-warning] time")!.textContent).toContain("sept");
+    await fill(el, { artifact: true, recoveryKey: true, acknowledge: true });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(q(el, "#old-box-gone-error")!.textContent).toBe(
+      "Confirma que el servidor anterior está apagado para siempre.",
+    );
+  });
+
+  it("switches language live, keeping the recovery key already typed", async () => {
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    await fill(el, { recoveryKey: true });
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent).toBe("Restaurar desde una copia de seguridad");
+    expect(q<HTMLInputElement>(el, "[data-test=recovery-key]")!.value).toBe("recovery-key");
   });
 });

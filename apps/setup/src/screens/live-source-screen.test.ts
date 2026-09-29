@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { SetupLiveSourceScreen } from "./live-source-screen.js";
 
@@ -135,5 +136,32 @@ describe("SetupLiveSourceScreen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=toggle-passphrase]")!.click();
     await el.updateComplete;
     expect(passphrase.getAttribute("type")).toBe("text");
+  });
+});
+
+describe("SetupLiveSourceScreen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("offers both paths and explains its refusals in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+    expect(q(el, "h1")!.textContent).toBe("Lleva tu restaurante preparado a producción");
+    expect(q(el, "wt-input")!.getAttribute("label")).toBe("Contraseña de exportación");
+    expect(q(el, "[data-test=empty]")!.textContent).toBe("Empezar desde cero");
+    q(el, "[data-test=import]")!.click();
+    await el.updateComplete;
+    expect(fieldErrors(el)).toEqual([
+      "Elige una exportación de configuración.",
+      "Introduce una contraseña de al menos 12 caracteres.",
+    ]);
+  });
+
+  it("switches language live, keeping the passphrase already typed", async () => {
+    const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+    await typePassphrase(el, "twelve-chars");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent).toBe("Lleva tu restaurante preparado a producción");
+    expect((q(el, "wt-input") as HTMLElement & { value: string }).value).toBe("twelve-chars");
   });
 });

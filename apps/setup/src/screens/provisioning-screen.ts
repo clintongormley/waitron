@@ -4,6 +4,8 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { helpLinkStyles, actionsStyles, errorStyles, statusStyles } from "../form-styles.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { t } from "../i18n/t.js";
 
 /** Renders the provision state the shell maps onto its props; the shell does the POST
  * (`apps/setup/src/setup-app.ts`). */
@@ -34,6 +36,11 @@ export class SetupProvisioningScreen extends LitElement {
 
   @property({ attribute: false }) reload: () => void = location.reload.bind(location);
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   #retry(): void {
     dispatchProvisionRequested(this);
   }
@@ -41,14 +48,14 @@ export class SetupProvisioningScreen extends LitElement {
   override render(): TemplateResult {
     if (this.message !== undefined) {
       return html`
-        <h1>Provisioning</h1>
+        <h1>${t("provisioning.failed_heading")}</h1>
         <p class="error" role="alert" data-test="error">${this.message}</p>
         <p>
-          If the browser shows a certificate warning, or this page will not connect,
+          ${t("provisioning.trust_help_before")}
           <a href="/setup/trust" target="_blank" rel="noopener" data-test="trust-help"
-            >open certificate and connection help</a
+            >${t("provisioning.trust_help_link")}</a
           >
-          in a new tab. Your entries stay in this tab until you close or reload it.
+          ${t("provisioning.trust_help_after")}
         </p>
         ${
           this.canReset
@@ -57,13 +64,13 @@ export class SetupProvisioningScreen extends LitElement {
                   variant="primary"
                   data-test="reset"
                   @click=${() => dispatchSetupGoto(this, "reset")}
-                  >Reset this server</wt-button
+                  >${t("provisioning.reset")}</wt-button
                 >
               </div>`
             : this.canRetry
               ? html`<div class="actions">
                   <wt-button variant="primary" data-test="retry" @click=${() => this.#retry()}
-                    >Try again</wt-button
+                    >${t("provisioning.retry")}</wt-button
                   >
                 </div>`
               : this.reloadLabel === undefined
@@ -77,11 +84,11 @@ export class SetupProvisioningScreen extends LitElement {
       `;
     }
     return html`
-      <h1>Provisioning this server</h1>
-      <p class="status" data-test="status">
-        Provisioning… this can take a moment. Keep this page open.
-      </p>
-      <wt-button variant="primary" data-test="provision" ?disabled=${true}>Provisioning…</wt-button>
+      <h1>${t("provisioning.heading")}</h1>
+      <p class="status" data-test="status">${t("provisioning.status")}</p>
+      <wt-button variant="primary" data-test="provision" ?disabled=${true}
+        >${t("provisioning.busy")}</wt-button
+      >
     `;
   }
 }

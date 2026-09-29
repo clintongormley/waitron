@@ -5,6 +5,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import type { ConfigurationPreview } from "../api/client.js";
 import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto } from "../events.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 @customElement("setup-configuration-preview-screen")
 export class SetupConfigurationPreviewScreen extends LitElement {
@@ -28,16 +30,20 @@ export class SetupConfigurationPreviewScreen extends LitElement {
 
   @property({ attribute: false }) preview?: ConfigurationPreview;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override render(): TemplateResult {
-    if (this.preview === undefined) return html`<h1>Review prepared configuration</h1>`;
+    if (this.preview === undefined) return html`<h1>${t("config_preview.heading")}</h1>`;
     return html`
-      <h1>Review prepared configuration</h1>
+      <h1>${t("config_preview.heading")}</h1>
       <p>
-        This will create a fresh production restaurant for
-        <strong>${this.preview.venue.legalName}</strong>. Practice sales and fiscal records are not
-        included.
+        ${t("config_preview.creates_for")}
+        <strong>${this.preview.venue.legalName}</strong>${t("config_preview.not_included")}
       </p>
-      <h2>Configuration to copy</h2>
+      <h2>${t("config_preview.copy_heading")}</h2>
       <dl>
         ${Object.entries(this.preview.counts).map(
           ([name, count]) =>
@@ -45,23 +51,23 @@ export class SetupConfigurationPreviewScreen extends LitElement {
               <dd>${count}</dd>`,
         )}
       </dl>
-      <h2>Reconnect after setup</h2>
+      <h2>${t("config_preview.reconnect_heading")}</h2>
       <p>
         ${
           this.preview.reconnect.length === 0
-            ? "No hardware reconnection is listed."
+            ? t("config_preview.no_reconnect")
             : this.preview.reconnect.join(", ")
         }
       </p>
       <div class="actions">
         <wt-button variant="ghost" @click=${() => dispatchSetupGoto(this, "live-source")}
-          >Back</wt-button
+          >${t("config_preview.back")}</wt-button
         >
         <wt-button
           variant="primary"
           data-test="continue"
           @click=${() => dispatchSetupGoto(this, "admin")}
-          >Continue</wt-button
+          >${t("config_preview.continue")}</wt-button
         >
       </div>
     `;

@@ -5,6 +5,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-card.js";
 import { actionsStyles } from "../form-styles.js";
 import { dispatchSetupGoto } from "../events.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 /** Why the mirror card promises so little: `PendingAdoption` in `apps/server/src/finish-adoption.ts`. */
 @customElement("setup-role-screen")
@@ -40,63 +42,51 @@ export class SetupRoleScreen extends LitElement {
     `,
   ];
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override render(): TemplateResult {
     return html`
-      <h1>Join or recover an existing restaurant</h1>
-      <p class="intro">
-        Restore a backup onto this server when no other server is still running with newer
-        restaurant data, or rebuild onto it from the continuous copy in your own storage bucket when
-        the old server is gone. Adding this server as a mirror does not work in this version — the
-        card below says what happens if you try.
-      </p>
+      <h1>${t("role.heading")}</h1>
+      <p class="intro">${t("role.intro")}</p>
 
       <div class="choices">
         <wt-card raised>
-          <h2>Add a mirror node</h2>
-          <p class="choice-copy">
-            This does not work in this version. The server signs in to the restaurant's primary and
-            restarts, then stops part-way through joining, and it will not get any further however
-            many times you restart it. It ends up holding none of the restaurant's information, with
-            no dashboard and no till, and it cannot sell or file anything. This setup wizard does
-            not open on this server again afterwards.
-          </p>
+          <h2>${t("role.mirror.heading")}</h2>
+          <p class="choice-copy">${t("role.mirror.copy")}</p>
           <wt-button
             variant="primary"
             data-test="choose-mirror"
             @click=${() => dispatchSetupGoto(this, "connect")}
-            >Add a mirror</wt-button
+            >${t("role.mirror.button")}</wt-button
           >
         </wt-card>
         <wt-card raised>
-          <h2>Restore from backup</h2>
-          <p class="choice-copy">
-            Recover onto this fresh server from an encrypted Waitron backup when no other server is
-            still running with newer restaurant data.
-          </p>
+          <h2>${t("role.restore.heading")}</h2>
+          <p class="choice-copy">${t("role.restore.copy")}</p>
           <wt-button
             variant="secondary"
             data-test="choose-restore"
             @click=${() => dispatchSetupGoto(this, "restore")}
-            >Restore a backup</wt-button
+            >${t("role.restore.button")}</wt-button
           >
         </wt-card>
         <wt-card raised>
-          <h2>Restore from my bucket</h2>
-          <p class="choice-copy">
-            Rebuild onto this fresh server from the continuous copy in your own storage bucket, when
-            the old server is gone. You need the recovery kit.
-          </p>
+          <h2>${t("role.bucket.heading")}</h2>
+          <p class="choice-copy">${t("role.bucket.copy")}</p>
           <wt-button
             variant="secondary"
             data-test="choose-restore-bucket"
             @click=${() => dispatchSetupGoto(this, "restore-bucket")}
-            >Restore from my bucket</wt-button
+            >${t("role.bucket.button")}</wt-button
           >
         </wt-card>
       </div>
       <div class="actions">
         <wt-button variant="ghost" data-test="back" @click=${() => dispatchSetupGoto(this, "mode")}
-          >Back</wt-button
+          >${t("role.back")}</wt-button
         >
       </div>
     `;

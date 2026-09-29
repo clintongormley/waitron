@@ -12,8 +12,64 @@ import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
+import { t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 type AdminField = "firstNames" | "lastNames" | "displayName" | "email" | "password" | "pin";
+
+interface FieldText {
+  label: StringKey;
+  error: StringKey;
+  summary: StringKey;
+  helpLabel: StringKey;
+  help: StringKey;
+}
+
+const FIELD_TEXT: Record<AdminField, FieldText> = {
+  firstNames: {
+    label: "admin.first_names.label",
+    error: "admin.first_names.error",
+    summary: "admin.first_names.summary",
+    helpLabel: "admin.first_names.help_label",
+    help: "admin.first_names.help",
+  },
+  lastNames: {
+    label: "admin.last_names.label",
+    error: "admin.last_names.error",
+    summary: "admin.last_names.summary",
+    helpLabel: "admin.last_names.help_label",
+    help: "admin.last_names.help",
+  },
+  displayName: {
+    label: "admin.display_name.label",
+    error: "admin.display_name.error",
+    summary: "admin.display_name.error",
+    helpLabel: "admin.display_name.help_label",
+    help: "admin.display_name.help",
+  },
+  email: {
+    label: "admin.email.label",
+    error: "admin.email.error",
+    summary: "admin.email.error",
+    helpLabel: "admin.email.help_label",
+    help: "admin.email.help",
+  },
+  password: {
+    label: "admin.password.label",
+    error: "admin.password.error",
+    summary: "admin.password.error",
+    helpLabel: "admin.password.help_label",
+    help: "admin.password.help",
+  },
+  pin: {
+    label: "admin.pin.label",
+    error: "admin.pin.error",
+    summary: "admin.pin.summary",
+    helpLabel: "admin.pin.help_label",
+    help: "admin.pin.help",
+  },
+};
 
 @customElement("setup-admin-screen")
 export class SetupAdminScreen extends LitElement {
@@ -45,6 +101,11 @@ export class SetupAdminScreen extends LitElement {
   @state() private showError = false;
 
   #seeded = false;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   override willUpdate(): void {
     if (this.#seeded) return;
@@ -117,7 +178,8 @@ export class SetupAdminScreen extends LitElement {
     dispatchSetupGoto(this, "mode");
   }
 
-  #field(label: string, key: AdminField, type = "text"): TemplateResult {
+  #field(key: AdminField, type = "text"): TemplateResult {
+    const text = FIELD_TEXT[key];
     const fieldPurpose = {
       firstNames: { name: "given-name", autocomplete: "given-name" },
       lastNames: { name: "family-name", autocomplete: "family-name" },
@@ -129,27 +191,33 @@ export class SetupAdminScreen extends LitElement {
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
-      label=${label}
+      label=${t(text.label)}
       data-test=${key}
       name=${fieldPurpose.name}
       autocomplete=${fieldPurpose.autocomplete}
       type=${this.visible.has(key) ? "text" : type}
       required
-      error=${this.invalid.has(key) ? `Enter your ${label.toLowerCase()}.` : ""}
+      error=${this.invalid.has(key) ? t(text.error) : ""}
       ?invalid=${this.invalid.has(key)}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
     >
-      <wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}>
-        ${{ firstNames: "Your first name, or names, as they appear on your ID.", lastNames: "Your surname, or surnames, as they appear on your ID.", displayName: "Use the name your colleagues will see in Waitron.", email: "Use your email to sign in to the dashboard and recover your account.", password: "Choose a password for signing in to the dashboard.", pin: "Choose a numeric PIN for quick sign-in at the till." }[key]}
-      </wt-help-tooltip>
+      <wt-help-tooltip slot="help" aria-label=${t(text.helpLabel)}>${t(text.help)}</wt-help-tooltip>
       ${
         type === "password"
           ? html`<wt-button
               slot="end"
               variant="ghost"
               data-test=${`toggle-${key}`}
-              aria-label=${`${this.visible.has(key) ? "Hide" : "Show"} ${key === "pin" ? "PIN" : "password"}`}
+              aria-label=${t(
+                key === "pin"
+                  ? this.visible.has(key)
+                    ? "admin.hide_pin"
+                    : "admin.show_pin"
+                  : this.visible.has(key)
+                    ? "admin.hide_password"
+                    : "admin.show_password",
+              )}
               @click=${() => {
                 const visible = new Set(this.visible);
                 if (visible.has(key)) visible.delete(key);
@@ -165,25 +233,27 @@ export class SetupAdminScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`
-      <h1>Your account</h1>
-      <p>Create the account that manages this server. You can add more people later.</p>
-      ${this.#field("First name(s)", "firstNames")} ${this.#field("Last name(s)", "lastNames")}
-      ${this.#field("Display name", "displayName")} ${this.#field("Email", "email", "email")}
-      ${this.#field("Password", "password", "password")} ${this.#field("PIN", "pin", "password")}
+      <h1>${t("admin.heading")}</h1>
+      <p>${t("admin.intro")}</p>
+      ${this.#field("firstNames")} ${this.#field("lastNames")} ${this.#field("displayName")}
+      ${this.#field("email", "email")} ${this.#field("password", "password")}
+      ${this.#field("pin", "password")}
       ${
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
-              heading="There is a problem with this form"
-              .errors=${[...this.invalid].map((key) => `Enter your ${{ firstNames: "first name", lastNames: "last name", displayName: "display name", email: "email", password: "password", pin: "PIN" }[key]}.`)}
+              heading=${t("admin.error_heading")}
+              .errors=${[...this.invalid].map((key) => t(FIELD_TEXT[key].summary))}
             ></wt-form-error-summary>`
           : nothing
       }
       <wt-form-actions>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-          >Back</wt-button
+          >${t("admin.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}>Next</wt-button>
+        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
+          >${t("admin.next")}</wt-button
+        >
       </wt-form-actions>
     `;
   }

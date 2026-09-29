@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./connect-screen.js";
 import type { SetupConnectScreen } from "./connect-screen.js";
 
@@ -38,7 +39,10 @@ async function fillValid(
   }
 }
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 describe("setup-connect-screen", () => {
   it("assembles the adopt body as a STRUCTURED credential object and emits adopt-requested", async () => {
@@ -191,5 +195,51 @@ describe("setup-connect-screen", () => {
     );
     q(el, "[data-test=back]")!.click();
     expect(events).toEqual([{ kind: "goto", detail: { screen: "role" } }]);
+  });
+});
+
+describe("setup-connect-screen in Spanish", () => {
+  const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
+
+  async function summaryItems(el: SetupConnectScreen): Promise<string[]> {
+    const summary = q(el, "[data-test=error]") as HTMLElement & {
+      updateComplete: Promise<unknown>;
+    };
+    await summary.updateComplete;
+    return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => text(li));
+  }
+
+  it("labels the form and explains a blank field in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    expect(text(q(el, "h1")!)).toBe("Conectar con el servidor principal");
+    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("label")).toBe(
+      "Dirección del servidor principal",
+    );
+    expect(text(q(el, "[data-test=connect]")!)).toBe("Conectar");
+    await fillValid(el, { personId: "" });
+    q(el, "[data-test=connect]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=error]")!.getAttribute("heading")).toBe(
+      "Hay un problema con este formulario",
+    );
+    expect(await summaryItems(el)).toEqual(["Revisa el ID de persona del administrador."]);
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
+      "Revisa el usuario administrador (ID de persona).",
+    );
+  });
+
+  it("switches language while mounted and keeps what was typed", async () => {
+    const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    await type(el, "primaryUrl", "https://waitron.local");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(text(q(el, "h1")!)).toBe("Conectar con el servidor principal");
+    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("label")).toBe(
+      "Dirección del servidor principal",
+    );
+    expect((q(el, "[data-test=primaryUrl]") as HTMLElement & { value: string }).value).toBe(
+      "https://waitron.local",
+    );
   });
 });
