@@ -3585,13 +3585,15 @@ ongoing overhaul listed at the top of Track A.
   hand-written per form:
   assembling the bottom message (a refusal's sentences, then `form.fix_fields`, joined), waiting for
   the render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-  which refusals the person has since changed — an `attempted` flag beside either a `dismissed` set,
-  a `refused` map or, in the image library, a single `refusal` holding one field and its error
-  code: three styles, the last used only there. Each of these pieces appears in many forms
+  which refusals the person has since changed — an `attempted` flag beside one of five shapes: a
+  `dismissed` set or a `refused` map in `apps/dashboard`; in the image library, a single `refusal`
+  holding one field and its error code; in the four Stripe and SumUp connect and add-reader forms, a
+  plain `refusal` string; and in the adjustment reasons and venue operations screens, a
+  `refusedFields` map beside an `editorError` string. Each of these pieces appears in many forms
   (`grep -rl form.fix_fields apps/dashboard/src` lists the dashboard's; the image library, `packages/media/src/dashboard/image-library.ts`, uses its
-  own key `image.fix_fields` and is not in that list; the four module packages repeat the same
-  plumbing, each with its own sentence — `adjustments.fix_fields`, `payments.stripe.fix_fields`,
-  `payments.sumup.fix_fields` and `venue.fix_fields`), and `placeErrors` is written twice, in
+  own key `image.fix_fields` and is not in that list; the four module packages each use their own
+  sentence — `adjustments.fix_fields`, `payments.stripe.fix_fields`, `payments.sumup.fix_fields`
+  and `venue.fix_fields`), and `placeErrors` is written twice, in
   `menus-screen.ts` and `sections-screen.ts`; a follow-up could move the first two into one helper
   in `apps/dashboard/src/widgets/form-fields.ts` and the state into a controller in
   `apps/dashboard/src/state/`, but that covers the dashboard only: `packages/media` cannot import
