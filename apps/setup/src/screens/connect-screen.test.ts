@@ -193,6 +193,37 @@ describe("setup-connect-screen", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
+  it("fills every field from the request the shell hands back, a missing one-time code as blank", async () => {
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+      request: {
+        primaryUrl: "https://primary.example",
+        credential: { personId: "op-7", password: " secret " },
+      },
+    });
+    const events = collect(host);
+    const value = (field: string) =>
+      (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
+    expect([value("primaryUrl"), value("personId"), value("password"), value("totp")]).toEqual([
+      "https://primary.example",
+      "op-7",
+      " secret ",
+      "",
+    ]);
+    q(el, "[data-test=connect]")!.click();
+    await el.updateComplete;
+    expect(events).toEqual([
+      {
+        kind: "adopt",
+        detail: {
+          body: {
+            primaryUrl: "https://primary.example",
+            credential: { personId: "op-7", password: " secret " },
+          },
+        },
+      },
+    ]);
+  });
+
   it("drops a field refusal on the next press and sends the form", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       invalidField: "totp",

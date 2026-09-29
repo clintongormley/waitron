@@ -401,6 +401,8 @@ export class SetupApp extends LitElement {
 
   @state() private connectError?: Message;
   @state() private connectInvalidField?: ConnectField;
+  /** Held only in this tab's memory, to hand back to the connect form with a refusal. */
+  @state() private connectRequest?: AdoptBody;
   @state() private restoreError?: Message;
   @state() private restoreInvalidField?: RestoreField;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the archive path. */
@@ -552,6 +554,7 @@ export class SetupApp extends LitElement {
     this.reviewError = undefined;
     this.connectError = undefined;
     this.connectInvalidField = undefined;
+    this.connectRequest = undefined;
     this.restoreError = undefined;
     this.restoreInvalidField = undefined;
     // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.
@@ -684,14 +687,14 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * The adopt body goes straight to `SetupApi.adopt` and never into the draft, so the password is not
-   * kept. A successful adopt leaves the box adoption-pending, not a working mirror: the
-   * `PendingAdoption` header in `apps/server/src/finish-adoption.ts` says why.
+   * A successful adopt leaves the box adoption-pending, not a working mirror: the `PendingAdoption`
+   * header in `apps/server/src/finish-adoption.ts` says why.
    */
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;
     this.connectInvalidField = undefined;
+    this.connectRequest = undefined;
     this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
@@ -702,7 +705,7 @@ export class SetupApp extends LitElement {
       this.screen = "done";
     } catch (error) {
       if (!this.isConnected) return;
-      await this.#mapAdoptError(error as ApiError);
+      await this.#mapAdoptError(error as ApiError, event.detail.body);
     }
   }
 
@@ -925,7 +928,7 @@ export class SetupApp extends LitElement {
    * "complete" gets the stopped-partway message. Otherwise `setup.operation_conflict` is terminal
    * too, and everything else routes back to the connect form, the mirror path's retry surface.
    */
-  async #mapAdoptError(error: ApiError): Promise<void> {
+  async #mapAdoptError(error: ApiError, body: AdoptBody): Promise<void> {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     switch (code) {
@@ -970,6 +973,7 @@ export class SetupApp extends LitElement {
       if (this.connectInvalidField === undefined) {
         this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
       }
+      this.connectRequest = body;
       this.screen = "connect";
     }
   }
@@ -989,7 +993,6 @@ export class SetupApp extends LitElement {
     this.provisionCanReset = true;
   }
 
-  /** Like the adopt body, the login goes straight to the API and is never kept. */
   async #onResetRequested(event: CustomEvent<{ credential: ResetCredential }>): Promise<void> {
     event.stopPropagation();
     if (this.resetBusy) return;
@@ -1149,6 +1152,7 @@ export class SetupApp extends LitElement {
           data-test="screen-connect"
           .errorMessage=${this.connectError?.()}
           .invalidField=${this.connectInvalidField}
+          .request=${this.connectRequest}
         ></setup-connect-screen>`;
       case "admin":
         return html`<setup-admin-screen
