@@ -6477,7 +6477,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
 - **An imported configuration no longer carries "already offered a passkey"**: a configuration
   transfer strips `passkey_offered_at` on export and refuses a bundle that still carries it.
 - **A browser refusing the login screen's automatic passkey attempt no longer shows "Something went
-  wrong, try again" on load — DONE (C8, 2026-09-29).** Any rejection from the browser's passkey
+  wrong, try again" on load — DONE (C8, #843, 2026-09-29).** Any rejection from the browser's passkey
   prompt (`startAuthentication`) ends the automatic attempt silently; a failure of the options or
   verify request still shows its banner. The passkey button shows "Could not verify the passkey,
   try again" for a browser refusal instead of the generic sentence. Measured in real Chromium with
@@ -6495,6 +6495,14 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   (`throw {`, `reject({`) found two, both carrying a string `code`; the grep does not see an object
   thrown through a variable or a conditional. The login page was opened on 2026-09-29, before the
   review fixes, in light and dark, English and Spanish, 1280 and 390 wide: no banner on first load.
+  - **Left OPEN by #843's review (reported by the review seat, not re-run here):** if the passkey
+    options request gets a 200 answer whose body is not JSON (a proxy's error page, say), the first
+    load still shows "Could not verify the passkey". The reviewer reported `main` behaving the same
+    before the branch. A fix would make the automatic attempt quiet for that case too, or have the
+    request helper refuse an unreadable success body with a code; the second touches every request.
+  - **Left OPEN by #843's review:** sign-in has no classifier for passkey errors like the one
+    registration uses (`classifyPasskeyRegistrationError`); the button now tells a browser refusal
+    from a server refusal inline. A shared helper would restructure code beyond C8.
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
