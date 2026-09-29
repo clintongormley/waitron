@@ -4908,6 +4908,20 @@ approved.
   *Afterwards*, designed now that bookings is genuinely toggleable), and a toggleable module that is
   load-bearing (identity, payments) fails boot loudly if disabled until the wiring inversion.
 
+- **`waitron.sh install` keeps the box's own copy of the script current — DONE (C83, 2026-09-29).**
+  Twice on 2026-09-29 the owner's box ran an old `waitron.sh`, because `install` fetched
+  `compose.yml` and `.env.example` for the ref but never the script, so a fix to install's own steps
+  (the autopair drop-in, #877) did not run until the owner downloaded it again by hand. `install
+  <ref>` now fetches that ref's `deploy/waitron.sh` first (`refresh_self`); if it differs from the
+  copy being run, it moves it into place over that copy (a new file renamed in, never the running
+  file written over) and runs `install` again from it with the same arguments, once —
+  `WAITRON_SH_REFRESHED` stops the re-run fetching again. A failed fetch carries on with the running
+  copy and says so. Tests: the four cases under "keeps the box's own copy of waitron.sh current" in
+  `scripts/waitron-sh.test.mjs`, which now runs each case from its own copy of the script. Left
+  open: installing a ref whose script predates this step puts back a copy that does not update
+  itself (`deploy/README.md` says to download it again); nothing checks a fetched script before
+  running it beyond what the fetch of `compose.yml` already trusts — the same GitHub URL over HTTPS.
+
 ### B5. The recovery page and degraded mode
 
 - **The failed start's reason on the recovery page — LANDED #695 (2026-09-26).** What it left:

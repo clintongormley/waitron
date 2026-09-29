@@ -46,6 +46,14 @@ from the same commit. Finally it pulls the box's images, the two Waitron ones fr
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
 
+Before any of that, `install` fetches `deploy/waitron.sh` itself from the ref you are installing and
+compares it with the copy you ran. If they differ, it moves the fetched script into place over that
+copy, says so, and runs `install` again from it with the same arguments, once — so a fix to
+`install`'s own steps takes effect on the install that fetches it, with no need to download the
+script again by hand. If the fetch fails, it says so on stderr and carries on with the copy you ran.
+Installing a ref whose `waitron.sh` predates this step leaves the box with a copy that does not
+update itself; download it again with the `curl` line above before the next install.
+
 On a box with AppArmor switched on, `install` also
 fetches the print agent's AppArmor profile from the same ref, `deploy/apparmor/waitron-print-agent`,
 writes it to `/etc/apparmor.d/`, loads it, and names it in `.env` as `WAITRON_PRINT_AGENT_APPARMOR`.

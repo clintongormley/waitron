@@ -100,6 +100,41 @@ env_unset() {
   _env_rewrite "$1"
 }
 
+# 0. This script, from the INSTALLED ref like compose.yml, so a fix to install's own steps runs on the
+#    install that fetches it. The new copy is moved into place and run, never written over this one:
+#    bash reads a script as it runs it. WAITRON_SH_REFRESHED stops the new copy fetching again.
+refresh_self() {
+  local ref="$1" self="${BASH_SOURCE[0]:-}" tmp
+  shift
+  [ -z "${WAITRON_SH_REFRESHED:-}" ] || return 0
+  if [ ! -f "$self" ]; then
+    echo "waitron.sh: not running from a file, so no copy of waitron.sh to update from ${ref}" >&2
+    return 0
+  fi
+  if ! tmp="$(mktemp "$(dirname "$self")/.waitron.sh.XXXXXX")"; then
+    echo "waitron.sh: could not create a temp file beside $self — carrying on with this copy, not ${ref}'s" >&2
+    return 0
+  fi
+  # A subshell, because the fetch that finds neither curl nor wget exits rather than returning.
+  if ! (fetch "${RAW_BASE}/${ref}/deploy/waitron.sh" "$tmp"); then
+    rm -f "$tmp"
+    echo "waitron.sh: could not fetch waitron.sh from ${ref} — carrying on with this copy" >&2
+    return 0
+  fi
+  if cmp -s "$tmp" "$self"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  chmod 0755 "$tmp"
+  if ! mv -f "$tmp" "$self"; then
+    rm -f "$tmp"
+    echo "waitron.sh: could not replace $self with ${ref}'s waitron.sh — carrying on with this copy" >&2
+    return 0
+  fi
+  echo "waitron.sh: updated $self to ${ref}'s waitron.sh; running install again from it"
+  WAITRON_SH_REFRESHED=1 exec "$BASH" "$self" install "$@"
+}
+
 # 2. compose.yml + .env.example always from the INSTALLED ref, so compose and the image share a
 #    commit. Overwrites an operator's compose edits (rare); the choice is stated aloud.
 fetch_box_files() {
@@ -431,6 +466,7 @@ report_unhealthy() {
 
 cmd_install() {
   local ref="${1:-main}"
+  refresh_self "$ref" "$@"
   ensure_docker
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"

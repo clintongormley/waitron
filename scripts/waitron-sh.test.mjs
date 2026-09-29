@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,7 +50,10 @@ afterEach(() => {
 // name, so the drop-in counts only once it exists; WT_BT_RESTART_FAIL=1 makes every
 // `systemctl restart bluetooth` fail, and =first only the first one in a case. `rm` is logged and
 // then run for real. `mktemp` fails when its arguments contain WT_MKTEMP_FAIL, and otherwise runs
-// the real one.
+// the real one. `curl` asked for the script itself answers with WT_SELF_SCRIPT's file, else this
+// repository's own copy (identical, so install carries on), and fails when WT_SELF_FETCH_FAIL=1.
+// Each case runs its OWN copy of the script (`sb.script`), because install may replace the copy it
+// runs from.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 
@@ -137,7 +142,12 @@ stub("mv", `[ "\${WT_MV_FAIL}" = "1" ] && exit 1\nexec "${REAL_MV}" "$@"`);
 stub(
   "curl",
   `
-out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; esac; done
+out=""; url=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; -*) shift;; *) url="$1"; shift;; esac; done
+case "$url" in
+  */deploy/waitron.sh)
+    [ "\${WT_SELF_FETCH_FAIL}" = "1" ] && exit 22
+    cp "\${WT_SELF_SCRIPT:-${SCRIPT}}" "$out"; exit 0 ;;
+esac
 [ -n "$out" ] && printf 'stub\\n' > "$out"
 exit 0
 `,
@@ -199,12 +209,16 @@ function sandbox({
   bluetoothRestartFail = false,
   bluetoothDropIns = {},
   mktempFail = "",
+  selfScript = "",
+  selfFetchFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
   const boxDir = join(root, "box");
   const log = join(root, "calls.log");
+  const script = join(root, "waitron.sh");
   mkdirSync(boxDir, { recursive: true });
+  copyFileSync(SCRIPT, script);
   let unit = "";
   if (bluetoothExecStart !== null) {
     unit = join(root, "bluetooth.service");
@@ -224,7 +238,10 @@ function sandbox({
     log,
     root,
     dropIn,
+    script,
     env: {
+      WT_SELF_SCRIPT: selfScript,
+      WT_SELF_FETCH_FAIL: selfFetchFail ? "1" : "0",
       WT_SANDBOX: root,
       WT_BT_UNIT: unit,
       WT_BT_RESTART_FAIL: bluetoothRestartFail === true ? "1" : bluetoothRestartFail || "0",
@@ -263,7 +280,7 @@ const RUN_TIMEOUT_MS = 20_000;
 vi.setConfig({ testTimeout: RUN_TIMEOUT_MS + 10_000 });
 
 function run(sb, args, extraEnv = {}, { timeoutMs = RUN_TIMEOUT_MS } = {}) {
-  const result = spawnSync("bash", [SCRIPT, ...args], {
+  const result = spawnSync("bash", [sb.script, ...args], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -353,6 +370,85 @@ describe("waitron.sh install <ref>", () => {
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
     expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
     expect(env).toMatch(/^WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:my-branch$/m);
+  });
+});
+
+describe("waitron.sh install keeps the box's own copy of waitron.sh current", () => {
+  const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
+  const selfUrl = (ref) =>
+    `https://raw.githubusercontent.com/clintongormley/waitron/${ref}/deploy/waitron.sh`;
+  const selfFetches = (sb, ref) =>
+    calls(sb).filter((c) => c.startsWith("curl ") && c.split(" ").includes(selfUrl(ref)));
+  // The ref's script: this repository's copy, plus one line logging that IT ran and with what.
+  function newerScript(sb) {
+    const path = join(sb.root, "newer-waitron.sh");
+    writeFileSync(
+      path,
+      readFileSync(SCRIPT, "utf8").replace(
+        "set -euo pipefail\n",
+        'set -euo pipefail\nprintf \'new-copy %s\\n\' "$*" >> "$WT_LOG"\n',
+      ),
+    );
+    return path;
+  }
+
+  it("replaces its copy with the ref's newer script, by a rename, and runs install again from it once", () => {
+    const sb = sandbox();
+    const newer = newerScript(sb);
+    sb.env.WT_SELF_SCRIPT = newer;
+    const inodeBefore = statSync(sb.script).ino;
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).toBe(0);
+    expect(readFileSync(sb.script, "utf8")).toBe(readFileSync(newer, "utf8"));
+    // A new file moved into place, not the running file written over: bash is still reading it.
+    expect(statSync(sb.script).ino).not.toBe(inodeBefore);
+    const log = calls(sb);
+    const fetched = log.findIndex((c) => c.startsWith("curl ") && c.includes(selfUrl("my-branch")));
+    const reran = log.indexOf("new-copy install my-branch");
+    const firstDocker = log.findIndex((c) => c.startsWith("docker "));
+    expect(fetched).toBeGreaterThanOrEqual(0);
+    expect(reran).toBeGreaterThan(fetched);
+    // The old copy did nothing to the box before handing over.
+    expect(firstDocker).toBeGreaterThan(reran);
+    expect(log.filter((c) => c.startsWith("new-copy "))).toEqual(["new-copy install my-branch"]);
+    // The new copy does not fetch itself again.
+    expect(selfFetches(sb, "my-branch")).toHaveLength(1);
+    expect(composeCalls(sb).filter((c) => /^up -d /.test(c))).toHaveLength(1);
+    expect(r.stdout).toContain("updated");
+  });
+
+  it("carries on with the running copy, and does not run install again, when the ref's script is the same", () => {
+    const sb = sandbox();
+    const before = readFileSync(sb.script, "utf8");
+    const inodeBefore = statSync(sb.script).ino;
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(selfFetches(sb, "main")).toHaveLength(1);
+    expect(readFileSync(sb.script, "utf8")).toBe(before);
+    expect(statSync(sb.script).ino).toBe(inodeBefore);
+    expect(r.stdout).not.toContain("updated");
+    expect(composeCalls(sb).filter((c) => /^up -d /.test(c))).toHaveLength(1);
+  });
+
+  it("carries on with the running copy, and says so, when the ref's script cannot be fetched", () => {
+    const sb = sandbox({ selfFetchFail: true });
+    const before = readFileSync(sb.script, "utf8");
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).toBe(0);
+    expect(selfFetches(sb, "my-branch")).toHaveLength(1);
+    expect(r.stderr).toContain("could not fetch waitron.sh from my-branch");
+    expect(readFileSync(sb.script, "utf8")).toBe(before);
+    expect(composeCalls(sb).filter((c) => /^up -d /.test(c))).toHaveLength(1);
+  });
+
+  it("does not fetch itself when it is already the re-run", () => {
+    const sb = sandbox();
+    sb.env.WT_SELF_SCRIPT = newerScript(sb);
+    const before = readFileSync(sb.script, "utf8");
+    const r = run(sb, ["install"], { WAITRON_SH_REFRESHED: "1" });
+    expect(r.status).toBe(0);
+    expect(selfFetches(sb, "main")).toEqual([]);
+    expect(readFileSync(sb.script, "utf8")).toBe(before);
   });
 });
 
