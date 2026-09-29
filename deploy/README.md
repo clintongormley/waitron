@@ -64,17 +64,22 @@ On a box whose Bluetooth service runs under systemd (`bluetooth.service`), `inst
 daemon command with `--noplugin=autopair` added. On the owner's box (BlueZ 5.82, 2026-09-29),
 BlueZ's `autopair` plugin answered a printer's PIN request with `0000` by itself, before the PIN
 the operator typed could be asked for. BlueZ's retry then went over Low Energy, which that printer
-refuses, so the printer, whose PIN is 1234, never paired. With the plugin off it paired. The
-operator therefore types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
+refuses, so the printer, whose PIN is 1234, never paired. With the plugin off it paired. Where the
+file is in effect, the operator types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
 the file changed, so installing again does not interrupt it. A box with no `bluetooth.service`
 gets one line saying so. If the file cannot be written or Bluetooth will not restart, `install`
 says so, removes the file again and restarts Bluetooth without it, and carries on; the next
 `install` tries again. If Bluetooth will not restart even without the file, `install` says Bluetooth
 may be stopped and to run `systemctl restart bluetooth` or restart the box. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
-so. It also changes nothing when another drop-in of `bluetooth.service` sets the daemon command
-(`ExecStart`), or cannot be read, and names that file: writing its own would drop that file's
-options or be overridden by it. A `waitron-noautopair.conf` an earlier `install` wrote stays in
-place then, and the message says so. To undo it, delete the file, then run `systemctl daemon-reload` and
+so. It also changes nothing — no file written, no restart — when another drop-in of
+`bluetooth.service` sets the daemon command (`ExecStart`), or cannot be read, and names that file:
+writing its own would drop that file's options or be overridden by it. systemd applies drop-ins in
+file-name order and the last one to set `ExecStart` wins, so a `waitron-noautopair.conf` an earlier
+`install` wrote, which stays in place, decides what runs. Applied after the other file (as it is
+after `override.conf`, the name `systemctl edit` writes), it is in effect: Bluetooth runs with the
+plugin off and without the other file's command, and the message says to delete it to get that
+command back. Applied before the other file (a `zz-site.conf`, say), it has no effect and the
+message says so. To undo it, delete the file, then run `systemctl daemon-reload` and
 `systemctl restart bluetooth`.
 
 A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it

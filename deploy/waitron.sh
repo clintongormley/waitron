@@ -151,25 +151,36 @@ load_print_agent_apparmor() {
 # scripts/deploy-image-env.test.ts instead.
 BLUETOOTH_DROPIN="${WAITRON_SH_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
 disable_bluetooth_autopair() {
-  local unit exec_start tmp dropins dropin kept=""
+  local unit exec_start tmp dropins dropin kept="" other="" last=""
   unit="$(systemctl show -p FragmentPath --value bluetooth.service 2>/dev/null || true)"
   if [ -z "$unit" ] || [ ! -r "$unit" ]; then
     echo "waitron.sh: no bluetooth.service on this host — Bluetooth pairing left as it is"
     return 0
   fi
+  # DropInPaths is in the order systemd applies the files; the last one to set ExecStart wins.
   read -ra dropins <<< "$(systemctl show -p DropInPaths --value bluetooth.service 2>/dev/null || true)"
   [ -f "$BLUETOOTH_DROPIN" ] && kept=" ($BLUETOOTH_DROPIN is still in place from an earlier install)"
   for dropin in ${dropins[@]+"${dropins[@]}"}; do
-    [ "$dropin" = "$BLUETOOTH_DROPIN" ] && continue
-    if [ ! -r "$dropin" ]; then
+    if [ "$dropin" != "$BLUETOOTH_DROPIN" ] && [ ! -r "$dropin" ]; then
       echo "waitron.sh: could not switch off bluetoothd's autopair plugin — could not read $dropin, which may set bluetooth.service's ExecStart; left as it is$kept" >&2
       return 0
     fi
-    if grep -Eq '^[[:space:]]*ExecStart[[:space:]]*=' "$dropin"; then
-      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $dropin also sets bluetooth.service's ExecStart; left as it is$kept" >&2
-      return 0
+    if grep -Eq '^[[:space:]]*ExecStart[[:space:]]*=' "$dropin" 2>/dev/null; then
+      last="$dropin"
+      [ "$dropin" = "$BLUETOOTH_DROPIN" ] || other="$dropin"
     fi
   done
+  if [ -n "$other" ]; then
+    if [ "$last" = "$BLUETOOTH_DROPIN" ]; then
+      echo "waitron.sh: $other also sets bluetooth.service's ExecStart, but $BLUETOOTH_DROPIN from an earlier install is applied after it, so bluetoothd runs with the autopair plugin off and without $other's command; to keep $other's command, delete $BLUETOOTH_DROPIN, then run 'systemctl daemon-reload' and 'systemctl restart bluetooth'" >&2
+      return 0
+    fi
+    case " ${dropins[*]} " in
+      *" $BLUETOOTH_DROPIN "*) kept=" ($BLUETOOTH_DROPIN is still in place from an earlier install but has no effect, because $other is applied after it)" ;;
+    esac
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $other also sets bluetooth.service's ExecStart; left as it is$kept" >&2
+    return 0
+  fi
   exec_start="$(sed -nE 's/^[[:space:]]*ExecStart[[:space:]]*=[[:space:]]*//p' "$unit" | tail -n 1)"
   if [ -z "$exec_start" ]; then
     echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $unit names no ExecStart" >&2
