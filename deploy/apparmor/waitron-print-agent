@@ -11,12 +11,12 @@
 # at the end is Waitron's addition: `docker-default` has no D-Bus rules, so the system bus refuses
 # the container's first message (`Hello`) and `bluetoothctl` cannot reach BlueZ at all.
 #
-# The D-Bus rules are what bluetoothctl 5.82 sends and receives for `list`, `devices`,
-# `devices Paired`, `scan on`, `scan off`, pairing with a PIN through its interactive agent, and `remove`.
+# The D-Bus rules are what bluetoothctl 5.82 sends and receives for `list`, `devices Paired`,
+# `scan on`, `scan off`, pairing with a PIN through its interactive agent, and `remove`.
 # Each was measured against a stand-in BlueZ (scripts/fake-bluez.py) on a GitHub Ubuntu 24.04 runner
 # (kernel 6.17, AppArmor parser 4.0.1, dbus-daemon 1.14.10, Docker 28.0.4), with bluetoothctl from
 # the print-agent stage's own bluez package (5.82-1.1). The listing and `scan on` rules: runs
-# 36562032152 and 36562581079, where `list`, `devices`, `devices Paired` and `scan on` worked with
+# 36562032152 and 36562581079, where `list`, `devices Paired` and `scan on` worked with
 # no refusal. The pairing and `remove` rules: probe run 36585218089.
 # There, with the previous rules loaded in complain mode, pairing, `remove`
 # and a PIN request left unanswered logged as ALLOWED exactly the messages the new rules name. With

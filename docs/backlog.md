@@ -4908,7 +4908,8 @@ approved.
     against the stand-in BlueZ on a CI runner (probe run 36585218089; the receipts are in the
     profile's header), and image-smoke now pairs the stand-in's PIN printer and forgets it under the
     profile. A property write (`trust`) and `Disconnect` were measured still refused there; BlueZ's
-    `Agent1.Release` is not allowed either, and was never seen.
+    `Agent1.Release` is not allowed either; the stand-in never sends it, and whether a real BlueZ does
+    is still open.
     `waitron.sh install` also switches off bluetoothd's `autopair` plugin with a systemd drop-in
     where it can (`deploy/README.md` says when it leaves Bluetooth alone), because on the owner's box it answered a PIN-1234 printer with `0000` before any agent was
     asked (`deploy/README.md`). On the owner's box (2026-09-29), under the new profile, a real PIN

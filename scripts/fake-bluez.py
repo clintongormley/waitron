@@ -191,7 +191,8 @@ class Device(dbus.service.Object):
         self.PropertiesChanged("org.bluez.Device1", {"Bonded": True, "Paired": True},
                                dbus.Array([], signature="s"))
         log("Pair %s -> success" % self.path)
-        # Before the reply, the stand-in's choice; the other order was not tried.
+        # Before the reply (the other order was not tried): image-smoke greps the driver's transcript for
+        # these signals, and the driver quits bluetoothctl as soon as it sees `Pairing successful`.
         for iface in ("org.bluez.Bearer.BREDR1", "org.bluez.Device1"):
             signal = dbus.lowlevel.SignalMessage(self.path, iface, "Disconnected")
             signal.append("fake-reason", "fake bluez", signature="ss")

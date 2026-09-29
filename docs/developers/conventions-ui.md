@@ -321,10 +321,10 @@ by `scripts/deploy-image-env.test.ts`; built in #308.
 Docker's default AppArmor profile refuses the system bus, so under it `bluetoothctl` cannot reach
 BlueZ: on the owner's box (2026-09-29) the bus refused the agent's first message, `Hello`, and the
 agent listed no Bluetooth printers. `deploy/apparmor/waitron-print-agent` is Moby's `docker-default`
-template plus bus rules for the messages `bluetoothctl list`, `devices`, `scan on`, `scan off`,
+template plus bus rules for the messages `bluetoothctl list`, `devices Paired`, `scan on`, `scan off`,
 pairing with a PIN through its interactive agent, and `remove` were seen to send and receive
-against a stand-in BlueZ (`scripts/fake-bluez.py`), and for the `Disconnected` signals a device
-sends after a pairing (the owner's box, 2026-09-29); every other bus message is refused, `trust` and
+against a stand-in BlueZ (`scripts/fake-bluez.py`), and for the `Disconnected` signals the owner's
+printer sent after its pairing (the owner's box, 2026-09-29); every other bus message is refused, `trust` and
 `disconnect` among them (probe run 36585218089 on a CI runner; `trust` again in 36617716323). `waitron.sh install` loads it where AppArmor is on and only then writes
 `WAITRON_PRINT_AGENT_APPARMOR` to `.env`; `deploy/compose.yml` falls back to `docker-default`
 without it. The order matters because Docker refuses to start a container naming a profile the host
