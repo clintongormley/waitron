@@ -3045,6 +3045,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       code both were refused with `sale.tender_shortfall` (due 15.80, charged 18.00). `collectOrder`
       now reads the amount due through `readOutstandingSaleForOrder`, as the card-reader path does,
       and the manual card's `payments` row records that amount too.
+      Left OPEN by C50, both read and not run: the receipt a corrected bill's collection prints
+      still shows the original invoice's total (`readSettledTicket`, `apps/server/src/till-sale.ts`),
+      so it reads 18.00 beside a 15.80 payment and 4.20 change; and a bill corrected down to zero
+      would settle a 0.00 tender, which the `tenders_amount_ck` check appears to refuse. **Next
+      action:** a test for each, then decide what the receipt should show (an owner call).
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
