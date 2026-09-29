@@ -3577,7 +3577,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       merge, so the ticket names the main bill the dishes are now on. Firing is unchanged: a group
       whose HOLD ticket was queued already fires with a FIRE slip. With the setting off, the
       dishes in those held groups print nothing at the move: no HOLD ticket. Tests:
-      `apps/server/src/party-arriving-dishes.test.ts`. No migration.
+      `apps/server/src/party-arriving-dishes.test.ts`. No migration. (#883, main `ff66222fc`.)
     - **Which dishes arrive unsent changed with Task 7.** An open counter order moved into table
       service has its dishes sent at the move (Task 7), so it arrives in a FIRED group, not the
       held group the plan's Task 9 expected; a later course's dish, held for its course, arrives
