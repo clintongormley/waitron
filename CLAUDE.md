@@ -334,7 +334,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Every colour, spacing, radius and font reads a `--wt-*` token.** No hex, no named colours, no
   `rem`/`em`. Guard: `packages/ui/src/no-hardcoded-chrome.test.ts`, which scans `packages/ui`
   components; [design-system.md](docs/developers/design-system.md) states the rule for any component
-  or view, which is the wider scope a reviewer should apply.
+  or view, which is the wider scope a reviewer should apply. The name read must also be declared:
+  CSS gives a property that reads an undeclared name with no fallback its inherited or initial
+  value, and one with a fallback the fallback for ever, and reports nothing (cost: the Cloud
+  services screen's labels drew at the body weight). Guard: `scripts/style-token-names.test.ts`,
+  weaker than its name — it reads text and matches a read against declarations anywhere in the
+  tree, not the ones the reading page loads, and it excuses the till reads its `FALLBACK_READS`
+  lists.
 - **A new `wt-*` primitive needs two specific tests**, not "some tests": a token-painting test, and an
   axe accessibility test in a sibling `*.a11y.test.ts` covering each distinct state in both themes.
 - **A shared `wt-*` component's custom events are named `wt-*`, carry `detail`, and are dispatched

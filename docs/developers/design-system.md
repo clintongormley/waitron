@@ -30,7 +30,10 @@ the moment it exists, with nothing to remember to register.
 The shared package also runs `packages/ui-core/src/no-hardcoded-chrome.test.ts` and
 `packages/ui-core/src/tap-target-and-focus.test.ts` directly over its own controls.
 
-If a token you need does not exist, add it to the token layer — do not inline a value.
+If a token you need does not exist, add it to the token layer — do not inline a value. A `--wt-*`
+name a stylesheet reads must be declared in the token layer. `scripts/style-token-names.test.ts`
+checks only that some file under `apps/` or `packages/` declares it, not where, by reading text;
+its header lists what it cannot see.
 
 ## Setting up a theme root
 

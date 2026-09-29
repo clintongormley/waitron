@@ -759,24 +759,15 @@ components, then make the guard and both documents agree — one of them is curr
 something CI will not enforce. Whoever picks up the next screen should settle this first, because
 every screen after it inherits the answer.
 
-**Also open: a missing font-weight token on the Cloud services screen, and no guard compares the
-token names read with the names declared** (found 2026-09-27 while fixing the Printers screen's
-`--wt-font-size-xs`, lane C's C21). `apps/dashboard/src/screens/cloud-services-screen.ts` sets its
-`dt` to `var(--wt-font-weight-medium)`, but `packages/ui-core/src/tokens/structure.css` defines only
-`--wt-font-weight-normal` and `--wt-font-weight-bold` (found by reading the code; the screen was not
-opened). Comparing every `var(--wt-…)` read under `apps/` and `packages/` with every declared name
-found five names that are read but declared nowhere. Two are read with no fallback: the Printers
-screen's `--wt-font-size-xs`, now fixed, and `--wt-font-weight-medium` above. Three are read with a
-fallback: `--wt-color-success-text` in `apps/till/src/widgets/diet-badges.ts`;
-`--wt-color-warning-text` in four till files, which has its own entry under A4 ("Four till surfaces
-ask for a caution colour that is defined nowhere"); and `--wt-form-max-width` in the Cloud services
-screen, read as `var(--wt-form-max-width, 36rem)`, whose fallback is also a `rem` value the token
-rule forbids. Such a comparison cannot see a token read from script. No guard compares the `--wt-*`
-names stylesheets read with the names declared: `packages/layouts/src/theme-registry.test.ts` checks
-that names are declared only for its `THEMEABLE_TOKENS` list, and
-`packages/ui/src/no-hardcoded-chrome.test.ts` and its `packages/ui-core` twin reject literal values
-in each package's shared components only. An undefined name a stylesheet reads is caught today only
-by a test that measures a computed style, and only for the property it measures.
+**Fixed (C69): every `var(--wt-…)` read in source text is now checked against the names declared.**
+The Cloud services screen's two reads of undeclared names (its labels' weight and its card's width)
+now read declared tokens. The guard, `scripts/style-token-names.test.ts`, is weaker than its name
+in the ways its header states, and excuses the five till reads under A4 in its `FALLBACK_READS`; an
+entry that is no longer needed fails the guard, and nothing stops one being added, so keeping the
+list from growing is a job for review. **Open question:** the labels now use the bold weight, as
+the C69 queue entry asked, but design-system.md's "Typography roles" table gives a field label the
+normal weight, muted, and its value the bold weight, which `content-languages-screen.ts` follows;
+whether the Cloud services screen should follow that table instead is the owner's call.
 
 **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
 page background, in the light theme.** Measured against the shipped values in
@@ -3434,8 +3425,11 @@ bill is refused.
   shadow root to find it, and why the same shape can hide anywhere a fallback is written.
   **Next action:** whoever takes the till layout pass above decides whether these four want
   `--wt-color-warning`, a new `--wt-color-warning-text` defined in both themes, or the
-  `--wt-color-danger` the dish picker's refusals now use — and then check every OTHER `var(--wt-*, …)`
-  fallback in the tree the same way, because this one was found by accident.
+  `--wt-color-danger` the dish picker's refusals now use. `diet-badges.ts` also reads
+  `--wt-color-success-text`, declared nowhere, the same way. Since C69 every other `var(--wt-…)`
+  read of an undeclared name in source text is refused by `scripts/style-token-names.test.ts`
+  (its header lists what it cannot see); these five reads are its listed exceptions, and fixing
+  them means deleting their entries from its `FALLBACK_READS`.
 - **Five measured till layout defects and one seen in a screenshot, all of them older than the
   extras-and-options work.** Found while looking at the real screens for B1 Task 12. **Next action:**
   take these six as

@@ -205,6 +205,15 @@ every component via `import.meta.glob("./components/*.ts", ...)` — a new compo
 moment the file exists, with nothing to register. If a needed token doesn't exist, it belongs in
 `packages/ui-core/src/tokens/`, not inlined.
 
+A `--wt-*` name a stylesheet reads must be declared somewhere, anywhere under `apps/` or
+`packages/`: CSS gives a property that reads an undeclared name with no fallback its inherited or
+initial value, and one with a fallback the fallback for ever, and reports nothing, which is how the
+Cloud services screen's labels rendered at the body weight (C69).
+`scripts/style-token-names.test.ts` enforces it over every tracked `.ts`, `.css` and `.html` file
+under `apps/` and `packages/`, as it stands in the working tree, whose name does not end
+`.test.ts`, reading text; its header lists what that cannot see, and its `FALLBACK_READS` names the
+till reads it excuses.
+
 ## Real Chromium only — never jsdom
 
 `packages/ui` tests run in real Chromium via Vitest browser mode (`@vitest/browser-playwright`),
