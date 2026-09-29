@@ -63,6 +63,12 @@ interface PrinterDraft {
   characterTable: number;
 }
 
+/** A dialog's one message beside its action: each non-empty part, in order. */
+const bottomMessage = (...parts: (string | null)[]): string =>
+  parts.filter((part): part is string => part !== null && part !== "").join(" ");
+
+const refusal = (code: string | null): string | null => (code === null ? null : codeMessage(code));
+
 /** The printer editor's checks that have a field of their own; the rest name only the bottom message. */
 const PRINTER_FIELDS: readonly string[] = ["name", "host", "port", "characterTable"];
 
@@ -444,6 +450,8 @@ export class PrintersScreen extends LitElement {
   @state() private probeAttempted = false;
   /** Address fields the server refused, each shown until the owner changes it. */
   @state() private probeRefused: Partial<Record<"host" | "port", string>> = {};
+  /** A refused address check that names no field, shown beside Check address. */
+  @state() private probeErrorKey: string | null = null;
   @state() private probeStatus:
     "idle" | "pending" | "found" | "missing" | "registered" | "page_printer" = "idle";
   #probeTarget: PrinterAddressProbe | undefined;
@@ -807,6 +815,7 @@ export class PrintersScreen extends LitElement {
     this.#probeTarget = undefined;
     this.probeStatus = address ? "pending" : "idle";
     this.errorKey = null;
+    this.probeErrorKey = null;
     this.scanning = true;
     const epoch = ++this.#scanEpoch;
     try {
@@ -842,7 +851,8 @@ export class PrintersScreen extends LitElement {
           [field]: t(field === "host" ? "printers.probe_host_invalid" : "printers.port_invalid"),
         };
         this.#focusFirstInvalid("[data-test=probe-panel]");
-      } else this.errorKey = codeOf(error);
+      } else if (address) this.probeErrorKey = codeOf(error);
+      else this.errorKey = codeOf(error);
       this.#endScan();
     }
   }
@@ -1349,7 +1359,7 @@ export class PrintersScreen extends LitElement {
       .open=${true}
       @wt-close=${() => this.#stopAgentModal()}
     >
-      ${this.#renderError()}
+      ${this.#renderRefreshError()}
       <p class="hint">${t("printers.agent_setup_hint")}</p>
       <ol class="setup-steps">
         <li>${t("printers.agent_step_open")}</li>
@@ -1376,7 +1386,7 @@ export class PrintersScreen extends LitElement {
           >${this.scanningAgents ? t("printers.scan_loading") : t("printers.scan_agents")}</wt-button
         >
       </section>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${bottomMessage(refusal(this.errorKey))}
         ><wt-button
           slot="cancel"
           data-test="cancel-new-agent"
@@ -1401,7 +1411,7 @@ export class PrintersScreen extends LitElement {
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-agent]"))}
     >
-      ${this.#renderError()}
+      ${this.#renderRefreshError()}
       <wt-input
         name="agent-name"
         required
@@ -1417,7 +1427,10 @@ export class PrintersScreen extends LitElement {
       ></wt-input>
       <p>${t("printers.agent_host")}: ${agent.host ?? t("printers.not_reported")}</p>
       <p>${t("printers.last_seen")}: ${this.#timestamp(agent.lastSeenAt)}</p>
-      <wt-form-actions slot="footer" .error=${nameError === "" ? "" : t("form.fix_fields")}>
+      <wt-form-actions
+        slot="footer"
+        .error=${bottomMessage(refusal(this.errorKey), nameError === "" ? null : t("form.fix_fields"))}
+      >
         <wt-button
           slot="cancel"
           data-test="cancel-edit-agent"
@@ -1695,6 +1708,7 @@ export class PrintersScreen extends LitElement {
           this.probePort = "9100";
           this.probeAttempted = false;
           this.probeRefused = {};
+          this.probeErrorKey = null;
           this.#registeredDevices.clear();
           this.discoveredNames = {};
           this.addedPrinterName = null;
@@ -1843,20 +1857,21 @@ export class PrintersScreen extends LitElement {
     await closed;
   }
 
+  /** A refused action outside any dialog; a dialog shows its refusal beside its own action. */
   #renderError(): TemplateResult {
     return html`${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
-    ${
-      this.refreshErrorKey
-        ? html`<div data-test="printer-refresh-error" role="alert">
-            <p class="error">
-              ${t("printers.refresh_failed")} ${codeMessage(this.refreshErrorKey)}
-            </p>
-            <wt-button data-test="refresh-printer-lists" @click=${() => void this.#load()}
-              >${t("printers.refresh_lists")}</wt-button
-            >
-          </div>`
-        : nothing
-    }`;
+    ${this.#renderRefreshError()}`;
+  }
+
+  /** A failed read, with its own retry, stays at the top of the page or the dialog. */
+  #renderRefreshError(): TemplateResult | typeof nothing {
+    if (!this.refreshErrorKey) return nothing;
+    return html`<div data-test="printer-refresh-error" role="alert">
+      <p class="error">${t("printers.refresh_failed")} ${codeMessage(this.refreshErrorKey)}</p>
+      <wt-button data-test="refresh-printer-lists" @click=${() => void this.#load()}
+        >${t("printers.refresh_lists")}</wt-button
+      >
+    </div>`;
   }
 
   /** Checks the draft once the form has been submitted, focusing the first invalid field. */
@@ -1906,12 +1921,14 @@ export class PrintersScreen extends LitElement {
           )?.code ?? "");
     const errors = this.formAttempted ? this.#printerErrors(p) : {};
     const fieldInvalid = PRINTER_FIELDS.some((key) => errors[key] !== undefined);
-    const bottom = [
+    const bottom = bottomMessage(
+      refusal(this.errorKey),
+      refusal(this.testError),
       ...Object.entries(errors)
         .filter(([key]) => !PRINTER_FIELDS.includes(key))
         .map(([, message]) => message),
-      ...(fieldInvalid ? [t("form.fix_fields")] : []),
-    ].join(" ");
+      fieldInvalid ? t("form.fix_fields") : null,
+    );
     const field = (key: "name" | "host" | "port", label: string, required = false) =>
       html`<wt-input
         name=${`printer-${key}`}
@@ -1936,8 +1953,7 @@ export class PrintersScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 4 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
       <div class="form-fields">
-        ${this.#renderError()}
-        ${this.testError ? html`<p class="error" role="alert">${codeMessage(this.testError)}</p>` : nothing}
+        ${this.#renderRefreshError()}
         ${this.calibrationStep ? html`<p role="status">${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}</p>` : nothing}
         ${
           this.calibrationStep === 0
@@ -2297,7 +2313,7 @@ export class PrintersScreen extends LitElement {
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-add-printer]"))}
     >
       <div class="form-fields">
-        ${this.#renderError()}
+        ${this.#renderRefreshError()}
         <p class="hint">
           ${this.#discoveredLabel(d)} · ${d.host ? `${d.host}:${d.port ?? 9100}` : d.localKey}
         </p>
@@ -2316,7 +2332,10 @@ export class PrintersScreen extends LitElement {
           }}
         ></wt-input>
       </div>
-      <wt-form-actions slot="footer" .error=${nameError === "" ? "" : t("form.fix_fields")}>
+      <wt-form-actions
+        slot="footer"
+        .error=${bottomMessage(refusal(this.errorKey), nameError === "" ? null : t("form.fix_fields"))}
+      >
         <wt-button
           slot="cancel"
           data-test="cancel-printer-name"
@@ -2394,7 +2413,7 @@ export class PrintersScreen extends LitElement {
       }}
     >
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${t("printers.added").replace("{name}", this.addedPrinterName)}</p>` : nothing}
-      ${this.#renderError()}
+      ${this.#renderRefreshError()}
       <p class="hint">${t("printers.discovery_hint")}</p>
       <details class="probe-panel" data-test="probe-panel">
         <summary>${t("printers.probe_title")}</summary>
@@ -2437,7 +2456,7 @@ export class PrintersScreen extends LitElement {
           ></wt-input>
           <wt-form-actions
             data-test="probe-actions"
-            .error=${probeInvalid ? t("form.fix_fields") : ""}
+            .error=${bottomMessage(refusal(this.probeErrorKey), probeInvalid ? t("form.fix_fields") : null)}
           >
             <wt-button
               variant="primary"
@@ -2488,7 +2507,10 @@ export class PrintersScreen extends LitElement {
         .rowKey=${(d: DiscoveredPrinter) => this.#deviceKey(d)}
         .emptyMessage=${this.scanning ? t("printers.scan_loading") : t("printers.no_discovered")}
       ></wt-data-table>
-      <wt-form-actions slot="footer">
+      <wt-form-actions
+        slot="footer"
+        .error=${this.namingPrinter ? "" : bottomMessage(refusal(this.errorKey))}
+      >
         <wt-button
           slot="cancel"
           data-test="cancel-new-printer"

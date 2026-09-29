@@ -327,6 +327,11 @@ async function bottomOf(el: PrintersScreen, actions: string): Promise<string> {
   await row.updateComplete;
   return row.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+/** A dialog's own action row, in its footer; the address check keeps a second row in the body. */
+const footerOf = (modal: string): string => `[data-test=${modal}] > wt-form-actions[slot=footer]`;
+/** A refusal paragraph at the top of a dialog, where the forms rule no longer puts one. */
+const topAlertOf = (el: PrintersScreen, modal: string) =>
+  q(el, `[data-test=${modal}] p[role=alert]`);
 const errorOf = (el: PrintersScreen, sel: string): string =>
   (q(el, sel) as unknown as { error: string }).error;
 const isDisabled = (el: PrintersScreen, sel: string): boolean =>
@@ -495,9 +500,10 @@ describe("guided printer calibration", () => {
     );
     q(el, "[data-test=test-printer-drawer]")!.click();
     await flush(el);
-    expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
       codeMessage("printer.not_found"),
     );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
     expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
     toggleSwitch(el, '[name="printer-cash-drawer"]', false);
     await flush(el);
@@ -532,6 +538,7 @@ describe("guided printer calibration", () => {
       await flush(el);
       expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
       expect(q(el, "[data-test=edit-printer-modal] [role=alert]")).toBeNull();
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe("");
     },
   );
 
@@ -1133,6 +1140,10 @@ describe("printers-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("device.join_mismatch", "es-ES"));
     expect(banner).not.toContain("device.join_mismatch");
+    expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+      codeMessage("device.join_mismatch", "es-ES"),
+    );
+    expect(topAlertOf(el, "new-agent-modal")).toBeNull();
   });
 
   it("keeps the dialog open on a recoverable accept fault", async () => {
@@ -2077,6 +2088,12 @@ describe("printers-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("printer.already_registered", "es-ES"));
     expect(banner).not.toContain("printer.already_registered");
+    expect(await bottomOf(el, footerOf("name-printer-modal"))).toBe(
+      codeMessage("printer.already_registered", "es-ES"),
+    );
+    expect(topAlertOf(el, "name-printer-modal")).toBeNull();
+    expect(topAlertOf(el, "new-printer-modal")).toBeNull();
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
 
   it("shows an error banner when reading the discovered list is rejected", async () => {
@@ -2090,6 +2107,10 @@ describe("printers-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("server.internal", "es-ES"));
     expect(banner).not.toContain("server.internal");
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe(
+      codeMessage("server.internal", "es-ES"),
+    );
+    expect(topAlertOf(el, "new-printer-modal")).toBeNull();
   });
 
   it("shows an error banner when Scan (opening the discovery window) is rejected", async () => {
@@ -2279,6 +2300,10 @@ describe("printers-screen", () => {
 
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("printer.not_found", "es-ES"));
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
+      codeMessage("printer.not_found", "es-ES"),
+    );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
   });
 
   it("deactivates a printer immediately, reloads, and disables inactive deletion", async () => {
@@ -2569,6 +2594,10 @@ it("shows a failed agent rename and lets Cancel discard the draft", async () => 
   q(el, "[data-test=save-agent]")!.click();
   await flush(el);
   expect(text(el, "[role=alert]")).toContain(codeMessage("agent.not_found", "es-ES"));
+  expect(await bottomOf(el, footerOf("edit-agent-modal"))).toBe(
+    codeMessage("agent.not_found", "es-ES"),
+  );
+  expect(topAlertOf(el, "edit-agent-modal")).toBeNull();
   q(el, "[data-test=cancel-edit-agent]")!.click();
   await flush(el);
   q(el, "[data-test=edit-agent-a1]")!.click();
@@ -2859,6 +2888,8 @@ it("keeps a disabled printer available when adding it again fails", async () => 
   expect(api.createPrinter).not.toHaveBeenCalled();
   expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
   expect(text(el, "[role=alert]")).toContain(codeMessage("printer.not_found"));
+  expect(await bottomOf(el, footerOf("name-printer-modal"))).toBe(codeMessage("printer.not_found"));
+  expect(topAlertOf(el, "name-printer-modal")).toBeNull();
 });
 
 it.each(["printer-row-p1", "job-printer-j1"])(
@@ -3326,6 +3357,7 @@ it("ignores a previous opening's pairing failure while the reopened dialog scans
   rejectOld({ code: "printer.not_found" });
   await flush(el);
   expect(q(el, "[role=alert]")).toBeNull();
+  expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
   expect(q(el, "[data-test=scan-agents]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
     true,
   );
@@ -3705,11 +3737,12 @@ describe("printers-screen agent joining edges", () => {
     await el.updateComplete;
     q(el, "[data-test=join-deny-j1]")!.click();
 
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=new-agent-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
         codeMessage("join_request.not_found"),
       ),
     );
+    expect(topAlertOf(el, "new-agent-modal")).toBeNull();
     expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
     expect(api.joinRequests).toHaveBeenCalledTimes(calls);
   });
@@ -3741,11 +3774,12 @@ describe("printers-screen agent joining edges", () => {
     q(el, '[data-choice="12"]')!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=new-agent-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
         codeMessage("connection.failed"),
       ),
     );
+    expect(topAlertOf(el, "new-agent-modal")).toBeNull();
   });
 
   it("opens pairing once when Add agent is pressed twice", async () => {
@@ -4151,6 +4185,7 @@ describe("printers-screen discovery and add edges", () => {
     expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe("");
     expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
 
   it("ignores a listen re-read that fails after Add printer was closed", async () => {
@@ -4304,6 +4339,7 @@ describe("printers-screen discovery and add edges", () => {
     await flush(el);
     expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe("");
   });
 });
 
@@ -4428,11 +4464,12 @@ describe("printers-screen printer editor edges", () => {
 
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
 
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
         codeMessage("printer.not_found"),
       ),
     );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
   });
 
   it("prints one character-table page when the button is pressed twice", async () => {
@@ -4461,11 +4498,12 @@ describe("printers-screen printer editor edges", () => {
 
     q(el, "[data-test=print-character-tables-p1]")!.click();
 
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
         codeMessage("printer.not_found"),
       ),
     );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
     expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
   });
 
@@ -4582,6 +4620,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
 
       expect(api.renewPairingMode).toHaveBeenCalled();
       expect(q(el, "[data-test=new-agent-modal] [role=alert]")).toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -4681,6 +4720,23 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     q(el, "[data-test=save-agent]")!.click();
     await flush(el);
     expect(api.updateAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an agent refusal and the fields sentence one after the other when both apply", async () => {
+    const { el } = await mounted({
+      updateAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
+    });
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    q(el, "[data-test=save-agent]")!.click();
+    await flush(el);
+    expect(await bottomOf(el, agentActions)).toBe(codeMessage("agent.not_found"));
+    typeField(el, "[data-test=edit-agent-name]", " ");
+    await flush(el);
+    expect(await bottomOf(el, agentActions)).toBe(
+      `${codeMessage("agent.not_found")} ${t("form.fix_fields")}`,
+    );
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(true);
   });
 
   it("starts the agent form again when it is reopened", async () => {
@@ -4868,6 +4924,9 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
     expect(errorOf(el, "[data-test=probe-host]")).toBe("");
+    expect(await bottomOf(el, probeActions)).toBe(codeMessage("printer.probe_busy"));
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
+    expect(topAlertOf(el, "new-printer-modal")).toBeNull();
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
