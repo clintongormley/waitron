@@ -221,6 +221,9 @@ importers:
       '@waitron/payments-sumup':
         specifier: workspace:*
         version: link:../../packages/payments-sumup
+      '@waitron/print-agent':
+        specifier: workspace:*
+        version: link:../../packages/print-agent
       '@waitron/printing':
         specifier: workspace:*
         version: link:../../packages/printing
@@ -315,9 +318,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.11
         version: 4.1.11(@vitest/browser@4.1.11)(vitest@4.1.11)
-      '@waitron/print-agent':
-        specifier: workspace:*
-        version: link:../../packages/print-agent
       '@waitron/print-agent-app':
         specifier: workspace:*
         version: link:../print-agent

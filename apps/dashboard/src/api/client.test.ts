@@ -2425,6 +2425,45 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("asks a named print agent to pair with a Bluetooth address using the PIN, and to forget one", async () => {
+    const pending = {
+      id: "c1",
+      kind: "pair",
+      address: "00:11:22:33:44:55",
+      state: "pending",
+      expiresInMs: 120_000,
+    } as const;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ command: pending }, true, 202))
+      .mockResolvedValueOnce(
+        jsonResponse({ command: { ...pending, id: "c2", kind: "forget" } }, true, 202),
+      );
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.pairBluetooth("a1", "00:11:22:33:44:55", "0000")).toEqual({
+      command: pending,
+    });
+    expect(await api.forgetBluetoothPairing("a1", "00:11:22:33:44:55")).toEqual({
+      command: { ...pending, id: "c2", kind: "forget" },
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, "/management-api/print-agents/a1/bluetooth/pair", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ address: "00:11:22:33:44:55", pin: "0000" }),
+    });
+    expect(fetchImpl).toHaveBeenNthCalledWith(
+      2,
+      "/management-api/print-agents/a1/bluetooth/forget",
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ address: "00:11:22:33:44:55" }),
+      },
+    );
+  });
+
   it("updatePrinter PATCHes the printer's route and resolves undefined on an empty 204", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

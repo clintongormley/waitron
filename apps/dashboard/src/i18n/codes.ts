@@ -140,6 +140,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Several addresses are being checked. Wait a moment and try again.",
     es: "Se están comprobando varias direcciones. Espera un momento e inténtalo de nuevo.",
   },
+  "printer.bluetooth_command_busy": {
+    en: "Several Bluetooth requests are already waiting for this print agent. Wait a moment and try again.",
+    es: "Ya hay varias solicitudes Bluetooth esperando a este agente de impresión. Espera un momento e inténtalo de nuevo.",
+  },
+  "printer.bluetooth_not_discovered": {
+    en: "This print agent has not found that Bluetooth device recently. Scan for printers, then try again.",
+    es: "Este agente de impresión no ha encontrado ese dispositivo Bluetooth recientemente. Pulsa Buscar impresoras e inténtalo de nuevo.",
+  },
+  "printer.bluetooth_not_paired": {
+    en: "This print agent no longer reports that Bluetooth device as paired.",
+    es: "Este agente de impresión ya no indica que ese dispositivo Bluetooth esté emparejado.",
+  },
   "content.language_invalid": {
     en: "Choose a recognised language.",
     es: "Elige un idioma reconocido.",

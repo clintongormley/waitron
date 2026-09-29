@@ -6,6 +6,7 @@ import "./printers-screen.js";
 import type { PrintersScreen } from "./printers-screen.js";
 import type {
   DashboardApi,
+  DiscoveredPrinter,
   JoinRequestRow,
   PrintAgentRow,
   PrintJobRow,
@@ -160,7 +161,7 @@ const pending: JoinRequestRow[] = [
 ];
 const CHOICES = ["12", "47", "83"];
 
-function stubApi(pairingOpen = false): DashboardApi {
+function stubApi(pairingOpen = false, overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
     listAgents: vi.fn().mockResolvedValue(agents),
     listPrinters: vi.fn().mockResolvedValue(printers),
@@ -187,6 +188,7 @@ function stubApi(pairingOpen = false): DashboardApi {
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
     listTills: vi.fn().mockResolvedValue(tills),
+    ...overrides,
   } as unknown as DashboardApi;
 }
 
@@ -224,6 +226,79 @@ async function openDiscovery(el: PrintersScreen): Promise<void> {
 }
 
 afterEach(cleanupWidgets);
+// The printers table remembers its status filter for the tab; each case starts from the default.
+afterEach(() => sessionStorage.removeItem("printers:table"));
+
+// A printer-like device waiting to be paired, a device that does not look like a printer, and a
+// switched-off Bluetooth printer its agent reports paired.
+const bluetooth: DiscoveredPrinter[] = [
+  {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "bluetooth",
+    localKey: "00:11:22:33:44:55",
+    name: "Bar printer",
+    printerLike: true,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2026-08-25T14:30:00.000Z",
+  },
+  {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "bluetooth",
+    localKey: "66:77:88:99:AA:BB",
+    name: "Headphones",
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2026-08-25T14:30:00.000Z",
+  },
+  {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "bluetooth",
+    localKey: "22:22:22:22:22:22",
+    name: "Old bar printer",
+    printerLike: true,
+    paired: true,
+    alreadyRegistered: true,
+    printerId: "p4",
+    lastSeenAt: "2026-08-25T14:30:00.000Z",
+  },
+];
+const bluetoothPrinter: Printer = {
+  ...printers[2]!,
+  id: "p4",
+  name: "Old bar printer",
+  transport: "bluetooth",
+  localKey: "22:22:22:22:22:22",
+  active: false,
+};
+function bluetoothApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
+  return stubApi(false, {
+    listPrinters: vi.fn().mockResolvedValue([...printers, bluetoothPrinter]),
+    listDiscoveredPrinters: vi.fn().mockResolvedValue(bluetooth),
+    pairBluetooth: vi.fn().mockResolvedValue({
+      command: {
+        id: "c1",
+        kind: "pair",
+        address: "00:11:22:33:44:55",
+        state: "pending",
+        expiresInMs: 120_000,
+      },
+    }),
+    forgetBluetoothPairing: vi.fn().mockResolvedValue({
+      command: {
+        id: "c2",
+        kind: "forget",
+        address: "22:22:22:22:22:22",
+        state: "pending",
+        expiresInMs: 120_000,
+      },
+    }),
+    ...overrides,
+  });
+}
 
 describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (theme) => {
   it.each([390, 1280])("renders printer status accessibly at %ipx", async (width) => {
@@ -454,6 +529,135 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     } finally {
       await page.viewport(1280, 900);
     }
+  });
+
+  it("renders Bluetooth devices, Show all and the Pair dialog accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      { api: bluetoothApi() },
+      theme,
+    );
+    await flush(el);
+    await openDiscovery(el);
+    expect(q(el, '[data-test="discovered-row-66:77:88:99:AA:BB"]')).toBeNull();
+    expect(q(el, "[data-test=bluetooth-note]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=show-all-bluetooth]")!.click();
+    await flush(el);
+    expect(q(el, '[data-test="discovered-row-66:77:88:99:AA:BB"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    await flush(el);
+    await expectNoA11yViolations(host);
+    q(el, "[data-test=confirm-pair]")!.click();
+    await flush(el);
+    expect((q(el, "[data-test=bluetooth-pin]") as unknown as { error: string }).error).toBe(
+      t("printers.bluetooth_pin_invalid"),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["pending", { expiresInMs: 120_000 }],
+    ["failed", { error: "Authentication Failed" }],
+  ] as const)("renders a Pair %s status accessibly", async (state, extra) => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: bluetoothApi({
+          pairBluetooth: vi.fn().mockResolvedValue({
+            command: { id: "c1", kind: "pair", address: "00:11:22:33:44:55", state, ...extra },
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openDiscovery(el);
+    q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+    await flush(el);
+    q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    q(el, "[data-test=confirm-pair]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
+    await flush(el);
+    expect(q(el, '[data-test="discovered-command-00:11:22:33:44:55"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders the status row of a Pair whose device the scan lost accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: bluetoothApi({
+          background: stubApi(false, { listDiscoveredPrinters: vi.fn().mockResolvedValue([]) }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+      await flush(el);
+      q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
+      );
+      await flush(el);
+      q(el, "[data-test=confirm-pair]")!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(120_000);
+      await flush(el);
+      expect(q(el, '[data-test="discovered-row-00:11:22:33:44:55"]')!.textContent).toContain(
+        t("printers.bluetooth_not_seen"),
+      );
+      expect(q(el, '[data-test="discovered-command-00:11:22:33:44:55"]')!.textContent).toBe(
+        t("printers.bluetooth_no_answer"),
+      );
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("renders a switched-off Bluetooth printer's Forget pairing and its outcome accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: bluetoothApi({
+          forgetBluetoothPairing: vi.fn().mockResolvedValue({
+            command: { id: "c2", kind: "forget", address: "22:22:22:22:22:22", state: "failed" },
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    q(el, "wt-tabs")!
+      .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+      .click();
+    await flush(el);
+    const filter = q(
+      el,
+      '[data-test="printers-table"]',
+    )!.shadowRoot!.querySelector<HTMLSelectElement>('[name="status-filter"]')!;
+    filter.value = "";
+    filter.dispatchEvent(new Event("change"));
+    await flush(el);
+    const forget = q(el, "[data-test=forget-pairing-p4]")!;
+    forget.closest("dashboard-row-actions")!.shadowRoot!.querySelector("button")!.click();
+    await flush(el);
+    expect(forget.checkVisibility()).toBe(true);
+    await expectNoA11yViolations(host);
+    forget.click();
+    await flush(el);
+    forget.click();
+    await flush(el);
+    expect(q(el, "[data-test=printer-command-p4]")).not.toBeNull();
+    await expectNoA11yViolations(host);
   });
 
   it("renders agent editing accessibly", async () => {

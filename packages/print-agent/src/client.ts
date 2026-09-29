@@ -271,9 +271,13 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
   };
 }
 
-const MAX_BLUETOOTH_COMMANDS = 8;
+/** How many Bluetooth commands the agent holds at once (queued, running, or with an unsent
+ * outcome), so also the most outcomes one pull carries, and how many taken ids it remembers; and the
+ * most commands it reads from one reply. */
+export const BLUETOOTH_COMMAND_LIMIT = 8;
+export const PIN_WITHHELD = "pairing failed; the detail was withheld because it contained the PIN";
 const MAX_COMMAND_ID_LENGTH = 128;
-const MAX_OUTCOME_ERROR_LENGTH = 500;
+export const MAX_OUTCOME_ERROR_LENGTH = 500;
 const MAC_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/i;
 // Printable ASCII only, so the byte count BlueZ limits equals the length, and no newline can reach a
 // line-oriented child's stdin.
@@ -287,11 +291,16 @@ export function isBluetoothPin(value: string): boolean {
   return PIN_PATTERN.test(value);
 }
 
+/** Withheld whole: masking only the PIN leaves it readable from what surrounds the gap. */
+export function withholdPin(error: string, pin: string | undefined): string {
+  return pin !== undefined && error.includes(pin) ? PIN_WITHHELD : error;
+}
+
 /** A malformed command is dropped alone, never failing the reply, so a server newer or older than
  * this agent cannot stop printing. */
 function decodeBluetoothCommands(raw: unknown): BluetoothCommand[] {
   const commands: BluetoothCommand[] = [];
-  for (const entry of Array.isArray(raw) ? raw.slice(0, MAX_BLUETOOTH_COMMANDS) : []) {
+  for (const entry of Array.isArray(raw) ? raw.slice(0, BLUETOOTH_COMMAND_LIMIT) : []) {
     if (typeof entry !== "object" || entry === null) continue;
     const { id, kind, address, pin } = entry as Record<string, unknown>;
     if (
