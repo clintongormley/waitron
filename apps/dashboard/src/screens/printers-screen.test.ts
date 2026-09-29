@@ -13,7 +13,12 @@ import type {
   Printer,
   Till,
 } from "../api/client.js";
-import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
+import {
+  COMMAND_ANSWER_MS,
+  PrintersScreen,
+  SCAN_LISTEN_MS,
+  SCAN_POLL_MS,
+} from "./printers-screen.js";
 import { LiveData } from "@waitron/dashboard-kit";
 
 beforeEach(() => {
@@ -2054,11 +2059,16 @@ describe("printers-screen", () => {
 
   it("registers Bluetooth devices from the same discovered table", async () => {
     const api = stubApi({
-      listDiscoveredPrinters: vi
-        .fn()
-        .mockResolvedValue([
-          { ...discovered[0], transport: "bluetooth", localKey: "AA:BB", name: "Bar printer" },
-        ]),
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([
+        {
+          ...discovered[0],
+          transport: "bluetooth",
+          localKey: "AA:BB",
+          name: "Bar printer",
+          printerLike: true,
+          paired: true,
+        },
+      ]),
     });
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
     await flush(el);
@@ -2848,6 +2858,7 @@ it.each(["usb", "bluetooth", "network_tcp"] as const)(
       host: stored.host,
       port: stored.port,
       localKey: stored.localKey ?? undefined,
+      ...(transport === "bluetooth" ? { printerLike: true as const, paired: true as const } : {}),
     };
     const api = stubApi({
       listPrinters: vi.fn().mockImplementation(async () => [{ ...stored, active }]),
@@ -4972,5 +4983,675 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     expect(errorOf(el, "[data-test=probe-host]")).toBe("");
     expect(await bottomOf(el, probeActions)).toBe("");
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
+  });
+});
+
+describe("printers-screen Bluetooth pairing", () => {
+  const ADDRESS = "00:11:22:33:44:55";
+  const OTHER = "66:77:88:99:AA:BB";
+  const PIN = "8472";
+  const barPrinter: DiscoveredPrinter = {
+    agentId: "a1",
+    agentName: "Cocina agent",
+    transport: "bluetooth",
+    localKey: ADDRESS,
+    name: "Bar printer",
+    printerLike: true,
+    alreadyRegistered: false,
+    printerId: null,
+    lastSeenAt: "2023-11-14T22:13:20.000Z",
+  };
+  const headphones: DiscoveredPrinter = {
+    ...barPrinter,
+    localKey: OTHER,
+    name: "Headphones",
+    printerLike: undefined,
+  };
+  const btPrinter = (id: string, localKey: string, active: boolean): Printer => ({
+    ...printers[2]!,
+    id,
+    name: `BT ${id}`,
+    transport: "bluetooth",
+    localKey,
+    active,
+  });
+  const pendingCommand = (kind: "pair" | "forget", address = ADDRESS) => ({
+    id: `${kind}-1`,
+    kind,
+    address,
+    state: "pending" as const,
+  });
+  const sel = (test: string) => `[data-test="${test}"]`;
+
+  async function mountPairing(
+    devices: DiscoveredPrinter[],
+    overrides: Partial<DashboardApi> = {},
+  ): Promise<{ el: PrintersScreen; api: DashboardApi }> {
+    const api = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(devices),
+      pairBluetooth: vi.fn().mockResolvedValue({ command: pendingCommand("pair") }),
+      forgetBluetoothPairing: vi.fn().mockResolvedValue({ command: pendingCommand("forget") }),
+      ...overrides,
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    return { el, api };
+  }
+
+  async function openPair(el: PrintersScreen, address = ADDRESS): Promise<void> {
+    q(el, sel(`pair-${address}`))!.click();
+    await flush(el);
+  }
+
+  const pinField = (el: PrintersScreen) =>
+    q(el, sel("bluetooth-pin")) as HTMLElement & {
+      value: string;
+      error: string;
+      required: boolean;
+    };
+
+  it("offers Pair, not Add, for an unpaired printer-like device, and Add for a paired one", async () => {
+    const paired: DiscoveredPrinter = { ...barPrinter, localKey: OTHER, paired: true };
+    const { el } = await mountPairing([barPrinter, paired]);
+    await openDiscovery(el);
+    expect(text(el, sel(`pair-${ADDRESS}`))).toBe(t("printers.bluetooth_pair"));
+    expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
+    expect(q(el, sel(`pair-${OTHER}`))).toBeNull();
+    // Pairing is not delivery: the note says so, and Pair opens no naming form.
+    expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
+    await openPair(el);
+    expect(q(el, sel("name-printer-modal"))).toBeNull();
+  });
+
+  it("says nothing about Bluetooth when no Bluetooth device was found", async () => {
+    const { el } = await mountPairing(discovered);
+    await openDiscovery(el);
+    expect(q(el, sel("bluetooth-note"))).toBeNull();
+    expect(q(el, sel("show-all-bluetooth"))).toBeNull();
+  });
+
+  it("asks for the PIN, checks it beside the field and the action, then pairs through the named agent", async () => {
+    const { el, api } = await mountPairing([barPrinter]);
+    await openDiscovery(el);
+    await openPair(el);
+    const modal = sel("pair-printer-modal");
+    expect(q(el, modal)).not.toBeNull();
+    expect(pinField(el).getAttribute("name")).toBe("pin");
+    expect(pinField(el).required).toBe(true);
+    expect(text(el, `${modal} .hint`)).toContain("Bar printer");
+    expect((pinField(el) as unknown as { hint: string }).hint).toBe(
+      t("printers.bluetooth_pin_hint"),
+    );
+    // Silent until the first submission.
+    expect(pinField(el).error).toBe("");
+    expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
+
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    expect(api.pairBluetooth).not.toHaveBeenCalled();
+    expect(pinField(el).error).toBe(t("printers.bluetooth_pin_invalid"));
+    expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(true);
+    expect(inputFocused(el, sel("bluetooth-pin"))).toBe(true);
+
+    for (const bad of ["12 34", "12345678901234567", "ñ123"]) {
+      typeField(el, sel("bluetooth-pin"), bad);
+      await flush(el);
+      expect(pinField(el).error).toBe(t("printers.bluetooth_pin_invalid"));
+    }
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    expect(pinField(el).error).toBe("");
+    expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
+
+    pinField(el)
+      .shadowRoot!.querySelector("input")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(q(el, modal)).toBeNull());
+    expect(api.pairBluetooth).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS, PIN);
+    expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+    // Pending: a second Pair waits for the outcome.
+    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(true);
+    expect(api.createPrinter).not.toHaveBeenCalled();
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+  });
+
+  it("shows a refusal naming the PIN under the field and one naming no field beside the action, never disabling Pair", async () => {
+    const pair = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "pin" } })
+      .mockRejectedValueOnce({
+        code: "printer.bluetooth_not_discovered",
+        params: { address: ADDRESS },
+      });
+    const { el } = await mountPairing([barPrinter], { pairBluetooth: pair });
+    await openDiscovery(el);
+    await openPair(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    expect(pinField(el).error).toBe(t("printers.bluetooth_pin_invalid"));
+    expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
+    expect(inputFocused(el, sel("bluetooth-pin"))).toBe(true);
+
+    typeField(el, sel("bluetooth-pin"), "0000");
+    await flush(el);
+    expect(pinField(el).error).toBe("");
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    expect(pinField(el).error).toBe("");
+    expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe(
+      codeMessage("printer.bluetooth_not_discovered"),
+    );
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
+    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+  });
+
+  it("never keeps the PIN once the dialog closes", async () => {
+    let answer!: (value: unknown) => void;
+    const pair = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountPairing([barPrinter], { pairBluetooth: pair });
+    await openDiscovery(el);
+    await openPair(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("cancel-pair"))!.click();
+    await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
+    await openPair(el);
+    expect(pinField(el).value).toBe("");
+    expect(pinField(el).error).toBe("");
+
+    // Cancelled while its request is out: the command was sent, so its status still shows.
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    expect(pair).toHaveBeenCalledOnce();
+    q(el, sel("cancel-pair"))!.click();
+    await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
+    answer({ command: pendingCommand("pair") });
+    await flush(el);
+    expect(q(el, sel("pair-printer-modal"))).toBeNull();
+    expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_pairing"));
+    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(true); // Pair waits while pending
+  });
+
+  it("ignores a refusal that arrives after its dialog closed", async () => {
+    let refuse!: (error: unknown) => void;
+    const pair = vi.fn().mockImplementation(
+      () =>
+        new Promise((_, reject) => {
+          refuse = reject;
+        }),
+    );
+    const { el } = await mountPairing([barPrinter], { pairBluetooth: pair });
+    await openDiscovery(el);
+    await openPair(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    q(el, sel("cancel-pair"))!.click();
+    await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
+    await openPair(el);
+    refuse({ code: "management.request_invalid", params: { field: "pin" } });
+    await flush(el);
+    expect(pinField(el).error).toBe("");
+    expect(await bottomOf(el, footerOf("pair-printer-modal"))).toBe("");
+    expect(isDisabled(el, sel("confirm-pair"))).toBe(false);
+    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+  });
+
+  it("tracks no pairing whose Add printer dialog closed before the request answered", async () => {
+    let answer!: (value: unknown) => void;
+    const pair = vi.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const { el } = await mountPairing([barPrinter], { pairBluetooth: pair });
+    await openDiscovery(el);
+    await openPair(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    q(el, sel("cancel-pair"))!.click();
+    await vi.waitFor(() => expect(q(el, sel("pair-printer-modal"))).toBeNull());
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+    answer({ command: pendingCommand("pair") });
+    await flush(el);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+  });
+
+  it("shows no error for a status read that fails after Add printer closed", async () => {
+    let fail!: (error: unknown) => void;
+    const passive = vi
+      .fn()
+      .mockResolvedValueOnce([barPrinter])
+      .mockImplementation(
+        () =>
+          new Promise((_, reject) => {
+            fail = reject;
+          }),
+      );
+    const { el } = await mountPairing([barPrinter], {
+      background: stubApi({ listDiscoveredPrinters: passive }),
+    });
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      // Let the scan's listen end, so only the status poll is reading.
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await openPair(el);
+      typeField(el, sel("bluetooth-pin"), PIN);
+      await flush(el);
+      q(el, sel("confirm-pair"))!.click();
+      await flush(el);
+      const reads = passive.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledTimes(reads + 1);
+      q(el, "[data-test=cancel-new-printer]")!.click();
+      await flush(el);
+      await flush(el);
+      fail({ code: "connection.failed" });
+      await flush(el);
+      expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 3);
+      expect(passive).toHaveBeenCalledTimes(reads + 1);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows pairing success, then offers Add for the now-paired device", async () => {
+    const background = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([
+        {
+          ...barPrinter,
+          paired: true,
+          bluetoothCommand: { ...pendingCommand("pair"), state: "succeeded" },
+        },
+      ]),
+    });
+    const { el } = await mountPairing([barPrinter], { background });
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await openPair(el);
+      typeField(el, sel("bluetooth-pin"), PIN);
+      await flush(el);
+      q(el, sel("confirm-pair"))!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(t("printers.bluetooth_paired"));
+      expect(text(el, sel(`register-${ADDRESS}`))).toBe(t("action.add"));
+      expect(q(el, sel(`pair-${ADDRESS}`))).toBeNull();
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows the reason the agent gave for a failed pairing until it is dismissed", async () => {
+    const background = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([
+        {
+          ...barPrinter,
+          bluetoothCommand: {
+            ...pendingCommand("pair"),
+            state: "failed",
+            error: "Authentication Failed",
+          },
+        },
+      ]),
+    });
+    const { el } = await mountPairing([barPrinter], { background });
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await openPair(el);
+      typeField(el, sel("bluetooth-pin"), PIN);
+      await flush(el);
+      q(el, sel("confirm-pair"))!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel(`discovered-command-${ADDRESS}`))).toBe(
+        `${t("printers.bluetooth_pair_failed")}: Authentication Failed`,
+      );
+      expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+      q(el, sel(`dismiss-discovered-command-${ADDRESS}`))!.click();
+      await flush(el);
+      expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a pairing's status when Add printer closes", async () => {
+    const { el } = await mountPairing([barPrinter]);
+    await openDiscovery(el);
+    await openPair(el);
+    typeField(el, sel("bluetooth-pin"), PIN);
+    await flush(el);
+    q(el, sel("confirm-pair"))!.click();
+    await flush(el);
+    expect(q(el, sel(`discovered-command-${ADDRESS}`))).not.toBeNull();
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-command-${ADDRESS}`))).toBeNull();
+    expect(isDisabled(el, sel(`pair-${ADDRESS}`))).toBe(false);
+  });
+
+  it("hides a device that does not look like a printer until Show all devices, and hides it again on reopening", async () => {
+    const { el } = await mountPairing([barPrinter, headphones]);
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).not.toBeNull();
+    expect(text(el, sel(`pair-${OTHER}`))).toBe(t("printers.bluetooth_pair"));
+    expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_hide_others"));
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    expect(text(el, sel("show-all-bluetooth"))).toBe(t("printers.bluetooth_show_all"));
+  });
+
+  it("keeps a wrongly-described registered printer reachable in its printer row and through Show all", async () => {
+    const stored = btPrinter("p4", OTHER, false);
+    const device: DiscoveredPrinter = {
+      ...headphones,
+      paired: true,
+      alreadyRegistered: true,
+      printerId: "p4",
+    };
+    const { el, api } = await mountPairing([device], {
+      listPrinters: vi.fn().mockResolvedValue([...printers, stored]),
+    });
+    await selectTab(el, "printers");
+    await filterPrinters(el, "all");
+    expect(q(el, sel("printer-row-p4"))).not.toBeNull();
+    expect(q(el, sel("forget-pairing-p4"))).not.toBeNull();
+    await openDiscovery(el);
+    expect(q(el, sel(`discovered-row-${OTHER}`))).toBeNull();
+    q(el, sel("show-all-bluetooth"))!.click();
+    await flush(el);
+    expect(text(el, sel(`register-${OTHER}`))).toBe(t("printers.add_again"));
+    await addDiscovered(el, q(el, sel(`register-${OTHER}`))!);
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p4", { active: true });
+  });
+
+  it("offers Forget pairing only on an inactive Bluetooth printer its agent reports paired now", async () => {
+    const rows = [
+      btPrinter("p4", ADDRESS, false),
+      btPrinter("p5", "11:11:11:11:11:11", false),
+      btPrinter("p6", "22:22:22:22:22:22", true),
+      btPrinter("p7", "33:33:33:33:33:33", false),
+    ];
+    const reported = (printerId: string, localKey: string, paired?: true): DiscoveredPrinter => ({
+      ...barPrinter,
+      localKey,
+      paired,
+      alreadyRegistered: true,
+      printerId,
+    });
+    const { el } = await mountPairing(
+      [
+        reported("p4", ADDRESS, true),
+        reported("p6", "22:22:22:22:22:22", true),
+        reported("p7", "33:33:33:33:33:33"),
+        { ...discovered[1]!, printerId: "p3" },
+      ],
+      { listPrinters: vi.fn().mockResolvedValue([...printers, ...rows]) },
+    );
+    await selectTab(el, "printers");
+    await filterPrinters(el, "all");
+    expect(text(el, sel("forget-pairing-p4"))).toBe(t("printers.bluetooth_forget"));
+    for (const id of ["p1", "p2", "p3", "p5", "p6", "p7"])
+      expect(q(el, sel(`forget-pairing-${id}`)), id).toBeNull();
+  });
+
+  describe("forgetting", () => {
+    const stored = btPrinter("p4", ADDRESS, false);
+    const reported: DiscoveredPrinter = {
+      ...barPrinter,
+      paired: true,
+      alreadyRegistered: true,
+      printerId: "p4",
+    };
+
+    async function mountForget(
+      background:
+        DiscoveredPrinter[][] | ReturnType<typeof vi.fn<() => Promise<DiscoveredPrinter[]>>>,
+      overrides: Partial<DashboardApi> = {},
+    ) {
+      const passive = Array.isArray(background)
+        ? background.reduce(
+            (fn, rows) => fn.mockResolvedValueOnce(rows),
+            vi.fn<() => Promise<DiscoveredPrinter[]>>().mockResolvedValue(background.at(-1) ?? []),
+          )
+        : background;
+      const listPrinters = vi.fn().mockResolvedValue([...printers, stored]);
+      const mounted = await mountPairing([reported], {
+        listPrinters,
+        // A reload reads through the background client too.
+        background: stubApi({ listPrinters, listDiscoveredPrinters: passive }),
+        ...overrides,
+      });
+      await selectTab(mounted.el, "printers");
+      await filterPrinters(mounted.el, "all");
+      vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+      return { ...mounted, passive };
+    }
+
+    async function forget(el: PrintersScreen): Promise<void> {
+      q(el, sel("forget-pairing-p4"))!.click();
+      await flush(el);
+      q(el, sel("forget-pairing-p4"))!.click();
+      await flush(el);
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("asks for a confirming click, then forgets through the named agent and address", async () => {
+      const { el, api } = await mountForget([[reported]]);
+      q(el, sel("forget-pairing-p4"))!.click();
+      await flush(el);
+      expect(api.forgetBluetoothPairing).not.toHaveBeenCalled();
+      expect(text(el, sel("forget-pairing-p4"))).toBe(t("printers.bluetooth_forget_confirm"));
+      q(el, sel("forget-pairing-p4"))!.click();
+      await flush(el);
+      expect(api.forgetBluetoothPairing).toHaveBeenCalledExactlyOnceWith("a1", ADDRESS);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgetting"));
+      expect(isDisabled(el, sel("forget-pairing-p4"))).toBe(true);
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+      expect(api.updatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("keeps showing a forgotten pairing after its row leaves the list, until dismissed", async () => {
+      const done = {
+        ...reported,
+        bluetoothCommand: { ...pendingCommand("forget"), state: "succeeded" as const },
+      };
+      const { el } = await mountForget([[done], []]);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+      // Any reload reads the list again; the device has left it, taking its status with it.
+      q(el, sel("deactivate-printer-p1"))!.click();
+      await flush(el);
+      await flush(el);
+      expect(q(el, sel("forget-pairing-p4"))).toBeNull();
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+      q(el, sel("dismiss-printer-command-p4"))!.click();
+      await flush(el);
+      expect(q(el, sel("printer-command-p4"))).toBeNull();
+    });
+
+    it("shows the reason a forget failed", async () => {
+      const failed = {
+        ...reported,
+        bluetoothCommand: {
+          ...pendingCommand("forget"),
+          state: "failed" as const,
+          error: "Device busy",
+        },
+      };
+      const { el } = await mountForget([[failed]]);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(
+        `${t("printers.bluetooth_forget_failed")}: Device busy`,
+      );
+    });
+
+    it("shows a refused forget on the page", async () => {
+      const { el } = await mountForget([[reported]], {
+        forgetBluetoothPairing: vi
+          .fn()
+          .mockRejectedValue({
+            code: "printer.bluetooth_not_paired",
+            params: { address: ADDRESS },
+          }),
+      });
+      await forget(el);
+      expect(text(el, "[role=alert]")).toBe(codeMessage("printer.bluetooth_not_paired"));
+      expect(q(el, sel("printer-command-p4"))).toBeNull();
+      expect(isDisabled(el, sel("forget-pairing-p4"))).toBe(false);
+    });
+
+    it("polls passively without overlapping itself, and stops at the outcome", async () => {
+      let answer!: (rows: DiscoveredPrinter[]) => void;
+      const passive = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<DiscoveredPrinter[]>((resolve) => {
+              answer = resolve;
+            }),
+        )
+        .mockResolvedValue([
+          { ...reported, bluetoothCommand: { ...pendingCommand("forget"), state: "succeeded" } },
+        ]);
+      const { el, api } = await mountForget(passive);
+      const foreground = vi.mocked(api.listDiscoveredPrinters).mock.calls.length;
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 3);
+      expect(passive).toHaveBeenCalledOnce();
+      answer([{ ...reported, bluetoothCommand: pendingCommand("forget") }]);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      expect(passive).toHaveBeenCalledTimes(2);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledTimes(2);
+      expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(foreground);
+    });
+
+    it("calls a command whose status vanished past its expiry unanswered, never done, and stops polling", async () => {
+      const { el, passive } = await mountForget([[]]);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(COMMAND_ANSWER_MS - SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgetting"));
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_no_answer"));
+      const calls = passive.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledTimes(calls);
+    });
+
+    it("keeps waiting through failed reads, and still gives up at the expiry", async () => {
+      const passive = vi.fn().mockRejectedValue({ code: "connection.failed" });
+      const { el } = await mountForget(passive);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgetting"));
+      expect(q(el, "[data-test=printer-refresh-error]")).not.toBeNull();
+      await vi.advanceTimersByTimeAsync(COMMAND_ANSWER_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_no_answer"));
+      const calls = passive.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledTimes(calls);
+    });
+
+    it("waits for this command's own outcome, not an earlier one still listed for the device", async () => {
+      const earlier = {
+        ...reported,
+        bluetoothCommand: { ...pendingCommand("forget"), id: "earlier", state: "failed" as const },
+      };
+      const { el } = await mountForget([[earlier]]);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 2);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgetting"));
+    });
+
+    it("reads through the screen's own client when it has no background client", async () => {
+      const { el } = await mountForget([[reported]], {
+        background: undefined,
+        listDiscoveredPrinters: vi
+          .fn()
+          .mockResolvedValueOnce([reported])
+          .mockResolvedValue([
+            { ...reported, bluetoothCommand: { ...pendingCommand("forget"), state: "succeeded" } },
+          ]),
+      });
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+    });
+
+    it("stops polling when the screen goes away", async () => {
+      let answer!: (rows: DiscoveredPrinter[]) => void;
+      const passive = vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<DiscoveredPrinter[]>((resolve) => {
+              answer = resolve;
+            }),
+        )
+        .mockResolvedValue([reported]);
+      const { el } = await mountForget(passive);
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      el.remove();
+      answer([{ ...reported, bluetoothCommand: pendingCommand("forget") }]);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS * 5);
+      expect(passive).toHaveBeenCalledOnce();
+    });
   });
 });

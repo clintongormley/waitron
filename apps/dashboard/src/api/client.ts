@@ -742,6 +742,15 @@ export interface PrinterAddressProbe {
   expiresAt: number;
 }
 
+/** The latest Pair or Forget command for one agent and address; it never carries the PIN. */
+export interface BluetoothCommandStatus {
+  id: string;
+  kind: "pair" | "forget";
+  address: string;
+  state: "pending" | "succeeded" | "failed";
+  error?: string;
+}
+
 export interface DiscoveredPrinter {
   agentId: string;
   agentName: string | null;
@@ -753,6 +762,11 @@ export interface DiscoveredPrinter {
   model?: string | null;
   name?: string | null;
   pagePrinter?: true;
+  /** Bluetooth only: the agent's scan decoded the device as a printer. */
+  printerLike?: true;
+  /** Bluetooth only: the agent reported the device paired within the list's freshness window. */
+  paired?: true;
+  bluetoothCommand?: BluetoothCommandStatus;
   alreadyRegistered: boolean;
   printerId: string | null;
   lastSeenAt: string;
@@ -2345,6 +2359,29 @@ export class DashboardApi {
 
   listDiscoveredPrinters(): Promise<DiscoveredPrinter[]> {
     return this.#request<DiscoveredPrinter[]>("/management-api/discovered-printers", "GET");
+  }
+
+  pairBluetooth(
+    agentId: string,
+    address: string,
+    pin: string,
+  ): Promise<{ command: BluetoothCommandStatus }> {
+    return this.#request<{ command: BluetoothCommandStatus }>(
+      `/management-api/print-agents/${agentId}/bluetooth/pair`,
+      "POST",
+      { address, pin },
+    );
+  }
+
+  forgetBluetoothPairing(
+    agentId: string,
+    address: string,
+  ): Promise<{ command: BluetoothCommandStatus }> {
+    return this.#request<{ command: BluetoothCommandStatus }>(
+      `/management-api/print-agents/${agentId}/bluetooth/forget`,
+      "POST",
+      { address },
+    );
   }
 
   updatePrinter(id: string, patch: PrinterPatch): Promise<void> {
