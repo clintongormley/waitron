@@ -2805,7 +2805,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Staff can put it off by five minutes. Since campaign item A116 (#821; owner, 2026-09-28:
       "refuse with a code"), only the group waiting, the party's first held group, can be put off:
       a snooze on any later held group is refused `group.not_waiting` (409) and the till says so
-      in English and Spanish. A manager sets the minutes, or turns the reminder off, on the
+      in English and Spanish. Clearing a later group's snooze gets the same refusal and the same
+      snooze-worded sentence. A manager sets the minutes, or turns the reminder off, on the
       dashboard's operations screen (Off, or 5 to 30 minutes; the route takes any whole number
       from 1 to 120).
     - The table screen's tab drawer is now Current orders: every group of the party in order, with
@@ -2854,10 +2855,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         each party's `reminder` (the held group waiting and when it is due); the till's floor
         mapping (`#toFloorTable`, `apps/till/src/screens/till-floor-screen.ts`) drops it: the
         finish-branch run-it review called it with and without a due reminder and got identical
-        data. The table screen's Current
-        orders shows it on the waiting group once it has a time: the time it falls due, then Snooze
-        and, where waiters fire held groups, Fire. **Next action:** a mark on the table's token when
-        a party's reminder is due.
+        data. The table screen's Current orders shows it on the waiting group once it has a time:
+        the time it falls due, then Snooze and, where waiters fire held groups, Fire; while it is
+        snoozed, also Clear snooze (A120). **Next action:** a mark on the table's token when a
+        party's reminder is due.
       - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
         group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
         (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
@@ -2866,10 +2867,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         behind the other party's held groups with its snooze intact. Measured 2026-09-29 with a
         throwaway test on the A116 branch, reminder at 10 minutes: once the group ahead was fired
         and served at 20:30, the moved group became the waiting one due at its leftover 20:20, not
-        the 20:40 it would have without the snooze. It predates A116. **Next action:** campaign item
-        A120 — a server command beside `group.snooze` that clears the snooze, and a Clear snooze
-        action on the till's Current orders; like a snooze, it applies only to the group the
-        reminder is waiting on, so a moved group can be cleared once it becomes the waiting one.
+        the 20:40 it would have without the snooze. It predates A116. **DONE (campaign item
+        A120):** staff clear a snooze with Clear snooze on Current orders
+        (`POST /api/parties/:id/groups/:gid/unsnooze`, `unsnoozeReminder` in
+        `apps/server/src/order-groups.ts`). Like a snooze, it applies only to the group the reminder
+        is waiting on, so a moved group is cleared once it becomes the waiting one; the reminder then
+        falls due as if it had never been snoozed. Clearing a group with no snooze is accepted and
+        changes nothing but the party's revision.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

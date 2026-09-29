@@ -2289,6 +2289,22 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("unsnoozeGroup POSTs the submission and revision to the group's /unsnooze route", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ revision: 9 }));
+
+    await expect(
+      new TillApi("", fetchStub).unsnoozeGroup("v1", "g3", {
+        submissionId: "sub-7",
+        expectedPartyRevision: 8,
+      }),
+    ).resolves.toEqual({ revision: 9 });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/groups/g3/unsnooze",
+      post({ submissionId: "sub-7", expectedPartyRevision: 8 }),
+    );
+  });
+
   it("readCurrentOrders GETs the party's Current orders", async () => {
     const answer = {
       revision: 6,

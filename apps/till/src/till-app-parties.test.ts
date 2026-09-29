@@ -221,6 +221,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     unmarkServed: vi.fn().mockResolvedValue({ revision: 4 }),
     markGroupServed: vi.fn().mockResolvedValue({ revision: 4 }),
     snoozeGroup: vi.fn().mockResolvedValue({ revision: 4 }),
+    unsnoozeGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     sendLines: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
@@ -3694,6 +3695,7 @@ describe("till-app: Current orders", () => {
     ],
     ["serve-group", { groupId: "g1" }, "markGroupServed", ["g1"]],
     ["snooze-group", { groupId: "g2", minutes: 5 }, "snoozeGroup", ["g2", 5]],
+    ["unsnooze-group", { groupId: "g2" }, "unsnoozeGroup", ["g2"]],
   ] as const)(
     "%s goes to the party under a fresh submission id at the revision shown, then reads Current orders again",
     async (type, detail, method, args) => {

@@ -4,7 +4,12 @@ import { DraftStore } from "../state/draft-sync.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { products, menuOf } from "./till-table-order-screen.test-helpers.js";
-import { current, groups, now } from "./till-table-order-screen.current-orders.test-helpers.js";
+import {
+  current,
+  groups,
+  now,
+  snoozed,
+} from "./till-table-order-screen.current-orders.test-helpers.js";
 
 afterEach(cleanupWidgets);
 
@@ -43,6 +48,16 @@ describe.each(["light", "dark"] as const)("Current orders a11y (%s theme)", (the
 
   it("has no violations with a reminder not yet due", async () => {
     const { host } = await mountDrawer({ now: now - 5 * 60_000 });
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a snoozed reminder that is due", async () => {
+    const { host } = await mountDrawer({ currentOrders: snoozed() });
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a snoozed reminder not yet due", async () => {
+    const { host } = await mountDrawer({ currentOrders: snoozed(), now: now - 5 * 60_000 });
     await expectNoA11yViolations(host);
   });
 

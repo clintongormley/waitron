@@ -243,6 +243,11 @@ export interface SnoozeGroupDetail {
   minutes: number;
 }
 
+/** `unsnooze-group`: the waiting group's snooze cleared, so its reminder falls due at its own time. */
+export interface UnsnoozeGroupDetail {
+  groupId: string;
+}
+
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
 
@@ -752,16 +757,20 @@ export class TillTableOrderScreen extends LitElement {
 
       /* Words first, so the reminder never rests on the warning colour. */
       .group-reminder {
-        margin: 0;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .group-reminder.due {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
         gap: var(--wt-space-2);
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .group-reminder > .group-actions {
+        margin-inline-start: auto;
+      }
+
+      .group-reminder.due {
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
         background: var(--wt-color-warning);
@@ -2770,7 +2779,7 @@ export class TillTableOrderScreen extends LitElement {
     const place = held.indexOf(group);
     const shown = this.currentOrders?.groups.find((candidate) => candidate.id === group.id);
     const current = this.currentOrders === null ? null : (shown?.rows ?? []);
-    const reminder = isHeld ? this.#reminderOf(group) : nothing;
+    const reminder = isHeld ? this.#reminderOf(group, shown) : nothing;
     // A due reminder brings its own Fire.
     const fires = this.fireControl === "waiter" && !(reminder !== nothing && this.#reminderDue);
     const servesWhole =
@@ -2883,22 +2892,44 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** The held group waiting for release: when it is to be fired, and once that time has come,
-   * Snooze and (where the waiter fires) Fire. Nothing while it has no time. */
-  #reminderOf(group: OrderGroup): TemplateResult | typeof nothing {
+   * Snooze and (where the waiter fires) Fire. While it is snoozed, Clear snooze too, due or not.
+   * Nothing while it has no time. */
+  #reminderOf(
+    group: OrderGroup,
+    shown: CurrentOrderGroup | undefined,
+  ): TemplateResult | typeof nothing {
     const reminder = this.currentOrders?.reminder;
     // A time that cannot be read is no time.
     if (reminder?.groupId !== group.id || this.#reminderDueAt() === Number.POSITIVE_INFINITY)
       return nothing;
     const name = t("table.group_n").replace("{n}", String(group.position));
+    const snoozed = shown?.remindAt;
+    const clear =
+      snoozed === null || snoozed === undefined
+        ? nothing
+        : html`<wt-button
+            variant="secondary"
+            data-reminder-unsnooze
+            aria-label=${`${t("table.reminder_clear_snooze")} · ${name}`}
+            ?disabled=${this.groupCommandBusy}
+            @click=${() =>
+              this.#dispatch("unsnooze-group", { groupId: group.id } satisfies UnsnoozeGroupDetail)}
+          >
+            ${t("table.reminder_clear_snooze")}
+          </wt-button>`;
     if (!this.#reminderDue) {
       const time = clockTime(this.#reminderDueAt());
-      return html`<p class="group-reminder" data-group-reminder="waiting">
-        ${t("table.reminder_at").replace("{time}", () => time)}
-      </p>`;
+      return html`<div class="group-reminder" data-group-reminder="waiting">
+        <span class="group-reminder-text"
+          >${t("table.reminder_at").replace("{time}", () => time)}</span
+        >
+        ${clear === nothing ? nothing : html`<span class="group-actions">${clear}</span>`}
+      </div>`;
     }
     return html`<div class="group-reminder due" data-group-reminder="due">
       <span class="group-reminder-text">${t("table.reminder_due")}</span>
       <span class="group-actions">
+        ${clear}
         <wt-button
           variant="secondary"
           data-reminder-snooze

@@ -261,6 +261,9 @@ Staff control the release of held groups, not guests. **Owner, 2026-09-26:**
 
 Show the reminder on the table or tab and in its details. You can fire the group or snooze it.
 
+**Owner, 2026-09-29:** staff can also clear a snooze by hand, from Current orders (campaign item
+A120).
+
 ### Print at fire time by default
 
 By default, print preparation tickets only when their groups fire. A configurable alternative

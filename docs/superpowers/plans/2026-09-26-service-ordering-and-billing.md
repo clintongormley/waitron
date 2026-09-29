@@ -361,6 +361,7 @@ names it so the owner can overturn it at review.
   - Snoozing sets `order_groups.remind_at` to now plus the snooze, and never touches a served time.
   - Firing, emptying or cancelling the group clears its reminder. Reordering recomputes it for
     whichever group is now first.
+    _(2026-09-29: staff can also clear a snooze by hand, from Current orders; campaign item A120.)_
 - **D12. Standalone ordering (spec §9).**
   - `products.ordering` takes `public | staff_only | not_sold_separately` and replaces
     `sold_alone`. **It is declared WITHOUT a table CHECK.** A CHECK added to an existing table makes
@@ -431,7 +432,7 @@ names it so the owner can overturn it at review.
     `expectedVisitRevision`, compare it and bump it in the same transaction (a mismatch is
     `visit.out_of_date`, and nothing is written):
     - group submit, join, fire, reorder and move, and the pass's ready and away (Tasks 3, 5);
-    - served, unserved and snooze (Task 9);
+    - served, unserved and snooze (Task 9); _(2026-09-29: and clear snooze, campaign item A120.)_
     - draft submission (Task 7);
     - Finish and Mark cleared (Task 2);
     - **every route that moves lines or tables between bills or visits**: the tab routes `move`,

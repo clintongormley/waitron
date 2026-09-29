@@ -2036,6 +2036,18 @@ export class TillApi {
     });
   }
 
+  /** Clear the snooze of the group waiting →
+   * `POST /api/parties/:partyId/groups/:groupId/unsnooze`: its reminder falls due at its own time
+   * again, and a group with no snooze is left as it is. A fired group rejects `group.not_held`, and
+   * a held group other than the one waiting `group.not_waiting`. */
+  unsnoozeGroup(
+    partyId: string,
+    groupId: string,
+    command: GroupCommand,
+  ): Promise<{ revision: number }> {
+    return this.#request(`/api/parties/${partyId}/groups/${groupId}/unsnooze`, "POST", command);
+  }
+
   /** A party's Current orders → `GET /api/parties/:partyId/current-orders`. */
   readCurrentOrders(partyId: string): Promise<CurrentOrders> {
     return this.#request(`/api/parties/${partyId}/current-orders`, "GET");

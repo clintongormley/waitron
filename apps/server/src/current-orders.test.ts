@@ -43,6 +43,7 @@ import {
   reorderHeldGroups,
   snoozeReminder,
   submitGroups,
+  unsnoozeReminder,
   type GroupLine,
   type GroupRelease,
 } from "./order-groups.js";
@@ -301,6 +302,11 @@ async function snooze(
 ) {
   const command = await args(partyId, opts);
   return inTx((tx) => snoozeReminder(tx, v.cfg, partyId, groupId, minutes, command));
+}
+
+async function unsnooze(v: Venue, partyId: string, groupId: string, opts: CommandOptions = {}) {
+  const command = await args(partyId, opts);
+  return inTx((tx) => unsnoozeReminder(tx, v.cfg, partyId, groupId, command));
 }
 
 async function reorder(partyId: string, heldGroupIds: string[]) {
@@ -795,6 +801,160 @@ describe("snoozeReminder (D8, D11, D19)", () => {
 
     await at(T(0), () => snooze(v, s.partyId, s.g3.id, 120));
     expect(await remindAtOf(s.g3.id)).toBe(T(0, 22));
+  });
+});
+
+describe("unsnoozeReminder (D8, D11, D19)", () => {
+  it("makes a snoozed group due at its unsnoozed time again, answering the party's revision", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
+    const revision = await revisionOf(s.partyId);
+
+    const answer = await at(T(16), () => unsnooze(v, s.partyId, s.g3.id));
+
+    expect(answer).toEqual({ revision: revision + 1 });
+    expect(await remindAtOf(s.g3.id)).toBeNull();
+    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
+    expect((await currentOrders(s.partyId)).reminder).toEqual({ groupId: s.g3.id, dueAt: T(15) });
+  });
+
+  it("accepts clearing a group with no snooze, moving only the party's revision", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    const revision = await revisionOf(s.partyId);
+
+    const answer = await unsnooze(v, s.partyId, s.g3.id);
+
+    expect(answer).toEqual({ revision: revision + 1 });
+    expect(await remindAtOf(s.g3.id)).toBeNull();
+    expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(15) });
+  });
+
+  it("answers a repeat of the same submission with the first answer, leaving a snooze taken since", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+    const submissionId = randomUUID();
+    const revision = await revisionOf(s.partyId);
+    const first = await unsnooze(v, s.partyId, s.g3.id, { submissionId });
+    await at(T(17), () => snooze(v, s.partyId, s.g3.id, 5));
+    const before = await snapshot(s.partyId);
+
+    const again = await unsnooze(v, s.partyId, s.g3.id, { submissionId, revision });
+
+    expect(again).toEqual(first);
+    expect(await snapshot(s.partyId)).toEqual(before);
+    expect(await remindAtOf(s.g3.id)).toBe(T(22));
+  });
+
+  it("refuses the same submission id for another group (submission.id_reused), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    const submissionId = randomUUID();
+    await unsnooze(v, s.partyId, s.g3.id, { submissionId });
+
+    await expectRefusedWithNothingWritten(
+      s.partyId,
+      () => unsnooze(v, s.partyId, s.g4.id, { submissionId }),
+      { code: "submission.id_reused", params: { submissionId } },
+    );
+  });
+
+  it("refuses a stale revision (party.out_of_date), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+    const revision = await revisionOf(s.partyId);
+
+    await expectRefusedWithNothingWritten(
+      s.partyId,
+      () => unsnooze(v, s.partyId, s.g3.id, { revision: revision - 1 }),
+      { code: "party.out_of_date", params: { partyId: s.partyId, revision } },
+    );
+  });
+
+  it("refuses a fired group (group.not_held), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await fourGroups(v);
+
+    await expectRefusedWithNothingWritten(s.partyId, () => unsnooze(v, s.partyId, s.g1.id), {
+      code: "group.not_held",
+      params: { groupId: s.g1.id },
+    });
+  });
+
+  it("refuses a group of another party, an unknown one and a removed one (group.not_found), writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await fourGroups(v);
+    const other = await fourGroups(v);
+    const command = await args(s.partyId);
+    await inTx((tx) =>
+      moveLinesToGroup(
+        tx,
+        v.cfg,
+        s.partyId,
+        [{ lineId: s.g3.lineIds[0]!, quantity: "1" }],
+        { groupId: s.g4.id },
+        command,
+      ),
+    );
+
+    for (const groupId of [other.g3.id, randomUUID(), s.g3.id]) {
+      await expectRefusedWithNothingWritten(s.partyId, () => unsnooze(v, s.partyId, groupId), {
+        code: "group.not_found",
+        params: { groupId },
+      });
+    }
+  });
+
+  it("refuses a held group that is not the one waiting (group.not_waiting), leaving the waiting group's snooze", async () => {
+    const v = await setupVenue();
+    const s = await servedUpToGroupTwo(v);
+    await at(T(15), () => snooze(v, s.partyId, s.g3.id, 5));
+
+    await expectRefusedWithNothingWritten(s.partyId, () => unsnooze(v, s.partyId, s.g4.id), {
+      code: "group.not_waiting",
+      params: { groupId: s.g4.id },
+    });
+
+    expect(await remindAtOf(s.g3.id)).toBe(T(20));
+  });
+
+  it("clears a merged group's leftover snooze only once it is the one waiting, which then falls due at its normal time", async () => {
+    const v = await setupVenue();
+    const a = await seated(v);
+    const aFired = await group(v, a.partyId, "fire", [line(v, "croquetas")]);
+    const aHeld = await group(v, a.partyId, "hold", [line(v, "flan")]);
+    await at(T(0), () => serveGroup(v, a.partyId, aFired.id));
+    const b = await seated(v);
+    const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
+    await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
+    const command = {
+      expectedPartyRevision: await revisionOf(a.partyId),
+      expectedSourcePartyRevision: await revisionOf(b.partyId),
+      operatorId: ALEX,
+    };
+    await inTx((tx) =>
+      mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
+    );
+    expect(await remindAtOf(bHeld.id)).toBe(T(20));
+
+    await expectRefusedWithNothingWritten(a.partyId, () => unsnooze(v, a.partyId, bHeld.id), {
+      code: "group.not_waiting",
+      params: { groupId: bHeld.id },
+    });
+    expect(await remindAtOf(bHeld.id)).toBe(T(20));
+
+    await fire(v, a.partyId, aHeld.id);
+    await at(T(30), () => serveGroup(v, a.partyId, aHeld.id));
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(20) });
+
+    await at(T(31), () => unsnooze(v, a.partyId, bHeld.id));
+
+    expect(await remindAtOf(bHeld.id)).toBeNull();
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(40) });
   });
 });
 

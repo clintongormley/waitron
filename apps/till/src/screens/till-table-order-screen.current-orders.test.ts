@@ -18,6 +18,7 @@ import {
   orderGroup,
   row,
   salad,
+  snoozed,
   steak,
   tarta,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
@@ -503,6 +504,57 @@ describe("the release reminder in Current orders", () => {
   it("shows no reminder when the venue has them off", async () => {
     const { el } = await mountCurrent({ currentOrders: current({ reminder: null }) });
     expect(q(el, "[data-group-reminder]")).toBeNull();
+  });
+
+  it("offers Clear snooze beside Snooze on a due reminder that was snoozed", async () => {
+    const { el } = await mountCurrent({ currentOrders: snoozed() });
+    expect(reminder(el)!.dataset.groupReminder).toBe("due");
+    const clear = reminder(el)!.querySelector<HTMLElement>("[data-reminder-unsnooze]")!;
+    expect(text(clear)).toBe(t("table.reminder_clear_snooze"));
+    expect(clear.getAttribute("aria-label")).toBe(
+      `${t("table.reminder_clear_snooze")} · ${t("table.group_n").replace("{n}", "3")}`,
+    );
+    expect(reminder(el)!.querySelector("[data-reminder-snooze]")).not.toBeNull();
+    const clears = capture(el, "unsnooze-group");
+    clear.click();
+    expect(clears.map((event) => [event.detail, event.composed])).toEqual([
+      [{ groupId: "g3" }, true],
+    ]);
+  });
+
+  it("says when a snoozed reminder not yet due will be, with Clear snooze beside it", async () => {
+    const { el } = await mountCurrent({ currentOrders: snoozed(), now: now - 5 * 60_000 });
+    const time = new Intl.DateTimeFormat(currentLocale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(now));
+    expect(reminder(el)!.dataset.groupReminder).toBe("waiting");
+    expect(text(reminder(el)!.querySelector(".group-reminder-text")!)).toBe(
+      t("table.reminder_at").replace("{time}", time),
+    );
+    const clear = reminder(el)!.querySelector<HTMLElement>("[data-reminder-unsnooze]")!;
+    expect(text(clear)).toBe(t("table.reminder_clear_snooze"));
+    expect(q(el, "[data-reminder-snooze]")).toBeNull();
+  });
+
+  it.each([
+    ["due", now],
+    ["not yet due", now - 5 * 60_000],
+  ])("offers no Clear snooze on a %s reminder nobody snoozed", async (_state, at) => {
+    const { el } = await mountCurrent({ now: at });
+    expect(reminder(el)).not.toBeNull();
+    expect(q(el, "[data-reminder-unsnooze]")).toBeNull();
+  });
+
+  it("offers no Clear snooze while the snoozed group's reminder has no time", async () => {
+    const { el } = await mountCurrent({ currentOrders: snoozed(null) });
+    expect(reminder(el)).toBeNull();
+    expect(q(el, "[data-reminder-unsnooze]")).toBeNull();
+  });
+
+  it("disables Clear snooze while a group command is under way", async () => {
+    const { el } = await mountCurrent({ currentOrders: snoozed(), groupCommandBusy: true });
+    expect(q(el, "[data-reminder-unsnooze]")!.disabled).toBe(true);
   });
 
   describe("on the screen's own clock", () => {

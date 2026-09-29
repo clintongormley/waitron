@@ -55,6 +55,7 @@ import type {
   SplitGroupLineDetail,
   SubmitDraftDetail,
   TakeOverDraftDetail,
+  UnsnoozeGroupDetail,
 } from "./screens/till-table-order-screen.js";
 import type { DraftGroup } from "./state/draft-groups.js";
 import "@waitron/ui/src/components/wt-toast.js";
@@ -3204,8 +3205,8 @@ export class TillApp extends LitElement {
     });
   }
 
-  /** Serving, its undo and a reminder's snooze are commands on the party whose order is open; with
-   * no order open they send nothing. */
+  /** Serving, its undo and a reminder's snooze and its clearing are commands on the party whose
+   * order is open; with no order open they send nothing. */
   async #onServiceRequest(
     request: (party: TableParty, command: GroupCommand) => Promise<{ revision: number }>,
   ): Promise<void> {
@@ -3236,6 +3237,13 @@ export class TillApp extends LitElement {
     const { groupId, minutes } = (event as CustomEvent<SnoozeGroupDetail>).detail;
     await this.#onServiceRequest((party, command) =>
       this.api.snoozeGroup(party.id, groupId, minutes, command),
+    );
+  }
+
+  async #onUnsnoozeGroup(event: Event): Promise<void> {
+    const { groupId } = (event as CustomEvent<UnsnoozeGroupDetail>).detail;
+    await this.#onServiceRequest((party, command) =>
+      this.api.unsnoozeGroup(party.id, groupId, command),
     );
   }
 
@@ -4066,6 +4074,7 @@ export class TillApp extends LitElement {
         @unserve-lines=${(event: Event) => void this.#onUnserveLines(event)}
         @serve-group=${(event: Event) => void this.#onServeGroup(event)}
         @snooze-group=${(event: Event) => void this.#onSnoozeGroup(event)}
+        @unsnooze-group=${(event: Event) => void this.#onUnsnoozeGroup(event)}
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
