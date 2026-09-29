@@ -214,8 +214,7 @@ export async function moveDraftsToParty(
     absorbed.map((draft) => draft.id),
   );
   for (const draft of absorbed) {
-    const actorId = operatorId;
-    await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, actorId);
+    await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, operatorId);
   }
 }
 

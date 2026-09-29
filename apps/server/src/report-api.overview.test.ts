@@ -102,11 +102,12 @@ async function seedTodaySale(db: Database): Promise<void> {
 }
 
 /**
- * One ACTIVE table a party holds, one ACTIVE + FREE, and one INACTIVE that a party also holds: the
- * route's openTables must be {open:1, total:2}, because an inactive table counts in neither.
+ * One ACTIVE table a party holds, one ACTIVE table whose party has left it, and one INACTIVE that a
+ * party holds: the route's openTables must be {open:1, total:2}, because a table counts as open only
+ * while a party holds it, and an inactive table counts in neither.
  */
 async function seedDiningTables(db: Database): Promise<void> {
-  const [held, , inactive] = await db
+  const [held, left, inactive] = await db
     .insert(diningTables)
     .values([
       { locationId, label: "Mesa 1" },
@@ -114,12 +115,16 @@ async function seedDiningTables(db: Database): Promise<void> {
       { locationId, label: "Mesa 3 (baja)", active: false },
     ])
     .returning({ id: diningTables.id });
-  for (const table of [held!, inactive!]) {
+  for (const [table, leftAt] of [
+    [held!, null],
+    [left!, new Date().toISOString()],
+    [inactive!, null],
+  ] as const) {
     const [party] = await db
       .insert(parties)
       .values({ openedBy: randomUUID() })
       .returning({ id: parties.id });
-    await db.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
+    await db.insert(partyTables).values({ partyId: party!.id, tableId: table.id, leftAt });
   }
 }
 
@@ -237,7 +242,8 @@ describe("mountReportApi — /reports/overview", () => {
     // One non-correcting, non-voided sale on today.
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
 
-    // Two ACTIVE tables, one held by a party; the inactive third counts in neither.
+    // Two ACTIVE tables, one held by a party and one its party has left; the inactive third counts
+    // in neither.
     expect(body.openTables).toEqual({ open: 1, total: 2 });
 
     // The single seeded line, keyed on its frozen STAFF name — never the customer-facing text.

@@ -117,7 +117,6 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** `seriesId` is unused by the split/unjoin routes: the detached check files only when paid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),

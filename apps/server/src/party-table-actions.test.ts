@@ -51,6 +51,7 @@ import {
   tableRow,
   zoneOf,
   type PartyVenue,
+  floorRow,
 } from "./testing/party-venue.js";
 import "./errors.js";
 
@@ -550,6 +551,91 @@ describe("move guests", () => {
         params: { field: "expectedOtherPartyRevision" },
       });
     });
+  });
+});
+
+/** What the floor shows of a table's bills. */
+async function floorFigures(tableId: string) {
+  const row = await floorRow(v, tableId);
+  return {
+    state: row.state,
+    hasOpenTab: row.hasOpenTab,
+    tabLineCount: row.tabLineCount,
+    tabTotal: row.tabTotal,
+    pendingToServe: row.pendingToServe,
+  };
+}
+
+describe("the floor reads the bills of the party holding the table", () => {
+  it("shows a table the party has left free, with no bill, and the table it moved to with its bill", async () => {
+    const [m4, m9] = await tables("Suelo dejada", 4, 9);
+    const ana = await seat(v, m4);
+    await order(v, ana.tabId, "Burger");
+    const moving = await opts(ana.partyId);
+
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m9, moving));
+
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m9]);
+    expect(await floorFigures(m4)).toEqual({
+      state: "free",
+      hasOpenTab: false,
+      tabLineCount: undefined,
+      tabTotal: undefined,
+      pendingToServe: 0,
+    });
+    expect(await floorFigures(m9)).toEqual({
+      state: "open-tab",
+      hasOpenTab: true,
+      tabLineCount: 1,
+      tabTotal: "12.00",
+      pendingToServe: 1,
+    });
+  });
+
+  it("counts a presented bill's dishes still to serve, but not toward the open bill, its lines or its total", async () => {
+    const [m4] = await tables("Suelo presentada", 4);
+    const ana = await seat(v, m4);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const presented = await splitOff(ana.partyId, ana.tabId, [2]);
+    await placeByHand(v, presented);
+    expect((await billRow(v, presented)).status).toBe("placed");
+
+    expect(await floorFigures(m4)).toEqual({
+      state: "open-tab",
+      hasOpenTab: true,
+      tabLineCount: 1,
+      tabTotal: "12.00",
+      pendingToServe: 2,
+    });
+
+    await placeByHand(v, ana.tabId);
+
+    expect(await floorFigures(m4)).toEqual({
+      state: "open-tab",
+      hasOpenTab: false,
+      tabLineCount: undefined,
+      tabTotal: undefined,
+      pendingToServe: 2,
+    });
+  });
+
+  it("adds a party's open bills together, and shows every table of the party the same figures", async () => {
+    const [m4, m5] = await tables("Suelo suma", 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const second = await splitOff(ana.partyId, ana.tabId, [2]);
+    expect((await billRow(v, second)).status).toBe("open");
+
+    const figures = {
+      state: "open-tab",
+      hasOpenTab: true,
+      tabLineCount: 2,
+      tabTotal: "42.00",
+      pendingToServe: 2,
+    };
+    expect(await floorFigures(m4)).toEqual(figures);
+    expect(await floorFigures(m5)).toEqual(figures);
   });
 });
 
