@@ -8411,7 +8411,10 @@ it. Left open:
     for the stream's local work: a sale waited for as long as Litestream's checkpoint held the write
     lock. Not measured: several sellers at once, where the write queue puts later sales behind the
     held one, and the box's own disk. CLAUDE.md §5 now says a sale can wait behind the checkpoint;
-    no Litestream setting has changed. **Next (A135):** measure, with the same probe and the
+    no Litestream setting has changed. Since A142 the full figures sit in
+    [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
+    checkpoint", and §5 keeps the rule, the longest wait on each disk and a link there.
+    **Next (A135):** measure, with the same probe and the
     stream-loop and restore checks, whether taking routine checkpoints away from Litestream stops
     the wait, and ask the owner before changing any setting. Read in the code at tag v0.5.17:
     `checkpoint-interval: 0` switches the timed checkpoint off — `cmd/litestream/main.go` copies an

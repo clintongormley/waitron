@@ -963,14 +963,12 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   never inline.
 - **The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
-  lock.** Litestream 0.5.17 holds the write lock through each of its PASSIVE checkpoints. Measured
-  2026-09-29 with one seller through `POST /api/sales` (run 36615242523): on a disk delayed
-  100 ms per flush, 14 writes in three runs waited 829–831 ms to begin; on a CI runner's
-  normal disk, 288 writes waited 20 ms or more, most of them 33–105 ms and the longest
-  629 ms. Each such wait spanned a Litestream checkpoint log line; with streaming off no write
-  waited over 1 ms. How long a write waits behind a checkpoint with several sellers at once, and
-  on the box's own disk, is not measured. Whether to take those checkpoints away from Litestream is
-  an open experiment (`docs/backlog.md`, A130's entry). A copy fifteen minutes behind raises
+  lock.** Litestream 0.5.17 holds the write lock through each of its PASSIVE checkpoints. Cost:
+  measured 2026-09-29, one seller's writes waited up to 831 ms to begin on a slowed disk and up to
+  629 ms on a CI runner's normal disk. Receipt (the figures, and what was not measured):
+  [testing-guide.md](docs/developers/testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
+  Whether to take those checkpoints away from Litestream is an open experiment (`docs/backlog.md`,
+  A130's entry). A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
   (`apps/server/src/alert-sources.ts`). The side file is bounded by stopping Litestream at a size
   limit (`backup.stream_paused`) and then folding the file back; that fold-back is the server's own
