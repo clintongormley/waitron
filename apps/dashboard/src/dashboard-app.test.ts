@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
@@ -4086,5 +4086,248 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     );
     await el.updateComplete;
     expect(layout().classList.contains("drawer-open")).toBe(true);
+  });
+});
+
+describe("the nav search", () => {
+  const sessionIn = (locale: string, me: Record<string, unknown> = {}) =>
+    stubApi({
+      getMe: vi
+        .fn()
+        .mockResolvedValue({ ...meResponse, venueLocale: locale, sessionDefault: locale, ...me }),
+      listStaff: vi.fn().mockResolvedValue([]),
+    });
+  const searchBox = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=nav-search]")!;
+  const shownItems = (el: DashboardApp) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>(".nav-item")]
+      .filter((item) => item.checkVisibility())
+      .map((item) => item.dataset.test);
+  const shownHeaders = (el: DashboardApp) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")]
+      .filter((header) => header.checkVisibility())
+      .map((header) => header.dataset.test);
+  const expandedHeaders = (el: DashboardApp) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")]
+      .filter((header) => header.getAttribute("aria-expanded") === "true")
+      .map((header) => header.dataset.test);
+  const emptyStatus = (el: DashboardApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-search-empty]");
+  const layout = (el: DashboardApp) => el.shadowRoot!.querySelector<HTMLElement>(".layout")!;
+
+  /** Types into the box the way a person does, replacing whatever it held. */
+  async function search(el: DashboardApp, term: string): Promise<void> {
+    const box = searchBox(el);
+    box.focus();
+    box.select();
+    await userEvent.keyboard(term === "" ? "{Backspace}" : term);
+    await flush(el);
+  }
+
+  async function press(el: DashboardApp, key: string): Promise<void> {
+    searchBox(el).focus();
+    await userEvent.keyboard(`{${key}}`);
+    await flush(el);
+  }
+
+  // The test frame is narrower than the drawer breakpoint, where a closed drawer is inert and its
+  // box cannot take focus; each case picks the width it describes.
+  let restoreViewport: [number, number];
+  beforeEach(() => {
+    restoreViewport = [window.innerWidth, window.innerHeight];
+  });
+  afterEach(async () => {
+    await page.viewport(...restoreViewport);
+  });
+
+  async function mountSession(api: DashboardApi, width = 1280): Promise<DashboardApp> {
+    await page.viewport(width, 800);
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    return el;
+  }
+
+  async function openDrawer(el: DashboardApp): Promise<void> {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await el.updateComplete;
+    expect(layout(el).classList.contains("drawer-open")).toBe(true);
+  }
+
+  it("is a named search box at the top of the nav", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    const box = searchBox(el);
+    expect(box.type).toBe("search");
+    expect(box.name).toBe("nav-search");
+    expect(box.autocomplete).toBe("off");
+    expect(box.getAttribute("aria-label")).toBe("Search pages");
+    expect(box.placeholder).toBe("Search pages");
+    expect(el.shadowRoot!.querySelector("nav")!.firstElementChild).toBe(box);
+  });
+
+  it("shows only the pages whose label holds the term, whatever its case", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "PRINT");
+    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+    expect(shownHeaders(el)).toEqual(["nav-group-configuration"]);
+
+    await search(el, "book");
+    expect(shownItems(el)).toEqual(["nav-bookings"]);
+  });
+
+  it("ignores accents, so a Spanish label is found typed without them", async () => {
+    const el = await mountSession(sessionIn("es-ES"));
+    await search(el, "CATEGORIAS");
+    expect(shownItems(el)).toEqual(["nav-categories"]);
+    await search(el, "impresion");
+    expect(shownItems(el)).toEqual(["nav-printing-rules"]);
+  });
+
+  it("shows every page of a group whose name holds the term", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "team");
+    expect(shownHeaders(el)).toEqual(["nav-group-team"]);
+    expect(shownItems(el)).toEqual([
+      "nav-staff",
+      "nav-roster",
+      "nav-approvals",
+      "nav-planned-actual",
+    ]);
+  });
+
+  it("opens a collapsed group holding a match, and clearing the term leaves the nav as it was", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    expect(expandedHeaders(el)).toEqual([]);
+
+    await search(el, "print");
+    expect(expandedHeaders(el)).toEqual(["nav-group-configuration"]);
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement>("#nav-group-panel-configuration")!.hidden,
+    ).toBe(false);
+
+    await search(el, "");
+    expect(expandedHeaders(el)).toEqual([]);
+    expect(shownHeaders(el)).toEqual([
+      "nav-group-menu",
+      "nav-group-service",
+      "nav-group-team",
+      "nav-group-purchasing",
+      "nav-group-configuration",
+    ]);
+    expect(shownItems(el)).toEqual(["nav-overview", "nav-sales"]);
+  });
+
+  it("never offers a page the person may not open, typed with its exact label", async () => {
+    const el = await mountSession(
+      sessionIn("en-GB", { role: "supervisor", permissions: [], modules: ["bookings"] }),
+    );
+    // "Menus" is a manager page; its group's name holds the term, so the group's other pages show.
+    await search(el, "Menus");
+    expect(shownItems(el)).toEqual(["nav-catalogue", "nav-categories", "nav-units"]);
+    await search(el, "Diagnostics");
+    expect(shownItems(el)).toEqual([]);
+    // Bookings is enabled for the venue, but this session lacks its permission.
+    await search(el, "Bookings");
+    expect(shownItems(el)).toEqual([]);
+  });
+
+  it("says so when no page matches", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "zzz");
+    expect(shownItems(el)).toEqual([]);
+    expect(shownHeaders(el)).toEqual([]);
+    const status = emptyStatus(el)!;
+    expect(status.getAttribute("role")).toBe("status");
+    expect(status.textContent!.trim()).toBe("No pages match");
+
+    await search(el, "print");
+    expect(emptyStatus(el)?.textContent?.trim() ?? "").toBe("");
+  });
+
+  it("opens the first match on Enter, closes the drawer and clears the term", async () => {
+    const el = await mountSession(sessionIn("en-GB"), 390);
+    await openDrawer(el);
+
+    await search(el, "print");
+    await press(el, "Enter");
+
+    expect(screenPrinters(el)).toBeTruthy();
+    expect(new URL(location.href).pathname).toBe("/manage/printers");
+    expect(navPrinters(el)!.getAttribute("aria-current")).toBe("page");
+    expect(layout(el).classList.contains("drawer-open")).toBe(false);
+    expect(searchBox(el).value).toBe("");
+    expect(expandedHeaders(el)).toEqual(["nav-group-configuration"]);
+    expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
+  });
+
+  it("does nothing on Enter when no page matches", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    const path = new URL(location.href).pathname;
+    await search(el, "zzz");
+    await press(el, "Enter");
+    expect(overview(el)).toBeTruthy();
+    expect(new URL(location.href).pathname).toBe(path);
+    expect(searchBox(el).value).toBe("zzz");
+  });
+
+  it("does nothing on Enter in an empty or blank box", async () => {
+    history.replaceState(null, "", "/manage/catalogue");
+    const el = await mountSession(sessionIn("en-GB"));
+    expect(catalogue(el)).toBeTruthy();
+    await press(el, "Enter");
+    await search(el, "   ");
+    await press(el, "Enter");
+    expect(catalogue(el)).toBeTruthy();
+    expect(new URL(location.href).pathname).toBe("/manage/catalogue");
+  });
+
+  it("clears the term and closes the drawer when a match is clicked", async () => {
+    const el = await mountSession(sessionIn("en-GB"), 390);
+    await openDrawer(el);
+    await search(el, "print");
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-printing-rules]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-printing-rules-screen")).toBeTruthy();
+    expect(layout(el).classList.contains("drawer-open")).toBe(false);
+    expect(searchBox(el).value).toBe("");
+    expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
+  });
+
+  it("clears a term on Escape without closing the drawer, and an empty box's Escape still closes it", async () => {
+    const el = await mountSession(sessionIn("en-GB"), 390);
+    await openDrawer(el);
+    await search(el, "print");
+    expect(shownItems(el)).toEqual(["nav-printers", "nav-printing-rules"]);
+
+    await press(el, "Escape");
+    expect(searchBox(el).value).toBe("");
+    expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
+    expect(layout(el).classList.contains("drawer-open")).toBe(true);
+
+    await press(el, "Escape");
+    expect(layout(el).classList.contains("drawer-open")).toBe(false);
+  });
+
+  it("keeps the term across a language switch and searches the new language's labels", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "impresora");
+    expect(shownItems(el)).toEqual([]);
+
+    emit(shellChooser(el)!, "locale-selected", { code: "es-ES" });
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+    expect(searchBox(el).value).toBe("impresora");
+    expect(searchBox(el).placeholder).toBe("Buscar páginas");
+    expect(shownItems(el)).toEqual(["nav-printers"]);
+  });
+
+  it("starts the next session with an empty box", async () => {
+    const el = await mountSession(sessionIn("en-GB"));
+    await search(el, "print");
+    logoutBtn(el)!.click();
+    await flush(el);
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    expect(searchBox(el).value).toBe("");
+    expect(shownHeaders(el)).toHaveLength(NAV_GROUP_KEYS.length);
   });
 });

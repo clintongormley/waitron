@@ -782,6 +782,22 @@ the opposite of what the header shows. The group holding the current screen alwa
 clicking its header leaves a collapse recorded that a further click cannot clear; the collapse shows
 once you open a screen outside that group, and never hides the page you are on.
 
+A search box sits at the top of the sidebar, above the groups: a native `<input type="search">`
+named `nav-search`, whose accessible name and placeholder are both **Search pages**. A staff session
+has no sidebar, so it has no search either. While the box holds a term (spaces trimmed), the nav
+shows only the pages whose label in the current language contains it, ignoring case and accents
+("categorias" finds "Categorías"), plus every page of a group whose header contains it. The search
+narrows the rows the nav would already show, so a page this person may not open never appears,
+however exactly its name is typed. A group with no match is hidden, header and all. A group with a
+match shows open whatever its collapsed state, and the search does not change that state, so
+clearing the term brings the nav back exactly as it was. When nothing matches, the nav says **No
+pages match** in a `role="status"` message. Enter opens the first page shown, in nav order, and
+does nothing when nothing matches or the box is blank. Opening a page from a search, by Enter or
+by click, clears the term and closes the phone-width drawer, as any nav click does. Escape clears a
+term and goes no further, so an open drawer stays open; Escape in an empty box closes the drawer as
+it does anywhere else in the shell. A language switch keeps the term and searches the new
+language's labels, and signing out empties the box.
+
 A group that has ITS OWN scrolled-to items shrink when collapsed can leave the sidebar's
 `scrollTop` past the new (shorter) scrollable range — the browser then clamps it down on its own,
 snapping every visible row upward even though nothing above the clicked header moved. `#toggleGroup`

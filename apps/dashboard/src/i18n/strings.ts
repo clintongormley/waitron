@@ -384,6 +384,8 @@ export const en = {
   // The next two label icon-only buttons, so each is the button's accessible name.
   "nav.toggle": "Toggle navigation",
   "nav.account_menu": "Account menu",
+  "nav.search": "Search pages",
+  "nav.search_empty": "No pages match",
   "alerts.bell": "Alerts",
   "alerts.bell_count": "Alerts, {count} open",
   "alerts.title": "Alerts",
@@ -2275,6 +2277,8 @@ export const es: Record<StringKey, string> = {
   "nav.sections": "Secciones",
   "nav.toggle": "Mostrar u ocultar la navegación",
   "nav.account_menu": "Menú de cuenta",
+  "nav.search": "Buscar páginas",
+  "nav.search_empty": "Ninguna página coincide",
   "alerts.bell": "Avisos",
   "alerts.bell_count": "Avisos, {count} abiertos",
   "alerts.title": "Avisos",

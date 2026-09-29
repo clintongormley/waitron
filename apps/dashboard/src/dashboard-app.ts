@@ -3,6 +3,7 @@ import { LitElement, type PropertyValues, type TemplateResult, css, html, nothin
 import { customElement, property, state } from "lit/decorators.js";
 import { classMap } from "lit/directives/class-map.js";
 import { keyed } from "lit/directives/keyed.js";
+import { live } from "lit/directives/live.js";
 import { baseStyles, UrlStateController, type WtToast } from "@waitron/ui";
 import { resolveActiveLocale } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
@@ -134,6 +135,13 @@ type NavItem = {
   requiresPermission?: string;
 };
 type NavGroup = { id: NavGroupId; headerKey?: StringKey; icon?: string; items: NavItem[] };
+/** A nav row as shown: a core item or a module's screen, labelled in the current language. */
+type NavPage = { screen: ScreenId; label: string };
+
+/** Case- and accent-insensitive, so "menus" finds "Menús". */
+function foldForSearch(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 
 const NAV_GROUPS: NavGroup[] = [
   {
@@ -265,6 +273,31 @@ export class DashboardApp extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-1);
+      }
+
+      .nav-search {
+        width: 100%;
+        min-width: 0;
+        min-height: var(--wt-tap-min);
+        margin-block-end: var(--wt-space-2);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface);
+        color: var(--wt-color-text);
+        font: inherit;
+      }
+
+      .nav-search::placeholder {
+        color: var(--wt-color-text-muted);
+      }
+
+      /* Rendered even while empty, so the live region exists before its message does; with no
+         block padding it takes no height then. */
+      .nav-search-empty {
+        margin: 0;
+        padding-inline: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
       }
 
       /* Group header: a toggle button (collapses/expands its own items), small caps (uppercase,
@@ -535,6 +568,8 @@ export class DashboardApp extends LitElement {
   #sessionPermissions: string[] = [];
 
   @state() private drawerOpen = false;
+
+  @state() private navSearch = "";
 
   @state() private profileOpen = false;
 
@@ -957,6 +992,7 @@ export class DashboardApp extends LitElement {
     this.#activeScreens.clear();
     this.#navGroups.clear();
     this.drawerOpen = false;
+    this.navSearch = "";
     this.#broadcastSessionDeadline(0);
     this.#url.write(
       { dashboard: null, canvas: null, "canvas-tab": null, "floor-view": null, "floor-zone": null },
@@ -1345,17 +1381,74 @@ export class DashboardApp extends LitElement {
     if (e.key === "Escape" && this.drawerOpen) this.drawerOpen = false;
   }
 
+  /** The pages this person may open, group by group in nav order, each labelled in the current
+   * language; `pages` is undefined for a group the search hides whole. */
+  #shownNav(): { group: NavGroup; holdsCurrent: boolean; pages?: NavPage[] }[] {
+    const term = foldForSearch(this.navSearch.trim());
+    return NAV_GROUPS.map((group) => {
+      const permitted: NavPage[] = [
+        ...group.items
+          .filter((item) => this.#mayOpen(item))
+          .map((item) => ({ screen: item.screen, label: t(item.labelKey) })),
+        ...(this.#navGroups.get(group.id) ?? []).map((c) => ({
+          screen: c.screen.id,
+          label: tKit(c.screen.navLabelKey),
+        })),
+      ];
+      const holdsCurrent =
+        group.items.some((item) => item.screen === this.screen) ||
+        permitted.some((page) => page.screen === this.screen);
+      if (term === "") return { group, holdsCurrent, pages: permitted };
+      const headerMatches =
+        group.headerKey !== undefined && foldForSearch(t(group.headerKey)).includes(term);
+      const pages = headerMatches
+        ? permitted
+        : permitted.filter((page) => foldForSearch(page.label).includes(term));
+      return { group, holdsCurrent, pages: pages.length > 0 ? pages : undefined };
+    });
+  }
+
+  #openFromNav(screen: ScreenId): void {
+    this.navSearch = "";
+    this.#selectScreen(screen);
+  }
+
+  /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer. */
+  #onNavSearchKeydown(e: KeyboardEvent): void {
+    if (e.key === "Enter" && this.navSearch.trim() !== "") {
+      const first = this.#shownNav().find((section) => section.pages?.length)?.pages?.[0];
+      if (first) this.#openFromNav(first.screen);
+    } else if (e.key === "Escape" && this.navSearch !== "") {
+      e.stopPropagation();
+      this.navSearch = "";
+    }
+  }
+
   /** Items are plain `.nav-item` buttons, not `wt-button`: a long list reads as navigation, not a
    * stack of buttons. */
   #nav(): TemplateResult {
+    const searching = this.navSearch.trim() !== "";
+    const sections = this.#shownNav();
+    const noMatch = searching && sections.every((section) => section.pages === undefined);
     return html`
       <nav class="nav" aria-label=${t("nav.sections")}>
-        ${NAV_GROUPS.map((group) => {
-          const contributions = this.#navGroups.get(group.id) ?? [];
-          const containsCurrentScreen =
-            group.items.some((item) => item.screen === this.screen) ||
-            contributions.some((c) => c.screen.id === this.screen);
-          const collapsed = this.collapsedGroups.has(group.id) && !containsCurrentScreen;
+        <input
+          class="nav-search"
+          type="search"
+          name="nav-search"
+          autocomplete="off"
+          data-test="nav-search"
+          aria-label=${t("nav.search")}
+          placeholder=${t("nav.search")}
+          .value=${live(this.navSearch)}
+          @input=${(e: Event) => (this.navSearch = (e.target as HTMLInputElement).value)}
+          @keydown=${(e: KeyboardEvent) => this.#onNavSearchKeydown(e)}
+        />
+        ${sections.map(({ group, holdsCurrent, pages }) => {
+          if (pages === undefined) return nothing;
+          // A search shows its matches open without touching `collapsedGroups`, so clearing it
+          // brings back the nav exactly as it was.
+          const collapsed = !searching && this.collapsedGroups.has(group.id) && !holdsCurrent;
           const panelId = `nav-group-panel-${group.id}`;
           return html`
             ${
@@ -1376,35 +1469,24 @@ export class DashboardApp extends LitElement {
                 : nothing
             }
             <div id=${panelId} ?hidden=${collapsed}>
-              ${group.items
-                .filter((item) => this.#mayOpen(item))
-                .map(
-                  (item) =>
-                    html`<button
-                      type="button"
-                      class="nav-item"
-                      aria-current=${this.screen === item.screen ? "page" : nothing}
-                      data-test="nav-${item.screen}"
-                      @click=${() => this.#selectScreen(item.screen)}
-                    >
-                      ${t(item.labelKey)}
-                    </button>`,
-                )}
-              ${contributions.map(
-                (c) =>
+              ${pages.map(
+                (page) =>
                   html`<button
                     type="button"
                     class="nav-item"
-                    aria-current=${this.screen === c.screen.id ? "page" : nothing}
-                    data-test="nav-${c.screen.id}"
-                    @click=${() => this.#selectScreen(c.screen.id)}
+                    aria-current=${this.screen === page.screen ? "page" : nothing}
+                    data-test="nav-${page.screen}"
+                    @click=${() => this.#openFromNav(page.screen)}
                   >
-                    ${tKit(c.screen.navLabelKey)}
+                    ${page.label}
                   </button>`,
               )}
             </div>
           `;
         })}
+        <p class="nav-search-empty" role="status" data-test="nav-search-empty">
+          ${noMatch ? t("nav.search_empty") : nothing}
+        </p>
       </nav>
     `;
   }
