@@ -77,11 +77,12 @@ function thrown(run: () => unknown): { code?: unknown; params?: { variable?: unk
 }
 
 /** Each `dbus` rule of an AppArmor profile that allows rather than denies, from its keyword to the
- * comma that ends it; a comma inside `( )` or `{ }` does not. Comments are dropped first. */
+ * comma that ends it; a comma inside `( )` or `{ }` does not. A rule is found where it begins a
+ * line or follows a `,` or `{` on one. Comments are dropped first. */
 function dbusAllowRules(profile: string): string[] {
   const text = profile.replace(/#.*$/gm, "");
   const rules: string[] = [];
-  for (const start of text.matchAll(/^[ \t]*((?:(?:audit|allow|deny)\s+)*)dbus\b/gm)) {
+  for (const start of text.matchAll(/(?:^|[,{])[ \t]*((?:(?:audit|allow|deny)\s+)*)dbus\b/gm)) {
     const from = start.index + start[0].length - start[1]!.length - "dbus".length;
     let depth = 0;
     let end = -1;
@@ -256,6 +257,15 @@ describe("the print-agent image and its compose wiring", () => {
       "audit dbus receive interface=org.bluez.Device1 member=*,",
     ]);
     expect(unnamedBusFields(dbusAllowRules(profile)[0]!)).toEqual([]);
+  });
+
+  it("finds a D-Bus rule that follows a , or { on the same line, not only one that begins it", () => {
+    const profile = `  deny mount, dbus send bus=system interface=org.bluez.* member=*,
+  profile inner { audit dbus receive interface=org.bluez.Device1 member=*, }`;
+    expect(dbusAllowRules(profile)).toEqual([
+      "dbus send bus=system interface=org.bluez.* member=*,",
+      "audit dbus receive interface=org.bluez.Device1 member=*,",
+    ]);
   });
 
   it("refuses a member or interface that is missing or a glob, and leaves the path alone", () => {

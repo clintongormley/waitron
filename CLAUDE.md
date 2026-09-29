@@ -356,8 +356,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
 - **The print agent runs under `deploy/apparmor/waitron-print-agent`, named through
-  `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a new `bluetoothctl` call
-  needs its own bus rule.** Cost: on the owner's box (2026-09-29) Docker's default profile refused
+  `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a `bluetoothctl` call that
+  sends a bus message the profile does not list is refused until the profile gains a rule for it.**
+  Cost: on the owner's box (2026-09-29) Docker's default profile refused
   the agent's first bus message and it silently listed no Bluetooth printers. Guards, weaker than
   their names: image-smoke runs only the agent's paired listing and the commands its Bluetooth step
   names, and not on a pull request that changed no image input; `scripts/deploy-image-env.test.ts`

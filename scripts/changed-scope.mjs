@@ -66,7 +66,13 @@ export function isRootScopePath(path) {
   return ROOT_SCOPE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
-/** Files outside `deploy/` that only image-smoke runs, so a change to one is checked nowhere else. */
+/**
+ * Files outside `deploy/` that only image-smoke runs, so a change to one is checked nowhere else.
+ * It must hold every `scripts/` file `.github/workflows/image-smoke.yml` runs. Guard: the
+ * image-smoke case in scripts/changed-scope.test.mjs, weaker than its name — it reads the workflow
+ * as text and sees only literal `scripts/…` paths. The workflow file itself is not an image input,
+ * by a recorded decision (ci.yml's `image` job comment): an edit to it is left to image-nightly.yml.
+ */
 const IMAGE_SMOKE_FILES = ["scripts/fake-bluez.py"];
 
 /**

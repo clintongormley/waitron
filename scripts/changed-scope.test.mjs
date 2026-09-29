@@ -134,6 +134,23 @@ describe("isImageInputPath", () => {
     expect(isImageInputPath("scripts/fake-bluez.py")).toBe(true);
   });
 
+  // Reads image-smoke.yml as TEXT and sees only literal `scripts/…` paths, so a script reached
+  // through a variable or outside `scripts/` is invisible to it.
+  it("treats every scripts/ file image-smoke.yml names as an image input", () => {
+    const workflow = readFileSync(
+      join(import.meta.dirname, "..", ".github", "workflows", "image-smoke.yml"),
+      "utf8",
+    );
+    const named = [
+      ...new Set(
+        [...workflow.matchAll(/scripts\/[\w./-]+/g)].map((match) => match[0].replace(/\.+$/, "")),
+      ),
+    ];
+
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((path) => !isImageInputPath(path))).toEqual([]);
+  });
+
   it.each([
     "packages/db/src/index.ts",
     "apps/server/src/index.ts",

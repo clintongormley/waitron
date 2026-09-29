@@ -316,9 +316,9 @@ command against it treat that entrypoint differently:
 ## The box's environment — `deploy/.env`
 
 `.env.example` documents every line. A box reached at `waitron.local` needs none of them set by
-hand: without AppArmor a plain `install` leaves it with no `.env` at all, and listing Bluetooth
-printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes there where it
-loaded the profile.
+hand: without AppArmor a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
+listing Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
+there once it has loaded the profile.
 The box holds no database credential, because there is no database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A
 box restored from a backup brings them back and, at its first trading start, replaces the leaf with
