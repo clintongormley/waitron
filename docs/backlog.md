@@ -2420,7 +2420,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   channel) from INSIDE the print-agent container — the owner printed from the host only. The last
   belongs with Bluetooth delivery, below, still unbuilt.
 - **The owner's Bluetooth printer was listed only under Show all devices (A137, owner 2026-09-29)
-  — FIXED where the tests reach; the cause on the box is not confirmed.** The agent's scan asked
+  — FIXED where the tests reach (#894); the cause on the box is not confirmed.** The agent's scan asked
   `bluetoothctl info` about the first eight devices listed and no others, and each scan's answer
   replaced the last, so a printer listed ninth or later was never marked, and one whose `info` failed
   once lost its mark until the next scan. Now each scan asks first about the devices it has never
