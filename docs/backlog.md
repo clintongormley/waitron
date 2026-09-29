@@ -7622,7 +7622,7 @@ it. Left open:
   sale's write waited behind the fold-back, rather than landing before it, is not observed, and the
   fold-back of a 256 MiB file is still timed only by the bench rig (results note, 1b), not through
   the supervisor.
-- **DONE (lane A's A130): the pause test's one failure on `main` (run 36559470238, a frozen sale at
+- **DONE (lane A's A130, #868): the pause test's one failure on `main` (run 36559470238, a frozen sale at
   1,228 ms against 1,000) was the CI runner's disk, not the bucket.** A probe reproduced it with one
   commit taking 1,017 ms while the disk stalled. The stream tests' CI step now sets
   `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
