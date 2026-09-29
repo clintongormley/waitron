@@ -13,8 +13,8 @@
 # within FAKE_BLUEZ_AGENT_TIMEOUT_MS (default 60000), after which it sends `Agent1.Cancel` — is
 # `AuthenticationFailed`. That is its own choice, not what bluetoothd was measured to return.
 # A pairing that succeeds is followed by `Disconnected` signals on the device's `org.bluez.Device1`
-# and `org.bluez.Bearer.BREDR1`, as on the owner's box after a real pairing (2026-09-29, BlueZ newer
-# than the image's bluetoothctl 5.82); their arguments are the stand-in's own.
+# and `org.bluez.Bearer.BREDR1`, as on the owner's box after a real pairing (2026-09-29); their
+# arguments, and their timing before the pairing's reply, are the stand-in's own.
 # `StopDiscovery`, `RemoveDevice`, `Properties.Set` and each agent exchange print a `fake bluez:`
 # line, so a check can tell whether a call reached it.
 import os
@@ -191,7 +191,7 @@ class Device(dbus.service.Object):
         self.PropertiesChanged("org.bluez.Device1", {"Bonded": True, "Paired": True},
                                dbus.Array([], signature="s"))
         log("Pair %s -> success" % self.path)
-        # Before the reply, so the bluetoothctl that asked is still on the bus to receive them.
+        # Before the reply, the stand-in's choice; the other order was not tried.
         for iface in ("org.bluez.Bearer.BREDR1", "org.bluez.Device1"):
             signal = dbus.lowlevel.SignalMessage(self.path, iface, "Disconnected")
             signal.append("fake-reason", "fake bluez", signature="ss")

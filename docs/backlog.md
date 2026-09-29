@@ -4917,13 +4917,15 @@ approved.
   - **`scan off` and a device's `Disconnected` signals are in the profile — BUILT (A134).** That
     pairing on the owner's box logged four refusals: `Adapter1.StopDiscovery` (twice, from the
     interactive session) and the `Disconnected` signal on the device's `Device1` and
-    `Bearer.BREDR1`; none named `Agent1.Release`. The profile now allows those three messages, and
+    `Bearer.BREDR1`. The profile now allows those three messages, and
     image-smoke runs an interactive `scan off` and a pairing the stand-in BlueZ follows with both
     signals, failing on any refusal but its `trust` control. Probe run 36617097865 reproduced the
     three refusals without the new rules and 36617716323 refused none with them. The agent's own
     scan (`bluetoothctl --timeout 6 scan on`) sends no `StopDiscovery`, measured on both runs:
     three scans each, no call reached the stand-in and none was refused. **Box check owed:** after
-    `sudo bash waitron.sh install`, `scan on` / `scan off` and a pairing from
+    `sudo bash waitron.sh install`, switch off the kernel's rate limit on its log first
+    (`sudo sysctl -w kernel.printk_ratelimit=0`), which can drop refusal lines — image-smoke
+    switches it off for that reason. Then `scan on` / `scan off` and a pairing from
     `docker compose exec -it print-agent bluetoothctl`, then
     `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
     `waitron-print-agent`.

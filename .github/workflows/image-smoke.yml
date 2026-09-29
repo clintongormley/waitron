@@ -284,10 +284,13 @@ jobs:
             | docker exec -i "$agent" bluetoothctl > "$RUNNER_TEMP/bt-scan-off.txt" 2>&1
           cat "$RUNNER_TEMP/bt-scan-off.txt"
           [ "$(stops)" -gt "$stopped" ]
+          grep -q "Discovery stopped" "$RUNNER_TEMP/bt-scan-off.txt"
 
           docker cp scripts/bluetoothctl-pair.mjs "$agent:/tmp/bluetoothctl-pair.mjs"
           docker exec "$agent" node /tmp/bluetoothctl-pair.mjs 86:67:7A:00:00:01 1234 | tee "$RUNNER_TEMP/bt-pair.txt"
           grep -q "Pairing successful" "$RUNNER_TEMP/bt-pair.txt"
+          grep -qF "[SIGNAL] org.bluez.Bearer.BREDR1.Disconnected" "$RUNNER_TEMP/bt-pair.txt"
+          grep -qF "[SIGNAL] org.bluez.Device1.Disconnected" "$RUNNER_TEMP/bt-pair.txt"
           grep -q "fake bluez: RequestPinCode reply '1234'" "$RUNNER_TEMP/fake-bluez.log"
           grep -q "fake bluez: Disconnected /org/bluez/hci0/dev_86_67_7A_00_00_01" "$RUNNER_TEMP/fake-bluez.log"
 

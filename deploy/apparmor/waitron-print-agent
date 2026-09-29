@@ -15,9 +15,10 @@
 # `devices Paired`, `scan on`, `scan off`, pairing with a PIN through its interactive agent, and `remove`.
 # Each was measured against a stand-in BlueZ (scripts/fake-bluez.py) on a GitHub Ubuntu 24.04 runner
 # (kernel 6.17, AppArmor parser 4.0.1, dbus-daemon 1.14.10, Docker 28.0.4), with bluetoothctl from
-# the print-agent stage's own bluez package (5.82-1.1). The listing and scan rules: runs 36562032152
-# and 36562581079, where those four commands worked with no refusal. The pairing and `remove` rules:
-# probe run 36585218089. There, with the previous rules loaded in complain mode, pairing, `remove`
+# the print-agent stage's own bluez package (5.82-1.1). The listing and `scan on` rules: runs
+# 36562032152 and 36562581079, where `list`, `devices`, `devices Paired` and `scan on` worked with
+# no refusal. The pairing and `remove` rules: probe run 36585218089.
+# There, with the previous rules loaded in complain mode, pairing, `remove`
 # and a PIN request left unanswered logged as ALLOWED exactly the messages the new rules name. With
 # each new rule dropped in turn its step failed or logged a refusal naming that message, and with
 # all of them the same steps worked, refusing nothing but the broadcasts named below. Nothing had to
@@ -27,17 +28,16 @@
 # `Disconnected` rules: probe run 36617097865, without them, refused the three messages the owner's
 # box refused around a real pairing (2026-09-29) — `StopDiscovery` from an interactive `scan off`,
 # and `Disconnected` on `Device1` and `Bearer.BREDR1` after the stand-in's pairing — and probe run
-# 36617716323, with them, refused neither. On both, the agent's own scan
+# 36617716323, with them, refused none of them. On both, the agent's own scan
 # (`bluetoothctl --timeout 6 scan on`, three times) sent no `StopDiscovery`: nothing reached the stand-in and nothing was
 # refused, where an interactive `scan off` on the same runs was refused (36617097865) or reached it
 # (36617716323).
 #
-# Refused on the pairing runs: `trust` (a `Properties.Set`) and `Device1.Disconnect`. Also refused:
-# the `InterfacesAdded` and `InterfacesRemoved` signals interactive bluetoothctl broadcasts about its
-# own agent. They were refused only while another process was listening for such signals from any
+# Refused on 36585218089 and 36586467212: `trust` (a `Properties.Set`) and `Device1.Disconnect`.
+# Also refused: the `InterfacesAdded` and `InterfacesRemoved` signals interactive bluetoothctl
+# broadcasts about its own agent. They were refused only while another process was listening for such signals from any
 # sender, and pairing still worked. `Agent1.Release`, which bluetoothd sends when it drops an agent
-# itself, is not allowed: the stand-in never sends it, and the owner's box logged no refusal naming
-# it after its real pairing.
+# itself, is not allowed: the stand-in never sends it.
 #
 # BlueZ's signals and its calls to the agent are allowed only from an unconfined sender, which the
 # stand-in was (root, no profile). A sender cannot be matched by its well-known name:
@@ -168,8 +168,8 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
        member=RemoveDevice
        peer=(name=org.bluez),
 
-  # A device dropping its connection, as it does after a pairing: on the owner's box (2026-09-29) the
-  # previous rules refused both signals to an interactive bluetoothctl that had just paired.
+  # A device dropping its connection, as the owner's printer did after its pairing (2026-09-29): there
+  # the previous rules refused both signals to an interactive bluetoothctl that had just paired.
   dbus receive
        bus=system
        path=/org/bluez/hci*/dev_*
