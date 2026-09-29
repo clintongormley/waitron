@@ -25,12 +25,19 @@ function requested(host: HTMLElement): Promise<BucketRestoreRequestDetail> {
     ),
   );
 }
-async function summaryItems(el: SetupRestoreBucketScreen): Promise<string[]> {
-  const summary = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "[data-test=error]");
-  if (summary === null) return [];
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+/** The one message `wt-form-actions` shows beside Restore; "" when there is none. */
+async function bottomOf(el: SetupRestoreBucketScreen): Promise<string> {
+  const actions = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+/** The messages shown under the fields, in page order. */
+function fieldMessages(el: SetupRestoreBucketScreen): string[] {
+  return [...el.shadowRoot!.querySelectorAll("p.error[id$='-error']")].map((p) =>
+    p.textContent!.trim(),
+  );
+}
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
 
@@ -45,9 +52,9 @@ describe("SetupRestoreBucketScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(q(el, "wt-form-error-summary")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(3); // kit, environment, confirmation
-    expect(await summaryItems(el)).toEqual([
+    expect(fieldMessages(el)).toEqual([
       "Upload or paste the recovery kit.",
       "Confirm that no other running server has newer data.",
     ]);
@@ -116,7 +123,8 @@ describe("SetupRestoreBucketScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(await summaryItems(el)).toEqual(["Confirm that this is your business."]);
+    expect(fieldMessages(el)).toEqual(["Confirm that this is your business."]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "#venue-confirmed-error")!.textContent).toBe(
       "Confirm that this is your business.",
     );
@@ -163,9 +171,8 @@ describe("SetupRestoreBucketScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(await summaryItems(el)).toEqual([
-      "Confirm that the old server is switched off for good.",
-    ]);
+    expect(fieldMessages(el)).toEqual(["Confirm that the old server is switched off for good."]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=old-box-gone]")!.getAttribute("aria-invalid")).toBe("true");
     expect(q(el, "#old-box-gone-error")!.textContent).toBe(
       "Confirm that the old server is switched off for good.",
@@ -310,13 +317,64 @@ describe("SetupRestoreBucketScreen", () => {
     ]);
   });
 
-  it("shows the server's refusal", async () => {
+  it("shows the server's refusal beside Restore and leaves Restore working", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
       errorMessage: "The bucket in this kit holds no copy of this restaurant.",
     });
-    expect(q(el, "[data-test=server-error]")!.textContent).toBe(
-      "The bucket in this kit holds no copy of this restaurant.",
-    );
+    expect(await bottomOf(el)).toBe("The bucket in this kit holds no copy of this restaurant.");
+    expect(q(el, "[data-test=server-error]")).toBeNull();
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  describe("messages beside Restore (owner's forms rule, 2026-09-28)", () => {
+    it("says nothing and leaves Restore working before the first press", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        venue: VENUE,
+        liveUnknown: true,
+      });
+      expect(await bottomOf(el)).toBe("");
+      expect(fieldMessages(el)).toEqual([]);
+      expect(q(el, "wt-form-error-summary")).toBeNull();
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("focuses the first marked field and holds Restore after a press with fields missing", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=kit]")));
+    });
+
+    it("clears each message as it is answered, marks one undone again, and gives Restore back at the end", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      paste(el, "k");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual(["Confirm that no other running server has newer data."]);
+      paste(el, " ");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([
+        "Upload or paste the recovery kit.",
+        "Confirm that no other running server has newer data.",
+      ]);
+      paste(el, "k");
+      tick(el, "[data-test=acknowledge]");
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("drops the server's refusal on the next press", async () => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+        errorMessage: "The bucket in this kit holds no copy of this restaurant.",
+      });
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    });
   });
 });
 
@@ -335,11 +393,12 @@ describe("SetupRestoreBucketScreen in Spanish", () => {
     expect(q(el, "[data-test=venue]")!.textContent).toContain("(NIF 89890001K), local Local.");
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await summaryItems(el)).toEqual([
+    expect(fieldMessages(el)).toEqual([
       "Sube o pega el kit de recuperación.",
       "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
       "Confirma que este es tu negocio.",
     ]);
+    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
   it("switches language live, keeping the kit already pasted", async () => {

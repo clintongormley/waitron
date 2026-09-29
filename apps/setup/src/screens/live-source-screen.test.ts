@@ -23,11 +23,25 @@ async function typePassphrase(el: SetupLiveSourceScreen, value: string): Promise
   await el.updateComplete;
 }
 
+/** The export's message under its field, then the passphrase's, which `wt-input` shows under itself. */
 function fieldErrors(el: SetupLiveSourceScreen): string[] {
-  return [...el.shadowRoot!.querySelectorAll("[data-test=field-error]")].map((node) =>
+  const exportErrors = [...el.shadowRoot!.querySelectorAll("[data-test=field-error]")].map((node) =>
     node.textContent!.trim(),
   );
+  const passphrase = (q(el, "wt-input") as HTMLElement & { error: string }).error;
+  return [...exportErrors, ...(passphrase === "" ? [] : [passphrase])];
 }
+
+/** The message element `wt-form-actions` shows beside Import, or null when there is none. */
+async function bottomElement(el: SetupLiveSourceScreen): Promise<HTMLElement | null> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector<HTMLElement>("[data-error]");
+}
+async function bottomOf(el: SetupLiveSourceScreen): Promise<string> {
+  return (await bottomElement(el))?.textContent?.trim() ?? "";
+}
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 const EXPORT = new File(["encrypted"], "prepared.waitron-config");
 
@@ -52,12 +66,8 @@ describe("SetupLiveSourceScreen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=import]")!.click();
     await el.updateComplete;
     expect(requested).not.toHaveBeenCalled();
-    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-    expect(el.shadowRoot!.querySelectorAll("[data-test=field-error]")).toHaveLength(2);
+    expect((await bottomElement(el))?.getAttribute("role")).toBe("alert");
+    expect(fieldErrors(el)).toHaveLength(2);
     expect(el.shadowRoot!.querySelector("input[type=file]")?.getAttribute("name")).toBe(
       "configuration-export",
     );
@@ -69,7 +79,7 @@ describe("SetupLiveSourceScreen", () => {
     host.addEventListener("configuration-requested", requested);
     q(el, "[data-test=import]")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     chooseExport(el, EXPORT);
     await typePassphrase(el, "twelve-chars");
     q(el, "[data-test=import]")!.click();
@@ -78,7 +88,7 @@ describe("SetupLiveSourceScreen", () => {
       { artifact: EXPORT, passphrase: "twelve-chars" },
     ]);
     expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(true);
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
   });
 
   it("refuses an eleven-character passphrase even with an export chosen", async () => {
@@ -116,7 +126,72 @@ describe("SetupLiveSourceScreen", () => {
     const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {
       errorMessage: "The export could not be decrypted.",
     });
-    expect(q(el, "[role=alert]")?.textContent).toBe("The export could not be decrypted.");
+    const alert = await bottomElement(el);
+    expect(alert?.getAttribute("role")).toBe("alert");
+    expect(alert?.textContent).toBe("The export could not be decrypted.");
+  });
+
+  describe("messages beside Import (owner's forms rule, 2026-09-28)", () => {
+    it("says nothing and leaves Import working before the first press", async () => {
+      const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+      expect(await bottomOf(el)).toBe("");
+      expect(fieldErrors(el)).toEqual([]);
+      expect(q(el, "wt-form-error-summary")).toBeNull();
+      expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("marks both fields once each, says one sentence beside Import, focuses the export, and holds Import", async () => {
+      const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+      q(el, "[data-test=import]")!.click();
+      await el.updateComplete;
+      expect(fieldErrors(el)).toEqual([
+        "Choose a configuration export.",
+        "Enter a passphrase of at least 12 characters.",
+      ]);
+      expect(el.shadowRoot!.textContent).not.toContain(
+        "Enter a passphrase of at least 12 characters.",
+      );
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(true);
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "input[type=file]")));
+    });
+
+    it("marks the passphrase again when it is shortened after the press, and gives Import back once both are fixed", async () => {
+      const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+      q(el, "[data-test=import]")!.click();
+      await el.updateComplete;
+      await typePassphrase(el, "twelve-chars");
+      await typePassphrase(el, "short");
+      expect(fieldErrors(el)).toEqual([
+        "Choose a configuration export.",
+        "Enter a passphrase of at least 12 characters.",
+      ]);
+      chooseExport(el, EXPORT);
+      await typePassphrase(el, "twelve-chars");
+      expect(fieldErrors(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
+      expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("gives Import back when an import it sent is refused, and drops the refusal on the next press", async () => {
+      const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+      chooseExport(el, EXPORT);
+      await typePassphrase(el, "twelve-chars");
+      q(el, "[data-test=import]")!.click();
+      await el.updateComplete;
+      expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(true);
+      el.errorMessage =
+        "The configuration export could not be opened. Check the file and passphrase.";
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe(
+        "The configuration export could not be opened. Check the file and passphrase.",
+      );
+      expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(false);
+      await typePassphrase(el, "short");
+      q(el, "[data-test=import]")!.click();
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    });
   });
 
   it("steps back to the mode screen", async () => {

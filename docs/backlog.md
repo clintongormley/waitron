@@ -2057,13 +2057,6 @@ first is still open:
 **Found while bringing `apps/setup` to the coverage bar (2026-09-23), left unfixed** — each was
 seen in a throwaway test, since deleted, and none has a test pinning it:
 
-- *In Demo, a server refusal of a field Demo hides gives the operator no signal.* The shell routes a
-  refused `seriesCode` or `operationDescription` back to the venue screen whatever the mode
-  (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing), but Demo does not draw
-  those fields: nothing is marked, no alert shows and focus does not move. Whether the server ever
-  refuses Demo's fixed series codes is not established.
-- *In Demo with a draft country that has no venue-setup pack*, the error summary asks for the tax ID
-  and the invoice languages, neither of which Demo shows.
 - *A draft carrying a country with no venue-setup pack* (a configuration import can bring one) shows
   Spain in the country select while the screen holds the other value, so "Check the country." sits
   beside what looks like a valid choice.
@@ -2071,6 +2064,35 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
   it stuck when it is put back*: the Run button stays on "Running test…", or the screen stays on
   "Provisioning…", with no retry. The connection check releases itself in the same case. The app
   mounts the wizard once and never removes it, so this may be unreachable in use.
+
+**Demo gaps on the setup wizard's venue screen, as they stand after C47s (2026-09-29), left
+unfixed** — the first two date from 2026-09-23 and were rewritten for the new behaviour; each
+says whether it was seen in a run or only read in the code:
+
+- *In Demo, a server refusal of a field Demo hides can only be retried unchanged.* The shell routes
+  a refused `seriesCode`, `rectificativeSeriesCode` or `operationDescription` back to the venue
+  screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
+  The refusal's sentence shows beside Next and pressing Next moves on to the review screen, which
+  sends the same series codes and description again, so the operator has nothing to change if the
+  server refused them. The venue screen's half is pinned by the `shows a Demo refusal of the hidden
+  %s beside Next, and pressing Next tries again` cases in `apps/setup/src/screens/venue-screen.test.ts`;
+  the move to the review screen (`#onAdvance` in `setup-app.ts`) was read, not run. Whether the
+  server ever refuses Demo's fixed series codes is not established.
+- *In Demo with a draft country that has no venue-setup pack*, the screen says from the start that
+  Demo's invoice settings have not loaded, even when they have (the unknown country names no filing
+  module to take a description from), and Next only moves focus to that sentence. When the draft
+  carries an operation description but no tax ID, a press puts "Enter the tax ID. Choose one or two
+  invoice languages." beside Next, ahead of the generic sentence — two fields Demo does not show.
+  Seen in a throwaway test on 2026-09-29, since deleted; nothing pins it.
+- *In Demo, a local check that fails only on a field Demo hides* — for example a draft whose series
+  code equals its refund-invoice series code — shows its message beside Next once Next has been
+  pressed, while Next stays enabled (it is disabled only by errors on fields the screen shows).
+  In that example both hidden fields carry the same message, and the message beside Next is built
+  from every hidden field's error (the `bottom` list in `render`,
+  `apps/setup/src/screens/venue-screen.ts`), so "Use different codes for ordinary and correction
+  invoices." would appear twice. Every press only runs the focus-the-first-invalid-field step and
+  returns, so the draft is never sent. All of this was read in the code, not run; whether a real
+  draft can reach that state has not been tested.
 
 **Restoring a backup and importing a configuration failed in a real browser — FIXED #584.** `restore`
 and `stageConfiguration` in `apps/setup/src/api/client.ts` now copy `fetch` into a local first, as
@@ -3533,9 +3555,17 @@ ongoing overhaul listed at the top of Track A.
   keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image
-  library's delete confirmation also keeps its refusal in the dialog's body. Left open, not done: (1) the dashboard module screens
+  library's delete confirmation also keeps its refusal in the dialog's body. Since C47s the setup
+  wizard's forms follow the rule too: the admin, connect, reset, venue, certificate, restore,
+  bucket-restore, Cloud-restore and live-source screens. The wizard's screens with no fields —
+  review, fiscal test, connection and provisioning — keep their refusal paragraph, as the cloud
+  services screen does, and in Demo the venue screen's "Demo invoice settings have not loaded yet."
+  alert (`data-test=defaults-error`, with its retry button) stays above the form, as a load failure
+  rather than a refusal. Left open, not done: (1) the dashboard module screens
   (adjustments reasons, Stripe and SumUp connect and add-reader, venue operations) still show
-  `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's screens — C47s, lane C; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
+  `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's Demo gaps, listed
+  under *Demo gaps on the setup wizard's venue screen* earlier in this file; (3) the till's forms are
+  C48; (4) `wt-form-error-summary` is deleted once
   nothing uses it — besides the module screens, the `packages/ui` workbench demo
   (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
   which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it; (5) the profile

@@ -33,20 +33,24 @@ async function fillValid(
   }
 }
 
-async function summary(el: SetupResetScreen): Promise<HTMLElement | null> {
-  const found = el.shadowRoot!.querySelector("wt-form-error-summary") as
-    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
-  await found?.updateComplete;
-  return found;
+/** The one message beside the reset button, as `wt-form-actions` shows it. */
+async function bottomOf(el: SetupResetScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
+/** Every alert in the screen and in its action row. */
 async function alerts(el: SetupResetScreen): Promise<Element[]> {
-  const inner = await summary(el);
+  const actions = el.shadowRoot!.querySelector("wt-form-actions");
+  await actions?.updateComplete;
   return [
     ...el.shadowRoot!.querySelectorAll("[role=alert]"),
-    ...(inner?.shadowRoot!.querySelectorAll("[role=alert]") ?? []),
+    ...(actions?.shadowRoot!.querySelectorAll("[role=alert]") ?? []),
   ];
 }
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 const REJECTED =
   "That person ID and password are not the admin login used to connect this server. Check them and try again.";
@@ -144,22 +148,21 @@ describe("setup-reset-screen", () => {
       const input = q(el, `[data-test=${field}]`)!;
       expect(input.hasAttribute("invalid")).toBe(true);
       expect(input.getAttribute("error")).toBe(sentence);
-      const shown = await summary(el);
-      expect((shown as unknown as { errors: string[] }).errors).toEqual([sentence]);
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
       expect(await alerts(el)).toHaveLength(1);
     },
   );
 
-  it("clears the client summary once a valid reset is submitted", async () => {
+  it("clears the client message once a valid reset is submitted", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
-    expect(await summary(el)).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await fillValid(el);
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
-    expect(await summary(el)).toBeNull();
+    expect(await bottomOf(el)).toBe("");
     expect(events).toHaveLength(1);
   });
 
@@ -176,7 +179,7 @@ describe("setup-reset-screen", () => {
     expect(events).toEqual([]);
   });
 
-  it("marks both fields and names the refused login in the summary when the login was refused", async () => {
+  it("marks both fields and names the refused login beside the reset button when the login was refused", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       credentialsRejected: true,
     });
@@ -184,36 +187,118 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("Check the admin person ID.");
     expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
-    const shown = await summary(el);
-    expect((shown as unknown as { errors: string[] }).errors).toEqual([REJECTED]);
+    expect(await bottomOf(el)).toBe(REJECTED);
     expect(await alerts(el)).toHaveLength(1);
   });
 
-  it("shows a routed-back message as one alert beside the form", async () => {
+  it("shows a routed-back message as one alert beside the reset button, leaving it working", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       errorMessage: "Too many attempts. Wait 30 seconds, then try again.",
     });
-    const banner = q(el, "[data-test=server-error]")!;
-    expect(banner.getAttribute("role")).toBe("alert");
-    expect(banner.textContent).toContain("Wait 30 seconds");
+    expect(await bottomOf(el)).toBe("Too many attempts. Wait 30 seconds, then try again.");
     expect(await alerts(el)).toHaveLength(1);
     expect(q(el, "[data-test=personId]")).not.toBeNull();
+    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("shows only the client summary when it and a routed-back message coincide", async () => {
+  it("drops a routed-back message for the client message when a press finds blank fields", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       errorMessage: "The server could not be reset.",
-      credentialsRejected: true,
     });
     q(el, "[data-test=reset]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=server-error]")).toBeNull();
-    const shown = await summary(el);
-    expect((shown as unknown as { errors: string[] }).errors).toEqual([
-      "Enter the admin person ID.",
-      "Enter the admin password.",
-    ]);
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("Enter the admin person ID.");
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Enter the admin password.");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(await alerts(el)).toHaveLength(1);
+  });
+
+  it("drops a routed-back message when the reset is asked for again", async () => {
+    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
+      errorMessage: "The server could not be reset.",
+    });
+    const events = collect(host);
+    await fillValid(el);
+    q(el, "[data-test=reset]")!.click();
+    await el.updateComplete;
+    expect(events).toHaveLength(1);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("says nothing and leaves the reset button working before the first press", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    await type(el, "personId", "");
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on a failed press focuses the first blank field and disables the reset button", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    await type(el, "personId", "op-1");
+    q(el, "[data-test=reset]")!.click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    const password = q(el, "[data-test=password]")!;
+    expect(password.getAttribute("error")).toBe("Enter the admin password.");
+    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks each change after a failed press, and the reset works again once both are filled", async () => {
+    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=reset]")!.click();
+    await el.updateComplete;
+
+    await type(el, "personId", "op-1");
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
+
+    await type(el, "personId", " ");
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("Enter the admin person ID.");
+
+    await fillValid(el);
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=reset]")!.click();
+    expect(events).toHaveLength(1);
+  });
+
+  it("holds the reset button while a refused login is unchanged, and focuses the person ID when it arrives", async () => {
+    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    const events = collect(host);
+    await fillValid(el);
+    el.credentialsRejected = true;
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const personId = q(el, "[data-test=personId]")!;
+    expect(personId.shadowRoot!.activeElement).toBe(personId.shadowRoot!.querySelector("input"));
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(true);
+    q(el, "[data-test=reset]")!.click();
+    expect(events).toEqual([]);
+  });
+
+  it("withdraws a refused login from both fields once either changes, and the reset works again", async () => {
+    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    const events = collect(host);
+    await fillValid(el);
+    el.credentialsRejected = true;
+    await el.updateComplete;
+
+    await type(el, "password", "battery staple");
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=reset]")!.click();
+    expect(events).toEqual([{ credential: { personId: "op-1", password: "battery staple" } }]);
   });
 
   it("keeps a field's wt-change inside the screen", async () => {
@@ -289,12 +374,10 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
       "Introduce el ID de persona del administrador.",
     );
-    const shown = (await summary(el))!;
-    expect(shown.getAttribute("heading")).toBe("Hay un problema con este formulario");
-    expect((shown as unknown as { errors: string[] }).errors).toEqual([
-      "Introduce el ID de persona del administrador.",
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe(
       "Introduce la contraseña del administrador.",
-    ]);
+    );
+    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
   it("names a refused login in Spanish", async () => {
@@ -305,9 +388,9 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe(
       "Revisa la contraseña del administrador.",
     );
-    expect(((await summary(el)) as unknown as { errors: string[] }).errors).toEqual([
+    expect(await bottomOf(el)).toBe(
       "Ese ID de persona y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
-    ]);
+    );
   });
 
   it("shows the in-flight button and the outcome in Spanish", async () => {

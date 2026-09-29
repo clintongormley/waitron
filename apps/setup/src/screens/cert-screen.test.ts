@@ -22,6 +22,15 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupCertScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
+/** The form's one message beside Next, shown by `wt-form-actions`. */
+async function bottomOf(el: SetupCertScreen): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
+
 async function typePassphrase(el: SetupCertScreen, value: string): Promise<void> {
   q(el, "[data-test=passphrase]")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -167,12 +176,9 @@ describe("setup-cert-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
-    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    const actions = q(el, "wt-form-actions")!;
+    expect(actions.shadowRoot!.querySelector("[data-error][role=alert]")).not.toBeNull();
     expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=pfx-field-error]")).not.toBeNull();
     expect((q(el, "[data-test=pfx]") as HTMLInputElement).getAttribute("aria-invalid")).toBe(
@@ -188,22 +194,26 @@ describe("setup-cert-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=passphrase]")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=passphrase-field-error]")).not.toBeNull();
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe(
+      "Enter the certificate passphrase.",
+    );
+    // `wt-input` shows its `error` under itself, in its own shadow root; the screen repeats nothing.
+    expect(el.shadowRoot!.textContent).not.toContain("Enter the certificate passphrase.");
   });
 
-  it("clears the banner once a file and passphrase are supplied and Next succeeds", async () => {
+  it("clears the bottom message once a file and passphrase are supplied and Next succeeds", async () => {
     const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const events = collect(host);
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await chooseFile(el, PFX_SOURCE);
     await typePassphrase(el, "unlock-2026");
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
     expect(events.some((e) => e.kind === "goto")).toBe(true);
   });
 
@@ -281,7 +291,7 @@ describe("setup-cert-screen", () => {
     expect(events).toEqual([{ kind: "goto", detail: { screen: "venue" } }]);
   });
 
-  it("shows a read-error banner and stays blocked when the FileReader fails, without an unhandled rejection", async () => {
+  it("explains a failed read under the file field once Next is pressed, and stays blocked, without an unhandled rejection", async () => {
     const rejections: PromiseRejectionEvent[] = [];
     const onReject = (e: PromiseRejectionEvent) => rejections.push(e);
     window.addEventListener("unhandledrejection", onReject);
@@ -302,20 +312,127 @@ describe("setup-cert-screen", () => {
       await new Promise((r) => setTimeout(r, 0));
       await el.updateComplete;
 
-      const banner = q(el, "[data-test=error]");
-      expect(banner).not.toBeNull();
-      await (banner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-      expect(banner!.shadowRoot!.textContent).toContain("couldn't read that file");
       expect(q(el, "[data-test=file-status]")).toBeNull();
 
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
       expect(events).toEqual([]);
+      expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain(
+        "couldn't read that file",
+      );
     } finally {
       globalThis.FileReader = RealFileReader;
       window.removeEventListener("unhandledrejection", onReject);
     }
     expect(rejections).toEqual([]);
+  });
+});
+
+describe("setup-cert-screen form errors", () => {
+  const next = (el: SetupCertScreen) => q(el, "[data-test=next]")!;
+
+  it("says nothing and leaves Next working before the first press", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe("");
+  });
+
+  it("on a failed press marks both fields, says so beside Next, focuses the file field and disables Next", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    next(el).click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(q(el, "[data-test=pfx-field-error]")!.textContent?.trim()).toBe(
+      "Choose the certificate file.",
+    );
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe(
+      "Enter the certificate passphrase.",
+    );
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=pfx]"));
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks every change after a failed press, and Next works again once both are fixed", async () => {
+    const { el, host } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const events = collect(host);
+    next(el).click();
+    await el.updateComplete;
+
+    await typePassphrase(el, "unlock-2026");
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+
+    await typePassphrase(el, "  ");
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe(
+      "Enter the certificate passphrase.",
+    );
+
+    await typePassphrase(el, "unlock-2026");
+    await chooseFile(el, PFX_SOURCE);
+    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    next(el).click();
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "goto"]);
+  });
+
+  /** Chooses a file with every read failing, and waits for the failure to settle. */
+  async function chooseUnreadableFile(el: SetupCertScreen): Promise<void> {
+    const RealFileReader = globalThis.FileReader;
+    globalThis.FileReader = FailingFileReader as unknown as typeof FileReader;
+    try {
+      const input = q(el, "[data-test=pfx]") as HTMLInputElement;
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array([1])], "cert.pfx"));
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change"));
+      await new Promise((r) => setTimeout(r, 0));
+      await el.updateComplete;
+    } finally {
+      globalThis.FileReader = RealFileReader;
+    }
+  }
+
+  it("says nothing about a failed read, and leaves Next working, before the first press", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    await chooseUnreadableFile(el);
+    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(q(el, ".field.file")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=pfx]")!.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("drops a failed read's message once the operator chooses a file that reads", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    await typePassphrase(el, "unlock-2026");
+    await chooseUnreadableFile(el);
+    next(el).click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=pfx-field-error]")!.textContent).toContain("couldn't read that file");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+
+    await chooseFile(el, PFX_SOURCE);
+    expect(q(el, "[data-test=pfx-field-error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says the bottom message in Spanish", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+      next(el).click();
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
+    } finally {
+      setLocale("en-GB");
+    }
   });
 });
 

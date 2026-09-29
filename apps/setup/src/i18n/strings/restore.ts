@@ -25,7 +25,7 @@ export const restoreEn = {
   "restore.acknowledge_help":
     "Check every other server this restaurant still has before restoring. A backup may be older than a server that is still running.",
   "restore.acknowledge_missing": "Confirm that no other running server has newer data.",
-  "restore.error_heading": "There is a problem with this form",
+  "restore.fix_fields": "Correct the highlighted fields to continue.",
   "restore.back": "Back",
   "restore.submit": "Restore backup",
 
@@ -52,7 +52,7 @@ export const restoreEn = {
   "restore_bucket.venue_details": "(tax id {taxId}), location {location}.",
   "restore_bucket.venue_confirm": "This is my business. Restore it onto this server.",
   "restore_bucket.venue_missing": "Confirm that this is your business.",
-  "restore_bucket.error_heading": "There is a problem with this form",
+  "restore_bucket.fix_fields": "Correct the highlighted fields to continue.",
   "restore_bucket.back": "Back",
   "restore_bucket.submit": "Restore from my bucket",
 
@@ -73,7 +73,7 @@ export const restoreEn = {
     "I confirm the old server and surviving peers are stopped, and I accept losing changes after this snapshot.",
   "cloud_restore.acknowledge_missing":
     "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.",
-  "cloud_restore.error_heading": "There is a problem with this form",
+  "cloud_restore.fix_fields": "Correct the highlighted fields to continue.",
   "cloud_restore.restore": "Restore this snapshot",
   "cloud_restore.back": "Back to backup file",
 
@@ -91,7 +91,7 @@ export const restoreEn = {
   "live_source.passphrase_help": "Enter the passphrase used to encrypt the configuration export.",
   "live_source.show_passphrase": "Show export passphrase",
   "live_source.hide_passphrase": "Hide export passphrase",
-  "live_source.error_heading": "There is a problem with this form",
+  "live_source.fix_fields": "Correct the highlighted fields to continue.",
   "live_source.import": "Review prepared configuration",
   "live_source.start_empty": "Start empty",
   "live_source.empty_intro": "Create a fresh live restaurant and enter its configuration yourself.",
@@ -148,7 +148,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Antes de restaurar, revisa todos los demás servidores que siga teniendo este restaurante. Una copia puede ser más antigua que un servidor que sigue funcionando.",
   "restore.acknowledge_missing":
     "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
-  "restore.error_heading": "Hay un problema con este formulario",
+  "restore.fix_fields": "Corrige los campos marcados para continuar.",
   "restore.back": "Volver",
   "restore.submit": "Restaurar la copia",
 
@@ -177,7 +177,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.venue_details": "(NIF {taxId}), local {location}.",
   "restore_bucket.venue_confirm": "Este es mi negocio. Restáuralo en este servidor.",
   "restore_bucket.venue_missing": "Confirma que este es tu negocio.",
-  "restore_bucket.error_heading": "Hay un problema con este formulario",
+  "restore_bucket.fix_fields": "Corrige los campos marcados para continuar.",
   "restore_bucket.back": "Volver",
   "restore_bucket.submit": "Restaurar desde mi bucket",
 
@@ -198,7 +198,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Confirmo que el servidor anterior y los demás servidores que queden están detenidos, y acepto perder los cambios posteriores a esta instantánea.",
   "cloud_restore.acknowledge_missing":
     "Confirma que el servidor anterior y los demás servidores que queden están detenidos, y que aceptas perder los cambios posteriores a esta instantánea.",
-  "cloud_restore.error_heading": "Hay un problema con este formulario",
+  "cloud_restore.fix_fields": "Corrige los campos marcados para continuar.",
   "cloud_restore.restore": "Restaurar esta instantánea",
   "cloud_restore.back": "Volver al archivo de copia de seguridad",
 
@@ -217,7 +217,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Introduce la contraseña con la que se cifró la exportación de configuración.",
   "live_source.show_passphrase": "Mostrar la contraseña de exportación",
   "live_source.hide_passphrase": "Ocultar la contraseña de exportación",
-  "live_source.error_heading": "Hay un problema con este formulario",
+  "live_source.fix_fields": "Corrige los campos marcados para continuar.",
   "live_source.import": "Revisar la configuración preparada",
   "live_source.start_empty": "Empezar desde cero",
   "live_source.empty_intro": "Crea un restaurante en vivo nuevo y configúralo tú.",

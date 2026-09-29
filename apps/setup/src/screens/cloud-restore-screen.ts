@@ -1,15 +1,14 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { CloudRecoveryView } from "../api/client.js";
 import { dispatchSetupGoto } from "../events.js";
 import { errorStyles, fieldStyles } from "../form-styles.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { oldBoxProblem, oldBoxQuestion } from "./old-box-question.js";
+import { oldBoxQuestion } from "./old-box-question.js";
 
 @customElement("setup-cloud-restore-screen")
 export class SetupCloudRestoreScreen extends LitElement {
@@ -41,7 +40,9 @@ export class SetupCloudRestoreScreen extends LitElement {
   @property({ type: Boolean }) liveUnknown = false;
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
-  @state() private showError = false;
+  @state() private attempted = false;
+  /** The owner pressed an action after `errorMessage` arrived, so it no longer applies. */
+  @state() private refusalDismissed = false;
   #approvalBinding?: string;
 
   constructor() {
@@ -55,12 +56,14 @@ export class SetupCloudRestoreScreen extends LitElement {
       : undefined;
   }
 
-  override willUpdate(): void {
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("errorMessage")) this.refusalDismissed = false;
     const binding = this.#currentApprovalBinding();
     if (binding !== this.#approvalBinding) {
       this.acknowledged = false;
       this.oldBoxGone = false;
-      this.showError = false;
+      this.attempted = false;
+      this.refusalDismissed = false;
       this.#approvalBinding = binding;
     }
   }
@@ -73,11 +76,8 @@ export class SetupCloudRestoreScreen extends LitElement {
     return this.#askingOldBox && !this.oldBoxGone;
   }
 
-  #problems(): string[] {
-    return [
-      !this.acknowledged ? t("cloud_restore.acknowledge_missing") : "",
-      this.#oldBoxUnanswered ? oldBoxProblem() : "",
-    ].filter(Boolean);
+  get #incomplete(): boolean {
+    return !this.acknowledged || this.#oldBoxUnanswered;
   }
 
   #action(action: "start" | "status" | "start-again" | "restore"): void {
@@ -89,12 +89,14 @@ export class SetupCloudRestoreScreen extends LitElement {
         this.#currentApprovalBinding() !== this.#approvalBinding
       )
         return;
-      if (this.#problems().length > 0) {
-        this.showError = true;
+      this.attempted = true;
+      if (this.#incomplete) {
+        this.refusalDismissed = true;
+        void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
         return;
       }
     }
-    this.showError = false;
+    this.refusalDismissed = true;
     this.dispatchEvent(
       new CustomEvent("cloud-restore-action", {
         detail: {
@@ -111,7 +113,12 @@ export class SetupCloudRestoreScreen extends LitElement {
 
   override render() {
     const approved = this.view?.state === "approved" && this.view.point;
-    const acknowledgeInvalid = this.showError && !this.acknowledged;
+    const acknowledgeInvalid = this.attempted && !this.acknowledged;
+    const fieldsInvalid = Boolean(approved) && this.attempted && this.#incomplete;
+    const bottom = [
+      ...(this.errorMessage && !this.refusalDismissed ? [this.errorMessage] : []),
+      ...(fieldsInvalid ? [t("cloud_restore.fix_fields")] : []),
+    ].join(" ");
     return html`
       <h1>${t("cloud_restore.heading")}</h1>
       <p>${t("cloud_restore.intro")}</p>
@@ -182,39 +189,30 @@ export class SetupCloudRestoreScreen extends LitElement {
                           liveSince: this.liveSince,
                           liveUnknown: this.liveUnknown,
                           checked: this.oldBoxGone,
-                          invalid: this.showError && this.#oldBoxUnanswered,
+                          invalid: this.attempted && this.#oldBoxUnanswered,
                           onChange: (checked) => {
                             this.oldBoxGone = checked;
                           },
                         })}
-                        ${
-                          this.showError
-                            ? html`<wt-form-error-summary
-                                data-test="error"
-                                heading=${t("cloud_restore.error_heading")}
-                                .errors=${this.#problems()}
-                              ></wt-form-error-summary>`
-                            : nothing
-                        }
-                        <p>
-                          <wt-button
-                            variant="primary"
-                            data-test="restore"
-                            ?disabled=${this.busy}
-                            @click=${() => this.#action("restore")}
-                            >${t("cloud_restore.restore")}</wt-button
-                          >
-                        </p>
                       `
                     : nothing
                 }
               `
       }
-      ${this.errorMessage && !this.showError ? html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>` : nothing}
-      <wt-form-actions
+      <wt-form-actions .error=${bottom}
         ><wt-button slot="cancel" variant="ghost" @click=${() => dispatchSetupGoto(this, "restore")}
           >${t("cloud_restore.back")}</wt-button
-        ></wt-form-actions
+        >${
+          approved
+            ? html`<wt-button
+                variant="primary"
+                data-test="restore"
+                ?disabled=${this.busy || fieldsInvalid}
+                @click=${() => this.#action("restore")}
+                >${t("cloud_restore.restore")}</wt-button
+              >`
+            : nothing
+        }</wt-form-actions
       >
     `;
   }

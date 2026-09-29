@@ -204,6 +204,15 @@ async function screenText(el: SetupApp, screen: Screen, sel: string): Promise<st
   return host.shadowRoot!.querySelector<HTMLElement>(sel)?.textContent?.trim() ?? null;
 }
 
+/** The one message beside a screen's primary action, or "" when it shows none. */
+async function bottomOf(host: HTMLElement): Promise<string> {
+  const actions = host.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
 /** The stopped-partway message offers the reset in place of support, and nothing else. */
 async function expectAdoptIncompleteWithReset(el: SetupApp): Promise<void> {
   expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).toBeNull();
@@ -593,9 +602,7 @@ describe("setup-app", () => {
     });
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-restore]")).not.toBeNull();
-    expect(await screenText(el, "restore", "[data-test=server-error]")).toContain(
-      "could not be staged",
-    );
+    expect(await bottomOf(await screenHost(el, "restore"))).toContain("could not be staged");
   });
 
   it("shows Cloud approval and stages only the snapshot the operator confirmed", async () => {
@@ -698,9 +705,7 @@ describe("setup-app", () => {
     await flush(el);
     cloudRecoveryAction(el, "start");
     await flush(el);
-    expect(await screenText(el, "cloud-restore", "[data-test=server-error]")).toContain(
-      "unavailable",
-    );
+    expect(await bottomOf(await screenHost(el, "cloud-restore"))).toContain("unavailable");
     cloudRecoveryAction(el, "start");
     await flush(el);
     expect(startCloudRecovery).toHaveBeenCalledTimes(2);
@@ -799,17 +804,15 @@ describe("setup-app", () => {
     const el = await mountSetupApp(stubApi({ provision }));
     provisionRequest(el);
     await flush(el);
-    expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
-      "country must match",
-    );
-    // The operator corrects and advances (demo → review): the stale banner does not follow.
+    expect(await bottomOf(await screenHost(el, "venue"))).toContain("country must match");
+    // The operator corrects and advances (demo → review): the stale message does not follow.
     patch(el, { mode: "demo" });
     advance(el);
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("[data-test=screen-review]")).not.toBeNull();
     goto(el, "venue");
     await el.updateComplete;
-    expect(await screenText(el, "venue", "[data-test=server-error]")).toBeNull();
+    expect(await bottomOf(await screenHost(el, "venue"))).toBe("");
   });
 
   it("#onPatch deep-merges a screen's slice into the draft, preserving seeded siblings", async () => {
@@ -1143,14 +1146,12 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
-    expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
-      "country must match",
-    );
+    expect(await bottomOf(await screenHost(el, "venue"))).toContain("country must match");
     goto(el, "admin");
     await el.updateComplete;
     goto(el, "venue");
     await el.updateComplete;
-    expect(await screenText(el, "venue", "[data-test=server-error]")).toBeNull();
+    expect(await bottomOf(await screenHost(el, "venue"))).toBe("");
   });
 
   it.each([
@@ -1166,7 +1167,7 @@ describe("setup-app", () => {
       provisionRequest(el);
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
-      expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(fragment);
+      expect(await bottomOf(await screenHost(el, "venue"))).toContain(fragment);
     },
   );
 
@@ -1178,9 +1179,7 @@ describe("setup-app", () => {
     provisionRequest(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-venue]")).not.toBeNull();
-    expect(await screenText(el, "venue", "[data-test=server-error]")).toContain(
-      "provisioning.invalid_country",
-    );
+    expect(await bottomOf(await screenHost(el, "venue"))).toContain("provisioning.invalid_country");
   });
 
   it("retries the POST when the provisioning screen's retry re-emits provision-requested", async () => {
@@ -1283,14 +1282,14 @@ describe("setup-app", () => {
     ["server.internal", 500, "Couldn't connect"],
     ["some.unexpected_code", 400, "Couldn't connect"],
   ])(
-    "routes the adopt failure %s (HTTP %i) back to the connect form with a banner",
+    "routes the adopt failure %s (HTTP %i) back to the connect form with a message beside Connect",
     async (code, status, fragment) => {
       const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
       const el = await mountSetupApp(stubApi({ adopt }));
       adoptRequest(el);
       await flush(el);
       expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-      expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(fragment);
+      expect(await bottomOf(await screenHost(el, "connect"))).toContain(fragment);
     },
   );
 
@@ -1309,9 +1308,7 @@ describe("setup-app", () => {
         adoptRequest(el);
         await flush(el);
         expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-        expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
-          "Couldn't connect",
-        );
+        expect(await bottomOf(await screenHost(el, "connect"))).toContain("Couldn't connect");
       } finally {
         window.removeEventListener("unhandledrejection", onReject);
       }
@@ -1439,9 +1436,7 @@ describe("setup-app", () => {
         expect(host.shadowRoot!.querySelector("[data-test=reset]")).toBeNull();
       } else {
         expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-        expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
-          "Couldn't connect",
-        );
+        expect(await bottomOf(await screenHost(el, "connect"))).toContain("Couldn't connect");
       }
     }
 
@@ -1500,9 +1495,7 @@ describe("setup-app", () => {
       await flush(el);
       expect(getStatus).toHaveBeenCalledTimes(bootReads);
       expect(el.shadowRoot!.querySelector("[data-test=screen-connect]")).not.toBeNull();
-      expect(await screenText(el, "connect", "[data-test=server-error]")).toContain(
-        "Couldn't connect",
-      );
+      expect(await bottomOf(await screenHost(el, "connect"))).toContain("Couldn't connect");
     });
 
     it.each([
@@ -1765,12 +1758,41 @@ describe("resetting a join that stopped partway", () => {
     expect(screen.shadowRoot!.querySelector("[data-test=password]")!.hasAttribute("invalid")).toBe(
       true,
     );
-    const summary = screen.shadowRoot!.querySelector("wt-form-error-summary") as unknown as {
-      errors: string[];
-    };
-    expect(summary.errors).toEqual([
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
       "That person ID and password are not the admin login used to connect this server. Check them and try again.",
-    ]);
+    );
+  });
+
+  it("names a second refused login after the operator corrects the password", async () => {
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    await submitReset(el, { personId: "op-1", password: "battery staple" });
+    expect(resetIncompleteAdopt).toHaveBeenCalledTimes(2);
+    const screen = await screenHost(el, "reset");
+    expect(screen.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
+      "Check the admin password.",
+    );
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
+      "That person ID and password are not the admin login used to connect this server. Check them and try again.",
+    );
+  });
+
+  it("shows the same general message again when a second reset fails the same way", async () => {
+    const resetIncompleteAdopt = vi
+      .fn()
+      .mockRejectedValue({ code: "server.internal", params: {}, status: 500 });
+    const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
+    await openReset(el);
+    await submitReset(el);
+    await submitReset(el);
+    expect(resetIncompleteAdopt).toHaveBeenCalledTimes(2);
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
+      "The server could not be reset. Check the connection and try again.",
+    );
   });
 
   it.each([
@@ -1785,7 +1807,7 @@ describe("resetting a join that stopped partway", () => {
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
-    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(message);
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(message);
   });
 
   it.each([
@@ -1800,7 +1822,7 @@ describe("resetting a join that stopped partway", () => {
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
-    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(message);
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(message);
     const screen = await screenHost(el, "reset");
     expect(screen.shadowRoot!.querySelector("[data-test=personId]")).not.toBeNull();
     expect(screen.shadowRoot!.querySelector("[data-test=reset]")!.hasAttribute("disabled")).toBe(
@@ -1817,7 +1839,7 @@ describe("resetting a join that stopped partway", () => {
     const el = await offerReset(stubApi({ adopt: incomplete(), resetIncompleteAdopt }));
     await openReset(el);
     await submitReset(el);
-    expect(await screenText(el, "reset", "[data-test=server-error]")).toBe(
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
       "The server could not be reset. Check the connection and try again.",
     );
     const screen = await screenHost(el, "reset");
@@ -1837,15 +1859,19 @@ describe("resetting a join that stopped partway", () => {
     await openReset(el);
     await submitReset(el);
     await submitReset(el);
-    let screen = await screenHost(el, "reset");
-    expect(screen.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
-    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")).not.toBeNull();
+    const screen = await screenHost(el, "reset");
+    expect((screen as HTMLElement & { credentialsRejected: boolean }).credentialsRejected).toBe(
+      false,
+    );
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe(
+      "The server could not be reset. Check the connection and try again.",
+    );
     screen.shadowRoot!.querySelector<HTMLElement>("[data-test=back]")!.click();
     await el.updateComplete;
-    screen = await openReset(el);
-    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")).toBeNull();
+    await openReset(el);
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe("");
     await submitReset(el);
-    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")).toBeNull();
+    expect(await bottomOf(await screenHost(el, "reset"))).toBe("");
     pending.resolve({ resetStaged: true, restarting: true });
     await flush(el);
   });
@@ -2161,7 +2187,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
       environment: "production",
     });
     await flush(el);
-    expect(await screenText(el, "restore", "[data-test=server-error]")).toBe(
+    expect(await bottomOf(await screenHost(el, "restore"))).toBe(
       "The backup could not be staged. Check the connection and try again.",
     );
   });
@@ -2176,7 +2202,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
     );
     configurationRequest(el, new File(["encrypted"], "prepared.waitron-config"), "passphrase");
     await flush(el);
-    expect(await screenText(el, "live-source", "[role=alert]")).toBe(
+    expect(await bottomOf(await screenHost(el, "live-source"))).toBe(
       "The configuration export could not be opened. Check the file and passphrase.",
     );
     expect(readDraft(el).configurationImport).toBeUndefined();
@@ -2478,7 +2504,7 @@ describe("restore from my bucket", () => {
   ])("explains %s (%o) and stays on the bucket screen", async (code, params, message) => {
     const screen = await refusedWith({ code, params, status: 400 });
     expect(screen.errorMessage).toBe(message);
-    expect(screen.shadowRoot!.querySelector("[data-test=server-error]")!.textContent).toBe(message);
+    expect(await bottomOf(screen)).toBe(message);
   });
 
   // Review Focus 5, the wizard's half.
@@ -2657,7 +2683,7 @@ describe("restoring a backup file whose old server may still be running", () => 
     const el = await mountSetupApp(stubApi({ restore: vi.fn().mockRejectedValue(undefined) }));
     restoreRequest(el, backup);
     await flush(el);
-    expect(await screenText(el, "restore", "[data-test=server-error]")).toBe(
+    expect(await bottomOf(await screenHost(el, "restore"))).toBe(
       "The backup could not be staged. Check the connection and try again.",
     );
   });
@@ -2928,20 +2954,20 @@ describe("restoring a Cloud snapshot whose old server may still be running", () 
     });
   });
 
-  it("clears a cloud-recovery error banner once the owner leaves the screen", async () => {
+  it("clears a cloud-recovery error message once the owner leaves the screen", async () => {
     const el = await approvedCloudApp({
       restoreFromCloud: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
     });
     cloudRecoveryAction(el, "restore", pointId, false);
     await flush(el);
-    expect(await screenText(el, "cloud-restore", "[data-test=server-error]")).toBe(
+    expect(await bottomOf(await screenHost(el, "cloud-restore"))).toBe(
       "Cloud recovery is unavailable. Check the connection or request expiry, then try again.",
     );
     goto(el, "restore");
     await flush(el);
     goto(el, "cloud-restore");
     await flush(el);
-    expect(await screenText(el, "cloud-restore", "[data-test=server-error]")).toBeNull();
+    expect(await bottomOf(await screenHost(el, "cloud-restore"))).toBe("");
   });
 
   it("writes nothing for an old-server refusal that arrives after the element is detached", async () => {

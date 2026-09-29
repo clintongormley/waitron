@@ -1,9 +1,8 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
@@ -52,10 +51,11 @@ export class SetupResetScreen extends LitElement {
 
   @property({ type: Boolean }) busy = false;
 
-  /** The server refused the person ID and password, so both fields are marked. */
+  /** The server refused the person ID and password as a pair, so both fields are marked until
+   * either changes, and the reset waits for that change. */
   @property({ type: Boolean }) credentialsRejected = false;
 
-  /** A refusal the operator cannot correct in the fields. */
+  /** A refusal the operator cannot correct in the fields; it never disables the reset. */
   @property() errorMessage?: string;
 
   /** Set once the reset is staged or cannot run; the form is replaced by it. */
@@ -65,7 +65,11 @@ export class SetupResetScreen extends LitElement {
 
   @state() private values: Record<ResetField, string> = { personId: "", password: "" };
 
-  @state() private missing = new Set<ResetField>();
+  @state() private attempted = false;
+
+  @state() private rejectionDismissed = false;
+
+  @state() private refusalDismissed = false;
 
   @state() private passwordVisible = false;
 
@@ -74,15 +78,44 @@ export class SetupResetScreen extends LitElement {
     new LocaleChangeController(this);
   }
 
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("credentialsRejected")) this.rejectionDismissed = false;
+    if (changed.has("errorMessage")) this.refusalDismissed = false;
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    if (changed.has("credentialsRejected") && this.#rejected()) this.#focusFirstInvalid();
+  }
+
+  #focusFirstInvalid(): void {
+    void this.updateComplete.then(() => {
+      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+    });
+  }
+
+  #rejected(): boolean {
+    return this.credentialsRejected && !this.rejectionDismissed;
+  }
+
+  #missing(): Set<ResetField> {
+    if (!this.attempted) return new Set();
+    return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
+  }
+
   #onField(key: ResetField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
+    this.rejectionDismissed = true;
   }
 
   #reset(): void {
-    if (this.busy) return;
-    this.missing = new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
-    if (this.missing.size > 0) return;
+    if (this.busy || this.#rejected()) return;
+    this.attempted = true;
+    this.refusalDismissed = true;
+    if (this.#missing().size > 0) {
+      this.#focusFirstInvalid();
+      return;
+    }
     // `password` is not trimmed: whitespace can be intentional in a secret.
     dispatchResetRequested(this, {
       personId: this.values.personId.trim(),
@@ -90,13 +123,8 @@ export class SetupResetScreen extends LitElement {
     });
   }
 
-  #fieldError(key: ResetField): string {
-    if (this.missing.has(key)) return t(MISSING[key]);
-    return this.missing.size === 0 && this.credentialsRejected ? t(CHECK[key]) : "";
-  }
-
-  #field(label: string, key: ResetField): TemplateResult {
-    const error = this.#fieldError(key);
+  #field(label: string, key: ResetField, missing: Set<ResetField>): TemplateResult {
+    const error = missing.has(key) ? t(MISSING[key]) : this.#rejected() ? t(CHECK[key]) : "";
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=reset]"))}
       class="field"
@@ -125,26 +153,6 @@ export class SetupResetScreen extends LitElement {
     >`;
   }
 
-  #alert(): TemplateResult | typeof nothing {
-    // One alert region: two `role="alert"` nodes double-announce to a screen reader. The
-    // client-validation summary wins over a stale answer from the server.
-    const errors =
-      this.missing.size > 0
-        ? [...this.missing].map((key) => t(MISSING[key]))
-        : this.credentialsRejected
-          ? [t("reset.rejected")]
-          : [];
-    if (errors.length > 0)
-      return html`<wt-form-error-summary
-        data-test="error"
-        heading=${t("reset.error_heading")}
-        .errors=${errors}
-      ></wt-form-error-summary>`;
-    return this.errorMessage === undefined
-      ? nothing
-      : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`;
-  }
-
   override render(): TemplateResult {
     if (this.outcome !== undefined) {
       const resetting = this.outcome.kind === "resetting";
@@ -164,13 +172,20 @@ export class SetupResetScreen extends LitElement {
         </div>
       `;
     }
+    const missing = this.#missing();
+    const rejected = this.#rejected();
+    const bottom = [
+      ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
+      ...(rejected ? [t("reset.rejected")] : []),
+      ...(missing.size > 0 ? [t("reset.fix_fields")] : []),
+    ].join(" ");
     return html`
       <h1>${t("reset.heading")}</h1>
       <p>${t("reset.explanation")}</p>
       <p>${t("reset.prompt")}</p>
-      ${this.#field(t("reset.person_id_label"), "personId")}
-      ${this.#field(t("reset.password_label"), "password")} ${this.#alert()}
-      <wt-form-actions>
+      ${this.#field(t("reset.person_id_label"), "personId", missing)}
+      ${this.#field(t("reset.password_label"), "password", missing)}
+      <wt-form-actions .error=${bottom}>
         <wt-button
           variant="ghost"
           slot="cancel"
@@ -181,7 +196,7 @@ export class SetupResetScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="reset"
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || rejected || missing.size > 0}
           @click=${() => this.#reset()}
           >${t(this.busy ? "reset.busy" : "reset.submit")}</wt-button
         >

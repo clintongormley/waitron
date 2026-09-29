@@ -1,14 +1,13 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import { deriveDisplayName } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { ProvisionBody } from "../api/client.js";
@@ -18,10 +17,18 @@ import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 type AdminField = "firstNames" | "lastNames" | "displayName" | "email" | "password" | "pin";
 
+const FIELDS: readonly AdminField[] = [
+  "firstNames",
+  "lastNames",
+  "displayName",
+  "email",
+  "password",
+  "pin",
+];
+
 interface FieldText {
   label: StringKey;
   error: StringKey;
-  summary: StringKey;
   helpLabel: StringKey;
   help: StringKey;
 }
@@ -30,42 +37,36 @@ const FIELD_TEXT: Record<AdminField, FieldText> = {
   firstNames: {
     label: "admin.first_names.label",
     error: "admin.first_names.error",
-    summary: "admin.first_names.summary",
     helpLabel: "admin.first_names.help_label",
     help: "admin.first_names.help",
   },
   lastNames: {
     label: "admin.last_names.label",
     error: "admin.last_names.error",
-    summary: "admin.last_names.summary",
     helpLabel: "admin.last_names.help_label",
     help: "admin.last_names.help",
   },
   displayName: {
     label: "admin.display_name.label",
     error: "admin.display_name.error",
-    summary: "admin.display_name.error",
     helpLabel: "admin.display_name.help_label",
     help: "admin.display_name.help",
   },
   email: {
     label: "admin.email.label",
     error: "admin.email.error",
-    summary: "admin.email.error",
     helpLabel: "admin.email.help_label",
     help: "admin.email.help",
   },
   password: {
     label: "admin.password.label",
     error: "admin.password.error",
-    summary: "admin.password.error",
     helpLabel: "admin.password.help_label",
     help: "admin.password.help",
   },
   pin: {
     label: "admin.pin.label",
     error: "admin.pin.error",
-    summary: "admin.pin.summary",
     helpLabel: "admin.pin.help_label",
     help: "admin.pin.help",
   },
@@ -76,7 +77,6 @@ export class SetupAdminScreen extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
-    errorStyles,
     actionsStyles,
     css`
       :host {
@@ -96,9 +96,7 @@ export class SetupAdminScreen extends LitElement {
     pin: "",
   };
   @state() private visible = new Set<AdminField>();
-  @state() private invalid = new Set<AdminField>();
-
-  @state() private showError = false;
+  @state() private attempted = false;
 
   #seeded = false;
 
@@ -141,24 +139,19 @@ export class SetupAdminScreen extends LitElement {
     this.values = values;
   }
 
+  #errors(): Set<AdminField> {
+    if (!this.attempted) return new Set();
+    return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
+  }
+
   #next(): void {
-    const invalid = new Set<AdminField>();
-    for (const key of [
-      "firstNames",
-      "lastNames",
-      "displayName",
-      "email",
-      "password",
-      "pin",
-    ] as const) {
-      if (this.values[key].trim() === "") invalid.add(key);
-    }
-    this.invalid = invalid;
-    if (invalid.size > 0) {
-      this.showError = true;
+    this.attempted = true;
+    if (this.#errors().size > 0) {
+      void this.updateComplete.then(() => {
+        if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+      });
       return;
     }
-    this.showError = false;
     dispatchSetupPatch(this, {
       venue: {
         admin: {
@@ -178,7 +171,7 @@ export class SetupAdminScreen extends LitElement {
     dispatchSetupGoto(this, "mode");
   }
 
-  #field(key: AdminField, type = "text"): TemplateResult {
+  #field(key: AdminField, invalid: boolean, type = "text"): TemplateResult {
     const text = FIELD_TEXT[key];
     const fieldPurpose = {
       firstNames: { name: "given-name", autocomplete: "given-name" },
@@ -197,8 +190,8 @@ export class SetupAdminScreen extends LitElement {
       autocomplete=${fieldPurpose.autocomplete}
       type=${this.visible.has(key) ? "text" : type}
       required
-      error=${this.invalid.has(key) ? t(text.error) : ""}
-      ?invalid=${this.invalid.has(key)}
+      error=${invalid ? t(text.error) : ""}
+      ?invalid=${invalid}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
     >
@@ -232,26 +225,22 @@ export class SetupAdminScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const errors = this.#errors();
+    const field = (key: AdminField, type?: string) => this.#field(key, errors.has(key), type);
     return html`
       <h1>${t("admin.heading")}</h1>
       <p>${t("admin.intro")}</p>
-      ${this.#field("firstNames")} ${this.#field("lastNames")} ${this.#field("displayName")}
-      ${this.#field("email", "email")} ${this.#field("password", "password")}
-      ${this.#field("pin", "password")}
-      ${
-        this.showError
-          ? html`<wt-form-error-summary
-              data-test="error"
-              heading=${t("admin.error_heading")}
-              .errors=${[...this.invalid].map((key) => t(FIELD_TEXT[key].summary))}
-            ></wt-form-error-summary>`
-          : nothing
-      }
-      <wt-form-actions>
+      ${field("firstNames")} ${field("lastNames")} ${field("displayName")}
+      ${field("email", "email")} ${field("password", "password")} ${field("pin", "password")}
+      <wt-form-actions .error=${errors.size > 0 ? t("admin.fix_fields") : ""}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("admin.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
+        <wt-button
+          variant="primary"
+          data-test="next"
+          ?disabled=${errors.size > 0}
+          @click=${() => this.#next()}
           >${t("admin.next")}</wt-button
         >
       </wt-form-actions>

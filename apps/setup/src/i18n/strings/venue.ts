@@ -85,7 +85,7 @@ export const venueEn = {
   "venue.error.territory_unsupported": "Setup is not available for this fiscal territory yet.",
   "venue.error.province": "Choose the province that matches the postal code.",
   "venue.error.series_codes": "Use different codes for ordinary and correction invoices.",
-  "venue.error_heading": "There is a problem with this form",
+  "venue.fix_fields": "Correct the highlighted fields to continue.",
 
   "venue.locale.es_es": "Spanish (España)",
   "venue.locale.ca_es": "Catalan (Català)",
@@ -146,7 +146,7 @@ export const venueEn = {
     "Select whether this is a company seal or representative certificate, matching the certificate you exported.",
   "cert.kind.sello": "Company seal (sello)",
   "cert.kind.representante": "Representative (representante)",
-  "cert.error_heading": "There is a problem with this form",
+  "cert.fix_fields": "Correct the highlighted fields to continue.",
   "cert.file_unreadable": "We couldn't read that file. Please choose the certificate file again.",
   "cert.back": "Back",
   "cert.next": "Next",
@@ -269,7 +269,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.error.province": "Elige la provincia que corresponde al código postal.",
   "venue.error.series_codes":
     "Usa códigos distintos para las facturas ordinarias y las rectificativas.",
-  "venue.error_heading": "Hay un problema con este formulario",
+  "venue.fix_fields": "Corrige los campos marcados para continuar.",
 
   "venue.locale.es_es": "Español (España)",
   "venue.locale.ca_es": "Catalán (Català)",
@@ -331,7 +331,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Indica si es un certificado de sello electrónico o de representante, según el certificado que exportaste.",
   "cert.kind.sello": "Sello electrónico",
   "cert.kind.representante": "Representante",
-  "cert.error_heading": "Hay un problema con este formulario",
+  "cert.fix_fields": "Corrige los campos marcados para continuar.",
   "cert.file_unreadable":
     "No hemos podido leer ese archivo. Vuelve a elegir el archivo del certificado.",
   "cert.back": "Volver",
