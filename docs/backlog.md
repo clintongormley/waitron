@@ -2012,7 +2012,7 @@ first is still open:
 
 **Still open after #334**, each one something the branch consciously did not take:
 
-- *The wizard has no translated text and no language chooser* — DONE (C42, 2026-09-29). Every screen
+- *The wizard has no translated text and no language chooser* — DONE (C42, #837, 2026-09-29). Every screen
   reads in Spanish or English from the wizard's own catalogue (`apps/setup/src/i18n/`, the till's
   pattern rather than `@waitron/dashboard-kit`'s), opens in the browser's language when it is one
   Waitron ships and in English otherwise, and offers the language chooser at the bottom right of
