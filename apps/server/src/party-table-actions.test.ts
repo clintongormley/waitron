@@ -91,7 +91,9 @@ async function opts(
   return {
     bills,
     expectedPartyRevision: await revisionOf(v, partyId),
-    ...(other === undefined ? {} : { expectedOtherPartyRevision: await revisionOf(v, other) }),
+    ...(other === undefined
+      ? {}
+      : { otherPartyId: other, expectedOtherPartyRevision: await revisionOf(v, other) }),
     operatorId: OPERATOR,
   };
 }
@@ -819,10 +821,11 @@ describe("join tables", () => {
       const held = await v.table("Otra zona T6", terrazaZone);
       const ana = await seat(v, m4);
       const luis = await seat(v, held);
+      const joiningFree = await opts(ana.partyId);
       const joining = await opts(ana.partyId, luis.partyId);
 
       const free = await refused([ana.partyId], [ana.tabId], [m4, terraza], () =>
-        act((tx) => joinTables(tx, v.cfg, ana.partyId, terraza, joining)),
+        act((tx) => joinTables(tx, v.cfg, ana.partyId, terraza, joiningFree)),
       );
       const other = await refused(
         [ana.partyId, luis.partyId],
@@ -935,6 +938,24 @@ describe("split a table", () => {
     await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
 
     expect((await tableRow(v, m6)).tabId).toBe(ana.tabId);
+  });
+
+  it("points a remaining table that showed the chosen bill at no bill when the party has no main bill", async () => {
+    const [m4, m5, m6] = await tables("Sin principal", 4, 5, 6);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await joinFree(ana.partyId, m6);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    await placeByHand(v, ana.tabId);
+    expect((await partyRow(v, ana.partyId)).mainBillId).toBeNull();
+    await act((tx) => tx.update(diningTables).set({ tabId: b2 }).where(eq(diningTables.id, m6)));
+
+    const splitting = await cmd(ana.partyId);
+    await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+    expect((await tableRow(v, m6)).tabId).toBeNull();
+    expect((await partyRow(v, ana.partyId)).mainBillId).toBeNull();
   });
 
   it("gives the new party a new, empty main bill at once when no bill is chosen", async () => {
@@ -1209,6 +1230,82 @@ describe("two tills at once", () => {
       expect(error).toMatchObject({
         code: "party.out_of_date",
         params: { partyId: luis.partyId, revision: splitting.expectedPartyRevision + 1 },
+      });
+    });
+  }
+});
+
+describe("a request read against a party that has since left the target table", () => {
+  for (const [name, act_] of [
+    ["move guests", moveGuests],
+    ["join tables", joinTables],
+  ] as const) {
+    it(`${name}: refuses it when another party now holds the table, though its revision matches`, async () => {
+      const [m4, m7, m9] = await tables(`Extraña ${name}`, 4, 7, 9);
+      const source = await seat(v, m4);
+      const target = await seat(v, m7);
+      await order(v, source.tabId, "Burger");
+      const stale = await opts(source.partyId, target.partyId);
+      const leaving = await opts(target.partyId);
+      await act((tx) => moveGuests(tx, v.cfg, target.partyId, m9, leaving));
+      const stranger = await seat(v, m7);
+      await order(v, stranger.tabId, "Tarta");
+      // The probe: without this the stale revision would be refused whichever party it named.
+      expect(await revisionOf(v, stranger.partyId)).toBe(stale.expectedOtherPartyRevision);
+
+      const error = await refused(
+        [source.partyId, target.partyId, stranger.partyId],
+        [source.tabId, target.tabId, stranger.tabId],
+        [m4, m7, m9],
+        () => act((tx) => act_(tx, v.cfg, source.partyId, m7, stale)),
+      );
+
+      expect(error).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: target.partyId, revision: await revisionOf(v, target.partyId) },
+      });
+      expect((await linesOf(v, stranger.tabId)).map((l) => l.name)).toEqual(["Tarta"]);
+    });
+
+    it(`${name}: refuses it when the table is now free`, async () => {
+      const [m4, m7, m9] = await tables(`Vacía ${name}`, 4, 7, 9);
+      const source = await seat(v, m4);
+      const target = await seat(v, m7);
+      const stale = await opts(source.partyId, target.partyId);
+      const leaving = await opts(target.partyId);
+      await act((tx) => moveGuests(tx, v.cfg, target.partyId, m9, leaving));
+      expect(await partyAt(v, m7)).toBeNull();
+
+      const error = await refused(
+        [source.partyId, target.partyId],
+        [source.tabId, target.tabId],
+        [m4, m7, m9],
+        () => act((tx) => act_(tx, v.cfg, source.partyId, m7, stale)),
+      );
+
+      expect(error).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: target.partyId, revision: await revisionOf(v, target.partyId) },
+      });
+    });
+
+    it(`${name}: refuses another party's revision sent without naming that party`, async () => {
+      const [m4, m7] = await tables(`Sin nombre ${name}`, 4, 7);
+      const source = await seat(v, m4);
+      const target = await seat(v, m7);
+      const { otherPartyId, ...unnamed } = await opts(source.partyId, target.partyId);
+      expect(otherPartyId).toBe(target.partyId);
+
+      const error = await refused(
+        [source.partyId, target.partyId],
+        [source.tabId, target.tabId],
+        [m4, m7],
+        () => act((tx) => act_(tx, v.cfg, source.partyId, m7, unnamed)),
+      );
+
+      expect(error).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "otherPartyId" },
       });
     });
   }

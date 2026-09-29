@@ -95,12 +95,14 @@ describe("the table action routes", () => {
     const merged = await post(`/api/parties/${ana.partyId}/move`, {
       toTableId: luis.tableId,
       expectedPartyRevision: ana.revision,
+      otherPartyId: luis.partyId,
       expectedOtherPartyRevision: luis.revision,
     });
     const separate = await post(`/api/parties/${bea.partyId}/move`, {
       toTableId: cris.tableId,
       bills: "separate",
       expectedPartyRevision: bea.revision,
+      otherPartyId: cris.partyId,
       expectedOtherPartyRevision: cris.revision,
     });
 
@@ -120,6 +122,7 @@ describe("the table action routes", () => {
       tableId: luis.tableId,
       bills: "separate",
       expectedPartyRevision: ana.revision,
+      otherPartyId: luis.partyId,
       expectedOtherPartyRevision: luis.revision,
     });
 
@@ -249,6 +252,87 @@ describe("the table action routes", () => {
         code: "management.request_invalid",
         params: { field: "expectedOtherPartyRevision" },
       });
+    });
+
+    it.each([["not-a-uuid"], [7], [null]])(
+      `answers ${path} with the other party id %j with 400 management.request_invalid`,
+      async (otherPartyId) => {
+        const ana = await seatedWith(venue);
+        const to = await freeTable();
+
+        const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+          [field]: to,
+          expectedPartyRevision: ana.revision,
+          otherPartyId,
+        });
+
+        expect(answer.status).toBe(400);
+        expect(answer.json).toMatchObject({
+          code: "management.request_invalid",
+          params: { field: "otherPartyId" },
+        });
+        expect(revisionOf(ana.partyId)).toBe(ana.revision);
+        expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
+      },
+    );
+
+    it(`answers ${path} with the other party's revision but not its id with 400`, async () => {
+      const ana = await seatedWith(venue);
+      const luis = await seatedWith(venue);
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: luis.tableId,
+        expectedPartyRevision: ana.revision,
+        expectedOtherPartyRevision: luis.revision,
+      });
+
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "otherPartyId" },
+      });
+      expect(revisionOf(ana.partyId)).toBe(ana.revision);
+      expect(revisionOf(luis.partyId)).toBe(luis.revision);
+      expect(tablesOf(luis.partyId)).toEqual([luis.tableId]);
+    });
+
+    it(`answers ${path} naming the other party in upper case as it names it in lower`, async () => {
+      const ana = await seatedWith(venue);
+      const luis = await seatedWith(venue);
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: luis.tableId,
+        expectedPartyRevision: ana.revision,
+        otherPartyId: luis.partyId.toUpperCase(),
+        expectedOtherPartyRevision: luis.revision,
+      });
+
+      expect(answer.status).toBe(200);
+    });
+
+    it(`answers ${path} to a table the party it read there has left with 409 party.out_of_date`, async () => {
+      const ana = await seatedWith(venue);
+      const luis = await seatedWith(venue);
+      const read = { otherPartyId: luis.partyId, expectedOtherPartyRevision: luis.revision };
+      const left = await post(`/api/parties/${luis.partyId}/move`, {
+        toTableId: await freeTable(),
+        expectedPartyRevision: luis.revision,
+      });
+      expect(left.status).toBe(200);
+
+      const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
+        [field]: luis.tableId,
+        expectedPartyRevision: ana.revision,
+        ...read,
+      });
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({
+        code: "party.out_of_date",
+        params: { partyId: luis.partyId, revision: revisionOf(luis.partyId) },
+      });
+      expect(revisionOf(ana.partyId)).toBe(ana.revision);
+      expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
     });
 
     it(`answers ${path} with no table with 400, and a malformed one with 404 table.not_found`, async () => {

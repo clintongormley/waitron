@@ -160,6 +160,15 @@ export async function setMainBill(
     );
 }
 
+/** The party's main bill as recorded, or null. */
+export async function readMainBill(tx: Transaction, partyId: string): Promise<string | null> {
+  const [party] = await tx
+    .select({ mainBillId: parties.mainBillId })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!.mainBillId;
+}
+
 /** The service zone of the party's earliest active table; null when it holds none, or no zone. */
 export async function partyZone(
   tx: Transaction,
@@ -363,6 +372,19 @@ export async function checkAndBumpParty(
   const revision = party.revision + 1;
   await tx.update(parties).set({ revision }).where(eq(parties.id, partyId));
   return revision;
+}
+
+/**
+ * Refuse a command naming a party it read somewhere the party no longer is: `party.out_of_date`
+ * with the party's current revision, or `party.not_open` when no party has that id.
+ */
+export async function refuseMovedParty(tx: Transaction, partyId: string): Promise<never> {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party === undefined) throw new AppError("party.not_open", { partyId });
+  throw new AppError("party.out_of_date", { partyId, revision: party.revision });
 }
 
 /**

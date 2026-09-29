@@ -18,6 +18,7 @@ import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js"
 import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { finishTable } from "./parties.js";
+import { moveGuests } from "./table-actions.js";
 import { createTable, deactivateTable } from "./tables.js";
 import {
   addTabRound,
@@ -103,7 +104,7 @@ async function move(billId: string, to: MoveTarget, opts: Partial<MoveBillOption
     ...(own === null ? {} : { expectedPartyRevision: await revisionOf(v, own) }),
     ...(target === null || target === own
       ? {}
-      : { expectedOtherPartyRevision: await revisionOf(v, target) }),
+      : { otherPartyId: target, expectedOtherPartyRevision: await revisionOf(v, target) }),
     ...opts,
   };
   return inTx(v, (tx) => moveBill(tx, v.cfg, billId, to, options));
@@ -556,6 +557,83 @@ describe("what a move refuses, changing nothing", () => {
     expect(error).toMatchObject({
       code: "party.out_of_date",
       params: { partyId: p.luis.partyId, revision: await revisionOf(v, p.luis.partyId) },
+    });
+  });
+
+  it("refuses a request read against a party another has since replaced at the table, though its revision matches", async () => {
+    const p = await twoParties("Mesa extraña");
+    const stale: MoveBillOptions = {
+      bills: "merge",
+      partyId: p.ana.partyId,
+      expectedPartyRevision: await revisionOf(v, p.ana.partyId),
+      otherPartyId: p.luis.partyId,
+      expectedOtherPartyRevision: await revisionOf(v, p.luis.partyId),
+      operatorId: OPERATOR,
+    };
+    const elsewhere = await v.table("Mesa extraña X");
+    const leaving = await commandFor(v, p.luis.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.luis.partyId, elsewhere, { ...leaving, bills: "merge" }),
+    );
+    const stranger = await seat(v, p.luisTable);
+    await order(v, stranger.tabId, "Tarta");
+    // The probe: without this the stale revision would be refused whichever party it named.
+    expect(await revisionOf(v, stranger.partyId)).toBe(stale.expectedOtherPartyRevision);
+
+    const error = await refused(
+      p,
+      [p.second, stranger.tabId],
+      () => inTx(v, (tx) => moveBill(tx, v.cfg, p.second, { tableId: p.luisTable }, stale)),
+      [p.luisTable, elsewhere],
+    );
+
+    expect(error).toMatchObject({
+      code: "party.out_of_date",
+      params: { partyId: p.luis.partyId, revision: await revisionOf(v, p.luis.partyId) },
+    });
+    expect((await linesOf(v, stranger.tabId)).map((l) => l.name)).toEqual(["Tarta"]);
+  });
+
+  it("refuses a request read against a party that has since left the table free", async () => {
+    const p = await twoParties("Mesa vaciada");
+    const stale: MoveBillOptions = {
+      bills: "merge",
+      partyId: p.ana.partyId,
+      expectedPartyRevision: await revisionOf(v, p.ana.partyId),
+      otherPartyId: p.luis.partyId,
+      expectedOtherPartyRevision: await revisionOf(v, p.luis.partyId),
+      operatorId: OPERATOR,
+    };
+    const elsewhere = await v.table("Mesa vaciada X");
+    const leaving = await commandFor(v, p.luis.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, p.luis.partyId, elsewhere, { ...leaving, bills: "merge" }),
+    );
+    expect(await partyAt(v, p.luisTable)).toBeNull();
+
+    const error = await refused(
+      p,
+      [p.second],
+      () => inTx(v, (tx) => moveBill(tx, v.cfg, p.second, { tableId: p.luisTable }, stale)),
+      [p.luisTable, elsewhere],
+    );
+
+    expect(error).toMatchObject({
+      code: "party.out_of_date",
+      params: { partyId: p.luis.partyId, revision: await revisionOf(v, p.luis.partyId) },
+    });
+  });
+
+  it("refuses another party's revision sent without naming that party", async () => {
+    const p = await twoParties("Mesa sin nombre");
+
+    const error = await refused(p, [p.second], () =>
+      move(p.second, { tableId: p.luisTable }, { otherPartyId: undefined }),
+    );
+
+    expect(error).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "otherPartyId" },
     });
   });
 
@@ -1177,6 +1255,7 @@ describe("two tills at once", () => {
             {
               bills: "separate",
               expectedPartyRevision: anaRead,
+              otherPartyId: luis.partyId,
               expectedOtherPartyRevision: luisRead,
               operatorId: OPERATOR,
             },
@@ -1215,7 +1294,7 @@ describe("two tills at once", () => {
       const luis = await seat(v, luisTable);
       const orderId = await counterOrder(v, "Tarta");
       const read = [await revisionOf(v, ana.partyId), await revisionOf(v, luis.partyId)];
-      const tillMoves = (tableId: string, otherRevision: number) => () =>
+      const tillMoves = (tableId: string, otherPartyId: string, otherRevision: number) => () =>
         inTx(v, (tx) =>
           moveBill(
             tx,
@@ -1225,13 +1304,14 @@ describe("two tills at once", () => {
             {
               bills: "separate",
               partyId: null,
+              otherPartyId,
               expectedOtherPartyRevision: otherRevision,
               operatorId: OPERATOR,
             },
           ),
         );
-      const tillA = tillMoves(anaTable, read[0]!);
-      const tillB = tillMoves(luisTable, read[1]!);
+      const tillA = tillMoves(anaTable, ana.partyId, read[0]!);
+      const tillB = tillMoves(luisTable, luis.partyId, read[1]!);
       const [winner, loser, winnerParty] =
         first === "A" ? [tillA, tillB, ana.partyId] : [tillB, tillA, luis.partyId];
 
@@ -1267,7 +1347,12 @@ describe("two tills at once", () => {
             v.cfg,
             second,
             { tableId: luisTable },
-            { ...read, bills: "separate", expectedOtherPartyRevision: luisRead },
+            {
+              ...read,
+              bills: "separate",
+              otherPartyId: luis.partyId,
+              expectedOtherPartyRevision: luisRead,
+            },
           ),
         );
       const [winner, loser] = first === "A" ? [toCounter, toLuis] : [toLuis, toCounter];
@@ -1292,6 +1377,7 @@ describe("two tills at once", () => {
       const options: MoveBillOptions = {
         bills: "separate",
         expectedPartyRevision: await revisionOf(v, ana.partyId),
+        otherPartyId: luis.partyId,
         expectedOtherPartyRevision: await revisionOf(v, luis.partyId),
         operatorId: OPERATOR,
       };

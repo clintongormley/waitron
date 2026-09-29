@@ -3273,7 +3273,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       be null), and `bills: "merge" | "separate"`, merge by default. A bill of a party sends its
       party's revision, and a move to a table another party holds sends that party's revision too
       (`expectedOtherPartyRevision`). Both are checked before the bill's or the table's own state,
-      so of two tills acting from one read the second is told `party.out_of_date`.
+      so of two tills acting from one read the second is told `party.out_of_date`. _(2026-09-29,
+      Task 8 finish: the other party is named by id as well as revision, `otherPartyId`. The table
+      must still be held by the party the till read there, or the move is `party.out_of_date`
+      naming that party, because a party seated there since can carry the same revision number and
+      the move would otherwise land on strangers' bill. A revision sent without the id is
+      `management.request_invalid` `{ field: "otherPartyId" }`.)_
     - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
       bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
       that party, before any revision is asked for; a `partyId` naming a party the bill has since
@@ -3379,10 +3384,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       and the new party has no main bill until it orders. Refusals: `table.not_joined` and
       `table.not_shared` (now with `{ tableId, partyId }`), `bill.other_party`, `bill.paid`,
       `tab.not_open`, `party.main_bill_stays` and `group.held_leaves_party`. A remaining table
-      that showed the chosen bill shows the party's main bill instead.
+      that showed the chosen bill shows the party's main bill instead, or no bill when the party
+      has none.
     - Every action checks the path party's revision, then the revision of the party holding the
       target table, before any table or bill, so of two tills acting from one read the second is
       `party.out_of_date`. A party already combined into another is `party.not_open`.
+    - The party the till read at the target table is named by id (`otherPartyId`) as well as by
+      revision, as a bill move names it. The table must still be held by that party, or the action
+      is `party.out_of_date` naming it: a party seated there since can carry the same revision
+      number, and without the id a stale move would combine the guests with strangers, or a stale
+      join land on a table now free. A revision sent without the id is
+      `management.request_invalid` `{ field: "otherPartyId" }`. Tasks 11 and 12's till sends both.
     - The kitchen gets a MOVED notice for each sent dish whose tables change, including a dish on
       a main bill merged away when parties combine (it is told once, on the bill it merged into).
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for

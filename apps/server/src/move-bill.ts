@@ -11,6 +11,8 @@ import {
   openParty,
   partyTableLabels,
   partyZone,
+  readMainBill,
+  refuseMovedParty,
   setMainBill,
 } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
@@ -27,14 +29,20 @@ import "./errors.js";
 
 export type MoveTarget = { tableId: string } | { counter: { zoneId: string | null } };
 
-export interface MoveBillOptions {
+/** The party a command read at the table it names, as {@link readTargetTable} checks it. */
+export interface OtherPartyRead {
+  /** The revision of the party holding the target table, required when one does. */
+  expectedOtherPartyRevision?: number;
+  /** The party the till read at the target table, required with its revision. */
+  otherPartyId?: string;
+}
+
+export interface MoveBillOptions extends OtherPartyRead {
   bills: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
   expectedPartyRevision?: number;
   /** The party the till read the bill under; null when it read the bill with no party. */
   partyId?: string | null;
-  /** The party holding the target table's, required when one does. */
-  expectedOtherPartyRevision?: number;
   operatorId: string;
 }
 
@@ -104,11 +112,7 @@ export async function moveBill(
   } else {
     const partyId = destination.partyId;
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
-    const [party] = await tx
-      .select({ mainBillId: parties.mainBillId })
-      .from(parties)
-      .where(eq(parties.id, partyId));
-    const main = party!.mainBillId;
+    const main = await readMainBill(tx, partyId);
     if (
       options.bills === "merge" &&
       main !== null &&
@@ -149,7 +153,7 @@ async function resolveDestination(
 ): Promise<Destination> {
   if ("counter" in to) return { kind: "counter", zoneId: to.counter.zoneId };
   const { tableId } = to;
-  const table = await readTargetTable(tx, cfg, tableId, source, options.expectedOtherPartyRevision);
+  const table = await readTargetTable(tx, cfg, tableId, source, options);
   if (table.holding !== null && table.holding === source) {
     throw new AppError("table.already_in_party", { tableId });
   }
@@ -167,22 +171,30 @@ export interface TargetTable {
 }
 
 /**
- * The table an action moves to or joins: the revision of a party holding it, other than `source`,
- * checked and moved on first (P27), then refused when it does not exist, is out of use or needs
- * clearing.
+ * The table an action moves to or joins: the party the command read there must be the one holding
+ * it now, else `party.out_of_date` for that party, since a revision alone can match a party seated
+ * there since; then the revision of a party holding it, other than `source`, checked and moved on
+ * first (P27); then refused when it does not exist, is out of use or needs clearing.
  */
 export async function readTargetTable(
   tx: Transaction,
   cfg: TillConfig,
   tableId: string,
   source: string | null,
-  expectedOtherPartyRevision: number | undefined,
+  read: OtherPartyRead,
 ): Promise<TargetTable> {
+  const { otherPartyId, expectedOtherPartyRevision } = read;
+  if (otherPartyId === undefined && expectedOtherPartyRevision !== undefined) {
+    throw new AppError("management.request_invalid", { field: "otherPartyId" });
+  }
   const [holder] = await tx
     .select({ partyId: partyTables.partyId })
     .from(partyTables)
     .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
   const holding = holder?.partyId ?? null;
+  if (otherPartyId !== undefined && otherPartyId !== holding) {
+    await refuseMovedParty(tx, otherPartyId);
+  }
   if (holding !== null && holding !== source) {
     if (expectedOtherPartyRevision === undefined) {
       throw new AppError("management.request_invalid", { field: "expectedOtherPartyRevision" });
