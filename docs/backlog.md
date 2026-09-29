@@ -2098,7 +2098,7 @@ says whether it was seen in a run or only read in the code:
 and `stageConfiguration` in `apps/setup/src/api/client.ts` now copy `fetch` into a local first, as
 `#request` does, so the browser no longer refuses them with `Illegal invocation`.
 
-**The dashboard's configuration export has the same fault, masked — FIXED (C7, 2026-09-29).**
+**The dashboard's configuration export has the same fault, masked — FIXED (C7, #842, 2026-09-29).**
 `exportConfiguration` in `apps/dashboard/src/api/client.ts` copies `fetch` into a local first, as
 the setup client does. It had worked only because `apps/dashboard/src/main.ts` hands the client
 `createInstrumentedFetch`'s wrapper (`packages/diagnostics/src/instrument-fetch.ts`), which calls
@@ -5623,7 +5623,7 @@ through. Found by reading.
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
 reading unless marked run:
 - Two dashboard client methods nothing called, `connectPaymentProvider` and `addReader` — DONE
-  (C7, 2026-09-29): removed, with the `AddReaderInput` type only `addReader` used. Run before
+  (C7, #842, 2026-09-29): removed, with the `AddReaderInput` type only `addReader` used. Run before
   removing: `grep -rn --include='*.ts' -E '\b(connectPaymentProvider|addReader)\b' apps packages`
   found no call to either dashboard method; the remaining `addReader` hits are a local helper in
   `apps/server/src/payments-api.test.ts` and the payment providers' own client methods and panel
