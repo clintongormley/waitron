@@ -177,7 +177,9 @@ import type { TillSaleResult } from "./till-sale.js";
 import {
   assertBillInvariant,
   issueIfFullyPaid,
+  outstandingOf,
   readPaidQuantities,
+  readPaymentsByBill,
   refuseBillHoldingMoney,
   refuseBillWithPayments,
   refusePaidLines,
@@ -3625,12 +3627,21 @@ export async function unjoinTable(
 export interface HeldOrderSummary {
   id: string;
   orderNumber: number;
-  /** The operator-supplied label ("Mesa 4"), or null when the order was parked without one. */
+  /**
+   * The operator-supplied label ("Mesa 4"); on an open bill moved to the counter, the party's display
+   * name the server set; null when neither gave one.
+   */
   label: string | null;
   /** Number of lines on the order, 0 for a lineless order. */
   itemCount: number;
   /** The GROSS total the operator saw; the filed `sale_lines.line_total` is net. */
   total: string;
+  /** `total` less the money the bill has received. */
+  outstanding: string;
+  /** A payment is pending or received on the bill, one given back in full included. */
+  hasPayments: boolean;
+  /** Null for a counter order; a party's bill is listed here too. */
+  partyId: string | null;
   openedAt: string;
 }
 
@@ -3703,7 +3714,7 @@ export interface HeldOrder {
   }[];
 }
 
-/** List the venue's open parked orders, lineless ones included. */
+/** List the venue's open bills, a party's bill and lineless ones included. */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
   cfg: TillConfig,
@@ -3715,6 +3726,7 @@ export async function listHeldOrders(
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
+        partyId: workingOrders.partyId,
         itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
@@ -3728,10 +3740,23 @@ export async function listHeldOrders(
         workingOrders.id,
         workingOrders.orderNumber,
         workingOrders.label,
+        workingOrders.partyId,
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
-    return rows.map((row) => ({ ...row, total: rawCentsToDecimal(row.total) }));
+    const { received, holding } = await readPaymentsByBill(
+      tx,
+      rows.map((row) => row.id),
+    );
+    return rows.map((row) => {
+      const total = rawCentsToDecimal(row.total);
+      return {
+        ...row,
+        total,
+        outstanding: outstandingOf(total, received.get(row.id)),
+        hasPayments: holding.has(row.id),
+      };
+    });
   });
 }
 

@@ -31,6 +31,7 @@ const paidTab: PartyBill = {
   status: "settled",
   total: "14.00",
   outstanding: "0.00",
+  hasPayments: false,
   receiptAvailable: true,
 };
 const check: PartyBill = {
@@ -40,6 +41,7 @@ const check: PartyBill = {
   status: "open",
   total: "30.00",
   outstanding: "30.00",
+  hasPayments: false,
   receiptAvailable: false,
 };
 const abandoned: PartyBill = {
@@ -49,6 +51,7 @@ const abandoned: PartyBill = {
   status: "abandoned",
   total: "0.00",
   outstanding: "0.00",
+  hasPayments: false,
   receiptAvailable: false,
 };
 
@@ -201,6 +204,61 @@ describe("till-table-order-screen: the party's bills", () => {
   });
 });
 
+describe("till-table-order-screen: paying a bill by its state", () => {
+  const placed: PartyBill = { ...check, workingOrderId: "wo-placed", status: "placed" };
+  const partlyPaid: PartyBill = {
+    ...check,
+    workingOrderId: "wo-part",
+    outstanding: "10.00",
+    hasPayments: true,
+  };
+
+  it("offers Take payment for a presented bill of the party", async () => {
+    const el = await mountScreen({ bills: [paidTab, placed] });
+    const asked = capture(el, "take-payment");
+
+    bill(el, "wo-placed")!.querySelector<HTMLElement>("[data-take-payment]")!.click();
+
+    expect(asked).toEqual([{ workingOrderId: "wo-placed" }]);
+  });
+
+  it("shows the charge on a presented bill on screen", async () => {
+    const el = await mountScreen({ orderId: "wo-placed", bills: [paidTab, placed], lines: [wine] });
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-bill-payments]")).toBeNull();
+  });
+
+  it("shows a partly paid bill on screen what it still owes and to take the rest as a bill payment, with no charge", async () => {
+    const el = await mountScreen({
+      orderId: "wo-part",
+      bills: [paidTab, partlyPaid],
+      lines: [wine],
+    });
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    const notice = el.shadowRoot!.querySelector<HTMLElement>("[data-bill-payments]")!;
+    expect(notice.textContent).toContain(
+      t("table.bill_to_pay").replace("{amount}", money("10.00")),
+    );
+    expect(notice.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it("takes no charge on a bill on screen whose only payment is a card still at the reader", async () => {
+    const pending: PartyBill = { ...check, workingOrderId: "wo-pending", hasPayments: true };
+    const el = await mountScreen({
+      orderId: "wo-pending",
+      bills: [paidTab, pending],
+      lines: [wine],
+    });
+
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-bill-payments]")!.textContent).toContain(
+      t("bill.pay_with_bill_payments"),
+    );
+  });
+});
+
 describe("till-table-order-screen: Finish table", () => {
   it("asks to finish the table", async () => {
     const el = await mountScreen();
@@ -223,15 +281,26 @@ describe("till-table-order-screen: Finish table", () => {
     expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
   });
 
-  it("offers no Take payment beside the refusal when no unpaid bill is open to charge here", async () => {
+  it("points the refusal's Take payment at a presented bill, which is collected here", async () => {
     const placed: PartyBill = { ...check, status: "placed" };
     const el = await mountScreen({ finishRefused: true, bills: [paidTab, placed] });
+    const asked = capture(el, "take-payment");
 
     const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
-    expect(refusal.querySelector("[data-take-payment]")).toBeNull();
+    refusal.querySelector<HTMLElement>("[data-take-payment]")!.click();
+
+    expect(asked).toEqual([{ workingOrderId: "wo-check" }]);
     expect(bill(el, "wo-check")!.querySelector("[data-bill-state]")!.textContent).toBe(
       t("table.bill_to_pay").replace("{amount}", money("30.00")),
     );
+  });
+
+  it("offers no Take payment beside the refusal when every bill is paid or abandoned", async () => {
+    const el = await mountScreen({ finishRefused: true, bills: [paidTab, abandoned] });
+
+    const refusal = bills(el).querySelector<HTMLElement>("[data-finish-refusal]")!;
+    expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
+    expect(refusal.querySelector("[data-take-payment]")).toBeNull();
   });
 
   it("points the refusal's Take payment at another unpaid bill before the one on screen", async () => {

@@ -10,8 +10,9 @@ export interface BillChoiceDetail {
 }
 
 /**
- * Asks what happens to the bills when one party joins another: merged (the default) or kept as
- * separate bills. `scope` says which party joins which. The dialog only reports the choice.
+ * Asks what happens to the bills when one party joins another, or a bill moves into one: merged
+ * (the default) or kept as separate bills. `scope` says which party or bill goes where, and
+ * `question` what is merged. The dialog only reports the choice.
  */
 @customElement("till-bill-choice-dialog")
 export class TillBillChoiceDialog extends LitElement {
@@ -25,6 +26,8 @@ export class TillBillChoiceDialog extends LitElement {
   ];
 
   @property() scope = "";
+  /** Empty asks about the two parties' main bills. */
+  @property() question = "";
 
   override async firstUpdated(): Promise<void> {
     await this.renderRoot.querySelector<WtDialog>("wt-dialog")!.updateComplete;
@@ -52,7 +55,7 @@ export class TillBillChoiceDialog extends LitElement {
       .heading=${this.scope}
       @wt-close=${() => this.#cancel()}
     >
-      <p>${t("table.bills_question")}</p>
+      <p>${this.question || t("table.bills_question")}</p>
       <wt-button slot="footer" data-bills-cancel variant="ghost" @click=${() => this.#cancel()}>
         ${t("action.cancel")}
       </wt-button>

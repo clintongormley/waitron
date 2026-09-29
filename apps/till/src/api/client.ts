@@ -718,8 +718,9 @@ export interface TillSaleResult {
 }
 
 /**
- * One row of `GET /api/working-orders` — a parked order the counter can retrieve. `total` is the GROSS
- * (VAT-inclusive) draft total; `label` is null when the order was parked without one.
+ * One row of `GET /api/working-orders` — an open bill, a party's bill included. `total` is the GROSS
+ * (VAT-inclusive) draft total; `label` is null when neither the operator nor a move to the counter
+ * gave one.
  */
 export interface HeldOrderSummary {
   id: string;
@@ -727,6 +728,12 @@ export interface HeldOrderSummary {
   label: string | null;
   itemCount: number;
   total: string;
+  /** `total` less the money the bill has received. */
+  outstanding: string;
+  /** A payment is pending or received on the bill, which the counter's single payment refuses. */
+  hasPayments: boolean;
+  /** Null for a counter order; a party's own bill is listed too. */
+  partyId: string | null;
   openedAt: string;
 }
 
@@ -1210,6 +1217,8 @@ export interface PartyBill {
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
   outstanding: string;
+  /** A payment is pending or received on the bill, which the single payment refuses. */
+  hasPayments: boolean;
   receiptAvailable: boolean;
 }
 
@@ -1237,6 +1246,25 @@ export interface TableActionResult {
 export interface BillRevisions {
   expectedPartyRevision?: number;
   partyId?: string;
+}
+
+/** Where Move a bill sends a bill: a table, or the counter in the counter's zone (null for none). */
+export type MoveBillTarget = { tableId: string } | { counter: { zoneId: string | null } };
+
+/** Move a bill's revisions; `partyId` is null for a bill read with no party, as a counter order. */
+export interface MoveBillRevisions
+  extends
+    Omit<BillRevisions, "partyId">,
+    Pick<TableActionRevisions, "otherPartyId" | "expectedOtherPartyRevision"> {
+  partyId?: string | null;
+}
+
+/** A move's answer: the party the bill is in now (null at the counter), and the bill it ended up
+ * as, the receiving main bill when `merged`. */
+export interface MoveBillResult {
+  partyId: string | null;
+  billId: string;
+  merged: boolean;
 }
 
 /**
@@ -2188,6 +2216,20 @@ export class TillApi {
       bills,
       ...revisions,
     });
+  }
+
+  /**
+   * Move a whole bill to a table or the counter → `POST /api/bills/:id/move`. Rejects, among others,
+   * `bill.paid`, `party.main_bill_stays`, `group.held_leaves_party`, `table.needs_clearing`,
+   * `table.already_in_party` and `party.out_of_date`.
+   */
+  moveBill(
+    billId: string,
+    to: MoveBillTarget,
+    bills: "merge" | "separate",
+    revisions: MoveBillRevisions,
+  ): Promise<MoveBillResult> {
+    return this.#request(`/api/bills/${billId}/move`, "POST", { to, bills, ...revisions });
   }
 
   /**

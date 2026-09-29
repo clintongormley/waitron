@@ -71,6 +71,7 @@ const cardGrid = (el: TillCounterScreen) =>
       selectedDiet: unknown;
       handheld: boolean;
       heldOrders: unknown;
+      tables: unknown;
       stationQueue: unknown;
       defaultStationId?: string;
       cardProvider: string;
@@ -231,11 +232,20 @@ describe("till-counter-screen", () => {
         label: "Mesa 4",
         itemCount: 2,
         total: "3.00",
+        outstanding: "3.00",
+        hasPayments: false,
+        partyId: null,
         openedAt: "2026-08-05T10:00:00.000Z",
       },
     ];
     const { el } = await mount({ heldOrders });
     expect(cardGrid(el)!.heldOrders).toBe(heldOrders);
+  });
+
+  it("threads the floor's tables through to the card grid, for a held order's Move to table", async () => {
+    const tables = [{ id: "t9", label: "Mesa 9" }];
+    const { el } = await mount({ tables } as never);
+    expect(cardGrid(el)!.tables).toBe(tables);
   });
 
   it("passes the SAME store instance to the card grid (which coordinates the cards through it)", async () => {

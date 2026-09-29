@@ -101,6 +101,7 @@ const tabBill: PartyBill = {
   status: "open",
   total: "14.00",
   outstanding: "14.00",
+  hasPayments: false,
   receiptAvailable: false,
 };
 const checkBill: PartyBill = {
@@ -110,6 +111,7 @@ const checkBill: PartyBill = {
   status: "open",
   total: "30.00",
   outstanding: "30.00",
+  hasPayments: false,
   receiptAvailable: false,
 };
 
@@ -233,6 +235,8 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
+    collectOrder: vi.fn().mockResolvedValue(saleResult),
+    moveBill: vi.fn().mockResolvedValue({ partyId: null, billId: "wo-check", merged: false }),
     reprint: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
@@ -1621,6 +1625,433 @@ describe("till-app: table actions on the party", () => {
     expect(banner(el)!.textContent).toContain(
       t("party.changed_tables").replace("{tables}", "4, 9"),
     );
+  });
+});
+
+describe("till-app: moving a bill", () => {
+  const heldRows = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement & { heldOrders: unknown[] }>("till-counter-screen")
+      ?.heldOrders ?? null;
+
+  it("moves the bill on screen to the counter, sending the counter's zone and the party revision", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "separate" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledWith(
+      "wo-check",
+      { counter: { zoneId: zone.id } },
+      "separate",
+      { expectedPartyRevision: 3, partyId: "v1" },
+    );
+  });
+
+  it("sends no counter zone when the counter's offers could not be read", async () => {
+    const { el } = await mountApp({
+      listDefaultZoneOffers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledWith("wo-4", { counter: { zoneId: null } }, "merge", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+    });
+  });
+
+  it("after a move to the counter shows the party's remaining bills, and the counter's held orders list the moved bill", async () => {
+    const moved = {
+      id: "wo-check",
+      orderNumber: 14,
+      label: "4",
+      itemCount: 1,
+      total: "30.00",
+      outstanding: "30.00",
+      hasPayments: false,
+      partyId: null,
+      openedAt: "2026-08-05T10:00:00.000Z",
+    };
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const listWorkingOrders = vi.fn().mockResolvedValue([]);
+    const { el } = await mountApp({ getPartyBills: bills, listWorkingOrders });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue([tabBill]);
+    listWorkingOrders.mockResolvedValue([moved]);
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.bills).toEqual([tabBill]);
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-4");
+    expect(banner(el)).toBeNull();
+    emit(shell(el), "tab-select", { key: "counter" });
+    await flush(el);
+    expect(heldRows(el)).toEqual([moved]);
+  });
+
+  it("keeps the floor it had when the floor cannot be read after the move", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue([tabBill]);
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
+  });
+
+  it("keeps the party on screen, not the older copy on the kept floor, when the floor cannot be read after the move", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    emit(order, "fire-group", { groupId: "g3" });
+    await flush(el);
+    expect(tableOrder(el)!.party?.revision).toBe(4);
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue([tabBill]);
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
+    expect(tableOrder(el)!.party).toEqual({ ...mesa4.party, revision: 4 });
+  });
+
+  it("says the move stands when the held orders cannot be read again after a move to the counter", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+    vi.mocked(api.listWorkingOrders).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(
+      el
+        .shadowRoot!.querySelector('[data-refresh-notice="held"] .refresh-message')!
+        .textContent!.trim(),
+    ).toBe(t("refresh.held_after_move"));
+  });
+
+  it("goes back to the floor when the moved bill was the party's last", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    bills.mockResolvedValue([]);
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)).not.toBeNull();
+  });
+
+  it("sends that it read a free table free, and stays with the party", async () => {
+    const { el } = await mountApp({
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v9", billId: "wo-check", merged: false }),
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    vi.mocked(api.getPartyBills).mockResolvedValue([tabBill]);
+
+    emit(tableOrder(el)!, "move-bill", { to: { tableId: "t9", seated: null }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledWith("wo-check", { tableId: "t9" }, "merge", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      otherPartyId: null,
+    });
+    expect(tableOrder(el)!.party).toEqual(mesa4.party);
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+  });
+
+  it("sends the party it read at a seated table with that party's revision, and says when the bills stayed apart", async () => {
+    const { el } = await mountApp({
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v7", billId: "wo-check", merged: false }),
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "move-bill", {
+      to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
+      bills: "merge",
+    });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledWith("wo-check", { tableId: "t7" }, "merge", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+    });
+    expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
+  });
+
+  it("sends the party the bill choice named, though the floor read since seats another there", async () => {
+    const pedro = seated(
+      { id: "t7", label: "7" },
+      { id: "v8", revision: 2, mainBillId: "wo-8", tableIds: ["t7"] },
+    );
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, pedro, mesa9]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-bill", {
+      to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
+      bills: "merge",
+    });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledWith("wo-4", { tableId: "t7" }, "merge", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+    });
+  });
+
+  it("leaves another table's bill on screen when the moved bill's party is read after the waiter opened it", async () => {
+    const bill7: PartyBill = { ...tabBill, workingOrderId: "wo-7", partyId: "v7" };
+    let release: (bills: PartyBill[]) => void = () => undefined;
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockImplementation((partyId: string) =>
+      partyId === "v1"
+        ? new Promise<PartyBill[]>((resolve) => (release = resolve))
+        : Promise.resolve([bill7]),
+    );
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    release([tabBill]);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.party!.id).toBe("v7");
+    expect(tableOrder(el)!.bills).toEqual([bill7]);
+  });
+
+  it.each([
+    ["merged into their main bill", "merge", true],
+    ["kept separate when asked to", "separate", false],
+  ] as const)("says nothing about the bills when the bill was %s", async (_how, bills, merged) => {
+    const { el } = await mountApp({
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v7", billId: "wo-7", merged }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-bill", { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(banner(el)).toBeNull();
+  });
+
+  it.each([
+    "party.main_bill_stays",
+    "bill.paid",
+    "group.held_leaves_party",
+    "table.needs_clearing",
+    "table.already_in_party",
+  ])("shows %s in its own words, and moves nothing on screen", async (code) => {
+    const { el } = await mountApp({ moveBill: vi.fn().mockRejectedValue({ code }) });
+    const order = await openMesa(el);
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage(code));
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+  });
+
+  it("reloads and says what changed when another device changed the party first", async () => {
+    const reads = floorThat(
+      [mesa4, mesa7, mesa9],
+      [seated({}, { revision: 5, billCount: 2 }), mesa7, mesa9],
+    );
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      moveBill: vi
+        .fn()
+        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 }),
+    });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+    expect(tableOrder(el)!.party!.revision).toBe(5);
+  });
+});
+
+describe("till-app: paying a bill by its state", () => {
+  const placedCheck: PartyBill = { ...checkBill, status: "placed" };
+
+  it("collects a presented bill moved into the party, and Finish then closes the table", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, placedCheck]);
+    const { el } = await mountApp({
+      getPartyBills: bills,
+      finishTable: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "party.bill_outstanding" })
+        .mockResolvedValue({ state: "closed" }),
+    });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    expect(tableOrder(el)!.finishRefused).toBe(true);
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue([
+      { ...tabBill, status: "settled", outstanding: "0.00" },
+      { ...placedCheck, status: "settled", outstanding: "0.00" },
+    ]);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(api.collectOrder).toHaveBeenCalledWith("wo-check", { method: "cash", amount: "30.00" });
+    expect(api.recordSale).not.toHaveBeenCalled();
+    emit(el.shadowRoot!.querySelector("till-ticket-view")!, "new-sale");
+    await flush(el);
+    emit(shell(el), "tab-select", { key: "floor" });
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const reopened = tableOrder(el)!;
+    expect(reopened.bills.map((bill) => bill.status)).toEqual(["settled", "settled"]);
+    emit(reopened, "finish-table", {});
+    await flush(el);
+    expect(api.finishTable).toHaveBeenLastCalledWith("v1", 3);
+    expect(tableOrder(el)).toBeNull();
+  });
+
+  it("collects a presented bill again under the same id after a collection that got no answer", async () => {
+    const collectOrder = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(saleResult);
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, placedCheck]),
+      collectOrder,
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+    expect(banner(el)!.textContent).toContain(t("sale.unconfirmed"));
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(collectOrder.mock.calls).toEqual([
+      ["wo-check", { method: "cash", amount: "30.00" }],
+      ["wo-check", { method: "cash", amount: "30.00" }],
+    ]);
+    expect(api.recordSale).not.toHaveBeenCalled();
+  });
+
+  it("takes no single payment for a partly paid bill, and says to take the rest as a bill payment", async () => {
+    const partly: PartyBill = { ...checkBill, outstanding: "10.00", hasPayments: true };
+    const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([tabBill, partly]) });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "10.00" });
+    await flush(el);
+
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.collectOrder).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it("takes no single payment for a bill whose only payment is a card still at the reader", async () => {
+    const pending: PartyBill = { ...checkBill, hasPayments: true };
+    const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([tabBill, pending]) });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.collectOrder).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it.each([
+    ["offers the original receipt when collecting filed the bill's sale", false, true],
+    ["offers no original receipt when the bill's sale was filed before", true, false],
+  ])("%s", async (_case, filedBefore, offered) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([tabBill, { ...placedCheck, receiptAvailable: filedBefore }]),
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(api.collectOrder).toHaveBeenCalledOnce();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { originalReceiptAvailable: boolean }>(
+        "till-ticket-view",
+      )!.originalReceiptAvailable,
+    ).toBe(offered);
+  });
+
+  it("says to take the rest as a bill payment when the single payment is refused for money already on the bill", async () => {
+    const { el } = await mountApp({
+      recordSale: vi.fn().mockRejectedValue({ code: "bill.payments_received" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "pay-tab", { method: "cash", amount: "14.00" });
+    await flush(el);
+
+    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "14.00" }, "wo-4");
+    expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
   });
 });
 

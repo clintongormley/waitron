@@ -11,19 +11,11 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import {
-  AppError,
-  centsToDecimal,
-  MONEY_SCALE,
-  normalisePartyName,
-  rawCentsToDecimal,
-  subtractDecimal,
-  toScale,
-} from "@waitron/shared";
+import { AppError, centsToDecimal, normalisePartyName, rawCentsToDecimal } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createOpenOrder, openTab } from "./working-order.js";
-import { readReceivedByBill, refuseBillHoldingMoney } from "./bill-payments.js";
+import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
 import "./errors.js";
 
@@ -40,6 +32,8 @@ export interface PartyBill {
    * before its invoice, and nothing on a settled or abandoned one.
    */
   outstanding: string;
+  /** A payment is pending or received on the bill, one given back in full included. */
+  hasPayments: boolean;
   /** A sale has been filed for the bill, so its receipt can be printed again. */
   receiptAvailable: boolean;
 }
@@ -470,25 +464,23 @@ export async function readBillsOfParties(
     .where(inArray(workingOrders.partyId, members))
     .groupBy(workingOrders.id)
     .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
-  const received = await readReceivedByBill(
+  const { received, holding } = await readPaymentsByBill(
     tx,
-    rows.filter((row) => row.status === "open").map((row) => row.workingOrderId),
+    rows.map((row) => row.workingOrderId),
   );
   const bills = rows.map((row): Omit<PartyBill, "receiptAvailable"> => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
-    const paid = received.get(row.workingOrderId);
     return {
       workingOrderId: row.workingOrderId,
       partyId: row.partyId!,
       label: row.label,
       status: row.status,
       total,
-      outstanding: !owing
-        ? centsToDecimal(0)
-        : paid === undefined
-          ? total
-          : toScale(subtractDecimal(total, paid), MONEY_SCALE),
+      outstanding: owing
+        ? outstandingOf(total, received.get(row.workingOrderId))
+        : centsToDecimal(0),
+      hasPayments: holding.has(row.workingOrderId),
     };
   });
   return new Map(

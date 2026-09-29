@@ -37,6 +37,16 @@ describe("till-bill-choice-dialog", () => {
     expect(button(el, "separate").textContent!.trim()).toBe(t("table.bills_separate"));
   });
 
+  it("asks about the two main bills by default, and the question it is given for a bill moving in", async () => {
+    const el = await mountDialog();
+    expect(el.shadowRoot!.querySelector("p")!.textContent).toBe(t("table.bills_question"));
+
+    el.question = t("table.bill_move_question");
+    await el.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("p")!.textContent).toBe(t("table.bill_move_question"));
+  });
+
   it("has Merge the bills focused, so it is the default", async () => {
     const el = await mountDialog();
 

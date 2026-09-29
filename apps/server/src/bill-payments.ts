@@ -16,12 +16,14 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  MONEY_SCALE,
   multiplyDecimal,
   stringToThousandths,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
   tillId as brandTillId,
+  toScale,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
@@ -340,6 +342,9 @@ function paidQuantitiesOf(
   return paid;
 }
 
+/** The states in which a payment is held on its bill, one given back in full included. */
+const HOLDING_STATES: readonly PaymentRow["state"][] = ["pending", "received"];
+
 /** {@link paidQuantitiesOf} the bill, read. */
 export async function readPaidQuantities(
   tx: Transaction,
@@ -356,7 +361,7 @@ export async function readPaidQuantities(
     .where(
       and(
         eq(billPayments.workingOrderId, workingOrderId),
-        inArray(billPayments.state, ["pending", "received"]),
+        inArray(billPayments.state, [...HOLDING_STATES]),
       ),
     );
   if (lines.length === 0) return new Map();
@@ -454,25 +459,35 @@ export async function holdsPayment(tx: Transaction, workingOrderId: string): Pro
     .where(
       and(
         eq(billPayments.workingOrderId, workingOrderId),
-        inArray(billPayments.state, ["pending", "received"]),
+        inArray(billPayments.state, [...HOLDING_STATES]),
       ),
     )
     .limit(1);
   return held !== undefined;
 }
 
-/** The net applied money each of these bills has received, for those that have received any. */
-export async function readReceivedByBill(
+/**
+ * For these bills: the net applied money each has received, for those that have received any, and
+ * the bills holding a payment as {@link holdsPayment} reads it.
+ */
+export async function readPaymentsByBill(
   tx: Transaction,
   workingOrderIds: readonly string[],
-): Promise<Map<string, Decimal>> {
+): Promise<{ received: Map<string, Decimal>; holding: Set<string> }> {
   const received = new Map<string, Decimal>();
+  const holding = new Set<string>();
   for (const payment of await readPaymentMoney(tx, workingOrderIds)) {
-    if (payment.row.state !== "received") continue;
-    const bill = payment.row.workingOrderId;
-    received.set(bill, addDecimal(received.get(bill) ?? ZERO, payment.netApplied));
+    const { state, workingOrderId: bill } = payment.row;
+    if (HOLDING_STATES.includes(state)) holding.add(bill);
+    if (state === "received")
+      received.set(bill, addDecimal(received.get(bill) ?? ZERO, payment.netApplied));
   }
-  return received;
+  return { received, holding };
+}
+
+/** A bill's `total` less what it has received, at the money scale. */
+export function outstandingOf(total: Decimal, received: Decimal | undefined): Decimal {
+  return received === undefined ? total : toScale(subtractDecimal(total, received), MONEY_SCALE);
 }
 
 async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map<string, number>> {

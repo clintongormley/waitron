@@ -14,7 +14,6 @@ import {
   formatMoney,
   grossOf,
   MONEY_SCALE,
-  partyTablesName,
   subtractDecimal,
   sumDecimals,
   perDishOptionQuantity,
@@ -47,6 +46,16 @@ import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
 import "../widgets/bill-choice-dialog.js";
+import {
+  moveBillScope,
+  partyScope,
+  partyTablesLabel,
+  seatedRead,
+  tableTarget,
+  tableTargetStyles,
+  type SeatedRead,
+} from "../widgets/table-targets.js";
+import { owing, paidInPart } from "../state/bill-state.js";
 import "../widgets/party-name-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
@@ -169,6 +178,16 @@ const LEFT_OUT_NAMED = 3;
 
 /** Where a later addition goes: `add-to-held` is offered only while the party has a held group. */
 type Destination = "fire-now" | "add-to-held" | "add-as-new";
+
+/** The table actions that name a table: Move guests, Join a table and Move this bill. */
+type TableVerb = "move" | "join" | "move-bill";
+type ActionVerb = TableVerb | "merge" | "transfer" | "split";
+
+/** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
+export interface MoveBillDetail {
+  to: { tableId: string; seated: SeatedRead } | { counter: true };
+  bills: BillChoiceDetail["bills"];
+}
 
 /** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
  * leaves in the draft. */
@@ -316,6 +335,7 @@ export class TillTableOrderScreen extends LitElement {
     `,
     baseStyles,
     selectStyles,
+    tableTargetStyles,
     css`
       :host {
         display: block;
@@ -606,26 +626,6 @@ export class TillTableOrderScreen extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
-      }
-
-      .table-target {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-      }
-
-      .target-state,
-      .target-reason {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .target-state {
-        margin-inline-start: var(--wt-space-2);
-      }
-
-      .target-reason {
-        margin: 0;
       }
 
       .transfer-line[aria-pressed="true"] {
@@ -1111,11 +1111,11 @@ export class TillTableOrderScreen extends LitElement {
     | "split-lines"
     | "split-table"
     | "split-table-bill" = "closed";
-  @state() private actionVerb: "move" | "join" | "merge" | "transfer" | "split" | null = null;
+  @state() private actionVerb: ActionVerb | null = null;
   /** The table Split a table takes away, once chosen. */
   @state() private splitTableId: string | null = null;
   /** A move or join to a table another party holds, waiting for the bill choice. */
-  @state() private billChoice: { verb: "move" | "join"; table: TableState } | null = null;
+  @state() private billChoice: { verb: TableVerb; table: TableState } | null = null;
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
   @state() private transferToBillId: string | null = null;
@@ -1260,6 +1260,8 @@ export class TillTableOrderScreen extends LitElement {
   #productsById = new Map<string, TillProduct>();
   /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
+  /** The party's bill on screen, when {@link bills} lists it. */
+  #shownBill: PartyBill | undefined;
   /** Built with {@link groups}: every group, and the held ones, in position order. */
   #groupsInOrder: OrderGroup[] = [];
   #heldInOrder: OrderGroup[] = [];
@@ -1300,6 +1302,7 @@ export class TillTableOrderScreen extends LitElement {
       this.reviewing = false;
       this.#browsingScroll = undefined;
     }
+    this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
@@ -2713,27 +2716,38 @@ export class TillTableOrderScreen extends LitElement {
             >${formatMoney(this.#payStore!.total, currentLocale())}</span
           >
         </div>
-        ${
-          this.canSettle && this.#chargeable()
-            ? html`<section
-                class="pay"
-                @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
-                @park-order=${(event: Event) => this.#onTenderPark(event)}
-              >
-                <h2>${t("table.pay_title")}</h2>
-                <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
-              </section>`
-            : nothing
-        }
+        ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         ${this.#billsSection()} ${this.#statusSection()} ${this.#actionSection()}
       </aside>
     `;
   }
 
-  /** The bill on screen can take a payment unless the party's bills say it is no longer open. */
+  /** The bill on screen can take a payment unless the party's bills say it is paid or abandoned; a
+   * presented bill is collected. */
   #chargeable(): boolean {
-    const shown = this.bills.find((bill) => bill.workingOrderId === this.orderId);
-    return shown === undefined || shown.status === "open";
+    const shown = this.#shownBill;
+    return shown === undefined || owing(shown);
+  }
+
+  #paySection(): TemplateResult {
+    const shown = this.#shownBill;
+    const partlyPaid = shown !== undefined && paidInPart(shown) ? shown : undefined;
+    return partlyPaid === undefined
+      ? html`<section
+          class="pay"
+          @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
+          @park-order=${(event: Event) => this.#onTenderPark(event)}
+        >
+          <h2>${t("table.pay_title")}</h2>
+          <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
+        </section>`
+      : html`<section class="pay" data-bill-payments>
+          <h2>${t("table.pay_title")}</h2>
+          <p class="amount">
+            ${t("table.bill_to_pay").replace("{amount}", () => this.#money(partlyPaid.outstanding))}
+          </p>
+          <p>${t("bill.pay_with_bill_payments")}</p>
+        </section>`;
   }
 
   /** Abandoned bills are left out: nobody pays them. */
@@ -2755,7 +2769,7 @@ export class TillTableOrderScreen extends LitElement {
   #billsSection(): TemplateResult | typeof nothing {
     if (this.party === null) return nothing;
     const bills = this.#shownBills();
-    const unpaid = bills.filter((bill) => bill.status === "open");
+    const unpaid = bills.filter(owing);
     // Another bill first: the one on screen is charged from the section above.
     const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
     return html`<section class="bills" data-bills>
@@ -2831,7 +2845,7 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
         ${
-          bill.status === "open" && !shown
+          owing(bill) && !shown
             ? html`<wt-button
                 size="sm"
                 variant="secondary"
@@ -3539,21 +3553,14 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** The party's display name with its tables, "Ana (Mesa 4, 5)", or the tables alone for a party
-   * with no name. */
   #partyScope(party: TableParty): string {
-    const tables = this.#tablesName(party);
-    return party.name === null
-      ? tables
-      : t("table.party_scope")
-          .replace("{name}", () => party.name!)
-          .replace("{tables}", () => tables);
+    return partyScope(party, this.tables);
   }
 
-  #tablesName(party: TableParty): string {
-    return partyTablesName(
-      party.tableIds.flatMap((id) => this.tables.find((table) => table.id === id)?.label ?? []),
-    );
+  /** The bill on screen by {@link #billName}, or undefined when the party's bills do not list it. */
+  #shownBillName(): string | undefined {
+    const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
+    return index < 0 ? undefined : this.#billName(index);
   }
 
   /** Every table but the party's own; Move guests also offers the party's own tables while it holds
@@ -3565,7 +3572,7 @@ export class TillTableOrderScreen extends LitElement {
     return [...owned, ...this.tables.filter((table) => !own.has(table.id))];
   }
 
-  /** The party's other open bills whose outstanding amount equals their total, which merge and
+  /** The party's other open bills holding no payment, a pending one included, which merge and
    * transfer offer, each with its name. The server decides whether it takes the chosen one. */
   #otherBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
@@ -3574,7 +3581,7 @@ export class TillTableOrderScreen extends LitElement {
       bill.workingOrderId !== this.orderId &&
       bill.partyId === party.id &&
       bill.status === "open" &&
-      compareDecimal(decimal(bill.outstanding), decimal(bill.total)) === 0
+      !bill.hasPayments
         ? [{ bill, name: this.#billName(index) }]
         : [],
     );
@@ -3595,7 +3602,7 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #chooseVerb(verb: "move" | "join" | "merge" | "transfer" | "split"): void {
+  #chooseVerb(verb: ActionVerb): void {
     this.actionVerb = verb;
     if (verb === "split") {
       this.splitQuantities = new Map();
@@ -3606,18 +3613,34 @@ export class TillTableOrderScreen extends LitElement {
 
   /** A table another party holds asks about the bills first; any other goes at once. */
   #pickTable(table: TableState): void {
-    const verb = this.actionVerb === "move" ? "move" : "join";
+    const verb: TableVerb =
+      this.actionVerb === "move" || this.actionVerb === "move-bill" ? this.actionVerb : "join";
     const other = table.party !== null && table.party.id !== this.party?.id;
     if (other) {
       this.billChoice = { verb, table };
       return;
     }
-    this.#sendTableAction(verb, table.id, "merge");
+    this.#sendTableAction(verb, table, "merge");
   }
 
-  #sendTableAction(verb: "move" | "join", tableId: string, bills: BillChoiceDetail["bills"]): void {
+  /** `table` as the picker showed it: Move this bill sends who was seated there. */
+  #sendTableAction(verb: TableVerb, table: TableState, bills: BillChoiceDetail["bills"]): void {
+    const tableId = table.id;
     if (verb === "move") this.#dispatch("move-guests", { toTableId: tableId, bills });
+    else if (verb === "move-bill")
+      this.#dispatch("move-bill", {
+        to: { tableId, seated: seatedRead(table) },
+        bills,
+      } satisfies MoveBillDetail);
     else this.#dispatch("join-tables", { tableId, bills });
+    this.#closeActions();
+  }
+
+  #moveBillToCounter(): void {
+    this.#dispatch("move-bill", {
+      to: { counter: true },
+      bills: "merge",
+    } satisfies MoveBillDetail);
     this.#closeActions();
   }
 
@@ -3626,7 +3649,7 @@ export class TillTableOrderScreen extends LitElement {
     const choice = this.billChoice;
     if (choice === null) return;
     const { bills } = (event as CustomEvent<BillChoiceDetail>).detail;
-    this.#sendTableAction(choice.verb, choice.table.id, bills);
+    this.#sendTableAction(choice.verb, choice.table, bills);
   }
 
   #billChoiceDialog(): TemplateResult | typeof nothing {
@@ -3634,14 +3657,18 @@ export class TillTableOrderScreen extends LitElement {
     const own = this.party;
     const other = choice?.table.party;
     if (choice === null || own === null || other === null || other === undefined) return nothing;
-    const [from, into] =
-      choice.verb === "move"
-        ? [this.#partyScope(own), this.#partyScope(other)]
-        : [this.#partyScope(other), this.#partyScope(own)];
+    const theirs = this.#partyScope(other);
+    const ours = this.#partyScope(own);
+    const [from, into] = choice.verb === "join" ? [theirs, ours] : [ours, theirs];
+    const scope =
+      choice.verb === "move-bill"
+        ? moveBillScope(this.#shownBillName() ?? "", into)
+        : t("table.combine_scope")
+            .replace("{from}", () => from)
+            .replace("{into}", () => into);
     return html`<till-bill-choice-dialog
-      .scope=${t("table.combine_scope")
-        .replace("{from}", () => from)
-        .replace("{into}", () => into)}
+      .scope=${scope}
+      .question=${choice.verb === "move-bill" ? t("table.bill_move_question") : ""}
       @bill-choice-confirm=${(event: Event) => this.#onBillChoice(event)}
       @bill-choice-cancel=${(event: Event) => {
         event.stopPropagation();
@@ -3660,7 +3687,7 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (naming === null || party === null) return nothing;
     return html`<till-party-name-dialog
-      .tables=${this.#tablesName(party)}
+      .tables=${partyTablesLabel(party, this.tables)}
       .value=${naming.value}
       .refusal=${naming.refusal}
       @party-name-confirm=${(event: Event) => {
@@ -3682,9 +3709,7 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (party === null) return [];
     return this.#shownBills().flatMap((bill, index) =>
-      bill.partyId === party.id &&
-      bill.workingOrderId !== party.mainBillId &&
-      (bill.status === "open" || bill.status === "placed")
+      bill.partyId === party.id && bill.workingOrderId !== party.mainBillId && owing(bill)
         ? [{ bill, name: this.#billName(index) }]
         : [],
     );
@@ -3927,7 +3952,7 @@ export class TillTableOrderScreen extends LitElement {
       html`<wt-button class="action" data-action=${name} variant="secondary" @click=${choose}>
         ${t(key)}
       </wt-button>`;
-    const verb = (name: "move" | "join" | "merge" | "transfer", key: StringKey) =>
+    const verb = (name: Exclude<ActionVerb, "split">, key: StringKey) =>
       action(name, key, () => this.#chooseVerb(name));
     const party = this.party;
     return html`<section class="actions" data-action-menu>
@@ -3942,6 +3967,7 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
         ${party === null ? nothing : action("name", "table.action_name", () => this.#openNaming())}
+        ${this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing}
         ${verb("merge", "table.action_merge_bills")} ${verb("transfer", "table.action_transfer")}
         <wt-button
           class="action"
@@ -3956,8 +3982,15 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
+  /** A bill of the party moves whole unless it is paid or abandoned: the server refuses `bill.paid`
+   * and `tab.not_open`. */
+  #movable(): boolean {
+    return this.party !== null && this.#chargeable();
+  }
+
   #targetPicker(): TemplateResult {
-    const forTables = this.actionVerb === "move" || this.actionVerb === "join";
+    const forTables =
+      this.actionVerb === "move" || this.actionVerb === "join" || this.actionVerb === "move-bill";
     if (forTables) return this.#tablePicker();
     const targets = this.#otherBills().map(({ bill, name }) => ({
       id: bill.workingOrderId,
@@ -3994,58 +4027,49 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** Move guests' and Join a table's list: every table it may name, with its condition. A table that
-   * needs clearing is listed but cannot be chosen, and says why. */
+  /** Move guests', Join a table's and Move this bill's list: every table it may name, with its
+   * condition, and for a bill the counter first. */
   #tablePicker(): TemplateResult {
-    const party = this.party;
-    const key = this.actionVerb === "move" ? "table.move_guests_heading" : "table.join_heading";
+    const movingBill = this.actionVerb === "move-bill";
     const targets = this.#tableTargets();
     return html`<section class="actions" data-target-picker>
-      <h2>
-        ${party === null ? t("table.actions_title") : t(key).replace("{party}", () => this.#partyScope(party))}
-      </h2>
+      <h2>${this.#tablePickerHeading()}</h2>
       ${
-        targets.length === 0
+        targets.length === 0 && !movingBill
           ? html`<p class="empty">${t("table.no_other_tables")}</p>`
           : html`<div class="action-options">
-              ${targets.map((table) => this.#tableTarget(table))}
+              ${
+                movingBill
+                  ? html`<wt-button
+                      class="target"
+                      data-target="counter"
+                      variant="secondary"
+                      @click=${() => this.#moveBillToCounter()}
+                    >
+                      <span class="target-label">${t("table.to_counter")}</span>
+                    </wt-button>`
+                  : nothing
+              }
+              ${targets.map((table) =>
+                tableTarget(table, this.party?.id, (picked) => this.#pickTable(picked)),
+              )}
             </div>`
       }
       ${this.#backButton()}
     </section>`;
   }
 
-  #tableTarget(table: TableState): TemplateResult {
-    const clearing = table.condition === "needs_clearing";
-    const held = table.party;
-    const state = clearing
-      ? t("floor.needs_clearing")
-      : held === null
-        ? t("floor.free")
-        : held.id === this.party?.id
-          ? t("table.this_party")
-          : t("table.held_by").replace("{party}", () => held.displayName);
-    return html`<div class="table-target">
-      <wt-button
-        class="target"
-        data-target=${table.id}
-        variant="secondary"
-        ?disabled=${clearing}
-        @click=${() => {
-          if (!clearing) this.#pickTable(table);
-        }}
-      >
-        <span class="target-label">${table.label}</span>
-        <span class="target-state">${state}</span>
-      </wt-button>
-      ${
-        clearing
-          ? html`<p class="target-reason" data-target-reason=${table.id}>
-              ${codeMessage("table.needs_clearing")}
-            </p>`
-          : nothing
-      }
-    </div>`;
+  #tablePickerHeading(): string {
+    const party = this.party;
+    if (party === null) return t("table.actions_title");
+    if (this.actionVerb === "move-bill") {
+      const bill = this.#shownBillName();
+      return bill === undefined
+        ? t("table.actions_title")
+        : t("table.move_bill_heading").replace("{bill}", () => bill);
+    }
+    const key = this.actionVerb === "move" ? "table.move_guests_heading" : "table.join_heading";
+    return t(key).replace("{party}", () => this.#partyScope(party));
   }
 
   /** `key` with each `{slot}` replaced by the name of the bill it maps to, or the plain heading when

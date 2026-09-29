@@ -15,6 +15,7 @@ import type {
   OrderFlow,
   ServiceZoneSummary,
   StationQueueGroup,
+  TableState,
   TillActiveReader,
   TillApi,
   TillProduct,
@@ -100,6 +101,8 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) serviceZones: ServiceZoneSummary[] = [];
   @property() selectedServiceZoneId = "";
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
+  /** The floor, which a held order's Move to table lists. */
+  @property({ attribute: false }) tables: TableState[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
   /** Absent when the venue has no default station configured. */
   @property({ attribute: false }) defaultStationId?: string;
@@ -113,7 +116,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   /** A sale is in flight: the visible half of the app's single-flight double-file guard. */
   @property({ type: Boolean }) busy = false;
-  /** A basket line must be resolved before paying (till-app's refresh flow). */
+  /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
   @property({ type: Boolean }) payHeld = false;
   /** When undefined the grid renders nothing. */
   @property({ attribute: false }) counterTab?: TabDef;
@@ -256,6 +259,7 @@ export class TillCounterScreen extends LitElement {
         .selectedDiet=${this.selectedDiet}
         .handheld=${this.handheld}
         .heldOrders=${this.heldOrders}
+        .tables=${this.tables}
         .stationQueue=${this.stationQueue}
         .defaultStationId=${this.defaultStationId}
         .busy=${this.busy}

@@ -220,6 +220,7 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
   status: "open",
   total: "14.00",
   outstanding: "14.00",
+  hasPayments: false,
   receiptAvailable: false,
   ...over,
 });
@@ -229,7 +230,7 @@ const checkBill = bill({ workingOrderId: "wo-check", total: "30.00", outstanding
 const paidBill = bill({ workingOrderId: "wo-paid", status: "settled", outstanding: "0.00" });
 const placedBill = bill({ workingOrderId: "wo-placed", status: "placed" });
 /** Open, with money already received against it. */
-const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00" });
+const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00", hasPayments: true });
 /** Open, but recorded on a party merged into this one. */
 const mergedPartyBill = bill({ workingOrderId: "wo-merged", partyId: "v0" });
 const partyBills = () => ({
@@ -3060,6 +3061,156 @@ describe("till-table-order-screen", () => {
       return details;
     }
 
+    describe("Move this bill", () => {
+      /** Ana's second bill on screen, at Mesa 4, with the floor around her. */
+      const onCheck = () => ({
+        lines: [pendingLine],
+        orderId: "wo-check",
+        ...partyTables(),
+        bills: partyBills().bills,
+      });
+      async function toMoveBill(el: TillTableOrderScreen): Promise<void> {
+        await toMenu(el);
+        click(el, '[data-action="move-bill"]');
+        await el.updateComplete;
+      }
+      const scope = t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2");
+
+      it("lists The counter and every other table with its condition, under the bill it moves", async () => {
+        const { el } = await mount(onCheck());
+        await toMenu(el);
+        expect(el.shadowRoot!.querySelector('[data-action="move-bill"]')!.textContent!.trim()).toBe(
+          t("table.action_move_bill"),
+        );
+        click(el, '[data-action="move-bill"]');
+        await el.updateComplete;
+
+        expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+          t("table.move_bill_heading").replace("{bill}", scope),
+        );
+        expect(targetIds(el)).toEqual(["counter", "t7", "t6", "t9"]);
+        expect(target(el, "counter")!.textContent).toContain(t("table.to_counter"));
+        expect(target(el, "t9")!.textContent).toContain(t("floor.free"));
+        expect(target(el, "t7")!.textContent).toContain(
+          t("table.held_by").replace("{party}", "Luis"),
+        );
+        expect(target(el, "t6")!.disabled).toBe(true);
+        expect(el.shadowRoot!.querySelector('[data-target-reason="t6"]')!.textContent!.trim()).toBe(
+          codeMessage("table.needs_clearing"),
+        );
+      });
+
+      it("moves the bill to the counter, or to a free table, at once", async () => {
+        const { el } = await mount(onCheck());
+        const moved = heard(el, "move-bill");
+        await toMoveBill(el);
+        target(el, "counter")!.click();
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
+        const pickAgain = async (id: string) => {
+          click(el, "[data-move-split]");
+          await el.updateComplete;
+          click(el, '[data-action="move-bill"]');
+          await el.updateComplete;
+          target(el, id)!.click();
+          await el.updateComplete;
+        };
+        await pickAgain("t9");
+        await pickAgain("t6");
+        await el.updateComplete;
+
+        expect(moved).toEqual([
+          { to: { counter: true }, bills: "merge" },
+          { to: { tableId: "t9", seated: null }, bills: "merge" },
+        ]);
+        expect(billChoice(el)).toBeNull();
+      });
+
+      it("asks about the bills first at a table another party holds, naming the bill and where it goes", async () => {
+        const { el } = await mount(onCheck());
+        const moved = heard(el, "move-bill");
+        await toMoveBill(el);
+        target(el, "t7")!.click();
+        await el.updateComplete;
+
+        const dialog = billChoice(el)!;
+        expect(moved).toEqual([]);
+        expect(dialog.scope).toBe(
+          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
+        );
+        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+        expect(dialog.shadowRoot!.textContent).toContain(t("table.bill_move_question"));
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
+        await el.updateComplete;
+
+        expect(moved).toEqual([
+          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "separate" },
+        ]);
+        expect(billChoice(el)).toBeNull();
+      });
+
+      it("sends the party the bill choice names, though the floor read since seats another there", async () => {
+        const { el } = await mount(onCheck());
+        const moved = heard(el, "move-bill");
+        await toMoveBill(el);
+        target(el, "t7")!.click();
+        await el.updateComplete;
+        el.tables = el.tables.map((table) =>
+          table.id === "t7"
+            ? {
+                ...table,
+                party: {
+                  ...table.party!,
+                  id: "v8",
+                  revision: 2,
+                  name: "Pedro",
+                  displayName: "Pedro",
+                },
+              }
+            : table,
+        );
+        await el.updateComplete;
+
+        const dialog = billChoice(el)!;
+        expect(dialog.scope).toBe(
+          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
+        );
+        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-merge]")!.click();
+        await el.updateComplete;
+
+        expect(moved).toEqual([
+          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "merge" },
+        ]);
+      });
+
+      it("sends nothing when the bill choice is cancelled", async () => {
+        const { el } = await mount(onCheck());
+        const moved = heard(el, "move-bill");
+        await toMoveBill(el);
+        target(el, "t7")!.click();
+        await el.updateComplete;
+        billChoice(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bills-cancel]")!.click();
+        await el.updateComplete;
+
+        expect(moved).toEqual([]);
+        expect(billChoice(el)).toBeNull();
+      });
+
+      it("is offered on a presented or partly paid bill, and not on a paid one", async () => {
+        for (const [orderId, offered] of [
+          ["wo-placed", true],
+          ["wo-part", true],
+          ["wo-paid", false],
+        ] as const) {
+          const { el } = await mount({ ...onCheck(), orderId });
+          await toMenu(el);
+          expect(el.shadowRoot!.querySelector('[data-action="move-bill"]') !== null).toBe(offered);
+          cleanupWidgets();
+        }
+      });
+    });
+
     it("offers Split a table only when the party holds two or more tables, and Name the party with a party", async () => {
       const alone = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(alone.el);
@@ -3367,6 +3518,27 @@ describe("till-table-order-screen", () => {
       expect(captured!.composed).toBe(true);
       expect(captured!.detail).toEqual({ fromBillId: "wo-check" });
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("offers neither merge nor transfer a bill holding a pending payment, though it still owes its total", async () => {
+      const pendingCard = bill({
+        workingOrderId: "wo-pending",
+        total: "20.00",
+        outstanding: "20.00",
+        hasPayments: true,
+      });
+      for (const verb of ["merge", "transfer"]) {
+        const { el } = await mount({
+          party: anaParty,
+          bills: [tabBill, checkBill, pendingCard],
+          lines: [pendingLine],
+          orderId: "wo-4",
+        });
+        await toMenu(el);
+        click(el, `[data-action="${verb}"]`);
+        await el.updateComplete;
+        expect(targetIds(el), verb).toEqual(["wo-check"]);
+      }
     });
 
     it("says which bill the chosen one merges into before anything is chosen", async () => {
