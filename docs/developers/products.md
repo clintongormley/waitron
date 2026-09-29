@@ -276,10 +276,17 @@ read from the current rows, as is whether each product and variant is Active and
 
 Each product placed in a menu's published structure, and offered by it, gets a button in the till's
 menu browser (`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search
-results, and wherever the device's home layout places it, whether or not it is marked as sold alone.
-A diet filter that staff turn on hides the dishes it rejects. One that cannot be sold now keeps its
-button, greyed, and a tap on it does nothing (`hasSomethingToSell`,
-`apps/till/src/widgets/product-pick.ts`), so the buttons around it do not move; the till's
+results, and wherever the device's home layout places it. The exception is a product whose
+standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
+button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
+extras list still offers it. Staff only gets a button like Public, because there is no guest
+ordering yet. A line not yet sent that holds a dish now sold only as an extra is marked "Only sold
+as an extra" (`lineBlock`, `apps/till/src/state/menu-refresh.ts`); in a draft it is left out of what
+is sent and offered for removal. The server refuses a standalone line for such a dish
+`product.not_sold_separately`, by the same published setting. A diet filter that staff turn on
+hides the dishes it rejects. One that cannot be sold now keeps its button, greyed, and a tap on it
+does nothing (`hasSomethingToSell`, `apps/till/src/widgets/product-pick.ts`), so the buttons around
+it do not move; the till's
 menu-state poll greys and restores it without reloading the offers (`apps/till/src/till-app.ts`). A
 variant never has a button: it is listed only nested under its parent's offer
 (`LiveOffer.variants`). The till reads its offers from the zone
@@ -341,6 +348,11 @@ dietary labels are its effective values (`effectiveProductColumns`; `resolvePrep
 froze (`TabLine.unitPrecision`), since a variant is not one of the till's products.
 
 ### In the product editor
+
+Under Available, **Standalone ordering** offers three choices: Public, Staff only and Not sold
+separately (`products.ordering`). A variant's own page does not offer it, because the till and the
+server read the dish's setting and a variant is only ever ordered under its dish. The products list
+shows the same setting as a column with a filter (`apps/dashboard/src/widgets/product-list.ts`).
 
 The editor allows any number of variants, one included (`apps/dashboard/src/widgets/product-editor.ts`):
 

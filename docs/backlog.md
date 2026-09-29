@@ -3161,6 +3161,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         is waiting on, so a moved group is cleared once it becomes the waiting one; the reminder then
         falls due as if it had never been snoozed. Clearing a group with no snooze is accepted and
         changes nothing but the party's revision.
+  - **Task 13 (standalone ordering) DONE on this branch** (lane B item B13,
+    `feat/service-standalone-ordering`, 2026-09-30; no pull request number yet). A product's
+    `ordering` is Public, Staff only or Not sold separately (`products.ordering`, core migrations
+    `0046`–`0048`; `products.sold_alone` is dropped). The published menu carries it, the server
+    refuses a standalone line for a dish the live version publishes as Not sold separately
+    (`product.not_sold_separately`, 409), and being offered as an extra ignores it. The till's home
+    page and search leave such a dish out, and mark a line not yet sent that holds one; the product
+    editor has the three-way choice and the products list a three-way column and filter. Staff only
+    behaves exactly as Public until guest ordering exists. **Upgrading a venue sets every product to
+    Public** (no data is carried across before production), so a venue must set again any product it
+    had as not sold on its own. **After the upgrade every published menu shows as changed**, listing
+    each product's "how it is sold", until it is published again: documents published before the
+    change carry no setting (measured on a seeded scratch venue, 2026-09-30). A standalone line
+    already stored on a held order or tab still sends and pays after a publish makes its dish Not
+    sold separately, because it was already ordered; the same line in a draft is refused when the
+    draft is sent or saved, and the till marks it for removal.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -3247,7 +3263,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     recording which element has focus just before the Escape; then press a real Escape during a save
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
-  - **Tasks left: 7 to 13 and 15 to 17.** The menus tasks that change the same order and till code
+  - **Tasks left: 10 to 12 and 15 to 17.** The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
     plan's order: 7 then 8; 10 after 8 and 9; 12 after 11; 16 after 10. Task 15 is the till side of
     Task 14 — no till code calls the bill-payment routes yet.
@@ -6946,7 +6962,9 @@ reading unless marked run:
   in each (2026-09-29).
   **DONE (C74, #878, 2026-09-29):** the category form's `wt-close` handler checks `this.open` too; its
   new test in `category-form.test.ts` counted two cancels without the check and one with it. The
-  variant form stays OPEN, for lane B's B13 reason above.
+  variant form stays OPEN, for lane B's B13 reason above. _(2026-09-30: B13 is done on
+  `feat/service-standalone-ordering` and did not touch the variant form, so its fix no longer waits
+  on B13.)_
 - Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
   (`apps/dashboard/src/screens/catalogue-screen.ts` mounts it at about line 711) also closes the
   product editor behind it; in the same test the Unit form sent exactly one cancel. Measured
@@ -9257,7 +9275,7 @@ while it holds decisions still open.
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
-| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
+| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed; Task 13 done on a branch | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |
