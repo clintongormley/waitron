@@ -4365,6 +4365,29 @@ Runs `waitron.sh install` unattended. Open questions it owns: whether the stick 
 install needs no internet; unattended updates for a box we did not sell; AP-mode WiFi onboarding. Box
 image constraints under *Detail → Box image*. Not started.
 
+**The box the customer buys probably doubles as a till, so the image ships a screen and a browser**
+(owner, 2026-09-29: "we probably want the server the customer buys to also serve as a till, which
+means that we need to ship Debian with a UI and chromium"). A lean, not yet a decision. The hardware
+decisions already put the deli's box under the counter driving the counter touchscreen (O5,
+[handheld and till hardware §5](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md)),
+but as a machine built by hand; this makes it how every box ships. What it asks of the image B3 lays
+down, none of it built:
+
+- **Debian with a graphical session and Chromium**, not a server-only install. Spec §5's lean is the
+  smallest one: automatic login on the console, then one full-screen Chromium under `cage` (a Wayland
+  compositor that runs a single application), restarted as a service, with no desktop environment.
+  Whether "a UI" means only that or a fuller desktop is not yet settled.
+- **The four traps spec §5 lists, each established on the first real build:** the "restore pages?"
+  bubble after a power cut, Chromium's own certificate store (the box's root certificate is installed
+  there separately), screen blanking and sleep, and the BIOS set to power on when mains returns.
+- **The box is specified for both jobs** — server, database and browser — which spec §5 and §6 already
+  say; spec §6's memory figure for a page-only machine is reasoning, not a measurement.
+- **Open:** whether the box's own screen enrols as a till like any other device or is treated
+  differently because it is local, and what address it opens the till at.
+- **Related:** the print-agent's AppArmor policy (A129, #862) was chosen on the owner's "we'll be
+  shipping with our own OS"; the licence notices for what an OS image adds (Debian packages, Chromium,
+  `cage`) need an answer too, beside the container image's `/app/third-party/`.
+
 Belongs with it: **a local maintenance account on each box**, its password printed on a sealed card
 and set when the box is imaged, with procedures for a lost card, a change of owner and a reinstall
 ([box maintenance and remote support](superpowers/specs/2026-09-11-box-maintenance-and-remote-support.md),
@@ -8084,8 +8107,8 @@ today); generalise archive entry routing off declared source ids when a second n
 - **The box image carries the WireGuard link.**
 - **Identity on a standby:** `persons` and `webauthn_credentials` are `state`, so a standby can
   authenticate the venue's people on failover; re-establishment is PIN-re-prompt v1.
-- Later kiosk options, none built: Chromium `--kiosk` in the box image and Fully Kiosk resale for
-  dedicated tablets. Cloud-managed device enrolment is tracked in the
+- Kiosk options, none built: Chromium in the box image, now the owner's lean for every box (B3,
+  2026-09-29), and, later, Fully Kiosk resale for dedicated tablets. Cloud-managed device enrolment is tracked in the
   [Cloud backlog](https://github.com/waitron-io/waitron-cloud/blob/main/docs/backlog.md). The counter till
   boots into the app with no operating-system login — automatic console login, one full-screen
   browser, and the till's own PIN as the boundary. Four traps to establish when the image is built
