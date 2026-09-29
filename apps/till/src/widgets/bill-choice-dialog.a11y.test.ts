@@ -22,7 +22,7 @@ describe.each(["light", "dark"] as const)("till-bill-choice-dialog a11y (%s them
     const { host } = await mountWidget<TillBillChoiceDialog>(
       "till-bill-choice-dialog",
       {
-        scope: "Cuenta 2 de Ana (Mesa 4) a Luis (Mesa 7)",
+        scope: "Ana · Cuenta 2 a Luis (Mesa 7)",
         question:
           "¿Juntar esta cuenta con su cuenta principal o mantenerla como una cuenta aparte?",
       },

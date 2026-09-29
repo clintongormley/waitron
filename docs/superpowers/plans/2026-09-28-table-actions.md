@@ -3906,7 +3906,18 @@ only, consuming Task 8's routes.
 > reworded; its wording is pinned in `apps/till/src/i18n/codes.test.ts`. `readReceivedByBill` was
 > replaced by `readPaymentsByBill` (`apps/server/src/bill-payments.ts`), which `listHeldOrders`
 > and `readBillsOfParties` both read. The Spanish strings shipped as "El mostrador" and
-> "Pasado a {table}".
+> "Pasado a {table}". The scope line and heading read "Ana · Bill 2 to Luis (Mesa 7)", the bill
+> named as the bills list names it, not "Bill 2 of Ana (Mesa 4) to Luis (Mesa 7)". The events
+> carry `seated`, the party the picker showed at the target table (null for a table it showed
+> free): the table screen's "move-bill" sends `{ to: { tableId, seated } | { counter: true }, bills }`
+> and held-orders' "move-held-order" sends `{ orderId, tableId, seated, bills }`; held-orders'
+> "move-held-order-open" carries no `{orderId}`. There is no `#payBill(bill)`: the table screen's
+> Take payment runs through `#onPayTab`, and a retrieved counter order through the counter's own
+> pay handlers, which refuse through `#refusePaidInPart`. The bill-payment path is chosen by the
+> server's `hasPayments` on an open bill (`paidInPart`, `apps/till/src/state/bill-state.ts`), not
+> by `outstanding` below `total` or a payment pending. Merge and transfer offer only the party's
+> other open bills with no payment on them (`!hasPayments`), so a bill holding a pending payment
+> is not offered.
 
 Spec §7 (Move a bill), decisions 11 and 12, §15 (the till, looked at). It is A81's and A82's till
 half; both are retired from lane A's queue when this lands. Plan decisions: P12, P18, P19 and P25.

@@ -3852,9 +3852,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       orders are made in (the one `api.setServiceZone` was given), or null when the counter's
       offers could not be read.
     - Afterwards the screen stays with the party, on its main bill or its first unpaid one, and
-      goes back to the floor when the party has no bill left; an answer arriving after the waiter
-      has opened another table changes nothing there. After a move to the counter the counter's
-      held orders are read again, so the bill is listed there under the label the server gave it;
+      goes back to the floor when the party has no bill left. The floor is read again after the
+      move, and a failed read keeps the last floor. An answer arriving after the waiter has left
+      the bill opens no other bill, does not go back to the floor and says nothing about bills kept
+      apart; the floor, and after a move to the counter the held list, are still read again. After
+      a move to the counter the counter's held orders are read again, so the bill is listed there
+      under the label the server gave it;
       a failed read says "The bill was moved, but the list of held orders could not refresh." `party.main_bill_stays`, `bill.paid`, `group.held_leaves_party`,
       `table.needs_clearing` and the other table refusals show in their own words;
       `party.out_of_date` reloads and says what changed.
@@ -3873,7 +3876,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       are disabled for it. A single payment refused `bill.payments_received` says the same. Any
       other bill pays as before. There is still no bill-payment screen (the service plan's Task
       15, lane B's B15); once it lands, that sentence should open it.
-    - The held list shows what a partly paid order still owes.
+    - The held list shows what an order holding a payment, a pending one included,
+      still owes.
+    - Merge and transfer offer only the party's other open bills with no payment on them (the
+      bill's `hasPayments`). Before, they offered a bill whose outstanding amount equalled its
+      total, which let through a bill holding a pending payment that the server then refuses;
+      that check came from Task 10 (#875), on `main` before this branch.
     - Server: `GET /api/working-orders` (`listHeldOrders`) answers `outstanding`, `hasPayments`
       and `partyId` for each open order, and a party's bills (`PartyBill`) carry `hasPayments`
       too. Both read the payments through `readPaymentsByBill` (`apps/server/src/bill-payments.ts`).
