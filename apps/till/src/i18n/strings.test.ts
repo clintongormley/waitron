@@ -51,3 +51,25 @@ describe("the suspended-account message matches the dashboard's wording", () => 
     );
   });
 });
+
+describe("the Spanish strings call a restaurant menu a carta", () => {
+  // Every "menu" the till's catalogue strings mean is a restaurant menu: no string here calls a
+  // popover a menu, which in the dashboard keeps "menú". Weaker than its name: only the catalogue in
+  // strings.ts is read, not the Spanish in codes.ts or allergen-names.ts, so a code message saying
+  // menú passes.
+  it("has no Spanish catalogue string that says menú", () => {
+    const menuWord = /(?<!\p{L})men[úu]s?(?!\p{L})/iu;
+    const saysMenu = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
+      menuWord.test(text.replace(/\{[^}]*\}/g, "")),
+    );
+    expect(saysMenu).toEqual([]);
+  });
+
+  it("names the menu switcher and the zone's menus with carta", () => {
+    expect(catalogues["es-ES"]?.["menu.switcher"]).toBe("Carta");
+    expect(catalogues["es-ES"]?.["service_zone.refresh"]).toBe("Actualizar cartas");
+    expect(catalogues["es-ES"]?.["service_zone.load_error"]).toBe(
+      "No se pudieron cargar las cartas de esta zona",
+    );
+  });
+});

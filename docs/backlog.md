@@ -4442,11 +4442,16 @@ phone, so the narrow-viewport banner and drawer are unverified on hardware; that
 the display walkthrough in [ui-review.md](ui-review.md). The rest of the dashboard's screens are the
 ongoing overhaul listed at the top of Track A.
 
-- **Restaurant menus use “carta” throughout the Spanish dashboard, module and setup wording
-  — DONE (C55, owner decision 2026-09-29).** The group renamed by C34 (#820) now reads “Productos y
-  cartas”, and the menus page reads “Cartas”. Menu prices, previews, shared-list usage, setup
+- **Restaurant menus use “carta” throughout the Spanish dashboard, module, setup and till wording —
+  DONE (C55, C56, owner decision 2026-09-29).** The group renamed by C34 (#820) now reads “Productos
+  y cartas”, and the menus page reads “Cartas”. Menu prices, previews, shared-list usage, setup
   guidance and the image library use the same noun and feminine agreement. Account and row-action
-  menus retain “menú”. Till wording remains C56, after the table-actions work.
+  menus retain “menú”. The till followed (C56): its menu switcher's name reads “Carta”, the service
+  area's refresh button “Actualizar cartas”, and its load failure “No se pudieron cargar las cartas
+  de esta zona”; `apps/till/src/i18n/strings.test.ts` fails if any Spanish string in the till's
+  catalogue (`apps/till/src/i18n/strings.ts`) says “menú”; the till's error-code messages and
+  allergen names (`apps/till/src/i18n/codes.ts`, `apps/till/src/i18n/allergen-names.ts`) are not
+  scanned.
 
 - **The sidebar's sections now open folded shut (C35, #822, owner decision 2026-09-28).** Two
   leftovers from its review, not fixed:
