@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
@@ -316,5 +317,38 @@ describe("SetupRestoreBucketScreen", () => {
     expect(q(el, "[data-test=server-error]")!.textContent).toBe(
       "The bucket in this kit holds no copy of this restaurant.",
     );
+  });
+});
+
+describe("SetupRestoreBucketScreen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("asks for the kit and the confirmations in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+      venue: VENUE,
+    });
+    expect(q(el, "h1")!.textContent).toBe("Restaurar desde mi bucket");
+    expect(q(el, "[data-test=kit-sensitive]")!.textContent).toContain(
+      "tan delicado como la clave de recuperación",
+    );
+    expect(q(el, "[data-test=venue]")!.textContent).toContain("(NIF 89890001K), local Local.");
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await summaryItems(el)).toEqual([
+      "Sube o pega el kit de recuperación.",
+      "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
+      "Confirma que este es tu negocio.",
+    ]);
+  });
+
+  it("switches language live, keeping the kit already pasted", async () => {
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+    paste(el, "WAITRON-RECOVERY-KIT-1:abc");
+    await el.updateComplete;
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent).toBe("Restaurar desde mi bucket");
+    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe("WAITRON-RECOVERY-KIT-1:abc");
   });
 });

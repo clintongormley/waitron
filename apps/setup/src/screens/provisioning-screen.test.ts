@@ -1,12 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./provisioning-screen.js";
 import type { SetupProvisioningScreen } from "./provisioning-screen.js";
 
 const q = (el: SetupProvisioningScreen, sel: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  setLocale("en-GB");
+  cleanupWidgets();
+});
 
 describe("setup-provisioning-screen", () => {
   it("shows a non-spinner in-flight state with a DISABLED provision control when no message is set", async () => {
@@ -120,5 +124,49 @@ describe("setup-provisioning-screen", () => {
     });
     expect(q(el, "[data-test=retry]")).not.toBeNull();
     expect(q(el, "[data-test=reload]")).toBeNull();
+  });
+
+  it("shows the in-flight state in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {});
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Configurando este servidor");
+    expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
+      "Configurando… puede tardar un momento. Mantén esta página abierta.",
+    );
+    expect(q(el, "[data-test=provision]")!.textContent!.trim()).toBe("Configurando…");
+  });
+
+  it("shows the failure state's help and actions in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "La configuración ha fallado.",
+      canRetry: true,
+    });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración");
+    expect(q(el, "[data-test=trust-help]")!.textContent!.trim()).toBe(
+      "abre la ayuda sobre el certificado y la conexión",
+    );
+    expect(q(el, "[data-test=retry]")!.textContent!.trim()).toBe("Volver a intentar");
+  });
+
+  it("names the reset action in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "Un intento anterior se detuvo a medias.",
+      canReset: true,
+    });
+    expect(q(el, "[data-test=reset]")!.textContent!.trim()).toBe("Restablecer este servidor");
+  });
+
+  it("redraws in Spanish on a live language switch", async () => {
+    const { el } = await mountWidget<SetupProvisioningScreen>("setup-provisioning-screen", {
+      message: "Provisioning failed. You can try again.",
+      canRetry: true,
+    });
+    expect(q(el, "[data-test=retry]")!.textContent!.trim()).toBe("Try again");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "[data-test=retry]")!.textContent!.trim()).toBe("Volver a intentar");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración");
   });
 });

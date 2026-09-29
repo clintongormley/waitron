@@ -1,5 +1,6 @@
 import { afterEach, expect, describe, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./connection-screen.js";
 import type { SetupConnectionScreen } from "./connection-screen.js";
 
@@ -12,7 +13,10 @@ const text = (node: { textContent: string | null }): string =>
 const words = (el: SetupConnectionScreen): string[] =>
   text(el.shadowRoot!).split(" ").filter(Boolean);
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en-GB");
+});
 
 describe("setup-connection-screen", () => {
   it("asks whether the connection is secure and points at the address bar", async () => {
@@ -110,5 +114,28 @@ describe("setup-connection-screen", () => {
     const button = q(el, "[data-test=continue]")!;
     expect(text(button)).toBe("Checking connection…");
     expect(button.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+describe("setup-connection-screen in Spanish", () => {
+  it("asks the question, quotes the browser's Spanish warning and offers Continue in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {});
+    expect(text(q(el, "h1")!)).toBe("¿Es segura tu conexión con esta página?");
+    expect(text(q(el, "[data-test=warning-words]")!)).toBe("«No es seguro»");
+    expect(text(q(el, "[data-test=trust-help]")!)).toBe("instalar el certificado de este servidor");
+    expect(text(q(el, "[data-test=otherwise]")!)).toBe("Si no:");
+    expect(text(q(el, "[data-test=continue]")!)).toBe("Continuar con la configuración");
+  });
+
+  it("switches language while mounted", async () => {
+    const { el } = await mountWidget<SetupConnectionScreen>("setup-connection-screen", {
+      checking: true,
+    });
+    expect(text(q(el, "[data-test=continue]")!)).toBe("Checking connection…");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(text(q(el, "h1")!)).toBe("¿Es segura tu conexión con esta página?");
+    expect(text(q(el, "[data-test=continue]")!)).toBe("Comprobando la conexión…");
   });
 });

@@ -16,12 +16,14 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { countryName } from "../country-name.js";
-import { currentLocale } from "../i18n/t.js";
+import { currentLocale, format, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import type { VenueDefaults, ProvisionBody } from "../api/client.js";
-import { SERVER_FIELDS } from "../server-fields.js";
+import { SERVER_FIELDS, type ServerField } from "../server-fields.js";
 
 type TextField =
   | "country"
@@ -76,52 +78,45 @@ const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "rectificativeSeriesCode",
 ];
 
-const FIELD_HELP: Record<TextField, string> = {
-  country:
-    "Choose the country where your business is registered. It determines the available address and tax settings.",
-  taxId: "Enter the tax identifier of the business that issues the invoices.",
-  legalName: "Use the business's registered legal name, as it appears on its tax documents.",
-  name: "Choose the name you use for this location in Waitron.",
-  operationDescription:
-    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. Invoice languages do not translate this text. You can change it in the dashboard for future records.",
-  addressLine1: "Enter the location's street and building number.",
-  addressLine2: "Add a floor, unit or other address detail if needed.",
-  postalCode: "Enter the location's postal code. Waitron uses it to suggest the province.",
-  city: "Enter the town or city where this location is based.",
-  province:
-    "The province must match the postal code. It determines the fiscal territory and time zone.",
-  dayCutover:
-    "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
-  tillName:
-    "Name the first register. Caja 1 is a useful starting point; this name is not your tax-filing identity.",
-  seriesCode:
-    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 38 characters. Keep FS unless you need another series.",
-  rectificativeSeriesCode:
-    "This prefix identifies correction invoices, for example FR/1. Use a different prefix from ordinary invoices. Keep FR unless you need another series.",
+const FIELD_HELP: Record<TextField, StringKey> = {
+  country: "venue.help.country",
+  taxId: "venue.help.tax_id",
+  legalName: "venue.help.legal_name",
+  name: "venue.help.name",
+  operationDescription: "venue.help.operation_description",
+  addressLine1: "venue.help.address_line1",
+  addressLine2: "venue.help.address_line2",
+  postalCode: "venue.help.postal_code",
+  city: "venue.help.city",
+  province: "venue.help.province",
+  dayCutover: "venue.help.day_cutover",
+  tillName: "venue.help.till_name",
+  seriesCode: "venue.help.series_code",
+  rectificativeSeriesCode: "venue.help.rectificative_series_code",
 };
-const FIELD_LABELS: Record<TextField, string> = {
-  country: "country",
-  taxId: "tax ID",
-  legalName: "legal name",
-  name: "location name",
-  operationDescription: "invoice operation description",
-  addressLine1: "street address",
-  addressLine2: "address detail",
-  postalCode: "postal code",
-  city: "city",
-  province: "province",
-  dayCutover: "business day cutover",
-  tillName: "till name",
-  seriesCode: "invoice series code",
-  rectificativeSeriesCode: "correction series code",
+const FIELD_NOUNS: Record<TextField, StringKey> = {
+  country: "venue.field.country",
+  taxId: "venue.field.tax_id",
+  legalName: "venue.field.legal_name",
+  name: "venue.field.name",
+  operationDescription: "venue.field.operation_description",
+  addressLine1: "venue.field.address_line1",
+  addressLine2: "venue.field.address_line2",
+  postalCode: "venue.field.postal_code",
+  city: "venue.field.city",
+  province: "venue.field.province",
+  dayCutover: "venue.field.day_cutover",
+  tillName: "venue.field.till_name",
+  seriesCode: "venue.field.series_code",
+  rectificativeSeriesCode: "venue.field.rectificative_series_code",
 };
 
-const LOCALE_LABELS: Readonly<Record<string, string>> = {
-  "es-ES": "Spanish (España)",
-  "ca-ES": "Catalan (Català)",
-  "gl-ES": "Galician (Galego)",
-  "eu-ES": "Basque (Euskara)",
-  "en-GB": "English",
+const LOCALE_LABELS: Readonly<Record<string, StringKey>> = {
+  "es-ES": "venue.locale.es_es",
+  "ca-ES": "venue.locale.ca_es",
+  "gl-ES": "venue.locale.gl_es",
+  "eu-ES": "venue.locale.eu_es",
+  "en-GB": "venue.locale.en_gb",
 };
 
 /**
@@ -196,6 +191,11 @@ export class SetupVenueScreen extends LitElement {
   @property({ attribute: false }) defaults: VenueDefaults = {};
   #descriptionEdited = false;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   get #demo(): boolean {
     return this.draft.mode === "demo";
   }
@@ -238,7 +238,8 @@ export class SetupVenueScreen extends LitElement {
   @state() private showError = false;
 
   // Keep server refusals separate: local validation rebuilds its own set on every submission.
-  @state() private serverInvalid?: { readonly key: TextField; readonly message: string };
+  // `refusal` is kept whole, not copied: its `message` is translated on each read.
+  @state() private serverInvalid?: { readonly key: TextField; readonly refusal: ServerField };
 
   #seeded = false;
   #invoiceLocalesFollowAreaDefault = true;
@@ -260,10 +261,12 @@ export class SetupVenueScreen extends LitElement {
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
     if (changed.has("invalidField")) {
-      this.serverInvalid =
+      const refusal =
         this.invalidField === undefined ? undefined : SERVER_FIELDS[this.invalidField];
-      if (this.#demo && this.serverInvalid?.key === "legalName")
-        this.serverInvalid = { ...this.serverInvalid, key: "name" };
+      this.serverInvalid =
+        refusal === undefined
+          ? undefined
+          : { key: this.#demo && refusal.key === "legalName" ? "name" : refusal.key, refusal };
     }
   }
 
@@ -494,22 +497,25 @@ export class SetupVenueScreen extends LitElement {
 
   #fieldError(key: TextField | "invoiceLocales"): string {
     if (!this.invalid.has(key)) return "";
-    if (key === "invoiceLocales") return "Choose one or two invoice languages.";
-    if (this.values[key].trim() === "") return `Enter the ${FIELD_LABELS[key]}.`;
-    if (key === "taxId") return "Enter a valid tax ID for the selected country.";
-    if (key === "postalCode") return "Enter a valid postal code that matches the province.";
+    if (key === "invoiceLocales") return t("venue.error.invoice_locales");
+    if (this.values[key].trim() === "")
+      return format("venue.enter_field", { field: t(FIELD_NOUNS[key]) });
+    if (key === "taxId") return t("venue.error.tax_id");
+    if (key === "postalCode") return t("venue.error.postal_code");
     if (key === "province")
       return this.#jurisdiction()?.supported === false
-        ? "Setup is not available for this fiscal territory yet."
-        : "Choose the province that matches the postal code.";
+        ? t("venue.error.territory_unsupported")
+        : t("venue.error.province");
     if (key === "seriesCode" || key === "rectificativeSeriesCode")
-      return "Use different codes for ordinary and correction invoices.";
-    return `Check the ${FIELD_LABELS[key]}.`;
+      return t("venue.error.series_codes");
+    return format("venue.check_field", { field: t(FIELD_NOUNS[key]) });
   }
 
   #help(key: TextField): TemplateResult {
-    return html`<wt-help-tooltip slot="help" aria-label=${`Help with ${FIELD_LABELS[key]}`}
-      >${FIELD_HELP[key]}</wt-help-tooltip
+    return html`<wt-help-tooltip
+      slot="help"
+      aria-label=${format("venue.help_with_field", { field: t(FIELD_NOUNS[key]) })}
+      >${t(FIELD_HELP[key])}</wt-help-tooltip
     >`;
   }
 
@@ -525,7 +531,7 @@ export class SetupVenueScreen extends LitElement {
       type=${type}
       ?invalid=${this.invalid.has(key) || refused !== undefined}
       ?required=${key !== "addressLine2"}
-      error=${refused?.message ?? this.#fieldError(key)}
+      error=${refused?.refusal.message ?? this.#fieldError(key)}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
       >${this.#help(key)}</wt-input
@@ -536,27 +542,32 @@ export class SetupVenueScreen extends LitElement {
     const pack = this.#pack();
     const area = this.#area(pack);
     const jurisdiction = this.#jurisdiction(pack, area);
+    const selectProvince = t("venue.select_province");
+    const fiscalTerritory = format("venue.fiscal_territory", {
+      territory: jurisdiction?.id ?? selectProvince,
+    });
+    const timeZone = format("venue.time_zone", {
+      zone: area?.timeZone ?? pack?.defaultTimeZone ?? "—",
+    });
     return html`
-      <h1>Your shop</h1>
-      <p>
-        ${this.#demo ? "Name your demo location and enter its address. Waitron supplies a made-up business identity and invoice settings; you can review them before setup." : "Enter the business that issues your invoices and the address of this location."}
-      </p>
+      <h1>${t("venue.heading")}</h1>
+      <p>${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
 
       ${
         this.#demo && this.values.operationDescription === ""
           ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
-                Demo invoice settings have not loaded yet.
+                ${t("venue.defaults_not_loaded")}
               </p>
               <wt-button
                 data-test="retry-defaults"
                 @click=${() => this.dispatchEvent(new CustomEvent("setup-defaults-requested", { bubbles: true, composed: true }))}
-                >Try loading settings again</wt-button
+                >${t("venue.retry_defaults")}</wt-button
               >`
           : nothing
       }
-      <h2>${this.#demo ? "Location" : "Business"}</h2>
+      <h2>${this.#demo ? t("venue.section.location") : t("venue.section.business")}</h2>
       <label class="field select">
-        <span>Country * ${this.#help("country")}</span>
+        <span>${t("venue.label.country")} * ${this.#help("country")}</span>
         <select
           name="country"
           required
@@ -578,8 +589,9 @@ export class SetupVenueScreen extends LitElement {
         </select>
         <span class="error" id="country-error">${this.#fieldError("country")}</span>
       </label>
-      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? "Tax ID", "taxId")}${this.#field("Legal name", "legalName")}`}
-      ${this.#demo ? nothing : html`<h2>Location</h2>`} ${this.#field("Location name", "name")}
+      ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}`}
+      ${this.#demo ? nothing : html`<h2>${t("venue.section.location")}</h2>`}
+      ${this.#field(t("venue.label.location_name"), "name")}
       ${
         this.#demo
           ? nothing
@@ -591,11 +603,9 @@ export class SetupVenueScreen extends LitElement {
                 aria-describedby=${this.invalid.has("invoiceLocales") ? "invoice-locales-error" : nothing}
               >
                 <legend>
-                  Invoice languages (pick one or two) *
-                  <wt-help-tooltip aria-label="Help with invoice languages"
-                    >Choose the languages printed on invoices. The country's language is ticked
-                    first, and a province with a language of its own adds it second; the operation
-                    description is kept separately.</wt-help-tooltip
+                  ${t("venue.label.invoice_locales")} *
+                  <wt-help-tooltip aria-label=${t("venue.invoice_locales_help_label")}
+                    >${t("venue.invoice_locales_help")}</wt-help-tooltip
                   >
                 </legend>
                 ${(pack?.invoiceLocales ?? []).map(
@@ -609,20 +619,21 @@ export class SetupVenueScreen extends LitElement {
                         .checked=${this.invoiceLocales.includes(locale)}
                         @change=${(e: Event) => this.#onLocaleToggle(locale, e)}
                       />
-                      ${LOCALE_LABELS[locale] ?? locale}
+                      ${LOCALE_LABELS[locale] === undefined ? locale : t(LOCALE_LABELS[locale])}
                     </label>`,
                 )}
                 ${this.invalid.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${this.#fieldError("invoiceLocales")}</p>` : nothing}
               </fieldset>
-              ${this.#field("Invoice operation description", "operationDescription")}`
+              ${this.#field(t("venue.label.operation_description"), "operationDescription")}`
       }
-      ${this.#field("Address line 1", "addressLine1")}
-      ${this.#field("Address line 2 (optional)", "addressLine2")}
-      ${this.#field("Postal code", "postalCode")} ${this.#field("City", "city")}
+      ${this.#field(t("venue.label.address_line1"), "addressLine1")}
+      ${this.#field(t("venue.label.address_line2"), "addressLine2")}
+      ${this.#field(t("venue.label.postal_code"), "postalCode")}
+      ${this.#field(t("venue.label.city"), "city")}
       ${
         pack !== undefined && pack.administrativeAreas.length > 0
           ? html`<label class="field select">
-              <span>Province * ${this.#help("province")}</span>
+              <span>${t("venue.label.province")} * ${this.#help("province")}</span>
               <select
                 name="province"
                 required
@@ -632,7 +643,7 @@ export class SetupVenueScreen extends LitElement {
                 aria-invalid=${this.invalid.has("province") ? "true" : "false"}
                 @change=${(event: Event) => this.#onProvince(event)}
               >
-                <option value="" .selected=${area === undefined}>Select province</option>
+                <option value="" .selected=${area === undefined}>${selectProvince}</option>
                 ${pack.administrativeAreas.map(
                   (candidate) =>
                     html`<option value=${candidate.code} .selected=${candidate.code === area?.code}>
@@ -642,25 +653,25 @@ export class SetupVenueScreen extends LitElement {
               </select>
               <span class="error" id="province-error">${this.#fieldError("province")}</span>
             </label>`
-          : this.#field("Province / region", "province")
+          : this.#field(t("venue.label.province_region"), "province")
       }
-      <p data-test="fiscalTerritory">Fiscal territory: ${jurisdiction?.id ?? "Select province"}</p>
-      <p data-test="timeZone">Time zone: ${area?.timeZone ?? pack?.defaultTimeZone ?? "—"}</p>
+      <p data-test="fiscalTerritory">${fiscalTerritory}</p>
+      <p data-test="timeZone">${timeZone}</p>
       ${
         this.#demo
           ? nothing
-          : html`${this.#field("Business day cutover", "dayCutover", "time")}
+          : html`${this.#field(t("venue.label.day_cutover"), "dayCutover", "time")}
 
-              <h2>Invoicing</h2>
-              ${this.#field("Till name", "tillName")}
-              ${this.#field("Invoice series code", "seriesCode")}
-              ${this.#field("Rectificative series code", "rectificativeSeriesCode")}`
+              <h2>${t("venue.section.invoicing")}</h2>
+              ${this.#field(t("venue.label.till_name"), "tillName")}
+              ${this.#field(t("venue.label.series_code"), "seriesCode")}
+              ${this.#field(t("venue.label.rectificative_series_code"), "rectificativeSeriesCode")}`
       }
       ${
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
-              heading="There is a problem with this form"
+              heading=${t("venue.error_heading")}
               .errors=${[...this.invalid].map((key) => this.#fieldError(key))}
             ></wt-form-error-summary>`
           : this.errorMessage === undefined
@@ -669,9 +680,11 @@ export class SetupVenueScreen extends LitElement {
       }
       <wt-form-actions>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-          >Back</wt-button
+          >${t("venue.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}>Next</wt-button>
+        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
+          >${t("venue.next")}</wt-button
+        >
       </wt-form-actions>
     `;
   }

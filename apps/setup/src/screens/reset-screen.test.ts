@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./reset-screen.js";
 import type { SetupResetScreen } from "./reset-screen.js";
 
@@ -50,7 +51,10 @@ async function alerts(el: SetupResetScreen): Promise<Element[]> {
 const REJECTED =
   "That person ID and password are not the admin login used to connect this server. Check them and try again.";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  setLocale("en-GB");
+  cleanupWidgets();
+});
 
 describe("setup-reset-screen", () => {
   it("says what the reset does to this server and that it changes nothing on the primary", async () => {
@@ -256,5 +260,77 @@ describe("setup-reset-screen", () => {
     expect(alert.textContent).toContain("no half-finished join");
     expect(q(el, "[data-test=personId]")).toBeNull();
     expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Reload");
+  });
+
+  it("shows the form in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain("No se cambia nada en el servidor principal");
+    expect(q(el, "[data-test=personId]")!.getAttribute("label")).toBe(
+      "Inicio de sesión del administrador (ID de persona)",
+    );
+    expect(q(el, "[data-test=password]")!.getAttribute("label")).toBe(
+      "Contraseña del administrador",
+    );
+    expect(q(el, "[data-test=toggle-password]")!.getAttribute("aria-label")).toBe(
+      "Mostrar contraseña",
+    );
+    expect(q(el, "[data-test=back]")!.textContent!.trim()).toBe("Volver");
+    expect(q(el, "[data-test=reset]")!.textContent!.trim()).toBe("Restablecer este servidor");
+  });
+
+  it("explains missing fields in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    q(el, "[data-test=reset]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
+      "Introduce el ID de persona del administrador.",
+    );
+    const shown = (await summary(el))!;
+    expect(shown.getAttribute("heading")).toBe("Hay un problema con este formulario");
+    expect((shown as unknown as { errors: string[] }).errors).toEqual([
+      "Introduce el ID de persona del administrador.",
+      "Introduce la contraseña del administrador.",
+    ]);
+  });
+
+  it("names a refused login in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
+      credentialsRejected: true,
+    });
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe(
+      "Revisa la contraseña del administrador.",
+    );
+    expect(((await summary(el)) as unknown as { errors: string[] }).errors).toEqual([
+      "Ese ID de persona y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
+    ]);
+  });
+
+  it("shows the in-flight button and the outcome in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", { busy: true });
+    expect(q(el, "[data-test=reset]")!.textContent!.trim()).toBe("Restableciendo…");
+    el.outcome = { kind: "resetting", message: "El servidor se está restableciendo." };
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Restableciendo este servidor");
+    expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Recargar");
+  });
+
+  it("redraws in Spanish on a live language switch and keeps what was typed", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    await type(el, "personId", "op-7");
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Reset this server");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Restablecer este servidor");
+    expect(q(el, "[data-test=personId]")!.getAttribute("label")).toBe(
+      "Inicio de sesión del administrador (ID de persona)",
+    );
+    const input = q(el, "[data-test=personId]") as HTMLElement & { value: string };
+    expect(input.value).toBe("op-7");
   });
 });

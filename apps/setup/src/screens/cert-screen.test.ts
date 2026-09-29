@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./cert-screen.js";
 import type { SetupCertScreen } from "./cert-screen.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -366,4 +367,57 @@ it.each([
 it("uses the icon reveal control for the certificate passphrase", async () => {
   const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
   expect(q(el, "[data-test=toggle-passphrase]")!.querySelector("svg")).not.toBeNull();
+});
+
+describe("setup-cert-screen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("shows its heading, fields, messages and export help in Spanish", async () => {
+    setLocale("es-ES");
+    const ua = vi
+      .spyOn(navigator, "userAgent", "get")
+      .mockReturnValue("Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605");
+    try {
+      const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+      expect(q(el, "h1")!.textContent).toBe("Certificado de la AEAT");
+      expect(q(el, "[data-test=passphrase]")!.getAttribute("label")).toBe(
+        "Contraseña del certificado",
+      );
+      const help = q(el, "[data-test=certificate-export-help]")!;
+      expect(help.getAttribute("aria-label")).toBe("Exporta tu certificado de firma");
+      expect(help.querySelector("[data-test=export-guide] h3")!.textContent).toBe(
+        "macOS (Acceso a Llaveros)",
+      );
+      expect(help.querySelector("[data-test=export-guide] ol")!.textContent).toContain(
+        "Acceso a Llaveros",
+      );
+      expect(
+        [...(q(el, "[data-test=certKind]") as HTMLSelectElement).options].map((option) =>
+          option.textContent?.trim(),
+        ),
+      ).toEqual(["Sello electrónico", "Representante"]);
+      q(el, "[data-test=next]")!.click();
+      await el.updateComplete;
+      expect(q(el, "[data-test=pfx-field-error]")!.textContent?.trim()).toBe(
+        "Elige el archivo del certificado.",
+      );
+      expect(q(el, "[data-test=next]")!.textContent).toBe("Siguiente");
+    } finally {
+      ua.mockRestore();
+    }
+  });
+
+  it("redraws in Spanish when the language is switched, keeping the typed passphrase", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    await typePassphrase(el, "unlock-2026");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent).toBe("Certificado de la AEAT");
+    expect(q(el, "[data-test=certificate-export-help] h2")!.textContent).toBe(
+      "Consigue el archivo de tu certificado",
+    );
+    expect((q(el, "[data-test=passphrase]") as unknown as { value: string }).value).toBe(
+      "unlock-2026",
+    );
+  });
 });

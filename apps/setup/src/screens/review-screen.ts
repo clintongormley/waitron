@@ -6,8 +6,21 @@ import { actionsStyles, errorStyles } from "../form-styles.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
 import { countryName } from "../country-name.js";
-import { currentLocale } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 import type { ProvisionBody } from "../api/client.js";
+
+const MODE_KEYS = {
+  demo: "review.mode_value.demo",
+  prepare: "review.mode_value.prepare",
+  live: "review.mode_value.live",
+} as const satisfies Record<ProvisionBody["mode"], StringKey>;
+
+function modeName(mode: string | undefined): string {
+  if (mode === undefined) return "—";
+  return Object.hasOwn(MODE_KEYS, mode) ? t(MODE_KEYS[mode as keyof typeof MODE_KEYS]) : mode;
+}
 
 /** Never renders a secret: no PIN, password, certificate passphrase or PFX bytes — the certificate
  * appears only as attached or not. */
@@ -44,6 +57,11 @@ export class SetupReviewScreen extends LitElement {
 
   @property() errorMessage?: string;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   #provision(): void {
     dispatchProvisionRequested(this);
   }
@@ -57,50 +75,52 @@ export class SetupReviewScreen extends LitElement {
     const location = venue?.location;
     const certAttached = Boolean(this.draft.aeatCert?.pfxBase64);
     return html`
-      <h1>Review and provision</h1>
-      <p>Check the details below, then provision this server.</p>
-      ${this.draft.mode === "demo" ? html`<p data-test="demo-defaults">Waitron generated a demo tax ID and supplied the business and invoice defaults below. Demo does not submit invoices to the tax agency.</p>` : nothing}
+      <h1>${t("review.heading")}</h1>
+      <p>${t("review.intro")}</p>
+      ${this.draft.mode === "demo" ? html`<p data-test="demo-defaults">${t("review.demo_defaults")}</p>` : nothing}
       <dl>
-        <dt>Mode</dt>
-        <dd data-test="summary-mode">${this.draft.mode ?? "—"}</dd>
-        <dt>Country</dt>
+        <dt>${t("review.mode")}</dt>
+        <dd data-test="summary-mode">${modeName(this.draft.mode)}</dd>
+        <dt>${t("review.country")}</dt>
         <dd data-test="summary-country">
           ${venue?.country === undefined ? "—" : countryName(venue.country, currentLocale())}
         </dd>
-        <dt>Tax ID</dt>
+        <dt>${t("review.tax_id")}</dt>
         <dd data-test="summary-taxId">${venue?.taxId ?? "—"}</dd>
-        <dt>Legal name</dt>
+        <dt>${t("review.legal_name")}</dt>
         <dd data-test="summary-legalName">${venue?.legalName ?? "—"}</dd>
-        <dt>Location</dt>
+        <dt>${t("review.location")}</dt>
         <dd data-test="summary-location">${location?.name ?? "—"}</dd>
-        <dt>Address</dt>
+        <dt>${t("review.address")}</dt>
         <dd data-test="summary-address">
           ${[location?.addressLine1, location?.addressLine2, location?.postalCode, location?.city, location?.province].filter(Boolean).join(", ") || "—"}
         </dd>
-        <dt>Invoice languages</dt>
+        <dt>${t("review.invoice_locales")}</dt>
         <dd data-test="summary-invoiceLocales">${location?.invoiceLocales?.join(", ") ?? "—"}</dd>
-        <dt>Invoice operation description</dt>
+        <dt>${t("review.operation_description")}</dt>
         <dd data-test="summary-operationDescription">${location?.operationDescription ?? "—"}</dd>
-        <dt>Business day cutover</dt>
+        <dt>${t("review.day_cutover")}</dt>
         <dd data-test="summary-dayCutover">${location?.dayCutover ?? "—"}</dd>
-        <dt>Till</dt>
+        <dt>${t("review.till")}</dt>
         <dd data-test="summary-tillName">${venue?.tillName ?? "—"}</dd>
-        <dt>Invoice series</dt>
+        <dt>${t("review.series")}</dt>
         <dd data-test="summary-seriesCode">${venue?.seriesCode ?? "—"}</dd>
-        <dt>Rectificative series</dt>
+        <dt>${t("review.rectificative_series")}</dt>
         <dd data-test="summary-rectificativeSeriesCode">
           ${venue?.rectificativeSeriesCode ?? "—"}
         </dd>
-        <dt>Operator</dt>
+        <dt>${t("review.operator")}</dt>
         <dd data-test="summary-admin-name">
           ${[venue?.admin?.firstNames, venue?.admin?.lastNames].filter(Boolean).join(" ") || "—"}
         </dd>
-        <dt>Operator display name</dt>
+        <dt>${t("review.operator_display_name")}</dt>
         <dd data-test="summary-admin">${venue?.admin?.displayName ?? "—"}</dd>
-        <dt>Operator email</dt>
+        <dt>${t("review.operator_email")}</dt>
         <dd data-test="summary-admin-email">${venue?.admin?.email ?? "—"}</dd>
-        <dt>AEAT certificate</dt>
-        <dd data-test="summary-cert">${certAttached ? "attached" : "not attached"}</dd>
+        <dt>${t("review.cert")}</dt>
+        <dd data-test="summary-cert">
+          ${certAttached ? t("review.cert_attached") : t("review.cert_not_attached")}
+        </dd>
       </dl>
       ${
         this.errorMessage === undefined
@@ -108,9 +128,11 @@ export class SetupReviewScreen extends LitElement {
           : html`<p class="error" role="alert" data-test="error">${this.errorMessage}</p>`
       }
       <div class="actions">
-        <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}>Back</wt-button>
+        <wt-button variant="ghost" data-test="back" @click=${() => this.#back()}
+          >${t("review.back")}</wt-button
+        >
         <wt-button variant="primary" data-test="provision" @click=${() => this.#provision()}
-          >Provision this server</wt-button
+          >${t("review.provision")}</wt-button
         >
       </div>
     `;

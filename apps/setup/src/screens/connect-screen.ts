@@ -9,10 +9,52 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
 import type { AdoptBody } from "../api/client.js";
+import { t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 type ConnectField = "primaryUrl" | "personId" | "password" | "totp";
 
 const REQUIRED_FIELDS: readonly ConnectField[] = ["primaryUrl", "personId", "password"];
+
+interface FieldText {
+  label: StringKey;
+  error: StringKey;
+  summary: StringKey;
+  helpLabel: StringKey;
+  help: StringKey;
+}
+
+const FIELD_TEXT: Record<ConnectField, FieldText> = {
+  primaryUrl: {
+    label: "connect.primary_url.label",
+    error: "connect.primary_url.error",
+    summary: "connect.primary_url.error",
+    helpLabel: "connect.primary_url.help_label",
+    help: "connect.primary_url.help",
+  },
+  personId: {
+    label: "connect.person_id.label",
+    error: "connect.person_id.error",
+    summary: "connect.person_id.summary",
+    helpLabel: "connect.person_id.help_label",
+    help: "connect.person_id.help",
+  },
+  password: {
+    label: "connect.password.label",
+    error: "connect.password.error",
+    summary: "connect.password.error",
+    helpLabel: "connect.password.help_label",
+    help: "connect.password.help",
+  },
+  totp: {
+    label: "connect.totp.label",
+    error: "connect.totp.error",
+    summary: "connect.totp.summary",
+    helpLabel: "connect.totp.help_label",
+    help: "connect.totp.help",
+  },
+};
 
 /**
  * The mirror path's connect step. It posts to this box's OWN `/setup-api/adopt`, which fetches the
@@ -46,6 +88,11 @@ export class SetupConnectScreen extends LitElement {
   @state() private invalid = new Set<ConnectField>();
 
   @state() private showError = false;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
 
   #onField(key: ConnectField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
@@ -81,56 +128,41 @@ export class SetupConnectScreen extends LitElement {
     dispatchSetupGoto(this, "role");
   }
 
-  #field(label: string, key: ConnectField, type = "text"): TemplateResult {
+  #field(key: ConnectField, type = "text"): TemplateResult {
+    const text = FIELD_TEXT[key];
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]"))}
       class="field"
-      label=${label}
+      label=${t(text.label)}
       name=${key}
       autocomplete=${key === "password" ? "current-password" : key === "personId" ? "username" : key === "totp" ? "one-time-code" : "off"}
       ?required=${key !== "totp"}
-      error=${this.invalid.has(key) ? `Check the ${label.toLowerCase()}.` : ""}
+      error=${this.invalid.has(key) ? t(text.error) : ""}
       data-test=${key}
       type=${type}
       ?invalid=${this.invalid.has(key)}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-      ><wt-help-tooltip slot="help" aria-label=${`Help with ${label.toLowerCase()}`}
-        >${
-          {
-            primaryUrl:
-              "Enter the full HTTPS address of the primary server this server would join.",
-            personId: "Enter an admin's person ID from the primary server.",
-            password: "Enter that admin's dashboard password on the primary server.",
-            totp: "If this admin uses an authenticator, enter its current one-time code.",
-          }[key]
-        }</wt-help-tooltip
+      ><wt-help-tooltip slot="help" aria-label=${t(text.helpLabel)}
+        >${t(text.help)}</wt-help-tooltip
       ></wt-input
     >`;
   }
 
   override render(): TemplateResult {
     return html`
-      <h1>Connect to the primary</h1>
-      <p>
-        Point this server at the restaurant's primary and sign in with an admin login for it. This
-        does not work in this version: the server signs in and restarts, then stops part-way through
-        joining, and it will not get any further however many times you restart it. It ends up
-        holding none of the restaurant's information, with no dashboard and no till, and it cannot
-        sell or file anything. This setup wizard does not open on this server again afterwards.
-      </p>
-      ${this.#field("Primary server address", "primaryUrl", "url")}
-      ${this.#field("Admin login (person ID)", "personId")}
-      ${this.#field("Admin password", "password", "password")}
-      ${this.#field("Authenticator code (if required)", "totp")}
+      <h1>${t("connect.heading")}</h1>
+      <p>${t("connect.intro")}</p>
+      ${this.#field("primaryUrl", "url")} ${this.#field("personId")}
+      ${this.#field("password", "password")} ${this.#field("totp")}
       ${
         // One alert region: two `role="alert"` nodes double-announce to a screen reader. The
         // client-validation banner wins over a stale server-routed message.
         this.showError
           ? html`<wt-form-error-summary
               data-test="error"
-              heading="There is a problem with this form"
-              .errors=${[...this.invalid].map((key) => `Check the ${{ primaryUrl: "primary server address", personId: "admin person ID", password: "admin password", totp: "authenticator code" }[key]}.`)}
+              heading=${t("connect.error_heading")}
+              .errors=${[...this.invalid].map((key) => t(FIELD_TEXT[key].summary))}
             ></wt-form-error-summary>`
           : this.errorMessage === undefined
             ? nothing
@@ -138,10 +170,10 @@ export class SetupConnectScreen extends LitElement {
       }
       <wt-form-actions>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
-          >Back</wt-button
+          >${t("connect.back")}</wt-button
         >
         <wt-button variant="primary" data-test="connect" @click=${() => this.#connect()}
-          >Connect</wt-button
+          >${t("connect.connect")}</wt-button
         >
       </wt-form-actions>
     `;

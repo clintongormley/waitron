@@ -167,3 +167,48 @@ it("shows the generated demo choices and full location details for review", asyn
   expect(text(el, "[data-test=summary-address]")).toContain("Calle Mayor 1");
   expect(text(el, "[data-test=summary-dayCutover]")).toBe("04:00");
 });
+
+describe("setup-review-screen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("shows its heading, labels, certificate state and buttons in Spanish", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    expect(text(el, "h1")).toBe("Revisar y configurar");
+    const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => dt.textContent);
+    expect(labels).toContain("Razón social");
+    expect(labels).toContain("Serie rectificativa");
+    expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
+    expect(text(el, "[data-test=provision]")).toBe("Configurar este servidor");
+    expect(text(el, "[data-test=back]")).toBe("Volver");
+  });
+
+  it("names each mode in Spanish, and shows an unknown mode as it came", async () => {
+    setLocale("es-ES");
+    const expected: Record<string, string> = {
+      demo: "demostración",
+      prepare: "preparación",
+      live: "en vivo",
+      someday: "someday",
+    };
+    for (const [mode, shown] of Object.entries(expected)) {
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+        draft: { ...fullDraft(), mode } as DeepPartial<ProvisionBody>,
+      });
+      expect(text(el, "[data-test=summary-mode]")).toBe(shown);
+    }
+  });
+
+  it("redraws in Spanish when the language is switched while it is open", async () => {
+    const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+      draft: fullDraft(),
+    });
+    expect(text(el, "h1")).toBe("Review and provision");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(text(el, "h1")).toBe("Revisar y configurar");
+    expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
+  });
+});

@@ -12,31 +12,43 @@
  * marked however the operator corrects it.
  */
 
+import { t } from "./i18n/t.js";
+
 export type ServerFieldKey =
   "legalName" | "seriesCode" | "rectificativeSeriesCode" | "operationDescription";
 
 export interface ServerField {
   /** Also the field's `name` attribute, which is how the screen finds the input to focus. */
   readonly key: ServerFieldKey;
+  /** Translated on each read, so it follows a language switch. */
   readonly message: string;
 }
-
-/** 38 is `MAX_BASE_CODE_LENGTH` (`packages/fiscal-verifactu/src/reserved-series.ts`). */
-const SERIES_CODE_MESSAGE =
-  "Use letters, numbers, and the characters / _ . and - only, up to 38 characters.";
 
 export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = {
   // Refused only for control characters, so advice to choose a different name cannot help.
   legalName: {
     key: "legalName",
-    message:
-      "This name contains characters the tax agency's records cannot carry — they are invisible, so you will not see them. Typing the name out instead of pasting it usually clears them.",
+    get message() {
+      return t("server_fields.legal_name");
+    },
   },
-  seriesCode: { key: "seriesCode", message: SERIES_CODE_MESSAGE },
-  rectificativeSeriesCode: { key: "rectificativeSeriesCode", message: SERIES_CODE_MESSAGE },
+  // The message's 38 is `MAX_BASE_CODE_LENGTH` (`packages/fiscal-verifactu/src/reserved-series.ts`).
+  seriesCode: {
+    key: "seriesCode",
+    get message() {
+      return t("server_fields.series_code");
+    },
+  },
+  rectificativeSeriesCode: {
+    key: "rectificativeSeriesCode",
+    get message() {
+      return t("server_fields.series_code");
+    },
+  },
   "location.operationDescription": {
     key: "operationDescription",
-    message:
-      "Keep this to 500 characters or fewer, and remove any hidden characters — typing it out instead of pasting it usually clears them.",
+    get message() {
+      return t("server_fields.operation_description");
+    },
   },
 };

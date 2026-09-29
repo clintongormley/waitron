@@ -4,6 +4,8 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { actionsStyles, statusStyles } from "../form-styles.js";
 import type { SetupApi } from "../api/client.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { t } from "../i18n/t.js";
 
 export const BACKUP_SETUP_URL = "/manage/backup";
 
@@ -111,6 +113,11 @@ export class SetupDoneScreen extends LitElement {
 
   #timer?: ReturnType<typeof setTimeout>;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override firstUpdated(): void {
     this.#timer = setTimeout(() => void this.#tick(), this.startDelayMs);
   }
@@ -151,16 +158,10 @@ export class SetupDoneScreen extends LitElement {
   #breakGlass(): TemplateResult | null {
     if (this.breakGlassSecret === undefined) return null;
     return html`<div class="break-glass" data-test="break-glass">
-      <h2>Save your break-glass code now</h2>
+      <h2>${t("done.break_glass.heading")}</h2>
       <p class="break-glass-warning" data-test="break-glass-warning">
-        Write this down and store it offline. It is shown once and will not be shown again.
-        ${
-          this.mirrorJoin
-            ? html`It was meant to let this server take over if the primary server could not be
-              reached. It cannot do that in this version, because this server does not finish
-              joining — so keep the code, but do not count on it.`
-            : html`You need it to promote this server if the primary is unreachable.`
-        }
+        ${t("done.break_glass.warning")}
+        ${t(this.mirrorJoin ? "done.break_glass.join_stalled" : "done.break_glass.promote")}
       </p>
       <code class="break-glass-secret" data-test="break-glass-secret"
         >${this.breakGlassSecret}</code
@@ -170,22 +171,22 @@ export class SetupDoneScreen extends LitElement {
 
   #renderTrading(): TemplateResult {
     return html`
-      <h1>${this.rebuilt ? "Rebuilt from your bucket" : "Setup complete"}</h1>
+      <h1>${t(this.rebuilt ? "done.heading_rebuilt" : "done.heading")}</h1>
       ${
         this.onboardingIntent === undefined
           ? nothing
           : html`<p class="mode-indicator" data-test="mode-indicator">
-              ${{ demo: "Demo", prepare: "Preparation", live: "Live" }[this.onboardingIntent]}
+              ${t(`done.mode.${this.onboardingIntent}`)}
             </p>`
       }
-      <p>The server is restarting into trading mode.</p>
+      <p>${t("done.restarting")}</p>
       <div class="links" data-test="links">
-        <p>Once the server is trading, reach it here:</p>
+        <p>${t("done.links_intro")}</p>
         <ul>
-          <li><a href="/">Till</a></li>
-          <li><a href="/manage">Dashboard</a></li>
-          <li><a href="/manage/email">Email inbox</a></li>
-          <li><a href=${`http://${this.hostname}:9110`}>Print agent</a></li>
+          <li><a href="/">${t("done.link.till")}</a></li>
+          <li><a href="/manage">${t("done.link.dashboard")}</a></li>
+          <li><a href="/manage/email">${t("done.link.email")}</a></li>
+          <li><a href=${`http://${this.hostname}:9110`}>${t("done.link.print_agent")}</a></li>
         </ul>
       </div>
       ${this.rebuilt ? this.#deviceSteps() : nothing} ${this.#breakGlass()}
@@ -193,66 +194,42 @@ export class SetupDoneScreen extends LitElement {
         this.onboardingIntent === "demo" || this.rebuilt
           ? nothing
           : html`<div class="backup-nudge" data-test="backup-nudge">
-              <p>
-                Your server is trading — but it has no backups yet, so there is no way back from a
-                disk failure.
-              </p>
-              <a class="nudge-link" href=${BACKUP_SETUP_URL}>Set up backups now</a>
+              <p>${t("done.backup_nudge")}</p>
+              <a class="nudge-link" href=${BACKUP_SETUP_URL}>${t("done.backup_link")}</a>
             </div>`
       }
       ${
         this.ready
           ? html`<div class="actions">
               <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
-                >Reload to open the till</wt-button
+                >${t("done.reload")}</wt-button
               >
             </div>`
-          : html`<p class="status" data-test="status">
-              Waiting for the server to come back online…
-            </p>`
+          : html`<p class="status" data-test="status">${t("done.waiting_online")}</p>`
       }
     `;
   }
 
   #deviceSteps(): TemplateResult {
     return html`<div class="links" data-test="device-steps">
-      <p>Devices depend on how each was set up:</p>
+      <p>${t("done.devices.intro")}</p>
       <ul>
-        <li>
-          Tills, handhelds and kitchen screens that were opened at https://waitron.local reconnect
-          by themselves.
-        </li>
-        <li>
-          Any that were opened at an IP address (for example by scanning a QR code) must be opened
-          again: go to /setup/trust on this server, scan its QR code, and set the device up again.
-        </li>
-        <li>
-          A print agent on this server reconnects by itself. One on another computer that was given
-          an IP address needs its Server address changed on its own page, at port 9110 on that
-          computer.
-        </li>
+        <li>${t("done.devices.local")}</li>
+        <li>${t("done.devices.ip")}</li>
+        <li>${t("done.devices.print_agent")}</li>
       </ul>
     </div>`;
   }
 
   #renderJoinStalled(): TemplateResult {
     return html`
-      <h1>This server did not join</h1>
-      <p>
-        The sign-in to the restaurant's primary worked and this server is restarting. It will not
-        come back able to do anything: it stops part-way through joining, and it will not get any
-        further however many times you restart it. It holds none of the restaurant's information, it
-        has no till and no dashboard, and it cannot sell or file anything.
-      </p>
+      <h1>${t("done.stalled.heading")}</h1>
+      <p>${t("done.stalled.body")}</p>
       ${this.#breakGlass()}
       ${
         this.ready
-          ? html`<p class="status" data-test="status">
-              The server has restarted, and this setup wizard is gone from it — reloading this page
-              will not bring anything up, and there is nothing else on the server to open. Nothing
-              on this page can fix that: tell whoever installed this server.
-            </p>`
-          : html`<p class="status" data-test="status">Waiting for the server to restart…</p>`
+          ? html`<p class="status" data-test="status">${t("done.stalled.restarted")}</p>`
+          : html`<p class="status" data-test="status">${t("done.stalled.waiting")}</p>`
       }
     `;
   }

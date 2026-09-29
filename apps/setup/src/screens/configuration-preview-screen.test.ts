@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { ConfigurationPreview } from "../api/client.js";
 import { SetupConfigurationPreviewScreen } from "./configuration-preview-screen.js";
@@ -83,5 +84,37 @@ describe("SetupConfigurationPreviewScreen", () => {
     expect(goto.mock.calls.map(([event]) => (event as CustomEvent).detail.screen)).toEqual([
       "live-source",
     ]);
+  });
+});
+
+describe("SetupConfigurationPreviewScreen in Spanish", () => {
+  afterEach(() => setLocale("en-GB"));
+
+  it("describes the copy in Spanish and leaves the server's names as they came", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview: { ...preview, reconnect: [] } },
+    );
+    expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe(
+      "Revisar la configuración preparada",
+    );
+    expect(el.shadowRoot!.textContent).toContain("No hay ningún hardware que reconectar.");
+    expect(el.shadowRoot!.querySelector("[data-test=continue]")?.textContent).toBe("Continuar");
+    expect([...el.shadowRoot!.querySelectorAll("dt")].map((node) => node.textContent)).toContain(
+      "products",
+    );
+  });
+
+  it("switches language live", async () => {
+    const { el } = await mountWidget<SetupConfigurationPreviewScreen>(
+      "setup-configuration-preview-screen",
+      { preview },
+    );
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("h1")?.textContent).toBe(
+      "Revisar la configuración preparada",
+    );
   });
 });

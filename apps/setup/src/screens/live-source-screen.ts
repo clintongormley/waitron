@@ -7,6 +7,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { passwordIcon } from "../password-icon.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
   dispatchConfigurationRequested,
@@ -40,6 +42,11 @@ export class SetupLiveSourceScreen extends LitElement {
   @state() private passphraseVisible = false;
   @state() private invalid = new Set<"artifact" | "passphrase">();
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   #empty(): void {
     dispatchSetupPatch(this, { configurationImport: false });
     dispatchSetupGoto(this, "admin");
@@ -66,13 +73,12 @@ export class SetupLiveSourceScreen extends LitElement {
   override render(): TemplateResult {
     return html`<div class="choices">
       <wt-card raised>
-        <h1>Bring your prepared restaurant live</h1>
-        <p>Copy menus, layouts, staff profiles and settings from a preparation export.</p>
+        <h1>${t("live_source.heading")}</h1>
+        <p>${t("live_source.intro")}</p>
         <label class="field">
-          Configuration export <span aria-hidden="true">*</span>
-          <wt-help-tooltip aria-label="Help with configuration export"
-            >Choose the encrypted configuration exported from your prepared restaurant. This copies
-            its settings into a new Live setup.</wt-help-tooltip
+          ${t("live_source.export")} <span aria-hidden="true">*</span>
+          <wt-help-tooltip aria-label=${t("live_source.export_help_label")}
+            >${t("live_source.export_help")}</wt-help-tooltip
           >
           <input
             name="configuration-export"
@@ -89,18 +95,18 @@ export class SetupLiveSourceScreen extends LitElement {
         ${
           this.invalid.has("artifact")
             ? html`<p id="configuration-export-error" class="error" data-test="field-error">
-                Choose a configuration export.
+                ${t("live_source.export_missing")}
               </p>`
             : nothing
         }
         <wt-input
           class="field"
           name="export-passphrase"
-          label="Export passphrase"
+          label=${t("live_source.passphrase")}
           type=${this.passphraseVisible ? "text" : "password"}
           autocomplete="off"
           required
-          error=${this.invalid.has("passphrase") ? "Enter a passphrase of at least 12 characters." : ""}
+          error=${this.invalid.has("passphrase") ? t("live_source.passphrase_short") : ""}
           ?invalid=${this.invalid.has("passphrase")}
           .value=${this.passphrase}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -109,14 +115,14 @@ export class SetupLiveSourceScreen extends LitElement {
             this.invalid = new Set([...this.invalid].filter((field) => field !== "passphrase"));
           }}
         >
-          <wt-help-tooltip slot="help" aria-label="Help with export passphrase"
-            >Enter the passphrase used to encrypt the configuration export.</wt-help-tooltip
+          <wt-help-tooltip slot="help" aria-label=${t("live_source.passphrase_help_label")}
+            >${t("live_source.passphrase_help")}</wt-help-tooltip
           >
           <wt-button
             slot="end"
             variant="ghost"
             data-test="toggle-passphrase"
-            aria-label=${this.passphraseVisible ? "Hide export passphrase" : "Show export passphrase"}
+            aria-label=${t(this.passphraseVisible ? "live_source.hide_passphrase" : "live_source.show_passphrase")}
             @click=${() => (this.passphraseVisible = !this.passphraseVisible)}
             >${passwordIcon(this.passphraseVisible)}</wt-button
           >
@@ -124,15 +130,15 @@ export class SetupLiveSourceScreen extends LitElement {
         ${
           this.invalid.has("passphrase")
             ? html`<p class="error" data-test="field-error">
-                Enter a passphrase of at least 12 characters.
+                ${t("live_source.passphrase_short")}
               </p>`
             : nothing
         }
         ${
           this.showError
             ? html`<wt-form-error-summary
-                heading="There is a problem with this form"
-                .errors=${[...this.invalid].map((field) => (field === "artifact" ? "Choose a configuration export." : "Enter a passphrase of at least 12 characters."))}
+                heading=${t("live_source.error_heading")}
+                .errors=${[...this.invalid].map((field) => t(field === "artifact" ? "live_source.export_missing" : "live_source.passphrase_short"))}
               ></wt-form-error-summary>`
             : this.errorMessage
               ? html`<p class="error" role="alert">${this.errorMessage}</p>`
@@ -143,18 +149,20 @@ export class SetupLiveSourceScreen extends LitElement {
           data-test="import"
           ?disabled=${this.importing}
           @click=${() => this.#import()}
-          >Review prepared configuration</wt-button
+          >${t("live_source.import")}</wt-button
         >
       </wt-card>
       <wt-card raised>
-        <h2>Start empty</h2>
-        <p>Create a fresh live restaurant and enter its configuration yourself.</p>
+        <h2>${t("live_source.start_empty")}</h2>
+        <p>${t("live_source.empty_intro")}</p>
         <wt-button variant="secondary" data-test="empty" @click=${() => this.#empty()}
-          >Start empty</wt-button
+          >${t("live_source.start_empty")}</wt-button
         >
       </wt-card>
       <div class="actions">
-        <wt-button variant="ghost" @click=${() => dispatchSetupGoto(this, "mode")}>Back</wt-button>
+        <wt-button variant="ghost" @click=${() => dispatchSetupGoto(this, "mode")}
+          >${t("live_source.back")}</wt-button
+        >
       </div>
     </div>`;
   }

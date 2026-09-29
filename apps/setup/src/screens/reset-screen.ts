@@ -8,23 +8,23 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
 import { actionsStyles, errorStyles, fieldStyles, statusStyles } from "../form-styles.js";
 import { dispatchResetRequested, dispatchSetupGoto } from "../events.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
+import { t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 
 type ResetField = "personId" | "password";
 
 const FIELDS: readonly ResetField[] = ["personId", "password"];
 
-const MISSING: Record<ResetField, string> = {
-  personId: "Enter the admin person ID.",
-  password: "Enter the admin password.",
+const MISSING: Record<ResetField, StringKey> = {
+  personId: "reset.missing.person_id",
+  password: "reset.missing.password",
 };
 
-const CHECK: Record<ResetField, string> = {
-  personId: "Check the admin person ID.",
-  password: "Check the admin password.",
+const CHECK: Record<ResetField, StringKey> = {
+  personId: "reset.check.person_id",
+  password: "reset.check.password",
 };
-
-const REJECTED =
-  "That person ID and password are not the admin login used to connect this server. Check them and try again.";
 
 export interface ResetScreenOutcome {
   kind: "resetting" | "refused";
@@ -69,6 +69,11 @@ export class SetupResetScreen extends LitElement {
 
   @state() private passwordVisible = false;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   #onField(key: ResetField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
@@ -86,8 +91,8 @@ export class SetupResetScreen extends LitElement {
   }
 
   #fieldError(key: ResetField): string {
-    if (this.missing.has(key)) return MISSING[key];
-    return this.missing.size === 0 && this.credentialsRejected ? CHECK[key] : "";
+    if (this.missing.has(key)) return t(MISSING[key]);
+    return this.missing.size === 0 && this.credentialsRejected ? t(CHECK[key]) : "";
   }
 
   #field(label: string, key: ResetField): TemplateResult {
@@ -111,7 +116,7 @@ export class SetupResetScreen extends LitElement {
               slot="end"
               variant="ghost"
               data-test="toggle-password"
-              aria-label=${this.passwordVisible ? "Hide password" : "Show password"}
+              aria-label=${t(this.passwordVisible ? "reset.hide_password" : "reset.show_password")}
               @click=${() => (this.passwordVisible = !this.passwordVisible)}
               >${passwordIcon(this.passwordVisible)}</wt-button
             >`
@@ -125,14 +130,14 @@ export class SetupResetScreen extends LitElement {
     // client-validation summary wins over a stale answer from the server.
     const errors =
       this.missing.size > 0
-        ? [...this.missing].map((key) => MISSING[key])
+        ? [...this.missing].map((key) => t(MISSING[key]))
         : this.credentialsRejected
-          ? [REJECTED]
+          ? [t("reset.rejected")]
           : [];
     if (errors.length > 0)
       return html`<wt-form-error-summary
         data-test="error"
-        heading="There is a problem with this form"
+        heading=${t("reset.error_heading")}
         .errors=${errors}
       ></wt-form-error-summary>`;
     return this.errorMessage === undefined
@@ -144,7 +149,7 @@ export class SetupResetScreen extends LitElement {
     if (this.outcome !== undefined) {
       const resetting = this.outcome.kind === "resetting";
       return html`
-        <h1>${resetting ? "Resetting this server" : "Reset this server"}</h1>
+        <h1>${t(resetting ? "reset.heading_resetting" : "reset.heading")}</h1>
         <p
           class=${resetting ? "status" : "error"}
           role=${resetting ? "status" : "alert"}
@@ -154,39 +159,31 @@ export class SetupResetScreen extends LitElement {
         </p>
         <div class="actions">
           <wt-button variant="primary" data-test="reload" @click=${() => this.reload()}
-            >Reload</wt-button
+            >${t("reset.reload")}</wt-button
           >
         </div>
       `;
     }
     return html`
-      <h1>Reset this server</h1>
-      <p>
-        This removes what the half-finished join left on this server and restarts it at a fresh
-        setup. Nothing on the primary server is changed, so the primary may still list this server.
-        To take it off that list, open the primary's dashboard, then Settings, then Servers, open
-        this server's row menu and choose Remove, then open the row menu again and choose Clear from
-        list. If its row already says Removed, only Clear from list is needed. Do this before you
-        join this server again: otherwise the new join adds a second row that is hard to tell apart
-        from this one, or is refused if the list is full.
-      </p>
-      <p>Enter the admin person ID and password you used to connect this server.</p>
-      ${this.#field("Admin login (person ID)", "personId")}
-      ${this.#field("Admin password", "password")} ${this.#alert()}
+      <h1>${t("reset.heading")}</h1>
+      <p>${t("reset.explanation")}</p>
+      <p>${t("reset.prompt")}</p>
+      ${this.#field(t("reset.person_id_label"), "personId")}
+      ${this.#field(t("reset.password_label"), "password")} ${this.#alert()}
       <wt-form-actions>
         <wt-button
           variant="ghost"
           slot="cancel"
           data-test="back"
           @click=${() => dispatchSetupGoto(this, "provisioning")}
-          >Back</wt-button
+          >${t("reset.back")}</wt-button
         >
         <wt-button
           variant="primary"
           data-test="reset"
           ?disabled=${this.busy}
           @click=${() => this.#reset()}
-          >${this.busy ? "Resetting…" : "Reset this server"}</wt-button
+          >${t(this.busy ? "reset.busy" : "reset.submit")}</wt-button
         >
       </wt-form-actions>
     `;

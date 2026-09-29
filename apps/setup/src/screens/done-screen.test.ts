@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./done-screen.js";
 import { BACKUP_SETUP_URL, type SetupDoneScreen } from "./done-screen.js";
 import type { SetupApi } from "../api/client.js";
@@ -23,7 +24,10 @@ async function mountDone(
   return el;
 }
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  setLocale("en-GB");
+  cleanupWidgets();
+});
 
 describe("setup-done-screen", () => {
   it("announces the restart into trading on the provision/restore path", async () => {
@@ -237,5 +241,87 @@ describe("setup-done-screen", () => {
     const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
     expect(warning).toContain("will not be shown again");
     expect(warning).toContain("cannot do that in this version");
+  });
+
+  it("shows the finished setup in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "prepare" });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
+    expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("Preparación");
+    const text = el.shadowRoot!.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain("El servidor se está reiniciando en modo de venta.");
+    const links = [...q(el, "[data-test=links]")!.querySelectorAll("a")].map((a) =>
+      a.textContent!.trim(),
+    );
+    expect(links).toEqual(["Caja", "Panel", "Bandeja de correo", "Agente de impresión"]);
+    expect(q(el, "[data-test=backup-nudge] a")!.textContent!.trim()).toBe(
+      "Configura ahora las copias de seguridad",
+    );
+    expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
+      "Esperando a que el servidor vuelva a estar en línea…",
+    );
+  });
+
+  it("offers the reload in Spanish once the server is trading", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => Promise.reject(new Error("404")));
+    await vi.waitFor(() => expect(q(el, "[data-test=reload]")).not.toBeNull());
+    expect(q(el, "[data-test=reload]")!.textContent!.trim()).toBe("Recargar para abrir la caja");
+  });
+
+  it("names the devices to reconnect after a rebuild in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => new Promise(() => {}), { rebuilt: true });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Reconstruido desde tu bucket");
+    const steps = q(el, "[data-test=device-steps]")!.textContent!.replace(/\s+/g, " ");
+    expect(steps).toContain("Los dispositivos dependen de cómo se configuró cada uno:");
+    expect(steps).toContain("https://waitron.local");
+    expect(steps).toContain("/setup/trust");
+    expect(steps).toContain("puerto 9110");
+  });
+
+  it("shows the stalled join and its break-glass code in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => new Promise(() => {}), {
+      mirrorJoin: true,
+      breakGlassSecret: "bg-9f3a",
+    });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Este servidor no se ha unido");
+    expect(q(el, "[data-test=break-glass] h2")!.textContent!.trim()).toBe(
+      "Guarda ahora tu código de emergencia",
+    );
+    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
+    expect(warning).toContain("Se muestra una sola vez y no se volverá a mostrar.");
+    expect(warning).toContain("En esta versión no puede hacerlo");
+    expect(q(el, "[data-test=break-glass-secret]")!.textContent).toBe("bg-9f3a");
+    expect(q(el, "[data-test=status]")!.textContent!.trim()).toBe(
+      "Esperando a que el servidor se reinicie…",
+    );
+  });
+
+  it("tells a trading server's operator in Spanish what the break-glass code is for", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => new Promise(() => {}), { breakGlassSecret: "bg-9f3a" });
+    const warning = q(el, "[data-test=break-glass-warning]")!.textContent!.replace(/\s+/g, " ");
+    expect(warning).toContain(
+      "Lo necesitas para que este servidor pase a ser el principal si no se puede contactar con el principal actual.",
+    );
+  });
+
+  it("reports the stalled server's restart in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mountDone(() => Promise.reject(new Error("404")), { mirrorJoin: true });
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=status]")!.textContent).toContain("El servidor se ha reiniciado"),
+    );
+  });
+
+  it("redraws in Spanish on a live language switch", async () => {
+    const el = await mountDone(() => new Promise(() => {}), { onboardingIntent: "live" });
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Setup complete");
+    setLocale("es-ES");
+    await el.updateComplete;
+    expect(q(el, "h1")!.textContent!.trim()).toBe("Configuración completada");
+    expect(q(el, "[data-test=mode-indicator]")!.textContent!.trim()).toBe("En vivo");
   });
 });

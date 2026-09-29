@@ -4,6 +4,8 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { actionsStyles, errorStyles } from "../form-styles.js";
 import { dispatchFiscalTestRequested, dispatchSetupGoto } from "../events.js";
+import { t } from "../i18n/t.js";
+import { LocaleChangeController } from "../i18n/locale-controller.js";
 
 @customElement("setup-fiscal-test-screen")
 export class SetupFiscalTestScreen extends LitElement {
@@ -26,46 +28,44 @@ export class SetupFiscalTestScreen extends LitElement {
   @property({ type: Boolean }) running = false;
   @property() errorMessage?: string;
 
+  constructor() {
+    super();
+    new LocaleChangeController(this);
+  }
+
   override render(): TemplateResult {
     return html`
-      <h1>Check fiscal readiness</h1>
-      <p>
-        Waitron will file one small sample with the AEAT test service using this restaurant's tax
-        identity and certificate. It does not file to AEAT's production service.
-      </p>
+      <h1>${t("fiscal_test.heading")}</h1>
+      <p>${t("fiscal_test.intro")}</p>
       ${
         this.status === "accepted"
-          ? html`<p class="success" role="status">AEAT accepted the test submission.</p>`
+          ? html`<p class="success" role="status">${t("fiscal_test.accepted")}</p>`
           : this.status === "rejected"
-            ? html`<p class="error" role="alert">
-                AEAT rejected the test submission. Correct the certificate or restaurant details,
-                then try again.
-              </p>`
+            ? html`<p class="error" role="alert">${t("fiscal_test.rejected")}</p>`
             : this.status === "uncertain"
-              ? html`<p class="error" role="alert">
-                  The result is uncertain. Wait a moment and retry; Waitron will keep the same test
-                  record.
-                </p>`
+              ? html`<p class="error" role="alert">${t("fiscal_test.uncertain")}</p>`
               : this.errorMessage
                 ? html`<p class="error" role="alert">${this.errorMessage}</p>`
                 : nothing
       }
       <div class="actions">
-        <wt-button variant="ghost" @click=${() => dispatchSetupGoto(this, "cert")}>Back</wt-button>
+        <wt-button variant="ghost" @click=${() => dispatchSetupGoto(this, "cert")}
+          >${t("fiscal_test.back")}</wt-button
+        >
         ${
           this.status === "accepted"
             ? html`<wt-button
                 variant="primary"
                 data-test="continue"
                 @click=${() => dispatchSetupGoto(this, "review")}
-                >Continue</wt-button
+                >${t("fiscal_test.continue")}</wt-button
               >`
             : html`<wt-button
                 variant="primary"
                 data-test="run"
                 ?disabled=${this.running}
                 @click=${() => dispatchFiscalTestRequested(this)}
-                >${this.running ? "Running test…" : "Run fiscal test"}</wt-button
+                >${t(this.running ? "fiscal_test.running" : "fiscal_test.run")}</wt-button
               >`
         }
       </div>
