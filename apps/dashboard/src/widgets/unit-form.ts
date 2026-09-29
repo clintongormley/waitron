@@ -216,6 +216,7 @@ export class UnitForm extends LitElement {
     const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
       " ",
     );
+    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`
       <wt-modal
         heading=${this.value ? t("units.edit") : t("units.create")}
@@ -290,7 +291,7 @@ export class UnitForm extends LitElement {
           <wt-button
             data-test="submit"
             variant="primary"
-            ?disabled=${this.busy || fieldKeys.size > 0}
+            ?disabled=${this.busy || invalid}
             @click=${this.#submit}
             >${t("action.save")}</wt-button
           >

@@ -85,15 +85,22 @@ describe("content language editor", () => {
       el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=default-language]")!.value,
     ).toBe("fr");
     click(el, "save-languages");
-    await vi.waitFor(async () =>
-      expect(await bottomOf(el)).toBe(codeMessage("content.default_missing")),
-    );
+    const defaultSelect = el.shadowRoot!.querySelector<HTMLSelectElement>(
+      "select[name=default-language]",
+    )!;
+    await vi.waitFor(() => expect(defaultSelect.getAttribute("aria-invalid")).toBe("true"));
+    expect(
+      el.shadowRoot!.getElementById(defaultSelect.getAttribute("aria-describedby")!)!.textContent,
+    ).toBe(codeMessage("content.default_missing"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     expect(disabled(el, "save-languages")).toBe(false);
     expect(el.open).toBe(true);
-    expect(
-      el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=default-language]")!.value,
-    ).toBe("fr");
+    expect(defaultSelect.value).toBe("fr");
+
+    await select(el, "default-language", "en");
+    expect(defaultSelect.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottomOf(el)).toBeNull();
   });
 
   it("explains an Add with no language chosen under the field, and clears the problem once one is chosen", async () => {

@@ -10,12 +10,10 @@ import type { PersonEditDetails, PersonRole, PersonSummary } from "../api/client
 import { codeMessage } from "../i18n/codes.js";
 import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
+import { refusedField } from "./person-form.js";
 
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
 const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "email", "telephone"];
-
-/** The one refusal shown beside a field; every other code goes in the bottom message. */
-const DISPLAY_NAME_TAKEN = "person.display_name_taken";
 
 @customElement("dashboard-person-edit")
 export class PersonEdit extends LitElement {
@@ -65,6 +63,8 @@ export class PersonEdit extends LitElement {
   @property({ attribute: false }) currentPersonId: string | null = null;
   @property({ type: Boolean, reflect: true }) open = false;
   @property() error: string | null = null;
+  /** The refused request's `params.field`, when it named one. */
+  @property({ attribute: false }) errorField: string | null = null;
 
   @state() private details: PersonEditDetails = {
     displayName: "",
@@ -92,7 +92,7 @@ export class PersonEdit extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
-    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN)
+    if (changed.has("error") && refusedField(this.error, this.errorField) !== undefined)
       void focusFirstInvalid(this.shadowRoot!);
   }
 
@@ -102,10 +102,9 @@ export class PersonEdit extends LitElement {
 
   #refused(): Record<string, string> {
     if (!this.error) return {};
-    const refused =
-      this.error === DISPLAY_NAME_TAKEN
-        ? { displayName: codeMessage(DISPLAY_NAME_TAKEN) }
-        : { _form: codeMessage(this.error) };
+    const refused = {
+      [refusedField(this.error, this.errorField) ?? "_form"]: codeMessage(this.error),
+    };
     return Object.fromEntries(Object.entries(refused).filter(([key]) => !this.dismissed.has(key)));
   }
 
@@ -344,7 +343,7 @@ export class PersonEdit extends LitElement {
           <wt-button
             data-test="save"
             variant="primary"
-            ?disabled=${fieldKeys.size > 0}
+            ?disabled=${this.attempted && Object.keys(this.#validate()).length > 0}
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
           >

@@ -144,8 +144,8 @@ it("explains a blank name beside the field and beside a disabled Save, and sends
   expect(api.createLabel).not.toHaveBeenCalled();
 });
 
-it.each(["label.name_taken", "label.invalid"])(
-  "puts a %s refusal beside the name and keeps what was typed",
+it.each(["label.name_taken", "label.invalid", "management.request_invalid"])(
+  "puts a %s refusal beside the name, keeps what was typed and leaves Save working",
   async (code) => {
     const { el, api } = await mount();
     api.createLabel.mockRejectedValueOnce({ code, params: { field: "name", name: "Alcoholic" } });
@@ -156,8 +156,31 @@ it.each(["label.name_taken", "label.invalid"])(
     await vi.waitFor(() => expect(nameInput(el).error).toBe(codeMessage(code)));
     expect(nameInput(el).value).toBe("Alcoholic");
     expect(modal(el, "label-form").open).toBe(true);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(
+      modal(el, "label-form").querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="save-label"]',
+      )!.disabled,
+    ).toBe(false);
   },
 );
+
+it("drops a refusal beside the name when the form is submitted again", async () => {
+  const { el, api } = await mount();
+  const creating = deferred<{ id: string; name: string }>();
+  api.createLabel
+    .mockRejectedValueOnce({ code: "label.name_taken" })
+    .mockReturnValueOnce(creating.promise);
+  await openAdd(el);
+  await type(el, "Alcoholic");
+  save(el);
+  await vi.waitFor(() => expect(nameInput(el).error).toBe(codeMessage("label.name_taken")));
+  save(el);
+  await el.updateComplete;
+  expect(nameInput(el).error).toBe("");
+  expect(api.createLabel).toHaveBeenCalledTimes(2);
+  creating.resolve({ id: "l-new", name: "Alcoholic" });
+});
 
 it("says why a rename of a label that no longer exists was refused, beside a Save that still works", async () => {
   const { el, api } = await mount();
@@ -392,7 +415,7 @@ it("focuses the name when a refusal naming it arrives, and clears it when the na
     nameInput(el).shadowRoot!.querySelector("input"),
   );
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
 
   await type(el, "Alcoholic drinks");
   expect(nameInput(el).error).toBe("");

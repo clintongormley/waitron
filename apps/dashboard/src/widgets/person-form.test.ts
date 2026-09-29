@@ -32,6 +32,12 @@ async function bottomOf(el: PersonForm): Promise<string> {
 const confirmOf = (el: PersonForm): HTMLElement =>
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!;
 
+async function confirmDisabled(el: PersonForm): Promise<boolean> {
+  const button = confirmOf(el) as HTMLElement & { updateComplete: Promise<unknown> };
+  await button.updateComplete;
+  return button.shadowRoot!.querySelector("button")!.disabled;
+}
+
 const fieldError = (el: PersonForm, testId: string): string | null =>
   el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
 
@@ -228,10 +234,10 @@ describe("person-form", () => {
   it("keeps entered values on a server error and clears them after Cancel", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
       open: true,
-      error: "person.email_taken",
+      error: "connection.failed",
     });
     await fillRequired(el);
-    expect(await bottomOf(el)).toContain("correo");
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=email]")!.value,
     ).toBe("ada@example.com");
@@ -254,7 +260,7 @@ describe("person-form", () => {
 });
 
 describe("person-form server refusals", () => {
-  it("puts a taken display name beside its field, disabling Create, until it is edited", async () => {
+  it("puts a taken display name beside its field, leaving Create working, until it is edited", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
@@ -262,7 +268,7 @@ describe("person-form server refusals", () => {
     const message = codeMessage("person.display_name_taken");
     expect(fieldError(el, "display-name")).toBe(message);
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect(await confirmDisabled(el)).toBe(false);
 
     change(el, "display-name", "Ada L");
     await el.updateComplete;
@@ -274,11 +280,71 @@ describe("person-form server refusals", () => {
   it("keeps any other server refusal in the bottom message alone, leaving Create working", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
-    el.error = "person.email_taken";
+    el.error = "connection.failed";
     await el.updateComplete;
     expect(fieldError(el, "display-name")).toBe("");
-    expect(await bottomOf(el)).toBe(codeMessage("person.email_taken"));
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it.each([
+    ["person.email_taken", "email"],
+    ["person.email_invalid", "email"],
+    ["person.telephone_invalid", "telephone"],
+  ])(
+    "puts %s under the %s field, leaving Create working, until it is edited",
+    async (code, testId) => {
+      const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+      await fillRequired(el);
+      change(el, "telephone", "12");
+      await el.updateComplete;
+      el.error = code;
+      await el.updateComplete;
+      expect(fieldError(el, testId)).toBe(codeMessage(code));
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(await confirmDisabled(el)).toBe(false);
+
+      change(el, testId, testId === "email" ? "ada.l@example.com" : "");
+      await el.updateComplete;
+      expect(fieldError(el, testId)).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(await confirmDisabled(el)).toBe(false);
+    },
+  );
+
+  it("puts a refusal whose params name a shown field under that field, leaving Create working", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.errorField = "lastNames";
+    el.error = "profile.invalid";
+    await el.updateComplete;
+    expect(fieldError(el, "last-names")).toBe(codeMessage("profile.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await confirmDisabled(el)).toBe(false);
+  });
+
+  it("keeps a refusal whose params name no single shown field in the bottom message", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.errorField = "displayName|firstNames|lastNames|role|telephone";
+    el.error = "management.request_invalid";
+    await el.updateComplete;
+    for (const testId of ["first-names", "last-names", "display-name", "email", "telephone"]) {
+      expect(fieldError(el, testId)).toBe("");
+    }
+    expect(await bottomOf(el)).toBe(codeMessage("management.request_invalid"));
+    expect(await confirmDisabled(el)).toBe(false);
+  });
+
+  it("focuses the email field when a refusal naming it arrives", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.email_taken";
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const field = el.shadowRoot!.querySelector("[data-test=email]")!;
+    expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
   });
 
   it("keeps a taken display name beside its field when another field fails its check", async () => {
@@ -413,9 +479,9 @@ describe("person-form validation and keyboard submit", () => {
   it("drops a refusal that names no field when the form is submitted again", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
       open: true,
-      error: "person.email_taken",
+      error: "connection.failed",
     });
-    expect(await bottomOf(el)).toBe(codeMessage("person.email_taken"));
+    expect(await bottomOf(el)).toBe(codeMessage("connection.failed"));
 
     confirmOf(el).click();
     await el.updateComplete;

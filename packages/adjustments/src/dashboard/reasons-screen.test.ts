@@ -684,6 +684,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(besideField(el, fieldName)).toBe(message);
     expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(button(el, "save-editor").disabled).toBe(false);
   });
 
   it("shows a name already in use beside the name", async () => {
@@ -701,6 +702,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Another active reason already has this name");
     expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(button(el, "save-editor").disabled).toBe(false);
     expect(modal(el)).not.toBeNull();
   });
 
@@ -876,7 +878,7 @@ describe("the editor's messages", () => {
     expect(api.createReason).toHaveBeenCalledTimes(1);
   });
 
-  it("holds Save after the server refuses a field, until that field changes", async () => {
+  it("keeps Save working after the server refuses a field, and keeps the refusal until that field changes", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi.fn().mockRejectedValue({
@@ -887,10 +889,13 @@ describe("the editor's messages", () => {
     );
     await press(el, "edit-c");
     await press(el, "save-editor");
-    expect(button(el, "save-editor").disabled).toBe(true);
+    expect(button(el, "save-editor").disabled).toBe(false);
     expect(el.shadowRoot!.activeElement).toBe(field(el, "maxPercent"));
     await type(el, "name", "Complaints");
-    expect(button(el, "save-editor").disabled).toBe(true);
+    expect(besideField(el, "maxPercent")).toBe(
+      "Enter a percentage above 0 and up to 100, with at most two decimals.",
+    );
+    expect(button(el, "save-editor").disabled).toBe(false);
     await type(el, "maxPercent", "20");
     expect(besideField(el, "maxPercent")).toBe("");
     expect(bottom(el)).toBe("");

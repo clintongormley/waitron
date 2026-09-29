@@ -75,7 +75,7 @@ function kindLabel(name: string, kind: ProductModifierRef["kind"]): string {
 /** Which field names each collapsed section holds, as PREFIXES. A section holding a validation
  * error cannot stay collapsed, and this is what its `has-error` is computed from. */
 const SECTION_FIELDS = {
-  kitchen: ["kitchen-name"],
+  kitchen: ["kitchen-name", "product-station", "product-course"],
   descriptors: ["customer-name-", "description-", "image"],
 } as const;
 type SectionName = keyof typeof SECTION_FIELDS;
@@ -99,6 +99,8 @@ const SERVER_FIELDS: Record<string, string> = {
   primaryCategoryId: "primary",
   labelIds: "labels",
   active: "active",
+  stationId: "product-station",
+  courseId: "product-course",
 };
 
 /**
@@ -159,6 +161,8 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   primaryCategoryId: "primary",
   labelIds: "labels",
   modifiers: "modifier",
+  stationId: "product-station",
+  courseId: "product-course",
 };
 
 function emptyDraft(): ProductEditorDraft {
@@ -480,6 +484,8 @@ export class ProductEditor extends LitElement {
       "tax",
       "unit",
       "unit-price",
+      "product-station",
+      "product-course",
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
@@ -503,7 +509,7 @@ export class ProductEditor extends LitElement {
     return { ...own, ...refused };
   }
   /** What the form says now: the messages under fields, the rows marked, and the one sentence
-   * beside Save — which stays working while nothing the operator can fix is left. */
+   * beside Save. */
   private assess(local: Record<string, string>) {
     const errors = this.standingErrors(local);
     const rows = this.variantRows(local);
@@ -512,9 +518,9 @@ export class ProductEditor extends LitElement {
     const formMessages = Object.entries(errors)
       .filter(([key]) => !shown.has(key))
       .map(([, message]) => message);
-    const blocked = fieldKeys.length > 0 || Object.keys(rows).length > 0;
-    const bottom = [...formMessages, ...(blocked ? [t("form.fix_fields")] : [])].join(" ");
-    return { errors, fieldKeys, rows, blocked, bottom };
+    const marked = fieldKeys.length > 0 || Object.keys(rows).length > 0;
+    const bottom = [...formMessages, ...(marked ? [t("form.fix_fields")] : [])].join(" ");
+    return { errors, fieldKeys, rows, bottom };
   }
   /**
    * The reported problems that belong to a variant ROW, against the variant OBJECT rather than its
@@ -657,9 +663,10 @@ export class ProductEditor extends LitElement {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
     const errors = this.validate();
-    if (this.assess(this.attempted ? errors : {}).blocked) return;
+    if (this.attempted && Object.keys(errors).length) return;
     this.attempted = true;
     this.dismiss(...Object.keys(this.fieldErrors));
+    this.#variantProblems = new Map();
     if (Object.keys(errors).length) {
       this.#focusField = Object.keys(errors)[0]!;
       return;
@@ -843,23 +850,26 @@ export class ProductEditor extends LitElement {
     selected: string | null,
     change: (id: string | null) => void,
   ) {
+    const error = this.error(name);
     return html`<label
-      >${label}<select
-        name=${name}
-        @change=${(event: Event) => {
-          event.stopPropagation();
-          change((event.target as HTMLSelectElement).value || null);
-        }}
-      >
-        <option value="" .selected=${selected === null}>${noneLabel}</option>
-        ${choices.map(
-          (choice) =>
-            html`<option value=${choice.id} .selected=${choice.id === selected}>
-              ${choice.name}
-            </option>`,
-        )}
-      </select></label
-    >`;
+        >${label}<select
+          name=${name}
+          aria-invalid=${error ? "true" : "false"}
+          aria-describedby=${`${name}-error`}
+          @change=${(event: Event) => {
+            event.stopPropagation();
+            change((event.target as HTMLSelectElement).value || null);
+          }}
+        >
+          <option value="" .selected=${selected === null}>${noneLabel}</option>
+          ${choices.map(
+            (choice) =>
+              html`<option value=${choice.id} .selected=${choice.id === selected}>
+                ${choice.name}
+              </option>`,
+          )}
+        </select></label
+      ><span class="error" id=${`${name}-error`}>${error}</span>`;
   }
 
   private renderDescriptors() {
@@ -1356,9 +1366,9 @@ export class ProductEditor extends LitElement {
   }
 
   override render() {
-    const { errors, fieldKeys, rows, blocked, bottom } = this.assess(
-      this.attempted ? this.validate() : {},
-    );
+    const local = this.attempted ? this.validate() : {};
+    const { errors, fieldKeys, rows, bottom } = this.assess(local);
+    const invalid = Object.keys(local).length > 0;
     this.#errorsNow = errors;
     this.#fieldKeysNow = fieldKeys;
     this.#rowsNow = rows;
@@ -1424,7 +1434,7 @@ export class ProductEditor extends LitElement {
                   variant="secondary"
                   data-test="restore"
                   .loading=${this.busy}
-                  ?disabled=${this.suspended || blocked}
+                  ?disabled=${this.suspended || invalid}
                   @click=${(event: Event) => this.save(event, true)}
                   >${t("product.restore")}</wt-button
                 >`
@@ -1432,7 +1442,7 @@ export class ProductEditor extends LitElement {
           <wt-button
             data-test="save"
             .loading=${this.busy}
-            ?disabled=${this.suspended || blocked}
+            ?disabled=${this.suspended || invalid}
             @click=${this.save}
             >${t("action.save")}</wt-button
           ></wt-form-actions

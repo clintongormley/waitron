@@ -786,10 +786,6 @@ export class PrintersScreen extends LitElement {
     return errors;
   }
 
-  #probeErrors(): Partial<Record<"host" | "port", string>> {
-    return { ...this.probeRefused, ...(this.probeAttempted ? this.#probeValidate() : {}) };
-  }
-
   async #probe(): Promise<void> {
     if (this.probeStatus === "pending") return;
     this.probeAttempted = true;
@@ -2395,8 +2391,9 @@ export class PrintersScreen extends LitElement {
               >`,
       },
     ];
-    const probeErrors = this.#probeErrors();
-    const probeInvalid = Object.keys(probeErrors).length > 0;
+    const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
+    const probeErrors = { ...this.probeRefused, ...probeChecked };
+    const probeInvalid = Object.keys(probeChecked).length > 0;
     return html`<wt-modal
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
@@ -2451,7 +2448,7 @@ export class PrintersScreen extends LitElement {
           ></wt-input>
           <wt-form-actions
             data-test="probe-actions"
-            .error=${bottomMessage(refusal(this.probeErrorKey), probeInvalid ? t("form.fix_fields") : null)}
+            .error=${bottomMessage(refusal(this.probeErrorKey), Object.keys(probeErrors).length > 0 ? t("form.fix_fields") : null)}
           >
             <wt-button
               variant="primary"

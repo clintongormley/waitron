@@ -436,7 +436,7 @@ describe("ingredient-form — a server refusal", () => {
     expect(ingredientRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
   });
 
-  it("shows a refused name under it, focuses it, and disables Create until the name changes", async () => {
+  it("shows a refused name under it, focuses it, and leaves Create working", async () => {
     const { el } = await mountWidget<IngredientForm>("dashboard-ingredient-form", baseProps());
     await setInput(el, "name", "Sal");
     el.fieldErrors = { name: "Refused name" };
@@ -445,7 +445,7 @@ describe("ingredient-form — a server refusal", () => {
 
     expect(nameErrorOf(el)).toBe("Refused name");
     expect((await bottomOf(el))?.textContent).toBe(t("form.fix_fields"));
-    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
     const name = el.shadowRoot!.querySelector("[data-test=name]")!;
     expect(name.shadowRoot!.activeElement).toBe(name.shadowRoot!.querySelector("input"));
 

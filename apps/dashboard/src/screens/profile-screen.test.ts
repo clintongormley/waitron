@@ -962,6 +962,11 @@ describe("your profile — errors beside Save, not above the form", () => {
   const focused = (el: ProfileScreen, name: string) =>
     field(el, name).shadowRoot!.activeElement ===
     field(el, name).shadowRoot!.querySelector("input");
+  const nativeSaveDisabled = async (el: ProfileScreen): Promise<boolean> => {
+    const button = save(el) as ReturnType<typeof save> & { updateComplete: Promise<unknown> };
+    await button.updateComplete;
+    return button.shadowRoot!.querySelector("button")!.disabled;
+  };
 
   it("says nothing until Save, then marks each field, focuses the first and waits for them", async () => {
     const { el, api } = await mount();
@@ -996,7 +1001,7 @@ describe("your profile — errors beside Save, not above the form", () => {
     expect(save(el).disabled).toBe(true);
   });
 
-  it("focuses the field a refusal names and waits until that field changes", async () => {
+  it("focuses the field a refusal names and leaves Save working until that field changes", async () => {
     const changePassword = vi.fn().mockRejectedValue({ code: "password.invalid" });
     const { el } = await mount({ changePassword });
     await click(el, "change-password");
@@ -1007,7 +1012,7 @@ describe("your profile — errors beside Save, not above the form", () => {
     expect(changePassword).toHaveBeenCalledTimes(1);
     expect(field(el, "currentPassword").error).toBe(codeMessage("password.invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(save(el).disabled).toBe(true);
+    expect(await nativeSaveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(focused(el, "currentPassword")).toBe(true));
 
     input(el, "currentPassword", "current");
@@ -1015,6 +1020,156 @@ describe("your profile — errors beside Save, not above the form", () => {
     expect(field(el, "currentPassword").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(save(el).disabled).toBe(false);
+  });
+
+  it.each([
+    ["person.email_taken", undefined, "email"],
+    ["person.telephone_invalid", undefined, "telephone"],
+    ["profile.invalid", "lastNames", "lastNames"],
+  ])(
+    "puts a refused %s on your details under its field, leaving Save working",
+    async (code, paramsField, name) => {
+      const saveProfile = vi
+        .fn()
+        .mockRejectedValue({ code, params: paramsField ? { field: paramsField } : {} });
+      const { el } = await mount({ saveProfile });
+      await editDetails(el);
+      input(el, "email", "new@example.com");
+      await flush(el);
+      input(el, "currentPassword", "current");
+      await click(el, "save");
+      expect(saveProfile).toHaveBeenCalledTimes(1);
+      expect(field(el, name).error).toBe(codeMessage(code));
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(await nativeSaveDisabled(el)).toBe(false);
+      await vi.waitFor(() => expect(focused(el, name)).toBe(true));
+    },
+  );
+
+  it("keeps a refusal whose params name a field the form does not show in the bottom message", async () => {
+    const saveProfile = vi
+      .fn()
+      .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } });
+    const { el } = await mount({ saveProfile });
+    await editDetails(el);
+    input(el, "displayName", "Alex R");
+    await click(el, "save");
+    expect(await bottomOf(el)).toBe(codeMessage("profile.invalid"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
+  });
+
+  it("puts a refused passkey name under its field, leaving Save working", async () => {
+    const { el } = await mount({
+      passkeyRegisterVerify: vi
+        .fn()
+        .mockRejectedValue({ code: "profile.invalid", params: { field: "passkeyName" } }),
+    });
+    await click(el, "add-passkey");
+    input(el, "passkeyName", "Work laptop");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(field(el, "passkeyName").error).toBe(codeMessage("profile.invalid"));
+    expect(field(el, "currentPassword").error).toBe("");
+    expect(await nativeSaveDisabled(el)).toBe(false);
+  });
+
+  it("puts a refused authenticator code under the new authenticator's code field, leaving Save working", async () => {
+    const { el } = await mount({
+      finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
+    });
+    await click(el, "setup-authenticator");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    input(el, "setupCode", "000000");
+    await click(el, "save");
+    expect(field(el, "setupCode").error).toBe(codeMessage("totp.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
+
+    input(el, "setupCode", "123456");
+    await flush(el);
+    expect(field(el, "setupCode").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("keeps Save waiting on a field emptied while a request was out, even when the refusal names it", async () => {
+    let reject!: (error: unknown) => void;
+    const changePassword = vi.fn(
+      () =>
+        new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    const { el } = await mount({ changePassword });
+    await click(el, "change-password");
+    input(el, "currentPassword", "wrong");
+    input(el, "password", "replacement password");
+    input(el, "confirmPassword", "replacement password");
+    await click(el, "save");
+    input(el, "currentPassword", "");
+    await flush(el);
+    reject({ code: "password.invalid" });
+    await flush(el);
+    expect(field(el, "currentPassword").error).toBe(codeMessage("password.invalid"));
+    expect(await nativeSaveDisabled(el)).toBe(true);
+
+    input(el, "currentPassword", "current");
+    await flush(el);
+    expect(field(el, "currentPassword").error).toBe("");
+    expect(await nativeSaveDisabled(el)).toBe(false);
+  });
+
+  it("puts a refused emailed code under the code field until that field changes, leaving Save working", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, pendingEmail: "new@example.com" }),
+      confirmProfileEmail: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
+    });
+    await click(el, "confirm-email");
+    input(el, "setupCode", "123456");
+    await click(el, "save");
+    expect(field(el, "setupCode").error).toBe(codeMessage("account_action.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
+    await vi.waitFor(() => expect(focused(el, "setupCode")).toBe(true));
+
+    input(el, "setupCode", "654321");
+    await flush(el);
+    expect(field(el, "setupCode").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("puts a refused language under the language select until that select changes, leaving Save working", async () => {
+    const { el, host } = await mount({
+      saveProfile: vi.fn().mockRejectedValue({ code: "locale.unsupported" }),
+    });
+    await editDetails(el);
+    await click(el, "save");
+    const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
+    expect(language.getAttribute("aria-invalid")).toBe("true");
+    const described = el.shadowRoot!.getElementById(language.getAttribute("aria-describedby")!)!;
+    expect(described.textContent!.trim()).toBe(codeMessage("locale.unsupported"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(language));
+    await expectNoA11yViolations(host);
+
+    language.value = "es-ES";
+    language.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(language.getAttribute("aria-invalid")).toBe("false");
+    expect(language.hasAttribute("aria-describedby")).toBe(false);
+    expect(described.isConnected).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("still waits on a required field an incomplete profile opens with", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, firstNames: null }),
+    });
+    expect(field(el, "firstNames").error).toBe(t("form.first_names_required"));
+    expect(await nativeSaveDisabled(el)).toBe(true);
   });
 
   it("re-checks a refused field once it changes", async () => {

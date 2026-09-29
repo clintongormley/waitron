@@ -1153,9 +1153,9 @@ describe("an editor's messages", () => {
     status: 400,
   });
 
-  // Fails if a refusal naming a field the editor shows is not put under it, stops holding Save,
-  // survives a change to that field, is cleared by a change to another field, or outlives the editor.
-  it("puts a refusal that names a field under that field, and holds Save until that field changes", async () => {
+  // Fails if a refusal naming a field the editor shows is not put under it, holds Save, survives a
+  // change to that field, is cleared by a change to another field, or outlives the editor.
+  it("puts a refusal that names a field under that field until that field changes, and leaves Save usable", async () => {
     const el = await newDepartment({
       createDepartment: vi.fn().mockRejectedValue(invalidRequest("tradingName")),
     });
@@ -1166,11 +1166,11 @@ describe("an editor's messages", () => {
     expect(invalid(el, "trading-name")).toBe("true");
     expect(fieldError(el, "department-name")).toBeUndefined();
     expect(bottom(el)).toBe(FIX);
-    expect(saveDisabled(el)).toBe(true);
+    expect(saveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field(el, "trading-name")));
     await type(el, "department-name", "Brunch bar");
     expect(fieldError(el, "trading-name")).toBe(REFUSED);
-    expect(saveDisabled(el)).toBe(true);
+    expect(saveDisabled(el)).toBe(false);
     await type(el, "trading-name", "Casa Brunch Bar");
     expect(fieldError(el, "trading-name")).toBeUndefined();
     expect(invalid(el, "trading-name")).toBe("false");
@@ -1280,7 +1280,65 @@ describe("an editor's messages", () => {
     await action(el, "save-editor");
     expect(fieldError(el, control)).toBe(REFUSED);
     expect(bottom(el)).toBe(FIX);
-    expect(saveDisabled(el)).toBe(true);
+    expect(saveDisabled(el)).toBe(false);
+  });
+
+  // Fails if a refusal whose code names one control of the editor is not put under that control, or
+  // holds Save.
+  it.each([
+    {
+      tab: "departments",
+      open: ["edit-hours-0"],
+      method: "replaceHours",
+      code: "department.not_found",
+      control: "hours-department",
+    },
+    {
+      tab: "zones",
+      open: ["edit-zone-z1"],
+      method: "configureZone",
+      code: "department.not_found",
+      control: "zone-department-z1",
+    },
+    {
+      tab: "zones",
+      open: ["zone-menus-z1", "edit-assignment-m1"],
+      method: "allowMenu",
+      code: "catalogue.not_found",
+      control: "assignment-menu",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      code: "route.subject_not_found",
+      control: "route-subject",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      code: "service_zone.not_found",
+      control: "route-zone",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      code: "route.station_inactive",
+      control: "route-target",
+    },
+  ])("puts a refused $code under $control", async ({ tab, open, method, code, control }) => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      [method]: vi.fn().mockRejectedValue({ code, params: {}, status: 404 }),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, tab);
+    for (const step of open) await action(el, step);
+    await action(el, "save-editor");
+    expect(fieldError(el, control)).toBe(REFUSED);
+    expect(bottom(el)).toBe(FIX);
+    expect(saveDisabled(el)).toBe(false);
   });
 
   // Fails if a refusal naming a field the editor does not show marks a field or holds Save.

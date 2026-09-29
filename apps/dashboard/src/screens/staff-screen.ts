@@ -92,7 +92,7 @@ export class StaffScreen extends LitElement {
     this,
     () => this.api,
     (error) => {
-      this.errorKey = codeOf(error);
+      this.#fail(error);
     },
   );
   @property({ attribute: false }) currentPersonId: string | null = null;
@@ -101,6 +101,8 @@ export class StaffScreen extends LitElement {
   @state() private editingPerson: PersonSummary | null = null;
   @state() private editOpen = false;
   @state() private errorKey: string | null = null;
+  /** The refusal's `params.field`, read by the add and edit forms beside `errorKey`. */
+  @state() private errorField: string | null = null;
   @state() private invitationStatus: "sent" | "not_sent" | null = null;
   @state() private search = "";
   @state() private roleFilter: PersonRole | "all" = "all";
@@ -150,7 +152,7 @@ export class StaffScreen extends LitElement {
       this.rowAction = null;
       await this.#load();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#fail(error);
     } finally {
       this.rowBusy = false;
     }
@@ -197,8 +199,14 @@ export class StaffScreen extends LitElement {
         this.people = value;
       });
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#fail(error);
     }
+  }
+
+  #fail(error: unknown): void {
+    this.errorKey = codeOf(error);
+    const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
+    this.errorField = typeof field === "string" ? field : null;
   }
 
   #openForm(): void {
@@ -240,7 +248,7 @@ export class StaffScreen extends LitElement {
         this.editingPerson = this.people.find((p) => p.personId === id) ?? this.editingPerson;
       }
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#fail(error);
     } finally {
       this.#editing = false;
     }
@@ -266,7 +274,7 @@ export class StaffScreen extends LitElement {
       this.invitationStatus = result.invitationSent ? "sent" : "not_sent";
       this.#closeEdit();
     } catch (error) {
-      this.errorKey = codeOf(error);
+      this.#fail(error);
     } finally {
       this.#editing = false;
     }
@@ -312,7 +320,7 @@ export class StaffScreen extends LitElement {
         this.editingPerson = inactive;
         this.editOpen = true;
       } else {
-        this.errorKey = code;
+        this.#fail(error);
       }
     } finally {
       this.#creating = false;
@@ -450,6 +458,7 @@ export class StaffScreen extends LitElement {
       <dashboard-person-form
         .open=${this.formOpen}
         .error=${this.formOpen ? this.errorKey : null}
+        .errorField=${this.errorField}
         @create-person=${(
           e: CustomEvent<{
             displayName: string;
@@ -467,6 +476,7 @@ export class StaffScreen extends LitElement {
         .currentPersonId=${this.currentPersonId}
         .open=${this.editOpen}
         .error=${this.editOpen ? this.errorKey : null}
+        .errorField=${this.errorField}
         @save-person=${(e: CustomEvent<PersonEditDetails>) => this.#onSavePerson(e)}
         @resend-invitation=${(e: Event) => void this.#onResendInvitation(e)}
         @wt-close=${() => this.#closeEdit()}

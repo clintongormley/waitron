@@ -578,6 +578,8 @@ call your own submit handler on the triggering `wt-button`'s `click` event.
 
 A form says nothing about errors until the operator first presses its primary action (owner rule,
 2026-09-28). There is no error summary at the top of a form: it makes the page jump when it clears.
+Only the form's own checks ever disable the action; an error that comes back from a request never
+does (owner rule, 2026-09-29).
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint;
@@ -589,16 +591,20 @@ A form says nothing about errors until the operator first presses its primary ac
   other panels), so focus cannot land on a marked control elsewhere on the page, and keep the
   entered values;
 - from then on the form re-checks itself on every change: a fixed field loses its message, a field
-  broken again gets it back, and the primary action stays disabled while any field still has one.
-  When the last one is fixed, the action works again and the bottom message goes;
-- a refusal from the server that names a field shows under that field and counts as that field's
-  error until the operator changes the field. A refusal that names no field the form shows (a
+  broken again gets it back, and the primary action stays disabled while any field still fails the
+  form's own checks. When the last one is fixed, the action works again and the bottom message goes;
+- an error that comes back from a request — the server refused, a conflict, the server could not be
+  reached — never disables the action by itself. When handling it empties or reveals a required
+  field, that field's own check holds the action until the field is filled. A refusal whose code or
+  params name a field the form shows puts its sentence under that field, and stays there until the
+  operator changes that field or submits again. A refusal that names no field the form shows (a
   network failure, a conflict, a field in a language the form does not show) goes in the bottom
-  message and does NOT disable the action — nothing in the form can fix it, so the operator must be
-  able to try again. It goes when the operator submits again;
-- the bottom message is the refusal's own sentence when there is one; otherwise the form's generic
-  sentence, equivalent to "Correct the highlighted fields to continue." Both show, one after the
-  other, when a refusal and field errors meet;
+  message instead, until the operator submits again;
+- the bottom message is the refusal's own sentence when the refusal names no field the form shows.
+  When a field is marked — by the form's own checks, or by a refusal placed under it — the bottom
+  message is the form's generic sentence, equivalent to "Correct the highlighted fields to
+  continue."; a field's own sentence is never repeated at the bottom. A refusal that names no field
+  and a marked field together show both, one after the other;
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
   focus lands on the field;
 - reopening or resetting a form starts it again: no messages, the action enabled.
@@ -629,7 +635,7 @@ html`
   ></wt-input>
   <wt-form-actions .error=${bottomMessage}>
     <wt-button slot="cancel" variant="secondary">${t("action.cancel")}</wt-button>
-    <wt-button variant="primary" ?disabled=${attempted && hasFieldErrors}>
+    <wt-button variant="primary" ?disabled=${attempted && failsOwnChecks}>
       ${t("action.continue")}
     </wt-button>
   </wt-form-actions>

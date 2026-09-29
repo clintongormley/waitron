@@ -70,8 +70,8 @@ async function bottomOf(el: OptionLabelForm): Promise<string> {
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
-const saveOf = (el: OptionLabelForm): HTMLElement =>
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+const saveOf = (el: OptionLabelForm): HTMLElementTagNameMap["wt-button"] =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
 
 /** The native input a `wt-input` field wraps, which is what focus lands on. */
 const inputOf = (el: OptionLabelForm, name: string): HTMLInputElement =>
@@ -239,7 +239,7 @@ it.each([
 
   expect(field(el, key).error).toBe("Refused.");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
   expect({ hasError: disclosure(el).hasError, open: disclosure(el).open }).toEqual({
     hasError: opened,
     open: opened,
@@ -325,13 +325,13 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
-it("clears a field's refusal when that field changes, and Save works again", async () => {
+it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
   const { el } = await mount({ value: rare, errors: { "label-kitchen-name": "Too long." } });
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "label-name", "Very rare");
   expect(field(el, "label-kitchen-name").error).toBe("Too long.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "label-kitchen-name", "VR");
   expect(field(el, "label-kitchen-name").error).toBe("");
@@ -347,7 +347,7 @@ it("clears a translated name's refusal only when that language's value changes",
 
   await type(el, "label-customer-name-es", "Muy poco hecho");
   expect(field(el, "label-customer-name-en").error).toBe("Rejected English.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "label-customer-name-en", "Very rare");
   expect(field(el, "label-customer-name-en").error).toBe("");

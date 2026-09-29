@@ -328,7 +328,7 @@ export class LoginScreen extends LitElement {
   }
 
   /** Each shown field's message, the one message beside the action, and whether the action waits
-   * for a field to be corrected. */
+   * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Record<string, string>; bottom: string; blocked: boolean } {
     const errors = this.#errors();
     const shown = this.#shownFields();
@@ -340,11 +340,12 @@ export class LoginScreen extends LitElement {
     }
     if (this.errorKey !== null && this.refusalField === null)
       messages.unshift(codeMessage(this.errorKey));
-    const blocked = Object.keys(fields).length > 0;
+    const marked = Object.keys(fields).length > 0;
+    const invalid = this.attempted ? Object.keys(this.#validate()) : [];
     return {
       fields,
-      bottom: [...new Set(messages), ...(blocked ? [t("form.fix_fields")] : [])].join(" "),
-      blocked,
+      bottom: [...new Set(messages), ...(marked ? [t("form.fix_fields")] : [])].join(" "),
+      blocked: invalid.some((key) => shown.has(key)),
     };
   }
 
@@ -369,6 +370,7 @@ export class LoginScreen extends LitElement {
   #onPinChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.pin = event.detail.value;
+    this.#dismissRefusal("new-pin");
   }
 
   #clearSecrets(): void {
@@ -579,6 +581,7 @@ export class LoginScreen extends LitElement {
     } catch (error) {
       const code = codeOf(error);
       if (code === "password.too_short") this.#refuse(code, "new-password");
+      else if (code === "pin.too_short") this.#refuse(code, "new-pin");
       else this.errorKey = code;
     } finally {
       this.busy = false;
@@ -660,11 +663,14 @@ export class LoginScreen extends LitElement {
         return;
       }
       const code = codeOf(error, "passkey.verification_failed");
+      const field = (error as { params?: { field?: unknown } } | null)?.params?.field;
       if (code === "totp.invalid") {
         this.passkeyFactorRequired = true;
         this.secondFactor = "";
         this.#refuse(code, "one-time-code");
-      } else this.errorKey = code;
+      } else if (code === "profile.invalid" && field === "passkeyName")
+        this.#refuse(code, "passkey-name");
+      else this.errorKey = code;
     } finally {
       if (attempt === this.passkeyAttempt) this.busy = false;
     }
@@ -1017,6 +1023,7 @@ export class LoginScreen extends LitElement {
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     this.passkeyName = event.detail.value;
+                    this.#dismissRefusal("passkey-name");
                   }}
                   @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
                 ></wt-input>

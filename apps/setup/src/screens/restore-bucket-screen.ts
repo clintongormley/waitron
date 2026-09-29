@@ -21,6 +21,8 @@ export interface RestoredVenue {
   locationName: string;
 }
 
+export type BucketField = "kit" | "environment";
+
 /**
  * Rebuild this server from the owner's bucket. It asks for the recovery kit and
  * the environment, which the restore's compatibility check compares with the copy's own. The shell
@@ -67,6 +69,8 @@ export class SetupRestoreBucketScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  /** The field `errorMessage` is about; the message then shows under it, not beside Restore. */
+  @property() invalidField?: BucketField;
   /** When the old server last wrote to its bucket (`restore.stream_source_live`). */
   @property() liveSince?: string;
   /** Whether the old server is still writing could not be checked (`restore.stream_source_unchecked`). */
@@ -82,6 +86,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private attempted = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
+  @state() private fieldRefusalDismissed = false;
 
   constructor() {
     super();
@@ -90,6 +95,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
+    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
       this.kit = this.request.kit;
       this.environment = this.request.environment;
@@ -101,6 +107,23 @@ export class SetupRestoreBucketScreen extends LitElement {
       this.venueConfirmed =
         this.venue !== undefined && this.request?.venueConfirmed === this.venue.taxId;
     }
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+      void focusFirstInvalid(this.shadowRoot!);
+    }
+  }
+
+  /** The field showing the server's refusal, if any. */
+  #refusalUnder(): BucketField | undefined {
+    return this.errorMessage === undefined || this.refusalDismissed || this.fieldRefusalDismissed
+      ? undefined
+      : this.invalidField;
+  }
+
+  #edited(field: BucketField): void {
+    if (field === this.invalidField) this.fieldRefusalDismissed = true;
   }
 
   /**
@@ -121,6 +144,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   #setKit(kit: string): void {
     this.kit = kit;
+    this.#edited("kit");
     if (this.#kitReplaced) {
       this.oldBoxGone = false;
       this.venueConfirmed = false;
@@ -192,12 +216,23 @@ export class SetupRestoreBucketScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    const kitInvalid = this.attempted && this.#kitMissing;
+    const refused = this.#refusalUnder();
+    const kitError =
+      this.attempted && this.#kitMissing
+        ? t("restore_bucket.kit_missing")
+        : refused === "kit"
+          ? this.errorMessage
+          : undefined;
+    const environmentError = refused === "environment" ? this.errorMessage : undefined;
     const acknowledgeInvalid = this.attempted && !this.acknowledged;
     const fieldsInvalid = this.attempted && this.#incomplete;
     const bottom = [
-      ...(this.errorMessage !== undefined && !this.refusalDismissed ? [this.errorMessage] : []),
-      ...(fieldsInvalid ? [t("restore_bucket.fix_fields")] : []),
+      ...(this.errorMessage !== undefined &&
+      !this.refusalDismissed &&
+      this.invalidField === undefined
+        ? [this.errorMessage]
+        : []),
+      ...(fieldsInvalid || refused !== undefined ? [t("restore_bucket.fix_fields")] : []),
     ].join(" ");
     return html`
       <h1>${t("restore_bucket.heading")}</h1>
@@ -225,15 +260,15 @@ export class SetupRestoreBucketScreen extends LitElement {
           autocapitalize="off"
           spellcheck="false"
           data-test="kit"
-          aria-invalid=${kitInvalid ? "true" : "false"}
-          aria-describedby=${kitInvalid ? "kit-error" : nothing}
+          aria-invalid=${kitError === undefined ? "false" : "true"}
+          aria-describedby=${kitError === undefined ? nothing : "kit-error"}
           .value=${this.kit}
           @input=${(e: Event) => {
             this.#setKit((e.currentTarget as HTMLTextAreaElement).value);
           }}
         ></textarea>
       </label>
-      ${kitInvalid ? html`<p class="error" id="kit-error">${t("restore_bucket.kit_missing")}</p>` : nothing}
+      ${kitError === undefined ? nothing : html`<p class="error" id="kit-error">${kitError}</p>`}
       <label class="field">
         ${t("restore_bucket.environment")} <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label=${t("restore_bucket.environment_help_label")}
@@ -243,9 +278,12 @@ export class SetupRestoreBucketScreen extends LitElement {
           name="environment"
           required
           data-test="environment"
+          aria-invalid=${environmentError === undefined ? "false" : "true"}
+          aria-describedby=${environmentError === undefined ? nothing : "environment-error"}
           @change=${(e: Event) => {
             this.environment = (e.currentTarget as HTMLSelectElement).value as
               "production" | "preproduction";
+            this.#edited("environment");
           }}
         >
           <option value="production" .selected=${this.environment === "production"}>
@@ -256,6 +294,7 @@ export class SetupRestoreBucketScreen extends LitElement {
           </option>
         </select>
       </label>
+      ${environmentError === undefined ? nothing : html`<p class="error" id="environment-error">${environmentError}</p>`}
       <label class="field">
         <input
           name="no-running-server"

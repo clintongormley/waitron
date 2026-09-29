@@ -81,6 +81,14 @@ function formErrorText(el: StaffScreen): string | undefined {
   return bottomOf(form(el));
 }
 
+async function nativeDisabled(dialog: HTMLElement, testId: string): Promise<boolean> {
+  const button = dialog.shadowRoot!.querySelector(`[data-test=${testId}]`) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await button.updateComplete;
+  return button.shadowRoot!.querySelector("button")!.disabled;
+}
+
 function editForm(el: StaffScreen): PersonEdit {
   return el.shadowRoot!.querySelector("dashboard-person-edit")!;
 }
@@ -347,7 +355,7 @@ describe("staff-screen", () => {
     expect(api.createPerson).toHaveBeenCalledWith(detail);
   });
 
-  it("renders person.email_taken from a rejected create in the dialog banner", async () => {
+  it("renders person.email_taken from a rejected create under the add form's email field", async () => {
     const api = stubApi({
       createPerson: vi.fn().mockRejectedValue({ code: "person.email_taken" }),
     });
@@ -364,9 +372,105 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect(form(el).error).toBe("person.email_taken");
+    await form(el).updateComplete;
+    const email = form(el).shadowRoot!.querySelector("[data-test=email]")!;
+    expect(email.getAttribute("error")).toBe(codeMessage("person.email_taken", "es-ES"));
     const banner = formErrorText(el);
-    expect(banner).toContain(codeMessage("person.email_taken", "es-ES"));
+    expect(banner).toBe(t("form.fix_fields"));
     expect(banner).not.toContain("person.email_taken");
+    expect(await nativeDisabled(form(el), "confirm")).toBe(false);
+  });
+
+  it("places a rejected create's params field under that field of the add form", async () => {
+    const api = stubApi({
+      createPerson: vi
+        .fn()
+        .mockRejectedValue({ code: "profile.invalid", params: { field: "lastNames" } }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=add]")!.click();
+    await el.updateComplete;
+
+    form(el).dispatchEvent(
+      new CustomEvent("create-person", {
+        detail: { displayName: "A", role: "staff", email: "a@x.com" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    await form(el).updateComplete;
+
+    const lastNames = form(el).shadowRoot!.querySelector("[data-test=last-names]")!;
+    expect(lastNames.getAttribute("error")).toBe(codeMessage("profile.invalid", "es-ES"));
+    expect(await nativeDisabled(form(el), "confirm")).toBe(false);
+  });
+
+  it("places a rejected edit's refusal under the field it names, leaving Save working", async () => {
+    const api = stubApi({
+      savePerson: vi
+        .fn()
+        .mockRejectedValue({ code: "person.email_taken", params: { email: "bea@x.com" } }),
+    });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", { api });
+    await flush(el);
+    await openEdit(el, "p1");
+
+    editForm(el).dispatchEvent(
+      new CustomEvent("save-person", {
+        detail: {
+          displayName: "Ada",
+          firstNames: "Ada",
+          lastNames: "Lovelace",
+          telephone: null,
+          email: "bea@x.com",
+          role: "manager",
+          status: "active",
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    await editForm(el).updateComplete;
+
+    const email = editForm(el).shadowRoot!.querySelector("[data-test=edit-email]")!;
+    expect(email.getAttribute("error")).toBe(codeMessage("person.email_taken", "es-ES"));
+    expect(await nativeDisabled(editForm(el), "save")).toBe(false);
+  });
+
+  it("does not carry a refusal's params field over to a later refusal without one", async () => {
+    const savePerson = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "email" } })
+      .mockRejectedValueOnce({ code: "connection.failed" });
+    const { el } = await mountWidget<StaffScreen>("dashboard-staff-screen", {
+      api: stubApi({ savePerson }),
+    });
+    await flush(el);
+    await openEdit(el, "p1");
+    const save = () =>
+      editForm(el).dispatchEvent(
+        new CustomEvent("save-person", {
+          detail: { ...people[0]!, telephone: null },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+    save();
+    await flush(el);
+    await editForm(el).updateComplete;
+    const email = editForm(el).shadowRoot!.querySelector("[data-test=edit-email]")!;
+    expect(email.getAttribute("error")).toBe(codeMessage("management.request_invalid", "es-ES"));
+
+    save();
+    await flush(el);
+    await editForm(el).updateComplete;
+    expect(email.getAttribute("error")).toBe("");
+    await editForm(el).shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
+    expect(bottomOf(editForm(el))).toBe(codeMessage("connection.failed", "es-ES"));
   });
 
   it("opens the existing inactive user when a create reuses their email", async () => {

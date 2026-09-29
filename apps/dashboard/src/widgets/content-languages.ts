@@ -53,6 +53,8 @@ export class ContentLanguageEditor extends LitElement {
   @state() private additionalLanguage = "";
   @state() private busy = false;
   @state() private error: string | null = null;
+  /** A refused save's reason when it is about the chosen default language. */
+  @state() private defaultError = "";
   @state() private addError = false;
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -61,6 +63,7 @@ export class ContentLanguageEditor extends LitElement {
       this.defaultLanguage = this.config.defaultLanguage;
       this.additionalLanguage = "";
       this.error = null;
+      this.defaultError = "";
       this.addError = false;
     }
   }
@@ -86,6 +89,7 @@ export class ContentLanguageEditor extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.error = null;
+    this.defaultError = "";
     const config = {
       defaultLanguage: this.defaultLanguage,
       languages: [
@@ -100,7 +104,11 @@ export class ContentLanguageEditor extends LitElement {
         new CustomEvent("languages-saved", { detail: config, bubbles: true, composed: true }),
       );
     } catch (error) {
-      this.error = codeOf(error);
+      const code = codeOf(error);
+      if (code === "content.default_missing") {
+        this.defaultError = codeMessage(code);
+        void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      } else this.error = code;
     } finally {
       this.busy = false;
     }
@@ -127,13 +135,17 @@ export class ContentLanguageEditor extends LitElement {
           name="default-language"
           required
           ?disabled=${this.busy}
+          aria-invalid=${this.defaultError ? "true" : "false"}
+          aria-describedby=${this.defaultError ? "default-language-error" : nothing}
           @change=${(event: Event) => {
             this.defaultLanguage = (event.target as HTMLSelectElement).value;
+            this.defaultError = "";
           }}
         >
           ${this.languages.map((code) => html`<option value=${code} ?selected=${code === this.defaultLanguage}>${names.of(code)}</option>`)}
         </select>
       </label>
+      ${this.defaultError ? html`<p class="error" id="default-language-error">${this.defaultError}</p>` : nothing}
       <ul aria-label=${t("content_languages.enabled")}>
         ${this.languages.map(
           (code) =>
@@ -179,7 +191,10 @@ export class ContentLanguageEditor extends LitElement {
         @click=${() => this.#add()}
         >${t("content_languages.add")}</wt-button
       >
-      <wt-form-actions slot="footer" .error=${this.error ? codeMessage(this.error) : ""}>
+      <wt-form-actions
+        slot="footer"
+        .error=${this.error ? codeMessage(this.error) : this.defaultError ? t("form.fix_fields") : ""}
+      >
         <wt-button
           slot="cancel"
           variant="secondary"

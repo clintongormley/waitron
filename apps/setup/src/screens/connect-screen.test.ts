@@ -172,6 +172,41 @@ describe("setup-connect-screen", () => {
     expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
   });
 
+  it("shows a request refusal of one field under that field and focuses it, leaving Connect working", async () => {
+    const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+      invalidField: "primaryUrl",
+    });
+    await new Promise((resolve) => setTimeout(resolve));
+    const url = q(el, "[data-test=primaryUrl]")!;
+    expect(url.hasAttribute("invalid")).toBe(true);
+    expect(url.getAttribute("error")).toBe("Check the primary server address.");
+    expect(url.shadowRoot!.activeElement).toBe(url.shadowRoot!.querySelector("input"));
+    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(await alerts(el)).toHaveLength(1);
+    expect((q(el, "[data-test=connect]") as HTMLElement & { disabled: boolean }).disabled).toBe(
+      false,
+    );
+
+    await type(el, "primaryUrl", "https://primary.example");
+    expect(url.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("drops a field refusal on the next press and sends the form", async () => {
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+      invalidField: "totp",
+    });
+    const events = collect(host);
+    await fillValid(el);
+    expect(q(el, "[data-test=totp]")!.hasAttribute("invalid")).toBe(true);
+    q(el, "[data-test=connect]")!.click();
+    await el.updateComplete;
+    expect(events).toHaveLength(1);
+    expect(q(el, "[data-test=totp]")!.hasAttribute("invalid")).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+  });
+
   it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       errorMessage: "Couldn't reach the primary server.",

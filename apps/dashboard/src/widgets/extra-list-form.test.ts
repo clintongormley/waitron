@@ -152,8 +152,8 @@ async function bottomOf(el: ExtraListForm): Promise<string> {
   return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
-const saveOf = (el: ExtraListForm): HTMLElement =>
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+const saveOf = (el: ExtraListForm): HTMLElementTagNameMap["wt-button"] =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
 
 const errorOf = (el: ExtraListForm, name: string): string =>
   field<HTMLElementTagNameMap["wt-input"]>(el, name).error;
@@ -398,7 +398,7 @@ it("refuses a price the product-price rule does not accept", async () => {
   expect(submitted[0]!.items[0]!.price).toBe("1.50");
 });
 
-it("puts a rejected field's message beside the input the server named, and holds Save back", async () => {
+it("puts a rejected field's message beside the input the server named, leaving Save working", async () => {
   const { el } = await mount({
     value: addons,
     fieldErrors: {
@@ -416,7 +416,7 @@ it("puts a rejected field's message beside the input the server named, and holds
   );
   expect(text(el, "item-0-product-error")).toBe("That product was deleted.");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 });
 
 it("keeps a rejected item's message on that item after it is moved", async () => {
@@ -591,7 +591,7 @@ it.each([
 
   expect(text(el, "items-error")).toBe("Something is wrong.");
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 });
 
 it("moves a rejected item's message under the items table once that item is removed", async () => {
@@ -1250,13 +1250,13 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("clears a field's refusal when that field changes, and Save works again", async () => {
+it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
   const { el } = await mount({ value: addons, fieldErrors: { "items.1.price": "Too cheap." } });
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "item-0-price", "0.90");
   expect(errorOf(el, "item-1-price")).toBe("Too cheap.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "item-1-price", "1.20");
   expect(errorOf(el, "item-1-price")).toBe("");
@@ -1272,7 +1272,7 @@ it("clears a translated name's refusal only when that language's value changes",
 
   await type(el, "customer-name-es", "Ponle algo");
   expect(errorOf(el, "customer-name-en")).toBe("Rejected English.");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await type(el, "customer-name-en", "Add something");
   expect(errorOf(el, "customer-name-en")).toBe("");
@@ -1281,7 +1281,7 @@ it("clears a translated name's refusal only when that language's value changes",
 
 it("clears a refusal about the items as a whole once the items change", async () => {
   const { el } = await mount({ value: addons, fieldErrors: { items: "Something is wrong." } });
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).disabled).toBe(false);
 
   await toggle(el, "item-0-preselected", true);
 

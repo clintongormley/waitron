@@ -14,6 +14,8 @@ import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
 
+export type RestoreField = "artifact" | "recoveryKey" | "environment";
+
 /**
  * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
  * does not finish joining (`PendingAdoption`, `apps/server/src/finish-adoption.ts`), so naming one as
@@ -34,6 +36,8 @@ export class SetupRestoreScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
+  /** The field `errorMessage` is about; the message then shows under it, not beside Restore. */
+  @property() invalidField?: RestoreField;
   /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
   @property() liveSince?: string;
   /** Set by the shell from `restore.stream_source_unchecked`. */
@@ -48,6 +52,7 @@ export class SetupRestoreScreen extends LitElement {
   @state() private attempted = false;
   /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
   @state() private refusalDismissed = false;
+  @state() private fieldRefusalDismissed = false;
 
   constructor() {
     super();
@@ -56,6 +61,7 @@ export class SetupRestoreScreen extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
+    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;
       this.recoveryKey = this.request.recoveryKey;
@@ -73,6 +79,26 @@ export class SetupRestoreScreen extends LitElement {
       files.items.add(this.request.artifact);
       this.shadowRoot!.querySelector<HTMLInputElement>("[data-test=artifact]")!.files = files.files;
     }
+    if (changed.has("invalidField") && this.#refusalUnder() !== undefined) {
+      void focusFirstInvalid(this.shadowRoot!);
+    }
+  }
+
+  /** The field showing the server's refusal, if any. */
+  #refusalUnder(): RestoreField | undefined {
+    return this.errorMessage === undefined || this.refusalDismissed || this.fieldRefusalDismissed
+      ? undefined
+      : this.invalidField;
+  }
+
+  #edited(field: RestoreField): void {
+    if (field === this.invalidField) this.fieldRefusalDismissed = true;
+  }
+
+  /** The message under `field`: the client's own when it is missing, else a refusal about it. */
+  #fieldError(field: RestoreField, missing: string | undefined): string | undefined {
+    if (missing !== undefined) return missing;
+    return this.#refusalUnder() === field ? this.errorMessage : undefined;
   }
 
   /** The owner chose another file than the one the shell's old-server refusal was about. */
@@ -115,9 +141,23 @@ export class SetupRestoreScreen extends LitElement {
 
   override render(): TemplateResult {
     const fieldsInvalid = this.attempted && this.#incomplete;
+    const refused = this.#refusalUnder();
+    const artifactError = this.#fieldError(
+      "artifact",
+      this.attempted && this.artifact === undefined ? t("restore.backup_file_missing") : undefined,
+    );
+    const keyError = this.#fieldError(
+      "recoveryKey",
+      this.attempted && this.recoveryKey === "" ? t("restore.recovery_key_missing") : undefined,
+    );
+    const environmentError = this.#fieldError("environment", undefined);
     const bottom = [
-      ...(this.errorMessage !== undefined && !this.refusalDismissed ? [this.errorMessage] : []),
-      ...(fieldsInvalid ? [t("restore.fix_fields")] : []),
+      ...(this.errorMessage !== undefined &&
+      !this.refusalDismissed &&
+      this.invalidField === undefined
+        ? [this.errorMessage]
+        : []),
+      ...(fieldsInvalid || refused !== undefined ? [t("restore.fix_fields")] : []),
     ].join(" ");
     return html`
       <h1>${t("restore.heading")}</h1>
@@ -139,15 +179,16 @@ export class SetupRestoreScreen extends LitElement {
           name="backup"
           type="file"
           required
-          aria-invalid=${this.attempted && this.artifact === undefined ? "true" : "false"}
+          aria-invalid=${artifactError === undefined ? "false" : "true"}
           aria-describedby="artifact-error"
           data-test="artifact"
           @change=${(event: Event) => {
             this.artifact = (event.currentTarget as HTMLInputElement).files?.[0];
+            this.#edited("artifact");
           }}
         />
       </label>
-      ${this.attempted && this.artifact === undefined ? html`<p class="error" id="artifact-error">${t("restore.backup_file_missing")}</p>` : nothing}
+      ${artifactError === undefined ? nothing : html`<p class="error" id="artifact-error">${artifactError}</p>`}
       <label class="field">
         ${t("restore.recovery_key")} <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label=${t("restore.recovery_key_help_label")}
@@ -158,16 +199,17 @@ export class SetupRestoreScreen extends LitElement {
           type="password"
           autocomplete="off"
           required
-          aria-invalid=${this.attempted && this.recoveryKey === "" ? "true" : "false"}
+          aria-invalid=${keyError === undefined ? "false" : "true"}
           aria-describedby="recovery-key-error"
           data-test="recovery-key"
           .value=${this.recoveryKey}
           @input=${(event: Event) => {
             this.recoveryKey = (event.currentTarget as HTMLInputElement).value;
+            this.#edited("recoveryKey");
           }}
         />
       </label>
-      ${this.attempted && this.recoveryKey === "" ? html`<p class="error" id="recovery-key-error">${t("restore.recovery_key_missing")}</p>` : nothing}
+      ${keyError === undefined ? nothing : html`<p class="error" id="recovery-key-error">${keyError}</p>`}
       <label class="field">
         ${t("restore.environment")} <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label=${t("restore.environment_help_label")}
@@ -177,10 +219,13 @@ export class SetupRestoreScreen extends LitElement {
           name="environment"
           required
           data-test="environment"
+          aria-invalid=${environmentError === undefined ? "false" : "true"}
+          aria-describedby=${environmentError === undefined ? nothing : "environment-error"}
           .value=${this.environment}
           @change=${(event: Event) => {
             this.environment = (event.currentTarget as HTMLSelectElement).value as
               "production" | "preproduction";
+            this.#edited("environment");
           }}
         >
           <option value="production" .selected=${this.environment === "production"}>
@@ -191,6 +236,7 @@ export class SetupRestoreScreen extends LitElement {
           </option>
         </select>
       </label>
+      ${environmentError === undefined ? nothing : html`<p class="error" id="environment-error">${environmentError}</p>`}
       <label class="field">
         <input
           name="no-running-server"

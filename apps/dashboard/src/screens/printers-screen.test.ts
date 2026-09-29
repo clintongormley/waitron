@@ -4184,6 +4184,7 @@ describe("printers-screen discovery and add edges", () => {
     );
     expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe("");
     expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
     expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
@@ -4891,7 +4892,7 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
   });
 
-  it("clears a refused address when that field changes, focusing it when the refusal arrives", async () => {
+  it("keeps a refused address, with Check address working, until that field changes, focusing it when the refusal arrives", async () => {
     const { el } = await mounted({
       probePrinterAddress: vi
         .fn()
@@ -4903,11 +4904,12 @@ describe("printers-screen forms say what is wrong beside the field and the actio
     q(el, "[data-test=probe-printer]")!.click();
     await flush(el);
     await vi.waitFor(() => expect(inputFocused(el, "[data-test=probe-host]")).toBe(true));
-    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
 
     typeField(el, "[data-test=probe-port]", "9101");
     await flush(el);
-    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
+    expect(errorOf(el, "[data-test=probe-host]")).toBe(t("printers.probe_host_invalid"));
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
 
     typeField(el, "[data-test=probe-host]", "10.0.0.50");
     await flush(el);

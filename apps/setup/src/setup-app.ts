@@ -36,8 +36,10 @@ import type {
   ConfigurationRequestDetail,
   RestoreRequestDetail,
 } from "./events.js";
-import type { RestoredVenue } from "./screens/restore-bucket-screen.js";
-import type { ResetScreenOutcome } from "./screens/reset-screen.js";
+import type { ConnectField } from "./screens/connect-screen.js";
+import type { BucketField, RestoredVenue } from "./screens/restore-bucket-screen.js";
+import type { RestoreField } from "./screens/restore-screen.js";
+import type { ResetField, ResetScreenOutcome } from "./screens/reset-screen.js";
 import { SERVER_FIELDS } from "./server-fields.js";
 import { LocaleChangeController } from "./i18n/locale-controller.js";
 import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
@@ -146,6 +148,57 @@ const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.request_invalid": "shell.reset.request_invalid",
   "setup.not_ready": "shell.not_ready",
 };
+
+/**
+ * The field a refusal is about, when the screen that sent the request shows it: named by the code
+ * itself, or by `setup.request_invalid`'s `params.field` (the server's path for the field).
+ */
+function refusedField<F extends string>(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+  byCode: Readonly<Record<string, F>>,
+  byPath: Readonly<Record<string, F>>,
+): F | undefined {
+  if (code === "setup.request_invalid") {
+    const path = params?.field;
+    return typeof path === "string" && Object.hasOwn(byPath, path) ? byPath[path] : undefined;
+  }
+  return typeof code === "string" && Object.hasOwn(byCode, code) ? byCode[code] : undefined;
+}
+
+const RESET_FIELD_PATHS: Record<string, ResetField> = {
+  personId: "personId",
+  password: "password",
+};
+
+const ADOPT_FIELD_CODES: Record<string, ConnectField> = {
+  "mirror.primary_url_invalid": "primaryUrl",
+};
+
+const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
+  primaryUrl: "primaryUrl",
+  "credential.personId": "personId",
+  "credential.password": "password",
+  "credential.totp": "totp",
+};
+
+const RESTORE_FIELD_CODES: Record<string, RestoreField> = {
+  "recovery.passphrase_invalid": "recoveryKey",
+  "restore.environment_mismatch": "environment",
+};
+
+const RESTORE_FIELD_PATHS: Record<string, RestoreField> = {
+  artifact: "artifact",
+  recoveryKey: "recoveryKey",
+  environment: "environment",
+};
+
+const BUCKET_FIELD_CODES: Record<string, BucketField> = {
+  "backup.stream_kit_invalid": "kit",
+  "restore.environment_mismatch": "environment",
+};
+
+const BUCKET_FIELD_PATHS: Record<string, BucketField> = { kit: "kit", environment: "environment" };
 
 function describeThrottle(params: Record<string, unknown> | undefined): Message {
   const seconds = params?.retryAfterSeconds;
@@ -347,13 +400,16 @@ export class SetupApp extends LitElement {
   @state() private venueInvalidField?: string;
 
   @state() private connectError?: Message;
+  @state() private connectInvalidField?: ConnectField;
   @state() private restoreError?: Message;
+  @state() private restoreInvalidField?: RestoreField;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the archive path. */
   @state() private restoreLiveSince?: string;
   @state() private restoreLiveUnknown = false;
   /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
   @state() private restoreRequest?: RestoreRequestDetail;
   @state() private bucketRestoreError?: Message;
+  @state() private bucketInvalidField?: BucketField;
   @state() private bucketLiveSince?: string;
   @state() private bucketLiveUnknown = false;
   @state() private bucketVenue?: RestoredVenue;
@@ -398,6 +454,7 @@ export class SetupApp extends LitElement {
 
   @state() private resetBusy = false;
   @state() private resetCredentialsRejected = false;
+  @state() private resetInvalidField?: ResetField;
   @state() private resetError?: Message;
   @state() private resetOutcome?: { kind: ResetScreenOutcome["kind"]; message: Message };
 
@@ -494,12 +551,15 @@ export class SetupApp extends LitElement {
     this.venueInvalidField = undefined;
     this.reviewError = undefined;
     this.connectError = undefined;
+    this.connectInvalidField = undefined;
     this.restoreError = undefined;
+    this.restoreInvalidField = undefined;
     // An answer belongs to the copy it was given for; leaving the screen may mean another kit or file.
     this.restoreLiveSince = undefined;
     this.restoreLiveUnknown = false;
     this.restoreRequest = undefined;
     this.bucketRestoreError = undefined;
+    this.bucketInvalidField = undefined;
     this.bucketLiveSince = undefined;
     this.bucketLiveUnknown = false;
     this.bucketVenue = undefined;
@@ -510,6 +570,7 @@ export class SetupApp extends LitElement {
     this.configurationError = undefined;
     this.fiscalTestError = undefined;
     this.resetCredentialsRejected = false;
+    this.resetInvalidField = undefined;
     this.resetError = undefined;
     this.screen = event.detail.screen;
   }
@@ -630,6 +691,7 @@ export class SetupApp extends LitElement {
   async #onAdoptRequested(event: CustomEvent<{ body: AdoptBody }>): Promise<void> {
     event.stopPropagation();
     this.connectError = undefined;
+    this.connectInvalidField = undefined;
     this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
@@ -647,6 +709,7 @@ export class SetupApp extends LitElement {
   async #onRestoreRequested(event: CustomEvent<{ request: RestoreRequestDetail }>): Promise<void> {
     event.stopPropagation();
     this.restoreError = undefined;
+    this.restoreInvalidField = undefined;
     this.#clearProvisionOutcome();
     this.screen = "provisioning";
     const request = event.detail.request;
@@ -682,6 +745,12 @@ export class SetupApp extends LitElement {
         this.restoreLiveSince = undefined;
         this.restoreLiveUnknown = true;
       } else {
+        this.restoreInvalidField = refusedField(
+          code,
+          params,
+          RESTORE_FIELD_CODES,
+          RESTORE_FIELD_PATHS,
+        );
         this.restoreError =
           typeof code === "string"
             ? sayWith("shell.restore.staging_failed_code", { code })
@@ -703,6 +772,7 @@ export class SetupApp extends LitElement {
       this.bucketVenue = undefined;
     }
     this.bucketRestoreError = undefined;
+    this.bucketInvalidField = undefined;
     this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
@@ -731,6 +801,12 @@ export class SetupApp extends LitElement {
       } else if (code === "restore.stream_venue_unconfirmed" && venue !== undefined) {
         this.bucketVenue = venue;
       } else {
+        this.bucketInvalidField = refusedField(
+          code,
+          params,
+          BUCKET_FIELD_CODES,
+          BUCKET_FIELD_PATHS,
+        );
         this.bucketRestoreError = describeBucketRefusal(code, params);
       }
       this.screen = "restore-bucket";
@@ -885,7 +961,15 @@ export class SetupApp extends LitElement {
       this.provisionCanRetry = false;
       this.provisionReloadLabel = say("shell.reload");
     } else {
-      this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+      this.connectInvalidField = refusedField(
+        code,
+        error.params,
+        ADOPT_FIELD_CODES,
+        ADOPT_FIELD_PATHS,
+      );
+      if (this.connectInvalidField === undefined) {
+        this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
+      }
       this.screen = "connect";
     }
   }
@@ -911,6 +995,7 @@ export class SetupApp extends LitElement {
     if (this.resetBusy) return;
     this.resetBusy = true;
     this.resetCredentialsRejected = false;
+    this.resetInvalidField = undefined;
     this.resetError = undefined;
     try {
       await this.api.resetIncompleteAdopt(event.detail.credential);
@@ -936,6 +1021,8 @@ export class SetupApp extends LitElement {
           this.resetOutcome = { kind: "refused", message: say("shell.operation_conflict") };
           break;
         default:
+          this.resetInvalidField = refusedField(code, params, {}, RESET_FIELD_PATHS);
+          if (this.resetInvalidField !== undefined) break;
           this.resetError = say(
             (typeof code === "string" ? RESET_ERROR_MESSAGES[code] : undefined) ??
               "shell.reset.generic",
@@ -1010,6 +1097,7 @@ export class SetupApp extends LitElement {
         return html`<setup-restore-screen
           data-test="screen-restore"
           .errorMessage=${this.restoreError?.()}
+          .invalidField=${this.restoreInvalidField}
           .liveSince=${this.restoreLiveSince}
           .liveUnknown=${this.restoreLiveUnknown}
           .request=${this.restoreRequest}
@@ -1018,6 +1106,7 @@ export class SetupApp extends LitElement {
         return html`<setup-restore-bucket-screen
           data-test="screen-restore-bucket"
           .errorMessage=${this.bucketRestoreError?.()}
+          .invalidField=${this.bucketInvalidField}
           .liveSince=${this.bucketLiveSince}
           .liveUnknown=${this.bucketLiveUnknown}
           .venue=${this.bucketVenue}
@@ -1059,6 +1148,7 @@ export class SetupApp extends LitElement {
         return html`<setup-connect-screen
           data-test="screen-connect"
           .errorMessage=${this.connectError?.()}
+          .invalidField=${this.connectInvalidField}
         ></setup-connect-screen>`;
       case "admin":
         return html`<setup-admin-screen
@@ -1097,6 +1187,7 @@ export class SetupApp extends LitElement {
           data-test="screen-reset"
           .busy=${this.resetBusy}
           .credentialsRejected=${this.resetCredentialsRejected}
+          .invalidField=${this.resetInvalidField}
           .errorMessage=${this.resetError?.()}
           .outcome=${this.resetOutcome && { kind: this.resetOutcome.kind, message: this.resetOutcome.message() }}
         ></setup-reset-screen>`;

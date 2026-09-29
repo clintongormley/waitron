@@ -665,14 +665,13 @@ export class PaymentsScreen extends LitElement {
     return this.billFormError === "pin.invalid" || this.billFormError === "pin.throttled";
   }
 
-  /** The attestation's field messages: its own checks once submitted, and a refused PIN. */
-  #billFieldErrors(): Partial<Record<"outcome" | "note" | "pin", string>> {
+  /** The attestation's own checks, once submitted. */
+  #billChecks(): Partial<Record<"outcome" | "note" | "pin", string>> {
     const errors: Partial<Record<"outcome" | "note" | "pin", string>> = {};
-    if (this.billAttempted && !this.billOutcome)
-      errors.outcome = t("payments.bill.outcome_required");
-    if (this.billAttempted && !this.billNote.trim()) errors.note = t("payments.bill.note_required");
-    if (this.#billPinRefused()) errors.pin = codeMessage(this.billFormError!);
-    else if (this.billAttempted && !this.billPin) errors.pin = t("payments.bill.pin_required");
+    if (!this.billAttempted) return errors;
+    if (!this.billOutcome) errors.outcome = t("payments.bill.outcome_required");
+    if (!this.billNote.trim()) errors.note = t("payments.bill.note_required");
+    if (!this.billPin) errors.pin = t("payments.bill.pin_required");
     return errors;
   }
 
@@ -837,11 +836,14 @@ export class PaymentsScreen extends LitElement {
         </wt-form-actions>
       </wt-dialog>`;
     const payment = action.target.kind === "payment";
-    const errors = this.#billFieldErrors();
-    const invalid = Object.keys(errors).length > 0;
+    const checked = this.#billChecks();
+    const errors = this.#billPinRefused()
+      ? { ...checked, pin: codeMessage(this.billFormError!) }
+      : checked;
+    const invalid = Object.keys(checked).length > 0;
     const bottom = [
       ...(this.billFormError && !this.#billPinRefused() ? [this.billFormErrorText] : []),
-      ...(invalid ? [t("form.fix_fields")] : []),
+      ...(Object.keys(errors).length > 0 ? [t("form.fix_fields")] : []),
     ].join(" ");
     return html`<wt-dialog
       data-test="bill-attest-dialog"

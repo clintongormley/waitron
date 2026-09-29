@@ -255,7 +255,7 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(text(el, "[role=alert]")).toBe(codeMessage("backup.stream_test_failed"));
   });
 
-  it("puts a refused bucket name beside the bucket field, with the bottom message, and focuses it", async () => {
+  it("puts a refused bucket name beside the bucket field, with the bottom message, focuses it and leaves Save working", async () => {
     const api = stubApi({
       saveStreamSettings: vi.fn().mockRejectedValue({
         code: "backup.stream_config_unsafe",
@@ -267,7 +267,8 @@ describe("stream-settings-panel: the bucket form", () => {
     await press(el, "save");
     expect(field(el, "bucket-name").error).toBe(t("stream.field.bucket_characters"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(disabled(el, "save")).toBe(true);
+    expect(disabled(el, "save")).toBe(false);
+    expect(disabled(el, "test")).toBe(false);
     expect(focusedName(el)).toBe("bucket-name");
     expect(q(el, "p[role=alert]")).toBeNull();
     // What was typed stays, so the owner can correct it.
@@ -300,6 +301,8 @@ describe("stream-settings-panel: the bucket form", () => {
     await press(el, "test");
     expect(field(el, name).error).toBe(t(key as StringKey));
     expect(focusedName(el)).toBe(name);
+    expect(disabled(el, "test")).toBe(false);
+    expect(disabled(el, "save")).toBe(false);
   });
 
   it("shows a refusal naming something the form does not hold as one alert, with no field marked", async () => {
@@ -434,7 +437,7 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(disabled(el, "test")).toBe(false);
   });
 
-  it("clears a refused field's message when that field changes, and Save works again", async () => {
+  it("keeps a refused field's message, with Save working, until that field changes", async () => {
     const api = stubApi({
       saveStreamSettings: vi.fn().mockRejectedValue({
         code: "backup.stream_config_unsafe",
@@ -444,12 +447,12 @@ describe("stream-settings-panel: the bucket form", () => {
     const { el } = await mount(api);
     fillRequired(el);
     await press(el, "save");
-    expect(disabled(el, "save")).toBe(true);
+    expect(disabled(el, "save")).toBe(false);
 
     type(el, "bucket-region", "eu-west-2");
     await flush(el);
     expect(field(el, "bucket-name").error).toBe(t("stream.field.bucket_characters"));
-    expect(disabled(el, "save")).toBe(true);
+    expect(disabled(el, "save")).toBe(false);
 
     type(el, "bucket-name", "venue.copy");
     await flush(el);

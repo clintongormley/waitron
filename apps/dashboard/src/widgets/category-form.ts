@@ -76,15 +76,21 @@ const FIELD_BY_REQUEST_FIELD = new Map([
   ["color", "color"],
 ]);
 
-/** A refused category write, keyed by the form's fields; `_form` is shown in the bottom message alone. */
+/** A refused category write, keyed by the form's fields; `_form` is shown in the bottom message alone.
+ * `parentId` is the parent the refused write named. */
 export function categoryRefusalErrors(
   error: unknown,
   defaultLanguage: string,
+  parentId: string | null = null,
 ): Record<string, string> {
   const code = codeOf(error);
   const message = codeMessage(code);
-  const params = (error as { params?: { field?: unknown; language?: unknown } }).params ?? {};
+  const params =
+    (error as { params?: { field?: unknown; language?: unknown; categoryId?: unknown } }).params ??
+    {};
   let field = FIELD_BY_CODE.get(code);
+  if (code === "category.not_found" && parentId !== null && params.categoryId === parentId)
+    field = "parent";
   if (code === "content.translation_required" && typeof params.language === "string")
     field = `name-${params.language}`;
   if (code === "management.request_invalid" && typeof params.field === "string")
@@ -197,8 +203,7 @@ export class CategoryForm extends LitElement {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
     this.attempted = true;
-    const shown = new Set(this.#fieldKeys(this.fieldErrors));
-    this.#dismiss(...Object.keys(this.fieldErrors).filter((key) => !shown.has(key)));
+    this.#dismiss(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
@@ -226,6 +231,7 @@ export class CategoryForm extends LitElement {
     const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
       " ",
     );
+    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     return html`<wt-modal
       .open=${this.open}
       heading=${t(this.value ? "categories.edit" : "categories.create")}
@@ -320,7 +326,7 @@ export class CategoryForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy || this.pickerOpen || fieldKeys.size > 0}
+          .disabled=${this.busy || this.pickerOpen || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

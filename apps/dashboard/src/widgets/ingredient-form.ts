@@ -180,7 +180,8 @@ export class IngredientForm extends LitElement {
   }
 
   override render() {
-    const nameError = (this.attempted ? this.#nameError() : "") || this.#refused("name");
+    const invalidName = this.attempted ? this.#nameError() : "";
+    const nameError = invalidName || this.#refused("name");
     const bottom = [this.#refused("_form"), nameError === "" ? "" : t("form.fix_fields")]
       .filter((message) => message !== "")
       .join(" ");
@@ -230,7 +231,7 @@ export class IngredientForm extends LitElement {
           <wt-button
             variant="primary"
             data-test="confirm"
-            ?disabled=${this.busy || nameError !== ""}
+            ?disabled=${this.busy || invalidName !== ""}
             @click=${(e: Event) => this.#confirm(e)}
             >${this.ingredient ? t("action.save") : t("action.create")}</wt-button
           >

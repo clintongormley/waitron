@@ -219,6 +219,7 @@ export class OptionLabelForm extends LitElement {
     const errors = this.#errors();
     const fields = this.#fields(errors);
     const fieldKeys = new Set(this.#fieldKeys(errors));
+    const invalid = this.attempted && Object.keys(this.#validate()).length > 0;
     const bottom = [
       ...Object.entries(errors)
         .filter(([key, message]) => message && !fieldKeys.has(key))
@@ -268,7 +269,7 @@ export class OptionLabelForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy || fieldKeys.size > 0}
+          .disabled=${this.busy || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

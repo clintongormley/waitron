@@ -729,12 +729,12 @@ it("refuses a variant's malformed price beside that variant's field", async () =
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
-it("shows a refusal naming the menu price beside it, with the generic sentence beside Save", async () => {
+it("shows a refusal naming the menu price beside it, with the generic sentence beside a working Save", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   el.refusal = { field: "grossPrice", message: "Refused here" };
   await el.updateComplete;
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   expect(field(el, "grossPrice").error).toBe("Refused here");
 });
 
@@ -793,13 +793,13 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("clears a refusal naming the menu price when that field changes, and Save works again", async () => {
+it("clears a refusal naming the menu price when that field changes, with Save working throughout", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   el.refusal = { field: "grossPrice", message: "Refused here" };
   await el.updateComplete;
   await flip(el, "active", false);
   expect(field(el, "grossPrice").error).toBe("Refused here");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 
   await type(el, "grossPrice", "2.70");
   expect(field(el, "grossPrice").error).toBe("");

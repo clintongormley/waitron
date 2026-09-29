@@ -786,7 +786,7 @@ it("on an invalid Save focuses the first invalid field and disables Save until i
   expect(client.updateSection).not.toHaveBeenCalled();
 });
 
-it("focuses a refused field, and holds Save until that field changes", async () => {
+it("focuses a refused field and leaves Save working", async () => {
   const client = api({
     updateSection: vi
       .fn()
@@ -799,11 +799,12 @@ it("focuses a refused field, and holds Save until that field changes", async () 
     expect(field(el, "internalName").error).toBe(codeMessage("menu_section.invalid")),
   );
   await vi.waitFor(() => expect(focusedIn(field(el, "internalName"))).toBe(true));
-  expect(button(el, "editor", "editor-save").disabled).toBe(true);
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
 
   await type(field(el, "names-en"), "Drinks");
   await el.updateComplete;
-  expect(button(el, "editor", "editor-save").disabled).toBe(true);
+  expect(field(el, "internalName").error).toBe(codeMessage("menu_section.invalid"));
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
 
   await type(field(el, "internalName"), "Drinks bar");
   await el.updateComplete;
@@ -1430,7 +1431,7 @@ it("refuses a blank copy name, and shows a server refusal, in the duplicate form
   expect(modal(el, "duplicate").open).toBe(false);
 });
 
-it("follows the form rule in the duplicate form: quiet until Save, then re-checked, with a field refusal holding Save", async () => {
+it("follows the form rule in the duplicate form: quiet until Save, then re-checked, with a field refusal leaving Save working", async () => {
   const client = api({
     duplicateSection: vi
       .fn()
@@ -1462,7 +1463,7 @@ it("follows the form rule in the duplicate form: quiet until Save, then re-check
 
   click(el, '[data-test="duplicate-save"]');
   await vi.waitFor(() => expect(name.error).toBe(codeMessage("menu_section.invalid")));
-  expect(save.disabled).toBe(true);
+  expect(save.disabled).toBe(false);
   await type(name, "Beer three");
   await el.updateComplete;
   expect(name.error).toBe("");

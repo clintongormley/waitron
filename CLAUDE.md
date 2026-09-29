@@ -268,7 +268,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **New or changed forms use the shared UI contract in [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields visibly marked; an invalid submission explains itself beside every bad field and in
   one localized message beside the action, which stays disabled until the fields are fixed — no
-  summary at the top (owner, 2026-09-28); every input has a semantic `name`, never a generated widget id.
+  summary at the top (owner, 2026-09-28). A refusal from a request never disables the action by
+  itself, and one that names a shown field says so under that field (owner, 2026-09-29). Every input
+  has a semantic `name`, never a generated widget id.
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a

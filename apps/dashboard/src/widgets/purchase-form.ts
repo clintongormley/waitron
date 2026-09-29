@@ -270,11 +270,11 @@ export class PurchaseForm extends LitElement {
     return Object.keys(errors).filter((key) => key !== "_form" && errors[key]);
   }
 
-  #errors(): PurchaseFormErrors {
+  #errors(invalid: PurchaseFormErrors): PurchaseFormErrors {
     const refused = Object.fromEntries(
       Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
     );
-    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
+    return { ...refused, ...invalid };
   }
 
   #confirm(event: Event): void {
@@ -390,9 +390,10 @@ export class PurchaseForm extends LitElement {
   }
 
   override render() {
-    const errors = this.#errors();
-    const invalid = this.#fieldKeys(errors).length > 0;
-    const bottom = [errors._form ?? "", invalid ? t("form.fix_fields") : ""]
+    const validation = this.attempted ? this.#validate() : {};
+    const errors = this.#errors(validation);
+    const marked = this.#fieldKeys(errors).length > 0;
+    const bottom = [errors._form ?? "", marked ? t("form.fix_fields") : ""]
       .filter((message) => message !== "")
       .join(" ");
     return html`
@@ -517,7 +518,7 @@ export class PurchaseForm extends LitElement {
           <wt-button
             variant="primary"
             data-test="confirm"
-            ?disabled=${this.busy || invalid}
+            ?disabled=${this.busy || Object.keys(validation).length > 0}
             @click=${(e: Event) => this.#confirm(e)}
             >${this.invoice ? t("action.save") : t("action.create")}</wt-button
           >

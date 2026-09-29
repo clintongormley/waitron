@@ -482,11 +482,8 @@ export class SetupVenueScreen extends LitElement {
     }
     this.attempted = true;
     this.refusalDismissed = true;
-    // Nothing on the form can fix a refusal of a field it does not show, so it must not block.
-    if (this.serverInvalid !== undefined && !this.#shows(this.serverInvalid.key)) {
-      this.serverInvalid = undefined;
-    }
-    if (this.#invalidFields().size > 0 || this.serverInvalid !== undefined) {
+    this.serverInvalid = undefined;
+    if (this.#invalidFields().size > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
@@ -593,6 +590,7 @@ export class SetupVenueScreen extends LitElement {
     });
     const errors = this.#errors;
     const fieldErrors = [...errors.keys()].filter((key) => this.#shows(key));
+    const invalid = this.attempted && [...this.#invalidFields()].some((key) => this.#shows(key));
     const bottom = [
       ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
       ...[...errors].filter(([key]) => !this.#shows(key)).map(([, message]) => message),
@@ -723,7 +721,7 @@ export class SetupVenueScreen extends LitElement {
         <wt-button
           variant="primary"
           data-test="next"
-          ?disabled=${fieldErrors.length > 0}
+          ?disabled=${invalid}
           @click=${() => this.#next()}
           >${t("venue.next")}</wt-button
         >

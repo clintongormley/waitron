@@ -549,10 +549,6 @@ export class MenuPricesTable extends LitElement {
     return Object.keys(errors).filter((key) => errors[key] && shown.has(key));
   }
 
-  #errors(draft: Draft): Record<string, string> {
-    return { ...this.refused, ...(this.attempted ? this.#validate(draft) : {}) };
-  }
-
   #editVariant(index: number, change: Partial<Draft["variants"][number]>, clears: string): void {
     this.#edit(
       (draft) => ({
@@ -684,7 +680,8 @@ export class MenuPricesTable extends LitElement {
     const row = this.#row();
     const draft = this.draft;
     const form = row !== undefined && draft !== null ? { row, draft } : null;
-    const errors = form ? this.#errors(form.draft) : {};
+    const invalid = form && this.attempted ? this.#validate(form.draft) : {};
+    const errors = form ? { ...this.refused, ...invalid } : {};
     const fieldKeys = new Set(this.#fieldKeys(errors));
     const bottom = [
       ...Object.entries(errors)
@@ -722,7 +719,7 @@ export class MenuPricesTable extends LitElement {
           variant="primary"
           data-test="offer-save"
           .loading=${this.busy}
-          .disabled=${this.busy || fieldKeys.size > 0}
+          .disabled=${this.busy || Object.keys(invalid).length > 0}
           @click=${(event: Event) => this.#save(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

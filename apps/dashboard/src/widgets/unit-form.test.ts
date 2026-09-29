@@ -27,8 +27,8 @@ async function bottomOf(el: UnitForm): Promise<string> {
 const errorOf = (el: UnitForm, testId: string): string | null =>
   el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
 
-const saveOf = (el: UnitForm): HTMLElement =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!;
+const saveOf = (el: UnitForm): HTMLElementTagNameMap["wt-button"] =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=submit]")!;
 
 describe("unit-form", () => {
   it("offers precision as exactly 0, 1, 2 or 3", async () => {
@@ -235,7 +235,7 @@ describe("unit-form", () => {
       expect(errorOf(el, `${field}-en`)).toBe(message);
       expect(errorOf(el, `${field}-es`)).toBe("");
       expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-      expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+      expect(saveOf(el).disabled).toBe(false);
     });
 
   it("keeps a refused translation for a language the form does not show in its bottom message, leaving Save working", async () => {
@@ -405,7 +405,7 @@ describe("unit-form", () => {
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("clears a field's refusal when that field changes, and Save works again", async () => {
+  it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
     const message = codeMessage("unit.precision_invalid");
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
@@ -414,11 +414,12 @@ describe("unit-form", () => {
       fieldErrors: unitRefusalErrors({ code: "unit.precision_invalid", params: {} }),
     });
     expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(message);
-    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+    expect(saveOf(el).disabled).toBe(false);
 
     change(el, "name-es", "caja grande");
     await el.updateComplete;
-    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(message);
+    expect(saveOf(el).disabled).toBe(false);
 
     change(el, "precision", "1");
     await el.updateComplete;

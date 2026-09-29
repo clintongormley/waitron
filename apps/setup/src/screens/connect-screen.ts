@@ -12,7 +12,7 @@ import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 
-type ConnectField = "primaryUrl" | "personId" | "password" | "totp";
+export type ConnectField = "primaryUrl" | "personId" | "password" | "totp";
 
 const REQUIRED_FIELDS: readonly ConnectField[] = ["primaryUrl", "personId", "password"];
 
@@ -68,8 +68,11 @@ export class SetupConnectScreen extends LitElement {
     `,
   ];
 
-  /** An adopt failure the shell routed back here. It names no field, so it never disables Connect. */
+  /** An adopt failure the shell routed back here that names no field this form shows. */
   @property() errorMessage?: string;
+
+  /** A field the shell found an adopt refusal to be about. It never disables Connect. */
+  @property() invalidField?: ConnectField;
 
   @state() private values: Record<ConnectField, string> = {
     primaryUrl: "",
@@ -83,6 +86,8 @@ export class SetupConnectScreen extends LitElement {
   /** Set when Connect is pressed after `errorMessage` arrived; the message is then not shown. */
   @state() private refusalDismissed = false;
 
+  @state() private fieldRefusalDismissed = false;
+
   constructor() {
     super();
     new LocaleChangeController(this);
@@ -90,6 +95,17 @@ export class SetupConnectScreen extends LitElement {
 
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
+    if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    if (changed.has("invalidField") && this.#refusedField() !== undefined) {
+      void focusFirstInvalid(this.shadowRoot!);
+    }
+  }
+
+  #refusedField(): ConnectField | undefined {
+    return this.fieldRefusalDismissed ? undefined : this.invalidField;
   }
 
   #errors(): Set<ConnectField> {
@@ -100,11 +116,13 @@ export class SetupConnectScreen extends LitElement {
   #onField(key: ConnectField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.values = { ...this.values, [key]: event.detail.value };
+    if (key === this.invalidField) this.fieldRefusalDismissed = true;
   }
 
   #connect(): void {
     this.attempted = true;
     this.refusalDismissed = true;
+    this.fieldRefusalDismissed = true;
     if (this.#errors().size > 0) {
       void this.updateComplete.then(() => {
         if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
@@ -152,10 +170,12 @@ export class SetupConnectScreen extends LitElement {
 
   override render(): TemplateResult {
     const errors = this.#errors();
-    const field = (key: ConnectField, type?: string) => this.#field(key, errors.has(key), type);
+    const refused = this.#refusedField();
+    const field = (key: ConnectField, type?: string) =>
+      this.#field(key, errors.has(key) || refused === key, type);
     const bottom = [
       ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
-      ...(errors.size > 0 ? [t("connect.fix_fields")] : []),
+      ...(errors.size > 0 || refused !== undefined ? [t("connect.fix_fields")] : []),
     ].join(" ");
     return html`
       <h1>${t("connect.heading")}</h1>

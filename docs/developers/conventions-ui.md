@@ -11,7 +11,13 @@ the one-line version of each rule and points here for the rest.
 
 Required fields are visibly marked; an attempted invalid submission shows explanatory text beside
 every bad field and one localized message beside the primary action, which stays disabled until
-every field error is fixed — no summary at the top (owner, 2026-09-28). Every input has a semantic
+the form's own checks pass — no summary at the top (owner, 2026-09-28). An error from a request
+never disables the action by itself (owner, 2026-09-29: "Fields with errors should explain the problem";
+"if there is a form validation error leave it disabled; if the error comes from a request leave it
+enabled"); when handling a refusal empties or reveals a required field, that field's own check holds
+the action until the field is filled. Cost: before C54, many forms outside the till — the login and
+profile screens and the catalogue editors among them — disabled their action after a server refusal
+naming a field, until that field changed. Every input has a semantic
 `name` (plus the standard `autocomplete` purpose when one exists), never a generated widget id as
 its identity. Password reveal buttons use the input's `end` slot and an action-specific accessible
 label. An inline confirmation embedded IN a form suspends that form's Save and implicit Enter

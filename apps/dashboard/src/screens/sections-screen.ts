@@ -55,17 +55,14 @@ const occurrenceParent = (row: Occurrence) => row.parentKey;
 
 const NO_USAGES: SectionUsages = { menus: [], sections: [] };
 
-/** Where a form's messages show: `invalid` when one is under a field `shown` names, which holds the
- * primary action; every other one, then the generic sentence, in the message beside it. */
-function placeErrors(
-  errors: Record<string, string>,
-  shown: ReadonlySet<string>,
-): { invalid: boolean; bottom: string } {
-  const invalid = Object.entries(errors).some(([key, message]) => message && shown.has(key));
+/** The message beside a form's primary action: every message not under a field `shown` names, then
+ * the generic sentence when one is. */
+function bottomMessage(errors: Record<string, string>, shown: ReadonlySet<string>): string {
+  const marked = Object.entries(errors).some(([key, message]) => message && shown.has(key));
   const others = Object.entries(errors)
     .filter(([key, message]) => message && !shown.has(key))
     .map(([, message]) => message);
-  return { invalid, bottom: [...others, ...(invalid ? [t("form.fix_fields")] : [])].join(" ") };
+  return [...others, ...(marked ? [t("form.fix_fields")] : [])].join(" ");
 }
 
 const without = (errors: Record<string, string>, keys: readonly string[]) =>
@@ -440,10 +437,6 @@ export class SectionsScreen extends LitElement {
 
   #nameErrors(name: string): Record<string, string> {
     return name.trim() === "" ? { internalName: t("sections.internal_name_required") } : {};
-  }
-
-  #editorErrors(): Record<string, string> {
-    return { ...this.fieldErrors, ...(this.attempted ? this.#nameErrors(this.internalName) : {}) };
   }
 
   /** The error keys a field of the details form shows. */
@@ -958,8 +951,9 @@ export class SectionsScreen extends LitElement {
 
   #renderEditor() {
     const details = this.editorView === "details";
-    const errors = this.#editorErrors();
-    const { invalid, bottom } = placeErrors(errors, this.#editorFields());
+    const invalid = this.attempted ? this.#nameErrors(this.internalName) : {};
+    const errors = { ...this.fieldErrors, ...invalid };
+    const bottom = bottomMessage(errors, this.#editorFields());
     return html`<wt-modal
       data-test="editor"
       .open=${this.editorOpen}
@@ -994,7 +988,7 @@ export class SectionsScreen extends LitElement {
               ><wt-button
                 variant="primary"
                 data-test="editor-save"
-                .disabled=${this.busy || this.pickerOpen || invalid}
+                .disabled=${this.busy || this.pickerOpen || Object.keys(invalid).length > 0}
                 @click=${() => void this.#save()}
                 >${t("action.save")}</wt-button
               ></wt-form-actions
@@ -1006,11 +1000,9 @@ export class SectionsScreen extends LitElement {
 
   #renderDuplicate() {
     const duplicating = this.duplicating;
-    const errors = {
-      ...this.duplicateErrors,
-      ...(this.duplicateAttempted ? this.#nameErrors(this.duplicateName) : {}),
-    };
-    const { invalid, bottom } = placeErrors(errors, new Set(["internalName"]));
+    const invalid = this.duplicateAttempted ? this.#nameErrors(this.duplicateName) : {};
+    const errors = { ...this.duplicateErrors, ...invalid };
+    const bottom = bottomMessage(errors, new Set(["internalName"]));
     return html`<wt-modal
       data-test="duplicate"
       .open=${duplicating !== null}
@@ -1084,7 +1076,7 @@ export class SectionsScreen extends LitElement {
         ><wt-button
           variant="primary"
           data-test="duplicate-save"
-          .disabled=${this.busy || invalid}
+          .disabled=${this.busy || Object.keys(invalid).length > 0}
           @click=${() => void this.#duplicate()}
           >${t("action.save")}</wt-button
         ></wt-form-actions
