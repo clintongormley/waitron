@@ -1129,7 +1129,9 @@ describe("your profile — errors beside Save, not above the form", () => {
     input(el, "setupCode", "123456");
     await click(el, "save");
     // The code's own sentence speaks of a link; under a code field the screen says code.
-    expect(field(el, "setupCode").error).toBe("Este código no es correcto o ya no es válido.");
+    expect(field(el, "setupCode").error).toBe(
+      "Este código no es correcto o ya no es válido. Revísalo o vuelve a cambiar tu correo para recibir uno nuevo.",
+    );
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(await nativeSaveDisabled(el)).toBe(false);
     await vi.waitFor(() => expect(focused(el, "setupCode")).toBe(true));
