@@ -48,4 +48,20 @@ describe("codeOf", () => {
   it("prefers the code over a supplied fallback", () => {
     expect(codeOf({ code: "z" }, "f")).toBe("z");
   });
+
+  it("ignores a code that is not a string", () => {
+    expect(codeOf({ code: 9 })).toBe("server.internal");
+  });
+
+  it("ignores a browser DOMException's numeric code", () => {
+    expect(codeOf(new DOMException("Not supported", "NotSupportedError"), "f")).toBe("f");
+  });
+
+  it("falls back for an undefined rejection", () => {
+    expect(codeOf(undefined)).toBe("server.internal");
+  });
+
+  it("falls back for a null rejection", () => {
+    expect(codeOf(null)).toBe("server.internal");
+  });
 });
