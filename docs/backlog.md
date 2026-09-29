@@ -5940,14 +5940,30 @@ reading unless marked run:
   dialog itself. `apps/dashboard/src/widgets/allergen-picker.ts` avoids the problem by mounting a
   fresh dialog for each open (`keyed`, about lines 215-222). Seen once under coverage load in a test
   (run); we believe a person cannot reopen it that fast; not tested.
-- Four catalogue forms turn the dialog's late `wt-close` into a Cancel without first checking that
-  they are still open: `unit-form.ts`, `option-list-form.ts`, `extra-list-form.ts` and
-  `variant-form.ts` (all in `apps/dashboard/src/widgets/`). So after a Cancel, once the owner has
-  closed the form, the late close report probably sends `wt-cancel` a second time. The catalogue
-  screen ignores a cancel for a form it has already closed (`#cancelChild`, #741); the Units and
-  Modifiers screens, and the product editor that owns the variant form, would act on it again.
-  `option-label-form.ts` already carries the one-line check, as `content-languages.ts` now does.
-  Found 2026-09-27 in review; by reading, not run.
+- The product editor's variant form (`apps/dashboard/src/widgets/variant-form.ts`) and the
+  category form (`apps/dashboard/src/widgets/category-form.ts`, its `wt-close` handler at about
+  lines 241-243, which checks only `busy` and `pickerOpen`) turn the dialog's late `wt-close` into
+  a Cancel without first checking that the form is still open. So after a Cancel, once the screen
+  has closed the form, the late close report probably sends `wt-cancel` a second time. For the
+  variant form the product editor would act on it again. For the category form, on today's two
+  callers it only re-sets a closed state: `categories-screen.ts` (about lines 968-971) sets
+  `editorOpen = false` again, and `catalogue-screen.ts`'s `#cancelChild` ignores it because no
+  form of that kind is open. Variant form found 2026-09-27 in review, category form 2026-09-29 in
+  review; both by reading, not run. The variant form was left out of C68 because lane B's
+  standalone-ordering task (B13, Task 13 of
+  `docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md`) changes the product editor.
+  **DONE (C68, 2026-09-29):** the Units, Options and Extras forms (`unit-form.ts`,
+  `option-list-form.ts`, `extra-list-form.ts`) carry the same `!this.open` check
+  `option-label-form.ts` does; a test in each cancels, closes the form, waits for the dialog's
+  close report and counts one `wt-cancel`. A review run with the three checks removed counted two
+  in each (2026-09-29).
+- Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
+  (`apps/dashboard/src/screens/catalogue-screen.ts` mounts it at about line 711) also closes the
+  product editor behind it; in the same test the Unit form sent exactly one cancel. Measured
+  2026-09-29 by a review seat with a browser test that opened a product, opened its Unit form,
+  pressed Escape (`userEvent.keyboard("{Escape}")`) and found the product editor's `open` false
+  (`expected false to be true`). The same test failed the same way with C68's changes reverted, so
+  it predates C68. The same test did not fail for the Extras and Options forms. Not yet diagnosed.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
 - My Schedule's load-failed banner (`loadFailed` in

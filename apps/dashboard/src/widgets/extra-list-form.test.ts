@@ -1,8 +1,8 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-extra-list-form`.
 import { ExtraListForm } from "./extra-list-form.js";
@@ -490,6 +490,33 @@ it("emits one wt-cancel, and neither event while it is saving", async () => {
   el.busy = false;
   await el.updateComplete;
   await click(el, "cancel");
+  expect(cancels).toBe(1);
+});
+
+it("sends one wt-cancel when the dialog reports its close after the form has been closed", async () => {
+  const { el, host } = await mount({ value: addons });
+  let cancels = 0;
+  host.addEventListener("wt-cancel", () => cancels++);
+
+  await click(el, "cancel");
+  el.open = false;
+  await el.updateComplete;
+  await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+  await closeReportsDelivered();
+
+  expect(cancels).toBe(1);
+});
+
+it("sends one wt-cancel when its dialog is dismissed with Escape while the form is open", async () => {
+  const { el, host } = await mount({ value: addons });
+  let cancels = 0;
+  host.addEventListener("wt-cancel", () => cancels++);
+
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(cancels).toBe(1));
+  await closeReportsDelivered();
+
+  expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   expect(cancels).toBe(1);
 });
 

@@ -1,5 +1,6 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
@@ -273,6 +274,39 @@ describe("unit-form", () => {
     expect(event.detail).toEqual({});
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
+  });
+
+  it("sends one wt-cancel when the dialog reports its close after the form has been closed", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+    });
+    let cancels = 0;
+    el.addEventListener("wt-cancel", () => cancels++);
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel]")!.click();
+    el.open = false;
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+    await closeReportsDelivered();
+
+    expect(cancels).toBe(1);
+  });
+
+  it("sends one wt-cancel when its dialog is dismissed with Escape while the form is open", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["en"],
+    });
+    let cancels = 0;
+    el.addEventListener("wt-cancel", () => cancels++);
+
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(cancels).toBe(1));
+    await closeReportsDelivered();
+
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
+    expect(cancels).toBe(1);
   });
 
   it("initializes an open edit form when its locales arrive after mounting", async () => {

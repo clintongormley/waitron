@@ -523,8 +523,6 @@ describe("catalogue-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
-  // One dismissal produces TWO `wt-cancel`s: the form's own, then the `<dialog>`'s native `close` a
-  // task later, by which time another form can be open.
   it("ignores a closed form's second cancel, which by then belongs to another form", async () => {
     const api = stubApi();
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });

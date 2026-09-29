@@ -203,7 +203,9 @@ export class UnitForm extends LitElement {
 
   #cancel(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
+    // The dialog also reports a close it was told to make, a task later; by then the screen has
+    // closed this form and a second cancel would be about nothing.
+    if (this.busy || !this.open) return;
     this.dispatchEvent(new CustomEvent("wt-cancel", { detail: {}, bubbles: true, composed: true }));
   }
 
