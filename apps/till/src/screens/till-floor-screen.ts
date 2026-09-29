@@ -484,6 +484,8 @@ export class TillFloorScreen extends LitElement {
         : table.status;
     return toFloorTable(table, {
       ...table,
+      // The server reads a table no party holds as free; one needing cleaning must not look ready to seat.
+      state: needsClearing(table) ? "open-tab" : table.state,
       tabTotal,
       status,
       reservedTime: table.nextReservation?.time ?? null,

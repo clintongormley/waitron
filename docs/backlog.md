@@ -3102,6 +3102,26 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
       `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which
       read the same column. Decide whether those should read the tables alone.
+  - **Task 3 DONE (feat/party-table-cleaning, 2026-09-29): a table needs cleaning, not its
+    party.** What changes for a person using the till:
+    - Finish closes the party at once. Where the venue's clearing setting is on, each of its tables
+      then reads "Needs clearing" on the floor with no party on it, and Mark cleared frees that one
+      table (`POST /api/tables/:id/cleared`, which answers 204 even for a table that needs nothing,
+      and `table.not_found` for an unknown one). With the setting off, Finish frees the tables at
+      once, as before. The per-party `POST /api/parties/:id/cleared` is gone.
+    - Seating, moving to or joining a table that needs cleaning is refused `table.needs_cleaning`
+      (409, including the bookings seat route), where seating one was refused `tab.already_open`.
+      The till's Move and Join table picker no longer offers such a table, and the floor map no
+      longer paints it with the free colour.
+    - Core migration `0039_table_needs_cleaning` adds `dining_tables.needs_cleaning_since`; the
+      configuration export leaves it out, like `tab_id`. The party state `needs_clearing` is no
+      longer written; Task 13 removes it.
+    - Upgrade, measured on a scratch venue seeded by the previous `main`: every row kept, only
+      `dining_tables` and its change-feed trigger changed, `foreign_key_check` empty. **A dev venue
+      holding a party already in `needs_clearing` keeps that party's tables held, and nothing on
+      this branch frees them** (Finish answers `party.not_open`, seating `tab.already_open`, Mark
+      cleared changes nothing). `wa-wt reset demo <name>` gives a clean venue; no data migration
+      (CLAUDE.md §3).
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

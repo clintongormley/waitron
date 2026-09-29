@@ -303,6 +303,20 @@ describe("till-floor-screen: a table needing clearing", () => {
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
   });
 
+  it("does not paint a table needing cleaning as free on the map, although no party holds it", async () => {
+    const el = await mountFloor([
+      { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
+    ]);
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    const token = canvas.shadowRoot!.querySelector<HTMLElement>(
+      '[data-table="t4"] wt-table-token',
+    )!;
+    await (token as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const card = token.shadowRoot!.querySelector(".card")!;
+    expect(card.classList.contains("state-free")).toBe(false);
+  });
+
   it("closes the map's clearing dialog without clearing when it is cancelled", async () => {
     const el = await mountFloor([
       { ...clearing("t4", "4"), posX: 200, posY: 200, shape: "round", rotation: 0 },
