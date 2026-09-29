@@ -70,14 +70,16 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     await library.updateComplete;
     await expectNoA11yViolations(host);
   });
-  it("announces missing upload metadata beside fields and in the form summary", async () => {
+  it("announces missing upload metadata beside fields and beside the Save button", async () => {
     const library = await mount(theme);
     await openDialog(library, "upload");
     library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await library.updateComplete;
-    const summary = library.shadowRoot!.querySelector("wt-form-error-summary")!;
-    await summary.updateComplete;
-    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    const actions = library.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+      "wt-modal wt-form-actions",
+    )!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
     await expectNoA11yViolations(host);
   });
   it("labels translated metadata fields in the edit dialog", async () => {
