@@ -2431,7 +2431,7 @@ async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise
  * Lines pass between two orders only when both have the same service mode, or neither has a service
  * context.
  */
-async function assertServiceModesMatch(
+export async function assertServiceModesMatch(
   tx: Transaction,
   cfg: TillConfig,
   fromOrderId: string,
@@ -2481,7 +2481,7 @@ export async function moveTabLines(
  * service mode — by that check, or by construction as `splitOffCheck`'s `copyOrderContext` does —
  * may pass it.
  */
-async function moveOrderLines(
+export async function moveOrderLines(
   tx: Transaction,
   cfg: TillConfig,
   fromTabId: string,
@@ -3077,7 +3077,7 @@ function grossLineTotal(grossUnit: string, quantity: string): Decimal {
  * pre-batch quantity and the split sets the source to `original − q`, so two partial "1"s off a line
  * of 3 would add 2 to the destination while the source dropped by 1.
  */
-function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number }[]): void {
+export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: number }[]): void {
   const seenLineNos = new Set<number>();
   for (const { lineNo } of transfers) {
     if (seenLineNos.has(lineNo)) {
@@ -3149,10 +3149,11 @@ async function carveBetweenTabs(
 /**
  * Carry whole lines and partial splits between two orders, keeping each unit's LOCKED prices and
  * CONSERVING quantity. It makes no open-order check and no service-mode check of its own: the
- * CALLER must already have made both. Every transfer is validated before anything moves. Returns each
+ * CALLER makes the first, and ensures the second by {@link assertServiceModesMatch} or by copying the
+ * source's context onto a new order. Every transfer is validated before anything moves. Returns each
  * ticket item a split made, mapped to the one it was copied from.
  */
-async function carveOffLines(
+export async function carveOffLines(
   tx: Transaction,
   cfg: TillConfig,
   fromTabId: string,

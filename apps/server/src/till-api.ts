@@ -105,6 +105,8 @@ import {
   partyRevisionOfOrder,
 } from "./parties.js";
 import type { PartyCommand } from "./parties.js";
+import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import type { BillCommand } from "./bill-actions.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -500,6 +502,46 @@ function partyCommand(
     );
   }
   return command;
+}
+
+/** A bill route's command: {@link partyCommand}'s, and the party the till read the bill under. */
+function billCommand(personId: string, body: Record<string, unknown>): BillCommand {
+  const command: BillCommand = partyCommand(personId, body);
+  if (body.partyId !== undefined) {
+    command.partyId = requireBodyUuid(body.partyId, "partyId").toLowerCase();
+  }
+  return command;
+}
+
+/**
+ * The other bill a bill route names, which the body must carry: a non-UUID names no open bill, as a
+ * malformed path id.
+ */
+function requireOtherBill(value: unknown, field: string): string {
+  if (value === undefined) throw invalid(field);
+  if (typeof value !== "string" || !isUuid(value)) {
+    throw new AppError("tab.not_open", { tabId: String(value) });
+  }
+  return value;
+}
+
+/**
+ * A list of objects, each with a numeric `lineNo`. A line number naming no line, and a bad quantity,
+ * are left to the verb's domain codes.
+ */
+function requireTransfers(value: unknown): { lineNo: number; quantity?: string }[] {
+  if (!Array.isArray(value)) throw invalid("transfers");
+  for (const entry of value) {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      Array.isArray(entry) ||
+      typeof (entry as { lineNo?: unknown }).lineNo !== "number"
+    ) {
+      throw invalid("transfers");
+    }
+  }
+  return value as { lineNo: number; quantity?: string }[];
 }
 
 /** What every group command carries: its submission id, the party revision read, and who acts. */
@@ -2047,6 +2089,55 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         }),
       );
       return c.json(result);
+    }),
+  );
+
+  app.post("/api/bills/:id/split", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const billId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const transfers = requireTransfers(body.transfers);
+      const command = billCommand(personId, body);
+      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
+        withTransaction(deps.db, async (tx) => {
+          const split = await splitBill(tx, deps.cfg, billId, transfers, command);
+          await issueIfFullyPaid(tx, fiscal, saleCfg, billId, personId);
+          return split;
+        }),
+      );
+      return c.json(result);
+    }),
+  );
+
+  // The path is the bill merged INTO.
+  app.post("/api/bills/:id/merge", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const intoBillId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const fromBillId = requireOtherBill(body.fromBillId, "fromBillId");
+      const command = billCommand(personId, body);
+      await withTransaction(deps.db, (tx) =>
+        mergeBills(tx, deps.cfg, intoBillId, fromBillId, command),
+      );
+      return c.body(null, 204);
+    }),
+  );
+
+  // The path is the bill the items leave.
+  app.post("/api/bills/:id/transfer", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const fromBillId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const toBillId = requireOtherBill(body.toBillId, "toBillId");
+      const transfers = requireTransfers(body.transfers);
+      const command = billCommand(personId, body);
+      await withTransaction(deps.db, (tx) =>
+        transferItems(tx, deps.cfg, fromBillId, toBillId, transfers, command),
+      );
+      return c.body(null, 204);
     }),
   );
 
