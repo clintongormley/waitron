@@ -4639,10 +4639,18 @@ approved.
   values every caller passes, or, if a record path is meant to use it, wire it up and say where.
 - **A box that mints its certificate before NTP sync persists a wrong validity window**, with no
   renewal path yet. Ties to a time-health check and certificate renewal.
-- **Fixed (C71): server shutdown closes the database even when stopping background work fails**
+- **Fixed (C71, #870): server shutdown closes the database even when stopping background work fails**
   (`apps/server/src/boot.ts`). One consequence: if stopping Litestream itself fails, the store is
   now closed while Litestream may still be running, where before it was left open; nothing tests
   that case.
+  - **OPEN, left by #870's review (read, not run): a failed START still has the shape C71 removed
+    from shutdown.** Two of `bootServer`'s `undoOnFailure` entries run several stops as one step:
+    the cloud entry awaits `cloudWorker` then `cloudSnapshots`, so if the worker's promise rejects
+    the snapshot loop is not waited for before the store closes; and the change-feed entry calls
+    `unsubscribeFromChanges()` then `liveEvents.close()`, so a throwing unsubscribe skips the close.
+    **Next action:** split each into one undo per stop (or run them through `closeAll`,
+    `apps/server/src/close-all.ts`, as `close()` now does), with a case in
+    `apps/server/src/boot.failed-start.test.ts` that fails first.
 - **Two concurrent first provisions can still race past the venue guard** (2026-09-14). Both can
   pass the empty-`locations` check and carry on down the venue path; `apps/server/src/provision.ts`
   says in as many words that callers must serialise provisioning, and nothing enforces it — the
