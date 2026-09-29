@@ -1039,16 +1039,22 @@ reporter.
 ### The upgrade test keeps its database in memory on Linux
 
 `scripts/migration-upgrade.test.ts` makes its scratch directory under `scratchParent()`
-(`scripts/scratch-dir.mjs`): `/dev/shm`, a memory-backed filesystem, when it is a directory, and the
-system temporary directory otherwise. A passing run's summary names which it used.
+(`scripts/scratch-dir.mjs`): `/dev/shm`, a memory-backed filesystem on Linux, when it is a
+directory, and the system temporary directory otherwise. A passing run's summary names which it
+used, though Vitest hides that output under an AI agent (previous section).
 
-Why. The test failed its 110-second deadline four times in CI's `lint` job (runs 36401947339,
-36471580455, 36544133895 and 36550884979), each time slow from its first phase rather than stuck in
-one. In the `lint` jobs of the 78 CI runs up to 2026-09-29 it took 17 to 112 seconds; the 11 runs
-over 60 seconds, the four failures among them, were all in the `centralus` region, on runners where
-every other root suite had finished within 27 to 31 seconds, against 31 to 45 on most runners. The
-test commits hundreds of times: a change-feed phase alone issues a `drop trigger` and a
-`create trigger` for each of three triggers on each of 115 sources, one statement at a time outside
+Why. The test failed five times in CI's `lint` job. The first, run 36401947339 (2026-09-28, #803's
+docs-only head `b3768ddb3`), failed `Test timed out in 120000ms` under the old 120-second bound,
+before the per-phase report existed, so nothing is known about its shape. The other four failed the
+110-second deadline with the report: runs 36471580455 (#817), 36501083786 (`main`), 36544133895
+(`main`) and 36550884979 (#851). Each of those four reports showed the test slow from its first
+phase rather than stuck in one. In the 114 `lint` jobs that ran it in CI runs 36466135605
+to 36551592480 it took 17 to 112 seconds; the 11 runs over 60 seconds, those four failures among them,
+were all in the `centralus` region, and in those 11 every other root suite finished within 27 to 30
+seconds of the first root suite finishing, against 31 to 46 seconds on all but two of the other 103
+runs. The test commits hundreds of times: a change-feed phase
+alone issues a `drop trigger` and a `create trigger` for each of three triggers on each source
+present at that step, 86 at the first steps up to 115 at the last, one statement at a time outside
 any transaction. The store leaves SQLite's `synchronous` at the driver's default, which reads back as
 `2` (full) on Node v26.7.0, so each of those commits waits for the disk. Two probes in a temporary
 workflow, 20 runners each, 2026-09-29:
@@ -1056,14 +1062,22 @@ workflow, 20 runners each, 2026-09-29:
 - The test alone, with `TMPDIR=/tmp` and then `TMPDIR=/dev/shm` on the same runner (run
   36553496623): 17 to 34 seconds on the disk and 4 to 8 seconds in memory, the memory run under half
   the disk run's time on every runner. 300 separate `create table` commits took 128 to 709 ms on the
-  disk and 7 to 22 ms in memory. None of the 20 reached the 60-to-112-second range the slow runs
-  were in, so that range itself was not reproduced.
+  disk and 8 to 22 ms in memory.
 - With this change, `pnpm vitest run --coverage`, the `lint` job's own command (run 36554428373):
-  the test took 6.2 to 11.5 seconds on all 20, four of them in `centralus`, and every run printed
+  the test took 6.2 to 11.5 seconds on all 20, three of them in `centralus`, and every run printed
   `Scratch directory under /dev/shm.`
 
+That the disk caused the 60-to-112-second runs is an inference. The probes show the disk slows this
+test 2.5 to 6 times, but neither reproduced that range.
+
+`/dev/shm` has a size limit. Measured 2026-09-29 by the review's run-it seat in a Linux container
+(Node v26.10.0) started with `--shm-size=64m`, Docker's default size: the scratch directory peaked at
+about 14 MiB and the test passed; after a 56 MiB file was written into `/dev/shm` first, leaving
+8 MiB, the test failed with `migrations.apply_failed`. The scratch directory was removed both times.
+
 `useVenueDb` (`packages/db/src/testing/venue-db.ts`) still makes its directories under the system
-temporary directory, so the package suites still pay the disk; whether they would gain is not
+temporary directory, and so do the root suites `scripts/append-only-triggers.test.ts` and
+`scripts/behavioural-triggers.test.ts`, so they still pay the disk; whether they would gain is not
 measured (`docs/backlog.md`, B9).
 
 ## Check every command's exit status

@@ -4405,23 +4405,18 @@ approved.
 
 ### B9. CI and test infra
 
-- **`scripts/migration-upgrade.test.ts` ran several times slower in some CI runs — DONE (lane A's
-  A122, 2026-09-29).** It failed its 110-second deadline in four `lint` jobs (runs 36401947339,
-  36471580455, 36544133895 on `main` and 36550884979 on #851), slow from its first phase rather than
-  stuck in one; A112 had added the per-phase report that showed it. The cause was the runner's disk:
-  the test commits hundreds of times with SQLite's `synchronous` at full, and in a CI probe of 20
-  runners the same test took 17 to 34 seconds on the disk against 4 to 8 in memory. It now makes its
-  scratch directory under `/dev/shm` when that exists (`scripts/scratch-dir.mjs`), and in a second
-  probe of 20 runners running the `lint` job's own command it took 6.2 to 11.5 seconds. The 60-to-112
-  second runs, all in `centralus`, were not reproduced by either probe. Receipts:
+- **`scripts/migration-upgrade.test.ts` makes its scratch directory under `/dev/shm` when it exists
+  — DONE (lane A's A122, 2026-09-29).** It ran 2.5 to 6 times slower on CI's disk than in memory;
+  the disk as the cause of its timeouts is inferred:
   [ci-and-gates.md](developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **Would the package suites' databases gain from memory too?** `useVenueDb`
   (`packages/db/src/testing/venue-db.ts`) makes each suite's venue folder under the system temporary
-  directory, so every database suite in CI commits to the runner's disk, the cost A122 measured for
-  the upgrade test. Not measured for the package suites. Next action: time one database-heavy
-  package's `test:coverage` in CI with its folders on the disk and under `/dev/shm`
-  (`scratchParent()` in `scripts/scratch-dir.mjs` is the choice the upgrade test makes), and adopt
-  it in `useVenueDb` only if the shard times move.
+  directory, and the root suites `scripts/append-only-triggers.test.ts` and
+  `scripts/behavioural-triggers.test.ts` make theirs there too, so they all commit to the runner's
+  disk. Not measured for them. Next action: time one database-heavy package's `test:coverage` in CI
+  with its folders on the disk and under `/dev/shm` (`scratchParent()` in `scripts/scratch-dir.mjs`
+  is the choice the upgrade test makes), and adopt it in `useVenueDb` only if the shard times move
+  and a suite's databases fit in `/dev/shm` (Docker's default is 64 MiB).
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →

@@ -1,3 +1,4 @@
+import { statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
 import { scratchParent } from "./scratch-dir.mjs";
@@ -11,7 +12,8 @@ describe("scratchParent", () => {
     expect(scratchParent({ isDirectory: () => false })).toBe(tmpdir());
   });
 
-  it("reads the real filesystem when nothing is injected", () => {
-    expect(["/dev/shm", tmpdir()]).toContain(scratchParent());
+  it("chooses /dev/shm exactly when the real filesystem has it as a directory", () => {
+    const hasShm = statSync("/dev/shm", { throwIfNoEntry: false })?.isDirectory() ?? false;
+    expect(scratchParent()).toBe(hasShm ? "/dev/shm" : tmpdir());
   });
 });

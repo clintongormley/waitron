@@ -251,6 +251,12 @@ hook, or how tests are scheduled:
   [conventions-data.md](docs/developers/conventions-data.md)). Cost: an earlier bricked box that
   was wiped, and a box that failed three starts on 2026-09-26. See
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
+- **The upgrade test makes its scratch directory under `scratchParent()` (`scripts/scratch-dir.mjs`),
+  which picks `/dev/shm` when it exists, because every commit waits for the disk** — the store
+  leaves `synchronous` at full. Cost: it timed out in CI five times; on CI's disk it ran 2.5 to 6
+  times slower than in memory, the inferred but unreproduced cause. Whether other database suites
+  would gain is not measured (`docs/backlog.md`, B9). Nothing guards it. Receipt:
+  [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
 CI runs the same checks. A hook failure the PR does not reproduce is a check CI has deferred to the
@@ -793,11 +799,6 @@ browser test** — most of these rules exist because a test passed while proving
   does not cover this** — it reads a `scripts/` suite's own declared waits, never the child's, so
   nothing guards the rule in general. Receipt (the `deploy/waitron.sh` health-probe case):
   [testing-guide.md](docs/developers/testing-guide.md).
-- **A suite that commits to SQLite many times is timed by the CI runner's DISK, not its CPU.**
-  The store leaves `synchronous` at full, so every commit waits for a flush: the upgrade test took
-  17 to 112 seconds in `lint` jobs on the disk and 6 to 12 under `/dev/shm`, where it now runs
-  (`scratchParent()`, `scripts/scratch-dir.mjs`). `useVenueDb` still uses the disk. Receipt:
-  [ci-and-gates.md](docs/developers/ci-and-gates.md#the-upgrade-test-keeps-its-database-in-memory-on-linux).
 - **A suite's executable stubs are built ONCE per file, not once per test** — move what each case
   varies into environment variables the stub reads. It pays only where the stubs are a large share of
   the runtime, and only on macOS (no Linux penalty), so it speeds the local hook and not CI — measure
