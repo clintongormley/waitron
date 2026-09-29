@@ -3102,7 +3102,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
       `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which
       read the same column. Decide whether those should read the tables alone.
-  - **Task 3 DONE (feat/party-table-cleaning, 2026-09-29): a table needs cleaning, not its
+  - **Task 3 DONE (#844, 2026-09-29, main `6736159a2`): a table needs cleaning, not its
     party.** What changes for a person using the till:
     - Finish closes the party at once. Where the venue's clearing setting is on, each of its tables
       then reads "Needs clearing" on the floor with no party on it, and Mark cleared frees that one
@@ -3122,6 +3122,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       this branch frees them** (Finish answers `party.not_open`, seating `tab.already_open`, Mark
       cleared changes nothing). `wa-wt reset demo <name>` gives a clean venue; no data migration
       (CLAUDE.md §3).
+    Left open, raised by #844's review and not changed there:
+    - A stale Mark cleared can free a table a LATER party has left: party A finishes and its table
+      is cleared, party B sits and finishes, and a second clear from a floor screen that had not
+      refreshed removes B's mark (reproduced by the Codex review). Clearing takes no revision by the
+      plan's P9. **Next action, if the owner wants it:** the till sends the mark's time with Mark
+      cleared and the server ignores a clear whose time no longer matches.
+    - New names say "cleaning" (`table.needs_cleaning`, `needs_cleaning_since`), older ones
+      "clearing" (`clearing_workflow`, "Mark cleared"). Free to rename until a venue is live.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
