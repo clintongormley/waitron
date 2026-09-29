@@ -2279,7 +2279,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   with 0000 by itself) answered first, BlueZ's retry went over Bluetooth Low Energy, which that
   printer refuses, and it never paired, while with the plugin off it paired. So
   `waitron.sh install` now switches the plugin off with a systemd drop-in (a small file that
-  changes how the Bluetooth service is started), and the operator types the PIN, 0000 for a 0000
+  changes how the Bluetooth service is started) where it can (`deploy/README.md` says when it
+  leaves Bluetooth alone), and the operator types the PIN, 0000 for a 0000
   printer. That drop-in was tried on a GitHub runner, where systemd showed the flag in the
   service's start command but the Bluetooth service itself never ran; it has not run on the
   owner's box. Pair and Forget under the shipped AppArmor profile (the Linux rules limiting what
@@ -4603,8 +4604,8 @@ approved.
     profile's header), and image-smoke now pairs the stand-in's PIN printer and forgets it under the
     profile. A property write (`trust`) and `Disconnect` were measured still refused there; BlueZ's
     `Agent1.Release` is not allowed either, and was never seen.
-    `waitron.sh install` also switches off bluetoothd's `autopair` plugin with a systemd drop-in,
-    because on the owner's box it answered a PIN-1234 printer with `0000` before any agent was
+    `waitron.sh install` also switches off bluetoothd's `autopair` plugin with a systemd drop-in
+    where it can (`deploy/README.md` says when it leaves Bluetooth alone), because on the owner's box it answered a PIN-1234 printer with `0000` before any agent was
     asked (`deploy/README.md`). Not yet run on the owner's box: pairing and `remove` under the new
     profile.
   - **The owner's box, in this order — done 2026-09-29.** The owner took the real-box pairing

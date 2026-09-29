@@ -542,7 +542,7 @@ export interface PullReply {
 }
 ```
 
-_2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin; the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the P2c entry in `docs/backlog.md`._
+_2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin where it can (`deploy/README.md` says when it leaves Bluetooth alone); the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the P2c entry in `docs/backlog.md`._
 
 - [ ] **Step 1: Write failing parser/body tests**
 
@@ -653,7 +653,7 @@ Use the full meaningful-code finish path and required Claude run-it review. Wait
 
 ## P2c — Server command channel and dashboard pairing
 
-_2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin; the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the P2c entry in `docs/backlog.md`._
+_2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin where it can (`deploy/README.md` says when it leaves Bluetooth alone); the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the P2c entry in `docs/backlog.md`._
 
 ### Task 9: Build the bounded in-memory command store
 

@@ -264,9 +264,9 @@ export function createAgent(opts: AgentOptions): Agent {
   }
 
   /** An id is remembered before its command starts, so a resent id does not run again while it is
-   * among the last `BLUETOOTH_COMMAND_LIMIT` taken. A command arriving while that many are already
-   * held (queued, running, or with an unsent outcome) is not remembered, so the server's next resend
-   * of it is taken instead. */
+   * among the last `BLUETOOTH_COMMAND_LIMIT` taken since the last setup reset. A command arriving
+   * while that many are already held (queued, running, or with an unsent outcome) is not remembered,
+   * so the server's next resend of it is taken instead. */
   function acceptBluetoothCommands(commands: BluetoothCommand[]): void {
     for (const command of commands) {
       if (executedBluetoothCommands.has(command.id)) continue;

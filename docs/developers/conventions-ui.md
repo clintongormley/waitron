@@ -343,8 +343,8 @@ own `bluetoothctl` calls, image-smoke runs only the paired listing, by waiting f
 its Bluetooth steps, so a new call is checked only once a step runs it too. It pairs through its own
 driver, `scripts/bluetoothctl-pair.mjs`, not the agent's Pair code, so a bus message the agent's Pair
 starts sending is checked only once the driver sends it too. It reads the kernel log with the
-kernel's printk rate limit switched off and requires that the profile's refusals logged during the
-step are the `trust` control's (`member="Set"`) and nothing else: any other refusal fails it. With
+kernel's printk rate limit switched off and requires at least one refusal logged during the step
+with `member="Set"`, which the `trust` control sends, and fails on any other refusal. With
 the limit on, the same
 probe run logged one AppArmor line of the nine a pairing and two removes produced, so a clean read
 proved nothing.
