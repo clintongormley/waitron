@@ -8096,16 +8096,32 @@ it. Left open:
   commit taking 1,017 ms while the disk stalled. The stream tests' CI step now sets
   `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
   are in memory"). Found by the probe, and open:
-  - A sale can wait behind Litestream's own checkpoint. Litestream 0.5.17 holds the database's write
-    lock while it checkpoints (`db.go` lines 2492–2512 at tag v0.5.17), and that checkpoint waits on
-    the disk too. In the reproduction the write after the slow commit waited 1,029 ms to begin. That
-    this wait was Litestream's is inferred: Litestream is the only other writer, and at its normal
-    log level it does not log checkpoints. CLAUDE.md §5's lead says the bucket stream never blocks
-    a sale, and its body that a sale can queue behind the server's own checkpoint but never waits
-    on the bucket. No sale in the probe waited on the bucket; if this wait was Litestream's
-    checkpoint, the stream held a write for about a second, which §5's "never blocks a sale" does
-    not allow for. **Next:** time a sale against a logged checkpoint on a slow disk, then decide
-    whether §5 should name it.
+  - **MEASURED (lane A's A133, 2026-09-29): a sale waits behind Litestream's own checkpoint; what
+    to do about it is the owner's decision** (question in the campaign's `questions.md`). Litestream
+    0.5.17 holds the database's write lock for a PASSIVE checkpoint: it opens a transaction writing
+    `_litestream_lock` around the checkpoint (`checkpointWithExecutor`, `db.go` lines 2492–2512 at
+    tag v0.5.17). The probe (a throwaway branch, since deleted; workflow run 36615242523, 12
+    GitHub-hosted runners, kernel 6.17.0-1022-azure) booted the real server on a provisioned venue
+    and sold through `POST /api/sales` with one seller, one sale at a time, for 150 s. Litestream
+    ran with the product's own configuration, the bucket answering, and its log at DEBUG written to
+    a file rather than a pipe, so the log could not stall it as trace level did in A130. Each
+    write's wait for `begin immediate` was timed in the write queue. The slow disk was a
+    device-mapper `delay` target: 10 ms per write, 100 ms per flush (50 synced 4 KiB writes took
+    6.9–9.4 s on it). Decided before running: if the stream cannot hold up a sale, writes wait
+    under 20 ms to begin with streaming on, as with it off. Results:
+    - Slow disk, streaming on: 14 writes waited 829–831 ms to begin (4, 5 and 5 in three runs), and
+      each wait contained one of Litestream's `checkpoint mode=PASSIVE` log lines. Slowest sale 1.06
+      to 1.32 s.
+    - Slow disk, streaming off: no write waited more than 1 ms to begin; slowest sale 0.40–0.54 s.
+    - The runner's normal disk, streaming on: 84, 104 and 100 writes waited 20 ms or more, each
+      containing a checkpoint line; 248 of those 288 lasted 33–105 ms, and the longest 430 and
+      629 ms.
+      Streaming off: none above 1 ms.
+    - No run met a 5-second `database is locked`, and every sale was answered 200.
+    So CLAUDE.md §5's "the bucket stream … never blocks a sale" does not hold for the stream's
+    local work: a sale waited for as long as Litestream's checkpoint held the write lock. Not
+    measured: several sellers at once, where the write queue puts later sales behind the held one,
+    and the box's own disk. Options are in the question; nothing has changed yet.
   - Litestream at trace logging deadlocked sales for five seconds. The probe first ran it at trace
     level by mistake, and 13 of 24 runs failed with a 500. Each one looked at was `begin immediate`
     failing `database is locked` after 5,006 to 5,008 ms (runs 36571860113, 36572745451). The inferred
