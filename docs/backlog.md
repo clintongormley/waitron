@@ -3931,7 +3931,7 @@ ongoing overhaul listed at the top of Track A.
   says the code is incorrect or no longer valid and how to get a new one (`profile.email_code_refused`, used only in the
   screen's email mode; the code's own link sentence stays for the login screen's links), and
   `locale.unsupported` has its own sentence in `apps/dashboard/src/i18n/codes.ts`;
-  (13) **DONE (C65, 2026-09-29):** the categories screen's change-main-category dialog now says its
+  (13) **DONE (C65, #861, 2026-09-29):** the categories screen's change-main-category dialog now says its
   message beside Save, through `wt-form-actions`' `error`, instead of above the picker: a refusal
   naming no field shows its own sentence there, and one placed under the picker shows "Correct the
   highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`
