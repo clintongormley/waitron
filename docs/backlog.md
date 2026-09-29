@@ -2817,7 +2817,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       0, so a line marked served before the upgrade keeps `served_at` with a served count of 0 (no
       backfill, by the pre-live rule). `0034`'s column is dropped again by core
       `0040_drop_order_group_added_later` (campaign item A119), a plain `DROP COLUMN` that rebuilds
-      no table. Measured 2026-09-29: a scratch venue migrated at main `c46cc8f2c`, holding one party
+      no table. Measured 2026-09-29: a scratch venue migrated at main `8235f63e7` (core `0039` there
+      is `0039_table_needs_cleaning`), holding one party
       with four groups (two fired, one of them marked added later, one held, one removed), six
       group events and four lines, then migrated with the branch's sets: the groups and group
       events read the same but for the dropped column, every line kept its group, tables (149),
