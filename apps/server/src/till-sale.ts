@@ -700,7 +700,7 @@ async function fileImmediateSale(
 }
 
 /**
- * The already-issued, unsettled sale for a working order, if any. An order placed under
+ * The already-issued sale for a working order, if any. An order placed under
  * `invoice_first` carries its sale from placing; one placed under any other mode files at pay. The
  * presence of the row, not the order's service mode, is the discriminator.
  *

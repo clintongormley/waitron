@@ -543,7 +543,7 @@ corrective invoice (R5, *factura rectificativa*) for a VAT error on an issued si
 `recordCorrection` exists (`packages/core/src/record-correction.ts`; the Verifactu backend corrects
 only an F2, as an R5), but no route calls it: its only callers under `apps/` are three scripts in
 `apps/server/scripts/` that each correct a sale they filed themselves (`daily-close-demo.ts`,
-`modelo-303-demo.ts`, `settle-invoice-first.ts`) and one test. The till computes a basket VAT split
+`modelo-303-demo.ts`, `settle-invoice-first.ts`) and tests. The till computes a basket VAT split
 (`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
 the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
 prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
@@ -3041,15 +3041,30 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **DONE (C50, 2026-09-29):** collecting a bill whose invoice carries a corrective invoice now
       settles at what the customer owes, the invoice total plus its corrections. New cases in
       `apps/server/src/collect-by-invoice.test.ts` issue an invoice-first bill for 18.00, correct it
-      by -2.20 through `recordCorrection`, then collect it in cash and by manual card. On the old
-      code both were refused with `sale.tender_shortfall` (due 15.80, charged 18.00). `collectOrder`
+      by -2.42 through `recordCorrection`, then collect it in cash and by manual card. On the old
+      code both were refused with `sale.tender_shortfall` (due 15.58, charged 18.00). `collectOrder`
       now reads the amount due through `readOutstandingSaleForOrder`, as the card-reader path does,
       and the manual card's `payments` row records that amount too.
-      Left OPEN by C50, both read and not run: the receipt a corrected bill's collection prints
-      still shows the original invoice's total (`readSettledTicket`, `apps/server/src/till-sale.ts`),
-      so it reads 18.00 beside a 15.80 payment and 4.20 change; and a bill corrected down to zero
-      would settle a 0.00 tender, which the `tenders_amount_ck` check appears to refuse. **Next
-      action:** a test for each, then decide what the receipt should show (an owner call).
+      Left OPEN by C50. No product route records a corrective invoice today (R5, above), so for now
+      only the demo scripts in `apps/server/scripts/` reach this path.
+      - **The ticket still shows the original invoice total.** Collection prints no receipt on this
+        path (the invoice-first receipt was printed at placing). The ticket `collectOrder` returns to
+        the till's screen, and any reprint, are built by `readSettledTicket`
+        (`apps/server/src/till-sale.ts`) and show the invoice's original total. Both print the cash
+        line as total plus change (`apps/server/src/receipt-ticket.ts:270`,
+        `apps/till/src/screens/till-ticket-view.ts:105`), so it overstates what was handed over. The
+        review's Codex probe of 2026-09-29, run on the earlier fixture (15.80 due, 20.00 handed
+        over), had `formatReceipt` print `TOTAL 18,00`, `Efectivo 22,20` and `Cambio 4,20`. **Next
+        action:** a test, then decide what the ticket should show (an owner call).
+      - **A bill corrected to zero or below cannot be collected.** Measured 2026-09-29 with a
+        temporary test that corrected the 18.00 bill by -18.00 and collected it in cash: on this
+        branch's code it fails with `CHECK constraint failed: tenders_amount_ck`, a raw database
+        error with no domain code; on the code before C50 it was refused with
+        `sale.tender_shortfall` (due 0.00, charged 18.00). So C50 turned a domain refusal into an
+        unclassified error for this case, and neither version can close such a bill.
+        `recordCorrection` sets no limit on a correction's size, so a correction larger than the
+        invoice reaches the same check. **Next action:** decide what collecting a bill with nothing
+        left to pay should do (an owner call), then a test.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
