@@ -2701,11 +2701,7 @@ describe("restore from my bucket", () => {
       undefined,
       "This server has saved setup work for a different request. Resume the original setup or contact support.",
     ],
-    [
-      "setup.request_invalid",
-      { field: "kit" },
-      "The server rejected the details. Check the kit and the environment, then try again.",
-    ],
+    ["setup.request_invalid", { field: "kit" }, "Check the recovery kit."],
     [
       "restore.hook_failed",
       { module: "fiscal", code: "x.y" },
@@ -2725,6 +2721,18 @@ describe("restore from my bucket", () => {
       };
       expect(button.disabled).toBe(false);
     }
+  });
+
+  it("says to check the environment under it when the server's request check names it", async () => {
+    const screen = await refusedWith({
+      code: "setup.request_invalid",
+      params: { field: "environment" },
+      status: 400,
+    });
+    expect(screen.shadowRoot!.querySelector("#environment-error")!.textContent).toBe(
+      "Check the environment.",
+    );
+    expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
   });
 
   // Review Focus 5, the wizard's half.
@@ -2900,18 +2908,24 @@ describe("restoring a backup file whose old server may still be running", () => 
   );
 
   it.each([
-    ["recovery.passphrase_invalid", {}, "recoveryKey"],
+    ["recovery.passphrase_invalid", {}, "recoveryKey", "Check the recovery key."],
     [
       "restore.environment_mismatch",
       { backup: "preproduction", target: "production" },
       "environment",
+      "The backup comes from the other environment. Choose the environment it came from.",
     ],
-    ["setup.request_invalid", { field: "artifact" }, "artifact"],
-    ["setup.request_invalid", { field: "recoveryKey" }, "recoveryKey"],
-    ["setup.request_invalid", { field: "environment" }, "environment"],
+    ["setup.request_invalid", { field: "artifact" }, "artifact", "Check the backup file."],
+    ["setup.request_invalid", { field: "recoveryKey" }, "recoveryKey", "Check the recovery key."],
+    [
+      "setup.request_invalid",
+      { field: "environment" },
+      "environment",
+      "Check the backup environment.",
+    ],
   ])(
     "returns the archive refusal %s %o under the %s field, leaving Restore working",
-    async (code, params, field) => {
+    async (code, params, field, message) => {
       const el = await mountSetupApp(
         stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 400 }) }),
       );
@@ -2919,7 +2933,8 @@ describe("restoring a backup file whose old server may still be running", () => 
       await flush(el);
       const screen = (await screenHost(el, "restore")) as SetupRestoreScreen;
       expect(screen.invalidField).toBe(field);
-      expect(screen.errorMessage).toContain(code);
+      const id = field === "recoveryKey" ? "recovery-key" : field;
+      expect(screen.shadowRoot!.querySelector(`#${id}-error`)!.textContent).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
       const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
         disabled: boolean;

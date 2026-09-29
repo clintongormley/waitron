@@ -600,7 +600,9 @@ does (owner rule, 2026-09-29).
   reached — never disables the action by itself. When handling it empties or reveals a required
   field, that field's own check holds the action until the field is filled. A refusal whose code or
   params name a field the form shows puts its sentence under that field, and stays there until the
-  operator changes that field or submits again. A refusal that names no field the form shows (a
+  operator changes that field or submits again. In the setup wizard the sentence under the field
+  speaks about that field alone: a "Check the …" sentence, or one that says what is wrong with that
+  field (owner, 2026-09-29, C62). A refusal that names no field the form shows (a
   network failure, a conflict, a field in a language the form does not show) goes in the bottom
   message instead, until the operator submits again;
 - the bottom message is the refusal's own sentence when the refusal names no field the form shows.

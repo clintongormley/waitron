@@ -26,6 +26,9 @@ export const restoreEn = {
     "Check every other server this restaurant still has before restoring. A backup may be older than a server that is still running.",
   "restore.acknowledge_missing": "Confirm that no other running server has newer data.",
   "restore.fix_fields": "Correct the highlighted fields to continue.",
+  "restore.check.backup_file": "Check the backup file.",
+  "restore.check.recovery_key": "Check the recovery key.",
+  "restore.check.environment": "Check the backup environment.",
   "restore.back": "Back",
   "restore.submit": "Restore backup",
 
@@ -53,6 +56,8 @@ export const restoreEn = {
   "restore_bucket.venue_confirm": "This is my business. Restore it onto this server.",
   "restore_bucket.venue_missing": "Confirm that this is your business.",
   "restore_bucket.fix_fields": "Correct the highlighted fields to continue.",
+  "restore_bucket.check.kit": "Check the recovery kit.",
+  "restore_bucket.check.environment": "Check the environment.",
   "restore_bucket.back": "Back",
   "restore_bucket.submit": "Restore from my bucket",
 
@@ -149,6 +154,9 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore.acknowledge_missing":
     "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
   "restore.fix_fields": "Corrige los campos marcados para continuar.",
+  "restore.check.backup_file": "Revisa el archivo de copia de seguridad.",
+  "restore.check.recovery_key": "Revisa la clave de recuperación.",
+  "restore.check.environment": "Revisa el entorno de la copia.",
   "restore.back": "Volver",
   "restore.submit": "Restaurar la copia",
 
@@ -178,6 +186,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.venue_confirm": "Este es mi negocio. Restáuralo en este servidor.",
   "restore_bucket.venue_missing": "Confirma que este es tu negocio.",
   "restore_bucket.fix_fields": "Corrige los campos marcados para continuar.",
+  "restore_bucket.check.kit": "Revisa el kit de recuperación.",
+  "restore_bucket.check.environment": "Revisa el entorno.",
   "restore_bucket.back": "Volver",
   "restore_bucket.submit": "Restaurar desde mi bucket",
 

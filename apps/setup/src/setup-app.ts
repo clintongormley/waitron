@@ -200,6 +200,17 @@ const BUCKET_FIELD_CODES: Record<string, BucketField> = {
 
 const BUCKET_FIELD_PATHS: Record<string, BucketField> = { kit: "kit", environment: "environment" };
 
+const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
+  artifact: "restore.check.backup_file",
+  recoveryKey: "restore.check.recovery_key",
+  environment: "restore.check.environment",
+};
+
+const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
+  kit: "restore_bucket.check.kit",
+  environment: "restore_bucket.check.environment",
+};
+
 function describeThrottle(params: Record<string, unknown> | undefined): Message {
   const seconds = params?.retryAfterSeconds;
   if (typeof seconds !== "number") return say("shell.throttle");
@@ -755,9 +766,13 @@ export class SetupApp extends LitElement {
           RESTORE_FIELD_PATHS,
         );
         this.restoreError =
-          typeof code === "string"
-            ? sayWith("shell.restore.staging_failed_code", { code })
-            : say("shell.restore.staging_failed");
+          code === "restore.environment_mismatch"
+            ? say("shell.restore.environment_mismatch")
+            : this.restoreInvalidField !== undefined
+              ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
+              : typeof code === "string"
+                ? sayWith("shell.restore.staging_failed_code", { code })
+                : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }
@@ -810,7 +825,11 @@ export class SetupApp extends LitElement {
           BUCKET_FIELD_CODES,
           BUCKET_FIELD_PATHS,
         );
-        this.bucketRestoreError = describeBucketRefusal(code, params);
+        // The kit's and environment's own refusals already say what is wrong with that field.
+        this.bucketRestoreError =
+          code === "setup.request_invalid" && this.bucketInvalidField !== undefined
+            ? say(BUCKET_FIELD_CHECKS[this.bucketInvalidField])
+            : describeBucketRefusal(code, params);
       }
       this.screen = "restore-bucket";
     }

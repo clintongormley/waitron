@@ -4545,21 +4545,33 @@ ongoing overhaul listed at the top of Track A.
   OPEN (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
   adjustments, venue-service and media module screens) it kept the action working after a request's
   refusal and put a refusal naming a shown field under that field. What it left, each
-  for the reason given with it: (1) the product
-  editor and the venue operations editors put a refused field's message under it in their generic
-  words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts` `#rejectedField`;
-  `venue.field_refused` in `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not
-  the refusal's own sentence, and the setup screens disagree on what goes under a refused field
-  (read, not run): the setup connect and reset screens show the field's own "Check the …" sentence
-  and the refusal's own sentence appears nowhere (`apps/setup/src/setup-app.ts` sets
-  `connectError` and `resetError` only when no field was placed; `connect-screen.ts` `#field`,
-  `reset-screen.ts` `CHECK`), while the restore and bucket-restore screens show the shell's refusal
-  sentence under the field (`restore-screen.ts` `#fieldError`, `restore-bucket-screen.ts`
-  `kitError`) — for restore that is always the whole-form "The backup could not be staged. Check the
-  file, key and environment. ({code})" with the raw code, and for bucket-restore the sentence
-  `describeBucketRefusal` picks: `shell.bucket.kit_damaged` for `backup.stream_kit_invalid` with
-  reason `encoding` or `shape`, otherwise the code's own sentence when `BUCKET_ERROR_MESSAGES` has
-  one, else "The copy could not be restored. ({code})"; (2) controls with no place for an error keep their refusal in the
+  for the reason given with it: (1) forms that put a refused field's message under it in generic
+  words, in two halves. **Dashboard half, OPEN:** the product editor and the venue operations
+  editors put a refused field's message under it in their generic words (`editor.field_rejected` in
+  `apps/dashboard/src/screens/catalogue-screen.ts` `#rejectedField`; `venue.field_refused` in
+  `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not the refusal's own
+  sentence. **Setup half, DONE (C62, 2026-09-29):** the setup screens now agree on what goes under a
+  refused field — a sentence about that field alone. Connect and reset already showed the field's
+  own "Check the …" sentence (venue shows one that says what is wrong with the field — `SERVER_FIELDS` in `apps/setup/src/server-fields.ts`), and the
+  restore screen now does too ("Check the backup file.", "Check the recovery key.", "Check the
+  backup environment.", and for `restore.environment_mismatch` "The backup comes from the other
+  environment. Choose the environment it came from.") instead of the whole-form "The backup could
+  not be staged. Check the file, key and environment. ({code})"; the bucket-restore screen does the
+  same for `setup.request_invalid` ("Check the recovery kit.", "Check the environment.") and keeps
+  its own sentences for `backup.stream_kit_invalid` and `restore.environment_mismatch`, which
+  already speak about that one field and say which way it is wrong (`RESTORE_FIELD_CHECKS` and
+  `BUCKET_FIELD_CHECKS` in `apps/setup/src/setup-app.ts`; tests in
+  `apps/setup/src/setup-app.test.ts`). design-system.md → Forms gained a sentence stating the setup
+  wizard's rule ("In the setup wizard the sentence under the field speaks about that field alone").
+  Still OPEN in the setup half (found in C62's review, read and not run): on the bucket-restore
+  screen a `setup.request_invalid` naming `oldBoxGone` or `venueConfirmed` (the two checkboxes;
+  `BUCKET_FIELD_PATHS` places only `kit` and `environment`) still shows `shell.bucket.request_invalid`
+  — "The server rejected the details. Check the kit and the environment, then try again." — in the
+  bottom message, which points at the kit and the environment when those two were accepted; it
+  predates C62 and nothing tests that case. The server refuses those two only when they are the
+  wrong type (`apps/server/src/setup-api.ts`), and the wizard's own request types them `boolean` and
+  `string | null` (`BucketRestoreRequestDetail`, `apps/setup/src/events.ts`; the client leaves out a
+  null `venueConfirmed`), so only a client bug or a request built outside the wizard reaches it; (2) controls with no place for an error keep their refusal in the
   bottom message — `wt-switch` (`active` on the ingredient, extras, options and menu-price forms;
   `available` on the product editor), the allergen and dietary-origin pickers on the ingredient
   form, and the purchase form's VAT regime select; (3) refusals naming two fields or a row the refusal does not number stay
@@ -4634,9 +4646,8 @@ ongoing overhaul listed at the top of Track A.
   and `apps/dashboard/src/screens/categories-screen.a11y.test.ts`. Still open there, read and not
   run: the same screen's delete dialog draws its message in the dialog's body, below the preview,
   rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`).
-  **Next action:** the owner decided on 2026-09-29 that the setup screens' wording under a refused
-  field in (1) is queued as C62; the other open points, and the delete dialog's
-  message noted above, still wait for the owner to say which are worth doing.
+  **Next action:** the other open points, and the delete dialog's message noted above, still wait
+  for the owner to say which are worth doing.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

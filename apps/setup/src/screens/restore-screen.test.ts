@@ -315,18 +315,21 @@ describe("SetupRestoreScreen", () => {
       environment: "production",
       oldBoxGone: false,
     };
-    const REFUSAL =
-      "The backup could not be staged. Check the file, key and environment. (recovery.passphrase_invalid)";
+    const REFUSAL = {
+      artifact: "Check the backup file.",
+      recoveryKey: "Check the recovery key.",
+      environment: "Check the backup environment.",
+    } as const;
 
     it("shows it under that field and focuses it, leaving Restore working", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
-        errorMessage: REFUSAL,
+        errorMessage: REFUSAL.recoveryKey,
         invalidField: "recoveryKey",
       });
       await new Promise((resolve) => setTimeout(resolve));
       const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
-      expect(fieldMessages(el)).toEqual([REFUSAL]);
+      expect(fieldMessages(el)).toEqual([REFUSAL.recoveryKey]);
       expect(key.getAttribute("aria-invalid")).toBe("true");
       expect(el.shadowRoot!.activeElement).toBe(key);
       expect(await bottomOf(el)).toBe(FIX_FIELDS);
@@ -348,17 +351,17 @@ describe("SetupRestoreScreen", () => {
     ] as const)("marks the %s field it names", async (field, selector) => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
-        errorMessage: REFUSAL,
+        errorMessage: REFUSAL[field],
         invalidField: field,
       });
       expect(q(el, selector)!.getAttribute("aria-invalid")).toBe("true");
-      expect(fieldMessages(el)).toEqual([REFUSAL]);
+      expect(fieldMessages(el)).toEqual([REFUSAL[field]]);
     });
 
     it("drops it when the named field changes", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
-        errorMessage: REFUSAL,
+        errorMessage: REFUSAL.environment,
         invalidField: "environment",
       });
       const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
@@ -372,7 +375,7 @@ describe("SetupRestoreScreen", () => {
     it("drops it on the next press and sends the request again", async () => {
       const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,
-        errorMessage: REFUSAL,
+        errorMessage: REFUSAL.artifact,
         invalidField: "artifact",
       });
       const listener = vi.fn();
