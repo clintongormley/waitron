@@ -48,6 +48,7 @@ const EXIT_GRACE_MS = 5_000;
 const AGENT_PROMPT = /^\[agent\] .*:$/;
 const PIN_PROMPT = "[agent] Enter PIN code:";
 const SHELL_PROMPT = "[bluetoothctl]>";
+const BLUEZ_ERROR_NAME = /^org\.bluez\.Error\.[A-Za-z]+$/;
 
 export interface BluetoothctlPairOptions {
   spawn?: () => ChildProcessWithoutNullStreams;
@@ -63,8 +64,9 @@ function spawnBluetoothctl(): ChildProcessWithoutNullStreams {
  * image's bluetoothctl 5.82 (P2b research-pin-report.md); the lines the tests mark READ (a refused
  * agent, no controller, the non-PIN prompts) come from the bluez 5.82 source and were not run. The
  * exit status is ignored: it was 0 whatever the outcome once `quit` was written. bluetoothctl echoes
- * the PIN to stdout on a line of its own, so no line printed after the PIN was written is quoted in
- * an error; nothing quoted is masked either, because gaps in a line the reader can rebuild (the
+ * the PIN to stdout on a line of its own, so of the lines printed after the PIN was written an error
+ * quotes only a name shaped `org.bluez.Error.<letters>`, which is longer than `isBluetoothPin` lets
+ * a PIN be; nothing quoted is masked either, because gaps in a line the reader can rebuild (the
  * address) would spell the PIN out.
  */
 export function pairWithBluetoothctl(
@@ -146,7 +148,8 @@ export function pairWithBluetoothctl(
         finish(fail("wrong PIN"), "quit");
       else if (name === "org.bluez.Error.ConnectionAttemptFailed")
         finish(fail("printer is off or out of range"), "quit");
-      else finish(fail(`pairing failed: ${name}`), "quit");
+      else if (BLUEZ_ERROR_NAME.test(name)) finish(fail(`pairing failed: ${name}`), "quit");
+      else finish(fail("pairing failed"), "quit");
     };
 
     const onLine = (line: string): void => {

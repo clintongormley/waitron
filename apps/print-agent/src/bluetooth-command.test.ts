@@ -435,6 +435,15 @@ describe("pairWithBluetoothctl — the PIN never leaves the runner", () => {
     });
   });
 
+  it.each([PIN, "x 1234", "org.bluez.Error.In Progress", "org.bluez.Error."])(
+    "quotes nothing from a failure whose name is not shaped like BlueZ's: %j",
+    async (name) => {
+      const { child, result } = registered(PIN);
+      child.say(PIN_PROMPT, `${PIN}\n`, event(`Failed to pair: ${name}`));
+      await expect(result).resolves.toStrictEqual({ ok: false, error: "pairing failed" });
+    },
+  );
+
   it("never alters the runner's own words, even when the PIN occurs in them", async () => {
     const { child, result } = registered("PIN");
     child.say(PIN_PROMPT, "PIN\n", event("Failed to pair: org.bluez.Error.AuthenticationFailed"));

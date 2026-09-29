@@ -101,11 +101,17 @@ export function parseBluetoothctlInfo(text: string): { printerLike?: true } {
 
 const REMOVAL_INCOMPLETE = "removal did not complete";
 
-/** An address BlueZ no longer knows is success: gone is what Forget asked for. */
-export function parseRemoveResult(text: string, mac: string): BluetoothCommandResult {
+/** Success is the removal line at exit 0, or this address reported unknown at exit 1: gone is what
+ * Forget asked for. `exitCode` is null for a run that was killed or ended by a signal. */
+export function parseRemoveResult(
+  text: string,
+  mac: string,
+  exitCode: number | null,
+): BluetoothCommandResult {
   const gone = `DEVICE ${mac.toUpperCase()} NOT AVAILABLE`;
   for (const line of cleanLines(text)) {
-    if (line === "Device has been removed" || line.toUpperCase() === gone) return { ok: true };
+    if (line === "Device has been removed" && exitCode === 0) return { ok: true };
+    if (line.toUpperCase() === gone && exitCode === 1) return { ok: true };
     if (line === NO_CONTROLLER) return { ok: false, error: NO_CONTROLLER };
     const failed = /^Failed to remove device:\s*(.+)$/.exec(line);
     if (failed !== null) return { ok: false, error: failed[1]! };
@@ -156,10 +162,20 @@ export function createBluetoothctlHost(opts: {
     async forget(mac: string): Promise<BluetoothCommandResult> {
       if (!isBluetoothAddress(mac)) return { ok: false, error: NOT_AN_ADDRESS };
       try {
-        return parseRemoveResult(await opts.run(["remove", mac]), mac);
+        return parseRemoveResult(await opts.run(["remove", mac]), mac, 0);
       } catch (error) {
-        const printed = (error as { stdout?: unknown } | null)?.stdout;
-        const result = parseRemoveResult(typeof printed === "string" ? printed : "", mac);
+        const failed = error as {
+          stdout?: unknown;
+          code?: unknown;
+          killed?: unknown;
+          signal?: unknown;
+        } | null;
+        const exitCode =
+          failed?.killed !== true && failed?.signal == null && typeof failed?.code === "number"
+            ? failed.code
+            : null;
+        const printed = failed?.stdout;
+        const result = parseRemoveResult(typeof printed === "string" ? printed : "", mac, exitCode);
         if (result.ok || result.error !== REMOVAL_INCOMPLETE) return result;
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }

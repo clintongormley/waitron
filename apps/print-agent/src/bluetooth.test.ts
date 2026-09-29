@@ -205,20 +205,20 @@ describe("parseRemoveResult", () => {
   // The owner's box, BlueZ 5.82, 2026-09-29: removing a paired printer, exit 0.
   it("reads the measured removal as success", () => {
     expect(
-      parseRemoveResult(`[DEL] Device ${MAC} BlueTooth Printer\nDevice has been removed\n`, MAC),
+      parseRemoveResult(`[DEL] Device ${MAC} BlueTooth Printer\nDevice has been removed\n`, MAC, 0),
     ).toStrictEqual({ ok: true });
   });
 
   // The owner's box, BlueZ 5.82, 2026-09-29: removing an address BlueZ no longer knows, exit 1.
   it("reads an address already gone as success, because gone is what Forget wants", () => {
-    expect(parseRemoveResult(`Device ${MAC} not available\n`, MAC)).toStrictEqual({ ok: true });
-    expect(parseRemoveResult(`Device ${MAC} not available\n`, MAC.toLowerCase())).toStrictEqual({
+    expect(parseRemoveResult(`Device ${MAC} not available\n`, MAC, 1)).toStrictEqual({ ok: true });
+    expect(parseRemoveResult(`Device ${MAC} not available\n`, MAC.toLowerCase(), 1)).toStrictEqual({
       ok: true,
     });
   });
 
   it("does not read another address being unavailable as this one gone", () => {
-    expect(parseRemoveResult("Device 11:22:33:44:55:66 not available\n", MAC)).toStrictEqual({
+    expect(parseRemoveResult("Device 11:22:33:44:55:66 not available\n", MAC, 1)).toStrictEqual({
       ok: false,
       error: "removal did not complete",
     });
@@ -230,12 +230,13 @@ describe("parseRemoveResult", () => {
       parseRemoveResult(
         "\x1b[0;91mFailed to remove device: org.freedesktop.DBus.Error.AccessDenied\x1b[0m\r\n",
         MAC,
+        1,
       ),
     ).toStrictEqual({ ok: false, error: "org.freedesktop.DBus.Error.AccessDenied" });
   });
 
   it("reports no output as a removal that did not complete", () => {
-    expect(parseRemoveResult("", MAC)).toStrictEqual({
+    expect(parseRemoveResult("", MAC, 0)).toStrictEqual({
       ok: false,
       error: "removal did not complete",
     });
@@ -337,6 +338,9 @@ describe("createBluetoothctlHost — forget()", () => {
   it("decodes the output a failed exit carries, not only its message", async () => {
     const run = vi.fn<Run>(async () => {
       throw Object.assign(new Error("Command failed: bluetoothctl remove"), {
+        code: 1,
+        killed: false,
+        signal: null,
         stdout: `Device ${MAC} not available\n`,
       });
     });
@@ -398,6 +402,37 @@ describe("createBluetoothctlHost — forget()", () => {
       error: "not an Error",
     });
   });
+
+  const exited = (stdout: string, fields: object) => async (): Promise<string> => {
+    throw Object.assign(new Error("Command failed: bluetoothctl remove"), { ...fields, stdout });
+  };
+  const gone = `Device ${MAC} not available\n`;
+
+  it("reads exit 0 after 'not available' as a removal that did not complete", async () => {
+    expect(await createBluetoothctlHost({ run: async () => gone }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: "removal did not complete",
+    });
+  });
+
+  it.each([
+    ["exit 2 after 'not available'", gone, { code: 2, killed: false, signal: null }],
+    [
+      "exit 1 after 'Device has been removed'",
+      "Device has been removed\n",
+      { code: 1, killed: false, signal: null },
+    ],
+    ["a kill after 'not available'", gone, { code: null, killed: true, signal: "SIGKILL" }],
+    ["a signal after 'not available'", gone, { code: 1, killed: false, signal: "SIGTERM" }],
+    [
+      "exit 1 from a killed run after 'not available'",
+      gone,
+      { code: 1, killed: true, signal: null },
+    ],
+  ] as const)("reads %s as failure, reporting the command's error", async (_, stdout, fields) => {
+    const result = await createBluetoothctlHost({ run: exited(stdout, fields) }).forget(MAC);
+    expect(result).toStrictEqual({ ok: false, error: "Command failed: bluetoothctl remove" });
+  });
 });
 
 // A stand-in `bluetoothctl` on PATH, so forget() runs through the real `runBluetoothctl` and the
@@ -441,6 +476,30 @@ describe("forget() through the real runBluetoothctl", () => {
     expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
       ok: false,
       error: "org.freedesktop.DBus.Error.AccessDenied",
+    });
+  });
+
+  it("reads exit 2 after 'not available' as failure", async () => {
+    await fake(`echo "Device $2 not available"; exit 2`);
+    expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: `Command failed: bluetoothctl remove ${MAC}\n`,
+    });
+  });
+
+  it("reads exit 1 after 'Device has been removed' as failure", async () => {
+    await fake(`echo "Device has been removed"; exit 1`);
+    expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: `Command failed: bluetoothctl remove ${MAC}\n`,
+    });
+  });
+
+  it("reads a kill after 'not available' as failure", async () => {
+    await fake(`echo "Device $2 not available"; kill -9 $$`);
+    expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: `Command failed: bluetoothctl remove ${MAC}\n`,
     });
   });
 });
