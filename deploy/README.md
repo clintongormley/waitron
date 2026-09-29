@@ -46,13 +46,20 @@ from the same commit. Finally it pulls the box's images, the two Waitron ones fr
 mail catcher from Docker Hub, stopping with an error if any of them fails to download, and starts the
 containers.
 
-Before any of that, `install` fetches `deploy/waitron.sh` itself from the ref you are installing and
-compares it with the copy you ran. If they differ, it moves the fetched script into place over that
-copy, says so, and runs `install` again from it with the same arguments, once — so a fix to
-`install`'s own steps takes effect on the install that fetches it, with no need to download the
-script again by hand. If the fetch fails, it says so on stderr and carries on with the copy you ran.
-Installing a ref whose `waitron.sh` predates this step leaves the box with a copy that does not
-update itself; download it again with the `curl` line above before the next install.
+Before any of that, unless the copy you ran is inside a git checkout, `install` fetches
+`deploy/waitron.sh` itself from the ref you are installing and compares it with the copy you ran.
+When there is a `.git` in the copy's folder or a folder above it, `install` says so on stderr and
+uses that copy as it is. If the fetched script differs, `install` moves it into place over the copy you ran, keeping that
+copy's mode and, run as root as above, its owner and group; says so; and runs `install` again from
+it with the same arguments, once — so a fix to `install`'s own steps takes effect on the install
+that fetches it, with no need to download the script again by hand. If something stops it fetching,
+comparing or replacing the script, it says so on stderr and carries on with the copy you ran. One
+such case: systemd's `fs.protected_regular` setting (from its `50-default.conf`) stops root writing
+to a file another user owns in `/tmp`, so a copy you downloaded there is not updated by
+`sudo bash waitron.sh install`, which reports that it could not fetch the script; download it to
+your home folder instead. Installing a ref whose
+`waitron.sh` predates this step leaves the box with a copy that does not update itself; download it
+again with the `curl` line above before the next install.
 
 On a box with AppArmor switched on, `install` also
 fetches the print agent's AppArmor profile from the same ref, `deploy/apparmor/waitron-print-agent`,
@@ -107,8 +114,9 @@ browser's option to visit the local HTTP site if offered, or transfer the certif
 device that can reach the box. Opening the wizard directly also offers certificate help before you
 enter setup details. Its Continue button checks communication with the box, not installed trust.
 
-On a box that already has a checkout of this repository, run the script directly instead of piping it
-through `bash`:
+On a box that already has a checkout of this repository, run the checkout's own script instead of
+downloading it. Because the folder above that copy holds the checkout's `.git`, `install` uses it as
+it is rather than fetching the ref's `waitron.sh`:
 
 ```bash
 sudo deploy/waitron.sh install

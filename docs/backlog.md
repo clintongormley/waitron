@@ -4914,13 +4914,22 @@ approved.
   (the autopair drop-in, #877) did not run until the owner downloaded it again by hand. `install
   <ref>` now fetches that ref's `deploy/waitron.sh` first (`refresh_self`); if it differs from the
   copy being run, it moves it into place over that copy (a new file renamed in, never the running
-  file written over) and runs `install` again from it with the same arguments, once —
-  `WAITRON_SH_REFRESHED` stops the re-run fetching again. A failed fetch carries on with the running
-  copy and says so. Tests: the four cases under "keeps the box's own copy of waitron.sh current" in
-  `scripts/waitron-sh.test.mjs`, which now runs each case from its own copy of the script. Left
-  open: installing a ref whose script predates this step puts back a copy that does not update
-  itself (`deploy/README.md` says to download it again); nothing checks a fetched script before
-  running it beyond what the fetch of `compose.yml` already trusts — the same GitHub URL over HTTPS.
+  file written over, keeping the old copy's mode and, run as root, its owner and group) and runs
+  `install` again from it with the same arguments, once — `WAITRON_SH_REFRESHED` stops the re-run
+  fetching again. A symlinked copy has the file it points at replaced. A copy with a `.git` in its
+  folder or a folder above it is used as it is, with no fetch. If something stops it fetching,
+  comparing or replacing the script, it says so and carries on with the running copy. Tests: the
+  cases under "keeps the box's own copy of waitron.sh current" in `scripts/waitron-sh.test.mjs`,
+  which now runs each case from its own copy of the script. No case covers a script not run from a
+  file, a link `readlink -f` cannot follow, a folder the script cannot enter, or a box with neither
+  curl nor wget; the owner and group kept under root were checked by hand in a Debian 13 container
+  (2026-09-29), because the suite does not run as root. Left open: installing a ref whose script
+  predates this step puts back a copy that does not update itself (`deploy/README.md` says to
+  download it again); a copy another user owns in `/tmp` is not updated under `sudo`, because systemd's `fs.protected_regular` setting stops root
+  writing the fetched script into the temp file beside it, which `cp -p` has given that user
+  (install reports a failed fetch; the README says to download to the home folder instead);
+  nothing checks a fetched script before running it beyond what the fetch of `compose.yml` already
+  trusts — the same GitHub URL over HTTPS.
 
 ### B5. The recovery page and degraded mode
 
