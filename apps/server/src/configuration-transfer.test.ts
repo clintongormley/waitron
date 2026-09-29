@@ -344,7 +344,6 @@ describe("configuration transfer database path", () => {
         id: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
         locationId: source.locationId,
         label: "T1",
-        tabId: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
       });
       await tx.insert(payments).values({
         id: "cccccccc-bbbb-bbbb-bbbb-cccccccccccc",
@@ -495,7 +494,6 @@ describe("configuration transfer database path", () => {
       shift_templates: number;
       convenio_config: number;
       payment_policy: number;
-      linked_tables: number;
       target_orders: number;
       target_payments: number;
       target_bookings: number;
@@ -518,8 +516,6 @@ describe("configuration transfer database path", () => {
         (select count(*) from shift_templates) as shift_templates,
         (select count(*) from convenio_config) as convenio_config,
         (select count(*) from payment_policy) as payment_policy,
-        (select count(*) from dining_tables
-          where tab_id is not null) as linked_tables,
         (select count(*) from working_orders ) as target_orders,
         (select count(*) from payments) as target_payments,
         (select count(*) from bookings) as target_bookings
@@ -539,7 +535,6 @@ describe("configuration transfer database path", () => {
       shift_templates: 1,
       convenio_config: 1,
       payment_policy: 1,
-      linked_tables: 0,
       target_orders: 0,
       target_payments: 0,
       target_bookings: 0,
@@ -1010,7 +1005,7 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
   expect(withoutId(imported)).toEqual(withoutId(prepared));
 });
 
-it("leaves a table's clearing state behind, as it leaves its tab", async () => {
+it("leaves a table's clearing state behind", async () => {
   const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -1039,6 +1034,5 @@ it("leaves a table's clearing state behind, as it leaves its tab", async () => {
   expect(rows.map((row) => row.label)).toContain("T9");
   for (const row of rows) {
     expect(row).not.toHaveProperty("needs_clearing_since");
-    expect(row).not.toHaveProperty("tab_id");
   }
 });

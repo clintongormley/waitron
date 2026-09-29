@@ -39,7 +39,7 @@ export interface PartyBill {
 }
 
 export type CommandScope =
-  { kind: "visit"; partyId: string } | { kind: "bill"; workingOrderId: string };
+  { kind: "party"; partyId: string } | { kind: "bill"; workingOrderId: string };
 
 /** What a bill action is sent (D19): the party's revision as the caller last read it, and who acts. */
 export interface PartyCommand {
@@ -356,7 +356,7 @@ export async function partyFamilies(
 async function readParty(
   tx: Transaction,
   partyId: string,
-): Promise<{ state: "open" | "needs_clearing" | "closed" } | undefined> {
+): Promise<{ state: "open" | "closed" } | undefined> {
   const [party] = await tx
     .select({ state: parties.state })
     .from(parties)
@@ -571,7 +571,7 @@ export async function runServiceCommand<R>(
   args: Record<string, unknown>,
   run: () => Promise<R>,
 ): Promise<R> {
-  const scopeId = scope.kind === "visit" ? scope.partyId : scope.workingOrderId;
+  const scopeId = scope.kind === "party" ? scope.partyId : scope.workingOrderId;
   const print = fingerprint(args);
   const [recorded] = await tx
     .select({
@@ -593,7 +593,7 @@ export async function runServiceCommand<R>(
     }
     return recorded.result.value as R;
   }
-  if (scope.kind === "visit") await requireOpenParty(tx, scope.partyId);
+  if (scope.kind === "party") await requireOpenParty(tx, scope.partyId);
   const result = await run();
   await tx.insert(serviceCommands).values({
     scopeKind: scope.kind,

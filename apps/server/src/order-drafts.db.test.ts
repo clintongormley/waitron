@@ -644,7 +644,7 @@ describe("saving a draft", () => {
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     await db
       .update(parties)
-      .set({ state: "needs_clearing", closedAt: new Date().toISOString() })
+      .set({ state: "closed", closedAt: new Date().toISOString() })
       .where(eq(parties.id, partyId));
     await expect(save(v, partyId, ALEX, draft.id, 0, [item(v, "fish")])).rejects.toMatchObject({
       code: "party.not_open",
@@ -1068,7 +1068,7 @@ describe("taking over a draft (D5, spec §2)", () => {
     const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
     await db
       .update(parties)
-      .set({ state: "needs_clearing", closedAt: new Date().toISOString() })
+      .set({ state: "closed", closedAt: new Date().toISOString() })
       .where(eq(parties.id, partyId));
     await expect(takeOver(v, partyId, draft.id, SAM, 0)).rejects.toMatchObject({
       code: "party.not_open",
@@ -2119,7 +2119,7 @@ describe("which lines a submission names", () => {
 
     await db
       .update(parties)
-      .set({ state: "needs_clearing", closedAt: new Date().toISOString() })
+      .set({ state: "closed", closedAt: new Date().toISOString() })
       .where(eq(parties.id, partyId));
     await refusedWritingNothing(
       () =>

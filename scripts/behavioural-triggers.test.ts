@@ -50,11 +50,13 @@ import {
  * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
  * Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
- * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`):
+ * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`, and again after the
+ * rebuild of its table by `packages/db/drizzle/0045_recreate_triggers_after_rebuild.sql`):
  * a table's service status comes off when the party leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
- * And the two of `packages/db/drizzle/0038_main_bill_release.sql`: a party's `main_bill_id` is
- * cleared when that bill leaves `open`, or leaves the party (to another party or to the counter).
+ * And the two of `packages/db/drizzle/0038_main_bill_release.sql`, re-created by `0045` too: a
+ * party's `main_bill_id` is cleared when that bill leaves `open`, or leaves the party (to another
+ * party or to the counter).
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
  * whatever the row, so they have no accepting control here.
@@ -299,7 +301,7 @@ function seed(connection) {
     workingOrder("wo-lines-update", "open"),
     workingOrder("wo-lines-delete", "open"),
     workingOrder("wo-orphaned-parent", "open"),
-    workingOrder("wo-tab", "open"),
+    workingOrder("wo-tab", "open", { partyId: "party-bill-settles" }),
     // A till that does not exist, so the join to a location resolves to nothing.
     workingOrder("wo-orphan", "open", { tillId: "ghost-till" }),
 
@@ -309,28 +311,27 @@ function seed(connection) {
     line("line-delete", "wo-lines-delete", '{"es":"Plato","ca":"Plat"}'),
     line("line-orphaned", "wo-orphaned-parent", '{"es":"Plato","ca":"Plat"}'),
 
-    // A tab's table carrying a service status: settling the tab leaves it (the party clears it).
+    // A party's table carrying a service status: settling the party's bill leaves it (the party
+    // clears it).
     `insert into table_service_statuses (id, label, color, created_at) ` +
       `values ('status-busy', 'Ocupada', '#ff0000', '${STAMP}')`,
-    `insert into dining_tables (id, location_id, label, tab_id, status_id, created_at) ` +
-      `values ('dt-closes', 'loc', '1', 'wo-tab', 'status-busy', '${STAMP}')`,
+    party("party-bill-settles"),
+    table("dt-closes", "1"),
+    membership("vt-closes", "party-bill-settles", "dt-closes", null),
 
     // Parties and their memberships, for the clear-when-the-party-leaves-open trigger. Each case
     // moves its own party, so no case's write changes what another case reads.
     party("party-finishes"),
-    party("party-clearing"),
     party("party-bumped"),
     party("party-frozen"),
     table("dt-member-a", "3"),
     table("dt-member-b", "4"),
     table("dt-left-earlier", "5"),
     table("dt-bystander", "6"),
-    table("dt-clearing", "7"),
     table("dt-bumped", "8"),
     membership("vt-a", "party-finishes", "dt-member-a", null),
     membership("vt-b", "party-finishes", "dt-member-b", null),
     membership("vt-left", "party-finishes", "dt-left-earlier", STAMP),
-    membership("vt-clearing", "party-clearing", "dt-clearing", null),
     membership("vt-bumped", "party-bumped", "dt-bumped", null),
 
     // A party per main-bill case, each with the open bill its case names as the main bill, so no
@@ -1105,19 +1106,12 @@ describe("parties_clear_table_status", () => {
     expect(statusOf("dt-bystander")).toBe("status-busy");
   });
 
-  it("clears it when the party moves to needs clearing", () => {
-    connection.exec(
-      `update parties set state = 'needs_clearing', closed_at = '${STAMP}' where id = 'party-clearing'`,
-    );
-    expect(statusOf("dt-clearing")).toBeNull();
-  });
-
   it("leaves it alone when an open party only changes its revision", () => {
     connection.exec(`update parties set revision = revision + 1 where id = 'party-bumped'`);
     expect(statusOf("dt-bumped")).toBe("status-busy");
   });
 
-  it("leaves a table's status alone when its tab settles", () => {
+  it("leaves a table's status alone when its party's bill settles", () => {
     connection.exec(
       `update working_orders set status = 'settled', settled_at = '${STAMP}' where id = 'wo-tab'`,
     );

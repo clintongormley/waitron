@@ -1,4 +1,3 @@
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
@@ -14,7 +13,6 @@ import {
   tsString,
 } from "./columns.js";
 import { floorZones } from "./floor-zones.js";
-import { workingOrders } from "./orders.js";
 import { tableServiceStatuses } from "./table-service-statuses.js";
 import { locations } from "./tenants.js";
 
@@ -28,14 +26,6 @@ export const floorTableShape = enumType(["round", "square", "rect"]);
  * A dining table — location scoped, long-lived. Anchored to the venue-wide `location`, NOT to
  * `node` (working orders, the held list, the order-number counter and the prep queue are all
  * node-scoped, but a table must not fragment when a venue runs a second node).
- *
- * `tab_id` is the BACK-POINTER to the tab covering this table; a single nullable FK gives one tab
- * per table. A table can keep pointing at a settled or abandoned tab; only when the table's own
- * party is recorded on that tab is it the party's current tab (`closedPartyTab`). Several tables
- * pointing at the SAME tab is a join. `working_orders`
- * carries the reverse key (`working_orders.delivery_table_id` → `dining_tables`), so the two
- * tables name each other; the `AnySQLiteColumn` annotation on the thunk below is what stops
- * TypeScript inferring each table's type from the other's.
  */
 export const diningTables = table(
   "dining_tables",
@@ -49,9 +39,6 @@ export const diningTables = table(
     capacity: count("capacity"),
     active: flag("active").notNull().default(true),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    /* v8 ignore start */
-    tabId: id("tab_id").references((): AnySQLiteColumn => workingOrders.id),
-    /* v8 ignore stop */
     statusId: id("status_id"),
     posX: smallCount("pos_x"),
     posY: smallCount("pos_y"),

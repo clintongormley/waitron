@@ -2270,7 +2270,7 @@ async function changeServed(
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     kind,
     { partyId, items, operatorId: args.operatorId },
@@ -2325,7 +2325,7 @@ export async function markGroupServed(
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     "group.served",
     { partyId, groupId, operatorId: args.operatorId },
@@ -5219,7 +5219,7 @@ export interface TableParty {
   id: string;
   revision: number;
   guestCount: number | null;
-  state: "open" | "needs_clearing" | "closed";
+  state: "open" | "closed";
   /** The name staff gave the party, or null. */
   name: string | null;
   /** `name`, or else the party's tables' labels ({@link partyDisplayName}). */

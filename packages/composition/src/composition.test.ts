@@ -131,11 +131,10 @@ describe("ALL_MODULES configuration transfer contribution", () => {
     ).toEqual({ kind: "none" });
   });
 
-  it("removes active order links, clearing marks and hardware authenticators from copied configuration", () => {
+  it("removes clearing marks and hardware authenticators from copied configuration", () => {
     const tables = ALL_MODULES.flatMap((module) =>
       module.configurationTransfer?.kind === "tables" ? module.configurationTransfer.tables : [],
     );
-    expect(tables.find((table) => table.name === "dining_tables")?.omit).toContain("tab_id");
     expect(tables.find((table) => table.name === "dining_tables")?.omit).toContain(
       "needs_clearing_since",
     );

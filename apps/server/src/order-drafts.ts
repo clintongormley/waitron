@@ -279,7 +279,7 @@ export async function submitDraft(
   const joinGroupId = input.joinGroupId === undefined ? undefined : foldIfUuid(input.joinGroupId);
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     input.submissionId,
     "draft.submit",
     { partyId, draftId: id, operatorId, groups, joinGroupId, billId: input.billId },

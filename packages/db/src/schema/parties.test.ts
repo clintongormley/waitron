@@ -109,7 +109,7 @@ describe("parties, party_tables and service_commands", () => {
     const error = await captureError(() =>
       inTx((tx) => tx.insert(parties).values({ openedBy: OPERATOR, guestCount: 0 })),
     );
-    expect(checkFailed(error, "visits_guest_count_ck")).toBe(true);
+    expect(checkFailed(error, "parties_guest_count_ck")).toBe(true);
   });
 
   it("refuses a state outside the vocabulary", async () => {
@@ -119,21 +119,43 @@ describe("parties, party_tables and service_commands", () => {
         await tx.execute(sql`update parties set state = 'paid' where id = ${id}`);
       }),
     );
-    expect(checkFailed(error, "visits_state_ck")).toBe(true);
+    expect(checkFailed(error, "parties_state_ck")).toBe(true);
+  });
+
+  it("refuses the party state needs_clearing, which is now a table's condition only, and accepts closed", async () => {
+    const id = await party();
+    const closedAt = new Date().toISOString();
+    const error = await captureError(() =>
+      inTx(async (tx) => {
+        await tx.execute(
+          sql`update parties set state = 'needs_clearing', closed_at = ${closedAt} where id = ${id}`,
+        );
+      }),
+    );
+    expect(checkFailed(error, "parties_state_ck")).toBe(true);
+    await inTx(async (tx) => {
+      await tx.execute(
+        sql`update parties set state = 'closed', closed_at = ${closedAt} where id = ${id}`,
+      );
+    });
+    const [row] = await inTx((tx) =>
+      tx.select({ state: parties.state }).from(parties).where(eq(parties.id, id)),
+    );
+    expect(row!.state).toBe("closed");
   });
 
   it("refuses a party that has left open without a closing time, and an open one that has one", async () => {
     const id = await party();
     const leftOpen = await captureError(() =>
-      inTx((tx) => tx.update(parties).set({ state: "needs_clearing" }).where(eq(parties.id, id))),
+      inTx((tx) => tx.update(parties).set({ state: "closed" }).where(eq(parties.id, id))),
     );
-    expect(checkFailed(leftOpen, "visits_closed_at_ck")).toBe(true);
+    expect(checkFailed(leftOpen, "parties_closed_at_ck")).toBe(true);
     const stamped = await captureError(() =>
       inTx((tx) =>
         tx.update(parties).set({ closedAt: new Date().toISOString() }).where(eq(parties.id, id)),
       ),
     );
-    expect(checkFailed(stamped, "visits_closed_at_ck")).toBe(true);
+    expect(checkFailed(stamped, "parties_closed_at_ck")).toBe(true);
   });
 
   it("refuses a merge into itself, and a merged party that is not closed", async () => {
@@ -147,11 +169,11 @@ describe("parties, party_tables and service_commands", () => {
           .where(eq(parties.id, id)),
       ),
     );
-    expect(checkFailed(self, "visits_merged_into_ck")).toBe(true);
+    expect(checkFailed(self, "parties_merged_into_ck")).toBe(true);
     const stillOpen = await captureError(() =>
       inTx((tx) => tx.update(parties).set({ mergedIntoPartyId: other }).where(eq(parties.id, id))),
     );
-    expect(checkFailed(stillOpen, "visits_merged_into_ck")).toBe(true);
+    expect(checkFailed(stillOpen, "parties_merged_into_ck")).toBe(true);
     // Control: a closed party merged into another is accepted.
     await inTx((tx) =>
       tx
@@ -182,7 +204,7 @@ describe("parties, party_tables and service_commands", () => {
   it("refuses the same submission id twice in one scope, and accepts it in another", async () => {
     const scopeId = randomUUID();
     const row = {
-      scopeKind: "visit" as const,
+      scopeKind: "party" as const,
       scopeId,
       submissionId: "sub-1",
       kind: "k",
@@ -201,17 +223,51 @@ describe("parties, party_tables and service_commands", () => {
     await inTx((tx) => tx.insert(serviceCommands).values({ ...row, scopeId: randomUUID() }));
   });
 
-  it("names visit, on the migrated database, only in the two objects Task 13 renames", () => {
+  it("refuses the command scope visit and accepts party", async () => {
+    const error = await captureError(() =>
+      inTx(async (tx) => {
+        await tx.execute(sql`
+          insert into service_commands (id, scope_kind, scope_id, submission_id, kind, fingerprint, result, created_at)
+          values (${randomUUID()}, 'visit', ${randomUUID()}, 'sub-v', 'k', 'f', '{}', ${new Date().toISOString()})
+        `);
+      }),
+    );
+    expect(checkFailed(error, "service_commands_scope_kind_ck")).toBe(true);
+    const scopeId = randomUUID();
+    await inTx((tx) =>
+      tx.insert(serviceCommands).values({
+        scopeKind: "party",
+        scopeId,
+        submissionId: "sub-p",
+        kind: "k",
+        fingerprint: "f",
+        result: { value: null },
+      }),
+    );
+    const rows = await inTx((tx) =>
+      tx
+        .select({ scopeKind: serviceCommands.scopeKind })
+        .from(serviceCommands)
+        .where(eq(serviceCommands.scopeId, scopeId)),
+    );
+    expect(rows).toEqual([{ scopeKind: "party" }]);
+  });
+
+  it("gives a dining table no pointer to a bill", () => {
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('dining_tables')`,
+    );
+    expect(columns.map((column) => column.name)).not.toContain("tab_id");
+    // Control: the read sees the table's columns at all.
+    expect(columns.map((column) => column.name)).toContain("needs_clearing_since");
+  });
+
+  it("names visit in no object of the migrated database", () => {
     const named = suite.db.all<{ type: string; name: string }>(sql`
       select type, name from sqlite_master
       where lower(name) like '%visit%' or lower(sql) like '%visit%'
       order by name
     `);
-    // `parties` keeps its four CHECK constraint names and `service_commands` its stored scope
-    // value 'visit' until Task 13's rebuild (plan P1).
-    expect(named).toEqual([
-      { type: "table", name: "parties" },
-      { type: "table", name: "service_commands" },
-    ]);
+    expect(named).toEqual([]);
   });
 });

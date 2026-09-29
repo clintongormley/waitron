@@ -16,7 +16,7 @@ import {
 import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
 
-export const partyState = enumType(["open", "needs_clearing", "closed"]);
+export const partyState = enumType(["open", "closed"]);
 
 /**
  * One seated party, from seating until its table is finished: it holds the party's tab, every bill
@@ -55,11 +55,11 @@ export const parties = table(
       name: "parties_merged_into_fk",
     }),
     index("parties_merged_into_idx").on(t.mergedIntoPartyId),
-    check("visits_state_ck", enumCheck(t.state)),
-    check("visits_guest_count_ck", sql`${t.guestCount} is null or ${t.guestCount} >= 1`),
-    check("visits_closed_at_ck", sql`(${t.state} = 'open') = (${t.closedAt} is null)`),
+    check("parties_state_ck", enumCheck(t.state)),
+    check("parties_guest_count_ck", sql`${t.guestCount} is null or ${t.guestCount} >= 1`),
+    check("parties_closed_at_ck", sql`(${t.state} = 'open') = (${t.closedAt} is null)`),
     check(
-      "visits_merged_into_ck",
+      "parties_merged_into_ck",
       sql`${t.mergedIntoPartyId} is null or (${t.mergedIntoPartyId} <> ${t.id} and ${t.state} = 'closed')`,
     ),
   ],
@@ -97,7 +97,7 @@ export const partyTables = table(
   ],
 );
 
-export const serviceCommandScope = enumType(["visit", "bill"]);
+export const serviceCommandScope = enumType(["party", "bill"]);
 
 /**
  * One row per service command, keyed by the submission id its device made for it, so a retry after

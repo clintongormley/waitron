@@ -1022,7 +1022,7 @@ describe("merge (D2)", () => {
     expect(
       await captureError(() =>
         inTx(suite, (tx) =>
-          runServiceCommand(tx, { kind: "visit", partyId: s.partyId }, randomUUID(), "k", {}, () =>
+          runServiceCommand(tx, { kind: "party", partyId: s.partyId }, randomUUID(), "k", {}, () =>
             Promise.resolve(1),
           ),
         ),
@@ -1253,7 +1253,7 @@ describe("runServiceCommand", () => {
     const { calls, run } = counting({ fired: 2 });
 
     const result = await inTx(suite, (tx) =>
-      runServiceCommand(tx, { kind: "visit", partyId }, "sub-1", "group.fire", body, run),
+      runServiceCommand(tx, { kind: "party", partyId }, "sub-1", "group.fire", body, run),
     );
 
     expect(result).toEqual({ fired: 2 });
@@ -1261,7 +1261,7 @@ describe("runServiceCommand", () => {
     const rows = await inTx(suite, (tx) => tx.select().from(serviceCommands));
     expect(rows).toEqual([
       expect.objectContaining({
-        scopeKind: "visit",
+        scopeKind: "party",
         scopeId: partyId,
         submissionId: "sub-1",
         kind: "group.fire",
@@ -1275,14 +1275,14 @@ describe("runServiceCommand", () => {
     const partyId = await openParty();
     const first = counting({ fired: 2 });
     await inTx(suite, (tx) =>
-      runServiceCommand(tx, { kind: "visit", partyId }, "sub-1", "group.fire", body, first.run),
+      runServiceCommand(tx, { kind: "party", partyId }, "sub-1", "group.fire", body, first.run),
     );
     const second = counting({ fired: 99 });
 
     const replay = await inTx(suite, (tx) =>
       runServiceCommand(
         tx,
-        { kind: "visit", partyId },
+        { kind: "party", partyId },
         "sub-1",
         "group.fire",
         // The same arguments in another key order, with a re-read revision and the id itself.
@@ -1311,13 +1311,13 @@ describe("runServiceCommand", () => {
   ])("refuses the same id with %s, and runs nothing", async (_, kind, args) => {
     const partyId = await openParty();
     await inTx(suite, (tx) =>
-      runServiceCommand(tx, { kind: "visit", partyId }, "sub-1", "group.fire", body, async () => 1),
+      runServiceCommand(tx, { kind: "party", partyId }, "sub-1", "group.fire", body, async () => 1),
     );
     const other = counting(2);
 
     const error = await captureError(() =>
       inTx(suite, (tx) =>
-        runServiceCommand(tx, { kind: "visit", partyId }, "sub-1", kind, args, other.run),
+        runServiceCommand(tx, { kind: "party", partyId }, "sub-1", kind, args, other.run),
       ),
     );
 
@@ -1336,8 +1336,8 @@ describe("runServiceCommand", () => {
     const counter = counting("ran");
 
     for (const scope of [
-      { kind: "visit" as const, partyId: partyA },
-      { kind: "visit" as const, partyId: partyB },
+      { kind: "party" as const, partyId: partyA },
+      { kind: "party" as const, partyId: partyB },
       { kind: "bill" as const, workingOrderId: bill },
     ]) {
       await inTx(suite, (tx) =>
@@ -1412,7 +1412,7 @@ describe("runServiceCommand", () => {
 
   it("refuses a new command on a party that is not open, and still replays one recorded before", async () => {
     const partyId = await openParty();
-    const scope = { kind: "visit" as const, partyId };
+    const scope = { kind: "party" as const, partyId };
     await inTx(suite, (tx) =>
       runServiceCommand(tx, scope, "sub-1", "group.fire", body, async () => "fired"),
     );
