@@ -53,6 +53,8 @@ describe("createAgent — phases", () => {
     expect(c.pullJobs).toHaveBeenCalledWith(A, "a1.s", {
       visible: [],
       scanned: [],
+      pairedBluetooth: [],
+      bluetoothOutcomes: [],
       host: "printer-box.local",
     });
   });
@@ -67,6 +69,8 @@ describe("createAgent — phases", () => {
       expect(c.pullJobs).toHaveBeenCalledWith(A, "a1.s", {
         visible: [],
         scanned: [],
+        pairedBluetooth: [],
+        bluetoothOutcomes: [],
         setupUrl,
         setupPort: 9210,
       });

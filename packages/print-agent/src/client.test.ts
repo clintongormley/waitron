@@ -13,6 +13,7 @@ function stub(status: number, body?: unknown): typeof fetch {
 }
 
 const URL_A = "http://a.test";
+const NO_INVENTORY = { visible: [], scanned: [], pairedBluetooth: [], bluetoothOutcomes: [] };
 
 describe("createClient — probeNode", () => {
   it("returns the node probe on 200 and calls /api/node on the given origin", async () => {
@@ -316,7 +317,7 @@ describe("createClient — pullJobs", () => {
       }),
     );
     const client = createClient({ fetch: fetchImpl });
-    const result = await client.pullJobs(URL_A, "a1.secret", { visible: [], scanned: [] });
+    const result = await client.pullJobs(URL_A, "a1.secret", NO_INVENTORY);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.nodeId).toBe("n1");
@@ -346,10 +347,11 @@ describe("createClient — pullJobs", () => {
         ],
       }),
     );
-    const result = await createClient({ fetch: fetchImpl }).pullJobs("http://s", "tok", {
-      visible: [],
-      scanned: [],
-    });
+    const result = await createClient({ fetch: fetchImpl }).pullJobs(
+      "http://s",
+      "tok",
+      NO_INVENTORY,
+    );
     expect(result.ok && result.value.networkProbes).toEqual([target]);
   });
 
@@ -374,6 +376,14 @@ describe("createClient — pullJobs", () => {
     const inventory = {
       visible: [{ transport: "usb" as const, localKey: "SN-1" }],
       scanned: [],
+      pairedBluetooth: [
+        { localKey: "AA:BB:CC:DD:EE:FF", name: "TM-P20" },
+        { localKey: "11:22:33:44:55:66" },
+      ],
+      bluetoothOutcomes: [
+        { id: "c1", ok: true },
+        { id: "c2", ok: false, error: "Failed to pair: org.bluez.Error.AuthenticationFailed" },
+      ],
       setupUrl: "http://192.168.10.40:9310",
       setupPort: 9210,
     };
@@ -397,14 +407,14 @@ describe("createClient — pullJobs", () => {
         }),
       ),
     });
-    const result = await client.pullJobs(URL_A, "t", { visible: [], scanned: [] });
+    const result = await client.pullJobs(URL_A, "t", NO_INVENTORY);
     expect(result.ok && result.value.servers).toEqual([{ url: "http://b.test" }]);
   });
 
   it("a reply that is not a JSON object is bad_reply", async () => {
     for (const response of [new Response("hello", { status: 200 }), reply(200, null)]) {
       const client = createClient({ fetch: vi.fn().mockResolvedValue(response) });
-      expect(await client.pullJobs(URL_A, "t", { visible: [], scanned: [] })).toEqual({
+      expect(await client.pullJobs(URL_A, "t", NO_INVENTORY)).toEqual({
         ok: false,
         failure: { kind: "bad_reply", detail: "invalid response body" },
       });
@@ -425,7 +435,7 @@ describe("createClient — pullJobs", () => {
           .fn()
           .mockResolvedValue(reply(200, { nodeId: "n1", servers: [], jobs: [good, bad] })),
       });
-      expect(await client.pullJobs(URL_A, "t", { visible: [], scanned: [] })).toEqual({
+      expect(await client.pullJobs(URL_A, "t", NO_INVENTORY)).toEqual({
         ok: false,
         failure: { kind: "bad_reply", detail: "invalid response body" },
       });
@@ -433,7 +443,7 @@ describe("createClient — pullJobs", () => {
   });
 
   it("401 → unauthorized; a reply whose jobs is not an array is bad_reply", async () => {
-    const inv = { visible: [], scanned: [] };
+    const inv = NO_INVENTORY;
     const unauth = createClient({
       fetch: vi.fn().mockResolvedValue(reply(401, { code: "agent.unauthorized" })),
     });
@@ -448,6 +458,202 @@ describe("createClient — pullJobs", () => {
       ok: false,
       failure: { kind: "bad_reply" },
     });
+  });
+});
+
+describe("createClient — Bluetooth commands", () => {
+  const MAC = "AA:BB:CC:DD:EE:FF";
+  const pull = async (bluetoothCommands: unknown, jobs: unknown[] = []) => {
+    const body: Record<string, unknown> = { nodeId: "n", servers: [], jobs };
+    if (bluetoothCommands !== undefined) body.bluetoothCommands = bluetoothCommands;
+    return createClient({ fetch: stub(200, body) }).pullJobs(URL_A, "t", NO_INVENTORY);
+  };
+  const commandsOf = async (bluetoothCommands: unknown) => {
+    const result = await pull(bluetoothCommands);
+    if (!result.ok) throw new Error(`pull failed: ${JSON.stringify(result.failure)}`);
+    return result.value.bluetoothCommands;
+  };
+
+  it("an older server that sends no commands leaves the field out of the reply", async () => {
+    const result = await pull(undefined);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect("bluetoothCommands" in result.value).toBe(false);
+  });
+
+  it("a reply whose commands decode to nothing leaves the field out too", async () => {
+    const result = await pull([{ id: "c1", kind: "reboot", address: MAC }]);
+    expect(result.ok && "bluetoothCommands" in result.value).toBe(false);
+  });
+
+  it("decodes pair and forget commands and upper-cases the address", async () => {
+    expect(
+      await commandsOf([
+        { id: "c1", kind: "pair", address: "aa:bb:cc:dd:ee:ff" },
+        { id: "c2", kind: "forget", address: "11:22:33:44:55:6a" },
+      ]),
+    ).toEqual([
+      { id: "c1", kind: "pair", address: MAC },
+      { id: "c2", kind: "forget", address: "11:22:33:44:55:6A" },
+    ]);
+  });
+
+  it.each([
+    ["an address of *, which bluetoothctl reads as every device", "*"],
+    ["an empty address", ""],
+    ["five octets", "AA:BB:CC:DD:EE"],
+    ["seven octets", "AA:BB:CC:DD:EE:FF:00"],
+    ["dash separators", "AA-BB-CC-DD-EE-FF"],
+    ["a non-hex digit", "AA:BB:CC:DD:EE:FG"],
+    ["a single-digit octet", "A:BB:CC:DD:EE:FF"],
+    ["a trailing newline", "AA:BB:CC:DD:EE:FF\n"],
+    ["a leading space", " AA:BB:CC:DD:EE:FF"],
+    ["a non-string address", 0xaabbccddeeff],
+    ["an address inside a list, which reads as a MAC once made a string", [MAC]],
+  ])("drops a command with %s", async (_, address) => {
+    expect(
+      await commandsOf([
+        { id: "bad", kind: "forget", address },
+        { id: "good", kind: "forget", address: MAC },
+      ]),
+    ).toEqual([{ id: "good", kind: "forget", address: MAC }]);
+  });
+
+  it.each([
+    ["an unknown kind", { id: "bad", kind: "trust", address: MAC }],
+    ["a kind in another case", { id: "bad", kind: "Pair", address: MAC }],
+    ["no kind", { id: "bad", address: MAC }],
+    ["a non-string id", { id: 7, kind: "pair", address: MAC }],
+    ["an empty id", { id: "", kind: "pair", address: MAC }],
+    ["an id over 128 characters", { id: "x".repeat(129), kind: "pair", address: MAC }],
+    ["a null entry", null],
+    ["a string entry", "pair"],
+  ])("drops %s", async (_, entry) => {
+    expect(await commandsOf([entry, { id: "good", kind: "forget", address: MAC }])).toEqual([
+      { id: "good", kind: "forget", address: MAC },
+    ]);
+  });
+
+  it("keeps an id of exactly 128 characters", async () => {
+    const id = "x".repeat(128);
+    expect(await commandsOf([{ id, kind: "forget", address: MAC }])).toEqual([
+      { id, kind: "forget", address: MAC },
+    ]);
+  });
+
+  it("reads only the first eight entries, counting the ones it drops", async () => {
+    const entries = Array.from({ length: 10 }, (_, i) => ({
+      id: `c${i}`,
+      kind: "forget",
+      address: MAC,
+    }));
+    entries[2] = { id: "c2", kind: "reboot", address: MAC };
+    expect((await commandsOf(entries))?.map((c) => c.id)).toEqual([
+      "c0",
+      "c1",
+      "c3",
+      "c4",
+      "c5",
+      "c6",
+      "c7",
+    ]);
+  });
+
+  it.each([["not a list"], [{ id: "c1", kind: "pair", address: MAC }], [null]])(
+    "treats a commands field that is not a list (%j) as none, and still delivers the jobs",
+    async (bluetoothCommands) => {
+      const job = {
+        id: "j1",
+        printerId: "p1",
+        transport: "usb",
+        localKey: "SN-1",
+        payload: Buffer.from([1]).toString("base64"),
+      };
+      const result = await pull(bluetoothCommands, [job]);
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.jobs.map((j) => j.id)).toEqual(["j1"]);
+      expect("bluetoothCommands" in result.value).toBe(false);
+    },
+  );
+
+  it("an invalid job still refuses the whole reply, valid commands or not", async () => {
+    expect(await pull([{ id: "c1", kind: "pair", address: MAC }], [{ id: 1 }])).toEqual({
+      ok: false,
+      failure: { kind: "bad_reply", detail: "invalid response body" },
+    });
+  });
+
+  describe("the operator's PIN on a pair command", () => {
+    it.each(["1234", "0", "!", "~", "a".repeat(16), "Ab1~!#"])("keeps the PIN %j", async (pin) => {
+      expect(await commandsOf([{ id: "c1", kind: "pair", address: MAC, pin }])).toEqual([
+        { id: "c1", kind: "pair", address: MAC, pin },
+      ]);
+    });
+
+    it("keeps a pair command with no PIN, without a pin key", async () => {
+      const commands = await commandsOf([{ id: "c1", kind: "pair", address: MAC }]);
+      expect(commands).toEqual([{ id: "c1", kind: "pair", address: MAC }]);
+      expect("pin" in commands![0]!).toBe(false);
+    });
+
+    it.each([
+      ["an empty PIN", ""],
+      ["a PIN over 16 characters", "1".repeat(17)],
+      ["a PIN with a space", "12 34"],
+      ["a PIN ending in a newline", "1234\n"],
+      ["a PIN with a carriage return", "12\r34"],
+      ["a PIN with a tab", "12\t34"],
+      ["a PIN with a non-ASCII character", "12€4"],
+      ["a PIN with a delete character", "123\x7f"],
+      ["a numeric PIN", 1234],
+      ["a null PIN", null],
+    ])("drops a pair command carrying %s whole", async (_, pin) => {
+      expect(
+        await commandsOf([
+          { id: "bad", kind: "pair", address: MAC, pin },
+          { id: "good", kind: "pair", address: MAC },
+        ]),
+      ).toEqual([{ id: "good", kind: "pair", address: MAC }]);
+    });
+
+    it("drops a PIN sent on a forget command but keeps the command", async () => {
+      const commands = await commandsOf([{ id: "c1", kind: "forget", address: MAC, pin: "1234" }]);
+      expect(commands).toEqual([{ id: "c1", kind: "forget", address: MAC }]);
+      expect("pin" in commands![0]!).toBe(false);
+    });
+
+    it("drops even an invalid PIN on a forget command rather than the command", async () => {
+      expect(await commandsOf([{ id: "c1", kind: "forget", address: MAC, pin: "12\n34" }])).toEqual(
+        [{ id: "c1", kind: "forget", address: MAC }],
+      );
+    });
+
+    it("never copies a field the wire does not define", async () => {
+      expect(
+        await commandsOf([{ id: "c1", kind: "pair", address: MAC, pin: "1234", extra: "x" }]),
+      ).toEqual([{ id: "c1", kind: "pair", address: MAC, pin: "1234" }]);
+    });
+  });
+});
+
+describe("createClient — pullJobs body bounds", () => {
+  it("cuts a command outcome's error to 500 characters", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(reply(200, { nodeId: "n", servers: [], jobs: [] }));
+    await createClient({ fetch: fetchImpl }).pullJobs(URL_A, "t", {
+      ...NO_INVENTORY,
+      bluetoothOutcomes: [
+        { id: "c1", ok: false, error: `${"e".repeat(500)}TAIL` },
+        { id: "c2", ok: false, error: "short" },
+        { id: "c3", ok: true },
+      ],
+    });
+    const sent = JSON.parse(fetchImpl.mock.calls[0]![1].body as string);
+    expect(sent.bluetoothOutcomes).toEqual([
+      { id: "c1", ok: false, error: "e".repeat(500) },
+      { id: "c2", ok: false, error: "short" },
+      { id: "c3", ok: true },
+    ]);
   });
 });
 

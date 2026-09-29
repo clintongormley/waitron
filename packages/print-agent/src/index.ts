@@ -17,6 +17,9 @@ export { DEFAULT_TIMEOUT_MS, createClient } from "./client.js";
 export type {
   AgentClient,
   AgentInventory,
+  BluetoothCommand,
+  BluetoothCommandKind,
+  BluetoothCommandOutcome,
   Failure,
   JobOutcome,
   JoinReply,

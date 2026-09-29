@@ -349,6 +349,8 @@ export function createAgent(opts: AgentOptions): Agent {
     const pulled = await client.pullJobs(current, token, {
       visible,
       scanned,
+      pairedBluetooth: [],
+      bluetoothOutcomes: [],
       ...(hostname === undefined ? {} : { host: hostname }),
       ...(setupUrl === undefined ? {} : { setupUrl }),
       ...(setupPort === undefined ? {} : { setupPort }),
