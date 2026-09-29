@@ -34,6 +34,8 @@ declare module "@waitron/shared" {
     /** This server owns the transient printer-discovery queue; the printing module owns persisted printers.
      * No free probe slot; retry after a request expires. */
     "printer.probe_busy": Record<string, never>;
+    /** A ninth distinct Bluetooth address would be queued for one print agent. */
+    "printer.bluetooth_command_busy": Record<string, never>;
     "password.throttled": { retryAfterSeconds: number };
     /** Too many public invitation/reset attempts reached this process in the current window. */
     "account_action.rate_limited": Record<string, never>;
