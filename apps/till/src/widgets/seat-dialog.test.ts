@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./seat-dialog.js";
@@ -16,7 +16,8 @@ const field = (el: TillSeatDialog) => el.shadowRoot!.querySelector("wt-input")!;
 const nativeInput = (el: TillSeatDialog) =>
   field(el).shadowRoot!.querySelector<HTMLInputElement>("input")!;
 const seatButton = (el: TillSeatDialog) =>
-  el.shadowRoot!.querySelector<HTMLElement>("[data-seat-confirm]")!;
+  el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-seat-confirm]")!;
+const bottom = (el: TillSeatDialog) => el.shadowRoot!.querySelector("wt-form-actions")!;
 
 async function type(el: TillSeatDialog, value: string): Promise<void> {
   const input = nativeInput(el);
@@ -65,7 +66,7 @@ describe("till-seat-dialog", () => {
   });
 
   it.each(["0", "2.5", "-1", "tres", "1000", "3e1"])(
-    "refuses %s beside the field and in a summary, keeping what was typed",
+    "refuses %s beside the field and once beside Seat, with no summary, keeping what was typed",
     async (value) => {
       const el = await mountDialog();
       const seen = captureConfirm(el);
@@ -76,11 +77,51 @@ describe("till-seat-dialog", () => {
 
       expect(seen).toEqual([]);
       expect(field(el).error).toBe(t("seat.guest_count_invalid"));
-      const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-      expect(summary.errors).toEqual([t("seat.guest_count_invalid")]);
+      expect(bottom(el).error).toBe(t("form.fix_fields"));
+      expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+      expect(seatButton(el).disabled).toBe(true);
       expect(nativeInput(el).value).toBe(value);
     },
   );
+
+  it("says nothing and keeps Seat working until the first press", async () => {
+    const el = await mountDialog();
+
+    await type(el, "0");
+
+    expect(field(el).error).toBe("");
+    expect(bottom(el).error).toBe("");
+    expect(seatButton(el).disabled).toBe(false);
+  });
+
+  it("moves the cursor to the guest count when a press is refused", async () => {
+    const el = await mountDialog();
+    await type(el, "tres");
+
+    seatButton(el).click();
+    await vi.waitFor(() => expect(field(el).shadowRoot!.activeElement).toBe(nativeInput(el)));
+  });
+
+  it("re-checks as the count changes after a refused press, and Seat works again once it is fixed", async () => {
+    const el = await mountDialog();
+    const seen = captureConfirm(el);
+    await type(el, "0");
+    seatButton(el).click();
+    await el.updateComplete;
+
+    await type(el, "2");
+
+    expect(field(el).error).toBe("");
+    expect(bottom(el).error).toBe("");
+    expect(seatButton(el).disabled).toBe(false);
+
+    await type(el, "2.5");
+
+    expect(field(el).error).toBe(t("seat.guest_count_invalid"));
+    expect(bottom(el).error).toBe(t("form.fix_fields"));
+    expect(seatButton(el).disabled).toBe(true);
+    expect(seen).toEqual([]);
+  });
 
   it("drops the refusal once a valid count is sent", async () => {
     const el = await mountDialog();

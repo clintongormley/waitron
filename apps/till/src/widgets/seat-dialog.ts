@@ -1,8 +1,8 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { isValidGuestCount } from "@waitron/shared";
 import { t } from "../i18n/t.js";
@@ -40,15 +40,22 @@ export class TillSeatDialog extends LitElement {
   @property() tableLabel = "";
 
   @state() private value = "";
-  @state() private error = "";
+  @state() private attempted = false;
 
-  #confirm(): void {
+  #error(): string {
+    return this.attempted && parseGuestCount(this.value) === undefined
+      ? t("seat.guest_count_invalid")
+      : "";
+  }
+
+  async #confirm(): Promise<void> {
+    this.attempted = true;
     const parsed = parseGuestCount(this.value);
     if (parsed === undefined) {
-      this.error = t("seat.guest_count_invalid");
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    this.error = "";
     this.dispatchEvent(
       new CustomEvent<SeatConfirmDetail>("seat-confirm", {
         detail: parsed,
@@ -63,6 +70,7 @@ export class TillSeatDialog extends LitElement {
   }
 
   override render() {
+    const error = this.#error();
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -70,21 +78,13 @@ export class TillSeatDialog extends LitElement {
       @wt-close=${() => this.#cancel()}
     >
       <div class="fields">
-        ${
-          this.error === ""
-            ? nothing
-            : html`<wt-form-error-summary
-                .heading=${t("form.error_heading")}
-                .errors=${[this.error]}
-              ></wt-form-error-summary>`
-        }
         <wt-input
           name="guestCount"
           autocomplete="off"
           .label=${t("seat.guest_count")}
           .hint=${t("seat.guest_count_hint")}
           .value=${this.value}
-          .error=${this.error}
+          .error=${error}
           @wt-change=${(event: CustomEvent<{ value: string }>) => (this.value = event.detail.value)}
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(
@@ -92,13 +92,25 @@ export class TillSeatDialog extends LitElement {
               this.shadowRoot!.querySelector<HTMLElement>("[data-seat-confirm]"),
             )}
         ></wt-input>
+        <wt-form-actions .error=${error === "" ? "" : t("form.fix_fields")}>
+          <wt-button
+            slot="cancel"
+            data-seat-cancel
+            variant="secondary"
+            @click=${() => this.#cancel()}
+          >
+            ${t("action.cancel")}
+          </wt-button>
+          <wt-button
+            data-seat-confirm
+            variant="primary"
+            ?disabled=${error !== ""}
+            @click=${() => void this.#confirm()}
+          >
+            ${t("seat.confirm")}
+          </wt-button>
+        </wt-form-actions>
       </div>
-      <wt-button slot="footer" data-seat-cancel variant="secondary" @click=${() => this.#cancel()}>
-        ${t("action.cancel")}
-      </wt-button>
-      <wt-button slot="footer" data-seat-confirm variant="primary" @click=${() => this.#confirm()}>
-        ${t("seat.confirm")}
-      </wt-button>
     </wt-dialog>`;
   }
 }

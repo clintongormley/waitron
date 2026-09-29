@@ -1,4 +1,5 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -730,6 +731,43 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="2"]')!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with a bad split quantity refused", async () => {
+    const splitLines: TabLine[] = [
+      { ...lines[0]!, productId: "jamon", quantity: "0.750", unitPrecision: 3 },
+    ];
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      { products: [...products, weightProduct], lines: splitLines, orderId: "wo-1" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="1"]')!.click();
+    await el.updateComplete;
+    const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      '[data-split-quantity="1"]',
+    )!;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = "0";
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-split-confirm]")!.click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const actions = el.shadowRoot!.querySelector<
+      HTMLElement & { error: string; updateComplete: Promise<unknown> }
+    >("[data-split-lines] wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.error).toBe(t("form.fix_fields"));
+    expect(field.error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 });
