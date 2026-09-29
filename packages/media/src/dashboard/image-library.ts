@@ -5,6 +5,7 @@ import {
   selectStyles,
   ContentLanguageController,
   currentContentLanguages,
+  focusFirstInvalid,
   submitOnEnter,
 } from "@waitron/ui";
 import {
@@ -19,7 +20,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { ImageApi, ImageMetadata, ImageQuery, ImageUsage, LibraryImage } from "./client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { t } from "./strings.js";
@@ -30,6 +30,18 @@ function usageHref(use: ImageUsage): string {
   if (use.kind === "section") return `/manage/sections?section=${encodeURIComponent(use.id)}`;
   if (use.kind === "menu_version") return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
+}
+
+const PHOTO_REFUSALS = new Set(["image.too_large", "image.invalid_file", "image.too_many_pixels"]);
+
+/** The editor field a refused save names — `file` or `name-<language>` — or `_form` for none. */
+function refusalField(error: unknown): string {
+  const code = codeOf(error);
+  if (PHOTO_REFUSALS.has(code)) return "file";
+  const language = (error as { params?: { language?: unknown } }).params?.language;
+  if (code === "image.translation_required" && typeof language === "string")
+    return `name-${language}`;
+  return "_form";
 }
 
 @customElement("dashboard-image-library")
@@ -151,9 +163,10 @@ export class ImageLibrary extends LitElement {
     labels: string;
     file: File | null;
   } | null = null;
-  @state() private invalid = false;
+  @state() private attempted = false;
   @state() private previewUrl: string | null = null;
-  @state() private saveError: string | null = null;
+  /** The last save's refusal; a field's lasts until that field changes, any other's until Save. */
+  @state() private refusal: { field: string; code: string } | null = null;
   @state() private duplicateImage: LibraryImage | null = null;
   @state() private deletion: { image: LibraryImage; uses: ImageUsage[] } | null = null;
   @state() private deleteError = false;
@@ -266,8 +279,8 @@ export class ImageLibrary extends LitElement {
       labels: image?.labels.join(", ") ?? "",
       file: null,
     };
-    this.invalid = false;
-    this.saveError = null;
+    this.attempted = false;
+    this.refusal = null;
     this.duplicateImage = null;
   }
   #closeEditor(): void {
@@ -278,16 +291,51 @@ export class ImageLibrary extends LitElement {
   #field(field: "names" | "altText", language: string, value: string): void {
     if (this.editor !== null)
       this.editor = { ...this.editor, [field]: { ...this.editor[field], [language]: value } };
+    if (field === "names") this.#dropRefusal(`name-${language}`);
+  }
+  #dropRefusal(field: string): void {
+    if (this.refusal?.field === field) this.refusal = null;
+  }
+  /** The default content language first, then the other enabled ones. */
+  #languages(): string[] {
+    const config = currentContentLanguages();
+    return [
+      config.defaultLanguage,
+      ...config.languages.filter((code) => code !== config.defaultLanguage),
+    ];
+  }
+  /** The fields the editor shows, each with its message when it has one. */
+  #fieldErrors(): Map<string, string> {
+    const editor = this.editor!;
+    const config = currentContentLanguages();
+    const errors = new Map<string, string>([
+      ...(editor.image === null ? [["file", ""] as const] : []),
+      ...this.#languages().map((language) => [`name-${language}`, ""] as const),
+    ]);
+    if (this.refusal && errors.has(this.refusal.field))
+      errors.set(this.refusal.field, codeMessage(this.refusal.code));
+    if (!this.attempted) return errors;
+    // Alt text is optional; only a file (for a new image) and a default-language name are required.
+    if (editor.image === null && editor.file === null) errors.set("file", t("image.file_required"));
+    if (!editor.names[config.defaultLanguage]?.trim())
+      errors.set(`name-${config.defaultLanguage}`, t("image.required"));
+    return errors;
+  }
+  async #focusFirstInvalid(): Promise<void> {
+    await this.updateComplete;
+    await focusFirstInvalid(this.shadowRoot!.querySelector("wt-modal")!);
   }
   async #save(): Promise<void> {
     const editor = this.editor;
     if (editor === null || this.busy) return;
-    const language = currentContentLanguages().defaultLanguage;
-    this.invalid = true;
-    // Alt text is optional; only a file (for a new image) and a default-language name are required.
-    if ((editor.image === null && editor.file === null) || !editor.names[language]?.trim()) return;
+    this.attempted = true;
+    const errors = this.#fieldErrors();
+    if (this.refusal && !errors.has(this.refusal.field)) this.refusal = null;
+    if ([...errors.values()].some(Boolean)) {
+      void this.#focusFirstInvalid();
+      return;
+    }
     this.busy = true;
-    this.saveError = null;
     const metadata: ImageMetadata = {
       names: editor.names,
       altText: editor.altText,
@@ -308,12 +356,12 @@ export class ImageLibrary extends LitElement {
       this.#setPreview(null);
       this.editor = null;
     } catch (error) {
-      this.saveError = codeOf(error);
-      return;
+      this.refusal = { field: refusalField(error), code: codeOf(error) };
     } finally {
       this.busy = false;
     }
-    await this.#load();
+    if (this.refusal) void this.#focusFirstInvalid();
+    else await this.#load();
   }
   async #inspectDeletion(image: LibraryImage): Promise<void> {
     if (this.busy) return;
@@ -351,15 +399,17 @@ export class ImageLibrary extends LitElement {
     const editor = this.editor;
     if (editor === null) return nothing;
     const config = currentContentLanguages();
-    const languages = [
-      config.defaultLanguage,
-      ...config.languages.filter((code) => code !== config.defaultLanguage),
-    ];
+    const languages = this.#languages();
     const languageNames = new Intl.DisplayNames([currentLocale()], { type: "language" });
-    const fileError =
-      this.invalid && editor.image === null && editor.file === null ? t("image.file_required") : "";
-    const nameError =
-      this.invalid && !editor.names[config.defaultLanguage]?.trim() ? t("image.required") : "";
+    const errors = this.#fieldErrors();
+    const fileError = errors.get("file") ?? "";
+    const invalid = [...errors.values()].some(Boolean);
+    const bottom = [
+      ...(this.refusal && !errors.has(this.refusal.field)
+        ? [`${t("image.save_error")} ${codeMessage(this.refusal.code)}`]
+        : []),
+      ...(invalid ? [t("image.fix_fields")] : []),
+    ].join(" ");
     const preview =
       editor.file !== null
         ? this.previewUrl
@@ -378,11 +428,6 @@ export class ImageLibrary extends LitElement {
         submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"));
       }}
     >
-      <wt-form-error-summary
-        heading=${t("image.problem")}
-        .errors=${[fileError, nameError].filter(Boolean)}
-      ></wt-form-error-summary>
-      ${this.saveError ? html`<p role="alert" class="error">${t("image.save_error")} ${codeMessage(this.saveError)}</p>` : nothing}
       <div class="fields">
         ${
           editor.image === null
@@ -399,6 +444,7 @@ export class ImageLibrary extends LitElement {
                       const file = (event.target as HTMLInputElement).files?.[0] ?? null;
                       this.#setPreview(file);
                       this.editor = { ...editor, file };
+                      this.#dropRefusal("file");
                     }} /></label
                 >${fileError ? html`<p id="file-error" class="error">${fileError}</p>` : nothing}`
             : nothing
@@ -425,7 +471,7 @@ export class ImageLibrary extends LitElement {
                 .value=${editor.names[language] ?? ""}
                 ?required=${language === config.defaultLanguage}
                 ?disabled=${this.busy}
-                error=${language === config.defaultLanguage ? nameError : ""}
+                error=${errors.get(`name-${language}`)!}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => this.#field("names", language, event.detail.value)}
               ></wt-input>
               <wt-input
@@ -448,14 +494,17 @@ export class ImageLibrary extends LitElement {
         ></wt-input>
         <p>${t("image.labels_help")}</p>
       </div>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
           variant="secondary"
           ?disabled=${this.busy}
           @click=${() => this.#closeEditor()}
           >${t("image.cancel")}</wt-button
-        ><wt-button data-test="save" ?disabled=${this.busy} @click=${() => void this.#save()}
+        ><wt-button
+          data-test="save"
+          ?disabled=${this.busy || invalid}
+          @click=${() => void this.#save()}
           >${t("image.save")}</wt-button
         ></wt-form-actions
       >

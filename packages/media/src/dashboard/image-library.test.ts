@@ -39,6 +39,13 @@ async function mount(client = api(), picker = false) {
 function click(selector: string) {
   (el.shadowRoot!.querySelector(selector) as HTMLElement).click();
 }
+async function bottomOf(): Promise<string> {
+  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    "wt-modal wt-form-actions",
+  )!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
 function field(name: string, value: string) {
   el.shadowRoot!.querySelector(`[name="${name}"]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -208,7 +215,7 @@ it("requires file and default-language name but keeps alt text optional", async 
   click("[data-test=save]");
   await el.updateComplete;
   expect(client.uploadImage).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).not.toBeNull();
+  expect(await bottomOf()).toBe("Correct the highlighted fields to continue.");
   expect(
     el.shadowRoot!.querySelector("wt-input[name=name-es]")!.getAttribute("error"),
   ).toBeTruthy();
@@ -495,8 +502,8 @@ it("keeps a failed save open, ignores repeated saves while pending and allows re
   click("[data-test=save]");
   click("[data-test=save]");
   expect(client.updateImage).toHaveBeenCalledOnce();
-  reject({ code: "image.translation_required" });
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("could not be saved"));
+  reject({ code: "image.invalid_metadata" });
+  await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
   expect(el.shadowRoot!.querySelector("[data-test=save]")).not.toBeNull();
   click("[data-test=save]");
   await vi.waitFor(() => expect(client.updateImage).toHaveBeenCalledTimes(2));
@@ -517,7 +524,7 @@ it("explains a photo the server could not read", async () => {
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+    expect(el.shadowRoot!.querySelector("#file-error")?.textContent).toContain(
       "The photo could not be read",
     ),
   );
@@ -800,12 +807,8 @@ it("keeps the editor open through a close requested mid-save, so a refusal is st
   click("wt-modal wt-button[slot=cancel]");
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=save]")).not.toBeNull();
-  save.reject({ code: "image.translation_required" });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-modal [role=alert]")!.textContent).toContain(
-      "could not be saved",
-    ),
-  );
+  save.reject({ code: "image.invalid_metadata" });
+  await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
 });
 
 it("ignores Escape while a save is in flight and honours it once the save has settled", async () => {
@@ -820,8 +823,8 @@ it("ignores Escape while a save is in flight and honours it once the save has se
   await userEvent.keyboard("{Escape}");
   await el.updateComplete;
   expect(openDialog().open).toBe(true);
-  save.reject({ code: "image.translation_required" });
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("could not be saved"));
+  save.reject({ code: "image.invalid_metadata" });
+  await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
   (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement).focus();
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-test=save]")).toBeNull());
@@ -1034,4 +1037,273 @@ it("dismisses an idle delete confirmation with Escape, without deleting", async 
   await userEvent.keyboard("{Escape}");
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull());
   expect(client.deleteImage).not.toHaveBeenCalled();
+});
+
+const saveButton = () => el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!;
+const nameInput = (language: string) =>
+  el.shadowRoot!.querySelector<HTMLElement & { error: string; value: string }>(
+    `wt-input[name=name-${language}]`,
+  )!;
+const fileInput = () => el.shadowRoot!.querySelector<HTMLInputElement>("input[name=image-file]")!;
+const fileError = () => el.shadowRoot!.querySelector("#file-error")?.textContent?.trim() ?? "";
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
+const photo = () => new File(["photo"], "bread.jpg", { type: "image/jpeg" });
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  await mount();
+  click("[data-test=upload]");
+  await el.updateComplete;
+  field("name-es", "");
+  await el.updateComplete;
+
+  expect(fileError()).toBe("");
+  expect(fileInput().getAttribute("aria-invalid")).toBe("false");
+  expect(nameInput("es").error).toBe("");
+  expect(await bottomOf()).toBe("");
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission shows the field and bottom messages, focuses the photo and disables Save", async () => {
+  const client = await mount();
+  click("[data-test=upload]");
+  await el.updateComplete;
+  field("name-fr", "Pain");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await el.updateComplete;
+
+  expect(client.uploadImage).not.toHaveBeenCalled();
+  expect(fileError()).toBe("Choose a photo to upload.");
+  expect(fileInput().getAttribute("aria-invalid")).toBe("true");
+  expect(nameInput("es").error).toBe("This field is required.");
+  expect(await bottomOf()).toBe(FIX_FIELDS);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
+  expect(nameInput("fr").value).toBe("Pain");
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(fileInput()));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+
+  setLocale("es-ES");
+  await el.updateComplete;
+  expect(await bottomOf()).toBe("Corrige los campos marcados para continuar.");
+});
+
+it("focuses the default-language name when an edit is saved without one", async () => {
+  await mount();
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  field("name-es", " ");
+  await el.updateComplete;
+  click("[data-test=save]");
+
+  await vi.waitFor(() =>
+    expect(nameInput("es").shadowRoot!.activeElement).toBe(
+      nameInput("es").shadowRoot!.querySelector("input"),
+    ),
+  );
+  expect(nameInput("es").error).toBe("This field is required.");
+});
+
+it("re-checks every change after a failed submission, and Save works again once fixed", async () => {
+  await mount();
+  click("[data-test=upload]");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await el.updateComplete;
+
+  chooseFile([photo()]);
+  await el.updateComplete;
+  expect(fileError()).toBe("");
+  expect(await bottomOf()).toBe(FIX_FIELDS);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
+
+  field("name-es", "Pan");
+  await el.updateComplete;
+  expect(nameInput("es").error).toBe("");
+  expect(await bottomOf()).toBe("");
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+
+  field("name-es", " ");
+  await el.updateComplete;
+  expect(nameInput("es").error).toBe("This field is required.");
+  expect(await bottomOf()).toBe(FIX_FIELDS);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
+});
+
+it.each(["image.too_large", "image.invalid_file", "image.too_many_pixels"])(
+  "puts a refused %s under the photo until another photo is chosen",
+  async (code) => {
+    const client = api();
+    client.uploadImage.mockRejectedValueOnce({ code, params: {}, status: 400 });
+    await mount(client);
+    click("[data-test=upload]");
+    await el.updateComplete;
+    chooseFile([photo()]);
+    field("name-es", "Pan");
+    await el.updateComplete;
+    click("[data-test=save]");
+
+    await vi.waitFor(() => expect(fileError()).toBe(codeMessage(code)));
+    expect(fileInput().getAttribute("aria-invalid")).toBe("true");
+    expect(await bottomOf()).toBe(FIX_FIELDS);
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(fileInput()));
+
+    field("name-es", "Pan blanco");
+    await el.updateComplete;
+    expect(fileError()).toBe(codeMessage(code));
+    expect(saveButton().hasAttribute("disabled")).toBe(true);
+
+    chooseFile([new File(["smaller"], "small.jpg", { type: "image/jpeg" })]);
+    await el.updateComplete;
+    expect(fileError()).toBe("");
+    expect(await bottomOf()).toBe("");
+    expect(saveButton().hasAttribute("disabled")).toBe(false);
+    click("[data-test=save]");
+    await vi.waitFor(() => expect(client.uploadImage).toHaveBeenCalledTimes(2));
+  },
+);
+
+it("puts a refused translation under that language's name until the name changes", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce({
+    code: "image.translation_required",
+    params: { field: "names", language: "es" },
+    status: 400,
+  });
+  await mount(client);
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+
+  const message = codeMessage("image.translation_required");
+  await vi.waitFor(() => expect(nameInput("es").error).toBe(message));
+  expect(await bottomOf()).toBe(FIX_FIELDS);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
+  await vi.waitFor(() =>
+    expect(nameInput("es").shadowRoot!.activeElement).toBe(
+      nameInput("es").shadowRoot!.querySelector("input"),
+    ),
+  );
+
+  field("name-fr", "Pain");
+  await el.updateComplete;
+  expect(nameInput("es").error).toBe(message);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
+
+  field("name-es", "Pan blanco");
+  await el.updateComplete;
+  expect(nameInput("es").error).toBe("");
+  expect(await bottomOf()).toBe("");
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+});
+
+it("says a refused translation in a language the form does not show beside Save, and leaves Save working", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce({
+    code: "image.translation_required",
+    params: { field: "names", language: "de" },
+    status: 400,
+  });
+  await mount(client);
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+
+  await vi.waitFor(async () =>
+    expect(await bottomOf()).toBe(
+      `The image could not be saved. ${codeMessage("image.translation_required")}`,
+    ),
+  );
+  expect(nameInput("es").error).toBe("");
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+});
+
+it("says a photo refusal on an edit, which has no photo field, beside Save and leaves Save working", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce({ code: "image.too_large", params: {}, status: 400 });
+  await mount(client);
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+
+  await vi.waitFor(async () =>
+    expect(await bottomOf()).toBe(
+      `The image could not be saved. ${codeMessage("image.too_large")}`,
+    ),
+  );
+  expect(el.shadowRoot!.querySelector("#file-error")).toBeNull();
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+});
+
+it("leaves Save working on a refusal that names no field, and drops it on the next submission", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce(new Error("offline"));
+  await mount(client);
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+
+  await vi.waitFor(async () =>
+    expect(await bottomOf()).toBe(
+      `The image could not be saved. ${codeMessage("server.internal")}`,
+    ),
+  );
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+  expect(el.shadowRoot!.querySelector("wt-modal p[role=alert]")).toBeNull();
+
+  const retry = deferred<never>();
+  client.updateImage.mockReturnValueOnce(retry.promise);
+  click("[data-test=save]");
+  await el.updateComplete;
+  expect(client.updateImage).toHaveBeenCalledTimes(2);
+  expect(await bottomOf()).toBe("");
+});
+
+it("shows the refusal and the generic sentence together when both apply", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce({ code: "image.invalid_metadata" });
+  await mount(client);
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+  const refused = `The image could not be saved. ${codeMessage("image.invalid_metadata")}`;
+  await vi.waitFor(async () => expect(await bottomOf()).toBe(refused));
+
+  field("name-es", "");
+  await el.updateComplete;
+  expect(await bottomOf()).toBe(`${refused} ${FIX_FIELDS}`);
+  expect(saveButton().hasAttribute("disabled")).toBe(true);
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const client = api();
+  client.updateImage.mockRejectedValueOnce({ code: "image.invalid_metadata" });
+  await mount(client);
+  click("[data-test=upload]");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await el.updateComplete;
+  expect(await bottomOf()).toBe(FIX_FIELDS);
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+
+  click("[data-test=upload]");
+  await el.updateComplete;
+  expect(fileError()).toBe("");
+  expect(nameInput("es").error).toBe("");
+  expect(await bottomOf()).toBe("");
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  click("[data-test=save]");
+  await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
+  click("wt-modal wt-button[slot=cancel]");
+  await el.updateComplete;
+  click("[data-test=edit-one]");
+  await el.updateComplete;
+  expect(await bottomOf()).toBe("");
+  expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
