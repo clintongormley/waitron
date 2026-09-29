@@ -587,6 +587,55 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
+  it("renders the form a finished pairing opens, then the paired row's Add and Forget pairing, accessibly", async () => {
+    const paired = {
+      ...bluetooth[0]!,
+      paired: true as const,
+      bluetoothCommand: {
+        id: "c1",
+        kind: "pair" as const,
+        address: "00:11:22:33:44:55",
+        state: "succeeded" as const,
+      },
+    };
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: bluetoothApi({
+          background: stubApi(false, {
+            listDiscoveredPrinters: vi.fn().mockResolvedValue([paired, ...bluetooth.slice(1)]),
+          }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+      await flush(el);
+      q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
+      );
+      await flush(el);
+      q(el, "[data-test=confirm-pair]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=pair-printer-modal]")).toBeNull());
+      await vi.advanceTimersByTimeAsync(2_000);
+      await flush(el);
+      expect(q(el, "[data-test=name-printer-modal]")).not.toBeNull();
+      await expectNoA11yViolations(host);
+      q(el, "[data-test=cancel-printer-name]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=name-printer-modal]")).toBeNull());
+      await flush(el);
+      expect(q(el, '[data-test="register-00:11:22:33:44:55"]')).not.toBeNull();
+      expect(q(el, '[data-test="forget-device-00:11:22:33:44:55"]')).not.toBeNull();
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("renders the status row of a Pair whose device the scan lost accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

@@ -280,6 +280,8 @@ action in progress: it disables the button, sets `aria-busy`, and leads the labe
 "Buscando…"), which is then the one thing announced. Existing `?disabled=${busy}` buttons predate
 this and are not yet migrated. `wt-spinner` on its own is for a region that is loading; there it is a
 `role="status"` live region, so give `label` the localized text.
+A third form is a `wt-spinner decorative` beside a status text that itself announces the state
+(`role="status"`), as the Bluetooth pairing row in Add a printer does.
 
 Use `wt-data-table` for sortable administrative collections such as people, devices, printers and
 canvases. Define columns and cell content in the consuming screen so domain actions stay outside the
