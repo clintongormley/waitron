@@ -246,6 +246,7 @@ export const en = {
   // Prefixes the time: "Reserved 20:30".
   "floor.reserved": "Reserved",
   "floor.forgotten": "Forgotten",
+  "floor.fire_due": "Time to fire",
   "floor.unsent": "An unsent order: {n} items",
   "floor.unsent_one": "An unsent order: 1 item",
   "floor.unsent_owner": "{name} has an unsent order: {n} items",
@@ -820,6 +821,7 @@ export const es: Record<StringKey, string> = {
   "floor.free": "Libre",
   "floor.reserved": "Reservada",
   "floor.forgotten": "Olvidada",
+  "floor.fire_due": "Hora de marchar",
   "floor.unsent": "Un pedido sin enviar: {n} artículos",
   "floor.unsent_one": "Un pedido sin enviar: 1 artículo",
   "floor.unsent_owner": "{name} tiene un pedido sin enviar: {n} artículos",

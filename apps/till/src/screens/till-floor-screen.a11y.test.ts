@@ -316,6 +316,50 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(map.host);
   });
 
+  it("has no violations with a party's reminder due, on the list and on the map", async () => {
+    const now = Date.parse("2026-09-29T20:00:00.000Z");
+    const due = partyTables.map((table) =>
+      table.party === null
+        ? table
+        : {
+            ...table,
+            party: {
+              ...table.party,
+              reminder: { groupId: "g2", dueAt: new Date(now).toISOString() },
+            },
+          },
+    );
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: due, now },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelectorAll("[data-fire-due]").length).toBeGreaterThan(0);
+    await expectNoA11yViolations(list.host);
+    cleanupWidgets();
+
+    const onMap = due.map((table, index) => ({
+      ...table,
+      posX: 100 + index * 200,
+      posY: 300,
+      shape: "round" as const,
+      rotation: 0,
+    }));
+    const map = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: onMap, now },
+      theme,
+    );
+    const canvas = map.el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    const token = canvas.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("wt-table-token")!;
+    await token.updateComplete;
+    expect(token.shadowRoot!.querySelector("[data-fire-due]")).not.toBeNull();
+    await expectNoA11yViolations(map.host);
+  });
+
   it("has no violations with the seat dialog open", async () => {
     const { el, host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",

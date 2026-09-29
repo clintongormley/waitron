@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { FloorTable } from "../floor.js";
@@ -14,6 +14,7 @@ interface Token extends HTMLElement {
     reserved?: string;
     forgotten?: string;
     unsent?: string;
+    fireDue?: string;
   };
   updateComplete: Promise<unknown>;
 }
@@ -102,6 +103,26 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
       tableData({ state: "open-tab", tabTotal: "12.00", unsentDrafts: [""] }),
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token whose party's reminder is due, with the chip's words, is accessible", async () => {
+    const el = await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", pendingToServe: 2, fireDue: true }),
+      theme,
+    );
+    el.labels = { ...el.labels, fireDue: "Fire now" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-fire-due]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("a token whose party's reminder is due, with a DECORATIVE chip (no label), is accessible", async () => {
+    const el = await mountToken(
+      tableData({ state: "open-tab", tabTotal: "12.00", fireDue: true }),
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-fire-due]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

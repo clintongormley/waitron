@@ -14,6 +14,8 @@ export interface TableTokenLabels {
   forgotten?: string;
   /** The unsent-order mark's text; its accessible name adds the names: "Unsent: Alex, Sam". */
   unsent?: string;
+  /** The fire-due chip's text; without one the chip is an unworded, `aria-hidden` mark. */
+  fireDue?: string;
 }
 
 /**
@@ -216,6 +218,12 @@ export class WtTableToken extends LitElement {
         border: 1px solid var(--wt-color-primary);
       }
 
+      .badge.fire-due {
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-warning);
+      }
+
       /* The manual-status chip: text in the theme colour on a neutral chip, with the DATA-driven status
          colour as a border + a small swatch — never as a text background, so contrast stays token-fixed
          and the arbitrary colour cannot fail a11y. Verbatim from FP-1's .badge.status. */
@@ -302,6 +310,7 @@ export class WtTableToken extends LitElement {
                 >`
               : nothing
           }
+          ${this.#fireDueChip(t)}
           ${
             t.status != null
               ? html`<span class="badge status" data-status style="border-color: ${t.status.color}">
@@ -312,6 +321,14 @@ export class WtTableToken extends LitElement {
         </span>
       </div>
     `;
+  }
+
+  #fireDueChip(t: FloorTable): TemplateResult | typeof nothing {
+    if (t.fireDue !== true) return nothing;
+    const label = this.labels.fireDue;
+    return label
+      ? html`<span class="badge fire-due" data-fire-due>${label}</span>`
+      : html`<span class="badge fire-due" data-fire-due aria-hidden="true"></span>`;
   }
 
   #unsentMark(t: FloorTable): TemplateResult | typeof nothing {

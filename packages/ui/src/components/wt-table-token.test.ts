@@ -133,6 +133,47 @@ test("shows the reserved chip (label + time) only when a reservation time is set
   expect(none.shadowRoot!.querySelector(".badge.reserved")).toBeNull();
 });
 
+describe("the fire-due chip", () => {
+  const chip = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>("[data-fire-due]");
+
+  test("shows the consumer's words in the badges when the party's reminder is due", async () => {
+    const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
+      fireDue: "Fire now",
+    });
+    expect(chip(el)!.textContent!.trim()).toBe("Fire now");
+    expect(chip(el)!.closest(".badges")).not.toBeNull();
+    expect(chip(el)!.hasAttribute("aria-hidden")).toBe(false);
+  });
+
+  test("shows no chip when the reminder is not due or the table carries no word of one", async () => {
+    const labels = { fireDue: "Time to fire" };
+    const notDue = await mountToken(table({ state: "open-tab", fireDue: false }), labels);
+    const absent = await mountToken(table({ state: "open-tab" }), labels);
+    expect(chip(notDue)).toBeNull();
+    expect(chip(absent)).toBeNull();
+  });
+
+  test("is a decorative mark, still drawn, when the consumer gives no words", async () => {
+    const el = await mountToken(table({ state: "open-tab", fireDue: true }));
+    expect(chip(el)!.textContent!.trim()).toBe("");
+    expect(chip(el)!.getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("paints its words on the neutral chip tokens with the warning token as its border", async () => {
+    const el = await mountToken(table({ state: "open-tab", fireDue: true }), {
+      fireDue: "Time to fire",
+    });
+    host.style.setProperty("--wt-color-warning", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-surface-raised", "rgb(7, 8, 9)");
+    host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+    const style = getComputedStyle(chip(el)!);
+    expect(style.borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(style.borderTopStyle).toBe("solid");
+    expect(style.backgroundColor).toBe("rgb(7, 8, 9)");
+    expect(style.color).toBe("rgb(10, 11, 12)");
+  });
+});
+
 describe("the unsent-order mark", () => {
   const unsent = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>("[data-unsent]");
   const shown = (el: HTMLElement) => {

@@ -27,6 +27,7 @@ import { countText, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
+import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -314,6 +315,13 @@ export class TillFloorScreen extends LitElement {
         border: 1px solid var(--wt-color-success);
       }
 
+      /* Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
+      .badge.fire-due {
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+        border: 1px solid var(--wt-color-warning);
+      }
+
       /* The manual-status chip: label in the theme's text colour on a neutral chip, with the DATA-driven
          status colour as a border + a small swatch — never as a text background, so contrast is fixed by
          the tokens and the arbitrary status colour cannot fail a11y. */
@@ -363,6 +371,9 @@ export class TillFloorScreen extends LitElement {
    * identical classes. A table crossing into a worse band shows on the next refresh.
    */
   @property({ attribute: false }) reducedMotion?: boolean;
+  /** Injectable clock for whether a party's release reminder is due; unset reads the real one and
+   * redraws the floor when the next reminder falls due. */
+  @property({ attribute: false }) now?: number;
 
   /**
    * A zone id, `null` for the no-zone tab, or `undefined` before the operator has picked one — kept
@@ -385,6 +396,46 @@ export class TillFloorScreen extends LitElement {
     },
     tillPath,
   );
+
+  /** The clock the last render judged reminders by. */
+  #drawnAt = 0;
+  #reminderTimer?: ReturnType<typeof setTimeout>;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    // The timer stopped while the screen was off the page; a time already past redraws at once.
+    if (this.hasUpdated) this.#watchReminders();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    clearTimeout(this.#reminderTimer);
+  }
+
+  override willUpdate(): void {
+    this.#drawnAt = this.now ?? Date.now();
+  }
+
+  override updated(): void {
+    this.#watchReminders();
+  }
+
+  #fireDue(table: TableState): boolean {
+    return reminderDueAt(table.party?.reminder) <= this.#drawnAt;
+  }
+
+  /** The server's floor does not change when a reminder falls due, so the screen redraws itself then. */
+  #watchReminders(): void {
+    clearTimeout(this.#reminderTimer);
+    if (this.now !== undefined) return;
+    let next = Number.POSITIVE_INFINITY;
+    for (const table of this.tables) {
+      const dueAt = reminderDueAt(table.party?.reminder);
+      if (dueAt > this.#drawnAt && dueAt < next) next = dueAt;
+    }
+    if (next === Number.POSITIVE_INFINITY) return;
+    this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(next));
+  }
 
   /** A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests. */
   #openTable(table: TableState): void {
@@ -504,6 +555,7 @@ export class TillFloorScreen extends LitElement {
       reservedTime: table.nextReservation?.time ?? null,
       unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
       partyName: shownPartyName(table),
+      fireDue: this.#fireDue(table),
     });
   }
 
@@ -515,6 +567,7 @@ export class TillFloorScreen extends LitElement {
       toServe: t("floor.to_serve"),
       reserved: t("floor.reserved"),
       unsent: t("floor.unsent_mark"),
+      fireDue: t("floor.fire_due"),
       zone: t("floor.zone"),
       rotate: t("floor.rotate"),
       remove: t("floor.remove"),
@@ -636,6 +689,7 @@ export class TillFloorScreen extends LitElement {
           toServe: t("floor.to_serve"),
           reserved: t("floor.reserved"),
           unsent: t("floor.unsent_mark"),
+          fireDue: t("floor.fire_due"),
         }}
       ></wt-table-token>
     </button>`;
@@ -785,6 +839,11 @@ export class TillFloorScreen extends LitElement {
         ${
           table.timingBand === "forgotten"
             ? html`<span class="badge forgotten" data-forgotten>${t("floor.forgotten")}</span>`
+            : nothing
+        }
+        ${
+          this.#fireDue(table)
+            ? html`<span class="badge fire-due" data-fire-due>${t("floor.fire_due")}</span>`
             : nothing
         }
         ${

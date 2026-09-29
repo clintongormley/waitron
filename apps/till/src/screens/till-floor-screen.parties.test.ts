@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-floor-screen.js";
@@ -560,5 +560,160 @@ describe("till-floor-screen: a table's unsent orders", () => {
 
     const tray = el.shadowRoot!.querySelector<Token>('[data-tray-table="t4"] wt-table-token')!;
     expect(await tokenMark(tray)).toBe("Unsent: Alex");
+  });
+});
+
+describe("till-floor-screen: a party's release reminder", () => {
+  const now = Date.parse("2026-09-29T20:00:00.000Z");
+  const at = (offsetMs: number) => new Date(now + offsetMs).toISOString();
+  const onMap = { posX: 200, posY: 200, shape: "round" as const, rotation: 0 };
+  type Token = HTMLElement & { updateComplete: Promise<unknown> };
+
+  /** `clock: "real"` leaves the screen on its own clock. */
+  async function mountAt(tables: TableState[], clock: number | "real" = now) {
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      zones: [{ id: "z1", name: "Comedor", displayOrder: 0, active: true }],
+      tables,
+      now: clock === "real" ? undefined : clock,
+    });
+    return el;
+  }
+  const chip = (el: TillFloorScreen, id: string) =>
+    card(el, id).querySelector<HTMLElement>("[data-fire-due]");
+  async function tokenChip(token: Token): Promise<string | undefined> {
+    await token.updateComplete;
+    return token.shadowRoot!.querySelector("[data-fire-due]")?.textContent?.trim();
+  }
+
+  it("marks a table's card when its party's reminder has fallen due", async () => {
+    const el = await mountAt([
+      seated({}, { reminder: { groupId: "g2", dueAt: at(-60_000) } }),
+      seated({ id: "t5", label: "5" }, { id: "v5", reminder: { groupId: "g2", dueAt: at(0) } }),
+    ]);
+    expect(chip(el, "t4")!.textContent!.trim()).toBe("Time to fire");
+    expect(chip(el, "t4")!.closest(".badges")).not.toBeNull();
+    expect(chip(el, "t5")).not.toBeNull();
+  });
+
+  it.each([
+    ["is not yet due", { groupId: "g2", dueAt: at(60_000) }],
+    ["has no time", { groupId: "g2", dueAt: null }],
+    ["does not exist", null],
+  ])("shows no mark while the reminder %s", async (_state, reminder) => {
+    const el = await mountAt([seated({}, { reminder })]);
+    expect(chip(el, "t4")).toBeNull();
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const el = await mountAt([seated({}, { reminder: { groupId: "g2", dueAt: at(-1) } })]);
+    expect(chip(el, "t4")!.textContent!.trim()).toBe("Hora de marchar");
+  });
+
+  it("marks the table's token on the map, and not a table whose reminder is not due", async () => {
+    setLocale("es");
+    const el = await mountAt([
+      seated(onMap, { reminder: { groupId: "g2", dueAt: at(-1) } }),
+      seated(
+        { id: "t5", label: "5", ...onMap, posX: 600 },
+        { id: "v5", reminder: { groupId: "g2", dueAt: at(60_000) } },
+      ),
+    ]);
+    const canvas = el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    const token = (id: string) =>
+      canvas.shadowRoot!.querySelector<Token>(`[data-table="${id}"] wt-table-token`)!;
+    expect(await tokenChip(token("t4"))).toBe("Hora de marchar");
+    expect(await tokenChip(token("t5"))).toBeUndefined();
+  });
+
+  it("marks an unplaced table's token in the map's tray", async () => {
+    const el = await mountAt([
+      table({ id: "t5", label: "5", ...onMap }),
+      seated({}, { reminder: { groupId: "g2", dueAt: at(-1) } }),
+    ]);
+    const tray = el.shadowRoot!.querySelector<Token>('[data-tray-table="t4"] wt-table-token')!;
+    expect(await tokenChip(tray)).toBe("Time to fire");
+  });
+
+  describe("on the screen's own clock", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("marks the table the moment its reminder falls due, with no new floor read", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const el = await mountAt(
+        [
+          seated({}, { reminder: { groupId: "g2", dueAt: at(120_000) } }),
+          seated(
+            { id: "t5", label: "5" },
+            { id: "v5", reminder: { groupId: "g2", dueAt: at(60_000) } },
+          ),
+        ],
+        "real",
+      );
+      expect(chip(el, "t5")).toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await el.updateComplete;
+      expect(chip(el, "t5")).not.toBeNull();
+      expect(chip(el, "t4")).toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await el.updateComplete;
+      expect(chip(el, "t4")).not.toBeNull();
+    });
+
+    it.each([
+      ["cannot be read", "not a time"],
+      ["is beyond the longest timer a browser keeps", "2100-01-01T00:00:00.000Z"],
+    ])("does not keep redrawing for a reminder time that %s", async (_why, dueAt) => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const el = await mountAt([seated({}, { reminder: { groupId: "g2", dueAt } })], "real");
+      const redraws = vi.spyOn(el, "requestUpdate");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(redraws).not.toHaveBeenCalled();
+      expect(chip(el, "t4")).toBeNull();
+    });
+
+    it("does not keep redrawing for a reminder already due", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const el = await mountAt(
+        [seated({}, { reminder: { groupId: "g2", dueAt: at(-1) } })],
+        "real",
+      );
+      const redraws = vi.spyOn(el, "requestUpdate");
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(redraws).not.toHaveBeenCalled();
+      expect(chip(el, "t4")).not.toBeNull();
+    });
+
+    it("marks the table on coming back to the page after its reminder fell due", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const el = await mountAt(
+        [seated({}, { reminder: { groupId: "g2", dueAt: at(60_000) } })],
+        "real",
+      );
+      const parent = el.parentElement!;
+      el.remove();
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(chip(el, "t4")).toBeNull();
+      parent.append(el);
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+      expect(chip(el, "t4")).not.toBeNull();
+    });
+
+    it("arms no timer when the screen is given its clock", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+      vi.setSystemTime(now);
+      const el = await mountAt([seated({}, { reminder: { groupId: "g2", dueAt: at(60_000) } })]);
+      const redraws = vi.spyOn(el, "requestUpdate");
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(redraws).not.toHaveBeenCalled();
+    });
   });
 });

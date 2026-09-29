@@ -56,6 +56,7 @@ import {
   type SeatedRead,
 } from "../widgets/table-targets.js";
 import { owing, paidInPart } from "../state/bill-state.js";
+import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
@@ -277,9 +278,6 @@ export interface UnsnoozeGroupDetail {
 
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
-
-/** The longest delay `setTimeout` holds: 2^31 − 1 ms, about 24.8 days. */
-const LONGEST_TIMER_MS = 2 ** 31 - 1;
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
@@ -1317,7 +1315,7 @@ export class TillTableOrderScreen extends LitElement {
         if (!this.#productsById.has(product.id)) this.#productsById.set(product.id, product);
       }
     }
-    this.#reminderDue = this.#reminderDueAt() <= (this.now ?? Date.now());
+    this.#reminderDue = reminderDueAt(this.currentOrders?.reminder) <= (this.now ?? Date.now());
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
     }
@@ -1347,23 +1345,12 @@ export class TillTableOrderScreen extends LitElement {
   #reminderDue = false;
   #reminderTimer?: ReturnType<typeof setTimeout>;
 
-  /** When the party's release reminder falls due; never, while it has no time. */
-  #reminderDueAt(): number {
-    const dueAt = Date.parse(this.currentOrders?.reminder?.dueAt ?? "");
-    return Number.isNaN(dueAt) ? Number.POSITIVE_INFINITY : dueAt;
-  }
-
   /** On the screen's own clock, a reminder not yet due is drawn again the moment it falls due. */
   #watchReminder(): void {
     clearTimeout(this.#reminderTimer);
-    const dueAt = this.#reminderDueAt();
+    const dueAt = reminderDueAt(this.currentOrders?.reminder);
     if (this.now !== undefined || this.#reminderDue || dueAt === Number.POSITIVE_INFINITY) return;
-    // A longer delay overflows the browser's timer, which then fires at once, and again on every
-    // redraw.
-    this.#reminderTimer = setTimeout(
-      () => this.requestUpdate(),
-      Math.min(dueAt - Date.now(), LONGEST_TIMER_MS),
-    );
+    this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(dueAt));
   }
 
   #lineGross(line: TabLine): Decimal {
@@ -3086,7 +3073,7 @@ export class TillTableOrderScreen extends LitElement {
   ): TemplateResult | typeof nothing {
     const reminder = this.currentOrders?.reminder;
     // A time that cannot be read is no time.
-    if (reminder?.groupId !== group.id || this.#reminderDueAt() === Number.POSITIVE_INFINITY)
+    if (reminder?.groupId !== group.id || reminderDueAt(reminder) === Number.POSITIVE_INFINITY)
       return nothing;
     const name = t("table.group_n").replace("{n}", String(group.position));
     const snoozed = shown?.remindAt;
@@ -3104,7 +3091,7 @@ export class TillTableOrderScreen extends LitElement {
             ${t("table.reminder_clear_snooze")}
           </wt-button>`;
     if (!this.#reminderDue) {
-      const time = clockTime(this.#reminderDueAt());
+      const time = clockTime(reminderDueAt(reminder));
       return html`<div class="group-reminder" data-group-reminder="waiting">
         <span class="group-reminder-text"
           >${t("table.reminder_at").replace("{time}", () => time)}</span
