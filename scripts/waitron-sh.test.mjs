@@ -304,7 +304,7 @@ describe("waitron.sh install and the print agent's AppArmor profile", () => {
     const profileUrl =
       "https://raw.githubusercontent.com/clintongormley/waitron/my-branch/deploy/apparmor/waitron-print-agent";
     const fetched = log.findIndex(
-      (c) => c.startsWith("curl ") && c.split(" ").includes(profileUrl),
+      (c) => c.startsWith("curl ") && c.split(" ").some((arg) => arg === profileUrl),
     );
     const installed = log.findIndex(
       (c) => c.startsWith("install -m 0644 ") && c.endsWith(` ${PROFILE}`),
