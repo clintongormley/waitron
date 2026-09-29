@@ -146,7 +146,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "printer.bluetooth_not_discovered": {
     en: "This print agent has not found that Bluetooth device recently. Scan for printers, then try again.",
-    es: "Este agente de impresión no ha encontrado ese dispositivo Bluetooth recientemente. Busca impresoras e inténtalo de nuevo.",
+    es: "Este agente de impresión no ha encontrado ese dispositivo Bluetooth recientemente. Pulsa Buscar impresoras e inténtalo de nuevo.",
   },
   "printer.bluetooth_not_paired": {
     en: "This print agent no longer reports that Bluetooth device as paired.",

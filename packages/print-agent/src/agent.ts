@@ -24,7 +24,7 @@ export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
 /** How many Bluetooth commands the agent holds at once (queued, running, or with an unsent
  * outcome), so also the most outcomes one pull carries, and how many taken ids it remembers. */
-const BLUETOOTH_COMMAND_LIMIT = 8;
+export const BLUETOOTH_COMMAND_LIMIT = 8;
 const PIN_WITHHELD = "pairing failed; the detail was withheld because it contained the PIN";
 
 export interface AgentOptions {

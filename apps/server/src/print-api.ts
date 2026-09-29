@@ -44,6 +44,8 @@ import {
 } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
+  BLUETOOTH_COMMAND_LIMIT,
+  MAX_OUTCOME_ERROR_LENGTH,
   isBluetoothAddress,
   isBluetoothPin,
   type BluetoothCommandOutcome,
@@ -247,9 +249,12 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
     if (typeof entry !== "object" || entry === null) continue;
     const d = entry as Record<string, unknown>;
     if (typeof d.transport !== "string" || !members.includes(d.transport)) continue;
+    const localKey = wireString(d.localKey);
     out.push({
       transport: d.transport,
-      localKey: wireString(d.localKey),
+      // Upper case, as paired reports and commands are, so one device keeps one entry and a Pair
+      // naming it finds its scan.
+      localKey: d.transport === "bluetooth" ? localKey?.toUpperCase() : localKey,
       host: wireString(d.host),
       port: typeof d.port === "number" && Number.isInteger(d.port) ? d.port : undefined,
       make: wireString(d.make),
@@ -275,15 +280,10 @@ function screenPairedBluetooth(raw: unknown): PairedBluetoothWire[] {
   return out;
 }
 
-// The agent's own bounds: it holds at most eight outcomes (packages/print-agent/src/agent.ts) and its
-// client cuts each reason to 500 characters (packages/print-agent/src/client.ts).
-const MAX_BLUETOOTH_OUTCOMES = 8;
-const MAX_OUTCOME_ERROR_LENGTH = 500;
-
 function screenBluetoothOutcomes(raw: unknown): BluetoothCommandOutcome[] {
   if (!Array.isArray(raw)) return [];
   const out: BluetoothCommandOutcome[] = [];
-  for (const entry of raw.slice(0, MAX_BLUETOOTH_OUTCOMES)) {
+  for (const entry of raw.slice(0, BLUETOOTH_COMMAND_LIMIT)) {
     if (typeof entry !== "object" || entry === null) continue;
     const { id, ok, error } = entry as Record<string, unknown>;
     if (typeof id !== "string" || typeof ok !== "boolean") continue;

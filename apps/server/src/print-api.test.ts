@@ -2368,7 +2368,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect((await pull(app, other.token)).bluetoothCommands).toBeUndefined();
   });
 
-  it("refuses Pair on a network scan of the same text, which is not a Bluetooth scan", async () => {
+  it("refuses Pair on a USB scan of the same text, which is not a Bluetooth scan", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
@@ -2377,6 +2377,24 @@ describe("Bluetooth Pair and Forget commands", () => {
     const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "printer.bluetooth_not_discovered" } });
+  });
+
+  it("reads a lower-case Bluetooth scan as the upper-case address a Pair names, in one row with its pairing", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, {
+      scanned: [scannedMac(mac.toLowerCase(), { printerLike: true })],
+      pairedBluetooth: [{ localKey: mac }],
+    });
+
+    const rows = (await discoveredRows(app)).filter(
+      (r) => r.agentId === agentId && r.transport === "bluetooth",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ localKey: mac, printerLike: true, paired: true });
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(202);
   });
 
   it("refuses Forget with printer.bluetooth_not_paired when the agent reports no pairing, even one it scanned", async () => {

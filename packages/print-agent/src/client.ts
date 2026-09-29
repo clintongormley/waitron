@@ -273,7 +273,7 @@ async function parsePullReply(response: Response): Promise<PullReply | undefined
 
 const MAX_BLUETOOTH_COMMANDS = 8;
 const MAX_COMMAND_ID_LENGTH = 128;
-const MAX_OUTCOME_ERROR_LENGTH = 500;
+export const MAX_OUTCOME_ERROR_LENGTH = 500;
 const MAC_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/i;
 // Printable ASCII only, so the byte count BlueZ limits equals the length, and no newline can reach a
 // line-oriented child's stdin.
