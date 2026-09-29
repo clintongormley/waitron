@@ -4504,19 +4504,23 @@ approved.
   agent. Low priority.
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
-- **`runAgentOnce` catches a database refusal and then writes again on the same transaction, with no
-  savepoint** (`packages/printing/src/runtime.ts`). What is still wrong, and is the whole of the item
-  now: when the
-  refusal is the `done` `reportPrintJob` inside the `try` rather than `transport.send`, the `catch`
-  records `failed` for a job whose bytes were already sent, so a later batch prints it again.
-  No caller in the tree reaches it —
-  `apps/server/src/print-api.ts` uses the split `claimPrintJobs`/`reportPrintJob`, and
-  `runAgentOnce`'s only callers are this package's own `runtime.test.ts`, `runtime.race.test.ts` and
-  `runtime.reclaim.test.ts` — but it is exported from the package's `index.ts`, so that is a fact
-  about today's tree rather than a property of the API. It becomes real the moment a local-mode
-  agent host is wired up (the item above). **Next action:** move the `done` report out of the
-  `try`, so a refused report is not recorded as a failed send; a savepoint around it would not
-  help, since the refused statement already confines itself.
+- **DONE (C70): a sent print job is no longer recorded as failed when its `done` report is
+  refused.** `runAgentOnce` (`packages/printing/src/runtime.ts`) now holds only `transport.send`
+  inside its `try`, so a refused `done` report no longer uses up an attempt or stores the
+  database's refusal text as a printer error; the refusal now reaches the caller. The refused job
+  still prints again either way. If the caller's transaction rolls back, it goes back to `queued`
+  with the rest of its batch. If the caller commits, it stays `printing`: an immediate re-run
+  claimed nothing (measured 2026-09-29), and from the claim query, not run, `claimPrintJobs`
+  re-claims it once its `claimed_at` is older than `PRINT_JOB_LEASE_MS`. Jobs after it in the
+  same batch were claimed but not sent, and share its fate. Case: "does not record a sent job as
+  failed when its done report is refused; the refusal propagates" in
+  `packages/printing/src/runtime.test.ts`. Still no caller in the tree outside this package's
+  tests. Measured 2026-09-29 with a scratch probe, not committed (two jobs, one `withTransaction`
+  around `runAgentOnce`, the second job's `done` refused by a trigger): the refusal rolled BOTH
+  jobs back to `queued` after both had printed, so both print again. A process that holds the
+  venue database and runs the agent itself, and wants to confine a refused report, should call
+  `claimPrintJobs` and then `reportPrintJob` per job, each report in its own transaction, as
+  `apps/server/src/print-api.ts` already does, rather than one `runAgentOnce` in one transaction.
 
 ### B7. Provisioning and build debt
 

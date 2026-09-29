@@ -159,16 +159,12 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
       port: job.port,
       devicePath: job.local_key,
     };
-    // Gap, deliberately left: if the database refuses the `done` report inside this `try`, the
-    // catch records `failed` for a job whose bytes were sent, so a later batch can print it again.
-    // No production caller reaches it today (`apps/server/src/print-api.ts` calls the split
-    // functions), but it is exported from `index.ts`.
+    // Only the send is inside the `try`: a refused `done` report is not a delivery failure, so it
+    // must not use up an attempt or record a printer error.
     try {
       // `ClaimedJob.payload` is typed `Buffer`, but this raw read delivers a plain `Uint8Array`
       // (measured 2026-09-22).
       await transport.send(target, new Uint8Array(job.payload));
-      await reportPrintJob(tx, { agentId, jobId: job.id, outcome: { status: "done" } });
-      delivered += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await reportPrintJob(tx, {
@@ -177,7 +173,10 @@ export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResu
         outcome: { status: "failed", error: message },
       });
       failed += 1;
+      continue;
     }
+    await reportPrintJob(tx, { agentId, jobId: job.id, outcome: { status: "done" } });
+    delivered += 1;
   }
   return { claimed: claimed.length, delivered, failed };
 }
