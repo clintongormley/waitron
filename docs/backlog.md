@@ -3702,7 +3702,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       course it lists among the draft's lines, while here such a dish keeps its own held group;
       and when the till lists none of the draft's courses it makes one section with no course,
       while here each inactive course keeps its own held group and a dish with no course joins the
-      earliest of them.
+      earliest of them. (#885, main `573253221`.) Left by its review, not queued (owner,
+      2026-09-29): when a round is SENT, `working-order.ts` picks its earliest course without
+      checking whether the course is active, so with a switched-off course the send path and this
+      move path can file a dish with no course under different courses.
     - **Which dishes arrive unsent changed with Task 7.** An open counter order moved into table
       service has its dishes sent at the move (Task 7), so it arrives in a FIRED group, not the
       held group the plan's Task 9 expected; a later course's dish, held for its course, arrives
