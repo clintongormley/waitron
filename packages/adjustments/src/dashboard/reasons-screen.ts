@@ -29,8 +29,7 @@ const ACTIONS: readonly AdjustmentAction[] = [
   "discount_percent",
   "discount_amount",
 ];
-/** Lowest first, as the server's role ladder orders them. */
-const ROLES: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
+const ROLES_BY_SENIORITY: readonly PersonRole[] = ["staff", "supervisor", "manager", "admin"];
 const PERCENT = /^(\d{1,3})(?:[.,](\d{1,2}))?$/;
 const AMOUNT = /^(\d{1,9})(?:[.,](\d{1,2}))?$/;
 
@@ -364,7 +363,9 @@ export class AdjustmentReasonsScreen extends LitElement {
       errors.maxPercent = t("adjustments.error.maxPercent");
     }
     if (amount(draft.maxAmount) === undefined) errors.maxAmount = t("adjustments.error.maxAmount");
-    if (ROLES.indexOf(draft.approverRole) < ROLES.indexOf(draft.applyRole)) {
+    if (
+      ROLES_BY_SENIORITY.indexOf(draft.approverRole) < ROLES_BY_SENIORITY.indexOf(draft.applyRole)
+    ) {
       errors.approverRole = t("adjustments.error.approverRole");
     }
     return errors;
@@ -606,6 +607,11 @@ export class AdjustmentReasonsScreen extends LitElement {
   #roleSelect(errors: FieldErrors, field: "applyRole" | "approverRole", label: string) {
     const draft = this.draft!;
     const invalid = errors[field] !== undefined;
+    const locale = currentLocale();
+    const collator = new Intl.Collator(locale, { sensitivity: "base" });
+    const roles = [...ROLES_BY_SENIORITY].sort((a, b) =>
+      collator.compare(roleName(a, locale), roleName(b, locale)),
+    );
     return html`<div class="select-field">
       <label class="select-label" for=${field}>${label}</label>
       <select
@@ -617,7 +623,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         @change=${(event: Event) =>
           this.#edit({ [field]: (event.target as HTMLSelectElement).value as PersonRole })}
       >
-        ${ROLES.map(
+        ${roles.map(
           (role) =>
             html`<option value=${role} .selected=${draft[field] === role}>
               ${roleName(role)}

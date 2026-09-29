@@ -407,6 +407,40 @@ describe("reordering", () => {
 });
 
 describe("the editor", () => {
+  it.each([
+    ["en", ["admin", "manager", "staff", "supervisor"]],
+    ["es", ["admin", "staff", "manager", "supervisor"]],
+  ] as const)("lists both role choices by their displayed name in %s", async (locale, roles) => {
+    setLocale(locale);
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    for (const name of ["applyRole", "approverRole"]) {
+      const select = field(el, name) as unknown as HTMLSelectElement;
+      expect([...select.options].map((option) => option.value)).toEqual(roles);
+    }
+    expect(field(el, "applyRole").value).toBe("supervisor");
+    expect(field(el, "approverRole").value).toBe("manager");
+  });
+
+  it.each(["en", "es"])("keeps role seniority separate from name order in %s", async (locale) => {
+    setLocale(locale);
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await choose(el, "applyRole", "manager");
+    await choose(el, "approverRole", "supervisor");
+    await press(el, "save-editor");
+    expect(api.updateReason).not.toHaveBeenCalled();
+    expect(field(el, "approverRole").getAttribute("aria-invalid")).toBe("true");
+    await choose(el, "approverRole", "admin");
+    await press(el, "save-editor");
+    expect(api.updateReason.mock.calls[0]![1]).toMatchObject({
+      applyRole: "manager",
+      approverRole: "admin",
+    });
+    expect(modal(el)).toBeNull();
+  });
+
   it("opens with every field of the reason, each with a semantic name", async () => {
     const el = await mount(fakeApi());
     await press(el, "edit-c");
