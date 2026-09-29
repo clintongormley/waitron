@@ -143,6 +143,48 @@ describe("loginManager", () => {
   });
 });
 
+describe("loginManager's timing equalization", () => {
+  // A refusal that settled before its KDF finished would be told apart from a wrong password by its
+  // time, which is the oracle the dummy check exists to close.
+  async function refusalWaitsForTheKdf(email: string) {
+    const spy = vi.mocked(verifyPassword);
+    let finish!: (matched: boolean) => void;
+    spy.mockImplementationOnce(() => new Promise<boolean>((resolve) => (finish = resolve)));
+    let settled = false;
+    const refused = run((tx) =>
+      codeOf(() => loginManager(tx, { email, password: "some password" })),
+    ).finally(() => (settled = true));
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(settled).toBe(false);
+    finish(false);
+    expect(await refused).toBe("password.invalid");
+  }
+  it("waits for the KDF before refusing an unknown email", async () => {
+    await refusalWaitsForTheKdf("nobody-waits@x.com");
+  });
+  it("waits for the KDF before refusing a suspended account", async () => {
+    await seedManager(suite.db, { email: "owner-suspended-waits@x.com", status: "suspended" });
+    await refusalWaitsForTheKdf("owner-suspended-waits@x.com");
+  });
+  it("waits for the KDF before refusing a pending account", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    await run((tx) =>
+      tx.execute(
+        sql`update persons set email = 'owner-pending-waits@x.com', status = 'pending' where id = ${personId}`,
+      ),
+    );
+    await refusalWaitsForTheKdf("owner-pending-waits@x.com");
+  });
+  it("waits for the KDF before refusing an account with no password", async () => {
+    const personId = await seedPerson(suite.db, "manager");
+    await run((tx) =>
+      tx.execute(sql`update persons set email = 'owner-nopw-waits@x.com' where id = ${personId}`),
+    );
+    await refusalWaitsForTheKdf("owner-nopw-waits@x.com");
+  });
+});
+
 // A trusted server-to-server path: it keeps the suspension error that the public email path folds
 // away.
 describe("loginManagerById", () => {

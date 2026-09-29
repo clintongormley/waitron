@@ -277,9 +277,12 @@ describe("runCli venue", () => {
     // The salt is random, so the hashes are checked with `verifyPin`/`verifyPassword`, not equality.
     const seedAdmin = actions.find((action) => action.kind === "seed-admin");
     expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
-    expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
+    expect(seedAdmin?.kind === "seed-admin" && (await verifyPin("4321", seedAdmin.pinHash))).toBe(
+      true,
+    );
     expect(
-      seedAdmin?.kind === "seed-admin" && verifyPassword("dashPass123", seedAdmin.passwordHash),
+      seedAdmin?.kind === "seed-admin" &&
+        (await verifyPassword("dashPass123", seedAdmin.passwordHash)),
     ).toBe(true);
     expect(h.askedSecretly).toEqual([]);
 
@@ -399,9 +402,12 @@ describe("runCli venue", () => {
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
     const seedAdmin = actions.find((action) => action.kind === "seed-admin");
     expect(seedAdmin?.kind === "seed-admin" && seedAdmin.displayName).toBe("Owner");
-    expect(seedAdmin?.kind === "seed-admin" && verifyPin("4321", seedAdmin.pinHash)).toBe(true);
+    expect(seedAdmin?.kind === "seed-admin" && (await verifyPin("4321", seedAdmin.pinHash))).toBe(
+      true,
+    );
     expect(
-      seedAdmin?.kind === "seed-admin" && verifyPassword("dashPass123", seedAdmin.passwordHash),
+      seedAdmin?.kind === "seed-admin" &&
+        (await verifyPassword("dashPass123", seedAdmin.passwordHash)),
     ).toBe(true);
     const transcript = h.lines.join("\n");
     expect(transcript).not.toContain("4321");

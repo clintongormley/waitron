@@ -132,8 +132,8 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     expect(code).toBe(0);
     const person = await readPerson(adminId);
     expect(person).toBeDefined();
-    expect(verifyPassword(NEW_PASSWORD, person!.passwordHash!)).toBe(true);
-    expect(verifyPassword(OLD_PASSWORD, person!.passwordHash!)).toBe(false);
+    expect(await verifyPassword(NEW_PASSWORD, person!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(OLD_PASSWORD, person!.passwordHash!)).toBe(false);
     expect(out.join("\n")).toMatch(adminId);
     expect(out.join("\n")).not.toMatch(NEW_PASSWORD);
     expect(closes).toBe(1);
@@ -170,8 +170,8 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const after = rows.rows[0]!.pin_hash;
     expect(before).toBeDefined();
     const { verifyPin } = await import("@waitron/identity");
-    expect(verifyPin("9999", after)).toBe(true);
-    expect(verifyPin("1234", after)).toBe(false);
+    expect(await verifyPin("9999", after)).toBe(true);
+    expect(await verifyPin("1234", after)).toBe(false);
   });
 
   it("reactivates a suspended admin (status → active)", async () => {
@@ -282,13 +282,21 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const joined = ambiguous.out.join("\n");
     expect(joined).toMatch(adminId);
     expect(joined).toMatch(secondId);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(
+      true,
+    );
+    expect(await verifyPassword(OLD_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(
+      true,
+    );
 
     const targeted = await run(baseEnv(), ["--person", secondId]);
     expect(targeted.code).toBe(0);
-    expect(verifyPassword(NEW_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(true);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(NEW_PASSWORD, (await readPerson(secondId))!.passwordHash!)).toBe(
+      true,
+    );
+    expect(await verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(
+      true,
+    );
   });
 
   it("--person as the last token (no following id) → returns 2 (usage), nothing reset", async () => {
@@ -305,7 +313,9 @@ describe("runBreakGlassReset (SQLite venue directory)", () => {
     const { adminId } = await setupTenant();
     const { code } = await run(baseEnv(), ["--person", "33333333-3333-4333-8333-333333333333"]);
     expect(code).toBe(1);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(
+      true,
+    );
   });
 
   it("the new credential is read from env, never argv: a password in argv is ignored", async () => {
@@ -335,7 +345,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
     expect(out).toEqual(["break-glass: that display name is already used by an active account"]);
     const after = await readPerson(adminId);
     expect(after!.status).toBe("suspended");
-    expect(verifyPassword(OLD_PASSWORD, after!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(OLD_PASSWORD, after!.passwordHash!)).toBe(true);
     expect(closes).toBe(1);
   });
 
@@ -361,7 +371,9 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
       sql`select cast(count(*) as int) as n from webauthn_credentials where person_id = ${adminId}`,
     );
     expect(passkeys.rows[0]!.n).toBe(1);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(
+      true,
+    );
   });
 
   it("rethrows a refusal that is not a duplicate name, and still closes the venue", async () => {
@@ -390,7 +402,9 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
       await suite.db.execute(sql`drop trigger break_glass_refuse_update`);
     }
     expect(closes).toBe(1);
-    expect(verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(true);
+    expect(await verifyPassword(OLD_PASSWORD, (await readPerson(adminId))!.passwordHash!)).toBe(
+      true,
+    );
   });
 
   it("with no injected opener, resets the admin in the real venue directory WAITRON_VENUE_DIR names", async () => {
@@ -423,7 +437,7 @@ describe("runBreakGlassReset — refusals inside the reset", () => {
         const rows = await reread.venue.execute<{ password_hash: string }>(
           sql`select password_hash from persons where id = ${admin!.id}`,
         );
-        expect(verifyPassword(NEW_PASSWORD, rows.rows[0]!.password_hash)).toBe(true);
+        expect(await verifyPassword(NEW_PASSWORD, rows.rows[0]!.password_hash)).toBe(true);
       } finally {
         await reread.close();
       }

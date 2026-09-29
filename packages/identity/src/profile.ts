@@ -55,10 +55,13 @@ async function ownPerson(tx: Transaction, input: Owner) {
   return (await ownSession(tx, input)).person;
 }
 
-function verifyCurrent(person: typeof persons.$inferSelect, credentials: Credentials): void {
+async function verifyCurrent(
+  person: typeof persons.$inferSelect,
+  credentials: Credentials,
+): Promise<void> {
   if (
     person.passwordHash === null ||
-    !verifyPassword(credentials.currentPassword ?? "", person.passwordHash)
+    !(await verifyPassword(credentials.currentPassword ?? "", person.passwordHash))
   ) {
     throw new AppError("password.invalid", {});
   }
@@ -80,7 +83,7 @@ export async function verifyOwnCredentials(
   input: Owner & Credentials,
 ): Promise<typeof persons.$inferSelect> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   return person;
 }
 
@@ -89,7 +92,7 @@ export async function beginOwnTotpEnrollment(
   input: Owner & Credentials & { keyRing: TotpKeyRing },
 ): Promise<{ enrollmentId: string; secret: string; uri: string; expiresAt: string }> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   const secret = generateTotpSecret();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
@@ -141,7 +144,7 @@ export async function regenerateOwnRecoveryCodes(
   input: Owner & Credentials & { keyRing: TotpKeyRing },
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
@@ -150,7 +153,7 @@ export async function disableOwnTotp(
   input: Owner & Credentials & { keyRing: TotpKeyRing },
 ): Promise<void> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
@@ -158,7 +161,7 @@ export async function disableOwnTotp(
 
 export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
 }
 
@@ -226,7 +229,7 @@ export async function saveOwnProfile(
   const email = normalizeAndValidateEmail(input.email);
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;
-  if (changedEmail) verifyCurrent(person, input);
+  if (changedEmail) await verifyCurrent(person, input);
   await assertDisplayNameAvailable(tx, displayName, person.id);
   await assertEmailAvailable(tx, email, person.id);
   try {
@@ -279,7 +282,7 @@ export async function changeOwnPin(
   input: Owner & Credentials & { pin: string },
 ): Promise<void> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   assertPinLength(input.pin);
   await tx
     .update(persons)
@@ -296,7 +299,7 @@ export async function changeOwnPassword(
   input: Owner & Credentials & { password: string },
 ): Promise<void> {
   const { person, sessionRowId } = await ownSession(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   assertPasswordLength(input.password);
   await tx
     .update(persons)
@@ -320,7 +323,7 @@ export async function removeOwnPasskey(
   input: Owner & Credentials & { id: string },
 ): Promise<void> {
   const person = await ownPerson(tx, input);
-  verifyCurrent(person, input);
+  await verifyCurrent(person, input);
   const removed = await tx
     .delete(webauthnCredentials)
     .where(and(eq(webauthnCredentials.id, input.id), eq(webauthnCredentials.personId, person.id)))

@@ -49,8 +49,8 @@ describe("mirror ambient viewer session", () => {
     // stored hash, and there is no password hash.
     const stored = person.rows[0]!;
     expect(stored.pin_hash.length > 0).toBe(true);
-    expect(verifyPin("0000", stored.pin_hash)).toBe(false);
-    expect(verifyPin("", stored.pin_hash)).toBe(false);
+    expect(await verifyPin("0000", stored.pin_hash)).toBe(false);
+    expect(await verifyPin("", stored.pin_hash)).toBe(false);
     expect(stored.password_hash).toBeNull();
 
     const resolved = await withTransaction(db, (tx) => resolveManagementSession(tx, token));
