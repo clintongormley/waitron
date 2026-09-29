@@ -45,7 +45,7 @@ afterEach(() => {
 // which is where each case points the Bluetooth drop-in. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
 // does, and `systemctl show … DropInPaths` lists the `.conf` files in the drop-in's folder, sorted by
-// name as systemd applies them, so the drop-in counts only once it exists; WT_BT_RESTART_FAIL=1 makes every
+// name, so the drop-in counts only once it exists; WT_BT_RESTART_FAIL=1 makes every
 // `systemctl restart bluetooth` fail, and =first only the first one in a case. `rm` is logged and
 // then run for real. `mktemp` fails when its arguments contain WT_MKTEMP_FAIL, and otherwise runs
 // the real one.
@@ -495,8 +495,8 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 
-  // systemd applies drop-ins in file-name order and the last one to set ExecStart wins, so
-  // "override.conf" (what `systemctl edit` writes) applies before ours and "zz-override.conf" after.
+  // The stand-in systemctl lists drop-ins by name, so "override.conf" (what `systemctl edit` writes)
+  // comes before ours and "zz-override.conf" after it.
   const beside = (sb, name) => join(dirname(sb.dropIn), name);
   const writeOurs = (sb) => {
     const ours = "[Service]\nExecStart=\nExecStart=/usr/sbin/bluetoothd --noplugin=autopair\n";
@@ -527,48 +527,56 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 
-  it("keeps a drop-in an earlier install wrote, and says it has no effect, when another drop-in sets ExecStart after it", () => {
-    const sb = sandbox({
-      bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
-      bluetoothDropIns: { "zz-override.conf": "[Service]\nExecStart = /usr/sbin/bluetoothd -E\n" },
-    });
-    const ours = writeOurs(sb);
-    const other = beside(sb, "zz-override.conf");
-    const r = run(sb, ["install"]);
-    expect(r.status).toBe(0);
-    expect(r.stderr).toContain(`${other} also sets bluetooth.service's ExecStart`);
-    expect(r.stderr).toContain(`${sb.dropIn} is still in place`);
-    expect(r.stderr).toContain(
-      `could not switch off bluetoothd's autopair plugin — ${other} also sets bluetooth.service's ExecStart; left as it is (${sb.dropIn} is still in place from an earlier install but has no effect, because ${other} is applied after it)`,
-    );
-    expect(readFileSync(sb.dropIn, "utf8")).toBe(ours);
-    const log = calls(sb);
-    expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
-    expect(log).not.toContain("systemctl daemon-reload");
-    expect(log).not.toContain("systemctl restart bluetooth");
-  });
+  // The same message whichever of the two files comes first in the listing.
+  const leftAsItIs = (sb, other, sets, depends) =>
+    `waitron.sh: left Bluetooth as it is — ${other} ${sets}, and ${sb.dropIn} from an earlier install is still there, so which command bluetoothd runs ${depends} on both files ('systemctl cat bluetooth' shows them); to keep only ${other}'s command, delete ${sb.dropIn}, then run 'systemctl daemon-reload' and 'systemctl restart bluetooth'`;
+  const override = "[Service]\nExecStart=\nExecStart=/usr/sbin/bluetoothd -E\n";
 
-  it("keeps a drop-in an earlier install wrote, and says it is the one in effect, when another drop-in sets ExecStart before it", () => {
-    const sb = sandbox({
-      bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
-      bluetoothDropIns: {
-        "override.conf": "[Service]\nExecStart=\nExecStart=/usr/sbin/bluetoothd --experimental\n",
-      },
+  for (const name of ["override.conf", "zz-override.conf"]) {
+    it(`keeps a drop-in an earlier install wrote, and says both files decide the command, when ${name} also sets ExecStart`, () => {
+      const sb = sandbox({
+        bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
+        bluetoothDropIns: { [name]: override },
+      });
+      const ours = writeOurs(sb);
+      const other = beside(sb, name);
+      const r = run(sb, ["install"]);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain(
+        `${leftAsItIs(sb, other, "also sets bluetooth.service's ExecStart", "depends")}\n`,
+      );
+      expect(r.stderr).not.toContain("could not switch off");
+      expect(readFileSync(sb.dropIn, "utf8")).toBe(ours);
+      const log = calls(sb);
+      expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
+      expect(log).not.toContain("systemctl daemon-reload");
+      expect(log).not.toContain("systemctl restart bluetooth");
     });
-    const ours = writeOurs(sb);
-    const other = beside(sb, "override.conf");
-    const r = run(sb, ["install"]);
-    expect(r.status).toBe(0);
-    expect(r.stderr).toContain(
-      `waitron.sh: ${other} also sets bluetooth.service's ExecStart, but ${sb.dropIn} from an earlier install is applied after it, so bluetoothd runs with the autopair plugin off and without ${other}'s command; to keep ${other}'s command, delete ${sb.dropIn}, then run 'systemctl daemon-reload' and 'systemctl restart bluetooth'`,
-    );
-    expect(r.stderr).not.toContain("could not switch off");
-    expect(readFileSync(sb.dropIn, "utf8")).toBe(ours);
-    const log = calls(sb);
-    expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
-    expect(log).not.toContain("systemctl daemon-reload");
-    expect(log).not.toContain("systemctl restart bluetooth");
-  });
+  }
+
+  // Root reads a file whatever its mode, so the case cannot make an unreadable one there.
+  it.skipIf(process.getuid?.() === 0)(
+    "keeps a drop-in an earlier install wrote, and says both files may decide the command, when another drop-in cannot be read",
+    () => {
+      const sb = sandbox({
+        bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
+        bluetoothDropIns: { "override.conf": override },
+      });
+      const ours = writeOurs(sb);
+      const other = beside(sb, "override.conf");
+      chmodSync(other, 0o000);
+      const r = run(sb, ["install"]);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toContain(
+        `${leftAsItIs(sb, other, "could not be read and may set bluetooth.service's ExecStart", "may depend")}\n`,
+      );
+      expect(readFileSync(sb.dropIn, "utf8")).toBe(ours);
+      const log = calls(sb);
+      expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
+      expect(log).not.toContain("systemctl daemon-reload");
+      expect(log).not.toContain("systemctl restart bluetooth");
+    },
+  );
 
   // Root reads a file whatever its mode, so the case cannot make an unreadable one there.
   it.skipIf(process.getuid?.() === 0)(

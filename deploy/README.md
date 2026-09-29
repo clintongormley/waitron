@@ -71,15 +71,13 @@ gets one line saying so. If the file cannot be written or Bluetooth will not res
 says so, removes the file again and restarts Bluetooth without it, and carries on; the next
 `install` tries again. If Bluetooth will not restart even without the file, `install` says Bluetooth
 may be stopped and to run `systemctl restart bluetooth` or restart the box. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
-so. It also changes nothing — no file written, no restart — when another drop-in of
+so. It also changes nothing — no file written, no reload, no restart — when another drop-in of
 `bluetooth.service` sets the daemon command (`ExecStart`), or cannot be read, and names that file:
-writing its own would drop that file's options or be overridden by it. systemd applies drop-ins in
-file-name order and the last one to set `ExecStart` wins, so a `waitron-noautopair.conf` an earlier
-`install` wrote, which stays in place, decides what runs. Applied after the other file (as it is
-after `override.conf`, the name `systemctl edit` writes), it is in effect: Bluetooth runs with the
-plugin off and without the other file's command, and the message says to delete it to get that
-command back. Applied before the other file (a `zz-site.conf`, say), it has no effect and the
-message says so. To undo it, delete the file, then run `systemctl daemon-reload` and
+writing its own could drop that file's options. If a `waitron-noautopair.conf` from an earlier
+`install` is still there, `install` leaves it in place too, says that which command Bluetooth runs
+depends on both files (or may, when the other file could not be read; `systemctl cat bluetooth`
+shows them), and says to delete `waitron-noautopair.conf`, then run `systemctl daemon-reload` and
+`systemctl restart bluetooth`, to keep only the other file's command. To undo it, delete the file, then run `systemctl daemon-reload` and
 `systemctl restart bluetooth`.
 
 A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it

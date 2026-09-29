@@ -2280,7 +2280,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   printer refuses, and it never paired, while with the plugin off it paired. So
   `waitron.sh install` now switches the plugin off with a systemd drop-in (a small file that
   changes how the Bluetooth service is started) where it can (`deploy/README.md` says when it
-  leaves Bluetooth alone), and the operator types the PIN, 0000 for a 0000
+  leaves Bluetooth alone), and, where it does, the operator types the PIN, 0000 for a 0000
   printer. That drop-in was tried on a GitHub runner, where systemd showed the flag in the
   service's start command but the Bluetooth service itself never ran; it has not run on the
   owner's box. Pair and Forget under the shipped AppArmor profile (the Linux rules limiting what
