@@ -733,7 +733,9 @@ that no table points at is still refused `tab.not_open`. Before Task 2 the serve
 on a check no table pointed at (`assertAnchoredTabOpen`). Since menus Task 7b (owner decision
 2026-09-26), a part of a line the kitchen has started can be split onto a check. A check can be
 merged back into its tab (`mergeTabs`, "tells the kitchen nothing when a check merges back into
-the tab it was split from" in `apps/server/src/split-bill.test.ts`).
+the tab it was split from" in `apps/server/src/split-bill.test.ts`). _(2026-09-30, Task 13:
+`mergeTabs` is deleted; that test now merges the check back with `mergeBills`
+(`apps/server/src/bill-actions.ts`).)_
 **Decided (owner, 2026-09-26):** a check gets no Void. The till pays a check straight after
 "Create bill", so a dish being cancelled is voided on the TAB first; a change of mind in between is
 covered by merging the check back. Since menus M7b3 the originating till does that merge itself when
@@ -2529,7 +2531,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     seeded on `main` took the new migration with no row lost and no table rebuilt, with a control
     showing the checks detect a rebuild (the PR has both). Left open, from the PR's "Parked points"
     and review notes: a cross-party merge can leave a settled check's lines naming a group now on
-    the target party; `moveTabLines` (test-only caller) ignores groups; the till's Fire course and
+    the target party; `moveTabLines` (test-only caller) ignores groups _(2026-09-30, Task 13: `moveTabLines` is
+    deleted; whether this still holds for the paths that move lines now is not checked here)_; the till's Fire course and
     Send all fire one group per request, so a failure part-way leaves some fired (Task 4 rebuilds
     the screen) _(Task 4, 2026-09-27: done — the till's table screen has no Fire course and no
     Tab-drawer Send all now; the waiter fires one held group at a time, one request each, from the
@@ -3219,7 +3222,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - The server now accepts line changes on a party's split bill. The seven call sites of
       `assertAnchoredTabOpen` in `apps/server/src/working-order.ts` (send, recall, a round, void, a
       line's course, moving lines between bills, and splitting) call `assertPartyBillOpen` instead.
-      The moving site serves both `transferLines` and un-joining a table with items. The round
+      The moving site serves both `transferLines` and un-joining a table with items. _(2026-09-30,
+      Task 13: the moving and splitting sites are deleted with `transferLines`, `unjoinTable` and
+      `splitOffCheck`; `assertPartyBillOpen` is now called in `sendLines`, `recallLines`,
+      `priceTabRound`, `voidTabLine` and `setLineCourse`.)_ The round
       site serves `addTabRound`; `placeGroups` skips it, because the bill it chose has already
       been checked open and the party's. `assertPartyBillOpen` lets through an open
       bill that belongs to a party, whether or not a table points at it. An open order of no
@@ -3501,6 +3507,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       kitchen, because a table bill sends nothing when it is paid.)
     - A table of the party still pointing at the merged-away bill is pointed at the surviving one,
       so the old till screens do not show an abandoned bill; its membership is unchanged.
+      _(2026-09-30, Task 13: a table no longer points at a bill (`dining_tables.tab_id` is dropped),
+      so this no longer applies.)_
   - **Task 7 DONE (#864, 2026-09-29): move a whole bill to
     another party, to a free table, to the counter, or from the counter into a party.** This is the
     server half of campaign items A81 (a counter order seated at a table) and A82 (a table's bill

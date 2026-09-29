@@ -7,11 +7,11 @@ import { withTransaction } from "../tenancy.js";
 import { diningTables } from "./dining-tables.js";
 import { locations, tenants } from "./tenants.js";
 
-// What is proven is the produced Drizzle export's column mapping (posX -> "pos_x") and the decoding
-// of the four placement columns.
+// What is proven is the produced Drizzle export's column mapping (posX -> "pos_x"), the decoding
+// of the four placement columns, and that a dining table has no `tab_id` column.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
 
-describe("dining_tables placement columns", () => {
+describe("dining_tables columns", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   beforeAll(async () => {

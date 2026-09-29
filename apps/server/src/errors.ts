@@ -1135,7 +1135,7 @@ declare module "@waitron/shared" {
       expected: string;
       actual: string;
     };
-    /** Join tables refuses a table whose service zone differs from the party's. */
+    /** Join tables refuses a table in a service zone other than the party's, when both have one. */
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
   }
 }

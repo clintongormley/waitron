@@ -235,7 +235,7 @@ export async function orderForParty(
   return { tabId, revision };
 }
 
-/** What a bill action is sent on a party: the revision the caller read, and who acts. */
+/** What a bill or table action is sent on a party: the revision the caller read, and who acts. */
 export async function commandFor(
   v: HasDb,
   partyId: string,
