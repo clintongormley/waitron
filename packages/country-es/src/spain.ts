@@ -201,7 +201,6 @@ const UNBIASED_DRAW_LIMIT = Math.floor(2 ** 32 / 10_000_000) * 10_000_000;
 
 export const SPAIN: CountryPack = {
   countryCode: "ES",
-  name: "España",
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"],

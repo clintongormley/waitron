@@ -32,7 +32,6 @@ export interface FiscalJurisdiction {
 
 export interface CountryPack {
   readonly countryCode: string;
-  readonly name: string;
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
   readonly invoiceLocales: readonly string[];

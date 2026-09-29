@@ -9,7 +9,6 @@ import {
 
 const pack: CountryPack = {
   countryCode: "XY",
-  name: "Example",
   defaultLocale: "xy-XY",
   defaultTimeZone: "Europe/Example",
   invoiceLocales: ["xy-XY", "en-GB"],

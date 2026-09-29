@@ -13,7 +13,6 @@ import { mountSetup, type SetupDeps } from "./setup-api.js";
 // pack whose filing regime this build does not include.
 const UNFILED: CountryPack = {
   countryCode: "ZZ",
-  name: "Unfiled",
   defaultLocale: "en-GB",
   defaultTimeZone: "Etc/UTC",
   invoiceLocales: ["en-GB"],
