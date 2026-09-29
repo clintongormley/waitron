@@ -52,6 +52,7 @@ export class TillSeatDialog extends LitElement {
     this.attempted = true;
     const parsed = parseGuestCount(this.value);
     if (parsed === undefined) {
+      await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }

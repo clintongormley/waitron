@@ -2963,7 +2963,7 @@ describe("till-table-order-screen", () => {
       },
     );
 
-    /** A weighed line and a plain dish, on the split step with both picked. */
+    /** Two weighed dishes, on the split step with both picked. */
     const splitTwoLines = async () => {
       const weight = {
         ...pendingLine,

@@ -4429,11 +4429,13 @@ ongoing overhaul listed at the top of Track A.
   alert where the summary was; an open editor keeps its own refusal beside Save, apart from a failed
   list refresh, and puts a server refusal that names a field under that field. Left open, not done:
   (1) the setup wizard's Demo gaps, listed under *Demo gaps on the setup wizard's venue screen*
-  earlier in this file; (2) **done by C48:** the till's forms follow the rule — the seat dialog,
-  the device join screen and the bill split step (the split step's top summary, from Task 10's
-  #875, included). The join screen's refusals, which named no field, moved from a banner at the top
+  earlier in this file; (2) **done by C48:** three of the till's forms follow the rule — the seat
+  dialog, the device join screen and the bill split step (the split step's top summary, from Task
+  10's #875, included). The join screen's refusals, which named no field, moved from a banner at the top
   to the message beside Ask to join, where each now stays until the next press rather than going
-  on a retype; (3) `wt-form-error-summary` is deleted once
+  on a retype. The split step's Split button is still disabled before any press until a dish is
+  picked, kept on purpose because it counts a selection rather than checking a field; the transfer
+  step's confirm button does the same, disabled until a bill and a dish are picked; (3) `wt-form-error-summary` is deleted once
   nothing uses it — besides its own files and exports in `packages/ui-core` and `packages/ui`, the
   `packages/ui` workbench demo (`packages/ui/demo/main.ts`) and the consumer test page
   `packages/ui-core/test/consumer/main.ts`, which `packages/ui-core/test/package-consumer.test.mjs`
@@ -4448,7 +4450,12 @@ ongoing overhaul listed at the top of Track A.
   `dismissed` set or a `refused` map in `apps/dashboard`; in the image library, a single `refusal`
   holding one field and its error code; in the four Stripe and SumUp connect and add-reader forms, a
   plain `refusal` string; and in the adjustment reasons and venue operations screens, a
-  `refusedFields` map beside an `editorError` string. Each of these pieces appears in many forms
+  `refusedFields` map beside an `editorError` string. In `apps/till` the party name dialog, seat
+  dialog, device join screen and bill split step each build their own bottom message from
+  `form.fix_fields` and a flag set on the first press (`attempted`, and `splitAttempted` on the
+  split step); the party name dialog also keeps a `refusal` string, the server's refusal of the
+  name, cleared when the name changes; the join screen puts a refusal's sentence before it. Each of these pieces appears in
+  many forms
   (`grep -rl form.fix_fields apps/dashboard/src` lists the dashboard's; the image library, `packages/media/src/dashboard/image-library.ts`, uses its
   own key `image.fix_fields` and is not in that list; the four module packages each use their own
   sentence — `adjustments.fix_fields`, `payments.stripe.fix_fields`, `payments.sumup.fix_fields`
@@ -4465,7 +4472,20 @@ ongoing overhaul listed at the top of Track A.
   `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
   (`docs/developers/design-system.md` → Forms); now that the Choose image button inside it carries
   `aria-invalid` and takes focus, a screen reader hears "invalid" with no reason. The
-  `aria-describedby` on the host predates C47 part 1 (both files carry it at 4fcac1646).
+  `aria-describedby` on the host predates C47 part 1 (both files carry it at 4fcac1646); (7) the
+  till's schedule screen (`apps/till/src/screens/till-schedule-screen.ts`) does not follow the rule
+  yet: its cover request keeps its button disabled until a shift and a colleague are chosen, and its
+  absence request until both dates are filled, before any press; neither shows a message beside its
+  fields; and a refusal shows as a `role="alert"` notice at the top of the card. Other till
+  surfaces were not checked against the rule either, and whether a number pad or a choice picker
+  counts as a form under it is open: the payment and weighing steps
+  (`apps/till/src/widgets/tender-pay.ts`) keep Confirm payment disabled while the cash entered is
+  below the total and Add disabled while the weight is invalid, before any press, with no message;
+  the dish options picker (`apps/till/src/widgets/modifier-picker.ts`) keeps Add or Save disabled
+  until its required choices are made, and shows changed or unavailable choices as `role="alert"`
+  paragraphs rather than beside a field; and the supervisor override dialog
+  (`apps/till/src/widgets/supervisor-override-dialog.ts`) keeps Authorize disabled while the PIN is
+  empty and shows a refusal as a `role="alert"` paragraph.
   **DONE (C53, 2026-09-29): SumUp Cancel checks pairing once more before cleanup** (owner's
   ruling on C47 part 2, option B: keep a reader known to be paired). The add-reader dialog closes
   immediately; a final status reply of `paired` calls `onAdded` and skips unpairing, including when
