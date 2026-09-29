@@ -25,6 +25,8 @@ const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave",
 
 const WINDOW_DAYS = 14;
 
+type ScheduleRead = "roster" | "shifts" | "swaps" | "absences";
+
 /** A half-open `[from, to)` window, computed in UTC, so a shift is placed by its UTC day. */
 export function scheduleWindow(now: Date, days: number): { from: string; to: string } {
   const to = new Date(now.getTime() + days * 86_400_000);
@@ -119,26 +121,30 @@ export class MyScheduleScreen extends LitElement {
         margin: 0 0 var(--wt-space-3);
         color: var(--wt-color-danger);
       }
+
+      .retry {
+        margin-bottom: var(--wt-space-5);
+      }
     `,
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
-  readonly #queries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => {
-      this.loadFailed = true;
-    },
-  );
+  /** One controller per read, because a controller's error callback does not say which read failed,
+   * and a later live refresh can fail or succeed for one list alone. */
+  readonly #roster = this.#reads("roster");
+  readonly #shifts = this.#reads("shifts");
+  readonly #swaps = this.#reads("swaps");
+  readonly #absences = this.#reads("absences");
   @property() myPersonId = "";
 
   @state() private shifts?: MyShift[];
   @state() private swaps?: MySwap[];
   @state() private absences?: MyAbsence[];
   @state() private roster: RosterEntry[] = [];
-  @state() private loadFailed = false;
+  @state() private failed: ReadonlySet<ScheduleRead> = new Set();
   @state() private noticeCode?: string;
   @state() private busy = false;
+  #listsStarted = false;
 
   @state() private coverShiftId = "";
   @state() private coverColleagueId = "";
@@ -152,24 +158,53 @@ export class MyScheduleScreen extends LitElement {
     void this.#load();
   }
 
+  #reads(read: ScheduleRead): DashboardQueries {
+    return new DashboardQueries(
+      this,
+      () => this.api,
+      () => {
+        this.failed = new Set(this.failed).add(read);
+      },
+    );
+  }
+
+  #loaded(read: ScheduleRead): void {
+    if (!this.failed.has(read)) return;
+    const failed = new Set(this.failed);
+    failed.delete(read);
+    this.failed = failed;
+  }
+
+  #retry(): void {
+    this.failed = new Set();
+    void this.#load();
+  }
+
   #window(): { from: string; to: string } {
     return scheduleWindow(new Date(), WINDOW_DAYS);
   }
 
   /** The roster loads only here: an action reloads just the lists, since a swap or absence cannot
-   * change the roster. */
+   * change the roster. The lists start from the roster's delivery, not after the await: a failed
+   * first read leaves the roster watched, and a later refresh can still deliver it. An action that
+   * already started them this load is not repeated. */
   async #load(): Promise<void> {
+    this.#listsStarted = false;
     try {
-      await this.#queries.watch("getStaffRoster", [], (value) => {
+      await this.#roster.watch("getStaffRoster", [], (value) => {
+        this.#loaded("roster");
         this.roster = value;
         if (!this.#colleagues().some((person) => person.personId === this.coverColleagueId)) {
           this.coverColleagueId = "";
         }
+        if (!this.#listsStarted) {
+          this.#loadLists().catch(() => {
+            // The failed list's own controller has already recorded it in `failed`.
+          });
+        }
       });
-      await this.#loadLists();
-      this.loadFailed = false;
     } catch {
-      this.loadFailed = true;
+      // The failed read's own controller has already recorded it in `failed`.
     }
   }
 
@@ -178,16 +213,20 @@ export class MyScheduleScreen extends LitElement {
   }
 
   async #loadLists(): Promise<void> {
+    this.#listsStarted = true;
     const { from, to } = this.#window();
     await Promise.all([
-      this.#queries.watch("listMyShifts", [from, to], (value) => {
+      this.#shifts.watch("listMyShifts", [from, to], (value) => {
+        this.#loaded("shifts");
         this.shifts = value;
         if (!value.some((shift) => shift.id === this.coverShiftId)) this.coverShiftId = "";
       }),
-      this.#queries.watch("listMySwaps", [], (value) => {
+      this.#swaps.watch("listMySwaps", [], (value) => {
+        this.#loaded("swaps");
         this.swaps = value;
       }),
-      this.#queries.watch("listMyAbsences", [], (value) => {
+      this.#absences.watch("listMyAbsences", [], (value) => {
+        this.#loaded("absences");
         this.absences = value;
       }),
     ]);
@@ -265,17 +304,24 @@ export class MyScheduleScreen extends LitElement {
   }
 
   #body(): TemplateResult {
-    if (this.shifts === undefined && !this.loadFailed) {
+    if (this.shifts === undefined && this.failed.size === 0) {
       return html`<p class="muted" role="status" data-test="loading">
         ${t("myschedule.loading")}
       </p>`;
     }
     return html`
       ${
-        this.loadFailed
+        this.failed.size > 0
           ? html`<p class="notice" role="alert" data-test="load-failed">
-              ${t("myschedule.load_failed")}
-            </p>`
+                ${t("myschedule.load_failed")}
+              </p>
+              <wt-button
+                class="retry"
+                variant="secondary"
+                data-test="retry"
+                @click=${() => this.#retry()}
+                >${t("myschedule.retry")}</wt-button
+              >`
           : nothing
       }
       ${this.#shiftsSection()} ${this.#swapsSection()} ${this.#coverSection()}
@@ -283,10 +329,17 @@ export class MyScheduleScreen extends LitElement {
     `;
   }
 
+  #listFailed(read: ScheduleRead, message: string): TemplateResult | typeof nothing {
+    return this.failed.has(read)
+      ? html`<p class="notice" role="alert" data-test=${`${read}-failed`}>${message}</p>`
+      : nothing;
+  }
+
   #shiftsSection(): TemplateResult {
     const shifts = this.shifts;
     return html`<section class="shifts" aria-labelledby="shifts-h">
       <h2 id="shifts-h">${t("myschedule.shifts_title")}</h2>
+      ${this.#listFailed("shifts", t("myschedule.shifts_failed"))}
       ${
         shifts === undefined
           ? nothing
@@ -308,9 +361,10 @@ export class MyScheduleScreen extends LitElement {
     const swaps = this.swaps;
     return html`<section class="swaps" aria-labelledby="swaps-h">
       <h2 id="swaps-h">${t("myschedule.swaps_title")}</h2>
+      ${this.#listFailed("swaps", t("myschedule.swaps_failed"))}
       ${
         swaps === undefined
-          ? this.loadFailed
+          ? this.failed.size > 0
             ? nothing
             : html`<p class="muted" role="status" data-test="swaps-loading">
                 ${t("myschedule.loading")}
@@ -409,9 +463,10 @@ export class MyScheduleScreen extends LitElement {
     const absences = this.absences;
     return html`<section class="absences" aria-labelledby="absences-h">
       <h2 id="absences-h">${t("myschedule.absences_title")}</h2>
+      ${this.#listFailed("absences", t("myschedule.absences_failed"))}
       ${
         absences === undefined
-          ? this.loadFailed
+          ? this.failed.size > 0
             ? nothing
             : html`<p class="muted" role="status" data-test="absences-loading">
                 ${t("myschedule.loading")}

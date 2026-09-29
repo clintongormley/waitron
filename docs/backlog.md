@@ -6316,7 +6316,17 @@ reading unless marked run:
   first read failed but arrives on a later live refresh shows its rows under a banner that never
   clears. Clearing the flag in each list's callback would bring back a stuck "Loading…" for a list
   that did fail; the fix is failure state per list, plus a retry as `menus-screen.ts` offers. Found
-  2026-09-27 in review; by reading, not run.
+  2026-09-27 in review; by reading, not run. **DONE (C73, 2026-09-29):** each read (the roster and
+  the three lists) has its own query controller, because a controller's error callback does not say
+  which read failed; a failure, including a later live refresh's, is recorded against its own read,
+  and that read's next delivery clears it. Each list says under its own heading when it failed; the
+  page's notice stays while any read is failed and now carries a Try again button that re-reads the
+  roster and the lists. Run: the new cases in `my-schedule-screen.test.ts` failed before the change
+  (no per-list notice, no retry). Unchanged by decision: while any read is failed, a list still
+  being read says neither "loading" nor "none" (the existing sibling-failure cases pin that). When
+  the roster's first read fails, the lists are read once the roster arrives, by a retry or a later
+  live refresh (run red first: "reads the lists once the roster arrives on a later refresh after its
+  first read failed").
 - Guards no test can reach, left uncovered rather than deleted: the canvas editor's "no draft" and
   "no selected card" guards, several `?? []` and `?? null` fallbacks in the printers, payments,
   kitchen, backup, devices, printing-rules, profile, extra-list and option-list files, and a
