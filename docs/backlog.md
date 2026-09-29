@@ -8230,19 +8230,19 @@ it. Left open:
   commit taking 1,017 ms while the disk stalled. The stream tests' CI step now sets
   `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
   are in memory"). Found by the probe, and open:
-  - **MEASURED (lane A's A133, 2026-09-29): a sale waits behind Litestream's own checkpoint; what
-    to do about it is the owner's decision** (question in the campaign's `questions.md`). Litestream
-    0.5.17 holds the database's write lock for a PASSIVE checkpoint: it opens a transaction writing
-    `_litestream_lock` around the checkpoint (`checkpointWithExecutor`, `db.go` lines 2492–2512 at
-    tag v0.5.17). The probe (a throwaway branch, since deleted; workflow run 36615242523, 12
-    GitHub-hosted runners, kernel 6.17.0-1022-azure) booted the real server on a provisioned venue
-    and sold through `POST /api/sales` with one seller, one sale at a time, for 150 s. Litestream
-    ran with the product's own configuration, the bucket answering, and its log at DEBUG written to
-    a file rather than a pipe, so the log could not stall it as trace level did in A130. Each
-    write's wait for `begin immediate` was timed in the write queue. The slow disk was a
-    device-mapper `delay` target: 10 ms per write, 100 ms per flush (50 synced 4 KiB writes took
-    6.9–9.4 s on it). Decided before running: if the stream cannot hold up a sale, writes wait
-    under 20 ms to begin with streaming on, as with it off. Results:
+  - **MEASURED (lane A's A133, 2026-09-29): a sale waits behind Litestream's own checkpoint. The
+    owner chose to narrow CLAUDE.md §5 now (DONE, A133) and to measure the fix next (A135, below).**
+    Litestream 0.5.17 holds the database's write lock for a PASSIVE checkpoint: it opens a
+    transaction writing `_litestream_lock` around the checkpoint (`checkpointWithExecutor`, `db.go`
+    lines 2492–2512 at tag v0.5.17). The probe (a throwaway branch, since deleted; workflow run
+    36615242523, 12 GitHub-hosted runners, kernel 6.17.0-1022-azure) booted the real server on a
+    provisioned venue and sold through `POST /api/sales` with one seller, one sale at a time, for
+    150 s. Litestream ran with the product's own configuration, the bucket answering, and its log
+    at DEBUG written to a file rather than a pipe, so the log could not stall it as trace level did
+    in A130. Each write's wait for `begin immediate` was timed in the write queue. The slow disk
+    was a device-mapper `delay` target: 10 ms per write, 100 ms per flush (50 synced 4 KiB
+    writes took 6.9–9.4 s on it). Decided before running: if the stream cannot hold up a sale,
+    writes wait under 20 ms to begin with streaming on, as with it off. Results:
     - Slow disk, streaming on: 14 writes waited 829–831 ms to begin (4, 5 and 5 in three runs), and
       each wait contained one of Litestream's `checkpoint mode=PASSIVE` log lines. Slowest sale 1.06
       to 1.32 s.
@@ -8252,10 +8252,23 @@ it. Left open:
       629 ms.
       Streaming off: none above 1 ms.
     - No run met a 5-second `database is locked`, and every sale was answered 200.
-    So CLAUDE.md §5's "the bucket stream … never blocks a sale" does not hold for the stream's
-    local work: a sale waited for as long as Litestream's checkpoint held the write lock. Not
-    measured: several sellers at once, where the write queue puts later sales behind the held one,
-    and the box's own disk. Options are in the question; nothing has changed yet.
+    So what CLAUDE.md §5 said until A133, "the bucket stream … never blocks a sale", did not hold
+    for the stream's local work: a sale waited for as long as Litestream's checkpoint held the write
+    lock. Not measured: several sellers at once, where the write queue puts later sales behind the
+    held one, and the box's own disk. CLAUDE.md §5 now says a sale can wait behind the checkpoint;
+    no Litestream setting has changed. **Next (A135):** measure, with the same probe and the
+    stream-loop and restore checks, whether taking routine checkpoints away from Litestream stops
+    the wait, and ask the owner before changing any setting. Read in the code at tag v0.5.17:
+    `checkpoint-interval: 0` switches the timed checkpoint off — `cmd/litestream/main.go` copies an
+    explicit 0 through, and `db.go` line 1471 runs that checkpoint only when the interval is above
+    0. A 3 s run of the pinned binary during A133's review logged no `checkpoint mode=PASSIVE` line
+    with it, which a run that short cannot tell apart from the 1-minute default. The page-count
+    checkpoint cannot be switched off: `db.go` line 788 refuses a `min-checkpoint-page-count` of 0
+    or less, and the pinned binary given 0 exited at start-up with
+    `cannot open store: minimum checkpoint page count required`. Unmeasured risks: Litestream
+    holds a long read transaction, so the side file may grow until the server's side-file limit
+    pauses the stream; and a checkpoint's disk cost still lands on some sale — with streaming off,
+    the slowest sale on the slow disk was 0.40–0.54 s.
   - Litestream at trace logging deadlocked sales for five seconds. The probe first ran it at trace
     level by mistake, and 13 of 24 runs failed with a 500. Each one looked at was `begin immediate`
     failing `database is locked` after 5,006 to 5,008 ms (runs 36571860113, 36572745451). The inferred

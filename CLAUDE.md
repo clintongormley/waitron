@@ -961,17 +961,26 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   residuals_). The till follows the primary and never chooses
   (till reroute, #244 to #265); only the primary sells. Fiscal submission is an outbox,
   never inline.
-- **The bucket stream is external too: it never blocks a sale and never fails `/health`.** A copy
-  fifteen minutes behind raises `backup.stream_behind`, unless a stopped, refused or
-  unusable-settings alert already explains it (`apps/server/src/alert-sources.ts`). The side file is bounded by stopping
-  Litestream at a size limit (`backup.stream_paused`) and then folding the file back; that
-  checkpoint takes its turn in the write queue with no busy wait (`checkpointTruncate`,
-  `packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket. Guards,
-  narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket, then times
-  the sales of three concurrent sellers on one till session through the server's own route against
-  a bound while the side file passes a 16 MiB limit, the server folds it back and the pause holds —
-  it does not observe whether a sale's write waited behind the fold-back rather than landing
-  before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
+- **The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
+  can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
+  lock.** Litestream 0.5.17 holds the write lock through each of its PASSIVE checkpoints. Measured
+  2026-09-29 with one seller through `POST /api/sales` (run 36615242523): on a disk delayed
+  100 ms per flush, 14 writes in three runs waited 829–831 ms to begin; on a CI runner's
+  normal disk, 288 writes waited 20 ms or more, most of them 33–105 ms and the longest
+  629 ms. Each such wait spanned a Litestream checkpoint log line; with streaming off no write
+  waited over 1 ms. How long a write waits behind a checkpoint with several sellers at once, and
+  on the box's own disk, is not measured. Whether to take those checkpoints away from Litestream is
+  an open experiment (`docs/backlog.md`, A130's entry). A copy fifteen minutes behind raises
+  `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it
+  (`apps/server/src/alert-sources.ts`). The side file is bounded by stopping Litestream at a size
+  limit (`backup.stream_paused`) and then folding the file back; that fold-back is the server's own
+  checkpoint, and it takes its turn in the write queue with no busy wait (`checkpointTruncate`,
+  `packages/store/src/index.ts`), so a sale can queue behind it but never waits on the bucket.
+  Guards, narrower than the rule: `apps/server/src/stream-pause.e2e.test.ts` freezes the bucket,
+  then times the sales of three concurrent sellers on one till session through the server's own
+  route against a bound while the side file passes a 16 MiB limit, the server folds it back and the
+  pause holds — it does not observe whether a sale's write waited behind the fold-back rather than
+  landing before it, nor time the fold-back of a 256 MiB file; the frozen-server stage of
   `apps/server/src/stream-loop.e2e.test.ts` records its sales through `recordOneSale`, a second
   store with its own write queue; both are skipped locally without their binaries (§4); the
   bucket-copy cases in `apps/server/src/health.test.ts` hold `/health`.
