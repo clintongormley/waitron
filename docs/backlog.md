@@ -3192,9 +3192,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 
   Out of scope for this plan: guest access, inventory, seat and staff assignment, changing the floor
   layout during service, screen plugins and Bizum.
-- **Tables, parties and bills — the till's table actions: planned (2026-09-28).**
-  [plan](superpowers/plans/2026-09-28-table-actions.md), thirteen tasks; the service plan's B10
-  onward wait until its Task 13 lands.
+- **Tables, parties and bills — the till's table actions: DONE (2026-09-29, all thirteen tasks).**
+  [plan](superpowers/plans/2026-09-28-table-actions.md); Task 13 landed as #897, so the service
+  plan's B10 onward may start.
   - **Task 1 DONE (#816, 2026-09-28):** "visit" renamed "party" in the
     code, the tables (`parties`, `party_tables`, the `party_id` columns, core migration `0036`), the
     routes (`/api/parties/...`) and the error codes (`party.*`, `tab.party_mismatch`,
@@ -3948,7 +3948,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     bills first or merge them". The plan's `table.move_to_counter` ("Move to counter") string was
     not added: the counter is a target in Move this bill's list, named `table.to_counter`, so
     nothing would read it.
-  - **Task 13 DONE (2026-09-29): the old tab routes and the table's pointer to its bill are
+  - **Task 13 DONE (#897, 2026-09-29, main `c05388158`): the old tab routes and the table's pointer to its bill are
     gone. RESET NOTICE: every dev venue needs `wa-wt reset demo <worktree-name>`, and the owner's
     box is wiped once.** Every venue that ever seated a party, took a booking for a table,
     delivered a counter order to a table, or recorded a party command stops at boot with
