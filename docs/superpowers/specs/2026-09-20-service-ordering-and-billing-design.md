@@ -226,6 +226,9 @@ and the kitchen gets the "moved to table X" slip the menus work builds.
 Current orders shows the groups, their items and each row's known state, including partial
 quantities. Keep held work, released work and subsequent additions distinguishable.
 
+**Owner, 2026-09-28:** a group is no longer tagged "Added later", as the Task 9 till showed it;
+each group shows when it was fired, or held, and by whom (campaign item A119).
+
 A paper kitchen may provide no preparation or readiness feedback. Sending a job to a printer is
 not proof that paper emerged, somebody read it, or cooking began. Show preparation or readiness
 only when there is an observation to support it. "Fired 20 minutes ago" is different from a claim

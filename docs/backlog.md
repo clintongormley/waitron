@@ -2362,10 +2362,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     2026-09-28: each line now shows once, inside its course section)_; the held-groups
     list shows each group's summary and then its lines _(Task 9, 2026-09-28: the list is now
     Current orders — every group of the party with each dish from every bill of the party, paid
-    ones included and abandoned ones left out, a header on each group showing when it was sent and
-    who sent it (campaign item A119; owner 2026-09-28: "show when and who"), and the serving
-    controls; a group's summary shows only when Current orders cannot be
-    read)_; group numbers are the server's positions,
+    ones included and abandoned ones left out, an "Added later" mark on a group started as a later
+    addition, and the serving controls; a group's summary shows only when Current orders cannot be
+    read)_ _(A119, 2026-09-29: the mark is gone; a fired group's header shows when it was fired and
+    who fired it, a held group's when it was held and who held it, and the name is left out when
+    there is no person record; owner 2026-09-28: "show when and who")_; group numbers are the
+    server's positions,
     so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
     older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
     44 px); per-line Send, Change and Cancel have no guard against a second press while the first is
@@ -2846,14 +2848,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         orders shows it on the waiting group once it has a time: the time it falls due, then Snooze
         and, where waiters fire held groups, Fire. **Next action:** a mark on the table's token when
         a party's reminder is due.
-      - Merging one party into another keeps a snooze on a group that is no longer the one
-        waiting. `moveGroupsToParty` (`apps/server/src/order-groups.ts`, reached from `mergeTabs`)
-        moves each absorbed group without touching its `remind_at`, so a snoozed waiting group of
-        the absorbed party lands behind the other party's held groups with its snooze intact.
-        Measured 2026-09-29 with a throwaway test on the A116 branch, reminder at 10 minutes: once
-        the group ahead was fired and served at 20:30, the moved group became the waiting one due
-        at its leftover 20:20 instead of 20:40. It predates A116. **Next action:** the owner
-        decides whether a merge clears a moved group's snooze.
+      - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
+        group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
+        (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
+        (`apps/server/src/order-groups.ts`, reached from `mergeTabs`) moves each absorbed group
+        without touching its `remind_at`, so a snoozed waiting group of the absorbed party lands
+        behind the other party's held groups with its snooze intact. Measured 2026-09-29 with a
+        throwaway test on the A116 branch, reminder at 10 minutes: once the group ahead was fired
+        and served at 20:30, the moved group became the waiting one due at its leftover 20:20, not
+        the 20:40 it would have without the snooze. It predates A116. **Next action:** campaign item
+        A120 — a server command beside `group.snooze` that clears the snooze, and a Clear snooze
+        action on the till's Current orders; like a snooze, it applies only to the group the
+        reminder is waiting on, so a moved group can be cleared once it becomes the waiting one.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
