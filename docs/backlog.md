@@ -4568,12 +4568,14 @@ ongoing overhaul listed at the top of Track A.
   are hand-built `<input type="number">`s rather than the shared `wt-input` that Forms prefers, left
   so because switching changes how an older test fills them in; and no test covers only the second
   box being invalid, or where focus lands after a failed check on the Save form (#860's review);
-  (5) **DONE (C64, 2026-09-29):** the setup connect screen no
+  (5) **DONE (C64, #893, 2026-09-29):** the setup connect screen no
   longer comes back empty after a refusal that routes back to it. The shell keeps the body it sent,
   in this tab's memory only, and hands it back to the rebuilt form (`connectRequest` in
   `apps/setup/src/setup-app.ts`, the screen's `request`), as the restore screens already did; leaving
   the screen or a successful Connect drops it. Tests: "what the operator typed on the connect form"
-  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case; (6) the setup
+  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case. Open, for the
+  owner: the refilled form brings back the one-time code too, which has usually expired by the next
+  try — whether to leave that one field blank instead; (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also
