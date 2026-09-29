@@ -52,8 +52,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esos artículos ya se han enviado a cocina. Revisa la mesa antes de volver a intentarlo",
   },
   "group.not_waiting": {
-    en: "Only the group waiting to go to the kitchen can be snoozed. Check the table before trying again",
-    es: "Solo se puede posponer el grupo que espera para ir a cocina. Revisa la mesa antes de volver a intentarlo",
+    en: "Only the next group to fire can be snoozed. Check the table before trying again",
+    es: "Solo se puede posponer el siguiente grupo por marchar. Revisa la mesa antes de volver a intentarlo",
   },
   "group.not_found": {
     en: "Those items are no longer on this table. Check the table before trying again",

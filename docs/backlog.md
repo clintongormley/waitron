@@ -2786,9 +2786,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       owner decides whether a pending refund should let a served mark through too.
     - The server works out when the party's next held group should be fired: once every dish of
       the fired groups ahead of it is served, a set number of minutes after the last of them.
-      Staff can put it off by five minutes. A manager sets the minutes, or turns the reminder off,
-      on the dashboard's operations screen (Off, or 5 to 30 minutes; the route takes any whole
-      number from 1 to 120).
+      Staff can put it off by five minutes. Since campaign item A116 (#821; owner, 2026-09-28:
+      "refuse with a code"), only the group waiting, the party's first held group, can be put off:
+      a snooze on any later held group is refused `group.not_waiting` (409) and the till says so
+      in English and Spanish. A manager sets the minutes, or turns the reminder off, on the
+      dashboard's operations screen (Off, or 5 to 30 minutes; the route takes any whole number
+      from 1 to 120).
     - The table screen's tab drawer is now Current orders: every group of the party in order, with
       each dish's recorded kitchen state, from every bill of the party that was not abandoned, a
       paid one included.
@@ -2831,10 +2834,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         orders shows it on the waiting group once it has a time: the time it falls due, then Snooze
         and, where waiters fire held groups, Fire. **Next action:** a mark on the table's token when
         a party's reminder is due.
-      - DONE (campaign item A116, on the owner's ruling of 2026-09-28 "refuse with a code"): a
-        snooze on a held group other than the one waiting (the party's first held group) is refused
-        `group.not_waiting` (409) and moves no reminder; the till says so in English and Spanish.
-        Before this, a later group's snooze made it due at 22:15 instead of its worked-out 20:30.
+      - Merging one party into another keeps a snooze on a group that is no longer the one
+        waiting. `moveGroupsToParty` (`apps/server/src/order-groups.ts`, reached from `mergeTabs`)
+        moves each absorbed group without touching its `remind_at`, so a snoozed waiting group of
+        the absorbed party lands behind the other party's held groups with its snooze intact.
+        Measured 2026-09-29 with a throwaway test on the A116 branch, reminder at 10 minutes: once
+        the group ahead was fired and served at 20:30, the moved group became the waiting one due
+        at its leftover 20:20 instead of 20:40. It predates A116. **Next action:** the owner
+        decides whether a merge clears a moved group's snooze.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

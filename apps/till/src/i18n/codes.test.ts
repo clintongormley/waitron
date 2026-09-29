@@ -230,7 +230,7 @@ it("words the three refusals of an order sent to a bill it cannot go on, in both
 
 it("explains a snooze refused because another group is the one waiting, in both languages", () => {
   expect([codeMessage("group.not_waiting", "en"), codeMessage("group.not_waiting", "es")]).toEqual([
-    "Only the group waiting to go to the kitchen can be snoozed. Check the table before trying again",
-    "Solo se puede posponer el grupo que espera para ir a cocina. Revisa la mesa antes de volver a intentarlo",
+    "Only the next group to fire can be snoozed. Check the table before trying again",
+    "Solo se puede posponer el siguiente grupo por marchar. Revisa la mesa antes de volver a intentarlo",
   ]);
 });

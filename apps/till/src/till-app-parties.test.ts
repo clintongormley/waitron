@@ -3862,7 +3862,7 @@ describe("till-app: Current orders", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      "Only the group waiting to go to the kitchen can be snoozed. Check the table before trying again",
+      "Only the next group to fire can be snoozed. Check the table before trying again",
     );
     expect(api.readCurrentOrders).toHaveBeenCalledTimes(reads + 1);
   });
