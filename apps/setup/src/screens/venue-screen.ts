@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
@@ -13,7 +13,6 @@ import { VENUE_SETUP_COUNTRY_PACKS, getVenueSetupCountryPack } from "@waitron/co
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { countryName } from "../country-name.js";
 import { currentLocale, format, t } from "../i18n/t.js";
@@ -61,6 +60,20 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   seriesCode: "off",
   rectificativeSeriesCode: "off",
 };
+
+type FieldKey = TextField | "invoiceLocales";
+
+/** Demo fills these itself, so its form does not show them. */
+const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
+  "taxId",
+  "legalName",
+  "operationDescription",
+  "invoiceLocales",
+  "dayCutover",
+  "tillName",
+  "seriesCode",
+  "rectificativeSeriesCode",
+]);
 
 const REQUIRED_TEXT_FIELDS: readonly TextField[] = [
   "country",
@@ -207,7 +220,8 @@ export class SetupVenueScreen extends LitElement {
     return filing === undefined ? "" : (this.defaults[filing]?.operationDescription ?? "");
   }
 
-  /** A server-side venue error the shell routed back here, shown as a banner. */
+  /** A server-side venue error that names no field, routed back by the shell and shown beside
+   * Next until the operator presses it again. */
   @property() errorMessage?: string;
 
   /** A field path the server refused (`setup.request_invalid`'s `params.field`), routed back by the
@@ -233,9 +247,9 @@ export class SetupVenueScreen extends LitElement {
 
   @state() private invoiceLocales: string[] = ["es-ES"];
 
-  @state() private invalid = new Set<TextField | "invoiceLocales">();
+  @state() private attempted = false;
 
-  @state() private showError = false;
+  @state() private refusalDismissed = false;
 
   // Keep server refusals separate: local validation rebuilds its own set on every submission.
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
@@ -243,6 +257,7 @@ export class SetupVenueScreen extends LitElement {
 
   #seeded = false;
   #invoiceLocalesFollowAreaDefault = true;
+  #errors = new Map<FieldKey, string>();
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (!this.#seeded) {
@@ -268,6 +283,8 @@ export class SetupVenueScreen extends LitElement {
           ? undefined
           : { key: this.#demo && refusal.key === "legalName" ? "name" : refusal.key, refusal };
     }
+    if (changed.has("errorMessage")) this.refusalDismissed = false;
+    this.#errors = this.#collectErrors();
   }
 
   /**
@@ -391,14 +408,16 @@ export class SetupVenueScreen extends LitElement {
       : this.invoiceLocales.filter((l) => l !== locale);
   }
 
-  #next(): void {
-    if (this.#demo && this.values.operationDescription === "") {
-      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
-      return;
-    }
-    if (this.#demo) this.values = { ...this.values, legalName: this.values.name };
-    const invalid = new Set<TextField | "invoiceLocales">();
+  #shows(key: FieldKey): boolean {
+    return !(this.#demo && DEMO_HIDDEN.has(key));
+  }
+
+  /** Every field whose current value would be refused. */
+  #invalidFields(): Set<FieldKey> {
+    const invalid = new Set<FieldKey>();
     for (const key of REQUIRED_TEXT_FIELDS) {
+      // Demo copies the location name into the legal name on Next.
+      if (this.#demo && key === "legalName") continue;
       if (this.values[key].trim() === "") invalid.add(key);
     }
     const pack = this.#pack();
@@ -444,17 +463,39 @@ export class SetupVenueScreen extends LitElement {
       invalid.add("seriesCode");
       invalid.add("rectificativeSeriesCode");
     }
-    this.invalid = invalid;
-    if (invalid.size > 0) {
-      this.showError = true;
-      void this.updateComplete.then(() =>
-        this.shadowRoot?.querySelector<HTMLElement>("[invalid]")?.focus(),
-      );
+    return invalid;
+  }
+
+  #collectErrors(): Map<FieldKey, string> {
+    const errors = new Map<FieldKey, string>();
+    if (this.attempted) {
+      for (const key of this.#invalidFields()) errors.set(key, this.#fieldMessage(key));
+    }
+    if (this.serverInvalid !== undefined) {
+      errors.set(this.serverInvalid.key, this.serverInvalid.refusal.message);
+    }
+    return errors;
+  }
+
+  #next(): void {
+    if (this.#demo && this.values.operationDescription === "") {
+      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
       return;
     }
-    this.showError = false;
+    this.attempted = true;
+    this.refusalDismissed = true;
+    if (this.#invalidFields().size > 0 || this.serverInvalid !== undefined) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
+    if (this.#demo) this.values = { ...this.values, legalName: this.values.name };
+    const pack = this.#pack();
+    const area = this.#area(pack);
+    const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
+    const taxValidation = pack?.taxIdentifier?.validate(this.values.taxId);
+    const jurisdiction = this.#jurisdiction(pack, area);
 
-    // Every path that leaves these undefined added an invalid field and returned above.
+    // Every path that leaves these undefined made a field invalid and returned above.
     const selectedPack = pack!;
     const selectedJurisdiction = jurisdiction!;
     const normalizedTaxId =
@@ -495,8 +536,7 @@ export class SetupVenueScreen extends LitElement {
     dispatchSetupGoto(this, "admin");
   }
 
-  #fieldError(key: TextField | "invoiceLocales"): string {
-    if (!this.invalid.has(key)) return "";
+  #fieldMessage(key: FieldKey): string {
     if (key === "invoiceLocales") return t("venue.error.invoice_locales");
     if (this.values[key].trim() === "")
       return format("venue.enter_field", { field: t(FIELD_NOUNS[key]) });
@@ -520,7 +560,7 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #field(label: string, key: TextField, type = "text"): TemplateResult {
-    const refused = this.serverInvalid?.key === key ? this.serverInvalid : undefined;
+    const error = this.#errors.get(key) ?? "";
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
       class="field"
@@ -529,9 +569,9 @@ export class SetupVenueScreen extends LitElement {
       autocomplete=${FIELD_AUTOCOMPLETE[key]}
       data-test=${key}
       type=${type}
-      ?invalid=${this.invalid.has(key) || refused !== undefined}
+      ?invalid=${error !== ""}
       ?required=${key !== "addressLine2"}
-      error=${refused?.refusal.message ?? this.#fieldError(key)}
+      error=${error}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
       >${this.#help(key)}</wt-input
@@ -549,6 +589,13 @@ export class SetupVenueScreen extends LitElement {
     const timeZone = format("venue.time_zone", {
       zone: area?.timeZone ?? pack?.defaultTimeZone ?? "—",
     });
+    const errors = this.#errors;
+    const fieldErrors = [...errors.keys()].filter((key) => this.#shows(key));
+    const bottom = [
+      ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
+      ...[...errors].filter(([key]) => !this.#shows(key)).map(([, message]) => message),
+      ...(fieldErrors.length > 0 ? [t("venue.fix_fields")] : []),
+    ].join(" ");
     return html`
       <h1>${t("venue.heading")}</h1>
       <p>${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
@@ -572,8 +619,8 @@ export class SetupVenueScreen extends LitElement {
           name="country"
           required
           data-test="country"
-          ?invalid=${this.invalid.has("country")}
-          aria-invalid=${this.invalid.has("country") ? "true" : "false"}
+          ?invalid=${errors.has("country")}
+          aria-invalid=${errors.has("country") ? "true" : "false"}
           aria-describedby="country-error"
           @change=${(event: Event) => this.#onCountry(event)}
         >
@@ -587,7 +634,7 @@ export class SetupVenueScreen extends LitElement {
               </option>`,
           )}
         </select>
-        <span class="error" id="country-error">${this.#fieldError("country")}</span>
+        <span class="error" id="country-error">${errors.get("country") ?? ""}</span>
       </label>
       ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}`}
       ${this.#demo ? nothing : html`<h2>${t("venue.section.location")}</h2>`}
@@ -598,9 +645,9 @@ export class SetupVenueScreen extends LitElement {
           : html`<fieldset
                 class="locales"
                 tabindex="-1"
-                ?invalid=${this.invalid.has("invoiceLocales")}
-                aria-invalid=${this.invalid.has("invoiceLocales") ? "true" : "false"}
-                aria-describedby=${this.invalid.has("invoiceLocales") ? "invoice-locales-error" : nothing}
+                ?invalid=${errors.has("invoiceLocales")}
+                aria-invalid=${errors.has("invoiceLocales") ? "true" : "false"}
+                aria-describedby=${errors.has("invoiceLocales") ? "invoice-locales-error" : nothing}
               >
                 <legend>
                   ${t("venue.label.invoice_locales")} *
@@ -622,7 +669,7 @@ export class SetupVenueScreen extends LitElement {
                       ${LOCALE_LABELS[locale] === undefined ? locale : t(LOCALE_LABELS[locale])}
                     </label>`,
                 )}
-                ${this.invalid.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${this.#fieldError("invoiceLocales")}</p>` : nothing}
+                ${errors.has("invoiceLocales") ? html`<p class="error" id="invoice-locales-error">${errors.get("invoiceLocales")}</p>` : nothing}
               </fieldset>
               ${this.#field(t("venue.label.operation_description"), "operationDescription")}`
       }
@@ -639,8 +686,8 @@ export class SetupVenueScreen extends LitElement {
                 required
                 aria-describedby="province-error"
                 data-test="province"
-                ?invalid=${this.invalid.has("province")}
-                aria-invalid=${this.invalid.has("province") ? "true" : "false"}
+                ?invalid=${errors.has("province")}
+                aria-invalid=${errors.has("province") ? "true" : "false"}
                 @change=${(event: Event) => this.#onProvince(event)}
               >
                 <option value="" .selected=${area === undefined}>${selectProvince}</option>
@@ -651,7 +698,7 @@ export class SetupVenueScreen extends LitElement {
                     </option>`,
                 )}
               </select>
-              <span class="error" id="province-error">${this.#fieldError("province")}</span>
+              <span class="error" id="province-error">${errors.get("province") ?? ""}</span>
             </label>`
           : this.#field(t("venue.label.province_region"), "province")
       }
@@ -667,22 +714,15 @@ export class SetupVenueScreen extends LitElement {
               ${this.#field(t("venue.label.series_code"), "seriesCode")}
               ${this.#field(t("venue.label.rectificative_series_code"), "rectificativeSeriesCode")}`
       }
-      ${
-        this.showError
-          ? html`<wt-form-error-summary
-              data-test="error"
-              heading=${t("venue.error_heading")}
-              .errors=${[...this.invalid].map((key) => this.#fieldError(key))}
-            ></wt-form-error-summary>`
-          : this.errorMessage === undefined
-            ? nothing
-            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
-      }
-      <wt-form-actions>
+      <wt-form-actions .error=${bottom}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("venue.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
+        <wt-button
+          variant="primary"
+          data-test="next"
+          ?disabled=${fieldErrors.length > 0}
+          @click=${() => this.#next()}
           >${t("venue.next")}</wt-button
         >
       </wt-form-actions>

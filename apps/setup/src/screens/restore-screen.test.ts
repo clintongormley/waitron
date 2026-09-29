@@ -32,12 +32,21 @@ async function fill(
   await el.updateComplete;
 }
 
-async function summaryItems(el: SetupRestoreScreen): Promise<string[]> {
-  const summary = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "[data-test=error]");
-  if (summary === null) return [];
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+/** The one message `wt-form-actions` shows beside Restore; "" when there is none. */
+async function bottomOf(el: SetupRestoreScreen): Promise<string> {
+  const actions = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+
+/** The messages shown under the fields, in page order. */
+function fieldMessages(el: SetupRestoreScreen): string[] {
+  return [...el.shadowRoot!.querySelectorAll("p.error[id$='-error']")].map((p) =>
+    p.textContent!.trim(),
+  );
+}
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 describe("SetupRestoreScreen", () => {
   it("opens guided Cloud recovery from backup file restore", async () => {
@@ -55,11 +64,9 @@ describe("SetupRestoreScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    const actions = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(4);
   });
 
@@ -127,7 +134,8 @@ describe("SetupRestoreScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(await summaryItems(el)).toEqual([message]);
+    expect(fieldMessages(el)).toEqual([message]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
   it("asks the old-server question when the old server wrote recently, and sends the answer", async () => {
@@ -141,9 +149,8 @@ describe("SetupRestoreScreen", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(listener).not.toHaveBeenCalled();
-    expect(await summaryItems(el)).toEqual([
-      "Confirm that the old server is switched off for good.",
-    ]);
+    expect(fieldMessages(el)).toEqual(["Confirm that the old server is switched off for good."]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "#old-box-gone-error")!.textContent).toBe(
       "Confirm that the old server is switched off for good.",
     );
@@ -236,6 +243,71 @@ describe("SetupRestoreScreen", () => {
     ]);
   });
 
+  describe("messages beside Restore (owner's forms rule, 2026-09-28)", () => {
+    it("says nothing and leaves Restore working before the first press", async () => {
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      expect(await bottomOf(el)).toBe("");
+      expect(fieldMessages(el)).toEqual([]);
+      expect(q(el, "wt-form-error-summary")).toBeNull();
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("marks each missing decision, says one sentence beside Restore, focuses the first, and holds Restore", async () => {
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expect(fieldMessages(el)).toHaveLength(3);
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      expect(q(el, "wt-form-error-summary")).toBeNull();
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=artifact]")),
+      );
+    });
+
+    it("clears each message as its decision is made, and gives Restore back when the last is", async () => {
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      await fill(el, { artifact: true, recoveryKey: true });
+      expect(fieldMessages(el)).toEqual(["Confirm that no other running server has newer data."]);
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
+      await fill(el, { acknowledge: true });
+      expect(fieldMessages(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("marks a decision again when it is undone after the press", async () => {
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+      await fill(el, { artifact: true, acknowledge: true });
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      await fill(el, { recoveryKey: true });
+      expect(fieldMessages(el)).toEqual([]);
+      const key = q<HTMLInputElement>(el, "[data-test=recovery-key]")!;
+      key.value = "";
+      key.dispatchEvent(new Event("input"));
+      await el.updateComplete;
+      expect(fieldMessages(el)).toEqual(["Enter the recovery key."]);
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
+    });
+
+    it("shows the server's refusal beside Restore, leaves Restore working, and drops it on the next press", async () => {
+      const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+        errorMessage: "The backup could not be staged. Check the connection and try again.",
+      });
+      expect(await bottomOf(el)).toBe(
+        "The backup could not be staged. Check the connection and try again.",
+      );
+      expect(q(el, "[data-test=server-error]")).toBeNull();
+      expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+      q(el, "[data-test=restore]")!.click();
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    });
+  });
+
   it("steps back to the role screen", async () => {
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     const goto = vi.fn();
@@ -258,11 +330,12 @@ describe("SetupRestoreScreen in Spanish", () => {
     expect(q(el, "[data-test=restore]")!.textContent).toBe("Restaurar la copia");
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await summaryItems(el)).toEqual([
+    expect(fieldMessages(el)).toEqual([
       "Elige un archivo de copia de seguridad.",
       "Introduce la clave de recuperación.",
       "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
     ]);
+    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
   it("asks the old-server question in Spanish, with the time in Spanish", async () => {

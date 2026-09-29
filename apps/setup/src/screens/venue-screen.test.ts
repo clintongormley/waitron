@@ -27,6 +27,21 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupVenueScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
+/** The form's one message beside Next, shown by `wt-form-actions`. */
+async function bottomOf(el: SetupVenueScreen): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+async function bottomAlertOf(el: SetupVenueScreen): Promise<Element | null> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error][role=alert]");
+}
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
+
 async function type(el: SetupVenueScreen, field: string, value: string): Promise<void> {
   const target = q(el, `[data-test=${field}]`)!;
   if (target instanceof HTMLSelectElement) {
@@ -287,12 +302,8 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
-    const summary = q(el, "[data-test=error]") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(await bottomAlertOf(el)).not.toBeNull();
     expect(q(el, "[data-test=seriesCode]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=rectificativeSeriesCode]")!.hasAttribute("invalid")).toBe(true);
   });
@@ -304,7 +315,7 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=taxId]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=legalName]")!.hasAttribute("invalid")).toBe(false);
   });
@@ -316,7 +327,7 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=taxId]")!.hasAttribute("invalid")).toBe(true);
   });
 
@@ -357,35 +368,32 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toContain("ES-canary");
   });
 
-  it("renders a routed-back server error banner when errorMessage is set (no client banner yet)", async () => {
+  it("renders a routed-back server error beside Next when errorMessage is set (no field marked yet)", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       errorMessage: "The country must match the fiscal territory.",
     });
-    const banner = q(el, "[data-test=server-error]")!;
-    expect(banner.getAttribute("role")).toBe("alert");
-    expect(banner.textContent).toContain("country must match");
-    expect(q(el, "[data-test=error]")).toBeNull();
+    const alert = await bottomAlertOf(el);
+    expect(alert).not.toBeNull();
+    expect(alert!.textContent).toContain("country must match");
+    expect(await bottomOf(el)).not.toContain(FIX_FIELDS);
   });
 
-  // The client message wins: it is about what the operator just typed, and the server's is stale.
+  // The server's message goes when the operator submits again: it is stale once they have acted.
   it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       errorMessage: "The country must match the fiscal territory.",
     });
-    q(el, "[data-test=next]")!.click(); // empty form → client validation fails → showError
+    q(el, "[data-test=next]")!.click(); // empty form → client validation fails
     await el.updateComplete;
-    const summary = q(el, "wt-form-error-summary") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
+    const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+    await actions.updateComplete;
     const alerts = [
       ...el.shadowRoot!.querySelectorAll("[role=alert]"),
-      ...summary.shadowRoot!.querySelectorAll("[role=alert]"),
+      ...actions.shadowRoot!.querySelectorAll("[role=alert]"),
     ];
     expect(alerts.length).toBe(1);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
-    expect(q(el, "[data-test=server-error]")).toBeNull();
-    expect(alerts[0]!.textContent).toContain("There is a problem with this form");
+    expect(alerts[0]!.textContent).toContain(FIX_FIELDS);
+    expect(alerts[0]!.textContent).not.toContain("country must match");
   });
 
   it("blocks Next when no invoice locale is selected", async () => {
@@ -396,7 +404,7 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
   it("blocks Next when more than two invoice locales are selected", async () => {
@@ -408,7 +416,7 @@ describe("setup-venue-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
   it("carries a second locale and the province-derived time zone through into the patch", async () => {
@@ -422,16 +430,16 @@ describe("setup-venue-screen", () => {
     expect(patch.venue?.location?.timeZone).toBe("Europe/Madrid");
   });
 
-  it("clears the banner once the form is valid and Next succeeds", async () => {
+  it("clears the bottom message once the form is valid and Next succeeds", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
-    q(el, "[data-test=next]")!.click(); // empty form → banner
+    q(el, "[data-test=next]")!.click(); // empty form → bottom message
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await fillValid(el);
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
     expect(events.some((e) => e.kind === "advance")).toBe(true);
   });
 
@@ -514,6 +522,133 @@ describe("setup-venue-screen", () => {
   });
 });
 
+describe("setup-venue-screen form errors", () => {
+  const next = (el: SetupVenueScreen) => q(el, "[data-test=next]")!;
+  const errorOf = (el: SetupVenueScreen, field: string) =>
+    q(el, `[data-test=${field}]`)!.getAttribute("error");
+
+  it("says nothing and leaves Next working before the first press", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await type(el, "legalName", "");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    expect(errorOf(el, "legalName")).toBe("");
+  });
+
+  it("on a failed press marks each bad field, says so beside Next, focuses the first and disables Next", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await fillValid(el, { legalName: "", city: "" });
+    next(el).click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(events).toEqual([]);
+    expect(errorOf(el, "legalName")).toBe("Enter the legal name.");
+    expect(errorOf(el, "city")).not.toBe("");
+    expect(errorOf(el, "name")).toBe("");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    const legalName = q(el, "[data-test=legalName]")!;
+    expect(legalName.shadowRoot!.activeElement).toBe(legalName.shadowRoot!.querySelector("input"));
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks every change after a failed press, and Next works again once all are fixed", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    const events = collect(host);
+    await fillValid(el, { legalName: "", city: "" });
+    next(el).click();
+    await el.updateComplete;
+
+    await type(el, "legalName", "Deli del Sol SL");
+    expect(errorOf(el, "legalName")).toBe("");
+    expect(errorOf(el, "city")).not.toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+
+    await type(el, "legalName", " ");
+    expect(errorOf(el, "legalName")).toBe("Enter the legal name.");
+
+    await type(el, "legalName", "Deli del Sol SL");
+    await type(el, "city", "Madrid");
+    expect(errorOf(el, "city")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    next(el).click();
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+  });
+
+  it("re-checks the selects and the language group too, not only the text fields", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    await fillValid(el, { province: "" });
+    await toggleLocale(el, "es-ES", false);
+    next(el).click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=province]")!.getAttribute("aria-invalid")).toBe("true");
+    expect(q(el, "fieldset.locales")!.getAttribute("aria-invalid")).toBe("true");
+
+    await type(el, "province", "28");
+    await toggleLocale(el, "es-ES", true);
+    expect(q(el, "[data-test=province]")!.getAttribute("aria-invalid")).toBe("false");
+    expect(q(el, "fieldset.locales")!.getAttribute("aria-invalid")).toBe("false");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("shows a refusal that names no field beside Next, leaves Next working, and drops it on the next press", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      errorMessage: "The country must match the fiscal territory.",
+    });
+    const events = collect(host);
+    expect(await bottomOf(el)).toBe("The country must match the fiscal territory.");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    expect(el.shadowRoot!.querySelectorAll("[invalid]")).toHaveLength(0);
+
+    await fillValid(el);
+    next(el).click();
+    await el.updateComplete;
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("puts both sentences beside Next when a refusal that names no field meets field errors", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    next(el).click();
+    await el.updateComplete;
+    el.errorMessage = "The country must match the fiscal territory.";
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(`The country must match the fiscal territory. ${FIX_FIELDS}`);
+  });
+
+  it("treats a refusal naming a field as that field's error until the operator changes it", async () => {
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
+      invalidField: "seriesCode",
+    });
+    for (const [key, value] of Object.entries(VALID)) {
+      if (key !== "seriesCode") await type(el, key, value);
+    }
+    expect(errorOf(el, "seriesCode")).toContain("letters, numbers");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+
+    await type(el, "seriesCode", "FA");
+    expect(errorOf(el, "seriesCode")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("says the bottom message in Spanish", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+      next(el).click();
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+});
+
 describe("A2 shop form", () => {
   const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
   it("prefills the first till and invoice series, using the fiscal description default", async () => {
@@ -580,7 +715,7 @@ describe("A2 shop form", () => {
       expect(input.hasAttribute("required")).toBe(true);
       expect(input.querySelector("wt-help-tooltip")).not.toBeNull();
     }
-    expect(q(el, "wt-form-error-summary")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "wt-form-actions")).not.toBeNull();
   });
 });

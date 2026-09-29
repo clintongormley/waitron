@@ -1,9 +1,18 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./restore-bucket-screen.js";
 import type { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 
 afterEach(cleanupWidgets);
+
+/** The message beside the primary action, which `wt-form-actions` draws in its own shadow root. */
+async function bottomMessage(el: HTMLElement): Promise<string | undefined> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim();
+}
 
 describe.each(["light", "dark"] as const)(
   "setup-restore-bucket-screen a11y (%s theme)",
@@ -17,7 +26,7 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations with the validation banner shown", async () => {
+    it("has no violations with the fields marked and the message beside Restore", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
         {
@@ -28,6 +37,7 @@ describe.each(["light", "dark"] as const)(
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
       await el.updateComplete;
+      expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
       await expectNoA11yViolations(host);
     });
 
@@ -50,7 +60,7 @@ describe.each(["light", "dark"] as const)(
     });
 
     it("has no violations with a server error shown", async () => {
-      const { host } = await mountWidget<SetupRestoreBucketScreen>(
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
         {
           errorMessage:
@@ -58,6 +68,7 @@ describe.each(["light", "dark"] as const)(
         },
         theme,
       );
+      expect(await bottomMessage(el)).toContain("could not be downloaded");
       await expectNoA11yViolations(host);
     });
   },

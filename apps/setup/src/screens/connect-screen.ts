@@ -1,12 +1,11 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
+import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
 import type { AdoptBody } from "../api/client.js";
 import { t } from "../i18n/t.js";
@@ -20,7 +19,6 @@ const REQUIRED_FIELDS: readonly ConnectField[] = ["primaryUrl", "personId", "pas
 interface FieldText {
   label: StringKey;
   error: StringKey;
-  summary: StringKey;
   helpLabel: StringKey;
   help: StringKey;
 }
@@ -29,28 +27,24 @@ const FIELD_TEXT: Record<ConnectField, FieldText> = {
   primaryUrl: {
     label: "connect.primary_url.label",
     error: "connect.primary_url.error",
-    summary: "connect.primary_url.error",
     helpLabel: "connect.primary_url.help_label",
     help: "connect.primary_url.help",
   },
   personId: {
     label: "connect.person_id.label",
     error: "connect.person_id.error",
-    summary: "connect.person_id.summary",
     helpLabel: "connect.person_id.help_label",
     help: "connect.person_id.help",
   },
   password: {
     label: "connect.password.label",
     error: "connect.password.error",
-    summary: "connect.password.error",
     helpLabel: "connect.password.help_label",
     help: "connect.password.help",
   },
   totp: {
     label: "connect.totp.label",
     error: "connect.totp.error",
-    summary: "connect.totp.summary",
     helpLabel: "connect.totp.help_label",
     help: "connect.totp.help",
   },
@@ -66,7 +60,6 @@ export class SetupConnectScreen extends LitElement {
   static override styles = [
     baseStyles,
     fieldStyles,
-    errorStyles,
     actionsStyles,
     css`
       :host {
@@ -75,7 +68,7 @@ export class SetupConnectScreen extends LitElement {
     `,
   ];
 
-  /** An adopt failure the shell routed back here. */
+  /** An adopt failure the shell routed back here. It names no field, so it never disables Connect. */
   @property() errorMessage?: string;
 
   @state() private values: Record<ConnectField, string> = {
@@ -85,13 +78,24 @@ export class SetupConnectScreen extends LitElement {
     totp: "",
   };
 
-  @state() private invalid = new Set<ConnectField>();
+  @state() private attempted = false;
 
-  @state() private showError = false;
+  /** Set when Connect is pressed after `errorMessage` arrived; the message is then not shown. */
+  @state() private refusalDismissed = false;
 
   constructor() {
     super();
     new LocaleChangeController(this);
+  }
+
+  protected override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("errorMessage")) this.refusalDismissed = false;
+  }
+
+  /** Each blank required field, once Connect has been pressed. */
+  #errors(): Set<ConnectField> {
+    if (!this.attempted) return new Set();
+    return new Set(REQUIRED_FIELDS.filter((key) => this.values[key].trim() === ""));
   }
 
   #onField(key: ConnectField, event: CustomEvent<{ value: string }>): void {
@@ -100,16 +104,14 @@ export class SetupConnectScreen extends LitElement {
   }
 
   #connect(): void {
-    const invalid = new Set<ConnectField>();
-    for (const key of REQUIRED_FIELDS) {
-      if (this.values[key].trim() === "") invalid.add(key);
-    }
-    this.invalid = invalid;
-    if (invalid.size > 0) {
-      this.showError = true;
+    this.attempted = true;
+    this.refusalDismissed = true;
+    if (this.#errors().size > 0) {
+      void this.updateComplete.then(() => {
+        if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+      });
       return;
     }
-    this.showError = false;
 
     const totp = this.values.totp.trim();
     // `password` is not trimmed: whitespace can be intentional in a secret.
@@ -128,7 +130,7 @@ export class SetupConnectScreen extends LitElement {
     dispatchSetupGoto(this, "role");
   }
 
-  #field(key: ConnectField, type = "text"): TemplateResult {
+  #field(key: ConnectField, invalid: boolean, type = "text"): TemplateResult {
     const text = FIELD_TEXT[key];
     return html`<wt-input
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]"))}
@@ -137,10 +139,10 @@ export class SetupConnectScreen extends LitElement {
       name=${key}
       autocomplete=${key === "password" ? "current-password" : key === "personId" ? "username" : key === "totp" ? "one-time-code" : "off"}
       ?required=${key !== "totp"}
-      error=${this.invalid.has(key) ? t(text.error) : ""}
+      error=${invalid ? t(text.error) : ""}
       data-test=${key}
       type=${type}
-      ?invalid=${this.invalid.has(key)}
+      ?invalid=${invalid}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
       ><wt-help-tooltip slot="help" aria-label=${t(text.helpLabel)}
@@ -150,29 +152,26 @@ export class SetupConnectScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const errors = this.#errors();
+    const field = (key: ConnectField, type?: string) => this.#field(key, errors.has(key), type);
+    const bottom = [
+      ...(this.errorMessage === undefined || this.refusalDismissed ? [] : [this.errorMessage]),
+      ...(errors.size > 0 ? [t("connect.fix_fields")] : []),
+    ].join(" ");
     return html`
       <h1>${t("connect.heading")}</h1>
       <p>${t("connect.intro")}</p>
-      ${this.#field("primaryUrl", "url")} ${this.#field("personId")}
-      ${this.#field("password", "password")} ${this.#field("totp")}
-      ${
-        // One alert region: two `role="alert"` nodes double-announce to a screen reader. The
-        // client-validation banner wins over a stale server-routed message.
-        this.showError
-          ? html`<wt-form-error-summary
-              data-test="error"
-              heading=${t("connect.error_heading")}
-              .errors=${[...this.invalid].map((key) => t(FIELD_TEXT[key].summary))}
-            ></wt-form-error-summary>`
-          : this.errorMessage === undefined
-            ? nothing
-            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
-      }
-      <wt-form-actions>
+      ${field("primaryUrl", "url")} ${field("personId")} ${field("password", "password")}
+      ${field("totp")}
+      <wt-form-actions .error=${bottom}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("connect.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="connect" @click=${() => this.#connect()}
+        <wt-button
+          variant="primary"
+          data-test="connect"
+          ?disabled=${errors.size > 0}
+          @click=${() => this.#connect()}
           >${t("connect.connect")}</wt-button
         >
       </wt-form-actions>

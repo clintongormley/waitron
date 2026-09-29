@@ -1,10 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { passwordIcon } from "../password-icon.js";
 import { format, t } from "../i18n/t.js";
@@ -96,9 +95,7 @@ export class SetupCertScreen extends LitElement {
   @state() private certKind: AeatCertDraft["certKind"] = "sello";
   @state() private passphraseVisible = false;
 
-  @state() private invalid = new Set<"pfx" | "passphrase">();
-
-  @state() private showError = false;
+  @state() private attempted = false;
 
   @state() private fileReadFailed = false;
 
@@ -134,7 +131,6 @@ export class SetupCertScreen extends LitElement {
       this.fileReadFailed = false;
       return;
     }
-    this.invalid = new Set([...this.invalid].filter((field) => field !== "pfx"));
     this.fileReadFailed = false;
     this.fileName = file.name;
     try {
@@ -151,7 +147,6 @@ export class SetupCertScreen extends LitElement {
   #onPassphrase(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.passphrase = event.detail.value;
-    this.invalid = new Set([...this.invalid].filter((field) => field !== "passphrase"));
   }
 
   #onCertKind(event: Event): void {
@@ -159,16 +154,24 @@ export class SetupCertScreen extends LitElement {
     this.certKind = (event.target as HTMLSelectElement).value as AeatCertDraft["certKind"];
   }
 
+  /** A failed read is the file field's error from the moment it happens, until another file is
+   * chosen. */
+  #errors(): Partial<Record<"pfx" | "passphrase", string>> {
+    const errors: Partial<Record<"pfx" | "passphrase", string>> = {};
+    if (this.fileReadFailed) errors.pfx = t("cert.file_unreadable");
+    else if (this.attempted && this.pfxBase64 === "") errors.pfx = t("cert.file_required");
+    if (this.attempted && this.passphrase.trim() === "") {
+      errors.passphrase = t("cert.passphrase_required");
+    }
+    return errors;
+  }
+
   #next(): void {
-    const invalid = new Set<"pfx" | "passphrase">();
-    if (this.pfxBase64 === "") invalid.add("pfx");
-    if (this.passphrase.trim() === "") invalid.add("passphrase");
-    this.invalid = invalid;
-    if (invalid.size > 0) {
-      this.showError = true;
+    this.attempted = true;
+    if (this.pfxBase64 === "" || this.passphrase.trim() === "") {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.showError = false;
     dispatchSetupPatch(this, {
       aeatCert: {
         pfxBase64: this.pfxBase64,
@@ -184,11 +187,13 @@ export class SetupCertScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const errors = this.#errors();
+    const hasFieldErrors = errors.pfx !== undefined || errors.passphrase !== undefined;
     return html`
       <h1>${t("cert.heading")}</h1>
       <p>${t("cert.intro")}</p>
       ${certificateExportHelp(navigator.userAgent)}
-      <label class="field file" ?invalid=${this.invalid.has("pfx")}>
+      <label class="field file" ?invalid=${errors.pfx !== undefined}>
         <span
           >${t("cert.file_label")} *
           <wt-help-tooltip aria-label=${t("cert.file_help_label")}
@@ -200,18 +205,18 @@ export class SetupCertScreen extends LitElement {
           type="file"
           accept=".pfx,.p12"
           required
-          aria-invalid=${this.invalid.has("pfx") ? "true" : "false"}
-          aria-describedby=${this.invalid.has("pfx") ? "certificate-file-error" : nothing}
+          aria-invalid=${errors.pfx === undefined ? "false" : "true"}
+          aria-describedby=${errors.pfx === undefined ? nothing : "certificate-file-error"}
           data-test="pfx"
           @change=${(e: Event) => void this.#onFileChange(e)}
         />
       </label>
       ${
-        this.invalid.has("pfx")
-          ? html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
-              ${t("cert.file_required")}
+        errors.pfx === undefined
+          ? nothing
+          : html`<p id="certificate-file-error" class="error" data-test="pfx-field-error">
+              ${errors.pfx}
             </p>`
-          : nothing
       }
       ${
         this.pfxBase64 !== ""
@@ -229,8 +234,8 @@ export class SetupCertScreen extends LitElement {
         type=${this.passphraseVisible ? "text" : "password"}
         required
         data-test="passphrase"
-        error=${this.invalid.has("passphrase") ? t("cert.passphrase_required") : ""}
-        ?invalid=${this.invalid.has("passphrase")}
+        error=${errors.passphrase ?? ""}
+        ?invalid=${errors.passphrase !== undefined}
         .value=${this.passphrase}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
       >
@@ -249,11 +254,9 @@ export class SetupCertScreen extends LitElement {
         >
       </wt-input>
       ${
-        this.invalid.has("passphrase")
-          ? html`<p class="error" data-test="passphrase-field-error">
-              ${t("cert.passphrase_required")}
-            </p>`
-          : nothing
+        errors.passphrase === undefined
+          ? nothing
+          : html`<p class="error" data-test="passphrase-field-error">${errors.passphrase}</p>`
       }
       <label class="field select">
         <span
@@ -276,20 +279,15 @@ export class SetupCertScreen extends LitElement {
           )}
         </select>
       </label>
-      ${
-        this.showError || this.fileReadFailed
-          ? html`<wt-form-error-summary
-              data-test="error"
-              heading=${t("cert.error_heading")}
-              .errors=${this.fileReadFailed ? [t("cert.file_unreadable")] : [...this.invalid].map((field) => t(field === "pfx" ? "cert.file_required" : "cert.passphrase_required"))}
-            ></wt-form-error-summary>`
-          : nothing
-      }
-      <wt-form-actions>
+      <wt-form-actions .error=${hasFieldErrors ? t("cert.fix_fields") : ""}>
         <wt-button variant="ghost" slot="cancel" data-test="back" @click=${() => this.#back()}
           >${t("cert.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="next" @click=${() => this.#next()}
+        <wt-button
+          variant="primary"
+          data-test="next"
+          ?disabled=${hasFieldErrors}
+          @click=${() => this.#next()}
           >${t("cert.next")}</wt-button
         >
       </wt-form-actions>

@@ -27,13 +27,22 @@ const tick = async (el: SetupCloudRestoreScreen, selector: string, checked = tru
   box.dispatchEvent(new Event("change"));
   await el.updateComplete;
 };
-async function summaryItems(el: SetupCloudRestoreScreen): Promise<string[]> {
-  const summary = q(el, "[data-test=error]") as
-    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
-  if (summary === null) return [];
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
+/** The message element `wt-form-actions` shows beside Restore, or null when there is none. */
+async function bottomElement(el: SetupCloudRestoreScreen): Promise<HTMLElement | null> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector<HTMLElement>("[data-error]");
 }
+async function bottomOf(el: SetupCloudRestoreScreen): Promise<string> {
+  return (await bottomElement(el))?.textContent?.trim() ?? "";
+}
+/** The messages shown under the fields, in page order. */
+function fieldMessages(el: SetupCloudRestoreScreen): string[] {
+  return [...el.shadowRoot!.querySelectorAll("p.error[id$='-error']")].map((p) =>
+    p.textContent!.trim(),
+  );
+}
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
 const ACKNOWLEDGE_PROBLEM =
   "Confirm that the old server and surviving peers are stopped, and that you accept losing changes after this snapshot.";
 
@@ -219,8 +228,8 @@ describe("Cloud restore screen", () => {
     const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       errorMessage: "Cloud recovery is unavailable. Try again.",
     });
-    expect(q(el, "[data-test=server-error]")?.getAttribute("role")).toBe("alert");
-    expect(el.shadowRoot!.textContent).toContain("Cloud recovery is unavailable. Try again.");
+    expect((await bottomElement(el))?.getAttribute("role")).toBe("alert");
+    expect(await bottomOf(el)).toContain("Cloud recovery is unavailable. Try again.");
     el.view = {
       requestId: "be9c200d-d6ae-4dad-8895-e5eb50fa8ea3",
       code: "12345678",
@@ -238,7 +247,8 @@ describe("Cloud restore screen", () => {
     await el.updateComplete;
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     el.view = { ...el.view, state: "awaiting_owner", point: undefined };
     await el.updateComplete;
     el.view = {
@@ -252,11 +262,13 @@ describe("Cloud restore screen", () => {
       },
     };
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).toBeNull();
-    expect(q(el, "[role=alert]")?.textContent).toContain("Cloud recovery is unavailable");
+    expect(fieldMessages(el)).toEqual([]);
+    expect(await bottomOf(el)).not.toContain(FIX_FIELDS);
+    expect(await bottomOf(el)).toContain("Cloud recovery is unavailable");
     el.errorMessage = undefined;
     await el.updateComplete;
     expect(q(el, "[role=alert]")).toBeNull();
+    expect(await bottomElement(el)).toBeNull();
   });
 });
 
@@ -328,7 +340,7 @@ describe("Cloud restore screen asking whether the old server is gone", () => {
 });
 
 describe("Cloud restore screen listing what is still unanswered", () => {
-  it("marks the acknowledgement beside the field and in one summary", async () => {
+  it("marks the acknowledgement beside the field and in one message beside Restore", async () => {
     const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       view: approvedView(),
     });
@@ -339,10 +351,8 @@ describe("Cloud restore screen listing what is still unanswered", () => {
     expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
-    expect(q(el, "wt-form-error-summary")!.getAttribute("heading")).toBe(
-      "There is a problem with this form",
-    );
+    expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(acknowledge.getAttribute("aria-invalid")).toBe("true");
     expect(acknowledge.getAttribute("aria-describedby")).toBe("acknowledge-error");
     expect(q(el, "#acknowledge-error")!.textContent).toBe(ACKNOWLEDGE_PROBLEM);
@@ -356,19 +366,69 @@ describe("Cloud restore screen listing what is still unanswered", () => {
     });
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM, OLD_BOX_PROBLEM]);
-    expect(q(el, "[data-test=server-error]")).toBeNull();
+    expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM, OLD_BOX_PROBLEM]);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await tick(el, "[data-test=acknowledge]");
-    expect(await summaryItems(el)).toEqual([OLD_BOX_PROBLEM]);
+    expect(fieldMessages(el)).toEqual([OLD_BOX_PROBLEM]);
     expect(q(el, "#acknowledge-error")).toBeNull();
     const acknowledge = q(el, "[data-test=acknowledge]")!;
     expect(acknowledge.getAttribute("aria-invalid")).toBe("false");
     expect(acknowledge.hasAttribute("aria-describedby")).toBe(false);
     await tick(el, "[data-test=acknowledge]", false);
     await tick(el, "[data-test=old-box-gone]");
-    expect(await summaryItems(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
+    expect(fieldMessages(el)).toEqual([ACKNOWLEDGE_PROBLEM]);
     await tick(el, "[data-test=acknowledge]");
-    expect(await summaryItems(el)).toEqual([]);
+    expect(fieldMessages(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("says nothing and leaves Restore working before the first press", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+    });
+    expect(await bottomOf(el)).toBe("");
+    expect(fieldMessages(el)).toEqual([]);
+    expect(q(el, "wt-form-error-summary")).toBeNull();
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("focuses the first unanswered question and holds Restore until the last is answered", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      liveUnknown: true,
+    });
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement).toBe(q(el, "[data-test=acknowledge]")),
+    );
+    await tick(el, "[data-test=acknowledge]");
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(true);
+    await tick(el, "[data-test=old-box-gone]");
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("shows the server's refusal beside Restore, leaves Restore working, and drops it on the next press", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: approvedView(),
+      errorMessage: "Cloud recovery is unavailable. Try again.",
+    });
+    expect(await bottomOf(el)).toBe("Cloud recovery is unavailable. Try again.");
+    expect(q(el, "[data-test=server-error]")).toBeNull();
+    expect(q(el, "[data-test=restore]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=restore]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+  });
+
+  it("shows a refusal of starting recovery in the bottom row and leaves Start working", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      errorMessage: "Cloud recovery is unavailable. Try again.",
+    });
+    expect(await bottomOf(el)).toBe("Cloud recovery is unavailable. Try again.");
+    expect(q(el, "[data-test=start]")!.hasAttribute("disabled")).toBe(false);
   });
 });
 
@@ -385,9 +445,10 @@ describe("Cloud restore screen in Spanish", () => {
     expect(q(el, "[data-test=restore]")!.textContent).toBe("Restaurar esta instantánea");
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await summaryItems(el)).toEqual([
+    expect(fieldMessages(el)).toEqual([
       "Confirma que el servidor anterior y los demás servidores que queden están detenidos, y que aceptas perder los cambios posteriores a esta instantánea.",
     ]);
+    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   });
 
   it("switches language live, keeping the acknowledgement already ticked", async () => {

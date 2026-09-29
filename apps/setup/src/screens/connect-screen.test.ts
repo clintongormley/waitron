@@ -24,6 +24,25 @@ async function type(el: SetupConnectScreen, field: string, value: string): Promi
   await el.updateComplete;
 }
 
+/** The one message beside Connect, as `wt-form-actions` shows it. */
+async function bottomOf(el: SetupConnectScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+/** Every alert in the screen and in its action row. */
+async function alerts(el: SetupConnectScreen): Promise<Element[]> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return [
+    ...el.shadowRoot!.querySelectorAll("[role=alert]"),
+    ...actions.shadowRoot!.querySelectorAll("[role=alert]"),
+  ];
+}
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
+
 const VALID: Record<string, string> = {
   primaryUrl: "https://waitron.local",
   personId: "op-1",
@@ -125,12 +144,8 @@ describe("setup-connect-screen", () => {
       q(el, "[data-test=connect]")!.click();
       await el.updateComplete;
       expect(events).toEqual([]);
-      expect(q(el, "[data-test=error]")).not.toBeNull();
-      const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
-        updateComplete: Promise<unknown>;
-      };
-      await summary.updateComplete;
-      expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+      expect(await bottomOf(el)).toBe(FIX_FIELDS);
+      expect(await alerts(el)).toHaveLength(1);
       expect(q(el, `[data-test=${field}]`)!.hasAttribute("invalid")).toBe(true);
     },
   );
@@ -142,17 +157,19 @@ describe("setup-connect-screen", () => {
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
     expect(events).toHaveLength(1);
-    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
   });
 
-  it("renders a routed-back server error banner when errorMessage is set (no client banner yet)", async () => {
+  it("shows a routed-back server error beside Connect as one alert, leaving Connect working", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       errorMessage: "Couldn't reach the primary server.",
     });
-    const banner = q(el, "[data-test=server-error]")!;
-    expect(banner.getAttribute("role")).toBe("alert");
-    expect(banner.textContent).toContain("reach the primary");
-    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("Couldn't reach the primary server.");
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
+    expect(await alerts(el)).toHaveLength(1);
+    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
   });
 
   it("renders exactly one role=alert (the client message) when a server error and a client error coincide", async () => {
@@ -161,29 +178,71 @@ describe("setup-connect-screen", () => {
     });
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
-    const summary = el.shadowRoot!.querySelector("wt-form-error-summary") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    const alerts = [
-      ...el.shadowRoot!.querySelectorAll("[role=alert]"),
-      ...summary.shadowRoot!.querySelectorAll("[role=alert]"),
-    ];
-    expect(alerts.length).toBe(1);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
-    expect(q(el, "[data-test=server-error]")).toBeNull();
+    expect(await alerts(el)).toHaveLength(1);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
   });
 
-  it("clears the client banner once the form is valid and Connect succeeds", async () => {
+  it("clears the client message once the form is valid and Connect succeeds", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
     const events = collect(host);
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await fillValid(el);
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(events).toHaveLength(1);
+  });
+
+  it("says nothing and leaves Connect working before the first press", async () => {
+    const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    await type(el, "primaryUrl", "");
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=primaryUrl]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on a failed press marks each blank field, focuses the first and disables Connect", async () => {
+    const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    await type(el, "primaryUrl", "https://waitron.local");
+    q(el, "[data-test=connect]")!.click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
+      "Check the admin login (person id).",
+    );
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
+    expect(q(el, "[data-test=totp]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    const personId = q(el, "[data-test=personId]")!;
+    expect(personId.shadowRoot!.activeElement).toBe(personId.shadowRoot!.querySelector("input"));
+    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks each change after a failed press, and Connect works again once every field is fixed", async () => {
+    const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
+    const events = collect(host);
+    q(el, "[data-test=connect]")!.click();
+    await el.updateComplete;
+
+    await type(el, "primaryUrl", "https://waitron.local");
+    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(true);
+
+    await type(el, "primaryUrl", " ");
+    expect(q(el, "[data-test=primaryUrl]")!.getAttribute("error")).toBe(
+      "Check the primary server address.",
+    );
+
+    await fillValid(el);
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=connect]")!.hasAttribute("disabled")).toBe(false);
+    q(el, "[data-test=connect]")!.click();
     expect(events).toHaveLength(1);
   });
 
@@ -201,14 +260,6 @@ describe("setup-connect-screen", () => {
 describe("setup-connect-screen in Spanish", () => {
   const text = (node: Element): string => node.textContent!.replace(/\s+/g, " ").trim();
 
-  async function summaryItems(el: SetupConnectScreen): Promise<string[]> {
-    const summary = q(el, "[data-test=error]") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => text(li));
-  }
-
   it("labels the form and explains a blank field in Spanish", async () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {});
@@ -220,10 +271,7 @@ describe("setup-connect-screen in Spanish", () => {
     await fillValid(el, { personId: "" });
     q(el, "[data-test=connect]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")!.getAttribute("heading")).toBe(
-      "Hay un problema con este formulario",
-    );
-    expect(await summaryItems(el)).toEqual(["Revisa el ID de persona del administrador."]);
+    expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
     expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe(
       "Revisa el usuario administrador (ID de persona).",
     );

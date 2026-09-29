@@ -29,6 +29,15 @@ async function type(el: SetupAdminScreen, field: string, value: string): Promise
   await el.updateComplete;
 }
 
+/** The one message beside Next, as `wt-form-actions` shows it. */
+async function bottomOf(el: SetupAdminScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
+
 afterEach(() => {
   cleanupWidgets();
   setLocale("en-GB");
@@ -109,12 +118,12 @@ describe("setup-admin-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(q(el, "[data-test=email]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(false);
   });
 
-  it("blocks Next and shows a banner when a field is blank", async () => {
+  it("blocks Next and announces the message beside it when a field is blank", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
     await type(el, "displayName", "Alba");
@@ -122,12 +131,9 @@ describe("setup-admin-screen", () => {
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
-    const summary = q(el, "[data-test=error]") as HTMLElement & {
-      updateComplete: Promise<unknown>;
-    };
-    await summary.updateComplete;
-    expect(summary.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
     expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=pin]")!.hasAttribute("invalid")).toBe(true);
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(false);
@@ -145,12 +151,12 @@ describe("setup-admin-screen", () => {
     expect(q(el, "[data-test=displayName]")!.hasAttribute("invalid")).toBe(true);
   });
 
-  it("clears the banner once the fields are filled and Next succeeds", async () => {
+  it("clears the message beside Next once the fields are filled and Next succeeds", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(host);
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
     await type(el, "firstNames", "Alba");
     await type(el, "lastNames", "Ramos");
     await type(el, "displayName", "Alba");
@@ -159,7 +165,7 @@ describe("setup-admin-screen", () => {
     await type(el, "pin", "1234");
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(q(el, "[data-test=error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
     expect(events.some((e) => e.kind === "goto")).toBe(true);
   });
 
@@ -310,20 +316,12 @@ it("stops following the names once the display name is edited by hand", async ()
   expect((q(el, "[data-test=displayName]") as HTMLElement & { value: string }).value).toBe("Clint");
 });
 
-async function summaryItems(el: SetupAdminScreen): Promise<string[]> {
-  const summary = q(el, "[data-test=error]") as
-    (HTMLElement & { updateComplete: Promise<unknown> }) | null;
-  if (summary === null) return [];
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim());
-}
-
-// The summary is read as rendered words, so a missing label ("Enter your undefined.") fails here.
+// The messages are read as rendered words, so a missing label ("Enter your undefined.") fails here.
 it.each([
-  ["first", "firstNames", "lastNames", "Enter your first name."],
-  ["last", "lastNames", "firstNames", "Enter your last name."],
+  ["first", "firstNames", "lastNames", "Enter your first name(s)."],
+  ["last", "lastNames", "firstNames", "Enter your last name(s)."],
 ] as const)(
-  "does not advance without a %s name, and names it in the summary",
+  "does not advance without a %s name, and says so under it and beside Next",
   async (_which, blank, filled, message) => {
     const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
     const events = collect(el);
@@ -335,10 +333,10 @@ it.each([
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     expect(events).toEqual([]);
-    expect(q(el, "[data-test=error]")).not.toBeNull();
     expect(q(el, `[data-test=${blank}]`)!.hasAttribute("invalid")).toBe(true);
     expect(q(el, `[data-test=${filled}]`)!.hasAttribute("invalid")).toBe(false);
-    expect(await summaryItems(el)).toEqual([message]);
+    expect(q(el, `[data-test=${blank}]`)!.getAttribute("error")).toBe(message);
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
   },
 );
 
@@ -423,7 +421,7 @@ it("labels the account form and names a blank field in Spanish", async () => {
   await type(el, "pin", "1234");
   q(el, "[data-test=next]")!.click();
   await el.updateComplete;
-  expect(await summaryItems(el)).toEqual(["Introduce tus apellidos."]);
+  expect(await bottomOf(el)).toBe("Corrige los campos marcados para continuar.");
   expect(q(el, "[data-test=lastNames]")!.getAttribute("error")).toBe("Introduce tus apellidos.");
 });
 
@@ -437,4 +435,68 @@ it("switches language while mounted and keeps what was typed", async () => {
   expect((q(el, "[data-test=email]") as HTMLElement & { value: string }).value).toBe(
     "alba@example.com",
   );
+});
+
+describe("setup-admin-screen form messages", () => {
+  const next = (el: SetupAdminScreen) => q(el, "[data-test=next]")!;
+
+  async function fillAll(el: SetupAdminScreen): Promise<void> {
+    await type(el, "firstNames", "Alba");
+    await type(el, "lastNames", "Ramos");
+    await type(el, "displayName", "Alba");
+    await type(el, "email", "alba@example.com");
+    await type(el, "password", "correct horse");
+    await type(el, "pin", "1234");
+  }
+
+  it("says nothing and leaves Next working before the first press", async () => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    expect(await bottomOf(el)).toBe("");
+    expect(q(el, "[data-test=firstNames]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=firstNames]")!.hasAttribute("invalid")).toBe(false);
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    await type(el, "firstNames", "");
+    expect(q(el, "[data-test=firstNames]")!.getAttribute("error")).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on a failed press marks each blank field, says so beside Next, focuses the first and disables Next", async () => {
+    const { el } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    await type(el, "firstNames", "Alba");
+    await type(el, "displayName", "Alba");
+    next(el).click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(q(el, "[data-test=lastNames]")!.getAttribute("error")).toBe("Enter your last name(s).");
+    expect(q(el, "[data-test=email]")!.getAttribute("error")).toBe("Enter your email.");
+    expect(q(el, "[data-test=firstNames]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe(FIX_FIELDS);
+    const lastNames = q(el, "[data-test=lastNames]")!;
+    expect(lastNames.shadowRoot!.activeElement).toBe(lastNames.shadowRoot!.querySelector("input"));
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks each change after a failed press, and Next works again once every field is fixed", async () => {
+    const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {});
+    const events = collect(host);
+    next(el).click();
+    await el.updateComplete;
+
+    await type(el, "firstNames", "Alba");
+    expect(q(el, "[data-test=firstNames]")!.getAttribute("error")).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(true);
+
+    await type(el, "firstNames", " ");
+    expect(q(el, "[data-test=firstNames]")!.getAttribute("error")).toBe(
+      "Enter your first name(s).",
+    );
+
+    await fillAll(el);
+    expect(q(el, "[data-test=pin]")!.getAttribute("error")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(next(el).hasAttribute("disabled")).toBe(false);
+    next(el).click();
+    expect(events.map((e) => e.kind)).toEqual(["patch", "goto"]);
+  });
 });

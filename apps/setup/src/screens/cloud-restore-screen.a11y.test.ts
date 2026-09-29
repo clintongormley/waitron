@@ -6,6 +6,15 @@ import "./cloud-restore-screen.js";
 
 afterEach(cleanupWidgets);
 
+/** The message beside the primary action, which `wt-form-actions` draws in its own shadow root. */
+async function bottomMessage(el: HTMLElement): Promise<string | undefined> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim();
+}
+
 describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (%s)", (theme) => {
   it("renders an approved snapshot without horizontal overflow or axe violations", async () => {
     await page.viewport(375, 812);
@@ -34,7 +43,7 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
     await expectNoA11yViolations(host);
   });
 
-  it("has no axe violations with the validation summary shown", async () => {
+  it("has no axe violations with the field marked and the message beside Restore", async () => {
     await page.viewport(375, 812);
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
       "setup-cloud-restore-screen",
@@ -58,7 +67,7 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
     );
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).not.toBeNull();
+    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
     expect(el.shadowRoot!.querySelector("#acknowledge-error")).not.toBeNull();
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(375);
     await expectNoA11yViolations(host);
@@ -86,6 +95,7 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
     el.view = { ...el.view, state: "expired" };
     el.errorMessage = "Cloud recovery is unavailable. Try again.";
     await el.updateComplete;
+    expect(await bottomMessage(el)).toBe("Cloud recovery is unavailable. Try again.");
     await expectNoA11yViolations(host);
   });
 
@@ -119,7 +129,7 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("#old-box-gone-error")).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("wt-form-error-summary")).not.toBeNull();
+      expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
       await expectNoA11yViolations(host);
       cleanupWidgets();
     }

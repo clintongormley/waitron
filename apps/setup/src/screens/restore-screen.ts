@@ -1,9 +1,8 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import {
@@ -13,7 +12,7 @@ import {
 } from "../events.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
-import { oldBoxProblem, oldBoxQuestion } from "./old-box-question.js";
+import { oldBoxQuestion } from "./old-box-question.js";
 
 /**
  * The warning asks about any server still RUNNING, never "a primary or a mirror": an adopted mirror
@@ -46,7 +45,9 @@ export class SetupRestoreScreen extends LitElement {
   @state() private environment: "production" | "preproduction" = "production";
   @state() private acknowledged = false;
   @state() private oldBoxGone = false;
-  @state() private showError = false;
+  @state() private attempted = false;
+  /** The owner pressed Restore after `errorMessage` arrived, so it no longer applies. */
+  @state() private refusalDismissed = false;
 
   constructor() {
     super();
@@ -54,6 +55,7 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("errorMessage")) this.refusalDismissed = false;
     if (changed.has("request") && this.request !== undefined) {
       this.artifact = this.request.artifact;
       this.recoveryKey = this.request.recoveryKey;
@@ -86,19 +88,25 @@ export class SetupRestoreScreen extends LitElement {
     return this.#askingOldBox && !this.oldBoxGone;
   }
 
-  #restore(): void {
-    if (
+  get #incomplete(): boolean {
+    return (
       this.artifact === undefined ||
       this.recoveryKey === "" ||
       !this.acknowledged ||
       this.#oldBoxUnanswered
-    ) {
-      this.showError = true;
+    );
+  }
+
+  #restore(): void {
+    this.attempted = true;
+    this.refusalDismissed = true;
+    const artifact = this.artifact;
+    if (artifact === undefined || this.#incomplete) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.showError = false;
     dispatchRestoreRequested(this, {
-      artifact: this.artifact,
+      artifact,
       recoveryKey: this.recoveryKey,
       environment: this.environment,
       oldBoxGone: this.#askingOldBox && this.oldBoxGone,
@@ -106,6 +114,11 @@ export class SetupRestoreScreen extends LitElement {
   }
 
   override render(): TemplateResult {
+    const fieldsInvalid = this.attempted && this.#incomplete;
+    const bottom = [
+      ...(this.errorMessage !== undefined && !this.refusalDismissed ? [this.errorMessage] : []),
+      ...(fieldsInvalid ? [t("restore.fix_fields")] : []),
+    ].join(" ");
     return html`
       <h1>${t("restore.heading")}</h1>
       <p>
@@ -126,7 +139,7 @@ export class SetupRestoreScreen extends LitElement {
           name="backup"
           type="file"
           required
-          aria-invalid=${this.showError && this.artifact === undefined ? "true" : "false"}
+          aria-invalid=${this.attempted && this.artifact === undefined ? "true" : "false"}
           aria-describedby="artifact-error"
           data-test="artifact"
           @change=${(event: Event) => {
@@ -134,7 +147,7 @@ export class SetupRestoreScreen extends LitElement {
           }}
         />
       </label>
-      ${this.showError && this.artifact === undefined ? html`<p class="error" id="artifact-error">${t("restore.backup_file_missing")}</p>` : nothing}
+      ${this.attempted && this.artifact === undefined ? html`<p class="error" id="artifact-error">${t("restore.backup_file_missing")}</p>` : nothing}
       <label class="field">
         ${t("restore.recovery_key")} <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label=${t("restore.recovery_key_help_label")}
@@ -145,7 +158,7 @@ export class SetupRestoreScreen extends LitElement {
           type="password"
           autocomplete="off"
           required
-          aria-invalid=${this.showError && this.recoveryKey === "" ? "true" : "false"}
+          aria-invalid=${this.attempted && this.recoveryKey === "" ? "true" : "false"}
           aria-describedby="recovery-key-error"
           data-test="recovery-key"
           .value=${this.recoveryKey}
@@ -154,7 +167,7 @@ export class SetupRestoreScreen extends LitElement {
           }}
         />
       </label>
-      ${this.showError && this.recoveryKey === "" ? html`<p class="error" id="recovery-key-error">${t("restore.recovery_key_missing")}</p>` : nothing}
+      ${this.attempted && this.recoveryKey === "" ? html`<p class="error" id="recovery-key-error">${t("restore.recovery_key_missing")}</p>` : nothing}
       <label class="field">
         ${t("restore.environment")} <span aria-hidden="true">*</span>
         <wt-help-tooltip aria-label=${t("restore.environment_help_label")}
@@ -183,7 +196,7 @@ export class SetupRestoreScreen extends LitElement {
           name="no-running-server"
           type="checkbox"
           required
-          aria-invalid=${this.showError && !this.acknowledged ? "true" : "false"}
+          aria-invalid=${this.attempted && !this.acknowledged ? "true" : "false"}
           aria-describedby="acknowledge-error"
           data-test="acknowledge"
           .checked=${this.acknowledged}
@@ -196,28 +209,17 @@ export class SetupRestoreScreen extends LitElement {
           >${t("restore.acknowledge_help")}</wt-help-tooltip
         >
       </label>
-      ${this.showError && !this.acknowledged ? html`<p class="error" id="acknowledge-error">${t("restore.acknowledge_missing")}</p>` : nothing}
+      ${this.attempted && !this.acknowledged ? html`<p class="error" id="acknowledge-error">${t("restore.acknowledge_missing")}</p>` : nothing}
       ${oldBoxQuestion({
         liveSince: this.#askingOldBox ? this.liveSince : undefined,
         liveUnknown: this.#askingOldBox && this.liveUnknown,
         checked: this.oldBoxGone,
-        invalid: this.showError && this.#oldBoxUnanswered,
+        invalid: this.attempted && this.#oldBoxUnanswered,
         onChange: (checked) => {
           this.oldBoxGone = checked;
         },
       })}
-      ${
-        this.showError
-          ? html`<wt-form-error-summary
-              data-test="error"
-              heading=${t("restore.error_heading")}
-              .errors=${[this.artifact === undefined ? t("restore.backup_file_missing") : "", this.recoveryKey === "" ? t("restore.recovery_key_missing") : "", !this.acknowledged ? t("restore.acknowledge_missing") : "", this.#oldBoxUnanswered ? oldBoxProblem() : ""].filter(Boolean)}
-            ></wt-form-error-summary>`
-          : this.errorMessage === undefined
-            ? html``
-            : html`<p class="error" role="alert" data-test="server-error">${this.errorMessage}</p>`
-      }
-      <wt-form-actions>
+      <wt-form-actions .error=${bottom}>
         <wt-button
           variant="ghost"
           slot="cancel"
@@ -225,7 +227,11 @@ export class SetupRestoreScreen extends LitElement {
           @click=${() => dispatchSetupGoto(this, "role")}
           >${t("restore.back")}</wt-button
         >
-        <wt-button variant="primary" data-test="restore" @click=${() => this.#restore()}
+        <wt-button
+          variant="primary"
+          data-test="restore"
+          ?disabled=${fieldsInvalid}
+          @click=${() => this.#restore()}
           >${t("restore.submit")}</wt-button
         >
       </wt-form-actions>

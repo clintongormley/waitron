@@ -28,7 +28,7 @@ export const finishEn = {
   "reset.check.password": "Check the admin password.",
   "reset.rejected":
     "That person ID and password are not the admin login used to connect this server. Check them and try again.",
-  "reset.error_heading": "There is a problem with this form",
+  "reset.fix_fields": "Correct the highlighted fields to continue.",
   "reset.back": "Back",
   "reset.submit": "Reset this server",
   "reset.busy": "Resetting…",
@@ -100,7 +100,7 @@ export const finishEs: Record<keyof typeof finishEn, string> = {
   "reset.check.password": "Revisa la contraseña del administrador.",
   "reset.rejected":
     "Ese ID de persona y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
-  "reset.error_heading": "Hay un problema con este formulario",
+  "reset.fix_fields": "Corrige los campos marcados para continuar.",
   "reset.back": "Volver",
   "reset.submit": "Restablecer este servidor",
   "reset.busy": "Restableciendo…",
