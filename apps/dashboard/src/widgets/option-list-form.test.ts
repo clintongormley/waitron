@@ -1029,7 +1029,7 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("clears a field's refusal when that field changes, and Save works again", async () => {
+it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { kitchenName: "Too long." } });
   expect(saveOf(el).disabled).toBe(false);
 

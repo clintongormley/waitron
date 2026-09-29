@@ -675,7 +675,7 @@ export class ExtraListForm extends LitElement {
 
   override render() {
     const { errors, fieldKeys } = this.#messages();
-    // The items table shows its own message, even one that holds nothing back.
+    // The items table shows its own message, even one that marks no field.
     const bottom = [
       ...Object.entries(errors)
         .filter(([key, message]) => message && key !== "items" && !fieldKeys.has(key))

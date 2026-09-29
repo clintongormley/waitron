@@ -594,14 +594,17 @@ does (owner rule, 2026-09-29).
   broken again gets it back, and the primary action stays disabled while any field still fails the
   form's own checks. When the last one is fixed, the action works again and the bottom message goes;
 - an error that comes back from a request — the server refused, a conflict, the server could not be
-  reached — leaves the action ENABLED, so the operator can always try again. A refusal whose code or
+  reached — never disables the action by itself. When handling it empties or reveals a required
+  field, that field's own check holds the action until the field is filled. A refusal whose code or
   params name a field the form shows puts its sentence under that field, and stays there until the
   operator changes that field or submits again. A refusal that names no field the form shows (a
   network failure, a conflict, a field in a language the form does not show) goes in the bottom
   message instead, until the operator submits again;
-- the bottom message is the refusal's own sentence when there is one; otherwise the form's generic
-  sentence, equivalent to "Correct the highlighted fields to continue." Both show, one after the
-  other, when a refusal and field errors meet;
+- the bottom message is the refusal's own sentence when the refusal names no field the form shows.
+  When a field is marked — by the form's own checks, or by a refusal placed under it — the bottom
+  message is the form's generic sentence, equivalent to "Correct the highlighted fields to
+  continue."; a field's own sentence is never repeated at the bottom. A refusal that names no field
+  and a marked field together show both, one after the other;
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
   focus lands on the field;
 - reopening or resetting a form starts it again: no messages, the action enabled.
@@ -632,7 +635,7 @@ html`
   ></wt-input>
   <wt-form-actions .error=${bottomMessage}>
     <wt-button slot="cancel" variant="secondary">${t("action.cancel")}</wt-button>
-    <wt-button variant="primary" ?disabled=${attempted && hasFieldErrors}>
+    <wt-button variant="primary" ?disabled=${attempted && failsOwnChecks}>
       ${t("action.continue")}
     </wt-button>
   </wt-form-actions>

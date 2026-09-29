@@ -709,7 +709,7 @@ it("re-checks every change after a failed submission, and Save works again once 
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
-it("clears a field's refusal when that field changes, and Save works again", async () => {
+it("keeps a field's refusal until that field changes, with Save working throughout", async () => {
   const message = codeMessage("category.parent_cycle");
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,

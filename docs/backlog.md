@@ -3674,9 +3674,11 @@ ongoing overhaul listed at the top of Track A.
   `docs/developers/design-system.md` → Forms states the rule. **The owner restated the rule on
   2026-09-29:** the button works until the first press; a form validation error (a field the form
   itself finds wrong) keeps it disabled until fixed; an error that comes back from a request (the
-  server refused, or it could not be reached) leaves it enabled. **Done by C54:** no form outside the
-  till lets a request's refusal disable its action any more, a refusal that names a shown field is
-  said under that field, and `docs/developers/design-system.md` → Forms and CLAUDE.md §3 state it. Deliberate exceptions in
+  server refused, or it could not be reached) leaves it enabled. **Done by C54:** in the forms it surveyed — the
+  dashboard, the setup wizard, and the adjustments, venue-service and media module screens — a
+  request's refusal no longer disables the action by itself (when handling it empties or reveals a
+  required field, that field's own check holds the action until the field is filled), a refusal
+  that names a shown field is said under that field, and `docs/developers/design-system.md` → Forms and CLAUDE.md §3 state it. Deliberate exceptions in
   `apps/dashboard`: the add-to-menus dialog (`apps/dashboard/src/widgets/add-to-menus.ts`) keeps its
   list of places that failed, and its menu-load error, at the top of the dialog; the backups panel's
   refusal paragraph (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays directly under the
@@ -3773,17 +3775,27 @@ ongoing overhaul listed at the top of Track A.
   and the cause is not established. (e) and (f) are observations from the implementer's session.
 
 - **Request refusals that still land in the bottom message, or under a field in generic words —
-  OPEN (left by C54).** C54 made every form outside the till keep its action working after a
-  request's refusal and put a refusal naming a shown field under that field. What it left, each
-  because the form has no single field to put it under or it would widen the item: (1) the product
+  OPEN (left by C54).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
+  adjustments, venue-service and media module screens) it kept the action working after a request's
+  refusal and put a refusal naming a shown field under that field. What it left, each
+  for the reason given with it: (1) the product
   editor and the venue operations editors put a refused field's message under it in their generic
   words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts` `#rejectedField`;
   `venue.field_refused` in `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not
-  the refusal's own sentence; (2) controls with no place for an error keep their refusal in the
+  the refusal's own sentence, and the setup screens disagree on what goes under a refused field
+  (read, not run): the setup connect and reset screens show the field's own "Check the …" sentence
+  and the refusal's own sentence appears nowhere (`apps/setup/src/setup-app.ts` sets
+  `connectError` and `resetError` only when no field was placed; `connect-screen.ts` `#field`,
+  `reset-screen.ts` `CHECK`), while the restore and bucket-restore screens show the shell's refusal
+  sentence under the field (`restore-screen.ts` `#fieldError`, `restore-bucket-screen.ts`
+  `kitError`) — for restore that is always the whole-form "The backup could not be staged. Check the
+  file, key and environment. ({code})" with the raw code, and for bucket-restore the sentence
+  `describeBucketRefusal` picks: `shell.bucket.kit_damaged` for `backup.stream_kit_invalid` with
+  reason `encoding` or `shape`, otherwise the code's own sentence when `BUCKET_ERROR_MESSAGES` has
+  one, else "The copy could not be restored. ({code})"; (2) controls with no place for an error keep their refusal in the
   bottom message — `wt-switch` (`active` on the ingredient, extras, options and menu-price forms;
   `available` on the product editor), the allergen and dietary-origin pickers on the ingredient
-  form, the purchase form's VAT regime select, and the profile screen's language select
-  (`locale.unsupported`); (3) refusals naming two fields or a row the refusal does not number stay
+  form, and the purchase form's VAT regime select; (3) refusals naming two fields or a row the refusal does not number stay
   at the bottom: `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate,
   base, tax or type, a variant price on the menu price window, `hours.N` on venue operations,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
@@ -3798,8 +3810,34 @@ ongoing overhaul listed at the top of Track A.
   point (4) of the entry above); (8) on the add-person and edit-person forms `profile.invalid` reads
   "Check your profile details", which is about someone else's details there; (9) after a refusal
   under a field the bottom message still reads "Correct the highlighted fields to continue" while
-  the action works — kept as it was. **Next action:** the owner decides which of (1)–(9) are worth
-  doing; (4) and (5) look like defects.
+  the action works — kept as it was; (10) the bookings form was not in C54's survey (read, not run):
+  a save refusal becomes the screen's `errorKey` (`packages/bookings/src/dashboard/bookings-screen.ts`
+  `#onCreate`/`#onUpdate`) and shows as a paragraph on the screen outside the dialog, never under a
+  field — including those naming one, `management.request_invalid` with a `field`, `booking.invalid`
+  with `partySize`, and `table.not_found` with `tableId` for an inactive table (`table.inactive`
+  comes only from seating); the form's Save is disabled only while a save is in flight (`busy`), so
+  no refusal disables it, and its own check shows one paragraph in the dialog rather than a message
+  under the field, and the payment-provider forms were not in C54's survey either (read, not
+  run): the connect and add-reader forms in `packages/payments-stripe` and `packages/payments-sumup`
+  (`stripe-connect-form.ts`, `stripe-add-reader.ts`, `sumup-connect-form.ts`, `sumup-add-reader.ts`)
+  put a refused request's message in the bottom message, except that SumUp's connect form answers
+  a key spanning several merchants by showing a merchant picker, and none of them disables its
+  action on a refusal; (11) the backup screen's configuration export drops the refusal's code in a
+  catch-all (`apps/dashboard/src/screens/backup-screen.ts` `#exportConfiguration`), so a
+  `management.request_invalid` naming `passphrase` would read only "The configuration export could not be created." at the bottom — read,
+  not run, as unreachable from this form, because the client refuses a passphrase shorter than 12
+  (`MIN_KEY_LENGTH`) before sending and the server's check is the same `length < 12`
+  (`apps/server/src/configuration-export-api.ts`); (12) the profile screen now puts two refusals
+  under their field whose sentences do not fit there: `account_action.invalid` under the emailed
+  code reads as a link that is invalid or has expired, and `locale.unsupported` has no entry in
+  `apps/dashboard/src/i18n/codes.ts`, so the language select shows the generic fallback sentence;
+  (13) the categories screen's change-main-category dialog draws its message above the picker (it
+  did before C54), and since C54 that message reads "Correct the highlighted fields to continue."
+  when a refusal is placed under the picker — a summary at the top, which Forms forbids; moving it
+  beside the action (inside `wt-form-actions`' shadow root) changes two assertions older than
+  C54 that read `p[role="alert"]` from the dialog (`apps/dashboard/src/screens/categories-screen.test.ts`),
+  so it waits for the owner. **Next action:** the owner decides which of (1)–(13) are worth doing;
+  (4), (5) and (13) look like defects.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

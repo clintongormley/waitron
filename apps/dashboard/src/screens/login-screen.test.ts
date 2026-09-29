@@ -2611,7 +2611,7 @@ describe("login-screen: errors beside the action, not above the form", () => {
     },
   );
 
-  it("shows a refused authenticator code during the passkey offer under the code field", async () => {
+  it("shows a refused authenticator code during the passkey offer under the code field, waiting for a code in the field it reveals", async () => {
     const { el } = await mountPasskeyOffer({
       passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });
@@ -2619,11 +2619,34 @@ describe("login-screen: errors beside the action, not above the form", () => {
     await flush(el);
     expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
     expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-    expect(await nativeDisabled(el, "setup-passkey")).toBe(false);
+    expect(await nativeDisabled(el, "setup-passkey")).toBe(true);
     input(el, "one-time-code", "654321");
     await el.updateComplete;
     expect(field(el, "one-time-code").error).toBe("");
-    expect(action(el, "setup-passkey").disabled).toBe(false);
+    expect(await nativeDisabled(el, "setup-passkey")).toBe(false);
+  });
+
+  it("keeps the action waiting on a field emptied while a request was out, even when the refusal names it", async () => {
+    const answer = deferred<{ personId: string }>();
+    const { el } = await signInWithPassword({
+      login: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockReturnValue(answer.promise),
+    });
+    click(el, "submit");
+    await el.updateComplete;
+    input(el, "password", "");
+    await el.updateComplete;
+    answer.reject({ code: "password.invalid" });
+    await flush(el);
+    expect(field(el, "password").error).toBe(codeMessage("password.invalid"));
+    expect(await nativeDisabled(el, "submit")).toBe(true);
+
+    input(el, "password", "another password");
+    await el.updateComplete;
+    expect(field(el, "password").error).toBe("");
+    expect(await nativeDisabled(el, "submit")).toBe(false);
   });
 
   it.each([

@@ -186,6 +186,18 @@ export class ProfileScreen extends LitElement {
         display: grid;
         gap: var(--wt-space-2);
       }
+      .select-field {
+        display: grid;
+        gap: var(--wt-space-1);
+      }
+      select[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
+      .field-error {
+        margin: 0;
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-danger);
+      }
       svg {
         width: var(--wt-font-size-lg);
         height: var(--wt-font-size-lg);
@@ -339,6 +351,7 @@ export class ProfileScreen extends LitElement {
 
   #changeLocale(event: Event): void {
     this.fields = { ...this.fields, locale: (event.target as HTMLSelectElement).value };
+    if ("locale" in this.requestRefused) this.requestRefused = {};
   }
   #input(
     field: Field,
@@ -425,7 +438,7 @@ export class ProfileScreen extends LitElement {
     const shown = new Set<Field>();
     const add = (...fields: Field[]) => fields.forEach((field) => shown.add(field));
     if (this.mode === "details")
-      add("firstNames", "lastNames", "displayName", "email", "telephone");
+      add("firstNames", "lastNames", "displayName", "email", "telephone", "locale");
     if (this.needsCredentials)
       add("currentPassword", ...(this.profile?.hasTotp ? ["totp" as const] : []));
     if (this.mode === "passkey") add("passkeyName");
@@ -470,13 +483,10 @@ export class ProfileScreen extends LitElement {
   }
 
   /** Each shown field's message, the one message beside the action, and whether the action waits
-   * for a field to be corrected. A request refusal never makes it wait. */
+   * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Partial<Record<Field, string>>; bottom: string; blocked: boolean } {
-    const errors = {
-      ...(this.attempted ? this.#validate() : {}),
-      ...this.refused,
-      ...this.requestRefused,
-    };
+    const own = { ...(this.attempted ? this.#validate() : {}), ...this.refused };
+    const errors = { ...own, ...this.requestRefused };
     const shown = this.#shownFields();
     const fields: Partial<Record<Field, string>> = {};
     const messages = this.error === "" ? [] : [this.error];
@@ -489,7 +499,7 @@ export class ProfileScreen extends LitElement {
     return {
       fields,
       bottom: [...new Set(messages), ...(marked ? [t("form.fix_fields")] : [])].join(" "),
-      blocked: Object.keys(fields).some((key) => !(key in this.requestRefused)),
+      blocked: (Object.keys(own) as Field[]).some((key) => shown.has(key)),
     };
   }
 
@@ -611,7 +621,11 @@ export class ProfileScreen extends LitElement {
                       ? "password"
                       : code === "pin.too_short"
                         ? "pin"
-                        : undefined;
+                        : code === "locale.unsupported"
+                          ? "locale"
+                          : code === "account_action.invalid" && this.mode === "email"
+                            ? "setupCode"
+                            : undefined;
       if (field !== undefined && this.#shownFields().has(field)) {
         this.requestRefused = { [field]: message };
         this.#focusFirstInvalid();
@@ -896,16 +910,20 @@ export class ProfileScreen extends LitElement {
       ${
         this.mode === "details"
           ? html`${this.#input("firstNames", "person.first_names", "text", "given-name")}${this.#input("lastNames", "person.last_names", "text", "family-name")}${this.#input("displayName", "person.display_name", "text", "nickname")}${this.#input("email", "login.email", "email", "email")}${this.#input("telephone", "person.telephone", "text", "tel", false)}
-              <label
-                >${t("profile.language")} *<select
-                  name="locale"
-                  required
-                  .value=${this.fields.locale}
-                  @change=${(event: Event) => this.#changeLocale(event)}
-                >
-                  ${this.locales.map((locale) => html`<option value=${locale.code} ?selected=${locale.code === this.fields.locale}>${locale.label}</option>`)}
-                </select></label
-              >`
+              <div class="select-field">
+                <label
+                  >${t("profile.language")} *<select
+                    name="locale"
+                    required
+                    aria-invalid=${this.#fieldErrors.locale ? "true" : "false"}
+                    aria-describedby=${this.#fieldErrors.locale ? "locale-error" : nothing}
+                    .value=${this.fields.locale}
+                    @change=${(event: Event) => this.#changeLocale(event)}
+                  >
+                    ${this.locales.map((locale) => html`<option value=${locale.code} ?selected=${locale.code === this.fields.locale}>${locale.label}</option>`)}
+                  </select></label
+                >${this.#fieldErrors.locale ? html`<p class="field-error" id="locale-error">${this.#fieldErrors.locale}</p>` : nothing}
+              </div>`
           : nothing
       }
       ${

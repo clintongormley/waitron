@@ -322,7 +322,7 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
   });
 
-  it("withdraws a refused login from both fields once either changes, and the reset works again", async () => {
+  it("withdraws a refused login from both fields once either changes, and the reset then sends the new login", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
     await fillValid(el);

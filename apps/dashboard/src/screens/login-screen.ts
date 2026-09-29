@@ -328,8 +328,7 @@ export class LoginScreen extends LitElement {
   }
 
   /** Each shown field's message, the one message beside the action, and whether the action waits
-   * for a field to be corrected. A request refusal never makes it wait, even over the field it
-   * cleared. */
+   * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Record<string, string>; bottom: string; blocked: boolean } {
     const errors = this.#errors();
     const shown = this.#shownFields();
@@ -346,7 +345,7 @@ export class LoginScreen extends LitElement {
     return {
       fields,
       bottom: [...new Set(messages), ...(marked ? [t("form.fix_fields")] : [])].join(" "),
-      blocked: invalid.some((key) => shown.has(key) && key !== this.refusalField),
+      blocked: invalid.some((key) => shown.has(key)),
     };
   }
 

@@ -556,7 +556,7 @@ export class OptionListForm extends LitElement {
   override render() {
     const { errors, fieldKeys } = this.#messages();
     const byLabel = this.#errorsByLabel(errors);
-    // The options table shows its own message, even one that holds nothing back.
+    // The options table shows its own message, even one that marks no field.
     const bottom = [
       ...Object.entries(errors)
         .filter(([key, message]) => message && key !== "labels" && !fieldKeys.has(key))

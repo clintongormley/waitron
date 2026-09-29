@@ -2190,6 +2190,100 @@ it.each([
   expect(picker.error).toBe("");
 });
 
+/** The refused picker holds focus when its inner trigger, the control marked invalid, does. */
+function holdsFocus(picker: HTMLElement): boolean {
+  const trigger = picker.shadowRoot!.querySelector('[aria-invalid="true"]');
+  return trigger !== null && picker.shadowRoot!.activeElement === trigger;
+}
+/** Every alert in the dialog but the delete preview's standing warning. */
+const alertTexts = (dialog: Element) =>
+  [...dialog.querySelectorAll('[role="alert"]:not([data-test="delete-warning"])')].map((node) =>
+    node.textContent!.trim(),
+  );
+
+it.each([
+  [{ code: "management.request_invalid", params: { field: "primaryCategoryId" } }],
+  [{ code: "category.not_found", params: { categoryId: "food" } }],
+])(
+  "says a main-category refusal once, under the focused picker, and drops it everywhere when the picker changes",
+  async (refusal) => {
+    const { el, api } = await mount();
+    api.setMainCategory.mockRejectedValueOnce(refusal);
+    await openProducts(el, "food");
+    const dialog = await openMainCategory(el, false);
+    const save = dialog.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      '[data-test="save-main-category"]',
+    )!;
+    save.click();
+    const picker = mainCategoryCombobox(el) as ReturnType<typeof mainCategoryCombobox> & {
+      error: string;
+    };
+    await vi.waitFor(() => expect(picker.error).toBe(codeMessage(refusal.code)));
+    await el.updateComplete;
+    expect(alertTexts(dialog)).toEqual([t("form.fix_fields")]);
+    await vi.waitFor(() => expect(holdsFocus(picker)).toBe(true));
+    await save.updateComplete;
+    expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    picker.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(picker.error).toBe("");
+    expect(alertTexts(dialog)).toEqual([]);
+    await save.updateComplete;
+    expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+  },
+);
+
+it.each([
+  ["category.reassign_invalid", { field: "childrenTo" }, "children-to"],
+  ["management.request_invalid", { field: "productsTo" }, "products-to"],
+  ["category.not_found", { categoryId: "drink" }, "children-to"],
+])(
+  "says a delete refusal %s once, under the focused picker, and drops it everywhere when that picker changes",
+  async (code, params, name) => {
+    const { el, api } = await mount();
+    api.getCategoryDependants.mockResolvedValue(everything);
+    api.deleteCategory.mockRejectedValueOnce({ code, params });
+    const { dialog, picker, remove } = await openFoodDelete(el);
+    if (code === "category.not_found") {
+      picker("children-to").dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "drink" }, bubbles: true, composed: true }),
+      );
+      await el.updateComplete;
+    }
+    remove.click();
+    await vi.waitFor(() => expect(picker(name).error).toBe(codeMessage(code)));
+    await el.updateComplete;
+    expect(alertTexts(dialog)).toEqual([t("form.fix_fields")]);
+    await vi.waitFor(() => expect(holdsFocus(picker(name))).toBe(true));
+    await remove.updateComplete;
+    expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+    picker(name).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    expect(picker(name).error).toBe("");
+    expect(alertTexts(dialog)).toEqual([]);
+    await remove.updateComplete;
+    expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
+  },
+);
+
+it("keeps a delete refusal that names no picker in the dialog's alert", async () => {
+  const { el, api } = await mount();
+  api.getCategoryDependants.mockResolvedValue(everything);
+  api.deleteCategory.mockRejectedValueOnce({
+    code: "category.not_found",
+    params: { categoryId: "food" },
+  });
+  const { dialog, picker, remove } = await openFoodDelete(el);
+  remove.click();
+  await vi.waitFor(() => expect(alertTexts(dialog)).toEqual([codeMessage("category.not_found")]));
+  expect(picker("products-to").error).toBe("");
+  expect(picker("children-to").error).toBe("");
+});
+
 it("retries a failed load from the Retry button", async () => {
   const fx = apiFixture();
   fx.api.listCategories.mockRejectedValueOnce(new Error("offline"));

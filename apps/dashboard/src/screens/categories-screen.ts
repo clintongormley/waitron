@@ -5,6 +5,7 @@ import { keyed } from "lit/directives/keyed.js";
 import {
   UrlStateController,
   baseStyles,
+  focusFirstInvalid,
   isHexColor,
   selectStyles,
   setContentLanguages,
@@ -317,7 +318,7 @@ export class CategoriesScreen extends LitElement {
       if (this.selected === this.deleting.id) this.selected = null;
       this.#closeDelete();
     } catch (error) {
-      this.saveError = this.#error(error);
+      const message = this.#error(error);
       const params =
         (error as { params?: { field?: unknown; categoryId?: unknown } } | null)?.params ?? {};
       const code = codeOf(error);
@@ -328,7 +329,9 @@ export class CategoriesScreen extends LitElement {
             params.categoryId !== this.deleting?.id &&
             params.categoryId === this.reassign[field],
       );
-      this.reassignErrors = Object.fromEntries(fields.map((field) => [field, this.saveError]));
+      this.reassignErrors = Object.fromEntries(fields.map((field) => [field, message]));
+      if (fields.length > 0) this.#focusRefused("delete-dialog");
+      else this.saveError = message;
       return;
     } finally {
       this.busy = false;
@@ -390,7 +393,7 @@ export class CategoriesScreen extends LitElement {
       await this.api.setMainCategory(product.id, this.mainCategory);
       this.mainCategoryProduct = null;
     } catch (error) {
-      this.saveError = this.#error(error);
+      const message = this.#error(error);
       const params =
         (error as { params?: { field?: unknown; categoryId?: unknown } } | null)?.params ?? {};
       const code = codeOf(error);
@@ -399,13 +402,29 @@ export class CategoriesScreen extends LitElement {
         (code === "category.not_found" &&
           this.mainCategory !== null &&
           params.categoryId === this.mainCategory)
-      )
-        this.mainCategoryError = this.saveError;
+      ) {
+        this.mainCategoryError = message;
+        this.#focusRefused("main-category-dialog");
+      } else this.saveError = message;
       return;
     } finally {
       this.busy = false;
     }
     await this.#load();
+  }
+  /** A refusal placed under a picker is said there, so the dialog's own line only points at it. */
+  #dialogMessage(fieldMarked: boolean) {
+    const message = [
+      ...(this.saveError ? [this.saveError] : []),
+      ...(fieldMarked ? [t("form.fix_fields")] : []),
+    ].join(" ");
+    return message ? html`<p role="alert">${message}</p>` : nothing;
+  }
+  #focusRefused(dialog: "delete-dialog" | "main-category-dialog"): void {
+    void this.updateComplete.then(() => {
+      const modal = this.shadowRoot?.querySelector(`wt-modal[data-test="${dialog}"]`);
+      if (modal) void focusFirstInvalid(modal);
+    });
   }
   #mainCount(category: CategorySummary): number {
     return this.products.filter((product) => product.primaryCategoryId === category.id).length;
@@ -962,7 +981,7 @@ export class CategoriesScreen extends LitElement {
         }}
       >
         ${this.deleting ? this.#renderDependants(this.deleting) : nothing}
-        ${this.saveError ? html`<p role="alert">${this.saveError}</p>` : nothing}
+        ${this.#dialogMessage(Object.values(this.reassignErrors).some(Boolean))}
         <wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
@@ -988,7 +1007,7 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.#closeMainCategory();
         }}
       >
-        ${this.saveError && mainProduct ? html`<p role="alert">${this.saveError}</p>` : nothing}
+        ${mainProduct ? this.#dialogMessage(this.mainCategoryError !== "") : nothing}
         ${
           mainProduct
             ? html`<p>${mainProduct.name}</p>

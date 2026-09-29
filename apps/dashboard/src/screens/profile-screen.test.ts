@@ -1092,6 +1092,77 @@ describe("your profile — errors beside Save, not above the form", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
+  it("keeps Save waiting on a field emptied while a request was out, even when the refusal names it", async () => {
+    let reject!: (error: unknown) => void;
+    const changePassword = vi.fn(
+      () =>
+        new Promise<void>((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    const { el } = await mount({ changePassword });
+    await click(el, "change-password");
+    input(el, "currentPassword", "wrong");
+    input(el, "password", "replacement password");
+    input(el, "confirmPassword", "replacement password");
+    await click(el, "save");
+    input(el, "currentPassword", "");
+    await flush(el);
+    reject({ code: "password.invalid" });
+    await flush(el);
+    expect(field(el, "currentPassword").error).toBe(codeMessage("password.invalid"));
+    expect(await nativeSaveDisabled(el)).toBe(true);
+
+    input(el, "currentPassword", "current");
+    await flush(el);
+    expect(field(el, "currentPassword").error).toBe("");
+    expect(await nativeSaveDisabled(el)).toBe(false);
+  });
+
+  it("puts a refused emailed code under the code field until that field changes, leaving Save working", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, pendingEmail: "new@example.com" }),
+      confirmProfileEmail: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
+    });
+    await click(el, "confirm-email");
+    input(el, "setupCode", "123456");
+    await click(el, "save");
+    expect(field(el, "setupCode").error).toBe(codeMessage("account_action.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
+    await vi.waitFor(() => expect(focused(el, "setupCode")).toBe(true));
+
+    input(el, "setupCode", "654321");
+    await flush(el);
+    expect(field(el, "setupCode").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("puts a refused language under the language select until that select changes, leaving Save working", async () => {
+    const { el, host } = await mount({
+      saveProfile: vi.fn().mockRejectedValue({ code: "locale.unsupported" }),
+    });
+    await editDetails(el);
+    await click(el, "save");
+    const language = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=locale]")!;
+    expect(language.getAttribute("aria-invalid")).toBe("true");
+    const described = el.shadowRoot!.getElementById(language.getAttribute("aria-describedby")!)!;
+    expect(described.textContent!.trim()).toBe(codeMessage("locale.unsupported"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(await nativeSaveDisabled(el)).toBe(false);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(language));
+    await expectNoA11yViolations(host);
+
+    language.value = "es-ES";
+    language.dispatchEvent(new Event("change"));
+    await flush(el);
+    expect(language.getAttribute("aria-invalid")).toBe("false");
+    expect(language.hasAttribute("aria-describedby")).toBe(false);
+    expect(described.isConnected).toBe(false);
+    expect(await bottomOf(el)).toBe("");
+  });
+
   it("still waits on a required field an incomplete profile opens with", async () => {
     const profile = await apiStub().getProfile();
     const { el } = await mount({

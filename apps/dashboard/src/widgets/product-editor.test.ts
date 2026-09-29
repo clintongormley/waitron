@@ -1176,7 +1176,7 @@ it("offers all six product dietary declarations without changing the saved set",
   expect(el.currentValue.dietaryDeclarations).toEqual(["vegan", "halal"]);
 });
 
-it("associates server and client errors with native selects", async () => {
+it("associates a server refusal with its native select until the next save", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
     locales: ["en"],
@@ -1185,6 +1185,9 @@ it("associates server and client errors with native selects", async () => {
   const select = el.shadowRoot!.querySelector(`[name=tax]`)!;
   expect(select.getAttribute("aria-invalid")).toBe("true");
   expect(el.shadowRoot!.getElementById(select.getAttribute("aria-describedby")!)!.textContent).toBe(
+    "Tax is no longer available",
+  );
+  expect(el.shadowRoot!.getElementById("tax-error")!.textContent).toBe(
     "Tax is no longer available",
   );
   // Submitting again is past the refusal.
