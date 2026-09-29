@@ -8231,7 +8231,7 @@ it. Left open:
   `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
   are in memory"). Found by the probe, and open:
   - **MEASURED (lane A's A133, 2026-09-29): a sale waits behind Litestream's own checkpoint. The
-    owner chose to narrow CLAUDE.md §5 now (DONE, A133) and to measure the fix next (A135, below).**
+    owner chose to narrow CLAUDE.md §5 now (DONE, A133, #889) and to measure the fix next (A135, below).**
     Litestream 0.5.17 holds the database's write lock for a PASSIVE checkpoint: it opens a
     transaction writing `_litestream_lock` around the checkpoint (`checkpointWithExecutor`, `db.go`
     lines 2492–2512 at tag v0.5.17). The probe (a throwaway branch, since deleted; workflow run
