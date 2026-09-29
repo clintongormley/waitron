@@ -200,12 +200,8 @@ describe("venue operations screen", () => {
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(pageAlert(el)).toBe("");
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
-    expect(
-      el.shadowRoot!.querySelector('[data-field-error="department-name"]')?.textContent,
-    ).toContain("Department name");
-    expect(
-      el.shadowRoot!.querySelector('[data-field-error="trading-name"]')?.textContent,
-    ).toContain("Trading name");
+    expect(fieldError(el, "department-name")).toBe("This field is required.");
+    expect(fieldError(el, "trading-name")).toBe("This field is required.");
     expect(api.createDepartment).not.toHaveBeenCalled();
   });
 
@@ -899,8 +895,8 @@ describe("the venue editors refuse an incomplete form", () => {
     await selectTab(el, "departments");
     await action(el, "new-hours");
     await action(el, "save-editor");
-    expect(fieldError(el, "hours-opens")).toBe("Opens: This field is required.");
-    expect(fieldError(el, "hours-closes")).toBe("Closes: This field is required.");
+    expect(fieldError(el, "hours-opens")).toBe("This field is required.");
+    expect(fieldError(el, "hours-closes")).toBe("This field is required.");
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     field(el, "hours-opens").value = "10:00";
     field(el, "hours-closes").value = "10:00";
@@ -923,7 +919,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await selectTab(el, "zones");
     await action(el, "edit-zone-z2");
     await action(el, "save-editor");
-    expect(fieldError(el, "zone-department-z2")).toBe("Department: This field is required.");
+    expect(fieldError(el, "zone-department-z2")).toBe("This field is required.");
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(api.configureZone).not.toHaveBeenCalled();
   });
@@ -945,7 +941,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await action(el, "new-assignment-z1");
     expect(field(el, "assignment-menu").value).toBe("");
     await action(el, "save-editor");
-    expect(fieldError(el, "assignment-menu")).toBe("Menu name: This field is required.");
+    expect(fieldError(el, "assignment-menu")).toBe("This field is required.");
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(api.allowMenu).not.toHaveBeenCalled();
   });
@@ -980,7 +976,7 @@ describe("the venue editors refuse an incomplete form", () => {
     await selectTab(el, "routing");
     await action(el, "new-route");
     await action(el, "save-editor");
-    expect(fieldError(el, "route-subject")).toBe("Product or category: This field is required.");
+    expect(fieldError(el, "route-subject")).toBe("This field is required.");
     expect(bottom(el)).toBe("Correct the highlighted fields to continue.");
     expect(fieldError(el, "route-target")).toBeUndefined();
     expect(api.createRoute).not.toHaveBeenCalled();
@@ -1021,7 +1017,7 @@ describe("an editor's messages", () => {
     await action(el, "save-editor");
     expect(invalid(el, "department-name")).toBe("true");
     expect(invalid(el, "trading-name")).toBe("true");
-    expect(fieldError(el, "department-name")).toBe("Department name: This field is required.");
+    expect(fieldError(el, "department-name")).toBe("This field is required.");
     expect(bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(true);
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field(el, "department-name")));
@@ -1040,7 +1036,7 @@ describe("an editor's messages", () => {
     expect(bottom(el)).toBe("");
     expect(saveDisabled(el)).toBe(false);
     await type(el, "department-name", " ");
-    expect(fieldError(el, "department-name")).toBe("Department name: This field is required.");
+    expect(fieldError(el, "department-name")).toBe("This field is required.");
     expect(bottom(el)).toBe(FIX);
     expect(saveDisabled(el)).toBe(true);
   });
@@ -1109,6 +1105,197 @@ describe("an editor's messages", () => {
     const el = await newDepartment();
     await action(el, "save-editor");
     expect(bottom(el)).toBe("Corrige los campos marcados para continuar.");
+  });
+
+  // Fails if a refresh behind the editor clears a refusal the operator has not answered by saving
+  // again, or repeats it at the top of the screen.
+  it("keeps a refusal beside Save when the list refreshes behind the editor", async () => {
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(structuredClone(model));
+    const el = await newDepartment({
+      load,
+      liveData,
+      createDepartment: vi.fn().mockRejectedValue(new Error("offline")),
+    } as Partial<VenueServiceApi>);
+    await type(el, "department-name", "Brunch");
+    await type(el, "trading-name", "Casa Brunch");
+    await action(el, "save-editor");
+    expect(bottom(el)).toBe("The change could not be saved.");
+    const updated = structuredClone(model);
+    updated.departments[0]!.name = "Updated elsewhere";
+    load.mockResolvedValue(updated);
+    liveData.invalidate([{ type: "departments", id: "d1" }]);
+    await vi.waitFor(() => expect(tableText(el, "departments")).toContain("Updated elsewhere"));
+    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(pageAlert(el)).toBe("");
+    expect(saveDisabled(el)).toBe(false);
+  });
+
+  // Fails if a refresh failing behind an open editor is said beside Save, as though the save had
+  // failed, or is said nowhere.
+  it("says a failed refresh at the top of the screen while an editor is open, not beside Save", async () => {
+    const liveData = new LiveData();
+    const load = vi.fn().mockResolvedValue(structuredClone(model));
+    const el = await newDepartment({ load, liveData } as Partial<VenueServiceApi>);
+    load.mockRejectedValue(new Error("offline"));
+    liveData.invalidate([{ type: "departments", id: "d1" }]);
+    await vi.waitFor(() =>
+      expect(pageAlert(el)).toBe("The venue configuration could not be loaded."),
+    );
+    expect(bottom(el)).toBe("");
+    expect(saveDisabled(el)).toBe(false);
+  });
+
+  const REFUSED = "This value was not accepted. Change it and save again.";
+  const invalidRequest = (field: string) => ({
+    code: "management.request_invalid",
+    params: { field },
+    status: 400,
+  });
+
+  // Fails if a refusal naming a field the editor shows is not put under it, stops holding Save,
+  // survives a change to that field, is cleared by a change to another field, or outlives the editor.
+  it("puts a refusal that names a field under that field, and holds Save until that field changes", async () => {
+    const el = await newDepartment({
+      createDepartment: vi.fn().mockRejectedValue(invalidRequest("tradingName")),
+    });
+    await type(el, "department-name", "Brunch");
+    await type(el, "trading-name", "Casa Brunch");
+    await action(el, "save-editor");
+    expect(fieldError(el, "trading-name")).toBe(REFUSED);
+    expect(invalid(el, "trading-name")).toBe("true");
+    expect(fieldError(el, "department-name")).toBeUndefined();
+    expect(bottom(el)).toBe(FIX);
+    expect(saveDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(field(el, "trading-name")));
+    await type(el, "department-name", "Brunch bar");
+    expect(fieldError(el, "trading-name")).toBe(REFUSED);
+    expect(saveDisabled(el)).toBe(true);
+    await type(el, "trading-name", "Casa Brunch Bar");
+    expect(fieldError(el, "trading-name")).toBeUndefined();
+    expect(invalid(el, "trading-name")).toBe("false");
+    expect(bottom(el)).toBe("");
+    expect(saveDisabled(el)).toBe(false);
+    await action(el, "save-editor");
+    expect(fieldError(el, "trading-name")).toBe(REFUSED);
+    await action(el, "cancel-editor");
+    await action(el, "new-department");
+    expect(fieldError(el, "trading-name")).toBeUndefined();
+    expect(saveDisabled(el)).toBe(false);
+  });
+
+  // Fails if any field the server can name is not mapped onto the control that holds it.
+  it.each([
+    {
+      tab: "departments",
+      open: ["edit-department-d1"],
+      method: "updateDepartment",
+      name: "name",
+      control: "department-name",
+    },
+    {
+      tab: "departments",
+      open: ["edit-department-d1"],
+      method: "updateDepartment",
+      name: "tradingName",
+      control: "trading-name",
+    },
+    {
+      tab: "departments",
+      open: ["edit-department-d1"],
+      method: "updateDepartment",
+      name: "defaultServiceMode",
+      control: "department-mode",
+    },
+    {
+      tab: "zones",
+      open: ["edit-zone-z1"],
+      method: "configureZone",
+      name: "departmentId",
+      control: "zone-department-z1",
+    },
+    {
+      tab: "zones",
+      open: ["edit-zone-z1"],
+      method: "configureZone",
+      name: "serviceMode",
+      control: "zone-mode-z1",
+    },
+    {
+      tab: "zones",
+      open: ["zone-menus-z1", "edit-assignment-m1"],
+      method: "allowMenu",
+      name: "displayOrder",
+      control: "assignment-order",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      name: "subject",
+      control: "route-subject",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      name: "categoryId",
+      control: "route-subject",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      name: "productId",
+      control: "route-subject",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      name: "zoneId",
+      control: "route-zone",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      name: "target",
+      control: "route-target",
+    },
+    {
+      tab: "routing",
+      open: ["edit-route-r1"],
+      method: "updateRoute",
+      name: "stationId",
+      control: "route-target",
+    },
+  ])("puts a refused $name under $control", async ({ tab, open, method, name, control }) => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      [method]: vi.fn().mockRejectedValue(invalidRequest(name)),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, tab);
+    for (const step of open) await action(el, step);
+    await action(el, "save-editor");
+    expect(fieldError(el, control)).toBe(REFUSED);
+    expect(bottom(el)).toBe(FIX);
+    expect(saveDisabled(el)).toBe(true);
+  });
+
+  // Fails if a refusal naming a field the editor does not show marks a field or holds Save.
+  it("says a refusal naming a field the editor does not show beside Save, and leaves Save usable", async () => {
+    const el = await mount({
+      load: vi.fn().mockResolvedValue(model),
+      replaceHours: vi.fn().mockRejectedValue(invalidRequest("hours.0")),
+    } as unknown as VenueServiceApi);
+    await selectTab(el, "departments");
+    await action(el, "edit-hours-0");
+    await action(el, "save-editor");
+    expect(bottom(el)).toBe("The change could not be saved.");
+    expect(el.shadowRoot!.querySelector("[data-field-error]")).toBeNull();
+    expect(saveDisabled(el)).toBe(false);
+    expect(pageAlert(el)).toBe("");
   });
 });
 
