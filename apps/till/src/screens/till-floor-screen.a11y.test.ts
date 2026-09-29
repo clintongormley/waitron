@@ -203,6 +203,9 @@ const placedTables: TableState[] = [
 const party = {
   revision: 4,
   guestCount: 3,
+  name: null,
+  displayName: "5, 6",
+  mainBillId: null,
   billCount: 2,
   tableIds: ["t5", "t6"],
   unsentDrafts: [],

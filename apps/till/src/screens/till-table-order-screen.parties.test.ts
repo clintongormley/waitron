@@ -14,6 +14,9 @@ const party: TableParty = {
   revision: 4,
   guestCount: 3,
   state: "open",
+  name: "Ana",
+  displayName: "Ana",
+  mainBillId: "wo-check",
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
@@ -111,6 +114,43 @@ describe("till-table-order-screen: the party's bills", () => {
       t("table.bill_to_pay").replace("{amount}", money("30.00")),
     );
     expect(bills(el).querySelector("[data-party-outstanding]")!.textContent).toBe(money("30.00"));
+  });
+
+  it("names each bill after the party, numbered in the order listed", async () => {
+    const el = await mountScreen();
+
+    expect(bill(el, "wo-tab")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
+      t("table.bill_of").replace("{party}", "Ana").replace("{n}", "1"),
+    );
+    expect(bill(el, "wo-check")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
+      t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
+    );
+  });
+
+  it("names an unnamed party's bills after its tables, and never after a bill's own label", async () => {
+    const el = await mountScreen({
+      party: { ...party, name: null, displayName: "Mesa 4, 5" },
+      bills: [paidTab, { ...check, label: "Mesa 4" }],
+    });
+
+    expect(bill(el, "wo-check")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
+      t("table.bill_of").replace("{party}", "Mesa 4, 5").replace("{n}", "2"),
+    );
+  });
+
+  it("marks the bill new orders go to, and no other", async () => {
+    const el = await mountScreen();
+
+    expect(bill(el, "wo-check")!.querySelector("[data-bill-main]")!.textContent!.trim()).toBe(
+      t("table.bill_main"),
+    );
+    expect(bill(el, "wo-tab")!.querySelector("[data-bill-main]")).toBeNull();
+  });
+
+  it("marks no bill when the party has no main bill until its next order", async () => {
+    const el = await mountScreen({ party: { ...party, mainBillId: null } });
+
+    expect(bills(el).querySelector("[data-bill-main]")).toBeNull();
   });
 
   it("leaves out a bill that was abandoned, which nobody pays", async () => {

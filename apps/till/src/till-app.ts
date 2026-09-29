@@ -107,6 +107,7 @@ import type {
   TillSaleResult,
   PartyBill,
   PartyRevisions,
+  BillRevisions,
   TillZoneMenu,
   ZoneOfferCatalogue,
 } from "./api/client.js";
@@ -223,9 +224,13 @@ const TABLE_REFUSALS = new Set([
   "tab.not_table_tab",
   "tab.party_mismatch",
   "tab.party_has_other_open_bill",
-  "tab.merge_leaves_no_table",
   "party.not_open",
   "party.bill_outstanding",
+  "bill.presented",
+  "bill.paid",
+  "bill.other_party",
+  "bill.payments_received",
+  "bill.line_paid",
 ]);
 
 function isPartyOutOfDate(error: unknown): boolean {
@@ -842,15 +847,8 @@ export class TillApp extends LitElement {
   #amountsReread = 0;
   /** The last read of the party's groups failed, so {@link tabGroups} is empty for want of an answer. */
   #groupsUnread = false;
-  /** The check {@link #onSplitLines} made and the tab it came from, cleared when a tab is paid, the
-   * check is left while it is the open order, or the operator's session ends. Held in memory only:
-   * after a reload the check stays in Held orders. */
-  #splitCheck?: { checkId: string; tabId: string };
-  /** The merge {@link #returnSplitCheck} started in this operator's session, while it is still
-   * running, so a later exit waits for it. */
-  #checkReturn?: Promise<boolean>;
-  /** Bumped when the operator's session ends by logout or a server switch, so a split answering
-   * afterwards records no origin and a merge answering afterwards changes nothing on screen. */
+  /** Bumped when the operator's session ends by logout or a server switch, so an answer arriving
+   * afterwards can tell that the session it was asked in has ended. */
   #operatorSession = 0;
   @state() private counterServiceZones: ServiceZoneSummary[] = [];
   @state() private counterServiceZoneId = "";
@@ -935,7 +933,7 @@ export class TillApp extends LitElement {
   @state() private receiptPrintMode: "auto" | "on_request" | "never" = "auto";
   /** Whether the issuance-time original action is still available for the ticket currently shown. */
   @state() private originalReceiptAvailable = false;
-  /** The working order that produced the ticket currently shown, including detached split checks. */
+  /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
   /**
    * The receipt's language, kept apart from the operator UI locale so a fiscal locale the UI does not
@@ -2174,8 +2172,8 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * `ticketWorkingOrderId` is captured by every terminal sale path, including a detached split check,
-   * which the counter store cannot identify.
+   * `ticketWorkingOrderId` is captured by every terminal sale path, including a bill split off
+   * another, which the counter store cannot identify.
    */
   async #onReprint(): Promise<void> {
     if (this.ticketWorkingOrderId === undefined) return;
@@ -2354,16 +2352,12 @@ export class TillApp extends LitElement {
     if (leftOrder) this.#orderVisit++;
     if (!wasShowingOrder && this.#tableCatalogueActive()) this.#shownOnVisit = this.#orderVisit;
     const session = this.#operatorSession;
-    const returned = leftOrder
-      ? this.#flushDraft().then(() =>
-          session === this.#operatorSession ? this.#returnSplitCheck() : false,
-        )
-      : Promise.resolve(false);
+    const flushed = leftOrder ? this.#flushDraft() : Promise.resolve();
     if (this.#tabNeedsFloorData(tab)) {
-      void returned.then(async (floorRead) => {
+      void flushed.then(async () => {
         if (session !== this.#operatorSession) return;
         if (!this.#floorLoaded) return this.#loadFloorData();
-        if (!floorRead) await this.#refreshFloor();
+        await this.#refreshFloor();
       });
     }
   }
@@ -2393,8 +2387,6 @@ export class TillApp extends LitElement {
     const session = this.#operatorSession;
     try {
       await this.#flushDraft();
-      if (session !== this.#operatorSession) return;
-      await this.#returnSplitCheck();
       if (session !== this.#operatorSession) return;
       await this.#openTable(tableId, seated ? undefined : (guestCount ?? null), offerRequest);
     } finally {
@@ -2458,6 +2450,9 @@ export class TillApp extends LitElement {
           revision,
           guestCount,
           state: "open",
+          name: null,
+          displayName: table?.label ?? "",
+          mainBillId: tabId,
           outstanding: "0.00",
           billCount: 1,
           tableIds: [tableId],
@@ -2672,13 +2667,10 @@ export class TillApp extends LitElement {
     this.#followPartyDraft();
   }
 
-  /** The draft the open order shows: the person's on its party, and none on a check. A floor that
-   * does not yet name the table's own tab cannot tell a check, so the draft shows. It waits for the
-   * party's own groups, since the screen decides from them whether its first line is a later
-   * addition. */
+  /** The draft the open order shows: the person's on its party, whichever of the party's bills is on
+   * screen. It waits for the party's own groups, since the screen decides from them whether its first
+   * line is a later addition. */
   #tableDraft(): WorkingOrderStore | null {
-    const row = this.tables.find((table) => table.id === this.activeTableId);
-    if (row?.tabId !== undefined && this.#showsCheck()) return null;
     if (this.orderParty === null) return this.#partylessDraft;
     const sync = this.#draftSync;
     const party = this.orderParty.id;
@@ -2836,11 +2828,6 @@ export class TillApp extends LitElement {
     return Promise.all([this.#loadTabLines(), this.#loadPartyBills()]);
   }
 
-  /** The party a tab's table belongs to, as the floor last read it. */
-  #partyOfTab(tabId: string): TableParty | null {
-    return this.tables.find((table) => table.tabId === tabId)?.party ?? null;
-  }
-
   /** A failed read leaves the list empty rather than showing another party's bills. A read
    * overtaken by a later one leaves the list alone, and only its generation, compared with
    * {@link #partyBillsRead}, tells a caller so. */
@@ -2861,16 +2848,16 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** The revision of the party at the open table, and of another party the command reaches into. */
-  #revisions(other: TableParty | null, otherIsSource: boolean): PartyRevisions {
+  /** The revision of the party at the open table, for a move or join. */
+  #revisions(): PartyRevisions {
     const own = this.orderParty;
-    const theirs = other !== null && other.id !== own?.id ? other : null;
-    const destination = otherIsSource ? own : (theirs ?? own);
-    const source = otherIsSource ? theirs : theirs === null ? null : own;
-    return {
-      ...(destination === null ? {} : { expectedPartyRevision: destination.revision }),
-      ...(source === null ? {} : { expectedSourcePartyRevision: source.revision }),
-    };
+    return own === null ? {} : { expectedPartyRevision: own.revision };
+  }
+
+  /** The party the open bill was read under, for a bill action. */
+  #billRevisions(): BillRevisions {
+    const own = this.orderParty;
+    return own === null ? {} : { expectedPartyRevision: own.revision, partyId: own.id };
   }
 
   /**
@@ -2904,11 +2891,11 @@ export class TillApp extends LitElement {
     this.errorKey = tableWriteError(error);
   }
 
-  /** A draft lands on the party's main bill, which the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
+  /** A draft lands on the bill it names, or else the party's main bill, which the screen follows. Once a submission leaves the draft empty, the till goes back to the floor
    * and says what the draft's submissions filed. Once the operator's session ends, the submission
    * sends nothing more, says nothing and does not move the next person's screen. */
   async #onSubmitDraft(event: Event): Promise<void> {
-    const { groups, joinGroupId, store, sent, draft } = (
+    const { groups, joinGroupId, billId, store, sent, draft } = (
       event as CustomEvent<Partial<SubmitDraftDetail>>
     ).detail;
     const tabId = this.activeTabId;
@@ -2917,12 +2904,6 @@ export class TillApp extends LitElement {
     if (tabId === undefined || store?.sending === true) return;
     if (party === null) {
       this.errorKey = "table.error";
-      return;
-    }
-    // The till's own rule until plan Task 10 names a bill: sent without one, the server puts the
-    // round on the party's main bill, not on this check.
-    if (this.#showsCheck()) {
-      this.errorKey = lineWriteError({ code: "tab.not_open" });
       return;
     }
     if (joinGroupId !== undefined && (await this.#refuseWithGroupsUnread())) return;
@@ -2942,7 +2923,7 @@ export class TillApp extends LitElement {
         tabId,
         party,
         sync,
-        { groups, joinGroupId },
+        { groups, joinGroupId, billId },
         sent,
         live,
         false,
@@ -2960,11 +2941,12 @@ export class TillApp extends LitElement {
     if (followUp === "find-tab" && onSentTable()) {
       await this.#retakePartyFromFloor();
       if (!live()) return;
-      // The server puts a draft only on its own party's main bill, so the table is followed only
-      // while it still holds the party the screen showed when the draft was sent.
+      // The server puts a draft only on a bill of its own party, the one named or else the main
+      // bill, so the table is followed only while it still holds the party the screen showed when
+      // the draft was sent.
       const now = this.tables.find((row) => row.id === tableId);
       if (now?.tabId !== undefined && now.party?.id === partyId && onSentTable())
-        this.#followDraft(tabId, now.tabId);
+        this.#followDraft(tabId, billId ?? now.tabId);
     } else if (typeof followUp === "object" && this.activeTabId === tabId) {
       await this.#reloadTables();
       if (!live()) return;
@@ -2996,12 +2978,12 @@ export class TillApp extends LitElement {
     tabId: string,
     party: TableParty,
     sync: DraftSync,
-    submission: { groups: readonly DraftGroup[]; joinGroupId?: string },
+    submission: { groups: readonly DraftGroup[]; joinGroupId?: string; billId?: string },
     sent: readonly OrderLine[],
     live: () => boolean,
     retried: boolean,
   ): Promise<DraftFollowUp> {
-    const { groups, joinGroupId } = submission;
+    const { groups, joinGroupId, billId } = submission;
     this.errorKey = undefined;
     // One limit covers the save before the send and the send with its retries.
     const send = limited(TABLE_REQUEST_LIMIT_MS);
@@ -3030,6 +3012,7 @@ export class TillApp extends LitElement {
           lineIds: group.lineIndexes.map((index) => ids[index]!),
         })),
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
+        ...(billId === undefined ? {} : { billId }),
       };
       submitted = await this.#sendDraft(party.id, sync.draftId, command, send.signal, live);
     } catch (error) {
@@ -3062,7 +3045,12 @@ export class TillApp extends LitElement {
       }
       if (isGroupGone(error)) await this.#loadTabLines();
       if (!live()) return;
-      this.errorKey = lineWriteError(error);
+      // The server raises this for the bill a submission names (`requireBillOfParty`), or, when it
+      // names none, for the party's main bill (`partyMainBill`), which the server chose.
+      this.errorKey =
+        billId !== undefined && refusal?.refused === "tab.not_open"
+          ? { code: "tab.not_open" }
+          : lineWriteError(error);
       return refusal?.refused === "product.unavailable" ? "mark-sold-out" : undefined;
     } finally {
       send.done();
@@ -3099,13 +3087,6 @@ export class TillApp extends LitElement {
     if (landedOn === sentTo || this.activeTabId !== sentTo) return;
     this.activeTabId = landedOn;
     this.#rememberOrderParty();
-  }
-
-  /** A check is an order no table points at, split off a party's tab. Judged only while the floor
-   * lists the open table, so a floor a failed read emptied refuses nothing. */
-  #showsCheck(): boolean {
-    const open = this.tables.some((table) => table.id === this.activeTableId);
-    return open && !this.tables.some((table) => table.tabId === this.activeTabId);
   }
 
   /** A refused send or group command: a party changed elsewhere is read again and described, and never
@@ -3416,7 +3397,7 @@ export class TillApp extends LitElement {
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.moveTab(this.activeTabId, toTableId, this.#revisions(null, false));
+      await this.api.moveTab(this.activeTabId, toTableId, this.#revisions());
     } catch (error) {
       await this.#onTableRefusal(error);
       return;
@@ -3430,7 +3411,7 @@ export class TillApp extends LitElement {
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.joinTable(this.activeTabId, tableId, this.#revisions(null, false));
+      await this.api.joinTable(this.activeTabId, tableId, this.#revisions());
     } catch (error) {
       await this.#onTableRefusal(error);
       return;
@@ -3438,19 +3419,12 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
-  async #onMergeTabs(event: Event): Promise<void> {
-    const { fromTabId, freeSourceTable } = (
-      event as CustomEvent<{ fromTabId: string; freeSourceTable: boolean }>
-    ).detail;
+  async #onMergeBills(event: Event): Promise<void> {
+    const { fromBillId } = (event as CustomEvent<{ fromBillId: string }>).detail;
     if (this.activeTabId === undefined) return;
     this.errorKey = undefined;
     try {
-      await this.api.mergeTabs(
-        this.activeTabId,
-        fromTabId,
-        freeSourceTable,
-        this.#revisions(this.#partyOfTab(fromTabId), true),
-      );
+      await this.api.mergeBills(this.activeTabId, fromBillId, this.#billRevisions());
     } catch (error) {
       await this.#onTableRefusal(error);
       return;
@@ -3459,18 +3433,13 @@ export class TillApp extends LitElement {
   }
 
   async #onTransferLines(event: Event): Promise<void> {
-    const { toTabId, transfers } = (
-      event as CustomEvent<{ toTabId: string; transfers: TabTransfer[] }>
+    const { toBillId, transfers } = (
+      event as CustomEvent<{ toBillId: string; transfers: TabTransfer[] }>
     ).detail;
-    if (this.activeTabId === undefined) return;
+    if (this.activeTabId === undefined || transfers.length === 0) return;
     this.errorKey = undefined;
     try {
-      await this.api.transferLines(
-        this.activeTabId,
-        toTabId,
-        transfers,
-        this.#revisions(this.#partyOfTab(toTabId), false),
-      );
+      await this.api.transferItems(this.activeTabId, toBillId, transfers, this.#billRevisions());
     } catch (error) {
       await this.#onTableRefusal(error);
       return;
@@ -3478,18 +3447,15 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
-  /** Carve selected tab lines into a detached check, then point the existing table payment screen at
-   * that check. The origin table id stays captured so its label continues to identify this split bill. */
+  /** Put the chosen items on a new bill of the party, and show that bill. */
   async #onSplitLines(event: Event): Promise<void> {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
-    const tabId = this.activeTabId;
-    if (tabId === undefined) return;
-    const session = this.#operatorSession;
+    const billId = this.activeTabId;
+    if (billId === undefined) return;
     this.errorKey = undefined;
     try {
-      const { checkId } = await this.api.splitTab(tabId, transfers, this.#revisions(null, false));
-      this.activeTabId = checkId;
-      if (session === this.#operatorSession) this.#splitCheck = { checkId, tabId };
+      const split = await this.api.splitBill(billId, transfers, this.#billRevisions());
+      this.activeTabId = split.billId;
     } catch (error) {
       const code = (error as { code?: string }).code;
       if (code === "tab.transfer_modifier_line") this.errorKey = "table.split_modifier_error";
@@ -3579,59 +3545,6 @@ export class TillApp extends LitElement {
     await this.#refreshFloor();
   }
 
-  /** Leaving a split-off check unpaid puts its lines back on the tab it came from, with their kitchen
-   * tickets. A check whose payment is running here is left to that payment, and a failed merge is not
-   * retried. Resolves once a merge still running in this session has settled, so an exit's next
-   * read comes after it; true when that merge has re-read the floor. */
-  #returnSplitCheck(): Promise<boolean> {
-    const split = this.#splitCheck;
-    const running = this.#checkReturn ?? Promise.resolve(false);
-    if (split === undefined || this.activeTabId !== split.checkId) return running;
-    this.#splitCheck = undefined;
-    if (this.submitting) {
-      this.#showCheckOutcome("table.check_kept_held");
-      return running;
-    }
-    const merge = this.#mergeCheckBack(split).finally(() => {
-      if (this.#checkReturn === merge) this.#checkReturn = undefined;
-    });
-    this.#checkReturn = merge;
-    return merge;
-  }
-
-  /** Sends the revision of the party whose table holds the tab, as the floor last read it, because
-   * the operator may already be opening another party's table. A merge moves that party's revision
-   * on, so a successful one re-reads the floor before resolving, so an exit or a table opened after
-   * it acts on the new revision; resolves to whether it did. */
-  async #mergeCheckBack(split: { checkId: string; tabId: string }): Promise<boolean> {
-    const session = this.#operatorSession;
-    const party = this.#partyOfTab(split.tabId);
-    try {
-      await this.api.mergeTabs(
-        split.tabId,
-        split.checkId,
-        false,
-        party === null ? {} : { expectedPartyRevision: party.revision },
-      );
-    } catch (error) {
-      if (session !== this.#operatorSession) return false;
-      // No answer means the merge may have happened.
-      this.#showCheckOutcome(
-        isNetworkFailure(error) ? "table.check_return_unconfirmed" : "table.check_kept_held",
-      );
-      return false;
-    }
-    if (session !== this.#operatorSession) return false;
-    await this.#refreshFloor();
-    if (session !== this.#operatorSession || this.activeTabId !== split.checkId) return true;
-    this.activeTabId = split.tabId;
-    this.#rememberOrderParty();
-    await this.#loadTabLines();
-    return true;
-  }
-
-  /** A merge still in flight is not waited for: its request has no time limit, so one that never
-   * answers would hold up every table the next operator opens. */
   #endOperatorSession(): void {
     this.#menuPoll.stop();
     this.#tableZoneId = undefined;
@@ -3639,25 +3552,6 @@ export class TillApp extends LitElement {
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
     this.#operatorSession++;
-    this.#splitCheck = undefined;
-    this.#checkReturn = undefined;
-  }
-
-  #showCheckOutcome(key: "table.check_kept_held" | "table.check_return_unconfirmed"): void {
-    const late = this.#lateChangeShown();
-    this.errorKey = late === undefined ? key : { lateChange: late, also: key };
-  }
-
-  /** A paid check is no longer in Held orders; a late change shown beside that message stays. */
-  #withdrawCheckKept(): void {
-    const shown = this.errorKey;
-    if (shown === "table.check_kept_held") this.errorKey = undefined;
-    else if (
-      typeof shown === "object" &&
-      "lateChange" in shown &&
-      shown.also === "table.check_kept_held"
-    )
-      this.errorKey = { lateChange: shown.lateChange };
   }
 
   /**
@@ -3673,8 +3567,6 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       this.result = await this.api.recordSale([], tender, id);
-      this.#splitCheck = undefined;
-      this.#withdrawCheckKept();
       this.#showTicket(id);
     } catch (error) {
       // No preliminary save, so any network failure may have filed.
@@ -3765,11 +3657,9 @@ export class TillApp extends LitElement {
     if (this.#inShell()) {
       this.#clearErrorKeepingLateChange();
       this.#popDrill();
-      void flushed
-        .then(() => (session === this.#operatorSession ? this.#returnSplitCheck() : false))
-        .then((floorRead) =>
-          floorRead || session !== this.#operatorSession ? undefined : this.#refreshFloor(),
-        );
+      void flushed.then(() =>
+        session !== this.#operatorSession ? undefined : this.#refreshFloor(),
+      );
     } else {
       void flushed.then(() => this.#onShowFloor());
     }
@@ -4084,7 +3974,7 @@ export class TillApp extends LitElement {
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
         @move-tab=${(event: Event) => void this.#onMoveTab(event)}
         @join-table=${(event: Event) => void this.#onJoinTable(event)}
-        @merge-tabs=${(event: Event) => void this.#onMergeTabs(event)}
+        @merge-bills=${(event: Event) => void this.#onMergeBills(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @split-lines=${(event: Event) => void this.#onSplitLines(event)}
         @finish-table=${() => void this.#onFinishTable()}

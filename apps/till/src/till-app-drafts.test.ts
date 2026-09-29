@@ -111,6 +111,9 @@ function party(over: Partial<TableParty> = {}): TableParty {
     revision: 3,
     guestCount: 2,
     state: "open",
+    name: null,
+    displayName: "4",
+    mainBillId: "wo-4",
     outstanding: "0.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -538,9 +541,9 @@ describe("till-app: a table's draft is kept on the server", () => {
     expect(server.drafts[0]!.lines.map((line) => line.courseId)).toEqual(["mains"]);
   });
 
-  it("shows no draft on a check split off the party's bill", async () => {
+  it("keeps showing the party's draft on a bill split off the party's bill", async () => {
     const { el } = await mountApp({
-      splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
+      splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       getTabLines: vi.fn().mockResolvedValue({
         lines: [
           {
@@ -571,8 +574,8 @@ describe("till-app: a table's draft is kept on the server", () => {
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-check");
-    expect(browser(el)).toBeNull();
-    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-action]")).toBeNull();
+    expect(browser(el)).not.toBeNull();
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-draft-action]")).not.toBeNull();
   });
 });
 
@@ -1437,13 +1440,13 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     expect(api.getTablesState.mock.calls.length).toBe(floorReads);
   });
 
-  describe("when the next person has split a check off before the save answers", () => {
+  describe("when the next person has split a bill off before the save answers", () => {
     const splitting = () => ({
-      splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
-      mergeTabs: vi.fn().mockResolvedValue(undefined),
+      splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
+      mergeBills: vi.fn().mockResolvedValue(undefined),
     });
 
-    /** Sam signs in, opens Mesa 7 from `floorTab` and splits a check off it; then the held save
+    /** Sam signs in, opens Mesa 7 from `floorTab` and splits a bill off it; then the held save
      * answers. */
     async function samSplitsBeforeTheSaveAnswers(
       el: TillApp,
@@ -1459,13 +1462,13 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       await flush(el);
       emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
       await flush(el);
-      expect(api.splitTab).toHaveBeenCalledOnce();
+      expect(api.splitBill).toHaveBeenCalledOnce();
       expect(tableOrder(el)!.orderId).toBe("wo-check");
       answer();
       await flush(el, 8);
     }
 
-    it("leaves the check alone when Back to floor waited on the save", async () => {
+    it("keeps Sam on the split-off bill when Back to floor waited on the save and merges nothing back", async () => {
       const { el } = await mountApp(splitting());
       await openMesa(el);
       const answer = await editBehindHeldSave(el);
@@ -1473,12 +1476,12 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
       await samSplitsBeforeTheSaveAnswers(el, answer, "floor");
 
-      expect(api.mergeTabs).not.toHaveBeenCalled();
+      expect(api.mergeBills).not.toHaveBeenCalled();
       expect(banner(el)).toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-check");
     });
 
-    it("leaves the check alone when choosing another tab waited on the save", async () => {
+    it("keeps Sam on the split-off bill when choosing another tab waited on the save and merges nothing back", async () => {
       const { el } = await mountApp(splitting());
       await openMesa(el);
       const answer = await editBehindHeldSave(el);
@@ -1487,12 +1490,12 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
       await samSplitsBeforeTheSaveAnswers(el, answer, "floor");
 
-      expect(api.mergeTabs).not.toHaveBeenCalled();
+      expect(api.mergeBills).not.toHaveBeenCalled();
       expect(banner(el)).toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-check");
     });
 
-    it("leaves the check alone when opening another table waited on the save", async () => {
+    it("keeps Sam on the split-off bill when opening another table waited on the save and merges nothing back", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue(till(sideBySide)),
         ...splitting(),
@@ -1509,7 +1512,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
 
       await samSplitsBeforeTheSaveAnswers(el, answer, "service");
 
-      expect(api.mergeTabs).not.toHaveBeenCalled();
+      expect(api.mergeBills).not.toHaveBeenCalled();
       expect(banner(el)).toBeNull();
       expect(tableOrder(el)!.orderId).toBe("wo-check");
     });

@@ -705,6 +705,16 @@ describe("transfer items", () => {
     expect(error).toMatchObject({ code: "tab.transfer_self", params: { tabId: main } });
     expect(await snapshot(partyId, [main])).toEqual(before);
   });
+
+  it("refuses a transfer carrying no items, changing neither bill", async () => {
+    const { partyId, main, second } = await twoBills("Mesa 34");
+    const before = await snapshot(partyId, [main, second]);
+
+    const error = await captureError(() => transfer(partyId, main, second, []));
+
+    expect(error).toMatchObject({ code: "sale.empty_basket", params: {} });
+    expect(await snapshot(partyId, [main, second])).toEqual(before);
+  });
 });
 
 describe("requireUntouched", () => {

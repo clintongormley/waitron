@@ -1709,58 +1709,57 @@ describe("TillApi", () => {
     );
   });
 
-  it("mergeTabs POSTs { fromTabId, freeSourceTable } to the destination tab's /merge route", async () => {
-    // `:id` is the DESTINATION (into) tab; `fromTabId` is the source that gets absorbed. `freeSourceTable`
-    // rides the body as an explicit boolean (frees the vacated table vs re-points it at the destination).
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("mergeBills POSTs { fromBillId } to the /merge route of the bill merged into, and answers nothing", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
     await expect(
-      new TillApi("", fetchStub).mergeTabs("wo-into", "wo-from", true),
+      new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {}),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tabs/wo-into/merge",
+      "/api/bills/wo-into/merge",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ fromTabId: "wo-from", freeSourceTable: true }),
+        body: JSON.stringify({ fromBillId: "wo-from" }),
       }),
     );
   });
 
-  it("transferLines POSTs { toTabId, transfers } to the source tab's /transfer route", async () => {
-    // `:id` is the SOURCE tab items move OUT of; `toTabId` is the destination. A partial move carries a
-    // `quantity`; a whole-line move omits it.
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("transferItems POSTs { toBillId, transfers } to the /transfer route of the bill the items leave", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
     await expect(
-      new TillApi("", fetchStub).transferLines("wo-src", "wo-dst", [
-        { lineNo: 1 },
-        { lineNo: 2, quantity: "1.000" },
-      ]),
+      new TillApi("", fetchStub).transferItems(
+        "wo-src",
+        "wo-dst",
+        [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
+        {},
+      ),
     ).resolves.toBeUndefined();
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tabs/wo-src/transfer",
+      "/api/bills/wo-src/transfer",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          toTabId: "wo-dst",
+          toBillId: "wo-dst",
           transfers: [{ lineNo: 1 }, { lineNo: 2, quantity: "1.000" }],
         }),
       }),
     );
   });
 
-  it("splitTab POSTs selected lines and returns the detached check id", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ checkId: "check-1" }));
-    const result = await new TillApi("", fetchStub).splitTab("wo-7", [{ lineNo: 1 }]);
+  it("splitBill POSTs the chosen lines to the bill's /split route and answers the new bill's id", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-new" }));
+
+    const result = await new TillApi("", fetchStub).splitBill("wo-7", [{ lineNo: 1 }], {});
 
     expect(fetchStub).toHaveBeenCalledWith(
-      "/api/tabs/wo-7/split",
+      "/api/bills/wo-7/split",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
@@ -1768,7 +1767,22 @@ describe("TillApi", () => {
         body: JSON.stringify({ transfers: [{ lineNo: 1 }] }),
       }),
     );
-    expect(result).toEqual({ checkId: "check-1" });
+    expect(result).toEqual({ billId: "wo-new" });
+  });
+
+  it("mergeBills surfaces a refusal as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse(
+          { error: { code: "bill.presented", params: { workingOrderId: "wo-from" } } },
+          409,
+        ),
+      );
+
+    await expect(
+      new TillApi("", fetchStub).mergeBills("wo-into", "wo-from", {}),
+    ).rejects.toMatchObject({ code: "bill.presented", workingOrderId: "wo-from" });
   });
 
   it("moveTab surfaces { code } when the target table is occupied", async () => {
@@ -2523,43 +2537,31 @@ describe("TillApi: a seated party", () => {
       { tableId: "tbl-9", expectedPartyRevision: 3 },
     ],
     [
-      "mergeTabs",
+      "mergeBills",
       (api: TillApi) =>
-        api.mergeTabs("wo-into", "wo-from", true, {
+        api.mergeBills("wo-into", "wo-from", { expectedPartyRevision: 3, partyId: "v1" }),
+      "/api/bills/wo-into/merge",
+      { fromBillId: "wo-from", expectedPartyRevision: 3, partyId: "v1" },
+    ],
+    [
+      "transferItems",
+      (api: TillApi) =>
+        api.transferItems("wo-src", "wo-dst", [{ lineNo: 1 }], {
           expectedPartyRevision: 3,
-          expectedSourcePartyRevision: 7,
+          partyId: "v1",
         }),
-      "/api/tabs/wo-into/merge",
-      {
-        fromTabId: "wo-from",
-        freeSourceTable: true,
-        expectedPartyRevision: 3,
-        expectedSourcePartyRevision: 7,
-      },
+      "/api/bills/wo-src/transfer",
+      { toBillId: "wo-dst", transfers: [{ lineNo: 1 }], expectedPartyRevision: 3, partyId: "v1" },
     ],
     [
-      "transferLines",
+      "splitBill",
       (api: TillApi) =>
-        api.transferLines("wo-src", "wo-dst", [{ lineNo: 1 }], {
-          expectedPartyRevision: 7,
-          expectedSourcePartyRevision: 3,
-        }),
-      "/api/tabs/wo-src/transfer",
-      {
-        toTabId: "wo-dst",
-        transfers: [{ lineNo: 1 }],
-        expectedPartyRevision: 7,
-        expectedSourcePartyRevision: 3,
-      },
-    ],
-    [
-      "splitTab",
-      (api: TillApi) => api.splitTab("wo-7", [{ lineNo: 1 }], { expectedPartyRevision: 3 }),
-      "/api/tabs/wo-7/split",
-      { transfers: [{ lineNo: 1 }], expectedPartyRevision: 3 },
+        api.splitBill("wo-7", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }),
+      "/api/bills/wo-7/split",
+      { transfers: [{ lineNo: 1 }], expectedPartyRevision: 3, partyId: "v1" },
     ],
   ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ checkId: "c1" }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "c1" }));
 
     await call(new TillApi("", fetchStub));
 
@@ -2756,6 +2758,26 @@ describe("TillApi: a party's drafts", () => {
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/drafts/d1/submit",
       expect.objectContaining({ method: "POST", body: JSON.stringify(body), signal }),
+    );
+  });
+
+  it("submitDraft sends the bill the lines go on when the person chose one", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ tabId: "wo-2", revision: 6, groups: [], draft: null }));
+    const body = {
+      submissionId: "sub-3",
+      expectedPartyRevision: 5,
+      draftRevision: 3,
+      groups: [{ lineIds: ["dl-1"], release: "fire" as const }],
+      billId: "wo-2",
+    };
+
+    await new TillApi("", fetchStub).submitDraft("v1", "d1", body);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/drafts/d1/submit",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(body) }),
     );
   });
 
