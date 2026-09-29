@@ -3640,7 +3640,7 @@ ongoing overhaul listed at the top of Track A.
   2026-09-28).** `deriveDisplayName` (`packages/shared/src/derive-display-name.ts`) takes the first
   word of each field, so "María José" + "García López" gives "María García". Shorter names collide
   more often, so the add-person, edit-person and profile forms now show `person.display_name_taken`
-  beside the display-name field. Since C54 the add-person and edit-person forms
+  beside the display-name field. Since C54 (#853) the add-person and edit-person forms
   (`apps/dashboard/src/widgets/person-form.ts`, `person-edit.ts`) also put `person.email_taken`,
   `person.email_invalid` and `person.telephone_invalid` under their field, with the action still
   working. Left as they were, from #827's review: unlike the two staff forms, the profile screen keeps a
@@ -3735,7 +3735,7 @@ ongoing overhaul listed at the top of Track A.
   `docs/developers/design-system.md` → Forms states the rule. **The owner restated the rule on
   2026-09-29:** the button works until the first press; a form validation error (a field the form
   itself finds wrong) keeps it disabled until fixed; an error that comes back from a request (the
-  server refused, or it could not be reached) leaves it enabled. **Done by C54:** in the forms it surveyed — the
+  server refused, or it could not be reached) leaves it enabled. **Done by C54 (#853):** in the forms it surveyed — the
   dashboard, the setup wizard, and the adjustments, venue-service and media module screens — a
   request's refusal no longer disables the action by itself (when handling it empties or reveals a
   required field, that field's own check holds the action until the field is filled), a refusal
@@ -3836,7 +3836,7 @@ ongoing overhaul listed at the top of Track A.
   and the cause is not established. (e) and (f) are observations from the implementer's session.
 
 - **Request refusals that still land in the bottom message, or under a field in generic words —
-  OPEN (left by C54).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
+  OPEN (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
   adjustments, venue-service and media module screens) it kept the action working after a request's
   refusal and put a refusal naming a shown field under that field. What it left, each
   for the reason given with it: (1) the product
