@@ -5952,7 +5952,7 @@ reading unless marked run:
   review; both by reading, not run. The variant form was left out of C68 because lane B's
   standalone-ordering task (B13, Task 13 of
   `docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md`) changes the product editor.
-  **DONE (C68, 2026-09-29):** the Units, Options and Extras forms (`unit-form.ts`,
+  **DONE (C68, #863, 2026-09-29):** the Units, Options and Extras forms (`unit-form.ts`,
   `option-list-form.ts`, `extra-list-form.ts`) carry the same `!this.open` check
   `option-label-form.ts` does; a test in each cancels, closes the form, waits for the dialog's
   close report and counts one `wt-cancel`. A review run with the three checks removed counted two
