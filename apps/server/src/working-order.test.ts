@@ -1284,9 +1284,22 @@ describe("listHeldOrders", () => {
         label: "Mesa 4",
         itemCount: 1,
         total: grossA,
+        outstanding: grossA,
+        hasPayments: false,
+        partyId: null,
         openedAt: a.openedAt,
       },
-      { id: idB, orderNumber: 2, label: null, itemCount: 2, total: grossB, openedAt: b.openedAt },
+      {
+        id: idB,
+        orderNumber: 2,
+        label: null,
+        itemCount: 2,
+        total: grossB,
+        outstanding: grossB,
+        hasPayments: false,
+        partyId: null,
+        openedAt: b.openedAt,
+      },
     ]);
   });
 

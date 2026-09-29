@@ -178,6 +178,7 @@ import {
   assertBillInvariant,
   issueIfFullyPaid,
   readPaidQuantities,
+  readReceivedByBill,
   refuseBillHoldingMoney,
   refuseBillWithPayments,
   refusePaidLines,
@@ -3631,6 +3632,12 @@ export interface HeldOrderSummary {
   itemCount: number;
   /** The GROSS total the operator saw; the filed `sale_lines.line_total` is net. */
   total: string;
+  /** `total` less the money the bill has received. */
+  outstanding: string;
+  /** A payment is pending or received on the bill, one given back in full included. */
+  hasPayments: boolean;
+  /** Null for a counter order; a party's bill is listed here too. */
+  partyId: string | null;
   openedAt: string;
 }
 
@@ -3715,9 +3722,14 @@ export async function listHeldOrders(
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
+        partyId: workingOrders.partyId,
         itemCount: sql<number>`cast(count(${workingOrderLines.id}) as int)`,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+        hasPayments: sql<number>`exists (
+          select 1 from ${billPayments}
+          where ${billPayments.workingOrderId} = ${workingOrders.id}
+            and ${billPayments.state} in ('pending', 'received'))`,
         openedAt: workingOrders.openedAt,
       })
       .from(workingOrders)
@@ -3728,10 +3740,30 @@ export async function listHeldOrders(
         workingOrders.id,
         workingOrders.orderNumber,
         workingOrders.label,
+        workingOrders.partyId,
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
-    return rows.map((row) => ({ ...row, total: rawCentsToDecimal(row.total) }));
+    const received = await readReceivedByBill(
+      tx,
+      rows.map((row) => row.id),
+    );
+    return rows.map(({ id, orderNumber, label, partyId, itemCount, openedAt, ...money }) => {
+      const total = rawCentsToDecimal(money.total);
+      const paid = received.get(id);
+      return {
+        id,
+        orderNumber,
+        label,
+        itemCount,
+        total,
+        outstanding:
+          paid === undefined ? total : toScale(subtractDecimal(total, paid), MONEY_SCALE),
+        hasPayments: money.hasPayments === 1,
+        partyId,
+        openedAt,
+      };
+    });
   });
 }
 
