@@ -2381,6 +2381,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   accessibility check in both themes. The real Printers screen, opened on the demo stack, drew with
   no console errors, but that stack has no Bluetooth hardware, so no command was sent through it.
   **Nobody has yet paired or forgotten a real printer through the dashboard.**
+  _2026-09-30: A138 changed this — the button is Pair and add, a succeeded pairing opens the form
+  to add the printer and shows Add at once, the screen keeps reading after a success until the
+  device is reported paired, that pairing's deadline passes, or Add a printer closes, and a paired
+  device with no printer row also offers Forget pairing;
+  see the A138 entry below._
 - **Follow-ups from P2c** (read, not run, unless a line says otherwise):
   - A command queued behind a slow pair can run out of time. The 120 seconds count from queueing
     (`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
@@ -2454,18 +2459,33 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   **The waits in the flow, read from the code and not timed:** the agent asks the server for work
   every 2 s when idle (`POLL_INTERVAL_MS`, `packages/print-agent/src/agent.ts`); while Add a
   printer's discovery window is open (`DISCOVERY_WINDOW_MS`, 3 minutes, `apps/server/src/print-api.ts`)
-  each ask first runs a 6-second Bluetooth scan plus `info` calls about up to eight devices
-  (`apps/print-agent/src/bluetooth.ts`), so a Pair can take that long to reach the agent; the pairing
-  itself allows 10 s to start bluetoothctl's agent, 75 s to pair and 5 s to exit
+  each ask first runs the whole discovery scan — USB, the network (`liveNetworkScan`,
+  `apps/print-agent/src/linux-devices.ts`), then a 6-second Bluetooth scan plus `info` calls about
+  up to eight devices (`apps/print-agent/src/bluetooth.ts`), plus any owner-started address checks
+  and the office-printer check — so a Pair can take at least that long to reach the agent; the
+  pairing itself allows 10 s to start bluetoothctl's agent, 75 s to pair and 5 s to exit
   (`apps/print-agent/src/bluetooth-command.ts`); a finished pairing wakes the agent's loop at once,
   but one that finishes during a scan goes out when that scan ends, with a paired listing started
   before the pairing finished, so the server can learn the device is paired one ask after it learns
   the pairing succeeded — which is why the dashboard counts a succeeded pairing as paired and keeps
-  reading until the report arrives; the dashboard reads every 2 s (`SCAN_POLL_MS`). No wait was
+  reading after a success until the device is reported paired, that pairing's deadline passes, or
+  Add a printer closes; the dashboard reads every 2 s (`SCAN_POLL_MS`,
+  `apps/dashboard/src/screens/printers-screen.ts`). No wait was
   shortened. **Open:** whether scanning while pairing slows a real pairing is not measured; the agent
   keeps scanning through a pairing because skipping the scan would drop every unpaired device from
   the list after the server's 15 s `DISCOVERED_TTL_MS`. Box check owed: time a pairing through the
   dashboard.
+- **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — open.** The
+  owner: _"i also don't see how to unpair the printer"_. Today an added Bluetooth printer's row
+  offers Forget pairing only while the printer is disabled and an agent reports it paired
+  (`#forgetAction` and `#pairedReport`, `apps/dashboard/src/screens/printers-screen.ts`); since
+  A138 a paired device with no printer row offers it in the new-printer list
+  (`#forgetDeviceAction`). Open: (i) find the actual cause first — the suspect, not yet checked, is
+  that the agent's paired listing drops every paired Bluetooth device while `liveBtDevicePath`
+  throws (the comment above `visibleDevices`' catch in `apps/print-agent/src/linux-devices.ts`);
+  (ii) the owner's Spanish wording for the action, "Desvincular" instead of "Olvidar
+  emparejamiento" (`printers.bluetooth_forget` and its siblings in
+  `apps/dashboard/src/i18n/strings.ts`).
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.

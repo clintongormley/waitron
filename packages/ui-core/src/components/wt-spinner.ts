@@ -66,7 +66,8 @@ export class WtSpinner extends LitElement {
   @property({ reflect: true }) size: WtSpinnerSize = "md";
   /** The accessible name of the status region — what a screen reader announces. */
   @property() label = "Loading";
-  /** Purely visual: no status role, hidden from assistive tech (the host control carries the state). */
+  /** Purely visual: no status role, hidden from assistive tech (a host control, or a status text
+   * beside it, carries the state). */
   @property({ type: Boolean, reflect: true }) decorative = false;
 
   override render() {
