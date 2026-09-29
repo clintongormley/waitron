@@ -3528,12 +3528,13 @@ ongoing overhaul listed at the top of Track A.
   services screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons,
   and shows a refusal as a plain alert; and the delete confirmations in
   `apps/dashboard/src/screens/labels-panel.ts` and `apps/dashboard/src/screens/sections-screen.ts`
-  keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
+  keep their refusal in the dialog's body, as does the image library's delete confirmation
+  (`packages/media/src/dashboard/image-library.ts`), whose upload and edit dialog follows the rule
+  since C47m; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Left open, not done: (1) the dashboard module screens
   (adjustments reasons, Stripe and SumUp connect and add-reader, venue operations) still show
-  `wt-form-error-summary` at the top — C47 part 2, lane B; the image library
-  (`packages/media`) is C47m, lane A; (2) the setup wizard's screens — C47s, lane C; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
+  `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's screens — C47s, lane C; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
   nothing uses it — besides the module screens, the `packages/ui` workbench demo
   (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
   which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it; (5) the profile
