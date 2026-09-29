@@ -1,11 +1,15 @@
 /**
- * Runs every closer, whatever the others do, then rejects with the first failure in list order —
- * so no pool is left open behind a failed one, and the failure still reaches the caller's log.
+ * Runs every closer in order, each after the one before it settles, even when one fails; then
+ * rejects with the first failure.
  */
-export async function closeAll(closers: ReadonlyArray<() => Promise<void>>): Promise<void> {
-  const outcomes = await Promise.allSettled(closers.map(async (close) => close()));
-  const failed = outcomes.find(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected",
-  );
-  if (failed !== undefined) throw failed.reason;
+export async function closeAll(closers: ReadonlyArray<() => unknown>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const close of closers) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
 }

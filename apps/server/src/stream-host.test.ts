@@ -370,8 +370,8 @@ describe("the live copy's wiring", () => {
         expect(litestream.replicas()).toHaveLength(1);
       });
 
-      // stopWork closes the store once stop() resolves, so Litestream must be gone by then even when
-      // a reload had already begun stopping it.
+      // The server's close() closes the store once this stop() settles, so Litestream must be gone
+      // by then even when a reload had already begun stopping it.
       /** A Litestream that takes 800 ms to exit after it is killed. */
       const slowToDie =
         (litestream: FakeLitestream): SpawnFn =>

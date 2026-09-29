@@ -33,6 +33,7 @@ import {
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
+import { closeAll } from "./close-all.js";
 import { runDue } from "@waitron/scheduler";
 import type { TickResult } from "@waitron/scheduler";
 import { StripeReconciler } from "@waitron/payments-stripe";
@@ -243,10 +244,7 @@ export interface StartedServer {
   close(): Promise<void>;
 }
 
-/**
- * The mode-specific half of `close()` (see `makeStartedServer`). `stopWork` must not reject: a
- * rejection skips `closePools`.
- */
+/** The mode-specific half of `close()` (see `makeStartedServer`). */
 interface BootTeardown {
   stopWork: () => Promise<void>;
   closePools: () => Promise<void>;
@@ -627,20 +625,15 @@ function makeStartedServer(
     close: async () => {
       if (closed) return;
       closed = true;
-      // A reject here must never skip the store teardown below.
       await mdns.stop().catch(() => {});
-      // Outside the try/finally: a rejecting `stopWork` skips `closePools`, so it must not reject.
-      await teardown.stopWork();
-      // `finally`: a rejecting listener close must still close the store.
-      try {
+      await closeAll([
+        teardown.stopWork,
         // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
         // Node's server.close() otherwise waits forever on the setup page's poll connection.
-        await closeListener(server);
-      } finally {
-        // A reject here must not skip the store teardown below.
-        if (landing !== undefined) await landing.close().catch(() => {});
-        await teardown.closePools();
-      }
+        () => closeListener(server),
+        () => landing?.close().catch(() => {}),
+        teardown.closePools,
+      ]);
       log("info", "server.stopped");
     },
   };
@@ -2046,17 +2039,18 @@ async function bootServer(
       stopWork: async () => {
         controller.abort();
         cloudController.abort();
-        await cloudWorker;
-        await cloudSnapshots;
-        unsubscribeFromChanges();
-        liveEvents.close();
-        tunnelController.abort();
-        await loop;
-        // Swallowed: a rejection here must never skip the store teardown.
-        if (tunnelWorker !== undefined) await tunnelWorker.catch(() => {});
-        await backupSupervisor.stop();
-        // Litestream writes venue.db, so it stops before the store closes beneath it.
-        await streamHost.stop();
+        await closeAll([
+          () => cloudWorker,
+          () => cloudSnapshots,
+          unsubscribeFromChanges,
+          () => liveEvents.close(),
+          () => tunnelController.abort(),
+          () => loop,
+          () => tunnelWorker?.catch(() => {}),
+          () => backupSupervisor.stop(),
+          // Litestream writes venue.db, so its stop is awaited before the store closes.
+          () => streamHost.stop(),
+        ]);
       },
       closePools: () => store.close(),
     },

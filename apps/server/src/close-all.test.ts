@@ -34,4 +34,25 @@ describe("closeAll", () => {
     await expect(outcome).rejects.toBe(boom);
     expect(closed).toEqual(["b"]);
   });
+
+  it("starts a closer only once the one before it has settled", async () => {
+    const seen: string[] = [];
+    let settleSlow!: () => void;
+    const outcome = closeAll([
+      () =>
+        new Promise<void>((resolve) => {
+          seen.push("slow started");
+          settleSlow = () => {
+            seen.push("slow settled");
+            resolve();
+          };
+        }),
+      () => void seen.push("next started"),
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(seen).toEqual(["slow started"]);
+    settleSlow();
+    await outcome;
+    expect(seen).toEqual(["slow started", "slow settled", "next started"]);
+  });
 });
