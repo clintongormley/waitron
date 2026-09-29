@@ -4550,7 +4550,7 @@ ongoing overhaul listed at the top of Track A.
   editors put a refused field's message under it in their generic words (`editor.field_rejected` in
   `apps/dashboard/src/screens/catalogue-screen.ts` `#rejectedField`; `venue.field_refused` in
   `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not the refusal's own
-  sentence. **Setup half, DONE (C62, 2026-09-29):** the setup screens now agree on what goes under a
+  sentence. **Setup half, DONE (C62, #895, 2026-09-29):** the setup screens now agree on what goes under a
   refused field — a sentence about that field alone. Connect and reset already showed the field's
   own "Check the …" sentence (venue shows one that says what is wrong with the field — `SERVER_FIELDS` in `apps/setup/src/server-fields.ts`), and the
   restore screen now does too ("Check the backup file.", "Check the recovery key.", "Check the
