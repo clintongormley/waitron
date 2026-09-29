@@ -3085,18 +3085,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `formatReceipt` print `TOTAL 18,00`, `Efectivo 22,20` and `Cambio 4,20`. **PARKED (owner,
         2026-09-29)** until the product can issue a corrective invoice; the owner's points for that
         design are on the corrective-invoice entry (R5, above).
-      - **A bill corrected to zero cannot be collected, and one corrected below zero probably cannot
-        either.** Measured 2026-09-29 with a temporary test that corrected the 18.00 bill by -18.00
-        and collected it in cash: with C50's change it fails with
-        `CHECK constraint failed: tenders_amount_ck`, a raw database error with no domain code; on
-        the code before C50 it was refused with `sale.tender_shortfall` (due 0.00, charged 18.00).
-        So C50 turned a domain refusal into an unclassified error for this case, and neither version
-        collected it. Read, not run: neither `recordCorrection`
-        (`packages/core/src/record-correction.ts`) nor the Verifactu backend's correction path
-        checks a correction's size against the invoice, and with a negative amount due
-        `settlementFor` settles at that amount and the payment insert meets the same
-        `tenders_amount_ck`. **DECIDED (owner, 2026-09-29): just close the bill** — collecting a
-        bill that owes nothing is queued as C59.
+      - **DONE (C59, 2026-09-29): a bill corrected to zero is collected and closes.** The owner's
+        answer (2026-09-29): "yes just close the bill". When corrections bring the amount due to
+        zero, `collectOrder` (`apps/server/src/till-sale.ts`) settles the sale with no tender row,
+        and writes no manual card `payments` row and no cash drawer opening, since no money changes
+        hands. The bill becomes `settled` with its `collected_at` stamped, as an ordinary
+        collection does, and no second fiscal record is filed. The ticket it returns has the tender
+        `{ method: "unpaid" }`, which the till's ticket screen shows as no payment line
+        (`apps/till/src/screens/till-ticket-view.ts:100`, read, not run). New cases in
+        `apps/server/src/collect-by-invoice.test.ts` correct the 18.00 bill by -18.00 and collect
+        it in cash and by manual card; both failed with `CHECK constraint failed:
+        tenders_amount_ck` before the change. A control case shows an ordinary cash collection of
+        a corrected bill does open the drawer.
+        **Still open: a bill corrected BELOW zero** (the customer is owed money) is refused and
+        stays open, now with the domain code `sale.tender_shortfall` (due -2.00, charged 0) where
+        it failed with the raw `tenders_amount_ck` error; measured by a case correcting the bill by
+        -20.00. Neither `recordCorrection` nor the Verifactu backend's correction path stops a
+        correction larger than the invoice (read, not run). **Next action:** decide what should
+        happen to such a bill (an owner call): refuse the over-sized correction when it is
+        recorded, or pay the difference back at collection.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
