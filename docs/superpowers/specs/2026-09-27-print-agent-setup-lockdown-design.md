@@ -217,4 +217,8 @@ header.
   whose bus rules cover what `list`, `devices` and `scan` were measured to need. The pairing call
   itself, what BlueZ calls back into bluetoothctl while pairing, and `trust` (a property write), are
   not allowed yet; the real-box measurement decides them. See `docs/backlog.md`, B6._
+  _2026-09-29 (P2b): the owner's box showed a bond is enough to reconnect, with `Trusted: no`, and
+  `remove` forgets a printer. The profile now allows pairing with a PIN through interactive
+  bluetoothctl, and `remove`, measured on a CI runner against the stand-in BlueZ; `trust` stays
+  refused. Receipts in the profile's header._
 - The permission name the two routes share with discovery, read from the existing route.

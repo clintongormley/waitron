@@ -292,7 +292,9 @@ describe("the print-agent image and its compose wiring", () => {
     expect(IMAGE_SMOKE).toContain("apparmor_parser -r deploy/apparmor/waitron-print-agent");
     expect(IMAGE_SMOKE).toContain('echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"');
     expect(IMAGE_SMOKE).toContain("scripts/fake-bluez.py");
-    expect(IMAGE_SMOKE).toContain("bluetoothctl remove 66:55:44:33:22:11");
+    expect(IMAGE_SMOKE).toContain("node /tmp/bluetoothctl-pair.mjs 86:67:7A:00:00:01 1234");
+    expect(IMAGE_SMOKE).toContain("bluetoothctl remove 86:67:7A:00:00:01");
+    expect(IMAGE_SMOKE).toContain("bluetoothctl trust 66:55:44:33:22:11");
     expect(IMAGE_SMOKE).toContain("--security-opt apparmor=docker-default");
     expect(IMAGE_SMOKE).toContain("jq -e '.bluetooth.available == true' status.json");
   });

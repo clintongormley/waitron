@@ -129,10 +129,14 @@ describe("isImageInputPath", () => {
     expect(isImageInputPath("deploy/README.md")).toBe(true);
   });
 
-  // Image-smoke's stand-in BlueZ lives outside deploy/, and nothing but image-smoke runs it.
-  it("treats the stand-in BlueZ image-smoke runs as an image input", () => {
-    expect(isImageInputPath("scripts/fake-bluez.py")).toBe(true);
-  });
+  // Image-smoke's stand-in BlueZ and its pairing driver live outside deploy/, and image-smoke is the
+  // only place either meets bluetoothctl.
+  it.each(["scripts/fake-bluez.py", "scripts/bluetoothctl-pair.mjs"])(
+    "treats %s, which image-smoke runs, as an image input",
+    (path) => {
+      expect(isImageInputPath(path)).toBe(true);
+    },
+  );
 
   // Reads image-smoke.yml as TEXT and sees only literal `scripts/…` paths, so a script reached
   // through a variable or outside `scripts/` is invisible to it.

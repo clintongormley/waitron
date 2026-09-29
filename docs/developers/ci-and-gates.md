@@ -41,8 +41,9 @@ and every bundle they produce is an esbuild bundle. **Nothing in that job, or in
 front-end-only pull request runs, executes `vite build`.** In CI, the dashboard, setup and till
 bundles are built only inside `deploy/Dockerfile` — and on a pull request the `image` job carries
 `needs.changes.outputs.deploy == 'true'`, so it runs only when the pull request changed an image
-input: a path under `deploy/`, or one of the files only image-smoke runs, which
-`isImageInputPath` in `scripts/changed-scope.mjs` names (`scripts/fake-bluez.py`). A change under
+input: a path under `deploy/`, or one of the files image-smoke runs, which
+`isImageInputPath` in `scripts/changed-scope.mjs` names (`scripts/fake-bluez.py`,
+`scripts/bluetoothctl-pair.mjs`). A change under
 `apps/till/src` therefore reaches a main push before anything in CI builds its bundle. Locally the
 root `build` script does run all three, which is how this branch got its evidence.
 

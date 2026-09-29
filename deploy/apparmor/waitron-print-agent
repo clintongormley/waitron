@@ -11,22 +11,32 @@
 # at the end is Waitron's addition: `docker-default` has no D-Bus rules, so the system bus refuses
 # the container's first message (`Hello`) and `bluetoothctl` cannot reach BlueZ at all.
 #
-# The D-Bus rules are the messages bluetoothctl 5.82 sent for `list`, `devices`, `devices Paired`
-# and `scan on`, and the two signals `scan on` received, read with dbus-monitor against a stand-in
-# BlueZ (scripts/fake-bluez.py) on a private system bus; run with a command, bluetoothctl sent
-# nothing to BlueZ's agent manager, so it registered no pairing agent. On a GitHub Ubuntu 24.04
-# runner (AppArmor parser 4.0.1, dbus-daemon 1.14.10, Docker 28.0.4; runs 36562032152 and
-# 36562581079) those four commands worked under these rules with no denial, and `remove` was
-# refused: its `RemoveDevice` never reached the stand-in. AppArmor's own rule matcher
-# (python3-apparmor 4.0.1) reads them as refusing the other calls it was asked about too: pairing
-# (`Device1.Pair`), `Device1.Disconnect`, `StopDiscovery`, registering an agent, setting a property
-# (`trust`), a made-up BlueZ interface, and BlueZ's call-backs to a pairing agent.
+# The D-Bus rules are what bluetoothctl 5.82 sends and receives for `list`, `devices`,
+# `devices Paired`, `scan on`, pairing with a PIN through its interactive agent, and `remove`. Each
+# was measured against a stand-in BlueZ (scripts/fake-bluez.py) on a GitHub Ubuntu 24.04 runner
+# (kernel 6.17, AppArmor parser 4.0.1, dbus-daemon 1.14.10, Docker 28.0.4), with bluetoothctl from
+# the print-agent stage's own bluez package (5.82-1.1). The listing and scan rules: runs 36562032152
+# and 36562581079, where those four commands worked with no refusal. The pairing and `remove` rules:
+# probe run 36585218089. There, with the previous rules loaded in complain mode, pairing, `remove`
+# and a PIN request left unanswered logged as ALLOWED exactly the messages the new rules name. With
+# each new rule dropped in turn its step failed or logged a refusal naming that message, and with
+# all of them the same steps worked, refusing nothing but the broadcasts named below. Nothing had to
+# be allowed for bluetoothctl's replies to BlueZ's calls: the PIN and the answer to `Cancel` both
+# reached the stand-in. Probe run 36586467212 ran the same steps under these rules as written, with
+# the same result, and image-smoke passed under them there.
 #
-# The two signals are allowed only from an unconfined sender, which the stand-in was (root, no
-# profile). A sender cannot be matched by its well-known name: `peer=(name=org.bluez)` on the
-# receive rules refused both signals on that runner. A bluetoothd running under a profile of its own
-# would not match `label=unconfined` (not tried); with its signals refused, `scan on` prints no
-# `[NEW]` or `[CHG]` lines, as it did on the runner with no receive rules at all.
+# Refused on those runs: `trust` (a `Properties.Set`), `Device1.Disconnect` and, on 36586467212,
+# `StopDiscovery` (`scan off`). Also refused: the `InterfacesAdded` and `InterfacesRemoved` signals
+# interactive bluetoothctl broadcasts about its own agent. They were refused only while another
+# process was listening for such signals from any sender, and pairing still worked. `Agent1.Release`,
+# which bluetoothd sends when it drops an agent itself, is not allowed: the stand-in never sends it.
+#
+# BlueZ's signals and its calls to the agent are allowed only from an unconfined sender, which the
+# stand-in was (root, no profile). A sender cannot be matched by its well-known name:
+# `peer=(name=org.bluez)` on the receive rules refused both scan signals on the A129 runs. A
+# bluetoothd running under a profile of its own would not match `label=unconfined` (not tried); with
+# its signals refused, `scan on` prints no `[NEW]` or `[CHG]` lines, as it did on the runner with no
+# receive rules at all.
 abi <abi/3.0>,
 #include <tunables/global>
 
@@ -106,6 +116,47 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
        interface=org.freedesktop.DBus.ObjectManager
        member=InterfacesAdded
        peer=(label=unconfined),
+
+  # A device BlueZ drops: after `remove`, and during a plain scan, where the owner's box refused it
+  # under the previous rules (2026-09-29).
+  dbus receive
+       bus=system
+       path=/
+       interface=org.freedesktop.DBus.ObjectManager
+       member=InterfacesRemoved
+       peer=(label=unconfined),
+
+  # Pair: interactive bluetoothctl registers its agent, so BlueZ can ask it for the PIN.
+  dbus send
+       bus=system
+       path=/org/bluez
+       interface=org.bluez.AgentManager1
+       member=RegisterAgent
+       peer=(name=org.bluez),
+
+  # Pair: the pairing itself.
+  dbus send
+       bus=system
+       path=/org/bluez/hci*/dev_*
+       interface=org.bluez.Device1
+       member=Pair
+       peer=(name=org.bluez),
+
+  # Pair: BlueZ asks the agent for the PIN, and cancels the question when nobody answers in time.
+  dbus receive
+       bus=system
+       path=/org/bluez/agent
+       interface=org.bluez.Agent1
+       member={RequestPinCode,Cancel}
+       peer=(label=unconfined),
+
+  # Forget: `bluetoothctl remove`.
+  dbus send
+       bus=system
+       path=/org/bluez/hci*
+       interface=org.bluez.Adapter1
+       member=RemoveDevice
+       peer=(name=org.bluez),
 
   dbus receive
        bus=system

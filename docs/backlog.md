@@ -4544,14 +4544,19 @@ approved.
   `failed`), and asks an unavailable one again every 30 seconds rather than every poll. It checks
   from the moment it starts, before it has joined a box, so the setup page's `/status.json` carries
   the report while the owner is still setting the agent up. Left open:
-  - **Pairing and `trust` are not in the profile yet.** It allows neither the pairing call
-    (`Device1.Pair`), nor anything BlueZ calls back into `bluetoothctl` while pairing (its agent,
-    `org.bluez.Agent1`), nor a property write (`trust`); P2b's real-box measurement decides these
-    and adds only what it needs.
-  - **The owner's box, in this order.** First take the plan's real-box pairing measurement with the
-    temporary `compose.override.yml` (`apparmor=unconfined`) still in place, because the shipped
-    profile refuses pairing. Then remove the override, reinstall, and check that
-    `docker compose exec print-agent bluetoothctl list` answers under the profile.
+  - **Pairing and `remove` are in the profile (P2b); `trust` is still refused.** P2b added the
+    messages interactive `bluetoothctl` pairing with a PIN and `remove` were measured to need
+    against the stand-in BlueZ on a CI runner (probe run 36585218089; the receipts are in the
+    profile's header), and image-smoke now pairs the stand-in's PIN printer and forgets it under the
+    profile. A property write (`trust`) and `Disconnect` were measured still refused there; BlueZ's
+    `Agent1.Release` is not allowed either, and was never seen.
+    `waitron.sh install` also switches off bluetoothd's `autopair` plugin with a systemd drop-in,
+    because on the owner's box it answered a PIN-1234 printer with `0000` before any agent was
+    asked (`deploy/README.md`). Not yet run on the owner's box: pairing and `remove` under the new
+    profile.
+  - **The owner's box, in this order — done 2026-09-29.** The owner took the real-box pairing
+    measurement with the profile `unconfined`, then ran `waitron.sh install`; afterwards `.env`
+    named the profile and `docker compose exec print-agent bluetoothctl list` showed the controller.
   - **The setup page's HTML says nothing about it** — only `/status.json` and the log do. The page
     is English-only, with no language switch to carry a Spanish line.
   - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
@@ -4560,10 +4565,9 @@ approved.
     messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed "No default
     controller available" and exited 0. The latest runs against the shipped rules are 36562032152
     and 36562581079 (the first printed Docker 28.0.4 and AppArmor parser 4.0.1).
-  - **Reloading at boot is read, not tried:** the profile is written to `/etc/apparmor.d`, the
-    folder Ubuntu 24.04's `apparmor.service` loads from before `sysinit.target`; no box has been
-    restarted with it. If a restart does not reload it, `.env` still names it and Docker will refuse
-    to start the print agent.
+  - **Reloading at boot — tried 2026-09-29 on the owner's box, and it works:** after a restart
+    `.env` still named the profile and `docker compose exec print-agent bluetoothctl list` showed
+    the controller, so the boot-time `apparmor.service` reloaded `/etc/apparmor.d/waitron-print-agent`.
   - **A failed Bluetooth scan throws away the USB and network printers found in the same scan**
     (found by #862's Codex review, which saw `main` do the same; not changed there).
     `createLinuxDevices`'s `scan()` (`apps/print-agent/src/linux-devices.ts`) awaits the Bluetooth
