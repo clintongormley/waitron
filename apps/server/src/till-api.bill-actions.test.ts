@@ -181,6 +181,27 @@ describe("the bill action routes", () => {
     },
   );
 
+  it.each(["split", "transfer"] as const)(
+    "%s: an empty transfers list is 400 sale.empty_basket, changing nothing",
+    async (route) => {
+      const { partyId, main, second } = await twoBills();
+      const expectedPartyRevision = await revisionOf(partyId);
+
+      const answer = await post(
+        `/api/bills/${main}/${route}`,
+        bodyFor(route, second, { expectedPartyRevision, partyId, transfers: [] }),
+      );
+
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({ code: "sale.empty_basket" });
+      expect(await revisionOf(partyId)).toBe(expectedPartyRevision);
+      expect([await statusOf(venue, main), await statusOf(venue, second)]).toEqual([
+        "open",
+        "open",
+      ]);
+    },
+  );
+
   const MALFORMED_ENTRIES = [
     ["split", null],
     ["transfer", null],

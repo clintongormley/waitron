@@ -250,6 +250,7 @@ export async function transferItems(
   command: BillCommand,
 ): Promise<void> {
   if (fromBillId === toBillId) throw new AppError("tab.transfer_self", { tabId: fromBillId });
+  if (transfers.length === 0) throw new AppError("sale.empty_basket", {});
   const path = await guardPathParty(tx, fromBillId, command);
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
