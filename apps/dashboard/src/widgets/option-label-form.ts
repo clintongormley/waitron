@@ -1,6 +1,6 @@
 import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -8,7 +8,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { optionalTextFields, switchField, textField, type FieldContext } from "./form-fields.js";
 import { t } from "../i18n/t.js";
 
@@ -50,13 +49,21 @@ export class OptionLabelForm extends LitElement {
     languages: ["en"],
   };
   /** Messages keyed by the input's `name` (`label-name`, `label-customer-name-<lang>`,
-   * `label-kitchen-name`). */
-  @property({ attribute: false }) errors: Record<string, string> = {};
+   * `label-kitchen-name`); any other key names no input here and is shown beside Save alone. The
+   * list form builds a new object on every render, so only a change of contents counts. */
+  @property({
+    attribute: false,
+    hasChanged: (next: Record<string, string>, previous?: Record<string, string>) =>
+      !sameMessages(next, previous),
+  })
+  errors: Record<string, string> = {};
   @state() private name = "";
   @state() private customerName: Record<string, string> = {};
   @state() private kitchenName = "";
   @state() private available = true;
-  @state() private validation: Record<string, string> = {};
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
 
   /** Also waits for the dialog, whose native close moves focus, so a caller can place focus after it. */
   protected override async getUpdateComplete(): Promise<boolean> {
@@ -67,6 +74,15 @@ export class OptionLabelForm extends LitElement {
 
   protected override willUpdate(changes: PropertyValues<this>): void {
     if ((changes.has("open") && this.open) || changes.has("value")) this.#reseed();
+    if (changes.has("errors")) this.dismissed = new Set();
+  }
+
+  protected override updated(changes: PropertyValues<this>): void {
+    if (
+      (changes.has("errors") || (changes.has("open") && this.open)) &&
+      this.#fieldKeys(this.#errors()).length > 0
+    )
+      void focusFirstInvalid(this.shadowRoot!);
   }
 
   #reseed(): void {
@@ -75,12 +91,27 @@ export class OptionLabelForm extends LitElement {
     this.customerName = { ...value?.customerName };
     this.kitchenName = value?.kitchenName ?? "";
     this.available = value?.available ?? true;
-    this.validation = {};
+    this.attempted = false;
+    this.dismissed = new Set();
   }
 
-  #edit(change: () => void): void {
+  #edit(change: () => void, ...keys: string[]): void {
     change();
-    this.validation = {};
+    this.dismissed = new Set([...this.dismissed, ...keys]);
+  }
+
+  #validate(): Record<string, string> {
+    return this.name.trim() ? {} : { "label-name": t("options.label_name_required") };
+  }
+
+  /** The keys of `errors` that an input this form shows displays. */
+  #fieldKeys(errors: Record<string, string>): string[] {
+    const shown = new Set([
+      "label-name",
+      "label-kitchen-name",
+      ...this.languages.languages.map((locale) => `label-customer-name-${locale}`),
+    ]);
+    return Object.keys(errors).filter((key) => errors[key] && shown.has(key));
   }
 
   #emit(
@@ -95,8 +126,10 @@ export class OptionLabelForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    if (!this.name.trim()) {
-      this.validation = { "label-name": t("options.label_name_required") };
+    this.attempted = true;
+    this.dismissed = new Set(Object.keys(this.errors));
+    if (Object.keys(this.#validate()).length > 0) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
     this.#emit(event, "wt-submit", {
@@ -123,7 +156,10 @@ export class OptionLabelForm extends LitElement {
   }
 
   #errors(): Record<string, string> {
-    return { ...this.errors, ...this.validation };
+    const refused = Object.fromEntries(
+      Object.entries(this.errors).filter(([key]) => !this.dismissed.has(key)),
+    );
+    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
   }
 
   #fields(errors: Record<string, string>): FieldContext {
@@ -156,7 +192,11 @@ export class OptionLabelForm extends LitElement {
           "label-customer-name",
           t("options.customer_name"),
           this.customerName,
-          (customerName) => this.#edit(() => (this.customerName = customerName)),
+          (customerName) =>
+            this.#edit(
+              () => (this.customerName = customerName),
+              ...locales.map((locale) => `label-customer-name-${locale}`),
+            ),
           this.name,
         )}
         ${textField(
@@ -164,7 +204,7 @@ export class OptionLabelForm extends LitElement {
           "label-kitchen-name",
           t("options.kitchen_name"),
           this.kitchenName,
-          (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName)),
+          (kitchenName) => this.#edit(() => (this.kitchenName = kitchenName), "label-kitchen-name"),
           false,
           this.name,
         )}
@@ -175,6 +215,13 @@ export class OptionLabelForm extends LitElement {
   override render() {
     const errors = this.#errors();
     const fields = this.#fields(errors);
+    const fieldKeys = new Set(this.#fieldKeys(errors));
+    const bottom = [
+      ...Object.entries(errors)
+        .filter(([key, message]) => message && !fieldKeys.has(key))
+        .map(([, message]) => message),
+      ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-modal
       .open=${this.open}
       heading=${t(this.value ? "options.edit_option" : "options.add_option")}
@@ -189,16 +236,12 @@ export class OptionLabelForm extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${Object.values(errors)}
-        ></wt-form-error-summary>
         ${textField(
           fields,
           "label-name",
           t("options.name"),
           this.name,
-          (name) => this.#edit(() => (this.name = name)),
+          (name) => this.#edit(() => (this.name = name), "label-name"),
           true,
         )}
         ${this.#namesSection(errors)}
@@ -210,7 +253,7 @@ export class OptionLabelForm extends LitElement {
           (available) => this.#edit(() => (this.available = available)),
         )}
       </div>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
           data-test="cancel"
@@ -222,7 +265,7 @@ export class OptionLabelForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy}
+          .disabled=${this.busy || fieldKeys.size > 0}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions
@@ -230,6 +273,17 @@ export class OptionLabelForm extends LitElement {
     </wt-modal>`;
   }
 }
+function sameMessages(
+  next: Record<string, string>,
+  previous: Record<string, string> | undefined,
+): boolean {
+  if (previous === undefined) return false;
+  const keys = Object.keys(next);
+  return (
+    keys.length === Object.keys(previous).length && keys.every((key) => next[key] === previous[key])
+  );
+}
+
 declare global {
   interface HTMLElementTagNameMap {
     "dashboard-option-label-form": OptionLabelForm;

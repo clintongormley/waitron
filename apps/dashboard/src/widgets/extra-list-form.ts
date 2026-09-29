@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { resolveContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -14,7 +14,6 @@ import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { optionalTextFields, translations, wholeWithin, type FieldContext } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
@@ -149,7 +148,9 @@ export class ExtraListForm extends LitElement {
   @state() private items: DraftItem[] = [];
   /** The product the picker is on, "" when it is on its blank entry. */
   @state() private pick = "";
-  @state() private validation: Record<string, string> = {};
+  @state() private attempted = false;
+  /** `serverErrors` keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
   /** `fieldErrors` with each path turned into one of this form's own keys. An item's message is
    * held against the item's ID rather than the position the server named, so moving an item
    * carries its message with it. */
@@ -179,7 +180,23 @@ export class ExtraListForm extends LitElement {
       this.#reseed();
     }
     // After the reseed, so an item path resolves against the items now on screen.
-    if (changes.has("fieldErrors")) this.serverErrors = this.#mapFieldErrors();
+    if (changes.has("fieldErrors")) {
+      this.serverErrors = this.#mapFieldErrors();
+      this.dismissed = new Set();
+    }
+  }
+
+  protected override updated(changes: PropertyValues<this>): void {
+    if (changes.has("fieldErrors") && this.#messages().fieldKeys.size > 0)
+      void this.#focusFirstInvalid();
+  }
+
+  /** A message under the items table or a row's product has no control of its own, so focus goes to
+   * the table when no control is invalid. */
+  async #focusFirstInvalid(): Promise<void> {
+    await this.updateComplete;
+    if ((await focusFirstInvalid(this.shadowRoot!)) === null)
+      this.shadowRoot!.querySelector<HTMLElement>(".table-wrap")?.focus();
   }
 
   #reseed(): void {
@@ -198,7 +215,8 @@ export class ExtraListForm extends LitElement {
       price: item.price ?? "",
     }));
     this.pick = "";
-    this.validation = {};
+    this.attempted = false;
+    this.dismissed = new Set();
   }
 
   #productById = new Map<string, Product>();
@@ -239,8 +257,10 @@ export class ExtraListForm extends LitElement {
   }
 
   /** A path naming the list as a whole or an item's id has no input of its own, so it is shown under
-   * the items table with the rest of the list-level refusals. */
+   * the items table with the rest of the list-level refusals. `_form` names no field, and is shown
+   * beside Save alone. */
   #formKey(field: string): string {
+    if (field === "_form") return field;
     const item = /^items\.(\d+)(?:\.(.+))?$/.exec(field);
     if (item) {
       const id = this.items[Number(item[1])]?.id;
@@ -268,35 +288,76 @@ export class ExtraListForm extends LitElement {
     return null;
   }
 
-  #errors(): Record<string, string> {
+  /**
+   * Every message on screen, keyed as the form shows it, and the keys among them that are a field's
+   * and so hold Save back. A refusal held for an item the operator has since removed is shown under
+   * the items table but holds nothing back: removing the item was the change to it. `active`, `_form`
+   * and an item's preselection (`wt-switch` draws no error text) name nothing this form shows a
+   * message under.
+   */
+  #messages(): { errors: Record<string, string>; fieldKeys: Set<string> } {
     const errors: Record<string, string> = {};
+    const fieldKeys = new Set<string>();
+    const shown = new Set([
+      "name",
+      "kitchen-name",
+      "min-picks",
+      "max-picks",
+      "items",
+      ...this.languages.languages.map((locale) => `customer-name-${locale}`),
+    ]);
+    const rowShown = new Set(["product", "max-quantity", "price"]);
+    const removed: string[] = [];
     for (const [key, message] of Object.entries(this.serverErrors)) {
+      if (this.dismissed.has(key)) continue;
       const held = /^item:([^:]+):(.+)$/.exec(key);
       if (held === null) {
         errors[key] = message;
+        if (shown.has(key)) fieldKeys.add(key);
         continue;
       }
       const index = this.items.findIndex((item) => item.id === held[1]);
-      errors[index < 0 ? "items" : `item-${index}-${held[2]}`] = message;
+      if (index < 0) {
+        removed.push(message);
+        continue;
+      }
+      errors[`item-${index}-${held[2]}`] = message;
+      if (rowShown.has(held[2]!)) fieldKeys.add(`item-${index}-${held[2]}`);
     }
-    return { ...errors, ...this.validation };
+    if (removed.length > 0 && errors.items === undefined) errors.items = removed.at(-1)!;
+    if (this.attempted)
+      for (const [key, message] of Object.entries(this.#check().validation)) {
+        errors[key] = message;
+        fieldKeys.add(key);
+      }
+    return { errors, fieldKeys };
   }
 
-  #edit(change: () => void): void {
+  #edit(change: () => void, ...keys: string[]): void {
     change();
-    this.validation = {};
+    this.dismissed = new Set([...this.dismissed, ...keys]);
   }
 
-  #editItem(id: string, patch: Partial<DraftItem>): void {
-    this.#edit(() => {
-      this.items = this.items.map((item) => (item.id === id ? { ...item, ...patch } : item));
-    });
+  /** A change to the items answers a refusal about them as a whole. */
+  #editItems(change: () => void, ...keys: string[]): void {
+    this.#edit(change, "items", ...keys);
+  }
+
+  /** `cell` is the refusal the change answers; a preselection's is shown beside Save alone, and goes
+   * only when the list is submitted again. */
+  #editItem(id: string, patch: Partial<DraftItem>, cell?: string): void {
+    this.#editItems(
+      () => {
+        this.items = this.items.map((item) => (item.id === id ? { ...item, ...patch } : item));
+      },
+      ...(cell ? [`item:${id}:${cell}`] : []),
+    );
   }
 
   #addItem(): void {
     const productId = this.pick;
     if (!productId) return;
-    this.#edit(() => {
+    this.#editItems(() => {
       // An item is given its id HERE, not by the server. `writeItems` deletes every item of the
       // list and re-inserts the body's under `item.id ?? randomUUID()`
       // (packages/catalogue/src/extras.ts), so a row keeps its identity across a save only because
@@ -315,7 +376,7 @@ export class ExtraListForm extends LitElement {
   }
 
   #removeItem(id: string): void {
-    this.#edit(() => {
+    this.#editItems(() => {
       this.items = this.items.filter((item) => item.id !== id);
     });
   }
@@ -324,7 +385,7 @@ export class ExtraListForm extends LitElement {
   #move(id: string, to: number): void {
     const from = this.items.findIndex((item) => item.id === id);
     if (from < 0) return;
-    this.#edit(() => {
+    this.#editItems(() => {
       this.items = reorder(this.items, from, to);
     });
   }
@@ -338,9 +399,8 @@ export class ExtraListForm extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #submit(event: Event): void {
-    event.stopPropagation();
-    if (this.busy) return;
+  /** The client's own refusals, and the list they would send when there are none. */
+  #check(): { validation: Record<string, string>; value: ExtraListInput | null } {
     const validation: Record<string, string> = {};
     if (!this.name.trim()) validation.name = t("extras.name_required");
     // A blank minimum is the contract's own default of 0 (`row.minPicks === undefined ? 0`), which
@@ -382,9 +442,9 @@ export class ExtraListForm extends LitElement {
     // same split the server makes.
     if (this.active && items.length === 0) validation.items = t("extras.items_required");
 
-    this.validation = validation;
-    if (minPicks === null || Object.keys(validation).length) return;
-    this.#emit(event, "wt-submit", {
+    if (minPicks === null || Object.keys(validation).length) return { validation, value: null };
+    return {
+      validation,
       value: {
         name: this.name.trim(),
         customerName: translations(this.customerName),
@@ -394,7 +454,20 @@ export class ExtraListForm extends LitElement {
         active: this.active,
         items,
       },
-    });
+    };
+  }
+
+  #submit(event: Event): void {
+    event.stopPropagation();
+    if (this.busy) return;
+    this.attempted = true;
+    this.dismissed = new Set(Object.keys(this.serverErrors));
+    const { value } = this.#check();
+    if (value === null) {
+      void this.#focusFirstInvalid();
+      return;
+    }
+    this.#emit(event, "wt-submit", { value });
   }
 
   #cancel(event: Event): void {
@@ -434,7 +507,11 @@ export class ExtraListForm extends LitElement {
           "customer-name",
           t("extras.customer_name"),
           this.customerName,
-          (customerName) => this.#edit(() => (this.customerName = customerName)),
+          (customerName) =>
+            this.#edit(
+              () => (this.customerName = customerName),
+              ...locales.map((locale) => `customer-name-${locale}`),
+            ),
           this.name,
         )}
         <wt-input
@@ -447,7 +524,7 @@ export class ExtraListForm extends LitElement {
           .invalid=${!!errors["kitchen-name"]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
-            this.#edit(() => (this.kitchenName = event.detail.value));
+            this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
           }}
         ></wt-input>
       </div>
@@ -482,7 +559,7 @@ export class ExtraListForm extends LitElement {
           .invalid=${!!errors[`item-${index}-max-quantity`]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
-            this.#editItem(item.id, { maxQuantity: event.detail.value });
+            this.#editItem(item.id, { maxQuantity: event.detail.value }, "max-quantity");
           }}
         ></wt-number-stepper>
       </td>
@@ -513,7 +590,7 @@ export class ExtraListForm extends LitElement {
           .error=${errors[`item-${index}-price`] ?? ""}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
-            this.#editItem(item.id, { price: event.detail.value });
+            this.#editItem(item.id, { price: event.detail.value }, "price");
           }}
         ></wt-price-input>
       </td>
@@ -591,7 +668,14 @@ export class ExtraListForm extends LitElement {
   }
 
   override render() {
-    const errors = this.#errors();
+    const { errors, fieldKeys } = this.#messages();
+    // The items table shows its own message, even one that holds nothing back.
+    const bottom = [
+      ...Object.entries(errors)
+        .filter(([key, message]) => message && key !== "items" && !fieldKeys.has(key))
+        .map(([, message]) => message),
+      ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-modal
       .open=${this.open}
       heading=${t(this.value ? "extras.edit" : "extras.create")}
@@ -606,10 +690,6 @@ export class ExtraListForm extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${Object.values(errors)}
-        ></wt-form-error-summary>
         <div class="names">
           <wt-input
             name="name"
@@ -621,7 +701,7 @@ export class ExtraListForm extends LitElement {
             .invalid=${!!errors.name}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               event.stopPropagation();
-              this.#edit(() => (this.name = event.detail.value));
+              this.#edit(() => (this.name = event.detail.value), "name");
             }}
           ></wt-input>
           ${this.#namesSection(errors)}
@@ -639,7 +719,7 @@ export class ExtraListForm extends LitElement {
               .invalid=${!!errors["min-picks"]}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
-                this.#edit(() => (this.minPicks = event.detail.value));
+                this.#edit(() => (this.minPicks = event.detail.value), "min-picks");
               }}
             ></wt-number-stepper>
             <wt-number-stepper
@@ -656,7 +736,7 @@ export class ExtraListForm extends LitElement {
               .invalid=${!!errors["max-picks"]}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
-                this.#edit(() => (this.maxPicks = event.detail.value));
+                this.#edit(() => (this.maxPicks = event.detail.value), "max-picks");
               }}
             ></wt-number-stepper>
           </div>
@@ -674,7 +754,7 @@ export class ExtraListForm extends LitElement {
         </div>
         ${this.#itemsSection(errors)}
       </div>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
           data-test="cancel"
@@ -686,7 +766,7 @@ export class ExtraListForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy}
+          .disabled=${this.busy || fieldKeys.size > 0}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

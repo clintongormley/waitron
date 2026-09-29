@@ -246,14 +246,20 @@ function field(el: SectionsScreen, name: string) {
   return inModal<HTMLElementTagNameMap["wt-input"]>(el, "editor", `wt-input[name="${name}"]`)!;
 }
 
-async function summary(el: SectionsScreen, testId: string): Promise<string[]> {
-  const found = inModal<HTMLElementTagNameMap["wt-form-error-summary"]>(
-    el,
-    testId,
-    "wt-form-error-summary",
-  )!;
-  await found.updateComplete;
-  return [...found.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
+/** The one message beside a form's primary action. */
+async function bottom(el: SectionsScreen, testId: string): Promise<string> {
+  const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(el, testId, "wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function button(el: SectionsScreen, testId: string, button: string) {
+  return inModal<HTMLElementTagNameMap["wt-button"]>(el, testId, `[data-test="${button}"]`)!;
+}
+
+/** Whether focus is in the native input inside `input`. */
+function focusedIn(input: HTMLElementTagNameMap["wt-input"]): boolean {
+  return input.shadowRoot!.activeElement === input.shadowRoot!.querySelector("input");
 }
 
 function click(el: SectionsScreen, selector: string): void {
@@ -664,7 +670,7 @@ it("saves on Enter in a field", async () => {
   await vi.waitFor(() => expect(client.updateSection).toHaveBeenCalledOnce());
 });
 
-it("refuses a blank internal name beside the field and in the summary, without saving", async () => {
+it("refuses a blank internal name beside the field and in the bottom message, without saving", async () => {
   const client = api();
   const el = await mount(client);
   await openEditor(el, "s-drinks");
@@ -672,7 +678,7 @@ it("refuses a blank internal name beside the field and in the summary, without s
   click(el, '[data-test="editor-save"]');
   await el.updateComplete;
   expect(field(el, "internalName").error).toBe(t("sections.internal_name_required"));
-  expect(await summary(el, "editor")).toEqual([t("sections.internal_name_required")]);
+  expect(await bottom(el, "editor")).toBe(t("form.fix_fields"));
   expect(client.updateSection).not.toHaveBeenCalled();
   expect(modal(el, "editor").open).toBe(true);
   // Typing again clears the complaint.
@@ -702,7 +708,7 @@ it("puts a server refusal beside the field it names, keeping the typed values", 
   );
   expect(field(el, "names-es").invalid).toBe(true);
   expect(field(el, "names-en").invalid).toBe(false);
-  expect(await summary(el, "editor")).toEqual([codeMessage("menu_section.translation_required")]);
+  expect(await bottom(el, "editor")).toBe(t("form.fix_fields"));
   expect(field(el, "names-en").value).toBe("Something to drink");
 
   click(el, '[data-test="editor-save"]');
@@ -720,9 +726,106 @@ it("puts a server refusal beside the field it names, keeping the typed values", 
 
   click(el, '[data-test="editor-save"]');
   await vi.waitFor(async () =>
-    expect(await summary(el, "editor")).toEqual([codeMessage("server.internal")]),
+    expect(await bottom(el, "editor")).toBe(codeMessage("server.internal")),
   );
   expect(modal(el, "editor").open).toBe(true);
+});
+
+it("says nothing about errors before the first Save, and Save works", async () => {
+  const el = await mount();
+  await openEditor(el, "s-drinks");
+  await type(field(el, "internalName"), "  ");
+  await el.updateComplete;
+  expect(field(el, "internalName").error).toBe("");
+  expect(await bottom(el, "editor")).toBe("");
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
+});
+
+it("on an invalid Save focuses the first invalid field and disables Save until it is fixed", async () => {
+  const client = api();
+  const el = await mount(client);
+  await openEditor(el, "s-drinks");
+  await type(field(el, "internalName"), "");
+  await el.updateComplete;
+  click(el, '[data-test="editor-save"]');
+  await el.updateComplete;
+  await vi.waitFor(() => expect(focusedIn(field(el, "internalName"))).toBe(true));
+  expect(button(el, "editor", "editor-save").disabled).toBe(true);
+
+  await type(field(el, "internalName"), "Drinks");
+  await el.updateComplete;
+  expect(await bottom(el, "editor")).toBe("");
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
+
+  await type(field(el, "internalName"), " ");
+  await el.updateComplete;
+  expect(field(el, "internalName").error).toBe(t("sections.internal_name_required"));
+  expect(await bottom(el, "editor")).toBe(t("form.fix_fields"));
+  expect(button(el, "editor", "editor-save").disabled).toBe(true);
+  expect(client.updateSection).not.toHaveBeenCalled();
+});
+
+it("focuses a refused field, and holds Save until that field changes", async () => {
+  const client = api({
+    updateSection: vi
+      .fn()
+      .mockRejectedValue({ code: "menu_section.invalid", params: { field: "internalName" } }),
+  });
+  const el = await mount(client);
+  await openEditor(el, "s-drinks");
+  click(el, '[data-test="editor-save"]');
+  await vi.waitFor(() =>
+    expect(field(el, "internalName").error).toBe(codeMessage("menu_section.invalid")),
+  );
+  await vi.waitFor(() => expect(focusedIn(field(el, "internalName"))).toBe(true));
+  expect(button(el, "editor", "editor-save").disabled).toBe(true);
+
+  await type(field(el, "names-en"), "Drinks");
+  await el.updateComplete;
+  expect(button(el, "editor", "editor-save").disabled).toBe(true);
+
+  await type(field(el, "internalName"), "Drinks bar");
+  await el.updateComplete;
+  expect(field(el, "internalName").error).toBe("");
+  expect(await bottom(el, "editor")).toBe("");
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
+});
+
+it("leaves Save working after a refusal naming no field, and drops it when Save is pressed again", async () => {
+  const client = api({
+    updateSection: vi.fn().mockRejectedValueOnce({ code: "server.internal" }),
+  });
+  const el = await mount(client);
+  await openEditor(el, "s-drinks");
+  click(el, '[data-test="editor-save"]');
+  await vi.waitFor(async () =>
+    expect(await bottom(el, "editor")).toBe(codeMessage("server.internal")),
+  );
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
+  await type(field(el, "internalName"), "Drinks bar");
+  await el.updateComplete;
+  expect(await bottom(el, "editor")).toBe(codeMessage("server.internal"));
+
+  await type(field(el, "internalName"), "");
+  await el.updateComplete;
+  click(el, '[data-test="editor-save"]');
+  await el.updateComplete;
+  expect(await bottom(el, "editor")).toBe(t("form.fix_fields"));
+});
+
+it("starts the editor again when it is reopened: no messages and Save working", async () => {
+  const el = await mount();
+  await openEditor(el, "s-drinks");
+  await type(field(el, "internalName"), "");
+  await el.updateComplete;
+  click(el, '[data-test="editor-save"]');
+  await el.updateComplete;
+  click(el, '[data-test="editor-cancel"]');
+  await el.updateComplete;
+  await openEditor(el, "s-drinks");
+  expect(field(el, "internalName").error).toBe("");
+  expect(await bottom(el, "editor")).toBe("");
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
 });
 
 it("treats a failed refresh after a successful save as a load failure, not a failed save", async () => {
@@ -903,7 +1006,7 @@ it("adds a member and shows the list the server then holds", async () => {
   expect(client.listSectionMembers).toHaveBeenCalledWith("s-drinks");
 });
 
-it("shows a refused nesting beside the member list and in the form's summary", async () => {
+it("shows a refused nesting beside the member list, not beside Save", async () => {
   const client = api({
     addSectionMember: vi.fn().mockRejectedValue({
       code: "menu_section.member_cycle",
@@ -917,7 +1020,8 @@ it("shows a refused nesting beside the member list and in the form's summary", a
   await vi.waitFor(() =>
     expect(inModal(el, "editor", '[data-test="member-error"]')!.textContent!.trim()).toBe(message),
   );
-  expect(await summary(el, "editor")).toEqual([message]);
+  expect(await bottom(el, "editor")).toBe("");
+  expect(button(el, "editor", "editor-save").disabled).toBe(false);
   const error = inModal(el, "editor", '[data-test="member-error"]')!;
   expect(
     error.compareDocumentPosition(memberList(el)) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1287,7 +1391,7 @@ it("refuses a blank copy name, and shows a server refusal, in the duplicate form
   click(el, '[data-test="duplicate-save"]');
   await el.updateComplete;
   expect(name.error).toBe(t("sections.internal_name_required"));
-  expect(await summary(el, "duplicate")).toEqual([t("sections.internal_name_required")]);
+  expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
   expect(client.duplicateSection).not.toHaveBeenCalled();
   await type(name, "Beer two");
   await el.updateComplete;
@@ -1297,14 +1401,57 @@ it("refuses a blank copy name, and shows a server refusal, in the duplicate form
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   await vi.waitFor(async () =>
-    expect(await summary(el, "duplicate")).toEqual([
-      codeMessage("menu_section.membership_invalid"),
-    ]),
+    expect(await bottom(el, "duplicate")).toBe(codeMessage("menu_section.membership_invalid")),
   );
   expect(modal(el, "duplicate").open).toBe(true);
   emit(modal(el, "duplicate"), "wt-close", {});
   await el.updateComplete;
   expect(modal(el, "duplicate").open).toBe(false);
+});
+
+it("follows the form rule in the duplicate form: quiet until Save, then re-checked, with a field refusal holding Save", async () => {
+  const client = api({
+    duplicateSection: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "menu_section.invalid", params: { field: "internalName" } })
+      .mockRejectedValueOnce({ code: "server.internal" }),
+  });
+  const el = await mount(client);
+  await inTable(el, "duplicate-s-beer");
+  const name = inModal<HTMLElementTagNameMap["wt-input"]>(
+    el,
+    "duplicate",
+    'wt-input[name="internalName"]',
+  )!;
+  const save = button(el, "duplicate", "duplicate-save");
+  await type(name, " ");
+  await el.updateComplete;
+  expect(name.error).toBe("");
+  expect(await bottom(el, "duplicate")).toBe("");
+  expect(save.disabled).toBe(false);
+
+  click(el, '[data-test="duplicate-save"]');
+  await el.updateComplete;
+  await vi.waitFor(() => expect(focusedIn(name)).toBe(true));
+  expect(save.disabled).toBe(true);
+  await type(name, "Beer two");
+  await el.updateComplete;
+  expect(await bottom(el, "duplicate")).toBe("");
+  expect(save.disabled).toBe(false);
+
+  click(el, '[data-test="duplicate-save"]');
+  await vi.waitFor(() => expect(name.error).toBe(codeMessage("menu_section.invalid")));
+  expect(save.disabled).toBe(true);
+  await type(name, "Beer three");
+  await el.updateComplete;
+  expect(name.error).toBe("");
+  expect(save.disabled).toBe(false);
+
+  click(el, '[data-test="duplicate-save"]');
+  await vi.waitFor(async () =>
+    expect(await bottom(el, "duplicate")).toBe(codeMessage("server.internal")),
+  );
+  expect(save.disabled).toBe(false);
 });
 
 it("puts a refused copy name beside the name field", async () => {

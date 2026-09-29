@@ -89,6 +89,17 @@ async function input(el: ProductEditor, name: string, value: string) {
 function save(el: ProductEditor) {
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
 }
+function saveButton(el: ProductEditor): HTMLElement {
+  return el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!;
+}
+async function bottomOf(el: ProductEditor): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+function errorOf(el: ProductEditor, name: string): string {
+  return el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`[name="${name}"]`)!.error;
+}
 function section(el: ProductEditor, name: string) {
   return el.shadowRoot!.querySelector<
     HTMLElement & { open: boolean; updateComplete: Promise<unknown> }
@@ -428,13 +439,212 @@ it("explains missing required fields together and retains entered values", async
   save(el);
   await el.updateComplete;
   expect(submit).not.toHaveBeenCalled();
-  const summary = el.shadowRoot!.querySelector<HTMLElement & { errors: string[] }>(
-    "wt-form-error-summary",
-  )!;
-  expect(summary.errors.length).toBeGreaterThanOrEqual(2);
+  expect(errorOf(el, "name")).toBe(t("editor.name_required"));
+  expect(errorOf(el, "unit-price")).toBe(t("editor.price_invalid"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   expect(
     (el.shadowRoot!.querySelector("[name=unit-price]") as HTMLElement & { value: string }).value,
   ).toBe("-1");
+});
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await input(el, "name", "");
+  await input(el, "unit-price", "-1");
+
+  expect(errorOf(el, "name")).toBe("");
+  expect(errorOf(el, "unit-price")).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the first invalid field and disables Save", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await input(el, "unit-price", "-1");
+  save(el);
+  await el.updateComplete;
+
+  expect(errorOf(el, "name")).toBe("");
+  expect(errorOf(el, "unit-price")).toBe(t("editor.price_invalid"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("unit-price");
+});
+
+it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  await input(el, "name", " ");
+  await input(el, "unit-price", "-1");
+  save(el);
+  await el.updateComplete;
+
+  await input(el, "name", "Tea");
+  expect(errorOf(el, "name")).toBe("");
+  expect(errorOf(el, "unit-price")).toBe(t("editor.price_invalid"));
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+
+  await input(el, "name", "");
+  expect(errorOf(el, "name")).toBe(t("editor.name_required"));
+
+  await input(el, "name", "Tea");
+  await input(el, "unit-price", "2.50");
+  expect(errorOf(el, "unit-price")).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit).toHaveBeenCalledOnce();
+});
+
+it("re-checks a variant row after a failed submission, and frees Save once the variant is fixed", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, variants: [small, { ...large, unitPrice: "-1" }] },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  save(el);
+  await el.updateComplete;
+  expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+
+  variantTable(el)!.dispatchEvent(
+    new CustomEvent("wt-edit", { detail: { index: 1 }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  variantForm(el).dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { ...large, unitPrice: "3.50" } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(variantTable(el)!.errors).toEqual({});
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("puts a refusal for a folded field under it, opening its section, until that field changes", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.fieldErrors = { "description-en": t("editor.field_rejected") };
+  await el.updateComplete;
+  await section(el, "descriptors").updateComplete;
+
+  expect(section(el, "descriptors").open).toBe(true);
+  const description = el.shadowRoot!.querySelector("[name=description-en]")!;
+  expect(description.getAttribute("aria-invalid")).toBe("true");
+  expect(
+    el.shadowRoot!.getElementById(description.getAttribute("aria-describedby")!)!.textContent,
+  ).toBe(t("editor.field_rejected"));
+  await expect
+    .poll(() => el.shadowRoot!.activeElement?.getAttribute("name"))
+    .toBe("description-en");
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+
+  await input(el, "name", "Coffee grande");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+
+  await input(el, "description-en", "Roasted this morning");
+  expect(description.getAttribute("aria-invalid")).toBe("false");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("keeps a refusal that names no field of the form in the bottom message, leaving Save working", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.fieldErrors = { active: "Those extras lists still offer it" };
+  await el.updateComplete;
+  expect(await bottomOf(el)).toBe("Those extras lists still offer it");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  await el.updateComplete;
+  expect(submit).toHaveBeenCalledOnce();
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("keeps a refused translation for a language the form does not show in the bottom message alone", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.fieldErrors = { "customer-name-fr": "Add the French name" };
+  await el.updateComplete;
+  expect(await bottomOf(el)).toBe("Add the French name");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("shows the refusal and the generic sentence together when both apply", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.fieldErrors = { active: "Those extras lists still offer it", "kitchen-name": "Too long" };
+  await el.updateComplete;
+  expect(await bottomOf(el)).toBe(`Those extras lists still offer it ${t("form.fix_fields")}`);
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  save(el);
+  await el.updateComplete;
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(errorOf(el, "name")).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
 });
 
 it("opens the section holding a reported error, puts focus in the field and leaves it open once fixed", async () => {

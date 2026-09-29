@@ -26,6 +26,19 @@ function edit(el: LocationSettingsScreen, value: string) {
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
+async function bottomOf(el: LocationSettingsScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+const errorOf = (el: LocationSettingsScreen) =>
+  q(el, "[name=operationDescription]").getAttribute("error");
+const saveDisabled = (el: LocationSettingsScreen) =>
+  q(el, "[data-test=save]").hasAttribute("disabled");
+const focusedInput = (el: LocationSettingsScreen) => {
+  const field = q(el, "[name=operationDescription]");
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
+};
 afterEach(cleanupWidgets);
 describe("location invoice description", () => {
   it("reads the current setting and saves the entered description", async () => {
@@ -175,6 +188,88 @@ describe("location invoice description", () => {
       resolve();
       await flush(el);
     }
+  });
+  it("says nothing about errors before the first submission, and Save works", async () => {
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: api(),
+    });
+    await flush(el);
+    edit(el, "  ");
+    await el.updateComplete;
+    expect(errorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveDisabled(el)).toBe(false);
+  });
+  it("on an invalid submission shows the field and bottom messages, focuses the field and disables Save", async () => {
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: api(),
+    });
+    await flush(el);
+    edit(el, "  ");
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    expect(errorOf(el)).toBe(t("location_settings.required"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveDisabled(el)).toBe(true);
+    expect(focusedInput(el)).toBe(true);
+    expect((q(el, "[name=operationDescription]") as unknown as { value: string }).value).toBe("  ");
+  });
+  it("re-checks every change after a failed submission, and Save works again once fixed", async () => {
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: api(),
+    });
+    await flush(el);
+    edit(el, "");
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    edit(el, "Venta");
+    await el.updateComplete;
+    expect(errorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveDisabled(el)).toBe(false);
+    edit(el, " ");
+    await el.updateComplete;
+    expect(errorOf(el)).toBe(t("location_settings.required"));
+    expect(saveDisabled(el)).toBe(true);
+  });
+  it("keeps a refused description's message until the field changes, focusing it when the refusal arrives", async () => {
+    const client = api({
+      putLocationSettings: vi.fn().mockRejectedValue({
+        code: "management.request_invalid",
+        params: { field: "operationDescription" },
+      }),
+    });
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: client,
+    });
+    await flush(el);
+    edit(el, "x".repeat(501));
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    await vi.waitFor(() => expect(focusedInput(el)).toBe(true));
+    expect(errorOf(el)).toBe(t("location_settings.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveDisabled(el)).toBe(true);
+    edit(el, "x".repeat(500));
+    await el.updateComplete;
+    expect(errorOf(el)).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveDisabled(el)).toBe(false);
+  });
+  it("leaves Save working after a refusal that names no field", async () => {
+    const client = api({
+      putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: client,
+    });
+    await flush(el);
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    expect(saveDisabled(el)).toBe(false);
+    q(el, "[data-test=save]").click();
+    await flush(el);
+    expect(client.putLocationSettings).toHaveBeenCalledTimes(2);
   });
   it.each(["light", "dark"] as const)("has no accessibility violations in %s", async (theme) => {
     const { el, host } = await mountWidget<LocationSettingsScreen>(

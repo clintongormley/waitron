@@ -64,10 +64,18 @@ function disclosure(el: OptionLabelForm): HTMLElementTagNameMap["wt-disclosure"]
   )!;
 }
 
-function summary(el: OptionLabelForm): string[] {
-  const box = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-  return [...box.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
+async function bottomOf(el: OptionLabelForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+
+const saveOf = (el: OptionLabelForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+
+/** The native input a `wt-input` field wraps, which is what focus lands on. */
+const inputOf = (el: OptionLabelForm, name: string): HTMLInputElement =>
+  field(el, name).shadowRoot!.querySelector("input")!;
 
 /** Counts submissions as well as capturing them: a composed event re-emitted without stopping the
  * original arrives twice, and a single-shot listener cannot see that. */
@@ -123,7 +131,7 @@ it("opens empty and headed Add option when it is given no option", async () => {
   expect(field<HTMLElementTagNameMap["wt-switch"]>(el, "label-available").checked).toBe(true);
 });
 
-it("refuses a blank name beside the name and in the summary, and emits nothing", async () => {
+it("refuses a blank name beside the name and in the bottom message, and emits nothing", async () => {
   const { el, host } = await mount({ value: rare });
   const submitted = record(host);
 
@@ -133,7 +141,8 @@ it("refuses a blank name beside the name and in the summary, and emits nothing",
   expect(submitted).toEqual([]);
   expect(field(el, "label-name").error).toBe(t("options.label_name_required"));
   expect(field(el, "label-name").invalid).toBe(true);
-  expect(summary(el)).toEqual([t("options.label_name_required")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 
   await type(el, "label-name", "Rare");
   expect(field(el, "label-name").error).toBe("");
@@ -229,7 +238,8 @@ it.each([
   await disclosure(el).updateComplete;
 
   expect(field(el, key).error).toBe("Refused.");
-  expect(summary(el)).toEqual(["Refused."]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
   expect({ hasError: disclosure(el).hasError, open: disclosure(el).open }).toEqual({
     hasError: opened,
     open: opened,
@@ -277,4 +287,102 @@ it("saves on Enter in a field", async () => {
   await el.updateComplete;
 
   expect(submitted.map((label) => label.id)).toEqual([RARE]);
+});
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const { el } = await mount({ value: rare });
+  await type(el, "label-name", "");
+
+  expect(field(el, "label-name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the name, keeps what was typed and disables Save", async () => {
+  const { el } = await mount({ value: rare });
+  await type(el, "label-customer-name-en", "Blue");
+  await type(el, "label-name", " ");
+  await click(el, "save");
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(field(el, "label-name").shadowRoot!.activeElement).toBe(inputOf(el, "label-name"));
+  expect(field(el, "label-customer-name-en").value).toBe("Blue");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("re-checks every change after a failed submission, and Save works again once the name is fixed", async () => {
+  const { el } = await mount({ value: null });
+  await click(el, "save");
+
+  await type(el, "label-name", "Rare");
+  expect(field(el, "label-name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  await type(el, "label-name", " ");
+  expect(field(el, "label-name").error).toBe(t("options.label_name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("clears a field's refusal when that field changes, and Save works again", async () => {
+  const { el } = await mount({ value: rare, errors: { "label-kitchen-name": "Too long." } });
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "label-name", "Very rare");
+  expect(field(el, "label-kitchen-name").error).toBe("Too long.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "label-kitchen-name", "VR");
+  expect(field(el, "label-kitchen-name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
+  const { el } = await mount({ value: rare });
+  el.errors = { "label-kitchen-name": "Too long." };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(disclosure(el).open).toBe(true);
+  expect(field(el, "label-kitchen-name").shadowRoot!.activeElement).toBe(
+    inputOf(el, "label-kitchen-name"),
+  );
+});
+
+it("keeps a refusal naming no field in the bottom message alone, leaving Save working until it is submitted again", async () => {
+  const { el, host } = await mount({ value: rare, errors: { "label-available": "Refused." } });
+  const submitted = record(host);
+
+  expect(await bottomOf(el)).toBe("Refused.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("shows a refusal naming no field and the generic sentence together when both apply", async () => {
+  const { el } = await mount({
+    value: rare,
+    errors: { "label-available": "Refused.", "label-name": "Already used." },
+  });
+
+  expect(await bottomOf(el)).toBe(`Refused. ${t("form.fix_fields")}`);
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const { el } = await mount({ value: null });
+  await click(el, "save");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(field(el, "label-name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });

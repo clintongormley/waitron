@@ -1,6 +1,7 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
+  focusFirstInvalid,
   submitOnEnter,
   UrlStateController,
   baseStyles,
@@ -17,7 +18,6 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "../widgets/row-actions.js";
@@ -52,6 +52,19 @@ import type {
   PrinterAddressProbe,
   Till,
 } from "../api/client.js";
+
+interface PrinterDraft {
+  name: string;
+  host: string;
+  port: string;
+  transport: PrintTransport;
+  localKey?: string;
+  pollId?: string;
+  characterTable: number;
+}
+
+/** The printer editor's checks that have a field of their own; the rest name only the bottom message. */
+const PRINTER_FIELDS: readonly string[] = ["name", "host", "port", "characterTable"];
 
 interface EditablePrinter {
   id: string;
@@ -219,6 +232,10 @@ export class PrintersScreen extends LitElement {
       .field-row > [name$="port"],
       .field-row > wt-button {
         flex: 0 1 calc(var(--wt-space-6) * 4);
+      }
+      .field-row > wt-form-actions {
+        flex: 0 1 auto;
+        width: auto;
       }
       fieldset {
         margin: 0;
@@ -398,7 +415,8 @@ export class PrintersScreen extends LitElement {
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
   @state() private editingAgent: PrintAgentRow | null = null;
-  @state() private formErrors: Record<string, string> = {};
+  /** Whether the open agent, printer or printer-name form has been submitted since it opened. */
+  @state() private formAttempted = false;
   @state() private preview: PrintJobPreview | null = null;
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
@@ -423,7 +441,9 @@ export class PrintersScreen extends LitElement {
   @state() private scanning = false;
   @state() private probeHost = "";
   @state() private probePort = "9100";
-  @state() private probeErrors: Record<string, string> = {};
+  @state() private probeAttempted = false;
+  /** Address fields the server refused, each shown until the owner changes it. */
+  @state() private probeRefused: Partial<Record<"host" | "port", string>> = {};
   @state() private probeStatus:
     "idle" | "pending" | "found" | "missing" | "registered" | "page_printer" = "idle";
   #probeTarget: PrinterAddressProbe | undefined;
@@ -748,17 +768,36 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  async #probe(): Promise<void> {
-    if (this.probeStatus === "pending") return;
-    const host = this.probeHost.trim();
+  #probeValidate(): Partial<Record<"host" | "port", string>> {
     const port = Number(this.probePort);
-    const errors: Record<string, string> = {};
-    if (!host) errors.host = t("printers.probe_host_invalid");
+    const errors: Partial<Record<"host" | "port", string>> = {};
+    if (!this.probeHost.trim()) errors.host = t("printers.probe_host_invalid");
     if (!/^\d+$/.test(this.probePort) || !Number.isInteger(port) || port < 1 || port > 65535)
       errors.port = t("printers.port_invalid");
-    this.probeErrors = errors;
-    if (Object.keys(errors).length) return;
-    await this.#scan({ host, port });
+    return errors;
+  }
+
+  #probeErrors(): Partial<Record<"host" | "port", string>> {
+    return { ...this.probeRefused, ...(this.probeAttempted ? this.#probeValidate() : {}) };
+  }
+
+  async #probe(): Promise<void> {
+    if (this.probeStatus === "pending") return;
+    this.probeAttempted = true;
+    this.probeRefused = {};
+    if (Object.keys(this.#probeValidate()).length) {
+      this.#focusFirstInvalid("[data-test=probe-panel]");
+      return;
+    }
+    await this.#scan({ host: this.probeHost.trim(), port: Number(this.probePort) });
+  }
+
+  /** Once the form has rendered its field messages, focuses the first invalid field in it. */
+  #focusFirstInvalid(form: string): void {
+    void this.updateComplete.then(() => {
+      const root = this.renderRoot.querySelector(form);
+      if (root) void focusFirstInvalid(root);
+    });
   }
 
   /** Listen for automatic discovery or the separately expiring address check. */
@@ -799,9 +838,10 @@ export class PrintersScreen extends LitElement {
         codeOf(error) === "management.request_invalid" &&
         (field === "host" || field === "port")
       ) {
-        this.probeErrors = {
+        this.probeRefused = {
           [field]: t(field === "host" ? "printers.probe_host_invalid" : "printers.port_invalid"),
         };
+        this.#focusFirstInvalid("[data-test=probe-panel]");
       } else this.errorKey = codeOf(error);
       this.#endScan();
     }
@@ -863,8 +903,11 @@ export class PrintersScreen extends LitElement {
       this.#disabledPrinter(device)?.name ??
       this.#discoveredLabel(device)
     ).trim();
-    this.formErrors = name ? {} : { [key]: t("form.name_required") };
-    if (!name) return;
+    this.formAttempted = true;
+    if (!name) {
+      this.#focusFirstInvalid("[data-test=name-printer-modal]");
+      return;
+    }
     this.submitting = true;
     this.errorKey = null;
     try {
@@ -1104,7 +1147,7 @@ export class PrintersScreen extends LitElement {
         data-test=${`edit-agent-${agent.id}`}
         @click=${(event: Event) => {
           this.#rememberEditTrigger(event);
-          this.formErrors = {};
+          this.formAttempted = false;
           this.errorKey = null;
           this.editingAgent = { ...agent };
         }}
@@ -1347,6 +1390,7 @@ export class PrintersScreen extends LitElement {
   #renderEditAgent(): TemplateResult | typeof nothing {
     const agent = this.editingAgent;
     if (!agent) return nothing;
+    const nameError = this.formAttempted && !agent.name.trim() ? t("form.name_required") : "";
     return html`<wt-modal
       heading=${t("printers.edit_agent")}
       data-test="edit-agent-modal"
@@ -1357,14 +1401,14 @@ export class PrintersScreen extends LitElement {
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-agent]"))}
     >
-      ${this.#renderFeedback()}
+      ${this.#renderError()}
       <wt-input
         name="agent-name"
         required
         label=${t("printers.name")}
         .value=${agent.name}
-        .invalid=${!!this.formErrors.name}
-        .error=${this.formErrors.name ?? ""}
+        .invalid=${nameError !== ""}
+        .error=${nameError}
         data-test="edit-agent-name"
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
@@ -1373,7 +1417,7 @@ export class PrintersScreen extends LitElement {
       ></wt-input>
       <p>${t("printers.agent_host")}: ${agent.host ?? t("printers.not_reported")}</p>
       <p>${t("printers.last_seen")}: ${this.#timestamp(agent.lastSeenAt)}</p>
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${nameError === "" ? "" : t("form.fix_fields")}>
         <wt-button
           slot="cancel"
           data-test="cancel-edit-agent"
@@ -1384,6 +1428,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test="save-agent"
           ?loading=${this.submitting}
+          ?disabled=${nameError !== ""}
           @click=${() => void this.#saveAgent()}
           >${t("action.save")}</wt-button
         >
@@ -1394,8 +1439,11 @@ export class PrintersScreen extends LitElement {
   async #saveAgent(): Promise<void> {
     const agent = this.editingAgent;
     if (!agent) return;
-    this.formErrors = agent.name.trim() ? {} : { name: t("form.name_required") };
-    if (Object.keys(this.formErrors).length) return;
+    this.formAttempted = true;
+    if (!agent.name.trim()) {
+      this.#focusFirstInvalid("[data-test=edit-agent-modal]");
+      return;
+    }
     await this.#submit(async () => {
       await this.api.updateAgent(agent.id, { name: agent.name.trim() });
       await this.#closeModal("edit-agent-modal");
@@ -1408,7 +1456,7 @@ export class PrintersScreen extends LitElement {
     this.calibrationStep = 0;
     this.drawerTestSent = false;
     this.drawerOutcome = "";
-    this.formErrors = {};
+    this.formAttempted = false;
     this.errorKey = null;
     this.tableBlockStart = 0;
     this.widthLine = "";
@@ -1640,12 +1688,13 @@ export class PrintersScreen extends LitElement {
         variant="primary"
         data-test="open-add-printer"
         @click=${() => {
-          this.formErrors = {};
+          this.formAttempted = false;
           this.errorKey = null;
           this.addingPrinter = true;
           this.probeHost = "";
           this.probePort = "9100";
-          this.probeErrors = {};
+          this.probeAttempted = false;
+          this.probeRefused = {};
           this.#registeredDevices.clear();
           this.discoveredNames = {};
           this.addedPrinterName = null;
@@ -1810,23 +1859,15 @@ export class PrintersScreen extends LitElement {
     }`;
   }
 
-  #renderFeedback(): TemplateResult {
-    return html`<wt-form-error-summary
-        .heading=${t("form.error_heading")}
-        .errors=${Object.values(this.formErrors)}
-      ></wt-form-error-summary
-      >${this.#renderError()}`;
+  /** Checks the draft once the form has been submitted, focusing the first invalid field. */
+  #validatePrinter(row: PrinterDraft): boolean {
+    this.formAttempted = true;
+    const valid = Object.keys(this.#printerErrors(row)).length === 0;
+    if (!valid) this.#focusFirstInvalid("[data-test=edit-printer-modal]");
+    return valid;
   }
 
-  #validatePrinter(row: {
-    name: string;
-    host: string;
-    port: string;
-    transport: PrintTransport;
-    localKey?: string;
-    pollId?: string;
-    characterTable: number;
-  }): boolean {
+  #printerErrors(row: PrinterDraft): Record<string, string> {
     const errors: Record<string, string> = {};
     if (!row.name.trim()) errors.name = t("form.name_required");
     if (row.transport === "network_tcp") {
@@ -1843,8 +1884,7 @@ export class PrintersScreen extends LitElement {
       errors.pollId = t("printers.poll_required");
     if (!Number.isInteger(row.characterTable) || row.characterTable < 0 || row.characterTable > 255)
       errors.characterTable = t("printers.character_table_invalid");
-    this.formErrors = errors;
-    return Object.keys(errors).length === 0;
+    return errors;
   }
 
   #renderEditPrinter(): TemplateResult | typeof nothing {
@@ -1864,6 +1904,14 @@ export class PrintersScreen extends LitElement {
               p.characterSet === characterSet &&
               p.characterTable === characterTable,
           )?.code ?? "");
+    const errors = this.formAttempted ? this.#printerErrors(p) : {};
+    const fieldInvalid = PRINTER_FIELDS.some((key) => errors[key] !== undefined);
+    const bottom = [
+      ...Object.entries(errors)
+        .filter(([key]) => !PRINTER_FIELDS.includes(key))
+        .map(([, message]) => message),
+      ...(fieldInvalid ? [t("form.fix_fields")] : []),
+    ].join(" ");
     const field = (key: "name" | "host" | "port", label: string, required = false) =>
       html`<wt-input
         name=${`printer-${key}`}
@@ -1872,8 +1920,8 @@ export class PrintersScreen extends LitElement {
         ?required=${required}
         type=${key === "port" ? "number" : "text"}
         data-test=${`printer-${key}-${p.id}`}
-        .invalid=${!!this.formErrors[key]}
-        .error=${this.formErrors[key] ?? ""}
+        .invalid=${!!errors[key]}
+        .error=${errors[key] ?? ""}
         @wt-change=${this.#editHandler(p.id, key)}
       ></wt-input>`;
     return html`<wt-modal
@@ -1888,7 +1936,7 @@ export class PrintersScreen extends LitElement {
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 4 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
       <div class="form-fields">
-        ${this.#renderFeedback()}
+        ${this.#renderError()}
         ${this.testError ? html`<p class="error" role="alert">${codeMessage(this.testError)}</p>` : nothing}
         ${this.calibrationStep ? html`<p role="status">${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}</p>` : nothing}
         ${
@@ -2072,7 +2120,7 @@ export class PrintersScreen extends LitElement {
             data-test="advanced-character-settings"
             heading=${t("printers.advanced_character_settings")}
             summary=${`${characterSetOptions(currentLocale()).find(({ value }) => value === p.characterSet)?.label ?? p.characterSet} · ${p.characterTable}`}
-            .hasError=${!!this.formErrors.characterTable}
+            .hasError=${!!errors.characterTable}
           >
             <div class="field-row">
               <label class="setting-field"
@@ -2097,8 +2145,8 @@ export class PrintersScreen extends LitElement {
                 type="number"
                 label=${t("printers.character_table")}
                 .value=${Number.isNaN(p.characterTable) ? "" : String(p.characterTable)}
-                .invalid=${!!this.formErrors.characterTable}
-                .error=${this.formErrors.characterTable ?? ""}
+                .invalid=${!!errors.characterTable}
+                .error=${errors.characterTable ?? ""}
                 @wt-change=${(e: CustomEvent<{ value: string }>) => {
                   e.stopPropagation();
                   this.#editPrinter(p.id, {
@@ -2179,7 +2227,7 @@ export class PrintersScreen extends LitElement {
           }
         </div>
       </div>
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${bottom}>
         <div slot="cancel" class="wizard-back">
           <wt-button
             data-test="cancel-edit-printer"
@@ -2203,6 +2251,7 @@ export class PrintersScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="calibration-next"
+                ?disabled=${fieldInvalid}
                 @click=${() => {
                   if (this.#validatePrinter(p)) this.calibrationStep++;
                 }}
@@ -2213,6 +2262,7 @@ export class PrintersScreen extends LitElement {
                   variant="primary"
                   data-test=${`save-printer-${p.id}`}
                   ?loading=${this.submitting}
+                  ?disabled=${fieldInvalid}
                   @click=${() => void this.#savePrinter(p.id)}
                   >${t("action.save")}</wt-button
                 >
@@ -2233,18 +2283,21 @@ export class PrintersScreen extends LitElement {
     const d = this.namingPrinter;
     if (!d) return nothing;
     const key = this.#deviceKey(d);
+    const name =
+      this.discoveredNames[key] ?? this.#disabledPrinter(d)?.name ?? this.#discoveredLabel(d);
+    const nameError = this.formAttempted && !name.trim() ? t("form.name_required") : "";
     return html`<wt-modal
       data-test="name-printer-modal"
       heading=${t("printers.add_printer")}
       .open=${true}
       @wt-close=${() => {
         this.namingPrinter = null;
-        this.formErrors = {};
+        this.formAttempted = false;
       }}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=confirm-add-printer]"))}
     >
       <div class="form-fields">
-        ${this.#renderFeedback()}
+        ${this.#renderError()}
         <p class="hint">
           ${this.#discoveredLabel(d)} · ${d.host ? `${d.host}:${d.port ?? 9100}` : d.localKey}
         </p>
@@ -2253,9 +2306,9 @@ export class PrintersScreen extends LitElement {
           name="new-printer-name"
           label=${t("printers.name")}
           data-test=${`discovered-name-${key}`}
-          .value=${this.discoveredNames[key] ?? this.#disabledPrinter(d)?.name ?? this.#discoveredLabel(d)}
-          .invalid=${!!this.formErrors[key]}
-          .error=${this.formErrors[key] ?? ""}
+          .value=${name}
+          .invalid=${nameError !== ""}
+          .error=${nameError}
           ?disabled=${this.submitting}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
@@ -2263,7 +2316,7 @@ export class PrintersScreen extends LitElement {
           }}
         ></wt-input>
       </div>
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${nameError === "" ? "" : t("form.fix_fields")}>
         <wt-button
           slot="cancel"
           data-test="cancel-printer-name"
@@ -2274,6 +2327,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test="confirm-add-printer"
           ?loading=${this.submitting}
+          ?disabled=${nameError !== ""}
           @click=${() => void this.#registerDiscovered(d)}
           >${this.#disabledPrinter(d) ? t("printers.add_again") : t("action.add")}</wt-button
         >
@@ -2319,7 +2373,7 @@ export class PrintersScreen extends LitElement {
                 ?disabled=${this.submitting}
                 @click=${() => {
                   if (this.submitting) return;
-                  this.formErrors = {};
+                  this.formAttempted = false;
                   this.errorKey = null;
                   this.namingPrinter = d;
                 }}
@@ -2327,6 +2381,8 @@ export class PrintersScreen extends LitElement {
               >`,
       },
     ];
+    const probeErrors = this.#probeErrors();
+    const probeInvalid = Object.keys(probeErrors).length > 0;
     return html`<wt-modal
       data-test="new-printer-modal"
       heading=${t("printers.add_printer")}
@@ -2338,16 +2394,11 @@ export class PrintersScreen extends LitElement {
       }}
     >
       ${this.addedPrinterName ? html`<p role="status" data-test="printer-added">${t("printers.added").replace("{name}", this.addedPrinterName)}</p>` : nothing}
-      ${this.#renderFeedback()}
+      ${this.#renderError()}
       <p class="hint">${t("printers.discovery_hint")}</p>
       <details class="probe-panel" data-test="probe-panel">
         <summary>${t("printers.probe_title")}</summary>
         <p class="hint">${t("printers.probe_hint")}</p>
-        <wt-form-error-summary
-          data-test="probe-errors"
-          .heading=${t("form.error_heading")}
-          .errors=${Object.values(this.probeErrors)}
-        ></wt-form-error-summary>
         <div
           class="field-row"
           @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=probe-printer]"))}
@@ -2358,11 +2409,14 @@ export class PrintersScreen extends LitElement {
             label=${t("printers.probe_host")}
             data-test="probe-host"
             .value=${this.probeHost}
-            .invalid=${!!this.probeErrors.host}
-            .error=${this.probeErrors.host ?? ""}
+            .invalid=${!!probeErrors.host}
+            .error=${probeErrors.host ?? ""}
             ?disabled=${this.probeStatus === "pending"}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               this.probeHost = event.detail.value;
+              const refused = { ...this.probeRefused };
+              delete refused.host;
+              this.probeRefused = refused;
             }}
           ></wt-input>
           <wt-input
@@ -2371,20 +2425,29 @@ export class PrintersScreen extends LitElement {
             label=${t("printers.port")}
             data-test="probe-port"
             .value=${this.probePort}
-            .invalid=${!!this.probeErrors.port}
-            .error=${this.probeErrors.port ?? ""}
+            .invalid=${!!probeErrors.port}
+            .error=${probeErrors.port ?? ""}
             ?disabled=${this.probeStatus === "pending"}
             @wt-change=${(event: CustomEvent<{ value: string }>) => {
               this.probePort = event.detail.value;
+              const refused = { ...this.probeRefused };
+              delete refused.port;
+              this.probeRefused = refused;
             }}
           ></wt-input>
-          <wt-button
-            variant="primary"
-            data-test="probe-printer"
-            ?loading=${this.probeStatus === "pending"}
-            @click=${() => void this.#probe()}
-            >${t("printers.probe_action")}</wt-button
+          <wt-form-actions
+            data-test="probe-actions"
+            .error=${probeInvalid ? t("form.fix_fields") : ""}
           >
+            <wt-button
+              variant="primary"
+              data-test="probe-printer"
+              ?loading=${this.probeStatus === "pending"}
+              ?disabled=${probeInvalid}
+              @click=${() => void this.#probe()}
+              >${t("printers.probe_action")}</wt-button
+            >
+          </wt-form-actions>
         </div>
         <p role="status" data-test="probe-status">
           ${

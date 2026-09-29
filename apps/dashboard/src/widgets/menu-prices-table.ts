@@ -3,13 +3,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
   currentContentLanguages,
+  focusFirstInvalid,
   submitOnEnter,
   type DataTableColumn,
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { stringToCents } from "@waitron/shared";
@@ -53,7 +53,8 @@ const blankToNull = (text: string): string | null => (text.trim() === "" ? null 
 const samePrice = (a: string | null, b: string | null): boolean =>
   a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
 
-/** Only a refusal naming the menu price is shown beside a field; any other goes to the summary. */
+/** Only a refusal naming the menu price is shown beside a field; any other goes to the bottom
+ * message. */
 const refusedField = (field: string): string => (field === "grossPrice" ? field : "_form");
 
 /** A table row: a product the menu reaches, or one of its Active variants, drawn under it. */
@@ -198,7 +199,9 @@ export class MenuPricesTable extends LitElement {
   @property({ attribute: false }) refusal: { field: string; message: string } | null = null;
 
   @state() private draft: Draft | null = null;
-  @state() private errors: Record<string, string> = {};
+  /** The host's refusal, less any field the operator has changed since. */
+  @state() private refused: Record<string, string> = {};
+  @state() private attempted = false;
 
   #sectionNames: ReadonlyMap<string, string> = new Map();
   /** Each row's sections, every placement's together, for the section filter. */
@@ -234,9 +237,18 @@ export class MenuPricesTable extends LitElement {
       this.#columns = this.#buildColumns();
     if (changed.has("editing") || changed.has("rows")) this.#seed();
     if (changed.has("refusal"))
-      this.errors = this.refusal
+      this.refused = this.refusal
         ? { [refusedField(this.refusal.field)]: this.refusal.message }
         : {};
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    if (changed.has("refusal") && this.#fieldKeys(this.refused).length > 0)
+      void this.#focusInvalid();
+  }
+
+  #focusInvalid(): Promise<HTMLElement | null> {
+    return focusFirstInvalid(this.shadowRoot!.querySelector("wt-modal")!);
   }
 
   #readCategories(): void {
@@ -324,7 +336,8 @@ export class MenuPricesTable extends LitElement {
     const row = this.#row();
     if (row === undefined) return;
     this.#opened = row;
-    this.errors = {};
+    this.refused = {};
+    this.attempted = false;
     this.draft = {
       grossPrice: row.override ?? "",
       active: row.active,
@@ -508,10 +521,36 @@ export class MenuPricesTable extends LitElement {
 
   #edit(change: (draft: Draft) => Draft, clears: string): void {
     this.draft = change(this.draft!);
-    if (clears in this.errors)
-      this.errors = Object.fromEntries(
-        Object.entries(this.errors).filter(([field]) => field !== clears),
+    if (clears in this.refused)
+      this.refused = Object.fromEntries(
+        Object.entries(this.refused).filter(([field]) => field !== clears),
       );
+  }
+
+  #validate(draft: Draft): Record<string, string> {
+    const errors: Record<string, string> = {};
+    const grossPrice = blankToNull(draft.grossPrice);
+    if (grossPrice !== null && !isProductPrice(grossPrice))
+      errors.grossPrice = t("editor.price_invalid");
+    draft.variants.forEach(({ price }, index) => {
+      const own = blankToNull(price);
+      if (own !== null && !isProductPrice(own))
+        errors[`variants.${index}.price`] = t("editor.price_invalid");
+    });
+    return errors;
+  }
+
+  /** The keys of `errors` a field of the window shows. */
+  #fieldKeys(errors: Record<string, string>): string[] {
+    const shown = new Set([
+      "grossPrice",
+      ...(this.draft?.variants ?? []).map((_, index) => `variants.${index}.price`),
+    ]);
+    return Object.keys(errors).filter((key) => errors[key] && shown.has(key));
+  }
+
+  #errors(draft: Draft): Record<string, string> {
+    return { ...this.refused, ...(this.attempted ? this.#validate(draft) : {}) };
   }
 
   #editVariant(index: number, change: Partial<Draft["variants"][number]>, clears: string): void {
@@ -530,18 +569,18 @@ export class MenuPricesTable extends LitElement {
     event.stopPropagation();
     const draft = this.draft;
     if (draft === null || this.busy) return;
-    const errors: Record<string, string> = {};
+    this.attempted = true;
+    this.refused = {};
+    if (Object.keys(this.#validate(draft)).length) {
+      void this.updateComplete.then(() => this.#focusInvalid());
+      return;
+    }
     const grossPrice = blankToNull(draft.grossPrice);
-    if (grossPrice !== null && !isProductPrice(grossPrice))
-      errors.grossPrice = t("editor.price_invalid");
-    const variants = draft.variants.map(({ variantId, price, offered }, index) => {
-      const own = blankToNull(price);
-      if (own !== null && !isProductPrice(own))
-        errors[`variants.${index}.price`] = t("editor.price_invalid");
-      return { variantId, price: own, offered };
-    });
-    this.errors = errors;
-    if (Object.keys(errors).length) return;
+    const variants = draft.variants.map(({ variantId, price, offered }) => ({
+      variantId,
+      price: blankToNull(price),
+      offered,
+    }));
     const row = this.#opened!;
     // The draft's variants were built from the opened row's, one for one and in its order.
     const variantsChanged = variants.some(({ price, offered }, at) => {
@@ -564,11 +603,11 @@ export class MenuPricesTable extends LitElement {
     if (!this.busy) this.#emit("wt-offer-cancel", {});
   }
 
-  #renderForm(row: MenuPriceRow, draft: Draft) {
+  #renderForm(row: MenuPriceRow, draft: Draft, errors: Record<string, string>) {
     const context: FieldContext = {
       busy: this.busy,
       locales: [],
-      error: (key) => this.errors[key] ?? "",
+      error: (key) => errors[key] ?? "",
     };
     const productPrice = row.productPrice;
     const typed = draft.grossPrice.trim();
@@ -583,10 +622,6 @@ export class MenuPricesTable extends LitElement {
           this.shadowRoot!.querySelector<HTMLElement>('[data-test="offer-save"]'),
         )}
     >
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${Object.values(this.errors)}
-      ></wt-form-error-summary>
       ${priceField(
         context,
         "grossPrice",
@@ -649,6 +684,14 @@ export class MenuPricesTable extends LitElement {
     const row = this.#row();
     const draft = this.draft;
     const form = row !== undefined && draft !== null ? { row, draft } : null;
+    const errors = form ? this.#errors(form.draft) : {};
+    const fieldKeys = new Set(this.#fieldKeys(errors));
+    const bottom = [
+      ...Object.entries(errors)
+        .filter(([key, message]) => message && !fieldKeys.has(key))
+        .map(([, message]) => message),
+      ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-modal
       .open=${form !== null}
       heading=${
@@ -666,8 +709,8 @@ export class MenuPricesTable extends LitElement {
         if (this.editing !== null) this.#cancel(event);
       }}
     >
-      ${form ? this.#renderForm(form.row, form.draft) : nothing}
-      <wt-form-actions slot="footer"
+      ${form ? this.#renderForm(form.row, form.draft, errors) : nothing}
+      <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -679,7 +722,7 @@ export class MenuPricesTable extends LitElement {
           variant="primary"
           data-test="offer-save"
           .loading=${this.busy}
-          .disabled=${this.busy}
+          .disabled=${this.busy || fieldKeys.size > 0}
           @click=${(event: Event) => this.#save(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

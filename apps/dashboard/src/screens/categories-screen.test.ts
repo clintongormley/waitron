@@ -682,7 +682,7 @@ it.each([
   ["category.image_not_found", "image", "dashboard-image-upload"],
   ["category.color_invalid", "color", "input[type=color]"],
 ])(
-  "explains %s beside the rejected field and in the form summary",
+  "explains %s beside the rejected field, and says to correct it beside a disabled Save",
   async (code, field, selector) => {
     const { el, api } = await mount();
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
@@ -712,9 +712,14 @@ it.each([
       const errorId = control.getAttribute("aria-describedby")!;
       expect(form.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
     }
-    expect(form.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toContain(
-      form.fieldErrors[field],
+    const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
+      t("form.fix_fields"),
     );
+    expect(
+      form.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.hasAttribute("disabled"),
+    ).toBe(true);
     expect(form.open).toBe(true);
   },
 );
@@ -1591,7 +1596,7 @@ it("puts a missing-translation refusal beside the name field for the language it
 
 // `categoryInput` in apps/server/src/catalogue-api.ts refuses a malformed parent as
 // `management.request_invalid` with `field: "parentId"`.
-it("puts a refused parent beside the parent field and in the form summary", async () => {
+it("puts a refused parent beside the parent field, and says to correct it beside the actions", async () => {
   setLocale("en-GB");
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
@@ -1608,11 +1613,11 @@ it("puts a refused parent beside the parent field and in the form summary", asyn
     return errorId ? combo.shadowRoot!.getElementById(errorId)?.textContent?.trim() : undefined;
   };
   await vi.waitFor(() => expect(besideParent()).toBe("Check the form and try again"));
-  const summary = form.shadowRoot!.querySelector("wt-form-error-summary")!;
-  await summary.updateComplete;
-  expect(
-    [...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim()),
-  ).toEqual(["Check the form and try again"]);
+  const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
+    t("form.fix_fields"),
+  );
   expect(form.open).toBe(true);
 });
 

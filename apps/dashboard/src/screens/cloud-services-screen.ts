@@ -4,7 +4,6 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { CloudConnectionStatus, DashboardApi } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -37,6 +36,9 @@ export class CloudServicesScreen extends LitElement {
       .code {
         font-size: var(--wt-font-size-xl);
         font-weight: var(--wt-font-weight-bold);
+      }
+      .error {
+        color: var(--wt-color-danger);
       }
       a {
         color: var(--wt-color-primary);
@@ -92,7 +94,7 @@ export class CloudServicesScreen extends LitElement {
         this.busy = false;
         await this.updateComplete;
         if (this.error)
-          this.shadowRoot?.querySelector<HTMLElement>("wt-form-error-summary")?.focus();
+          this.shadowRoot?.querySelector<HTMLElement>("[data-test=cloud-error]")?.focus();
       }
     }
   }
@@ -203,13 +205,16 @@ export class CloudServicesScreen extends LitElement {
         }}
         >${label}</wt-button
       >`;
+    const error = this.error || s?.replacementError;
     return html`<h1>${t("nav.cloud")}</h1>
       <wt-card>
-        <wt-form-error-summary
-          tabindex="-1"
-          .heading=${t("cloud.error_heading")}
-          .errors=${this.error ? [codeMessage(this.error)] : s?.replacementError ? [codeMessage(s.replacementError)] : []}
-        ></wt-form-error-summary>
+        ${
+          error
+            ? html`<p class="error" role="alert" tabindex="-1" data-test="cloud-error">
+                ${codeMessage(error)}
+              </p>`
+            : nothing
+        }
         ${
           !s
             ? html`<p role="status">${t("cloud.loading")}</p>

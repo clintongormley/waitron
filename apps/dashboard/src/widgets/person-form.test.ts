@@ -23,6 +23,18 @@ const displayName = (el: PersonForm): string =>
   (el.shadowRoot!.querySelector("[data-test=display-name]") as HTMLElement & { value: string })
     .value;
 
+async function bottomOf(el: PersonForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const confirmOf = (el: PersonForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!;
+
+const fieldError = (el: PersonForm, testId: string): string | null =>
+  el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
 async function fillRequired(el: PersonForm): Promise<void> {
   change(el, "first-names", "Ada");
   change(el, "last-names", "Lovelace");
@@ -181,15 +193,21 @@ describe("person-form", () => {
     expect(event.detail.telephone).toBe("+44 20 7946 0958");
   });
 
-  it("explains every missing required field in one form summary", async () => {
+  it("explains every missing required field under it, with one message beside a disabled Create", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await el.updateComplete;
-    const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-    expect(summary.shadowRoot!.querySelector("[data-heading]")?.textContent).toBe(
-      t("form.error_heading"),
-    );
-    expect(summary.shadowRoot!.querySelectorAll("li")).toHaveLength(4);
+    expect(
+      ["first-names", "last-names", "display-name", "email"].map((id) => fieldError(el, id)),
+    ).toEqual([
+      t("form.first_names_required"),
+      t("form.last_names_required"),
+      t("form.display_name_required"),
+      t("form.email_required"),
+    ]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   });
 
   it("gives every field a semantic name and marks telephone optional", async () => {
@@ -213,9 +231,7 @@ describe("person-form", () => {
       error: "person.email_taken",
     });
     await fillRequired(el);
-    expect(
-      el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.textContent,
-    ).toContain("correo");
+    expect(await bottomOf(el)).toContain("correo");
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=email]")!.value,
     ).toBe("ada@example.com");
@@ -238,36 +254,34 @@ describe("person-form", () => {
 });
 
 describe("person-form server refusals", () => {
-  const summaryErrors = (el: PersonForm): readonly string[] =>
-    el.shadowRoot!.querySelector("wt-form-error-summary")!.errors;
-  const fieldError = (el: PersonForm, testId: string): string | null =>
-    el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
-
-  it("puts a taken display name beside its field and once in the summary, until it is edited", async () => {
+  it("puts a taken display name beside its field, disabling Create, until it is edited", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
     await el.updateComplete;
     const message = codeMessage("person.display_name_taken");
     expect(fieldError(el, "display-name")).toBe(message);
-    expect(summaryErrors(el)).toEqual([message]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
 
     change(el, "display-name", "Ada L");
     await el.updateComplete;
     expect(fieldError(el, "display-name")).toBe("");
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps any other server refusal in the summary alone", async () => {
+  it("keeps any other server refusal in the bottom message alone, leaving Create working", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.error = "person.email_taken";
     await el.updateComplete;
     expect(fieldError(el, "display-name")).toBe("");
-    expect(summaryErrors(el)).toEqual([codeMessage("person.email_taken")]);
+    expect(await bottomOf(el)).toBe(codeMessage("person.email_taken"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps a taken display name beside its field and once in the summary when another field fails its check", async () => {
+  it("keeps a taken display name beside its field when another field fails its check", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);
     el.error = "person.display_name_taken";
@@ -284,7 +298,7 @@ describe("person-form server refusals", () => {
     expect(created).toBe(false);
     expect(fieldError(el, "display-name")).toBe(message);
     expect(fieldError(el, "email")).toBe(t("form.email_required"));
-    expect([...summaryErrors(el)].sort()).toEqual([message, t("form.email_required")].sort());
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("still sends an Add whose own checks pass, for the server to judge the name again", async () => {
@@ -313,7 +327,7 @@ describe("person-form server refusals", () => {
     await el.updateComplete;
     expect(displayName(el)).toBe("Ada Byron");
     expect(fieldError(el, "display-name")).toBe("");
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
   });
 
   it("keeps a taken display name when a name change leaves a customised one alone", async () => {
@@ -326,11 +340,111 @@ describe("person-form server refusals", () => {
     const message = codeMessage("person.display_name_taken");
     expect(displayName(el)).toBe("Ada");
     expect(fieldError(el, "display-name")).toBe(message);
-    expect(summaryErrors(el)).toEqual([message]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 });
 
 describe("person-form validation and keyboard submit", () => {
+  it("says nothing about errors before the first submission, and Create works", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "email", "ada@");
+    await el.updateComplete;
+
+    expect(fieldError(el, "email")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on an invalid submission focuses the first invalid field and keeps what was typed", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Ada");
+    await el.updateComplete;
+    confirmOf(el).click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const lastNames = el.shadowRoot!.querySelector("[data-test=last-names]")!;
+    expect(lastNames.shadowRoot!.activeElement).toBe(lastNames.shadowRoot!.querySelector("input"));
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=first-names]")!
+        .value,
+    ).toBe("Ada");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks every change after a failed submission, and Create works again once all are fixed", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    change(el, "first-names", "Ada");
+    change(el, "last-names", "Lovelace");
+    change(el, "display-name", "Ada");
+    await el.updateComplete;
+    confirmOf(el).click();
+    await el.updateComplete;
+    expect(fieldError(el, "email")).toBe(t("form.email_required"));
+
+    change(el, "email", "ada@example");
+    await el.updateComplete;
+    expect(fieldError(el, "email")).toBe(codeMessage("person.email_invalid"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    change(el, "email", "ada@example.com");
+    await el.updateComplete;
+    expect(fieldError(el, "email")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+
+    change(el, "first-names", "");
+    await el.updateComplete;
+    expect(fieldError(el, "first-names")).toBe(t("form.first_names_required"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("focuses the display name when a refusal naming it arrives", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    await fillRequired(el);
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const field = el.shadowRoot!.querySelector("[data-test=display-name]")!;
+    expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
+  });
+
+  it("drops a refusal that names no field when the form is submitted again", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", {
+      open: true,
+      error: "person.email_taken",
+    });
+    expect(await bottomOf(el)).toBe(codeMessage("person.email_taken"));
+
+    confirmOf(el).click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("shows a refusal and the generic sentence together when both apply", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    confirmOf(el).click();
+    await el.updateComplete;
+    el.error = "server.internal";
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
+  });
+
+  it("starts again when reopened: no messages and Create working", async () => {
+    const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
+    confirmOf(el).click();
+    await el.updateComplete;
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+
+    expect(fieldError(el, "first-names")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
   it("rejects a malformed email beside the field without emitting create-person", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     await fillRequired(el);

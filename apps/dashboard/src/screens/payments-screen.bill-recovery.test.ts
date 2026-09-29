@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
@@ -79,6 +80,26 @@ function q(el: PaymentsScreen, selector: string): HTMLElement | null {
 
 function change(el: PaymentsScreen, selector: string, value: string): void {
   q(el, selector)!.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+}
+
+async function bottomOf(el: PaymentsScreen): Promise<string> {
+  const actions = q(el, "[data-test=bill-attest-dialog] wt-form-actions") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const errorOf = (el: PaymentsScreen, testId: string): string =>
+  (q(el, `[data-test=${testId}]`) as HTMLElement & { error: string }).error;
+
+const attestDisabled = (el: PaymentsScreen): boolean =>
+  q(el, "[data-test=confirm-bill-attest]")!.hasAttribute("disabled");
+
+function chooseOutcome(el: PaymentsScreen, value: string): void {
+  const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
+  outcome.value = value;
+  outcome.dispatchEvent(new Event("change"));
 }
 
 describe("bill payment recovery on the Payments screen", () => {
@@ -215,8 +236,9 @@ describe("bill payment recovery on the Payments screen", () => {
     q(el, "[data-test=confirm-bill-attest]")!.click();
     await flush(el);
     expect(api.attestStuckBillRefund).not.toHaveBeenCalled();
-    const summary = q(el, "[data-test=bill-attest-dialog] wt-form-error-summary")!;
-    expect((summary as HTMLElement & { errors: string[] }).errors).toHaveLength(3);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(attestDisabled(el)).toBe(true);
+    expect(q(el, "[data-test=bill-attest-dialog] wt-form-error-summary")).toBeNull();
     expect(q(el, "[data-test=bill-outcome-error]")!.textContent).toContain("outcome");
     expect(
       q(el, "[data-test=bill-attest-dialog] wt-input[name=note]")!.hasAttribute("required"),
@@ -314,5 +336,132 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(q(el, "[data-test=bill-attest-dialog]")).toBeNull();
     expect(q(el, "[data-test=bill-payment-bp-1]")).toBeNull();
     expect(q(el, "[data-test=bill-action-result]")!.getAttribute("role")).toBe("alert");
+  });
+
+  it("says nothing about errors before the first submission, and Record works", async () => {
+    const el = await mount();
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    change(el, "[data-test=bill-attest-note]", " ");
+    await flush(el);
+    expect(errorOf(el, "bill-attest-note")).toBe("");
+    expect(q(el, "[data-test=bill-outcome-error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(attestDisabled(el)).toBe(false);
+  });
+
+  it("on an invalid submission focuses the first invalid field, marks it and disables Record", async () => {
+    const el = await mount();
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    const outcome = q(el, "[data-test=bill-attest-outcome]") as HTMLSelectElement;
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(outcome));
+    expect(outcome.getAttribute("aria-invalid")).toBe("true");
+    expect(outcome.getAttribute("aria-describedby")).toBe("bill-outcome-error");
+    expect(attestDisabled(el)).toBe(true);
+
+    chooseOutcome(el, "received");
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    const note = q(el, "[data-test=bill-attest-note]")!;
+    await vi.waitFor(() =>
+      expect(note.shadowRoot!.activeElement).toBe(note.shadowRoot!.querySelector("input")),
+    );
+  });
+
+  it("re-checks every change after a failed submission, and Record works again once all are fixed", async () => {
+    const el = await mount();
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+
+    change(el, "[data-test=bill-attest-note]", "Provider confirmed");
+    await flush(el);
+    expect(errorOf(el, "bill-attest-note")).toBe("");
+    expect(errorOf(el, "bill-attest-pin")).toBe(t("payments.bill.pin_required"));
+    expect(attestDisabled(el)).toBe(true);
+
+    change(el, "[data-test=bill-attest-note]", "  ");
+    await flush(el);
+    expect(errorOf(el, "bill-attest-note")).toBe(t("payments.bill.note_required"));
+
+    change(el, "[data-test=bill-attest-note]", "Provider confirmed");
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    chooseOutcome(el, "received");
+    await flush(el);
+    expect(q(el, "[data-test=bill-outcome-error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(attestDisabled(el)).toBe(false);
+  });
+
+  it("clears a refused PIN when the PIN changes, focusing it when the refusal arrives", async () => {
+    const el = await mount(
+      stubApi({ attestStuckBillPayment: vi.fn().mockRejectedValue({ code: "pin.invalid" }) }),
+    );
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    chooseOutcome(el, "received");
+    change(el, "[data-test=bill-attest-note]", "Provider says no charge");
+    change(el, "[data-test=bill-attest-pin]", "0000");
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    const pin = q(el, "[data-test=bill-attest-pin]")!;
+    await vi.waitFor(() =>
+      expect(pin.shadowRoot!.activeElement).toBe(pin.shadowRoot!.querySelector("input")),
+    );
+    expect(errorOf(el, "bill-attest-pin")).toBe(codeMessage("pin.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(attestDisabled(el)).toBe(true);
+
+    change(el, "[data-test=bill-attest-note]", "Provider says no charge today");
+    await flush(el);
+    expect(attestDisabled(el)).toBe(true);
+
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
+    expect(errorOf(el, "bill-attest-pin")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(attestDisabled(el)).toBe(false);
+  });
+
+  it("shows a refusal that names no field beside Record and leaves Record working", async () => {
+    const attest = vi.fn().mockRejectedValue({ code: "bill.attestation_contradicted" });
+    const el = await mount(stubApi({ attestStuckBillPayment: attest }));
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    chooseOutcome(el, "received");
+    change(el, "[data-test=bill-attest-note]", "Provider says received");
+    change(el, "[data-test=bill-attest-pin]", "1234");
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("bill.attestation_contradicted"));
+    expect(q(el, "[data-test=bill-attest-dialog] [role=alert]")).toBeNull();
+    expect(attestDisabled(el)).toBe(false);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    expect(attest).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts again when the form is reopened: no messages and Record working", async () => {
+    const el = await mount();
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=confirm-bill-attest]")!.click();
+    await flush(el);
+    q(el, "[data-test=bill-attest-dialog]")!.dispatchEvent(new CustomEvent("wt-close"));
+    await flush(el);
+    q(el, "[data-test=attest-bill-payment-bp-1]")!.click();
+    await flush(el);
+    expect(errorOf(el, "bill-attest-note")).toBe("");
+    expect(q(el, "[data-test=bill-outcome-error]")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(attestDisabled(el)).toBe(false);
   });
 });

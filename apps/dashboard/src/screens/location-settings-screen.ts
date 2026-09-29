@@ -1,10 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import type { DashboardApi } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -26,7 +25,9 @@ export class LocationSettingsScreen extends LitElement {
   @state() private description = "";
   @state() private loaded = false;
   @state() private loadFailed = false;
-  @state() private fieldError = "";
+  @state() private attempted = false;
+  /** The server's refusal of the description, shown until the field changes. */
+  @state() private refusal = "";
   @state() private saveFailed = false;
   @state() private saving = false;
   @state() private saved = false;
@@ -56,26 +57,43 @@ export class LocationSettingsScreen extends LitElement {
       this.loadFailed = true;
     }
   }
+  #validate(): string {
+    return this.description.trim() === "" ? t("location_settings.required") : "";
+  }
+  #fieldError(): string {
+    return (this.attempted ? this.#validate() : "") || this.refusal;
+  }
   async #save(): Promise<void> {
     if (!this.loaded || this.saving) return;
     this.saved = false;
     this.saveFailed = false;
-    this.fieldError = this.description.trim() === "" ? t("location_settings.required") : "";
-    if (this.fieldError !== "") return;
+    this.attempted = true;
+    this.refusal = "";
+    if (this.#validate() !== "") {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
     this.saving = true;
     try {
       await this.api.putLocationSettings(this.description);
       this.#dirty = false;
       this.saved = true;
+      this.attempted = false;
     } catch (error) {
       if (codeOf(error) === "management.request_invalid")
-        this.fieldError = t("location_settings.invalid");
+        this.refusal = t("location_settings.invalid");
       else this.saveFailed = true;
     } finally {
       this.saving = false;
     }
+    if (this.refusal !== "") {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
+    }
   }
   override render() {
+    const fieldError = this.#fieldError();
     return html`<h1>${t("location_settings.title")}</h1>
       <p>${this.name}</p>
       ${
@@ -89,24 +107,20 @@ export class LocationSettingsScreen extends LitElement {
       ${
         this.loaded
           ? html`
-              <wt-form-error-summary
-                heading=${t("form.error_heading")}
-                .errors=${this.fieldError === "" ? [] : [this.fieldError]}
-              ></wt-form-error-summary>
               <wt-input
                 name="operationDescription"
                 autocomplete="off"
                 required
                 label=${t("location_settings.description")}
                 .value=${this.description}
-                error=${this.fieldError}
-                ?invalid=${this.fieldError !== ""}
+                error=${fieldError}
+                ?invalid=${fieldError !== ""}
                 ?disabled=${this.saving}
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
                   event.stopPropagation();
                   this.description = event.detail.value;
                   this.#dirty = true;
-                  this.fieldError = "";
+                  this.refusal = "";
                   this.saved = false;
                 }}
                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
@@ -117,11 +131,12 @@ export class LocationSettingsScreen extends LitElement {
               </wt-input>
               ${this.saveFailed ? html`<p role="alert">${t("location_settings.save_error")}</p>` : nothing}
               ${this.saved ? html`<p role="status">${t("location_settings.saved")}</p>` : nothing}
-              <wt-form-actions
+              <wt-form-actions .error=${fieldError === "" ? "" : t("form.fix_fields")}
                 ><wt-button
                   data-test="save"
                   variant="primary"
                   ?loading=${this.saving}
+                  ?disabled=${fieldError !== ""}
                   @click=${() => void this.#save()}
                   >${t("action.save")}</wt-button
                 ></wt-form-actions

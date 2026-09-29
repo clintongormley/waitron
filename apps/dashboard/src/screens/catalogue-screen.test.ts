@@ -563,10 +563,12 @@ describe("catalogue-screen", () => {
     await flush(el);
     await form.updateComplete;
   }
-  const summaryOf = (form: Element): readonly string[] =>
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
-      "wt-form-error-summary",
-    )!.errors;
+  /** The one message a form shows beside its primary action, or "" when it shows none. */
+  async function bottomOf(form: Element): Promise<string> {
+    const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  }
   const errorBeside = (form: Element, selector: string): string =>
     form.shadowRoot!.querySelector<HTMLElement & { error: string }>(selector)!.error;
 
@@ -594,7 +596,7 @@ describe("catalogue-screen", () => {
     expect(form.shadowRoot!.querySelector("#precision-error")?.textContent).toBe(
       codeMessage("unit.precision_invalid"),
     );
-    expect(summaryOf(form)).toEqual([codeMessage("unit.precision_invalid")]);
+    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
     await submitNested(el, form, { name: { es: "ración" }, abbreviation: {}, precision: 2 });
@@ -603,7 +605,7 @@ describe("catalogue-screen", () => {
     );
     expect(errorBeside(form, "[data-test=name-es]")).toBe("");
     expect(form.shadowRoot!.querySelector("#precision-error")).toBeNull();
-    expect(summaryOf(form)).toEqual([codeMessage("unit.translation_required")]);
+    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
   it("gives a refused nested category create back to the category form, beside the field it concerns", async () => {
@@ -634,14 +636,14 @@ describe("catalogue-screen", () => {
     expect(form.shadowRoot!.querySelector("#category-color-error")?.textContent).toBe(
       codeMessage("category.color_invalid"),
     );
-    expect(summaryOf(form)).toEqual([codeMessage("category.color_invalid")]);
+    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
     await submitNested(el, form, input);
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
       codeMessage("category.parent_cycle"),
     );
-    expect(summaryOf(form)).toEqual([codeMessage("category.parent_cycle")]);
+    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
 
     await submitNested(el, form, input);
     expect(errorBeside(form, "wt-input[name=category-name-es]")).toBe(
@@ -649,10 +651,10 @@ describe("catalogue-screen", () => {
     );
     expect(errorBeside(form, "wt-input[name=category-name-en]")).toBe("");
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe("");
-    expect(summaryOf(form)).toEqual([codeMessage("content.translation_required")]);
+    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
-  it("still says a nested unit or category refusal that names no field of the form, in its summary", async () => {
+  it("still says a nested unit or category refusal that names no field of the form, beside its Save", async () => {
     const api = stubApi({
       createUnit: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
       createCategory: vi
@@ -667,7 +669,7 @@ describe("catalogue-screen", () => {
       precision: 2,
     });
     expect(unitForm.open).toBe(true);
-    expect(summaryOf(unitForm)).toEqual([codeMessage("server.internal")]);
+    expect(await bottomOf(unitForm)).toBe(codeMessage("server.internal"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
     emit(unitForm, "wt-cancel", {});
@@ -677,7 +679,7 @@ describe("catalogue-screen", () => {
     const categoryForm = el.shadowRoot!.querySelector("dashboard-category-form")!;
     await categoryForm.updateComplete;
     // The unit form's refusal is not carried into the next form.
-    expect(summaryOf(categoryForm)).toEqual([]);
+    expect(await bottomOf(categoryForm)).toBe("");
     await submitNested(el, categoryForm, {
       name: { es: "Postres" },
       parentId: null,
@@ -685,7 +687,7 @@ describe("catalogue-screen", () => {
       color: null,
     });
     expect(categoryForm.open).toBe(true);
-    expect(summaryOf(categoryForm)).toEqual([codeMessage("content.translation_invalid")]);
+    expect(await bottomOf(categoryForm)).toBe(codeMessage("content.translation_invalid"));
   });
 
   it("ignores a closed unit form's second cancel once the category form is open", async () => {
@@ -826,10 +828,10 @@ describe("catalogue-screen", () => {
       error: codeMessage("content.translation_required"),
       invalid: true,
     });
-    const summary = editor(el).shadowRoot!.querySelector("wt-form-error-summary") as unknown as {
-      errors: string[];
-    };
-    expect(summary.errors).toEqual([codeMessage("content.translation_required")]);
+    expect(await bottomOf(editor(el))).toBe(t("form.fix_fields"));
+    expect(editor(el).shadowRoot!.querySelector("[data-test=save]")!.hasAttribute("disabled")).toBe(
+      true,
+    );
   });
 
   it("marks the variant whose translation the save refused, and reaches its window", async () => {
@@ -1269,10 +1271,12 @@ describe("catalogue-screen", () => {
       );
       expect(editor(el).open).toBe(true);
       await editor(el).updateComplete;
-      const summary = editor(el).shadowRoot!.querySelector("wt-form-error-summary")!;
-      expect(summary.errors).toEqual([
+      expect(await bottomOf(editor(el))).toBe(
         `${codeMessage("product.offered_as_extra")} Salsas, Toppings`,
-      ]);
+      );
+      expect(
+        editor(el).shadowRoot!.querySelector("[data-test=restore]")!.hasAttribute("disabled"),
+      ).toBe(false);
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
     });
 

@@ -1,10 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing, svg } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   DashboardApi,
@@ -248,7 +247,9 @@ export class StreamSettingsPanel extends LitElement {
   @state() private settings?: StreamSettingsView;
   @state() private draft: StreamBucketBody = { ...EMPTY };
   @state() private editing = false;
-  @state() private errors: Partial<Record<Field, string>> = {};
+  @state() private attempted = false;
+  /** Fields the server refused, each shown until the owner changes it. */
+  @state() private refused: Partial<Record<Field, string>> = {};
   @state() private submitting = false;
   @state() private testPassed = false;
   /** A refusal of something the owner did; `#clearMessages` takes it away. */
@@ -267,8 +268,6 @@ export class StreamSettingsPanel extends LitElement {
   @state() private turnOffArmed = false;
   @state() private busy = false;
 
-  /** Applied in `updated`, so the message beside the field is on screen when focus lands. */
-  #focusField: Field | null = null;
   /** The key fingerprint the panel last accepted. While the copy is on, a read bringing a different
    * key is accepted only once the kit has been fetched again, so the next read retries a failed
    * fetch. */
@@ -290,15 +289,6 @@ export class StreamSettingsPanel extends LitElement {
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
     this.#blobUrls.clear();
     super.disconnectedCallback();
-  }
-
-  protected override updated(): void {
-    const focus = this.#focusField;
-    if (focus !== null) {
-      this.#focusField = null;
-      const name = FIELDS.find((f) => f.field === focus)!.name;
-      this.shadowRoot!.querySelector<HTMLElement>(`wt-input[name=${name}]`)?.focus();
-    }
   }
 
   async #load(): Promise<void> {
@@ -363,8 +353,8 @@ export class StreamSettingsPanel extends LitElement {
       isField(named)
     ) {
       const key = code === "backup.stream_config_unsafe" ? UNSAFE_FIELD_KEYS[named] : undefined;
-      this.errors = { [named]: t(key ?? "stream.field.check") };
-      this.#focusField = named;
+      this.refused = { [named]: t(key ?? "stream.field.check") };
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
     this.failure = failureOf(error);
@@ -413,13 +403,22 @@ export class StreamSettingsPanel extends LitElement {
     };
   }
 
+  #errors(): Partial<Record<Field, string>> {
+    return { ...this.refused, ...(this.attempted ? this.#validate() : {}) };
+  }
+
+  #resetForm(): void {
+    this.attempted = false;
+    this.refused = {};
+  }
+
   /** False when the draft has a problem, which it marks, or a request is already running. */
   #ready(): boolean {
     this.#clearMessages();
-    this.errors = this.#validate();
-    const first = FIELDS.find((f) => this.errors[f.field] !== undefined);
-    if (first === undefined) return !this.submitting;
-    this.#focusField = first.field;
+    this.attempted = true;
+    this.refused = {};
+    if (Object.keys(this.#validate()).length === 0) return !this.submitting;
+    void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
     return false;
   }
 
@@ -447,6 +446,7 @@ export class StreamSettingsPanel extends LitElement {
       this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.editing = false;
       this.draft = { ...EMPTY };
+      this.#resetForm();
       this.#dropKit();
       await this.#loadKit();
     } catch (error) {
@@ -511,7 +511,7 @@ export class StreamSettingsPanel extends LitElement {
       accessKeyId: b?.accessKeyId ?? "",
       secretAccessKey: "",
     };
-    this.errors = {};
+    this.#resetForm();
     this.#clearMessages();
     this.editing = true;
   }
@@ -653,13 +653,11 @@ export class StreamSettingsPanel extends LitElement {
 
   #renderForm(canCancel: boolean): TemplateResult {
     const save = () => this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]");
+    const errors = this.#errors();
+    const invalid = FIELDS.some((f) => errors[f.field] !== undefined);
     return html`
       <div class="form" @keydown=${(event: KeyboardEvent) => submitOnEnter(event, save())}>
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${FIELDS.flatMap((f) => this.errors[f.field] ?? [])}
-        ></wt-form-error-summary>
-        ${FIELDS.map((f) => this.#renderField(f))}
+        ${FIELDS.map((f) => this.#renderField(f, errors[f.field] ?? ""))}
         ${
           this.testPassed
             ? html`<p class="passed" data-test="test-passed" role="status">
@@ -667,7 +665,7 @@ export class StreamSettingsPanel extends LitElement {
               </p>`
             : nothing
         }
-        <wt-form-actions>
+        <wt-form-actions .error=${invalid ? t("form.fix_fields") : ""}>
           ${
             canCancel
               ? html`<wt-button
@@ -676,7 +674,7 @@ export class StreamSettingsPanel extends LitElement {
                   data-test="cancel"
                   @click=${() => {
                     this.editing = false;
-                    this.errors = {};
+                    this.#resetForm();
                     this.#clearMessages();
                   }}
                   >${t("stream.form.cancel")}</wt-button
@@ -687,14 +685,14 @@ export class StreamSettingsPanel extends LitElement {
             slot="secondary"
             variant="secondary"
             data-test="test"
-            ?disabled=${this.submitting}
+            ?disabled=${this.submitting || invalid}
             @click=${() => void this.#test()}
             >${t("stream.form.test")}</wt-button
           >
           <wt-button
             variant="primary"
             data-test="save"
-            ?disabled=${this.submitting}
+            ?disabled=${this.submitting || invalid}
             @click=${() => void this.#save()}
             >${t("stream.form.save")}</wt-button
           >
@@ -703,7 +701,7 @@ export class StreamSettingsPanel extends LitElement {
     `;
   }
 
-  #renderField(f: (typeof FIELDS)[number]): TemplateResult {
+  #renderField(f: (typeof FIELDS)[number], error: string): TemplateResult {
     const secret = f.field === "secretAccessKey";
     const toggleLabel = t(
       this.secretVisible ? "stream.form.hide_secret" : "stream.form.show_secret",
@@ -715,10 +713,13 @@ export class StreamSettingsPanel extends LitElement {
       type=${secret && !this.secretVisible ? "password" : "text"}
       autocomplete=${secret ? "new-password" : "off"}
       .value=${this.draft[f.field]}
-      .error=${this.errors[f.field] ?? ""}
+      .error=${error}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.draft = { ...this.draft, [f.field]: event.detail.value };
+        const refused = { ...this.refused };
+        delete refused[f.field];
+        this.refused = refused;
         this.testPassed = false;
       }}
       >${

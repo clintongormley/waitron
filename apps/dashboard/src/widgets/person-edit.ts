@@ -1,11 +1,10 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
-import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { PersonEditDetails, PersonRole, PersonSummary } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -13,8 +12,9 @@ import { roleName, rolesByName, statusName } from "../i18n/domain.js";
 import { t } from "../i18n/t.js";
 
 type EditableField = "displayName" | "firstNames" | "lastNames" | "email";
+const FIELDS: readonly string[] = ["firstNames", "lastNames", "displayName", "email", "telephone"];
 
-/** Shown beside the display-name field, so the summary does not list it a second time. */
+/** The one refusal shown beside a field; every other code goes in the bottom message. */
 const DISPLAY_NAME_TAKEN = "person.display_name_taken";
 
 @customElement("dashboard-person-edit")
@@ -75,16 +75,42 @@ export class PersonEdit extends LitElement {
     role: "staff",
     status: "pending",
   };
-  @state() private fieldErrors: Partial<Record<EditableField | "telephone", string>> = {};
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
   #personId: string | null = null;
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("person") && this.person?.personId !== this.#personId) {
       this.#loadPerson();
     }
-    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN) {
-      this.fieldErrors = { ...this.fieldErrors, displayName: codeMessage(DISPLAY_NAME_TAKEN) };
+    if (changed.has("error")) this.dismissed = new Set();
+    if (changed.has("open") && this.open) {
+      this.attempted = false;
+      this.dismissed = new Set();
     }
+  }
+
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("error") && this.error === DISPLAY_NAME_TAKEN)
+      void focusFirstInvalid(this.shadowRoot!);
+  }
+
+  #dismiss(...keys: string[]): void {
+    this.dismissed = new Set([...this.dismissed, ...keys]);
+  }
+
+  #refused(): Record<string, string> {
+    if (!this.error) return {};
+    const refused =
+      this.error === DISPLAY_NAME_TAKEN
+        ? { displayName: codeMessage(DISPLAY_NAME_TAKEN) }
+        : { _form: codeMessage(this.error) };
+    return Object.fromEntries(Object.entries(refused).filter(([key]) => !this.dismissed.has(key)));
+  }
+
+  #errors(): Record<string, string> {
+    return { ...this.#refused(), ...(this.attempted ? this.#validate() : {}) };
   }
 
   #loadPerson(): void {
@@ -99,7 +125,8 @@ export class PersonEdit extends LitElement {
       role: person?.role ?? "staff",
       status: person?.status ?? "pending",
     };
-    this.fieldErrors = {};
+    this.attempted = false;
+    this.dismissed = new Set();
   }
 
   #change(field: EditableField | "telephone", event: CustomEvent<{ value: string }>): void {
@@ -121,14 +148,10 @@ export class PersonEdit extends LitElement {
     } else {
       this.details = { ...this.details, [field]: field === "telephone" ? value || null : value };
     }
-    this.fieldErrors = {
-      ...this.fieldErrors,
-      [field]: undefined,
-      ...(this.details.displayName !== prevDisplayName && { displayName: undefined }),
-    };
+    this.#dismiss(field, ...(this.details.displayName !== prevDisplayName ? ["displayName"] : []));
   }
 
-  #validate(): boolean {
+  #validate(): Partial<Record<EditableField | "telephone", string>> {
     const errors: Partial<Record<EditableField | "telephone", string>> = {};
     if (this.details.firstNames.trim() === "") errors.firstNames = t("form.first_names_required");
     if (this.details.lastNames.trim() === "") errors.lastNames = t("form.last_names_required");
@@ -141,18 +164,17 @@ export class PersonEdit extends LitElement {
     }
     const tel = this.details.telephone?.trim() ?? "";
     if (tel && !isValidTelephone(tel)) errors.telephone = codeMessage("person.telephone_invalid");
-    const valid = Object.keys(errors).length === 0;
-    // Kept only when a local check fails; a form that passes goes on for the server to judge again.
-    if (!valid && this.fieldErrors.displayName === codeMessage(DISPLAY_NAME_TAKEN)) {
-      errors.displayName ??= this.fieldErrors.displayName;
-    }
-    this.fieldErrors = errors;
-    return valid;
+    return errors;
   }
 
   #save(event: Event): void {
     event.stopPropagation();
-    if (!this.#validate()) return;
+    this.attempted = true;
+    this.#dismiss("_form");
+    if (Object.keys(this.#validate()).length > 0) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
     this.#emit("save-person", {
       displayName: this.details.displayName.trim(),
       firstNames: this.details.firstNames.trim(),
@@ -172,7 +194,13 @@ export class PersonEdit extends LitElement {
     return person.status === "suspended" ? ["suspended"] : [person.status, "suspended"];
   }
 
-  #input(testId: string, name: string, label: string, field: EditableField | "telephone") {
+  #input(
+    testId: string,
+    name: string,
+    label: string,
+    field: EditableField | "telephone",
+    errors: Record<string, string>,
+  ) {
     const value = this.details[field] ?? "";
     return html`
       <wt-input
@@ -183,7 +211,7 @@ export class PersonEdit extends LitElement {
         type=${field === "email" ? "email" : field === "telephone" ? "tel" : "text"}
         label=${label}
         .value=${value}
-        error=${this.fieldErrors[field] ?? ""}
+        error=${errors[field] ?? ""}
         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change(field, event)}
       ></wt-input>
     `;
@@ -191,6 +219,14 @@ export class PersonEdit extends LitElement {
 
   override render() {
     const person = this.person;
+    const errors = this.#errors();
+    const fieldKeys = new Set(FIELDS.filter((key) => Boolean(errors[key])));
+    const formMessages = Object.entries(errors)
+      .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
+      .map(([, message]) => message);
+    const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
+      " ",
+    );
     return html`
       <wt-modal
         heading=${person ? `${t("action.edit")} ${person.displayName}` : t("person.edit")}
@@ -204,38 +240,30 @@ export class PersonEdit extends LitElement {
         ${
           person
             ? html`
-                <wt-form-error-summary
-                  heading=${t("form.error_heading")}
-                  .errors=${[
-                    ...Object.values(this.fieldErrors).filter(
-                      (message): message is string => message !== undefined,
-                    ),
-                    ...(this.error && this.error !== DISPLAY_NAME_TAKEN
-                      ? [codeMessage(this.error)]
-                      : []),
-                  ]}
-                ></wt-form-error-summary>
                 <div class="fields">
                   ${this.#input(
                     "edit-first-names",
                     "given-name",
                     t("person.first_names"),
                     "firstNames",
+                    errors,
                   )}
                   ${this.#input(
                     "edit-last-names",
                     "family-name",
                     t("person.last_names"),
                     "lastNames",
+                    errors,
                   )}
                   ${this.#input(
                     "edit-display-name",
                     "nickname",
                     t("person.display_name"),
                     "displayName",
+                    errors,
                   )}
-                  ${this.#input("edit-email", "email", t("person.email"), "email")}
-                  ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone")}
+                  ${this.#input("edit-email", "email", t("person.email"), "email", errors)}
+                  ${this.#input("edit-telephone", "telephone", t("person.telephone"), "telephone", errors)}
                   <label>
                     <span class="field-label"
                       >${t("person.role")}<span class="required" aria-hidden="true">*</span></span
@@ -300,7 +328,7 @@ export class PersonEdit extends LitElement {
               `
             : nothing
         }
-        <wt-form-actions slot="footer">
+        <wt-form-actions slot="footer" .error=${person ? bottom : ""}>
           <wt-button
             slot="cancel"
             data-test="cancel"
@@ -316,6 +344,7 @@ export class PersonEdit extends LitElement {
           <wt-button
             data-test="save"
             variant="primary"
+            ?disabled=${fieldKeys.size > 0}
             @click=${(event: Event) => this.#save(event)}
             >${t("action.save")}</wt-button
           >

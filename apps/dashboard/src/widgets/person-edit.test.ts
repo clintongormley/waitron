@@ -30,6 +30,15 @@ function change(el: PersonEdit, testId: string, value: string): void {
   );
 }
 
+async function bottomOf(el: PersonEdit): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const saveOf = (el: PersonEdit): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!;
+
 describe("person-edit", () => {
   it("uses the shared modal with one field per row, the same field-list shape as the profile screen's own edit form", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
@@ -219,31 +228,32 @@ describe("person-edit", () => {
 });
 
 describe("person-edit server refusals", () => {
-  const summaryErrors = (el: PersonEdit): readonly string[] =>
-    el.shadowRoot!.querySelector("wt-form-error-summary")!.errors;
   const fieldError = (el: PersonEdit, testId: string): string | null =>
     el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
 
-  it("puts a taken display name beside its field and once in the summary, until it is edited", async () => {
+  it("puts a taken display name beside its field, disabling Save, until it is edited", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     el.error = "person.display_name_taken";
     await el.updateComplete;
     const message = codeMessage("person.display_name_taken");
     expect(fieldError(el, "edit-display-name")).toBe(message);
-    expect(summaryErrors(el)).toEqual([message]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
     change(el, "edit-display-name", "Ada L");
     await el.updateComplete;
     expect(fieldError(el, "edit-display-name")).toBe("");
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("keeps any other server refusal in the summary alone", async () => {
+  it("keeps any other server refusal in the bottom message alone, leaving Save working", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     el.error = "person.email_taken";
     await el.updateComplete;
     expect(fieldError(el, "edit-display-name")).toBe("");
-    expect(summaryErrors(el)).toEqual([codeMessage("person.email_taken")]);
+    expect(await bottomOf(el)).toBe(codeMessage("person.email_taken"));
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
 
   const displayName = (el: PersonEdit): string =>
@@ -253,7 +263,7 @@ describe("person-edit server refusals", () => {
       }
     ).value;
 
-  it("keeps a taken display name beside its field and once in the summary when another field fails its check", async () => {
+  it("keeps a taken display name beside its field when another field fails its check", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     el.error = "person.display_name_taken";
     await el.updateComplete;
@@ -270,7 +280,7 @@ describe("person-edit server refusals", () => {
     expect(saved).toBe(false);
     expect(fieldError(el, "edit-display-name")).toBe(message);
     expect(fieldError(el, "edit-last-names")).toBe(t("form.last_names_required"));
-    expect([...summaryErrors(el)].sort()).toEqual([message, t("form.last_names_required")].sort());
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("still sends a Save whose own checks pass, for the server to judge the name again", async () => {
@@ -296,7 +306,7 @@ describe("person-edit server refusals", () => {
     await el.updateComplete;
     expect(displayName(el)).toBe("Ada Byron");
     expect(fieldError(el, "edit-display-name")).toBe("");
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
   });
 
   it("keeps a taken display name when a name change leaves a customised one alone", async () => {
@@ -308,11 +318,120 @@ describe("person-edit server refusals", () => {
     const message = codeMessage("person.display_name_taken");
     expect(displayName(el)).toBe("Ada");
     expect(fieldError(el, "edit-display-name")).toBe(message);
-    expect(summaryErrors(el)).toEqual([message]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 });
 
 describe("person-edit validation and keyboard submit", () => {
+  const fieldError = (el: PersonEdit, testId: string): string | null =>
+    el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
+  it("says nothing about errors before the first submission, and Save works", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-first-names", "");
+    await el.updateComplete;
+
+    expect(fieldError(el, "edit-first-names")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on an invalid submission shows one message beside a disabled Save and focuses the first invalid field", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-last-names", "");
+    change(el, "edit-email", "ada@");
+    await el.updateComplete;
+    saveOf(el).click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+    const lastNames = el.shadowRoot!.querySelector("[data-test=edit-last-names]")!;
+    expect(lastNames.shadowRoot!.activeElement).toBe(lastNames.shadowRoot!.querySelector("input"));
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { value: string }>("[data-test=edit-email]")!
+        .value,
+    ).toBe("ada@");
+  });
+
+  it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-telephone", "+44 20 7946 0958");
+    change(el, "edit-email", "");
+    await el.updateComplete;
+    saveOf(el).click();
+    await el.updateComplete;
+
+    change(el, "edit-email", "ada@example");
+    await el.updateComplete;
+    expect(fieldError(el, "edit-email")).toBe(codeMessage("person.email_invalid"));
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+    change(el, "edit-email", "ada@example.com");
+    await el.updateComplete;
+    expect(fieldError(el, "edit-email")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+    change(el, "edit-email", " ");
+    await el.updateComplete;
+    expect(fieldError(el, "edit-email")).toBe(t("form.email_required"));
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("focuses the display name when a refusal naming it arrives", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    el.error = "person.display_name_taken";
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const field = el.shadowRoot!.querySelector("[data-test=edit-display-name]")!;
+    expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
+  });
+
+  it("drops a refusal that names no field when the form is submitted again", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", {
+      person,
+      open: true,
+      error: "person.email_taken",
+    });
+    expect(await bottomOf(el)).toBe(codeMessage("person.email_taken"));
+
+    change(el, "edit-first-names", "");
+    await el.updateComplete;
+    saveOf(el).click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("shows a refusal and the generic sentence together when both apply", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-first-names", "");
+    await el.updateComplete;
+    saveOf(el).click();
+    await el.updateComplete;
+    el.error = "server.internal";
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
+  });
+
+  it("starts again when reopened: no messages and Save working", async () => {
+    const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
+    change(el, "edit-first-names", "");
+    await el.updateComplete;
+    saveOf(el).click();
+    await el.updateComplete;
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+
+    expect(fieldError(el, "edit-first-names")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
   it("names every blank required field under its own message and does not save", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     change(el, "edit-first-names", " ");

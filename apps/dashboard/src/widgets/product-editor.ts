@@ -18,7 +18,6 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "./allergen-dietary-picker.js";
 import "./image-upload.js";
 import "./variant-form.js";
@@ -85,7 +84,7 @@ type SectionName = keyof typeof SECTION_FIELDS;
 /**
  * The field names the SERVER uses when it rejects a product body
  * (`packages/catalogue/src/product-editor-input.ts`), mapped onto this editor's field names, or a
- * key only the error summary shows. A value ending in "-" names a translated field: the server
+ * key only the message beside Save shows. A value ending in "-" names a translated field: the server
  * names such a field once for all of its languages, so there is no single language to point at and
  * the default content language's input is used.
  */
@@ -105,7 +104,7 @@ const SERVER_FIELDS: Record<string, string> = {
 
 /**
  * The editor field a rejected product write's `field` belongs to, or null when this editor cannot
- * show it. A key with no input of its own (`active`) is shown in the editor's error summary alone.
+ * show it. A key with no input of its own (`active`) is shown in the message beside Save alone.
  */
 export function productEditorField(field: string, defaultLanguage: string): string | null {
   const variant = /^variants\.(\d+)\.(name|unitPrice|active)$/.exec(field);
@@ -144,6 +143,28 @@ export function productEditorTranslationField(
   );
   return index === -1 ? null : `variant-${index}-name`;
 }
+
+const VARIANT_KEY = /^variant-(\d+)-(?:name|price|active)$/;
+
+/** The error key a change to each draft field answers, so a refusal of that field goes once the
+ * operator has changed it. A translated field's key is its prefix, completed per language. */
+const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
+  name: "name",
+  customerName: "customer-name-",
+  description: "description-",
+  kitchenName: "kitchen-name",
+  image: "image",
+  unitId: "unit",
+  unitPrice: "unit-price",
+  vatClass: "tax",
+  primaryCategoryId: "primary",
+  labelIds: "labels",
+  modifiers: "modifier",
+  stationId: "product-station",
+  courseId: "product-course",
+  allergens: "allergens",
+  dietaryDeclarations: "dietary",
+};
 
 function emptyDraft(): ProductEditorDraft {
   return {
@@ -326,7 +347,10 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @property({ attribute: false }) api?: DashboardApi;
   @state() private draft: ProductEditorDraft = emptyDraft();
-  @state() private errors: Record<string, string> = {};
+  /** Set by the first press of Save; from then on the form re-checks itself on every change. */
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed: ReadonlySet<string> = new Set();
   @state() private imageOpen = false;
   @state() private unitPickerOpen = false;
   @state() private variantOpen = false;
@@ -336,6 +360,10 @@ export class ProductEditor extends LitElement {
   private generation = 0;
   /** The field to put focus in once the update that reported an error has rendered. */
   #focusField: string | null = null;
+  /** The standing messages, keyed by field, as of this render; what `error` reads. */
+  #errorsNow: Record<string, string> = {};
+  /** The variant rows marked as of this render. */
+  #rowsNow: Record<number, string> = {};
   #listNames: ReadonlyMap<string, string> = new Map();
 
   readonly #reorder = new ReorderController(this, {
@@ -362,7 +390,8 @@ export class ProductEditor extends LitElement {
       this.draft = this.value ? structuredClone(this.value) : emptyDraft();
       this.generation++;
       this.imageOpen = false;
-      this.errors = {};
+      this.attempted = false;
+      this.dismissed = new Set();
       this.submitted = false;
       this.unitPickerOpen = false;
       this.variantOpen = false;
@@ -373,8 +402,13 @@ export class ProductEditor extends LitElement {
     // A field error the SERVER reported is surfaced the same way a local one is: its section opens
     // and focus goes to it, so a rejected save never hides its reason behind a folded header.
     if (changed.has("fieldErrors")) {
-      this.aimFocus(this.fieldErrors);
+      this.dismissed = new Set();
       this.recordVariantProblems();
+      const shown = this.shownFields();
+      this.#focusField =
+        Object.keys(this.fieldErrors).find(
+          (key) => shown.has(key) || this.#variantRefusalKeys.has(key),
+        ) ?? null;
     }
   }
 
@@ -389,6 +423,10 @@ export class ProductEditor extends LitElement {
    * and focusing a hidden element silently does nothing, so wait for that section first. */
   private async focusField(name: string): Promise<void> {
     await this.updateComplete;
+    if (name === "image") {
+      await this.focusImage();
+      return;
+    }
     const field = this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
     if (!field) {
       await this.focusVariantRow(name);
@@ -399,6 +437,16 @@ export class ProductEditor extends LitElement {
     );
     await section?.updateComplete;
     field.focus();
+  }
+
+  /** The photo control has no input of its own; its Choose button is where a refused photo puts
+   * focus, once the folded section holding it has opened. */
+  private async focusImage(): Promise<void> {
+    const upload = this.shadowRoot?.querySelector<LitElement>("dashboard-image-upload");
+    if (!upload) return;
+    await upload.closest<LitElement>("wt-disclosure")?.updateComplete;
+    await upload.updateComplete;
+    upload.shadowRoot?.querySelector<HTMLElement>("[data-test=choose-image]")?.focus();
   }
 
   /** A variant has no input of its own in this form — its fields live in the window the row's Edit
@@ -418,18 +466,59 @@ export class ProductEditor extends LitElement {
     return this.busy || this.childOpen || this.imageOpen || this.variantOpen;
   }
   private error(name: string) {
-    return this.fieldErrors[name] ?? this.errors[name] ?? "";
-  }
-  private get allErrors(): Record<string, string> {
-    return { ...this.errors, ...this.fieldErrors };
-  }
-  private aimFocus(errors: Record<string, string>): void {
-    this.#focusField = Object.keys(errors)[0] ?? null;
+    return this.#errorsNow[name] ?? "";
   }
   private sectionHasError(section: SectionName): boolean {
-    return Object.keys(this.allErrors).some((key) =>
-      SECTION_FIELDS[section].some((field) => key.startsWith(field)),
+    const shown = this.shownFields();
+    return Object.keys(this.#errorsNow).some(
+      (key) => shown.has(key) && SECTION_FIELDS[section].some((field) => key.startsWith(field)),
     );
+  }
+  /** The keys this form shows a message under a field for. A variant's problems are shown on its
+   * row, which `variantRows` covers. */
+  private shownFields(): ReadonlySet<string> {
+    const keys = [
+      "name",
+      "primary",
+      "kitchen-name",
+      "tax",
+      "unit",
+      "unit-price",
+      ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
+    ];
+    if (this.api) keys.push("image");
+    if (this.inherited === null) keys.push("labels", "modifier");
+    return new Set(keys);
+  }
+  private dismiss(...keys: string[]): void {
+    if (keys.every((key) => this.dismissed.has(key))) return;
+    this.dismissed = new Set([...this.dismissed, ...keys]);
+  }
+  /** Refusals not yet dismissed, over the form's own checks for everything but a variant row. A
+   * refusal wins where both name one field. */
+  private standingErrors(local: Record<string, string>): Record<string, string> {
+    const own = Object.fromEntries(Object.entries(local).filter(([key]) => !VARIANT_KEY.test(key)));
+    const refused = Object.fromEntries(
+      Object.entries(this.fieldErrors).filter(
+        ([key, message]) =>
+          Boolean(message) && !this.dismissed.has(key) && !this.#variantRefusalKeys.has(key),
+      ),
+    );
+    return { ...own, ...refused };
+  }
+  /** What the form says now: the messages under fields, the rows marked, and the one sentence
+   * beside Save — which stays working while nothing the operator can fix is left. */
+  private assess(local: Record<string, string>) {
+    const errors = this.standingErrors(local);
+    const rows = this.variantRows(local);
+    const shown = this.shownFields();
+    const formMessages = Object.entries(errors)
+      .filter(([key]) => !shown.has(key))
+      .map(([, message]) => message);
+    const blocked =
+      Object.keys(errors).some((key) => shown.has(key)) || Object.keys(rows).length > 0;
+    const bottom = [...formMessages, ...(blocked ? [t("form.fix_fields")] : [])].join(" ");
+    return { errors, rows, blocked, bottom };
   }
   /**
    * The reported problems that belong to a variant ROW, against the variant OBJECT rather than its
@@ -440,19 +529,29 @@ export class ProductEditor extends LitElement {
    * verdict was about the value the row no longer holds.
    */
   #variantProblems = new Map<EditorVariant, string>();
+  /** The refusal keys held against a variant row; a key naming no variant stays a form message. */
+  #variantRefusalKeys: ReadonlySet<string> = new Set();
   private recordVariantProblems(): void {
     const problems = new Map<EditorVariant, string>();
-    for (const [key, message] of Object.entries(this.allErrors)) {
-      const match = /^variant-(\d+)-(?:name|price|active)$/.exec(key);
+    const keys = new Set<string>();
+    for (const [key, message] of Object.entries(this.fieldErrors)) {
+      const match = VARIANT_KEY.exec(key);
       const variant = match ? this.draft.variants[Number(match[1])] : undefined;
-      if (variant && !problems.has(variant)) problems.set(variant, message);
+      if (!variant || !message) continue;
+      keys.add(key);
+      if (!problems.has(variant)) problems.set(variant, message);
     }
     this.#variantProblems = problems;
+    this.#variantRefusalKeys = keys;
   }
-  private get variantErrors(): Record<number, string> {
+  /** The form's own checks run on the variants as they now stand, so they follow a reorder. */
+  private variantRows(local: Record<string, string>): Record<number, string> {
     const rows: Record<number, string> = {};
     this.draft.variants.forEach((variant, index) => {
-      const message = this.#variantProblems.get(variant);
+      const message =
+        this.#variantProblems.get(variant) ??
+        local[`variant-${index}-name`] ??
+        local[`variant-${index}-price`];
       if (message !== undefined) rows[index] = message;
     });
     return rows;
@@ -517,6 +616,16 @@ export class ProductEditor extends LitElement {
     return { busy: this.busy, locales: this.locales, error: (key) => this.error(key) };
   }
   private change<K extends keyof ProductEditorDraft>(key: K, value: ProductEditorDraft[K]) {
+    const errorKey = DRAFT_ERROR_KEYS[key];
+    if (errorKey?.endsWith("-")) {
+      const before = (this.draft[key] ?? {}) as LocalizedText;
+      const after = (value ?? {}) as LocalizedText;
+      this.dismiss(
+        ...[...new Set([...Object.keys(before), ...Object.keys(after)])]
+          .filter((locale) => before[locale] !== after[locale])
+          .map((locale) => `${errorKey}${locale}`),
+      );
+    } else if (errorKey !== undefined) this.dismiss(errorKey);
     this.draft = { ...this.draft, [key]: value };
   }
   private changeVariant(index: number, next: (variant: EditorVariant) => EditorVariant): void {
@@ -551,8 +660,30 @@ export class ProductEditor extends LitElement {
   private save(event: Event, restore = false) {
     event.stopPropagation();
     if (this.suspended || this.submitted) return;
-    // Inserted in the order the fields are rendered, so the summary reads top to bottom and the
-    // first entry is the field focus lands in.
+    if (this.assess(this.attempted ? this.validate() : {}).blocked) return;
+    this.attempted = true;
+    this.dismiss(...Object.keys(this.fieldErrors));
+    const errors = this.validate();
+    if (Object.keys(errors).length) {
+      this.#focusField = Object.keys(errors)[0]!;
+      return;
+    }
+    this.submitted = true;
+    const value = this.currentValue;
+    delete value.inherited;
+    if (this.inherited !== null && !(value.unitPrice ?? "").trim()) value.unitPrice = null;
+    if (restore) value.active = true;
+    value.name = value.name.trim();
+    value.kitchenName = value.kitchenName?.trim() || null;
+    value.customerName = blankToNull(value.customerName);
+    value.description = blankToNull(value.description);
+    this.dispatchEvent(
+      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
+    );
+  }
+  /** The form's own checks, keyed in the order the fields are rendered, so the first key is the
+   * field focus lands in. */
+  private validate(): Record<string, string> {
     const errors: Record<string, string> = {};
     if (!this.draft.name.trim()) errors.name = t("editor.name_required");
     const variantPage = this.inherited !== null;
@@ -571,24 +702,7 @@ export class ProductEditor extends LitElement {
       if (variant.unitPrice !== null && !isProductPrice(variant.unitPrice))
         errors[`variant-${index}-price`] = t("editor.price_invalid");
     }
-    this.errors = errors;
-    this.recordVariantProblems();
-    if (Object.keys(errors).length) {
-      this.aimFocus(errors);
-      return;
-    }
-    this.submitted = true;
-    const value = this.currentValue;
-    delete value.inherited;
-    if (variantPage && blankPrice) value.unitPrice = null;
-    if (restore) value.active = true;
-    value.name = value.name.trim();
-    value.kitchenName = value.kitchenName?.trim() || null;
-    value.customerName = blankToNull(value.customerName);
-    value.description = blankToNull(value.description);
-    this.dispatchEvent(
-      new CustomEvent("wt-submit", { detail: { value }, bubbles: true, composed: true }),
-    );
+    return errors;
   }
   private cancel(event: Event) {
     event.stopPropagation();
@@ -784,11 +898,13 @@ export class ProductEditor extends LitElement {
           this.draft.customerName ?? {},
           (value) => this.change("customerName", value),
         )}
-        ${this.locales.map(
-          (locale) =>
-            html`<label
+        ${this.locales.map((locale) => {
+          const error = this.error(`description-${locale}`);
+          return html`<label
               >${t("editor.description")} (${locale})<textarea
                 name=${`description-${locale}`}
+                aria-invalid=${error ? "true" : "false"}
+                aria-describedby=${error ? `description-${locale}-error` : nothing}
                 placeholder=${descriptionHints?.[locale] ?? ""}
                 .value=${this.draft.description?.[locale] ?? ""}
                 @input=${(event: Event) => {
@@ -799,23 +915,35 @@ export class ProductEditor extends LitElement {
                   });
                 }}
               ></textarea>
-            </label>`,
-        )}
+            </label>
+            ${
+              error
+                ? html`<span class="error" id=${`description-${locale}-error`}>${error}</span>`
+                : nothing
+            }`;
+        })}
         ${
           this.api
             ? html`<dashboard-image-upload
-                .api=${this.api}
-                .image=${this.draft.image}
-                .inheritedImage=${this.inherited?.image ?? null}
-                @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-                  event.stopPropagation();
-                  this.change("image", event.detail.image);
-                }}
-                @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-                  event.stopPropagation();
-                  this.imageOpen = event.detail.open;
-                }}
-              ></dashboard-image-upload>`
+                  .api=${this.api}
+                  .image=${this.draft.image}
+                  .inheritedImage=${this.inherited?.image ?? null}
+                  @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
+                    event.stopPropagation();
+                    this.change("image", event.detail.image);
+                  }}
+                  @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
+                    event.stopPropagation();
+                    this.imageOpen = event.detail.open;
+                  }}
+                ></dashboard-image-upload>
+                ${
+                  this.error("image")
+                    ? html`<span class="error" data-test="image-error"
+                        >${this.error("image")}</span
+                      >`
+                    : nothing
+                }`
             : nothing
         }
       </div>
@@ -885,6 +1013,7 @@ export class ProductEditor extends LitElement {
           // On a variant an empty choice is blank, which reads the parent's: saved as an empty
           // overlay it would declare the variant free of every allergen its parent contains.
           const variantPage = this.inherited !== null;
+          this.dismiss("allergens", "dietary");
           this.draft = {
             ...this.draft,
             allergens: variantPage && !codes.length ? null : allergens,
@@ -1014,7 +1143,7 @@ export class ProductEditor extends LitElement {
               addUnitLabel=${t("editor.add_unit")}
               .busy=${this.suspended}
               .openBlocked=${unsaved}
-              .errors=${this.variantErrors}
+              .errors=${this.#rowsNow}
               @wt-unit-change=${(event: CustomEvent<{ unitId: string | null }>) => {
                 event.stopPropagation();
                 this.change("unitId", event.detail.unitId);
@@ -1233,6 +1362,9 @@ export class ProductEditor extends LitElement {
   }
 
   override render() {
+    const { errors, rows, blocked, bottom } = this.assess(this.attempted ? this.validate() : {});
+    this.#errorsNow = errors;
+    this.#rowsNow = rows;
     const fields = this.fields();
     return html`<wt-modal
         .open=${this.open}
@@ -1246,10 +1378,6 @@ export class ProductEditor extends LitElement {
           if (event.target === event.currentTarget && this.open) this.cancel(event);
         }}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${Object.values(this.allErrors)}
-        ></wt-form-error-summary>
         <div class="form">
           ${
             this.draft.active
@@ -1283,7 +1411,7 @@ export class ProductEditor extends LitElement {
           ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}
           ${this.inherited ? nothing : this.renderModifiers()}
         </div>
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -1299,7 +1427,7 @@ export class ProductEditor extends LitElement {
                   variant="secondary"
                   data-test="restore"
                   .loading=${this.busy}
-                  ?disabled=${this.suspended}
+                  ?disabled=${this.suspended || blocked}
                   @click=${(event: Event) => this.save(event, true)}
                   >${t("product.restore")}</wt-button
                 >`
@@ -1307,7 +1435,7 @@ export class ProductEditor extends LitElement {
           <wt-button
             data-test="save"
             .loading=${this.busy}
-            ?disabled=${this.suspended}
+            ?disabled=${this.suspended || blocked}
             @click=${this.save}
             >${t("action.save")}</wt-button
           ></wt-form-actions

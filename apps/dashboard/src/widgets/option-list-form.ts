@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import type { ContentLanguages } from "@waitron/shared";
 import { effectiveDefaultLabelId } from "@waitron/catalogue/src/option-default.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -12,7 +12,6 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { optionalTextFields, translations, type FieldContext } from "./form-fields.js";
 import { reorder } from "./reorder.js";
 import { ReorderController, type ReorderModel } from "./reorder-table.js";
@@ -114,7 +113,9 @@ export class OptionListForm extends LitElement {
   @state() private labels: DraftLabel[] = [];
   @state() private defaultLabelId: string | null = null;
   @state() private editingLabel: DraftLabel | "new" | null = null;
-  @state() private validation: Record<string, string> = {};
+  @state() private attempted = false;
+  /** `serverErrors` keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
   /** `fieldErrors` with each path turned into one of this form's own keys. A label's message is
    * held against the label's ID rather than the position the server named, so moving a label
    * carries its message with it. */
@@ -140,7 +141,23 @@ export class OptionListForm extends LitElement {
     }
     if (changes.has("open") && !this.open) this.editingLabel = null;
     // After the reseed, so a label path resolves against the labels now on screen.
-    if (changes.has("fieldErrors")) this.serverErrors = this.#mapFieldErrors();
+    if (changes.has("fieldErrors")) {
+      this.serverErrors = this.#mapFieldErrors();
+      this.dismissed = new Set();
+    }
+  }
+
+  protected override updated(changes: PropertyValues<this>): void {
+    if (changes.has("fieldErrors") && this.#messages().fieldKeys.size > 0)
+      void this.#focusFirstInvalid();
+  }
+
+  /** A message under the options table or a row has no control of its own, so focus goes to the
+   * table when no control is invalid. */
+  async #focusFirstInvalid(): Promise<void> {
+    await this.updateComplete;
+    if ((await focusFirstInvalid(this.shadowRoot!)) === null)
+      this.shadowRoot!.querySelector<HTMLElement>(".table-wrap")?.focus();
   }
 
   #reseed(): void {
@@ -159,7 +176,8 @@ export class OptionListForm extends LitElement {
     this.defaultLabelId = value?.defaultLabelId ?? null;
     this.#keepDefault();
     this.editingLabel = null;
-    this.validation = {};
+    this.attempted = false;
+    this.dismissed = new Set();
   }
 
   #keepDefault(): void {
@@ -181,8 +199,9 @@ export class OptionListForm extends LitElement {
 
   /** A path naming the list as a whole, an option's id or an option's availability (`wt-switch`
    * draws no error text) is shown under the options table with the rest of the list-level
-   * refusals. */
+   * refusals. `_form` names no field, and is shown beside Save alone. */
   #formKey(field: string): string {
+    if (field === "_form") return field;
     const label = /^labels\.(\d+)(?:\.(.+))?$/.exec(field);
     if (label) {
       const id = this.labels[Number(label[1])]?.id;
@@ -200,13 +219,45 @@ export class OptionListForm extends LitElement {
     return null;
   }
 
-  #errors(): Record<string, string> {
+  #validate(): Record<string, string> {
+    const validation: Record<string, string> = {};
+    if (!this.name.trim()) validation.name = t("options.name_required");
+    if (this.active && !this.labels.some((label) => label.available))
+      validation.labels = t("options.labels_required");
+    return validation;
+  }
+
+  /**
+   * Every message on screen, keyed as the form shows it, and the keys among them that are a field's
+   * and so hold Save back. A refusal held for an option the operator has since removed is shown
+   * under the options table but holds nothing back: removing the option was the change to it.
+   * `active` and `_form` name nothing this form shows a message under.
+   */
+  #messages(): { errors: Record<string, string>; fieldKeys: Set<string> } {
     const errors: Record<string, string> = {};
-    for (const [key, message] of Object.entries(this.serverErrors)) {
+    const fieldKeys = new Set<string>();
+    const shown = new Set([
+      "name",
+      "kitchen-name",
+      "labels",
+      ...this.languages.languages.map((locale) => `customer-name-${locale}`),
+    ]);
+    const live = Object.entries(this.serverErrors).filter(([key]) => !this.dismissed.has(key));
+    const removed = ([key]: [string, string]) => {
       const held = /^label:([^:]+):/.exec(key);
-      errors[held && !this.labels.some((label) => label.id === held[1]) ? "labels" : key] = message;
+      return held !== null && !this.labels.some((label) => label.id === held[1]);
+    };
+    for (const [, message] of live.filter(removed)) errors.labels = message;
+    for (const [key, message] of live.filter((entry) => !removed(entry))) {
+      errors[key] = message;
+      if (key.startsWith("label:") || shown.has(key)) fieldKeys.add(key);
     }
-    return { ...errors, ...this.validation };
+    if (this.attempted)
+      for (const [key, message] of Object.entries(this.#validate())) {
+        errors[key] = message;
+        fieldKeys.add(key);
+      }
+    return { errors, fieldKeys };
   }
 
   /** Each option's messages, keyed as the option editor names its inputs (`label-name`). */
@@ -222,16 +273,21 @@ export class OptionListForm extends LitElement {
     return byLabel;
   }
 
-  #edit(change: () => void): void {
+  #edit(change: () => void, ...keys: string[]): void {
     change();
-    this.validation = {};
+    this.dismissed = new Set([...this.dismissed, ...keys]);
+  }
+
+  /** A change to the options answers a refusal about them as a whole. */
+  #editLabels(change: () => void): void {
+    this.#edit(change, "labels");
   }
 
   #saveLabel(event: CustomEvent<{ value: DraftLabel }>): void {
     event.stopPropagation();
     const saved = event.detail.value;
     const known = this.labels.some((label) => label.id === saved.id);
-    this.#edit(() => {
+    this.#editLabels(() => {
       this.labels = known
         ? this.labels.map((label) => (label.id === saved.id ? saved : label))
         : [...this.labels, saved];
@@ -269,7 +325,7 @@ export class OptionListForm extends LitElement {
     const index = this.labels.findIndex((label) => label.id === id);
     if (index < 0) return;
     const focusId = this.labels[index + 1]?.id ?? this.labels[index - 1]?.id ?? null;
-    this.#edit(() => {
+    this.#editLabels(() => {
       this.labels = this.labels.filter((label) => label.id !== id);
       this.#keepDefault();
     });
@@ -280,7 +336,7 @@ export class OptionListForm extends LitElement {
   #move(id: string, to: number): void {
     const from = this.labels.findIndex((label) => label.id === id);
     if (from < 0) return;
-    this.#edit(() => {
+    this.#editLabels(() => {
       this.labels = reorder(this.labels, from, to);
     });
   }
@@ -297,12 +353,12 @@ export class OptionListForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    const validation: Record<string, string> = {};
-    if (!this.name.trim()) validation.name = t("options.name_required");
-    if (this.active && !this.labels.some((label) => label.available))
-      validation.labels = t("options.labels_required");
-    this.validation = validation;
-    if (Object.keys(validation).length) return;
+    this.attempted = true;
+    this.dismissed = new Set(Object.keys(this.serverErrors));
+    if (Object.keys(this.#validate()).length) {
+      void this.#focusFirstInvalid();
+      return;
+    }
     this.#emit(event, "wt-submit", {
       value: {
         name: this.name.trim(),
@@ -358,7 +414,11 @@ export class OptionListForm extends LitElement {
           "customer-name",
           t("options.customer_name"),
           this.customerName,
-          (customerName) => this.#edit(() => (this.customerName = customerName)),
+          (customerName) =>
+            this.#edit(
+              () => (this.customerName = customerName),
+              ...locales.map((locale) => `customer-name-${locale}`),
+            ),
           this.name,
         )}
         <wt-input
@@ -371,7 +431,7 @@ export class OptionListForm extends LitElement {
           .invalid=${!!errors["kitchen-name"]}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
-            this.#edit(() => (this.kitchenName = event.detail.value));
+            this.#edit(() => (this.kitchenName = event.detail.value), "kitchen-name");
           }}
         ></wt-input>
       </div>
@@ -404,7 +464,7 @@ export class OptionListForm extends LitElement {
             aria-label=${`${t("options.default")}: ${label.name}`}
             .checked=${this.defaultLabelId === label.id}
             ?disabled=${!label.available || this.busy}
-            @change=${() => this.#edit(() => (this.defaultLabelId = label.id))}
+            @change=${() => this.#editLabels(() => (this.defaultLabelId = label.id))}
         /></label>
       </td>
       <td>
@@ -492,8 +552,15 @@ export class OptionListForm extends LitElement {
   }
 
   override render() {
-    const errors = this.#errors();
+    const { errors, fieldKeys } = this.#messages();
     const byLabel = this.#errorsByLabel(errors);
+    // The options table shows its own message, even one that holds nothing back.
+    const bottom = [
+      ...Object.entries(errors)
+        .filter(([key, message]) => message && key !== "labels" && !fieldKeys.has(key))
+        .map(([, message]) => message),
+      ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-modal
         .open=${this.open}
         heading=${t(this.value ? "options.edit" : "options.create")}
@@ -508,10 +575,6 @@ export class OptionListForm extends LitElement {
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
         >
-          <wt-form-error-summary
-            heading=${t("form.error_heading")}
-            .errors=${Object.values(errors)}
-          ></wt-form-error-summary>
           <div class="names">
             <wt-input
               name="name"
@@ -523,7 +586,7 @@ export class OptionListForm extends LitElement {
               .invalid=${!!errors.name}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
-                this.#edit(() => (this.name = event.detail.value));
+                this.#edit(() => (this.name = event.detail.value), "name");
               }}
             ></wt-input>
             ${this.#namesSection(errors)}
@@ -541,7 +604,7 @@ export class OptionListForm extends LitElement {
           </div>
           ${this.#labelsSection(errors, byLabel)}
         </div>
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button
             slot="cancel"
             data-test="cancel"
@@ -553,7 +616,7 @@ export class OptionListForm extends LitElement {
           <wt-button
             data-test="save"
             variant="primary"
-            .disabled=${this.busy}
+            .disabled=${this.busy || fieldKeys.size > 0}
             @click=${(event: Event) => this.#submit(event)}
             >${t("action.save")}</wt-button
           ></wt-form-actions

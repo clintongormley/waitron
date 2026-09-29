@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, setContentLanguages, submitOnEnter, type DataTableColumn } from "@waitron/ui";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  setContentLanguages,
+  submitOnEnter,
+  type DataTableColumn,
+} from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -8,7 +14,6 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "../widgets/image-upload.js";
 import {
   memberKindLabel,
@@ -49,6 +54,22 @@ const occurrenceKey = (row: Occurrence) => row.key;
 const occurrenceParent = (row: Occurrence) => row.parentKey;
 
 const NO_USAGES: SectionUsages = { menus: [], sections: [] };
+
+/** Where a form's messages show: `invalid` when one is under a field `shown` names, which holds the
+ * primary action; every other one, then the generic sentence, in the message beside it. */
+function placeErrors(
+  errors: Record<string, string>,
+  shown: ReadonlySet<string>,
+): { invalid: boolean; bottom: string } {
+  const invalid = Object.entries(errors).some(([key, message]) => message && shown.has(key));
+  const others = Object.entries(errors)
+    .filter(([key, message]) => message && !shown.has(key))
+    .map(([, message]) => message);
+  return { invalid, bottom: [...others, ...(invalid ? [t("form.fix_fields")] : [])].join(" ") };
+}
+
+const without = (errors: Record<string, string>, keys: readonly string[]) =>
+  Object.fromEntries(Object.entries(errors).filter(([key]) => !keys.includes(key)));
 
 function usedInText(usages: SectionUsages): string {
   return [
@@ -195,7 +216,9 @@ export class SectionsScreen extends LitElement {
   @state() private image: string | null = null;
   @state() private color: string | null = null;
   @state() private pickerOpen = false;
+  /** The last refused save, less each field the operator has changed since. */
   @state() private fieldErrors: Record<string, string> = {};
+  @state() private attempted = false;
   @state() private memberError: string | null = null;
   @state() private membersReloadError = false;
   @state() private editorMembers: SectionMember[] = [];
@@ -206,7 +229,9 @@ export class SectionsScreen extends LitElement {
   @state() private duplicating: { source: LibrarySection; chosen: ReadonlySet<string> } | null =
     null;
   @state() private duplicateName = "";
+  /** The last refused copy, less its name once the operator changes it. */
   @state() private duplicateErrors: Record<string, string> = {};
+  @state() private duplicateAttempted = false;
 
   @state() private deleting: { id: string; name: string } | null = null;
   @state() private deleteUsages: SectionUsages | null = null;
@@ -366,6 +391,7 @@ export class SectionsScreen extends LitElement {
     this.image = section?.image ?? null;
     this.color = section?.color ?? null;
     this.fieldErrors = {};
+    this.attempted = false;
     this.memberError = null;
     this.membersReloadError = false;
     this.editorMembers = section?.members ?? [];
@@ -405,11 +431,39 @@ export class SectionsScreen extends LitElement {
     if (current()) apply(usages);
   }
 
+  /** Moves focus to the first invalid field of the modal `testId`, once it has rendered. */
+  async #focusInvalid(testId: string): Promise<void> {
+    await this.updateComplete;
+    const modal = this.shadowRoot!.querySelector(`wt-modal[data-test="${testId}"]`);
+    if (modal) await focusFirstInvalid(modal);
+  }
+
+  #nameErrors(name: string): Record<string, string> {
+    return name.trim() === "" ? { internalName: t("sections.internal_name_required") } : {};
+  }
+
+  #editorErrors(): Record<string, string> {
+    return { ...this.fieldErrors, ...(this.attempted ? this.#nameErrors(this.internalName) : {}) };
+  }
+
+  /** The error keys a field of the details form shows. */
+  #editorFields(): ReadonlySet<string> {
+    return new Set([
+      "internalName",
+      "names",
+      "color",
+      "image",
+      ...(this.locales?.languages ?? []).map((language) => `names-${language}`),
+    ]);
+  }
+
   async #save(): Promise<void> {
     if (this.busy || this.pickerOpen) return;
+    this.attempted = true;
+    this.fieldErrors = {};
     const internalName = this.internalName.trim();
     if (internalName === "") {
-      this.fieldErrors = { internalName: t("sections.internal_name_required") };
+      void this.#focusInvalid("editor");
       return;
     }
     const input: SectionInput = {
@@ -423,7 +477,6 @@ export class SectionsScreen extends LitElement {
       color: this.color,
     };
     this.busy = true;
-    this.fieldErrors = {};
     let saved: LibrarySection;
     try {
       saved =
@@ -433,6 +486,7 @@ export class SectionsScreen extends LitElement {
     } catch (error) {
       this.fieldErrors = { [fieldOf(error)]: codeMessage(codeOf(error)) };
       this.busy = false;
+      void this.#focusInvalid("editor");
       return;
     }
     this.busy = false;
@@ -518,19 +572,21 @@ export class SectionsScreen extends LitElement {
     };
     this.duplicateName = t("sections.copy_name").replace("{name}", section.internalName);
     this.duplicateErrors = {};
+    this.duplicateAttempted = false;
   }
 
   async #duplicate(): Promise<void> {
     const duplicating = this.duplicating!;
     if (this.busy) return;
+    this.duplicateAttempted = true;
+    this.duplicateErrors = {};
     const internalName = this.duplicateName.trim();
     if (internalName === "") {
-      this.duplicateErrors = { internalName: t("sections.internal_name_required") };
+      void this.#focusInvalid("duplicate");
       return;
     }
     const { source, chosen } = duplicating;
     this.busy = true;
-    this.duplicateErrors = {};
     try {
       await this.api.duplicateSection(source.id, {
         internalName,
@@ -539,6 +595,7 @@ export class SectionsScreen extends LitElement {
     } catch (error) {
       this.duplicateErrors = { [fieldOf(error)]: codeMessage(codeOf(error)) };
       this.busy = false;
+      void this.#focusInvalid("duplicate");
       return;
     }
     this.busy = false;
@@ -697,13 +754,6 @@ export class SectionsScreen extends LitElement {
       ></wt-data-table>`;
   }
 
-  #summary(errors: string[]) {
-    return html`<wt-form-error-summary
-      heading=${t("form.error_heading")}
-      .errors=${errors}
-    ></wt-form-error-summary>`;
-  }
-
   #renderUsedIn() {
     if (this.editorUsagesError)
       return html`<p class="error" role="alert" data-test="editor-used-in">
@@ -788,11 +838,9 @@ export class SectionsScreen extends LitElement {
     };
   }
 
-  #renderDetails() {
-    const errors = this.fieldErrors;
+  #renderDetails(errors: Record<string, string>) {
     const context = this.#fields(errors);
     return html`<div class="fields" ?inert=${this.busy}>
-        ${this.#summary([...Object.values(errors), ...(this.memberError ? [this.memberError] : [])])}
         <div
           class="fields"
           @keydown=${(event: KeyboardEvent) =>
@@ -809,9 +857,7 @@ export class SectionsScreen extends LitElement {
               this.internalName,
               (value) => {
                 this.internalName = value;
-                const remaining = { ...this.fieldErrors };
-                delete remaining.internalName;
-                this.fieldErrors = remaining;
+                this.fieldErrors = without(this.fieldErrors, ["internalName"]);
               },
               true,
             )}
@@ -825,7 +871,14 @@ export class SectionsScreen extends LitElement {
               t("sections.customer_name"),
               this.names,
               (names) => {
+                const changed = Object.keys(names).filter(
+                  (language) => names[language] !== this.names[language],
+                );
                 this.names = names;
+                this.fieldErrors = without(this.fieldErrors, [
+                  "names",
+                  ...changed.map((language) => `names-${language}`),
+                ]);
               },
             )}
             <span class="field-error" id="section-names-error">${errors.names ?? nothing}</span>
@@ -839,6 +892,7 @@ export class SectionsScreen extends LitElement {
           errorId: "section-color-error",
           change: (color) => {
             this.color = color;
+            this.fieldErrors = without(this.fieldErrors, ["color"]);
           },
         })}
         <dashboard-image-upload
@@ -852,6 +906,7 @@ export class SectionsScreen extends LitElement {
           @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
             event.stopPropagation();
             this.image = event.detail.image;
+            this.fieldErrors = without(this.fieldErrors, ["image"]);
           }}
         ></dashboard-image-upload>
         <span class="field-error" id="section-image-error">${errors.image ?? nothing}</span>
@@ -902,6 +957,8 @@ export class SectionsScreen extends LitElement {
 
   #renderEditor() {
     const details = this.editorView === "details";
+    const errors = this.#editorErrors();
+    const { invalid, bottom } = placeErrors(errors, this.#editorFields());
     return html`<wt-modal
       data-test="editor"
       .open=${this.editorOpen}
@@ -914,10 +971,16 @@ export class SectionsScreen extends LitElement {
         if (this.editorOpen && !this.busy && !this.pickerOpen) this.#closeEditor();
       }}
     >
-      ${this.editorOpen ? (details ? this.#renderDetails() : this.#renderAddProducts()) : nothing}
+      ${
+        this.editorOpen
+          ? details
+            ? this.#renderDetails(errors)
+            : this.#renderAddProducts()
+          : nothing
+      }
       ${
         details
-          ? html`<wt-form-actions slot="footer"
+          ? html`<wt-form-actions slot="footer" .error=${bottom}
               ><wt-button
                 slot="cancel"
                 variant="secondary"
@@ -930,7 +993,7 @@ export class SectionsScreen extends LitElement {
               ><wt-button
                 variant="primary"
                 data-test="editor-save"
-                .disabled=${this.busy || this.pickerOpen}
+                .disabled=${this.busy || this.pickerOpen || invalid}
                 @click=${() => void this.#save()}
                 >${t("action.save")}</wt-button
               ></wt-form-actions
@@ -942,7 +1005,11 @@ export class SectionsScreen extends LitElement {
 
   #renderDuplicate() {
     const duplicating = this.duplicating;
-    const errors = this.duplicateErrors;
+    const errors = {
+      ...this.duplicateErrors,
+      ...(this.duplicateAttempted ? this.#nameErrors(this.duplicateName) : {}),
+    };
+    const { invalid, bottom } = placeErrors(errors, new Set(["internalName"]));
     return html`<wt-modal
       data-test="duplicate"
       .open=${duplicating !== null}
@@ -961,7 +1028,6 @@ export class SectionsScreen extends LitElement {
       ${
         duplicating
           ? html`<div class="fields" ?inert=${this.busy}>
-              ${this.#summary(Object.values(errors))}
               <wt-input
                 name="internalName"
                 required
@@ -976,7 +1042,7 @@ export class SectionsScreen extends LitElement {
                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
                   event.stopPropagation();
                   this.duplicateName = event.detail.value;
-                  this.duplicateErrors = {};
+                  this.duplicateErrors = without(this.duplicateErrors, ["internalName"]);
                 }}
               ></wt-input>
               <fieldset class="picks">
@@ -1004,7 +1070,7 @@ export class SectionsScreen extends LitElement {
             </div>`
           : nothing
       }
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -1017,7 +1083,7 @@ export class SectionsScreen extends LitElement {
         ><wt-button
           variant="primary"
           data-test="duplicate-save"
-          .disabled=${this.busy}
+          .disabled=${this.busy || invalid}
           @click=${() => void this.#duplicate()}
           >${t("action.save")}</wt-button
         ></wt-form-actions
