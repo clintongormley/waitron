@@ -3479,19 +3479,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
       Split a table too.
     - A paid bill left on the absorbed party names, in the kitchen, the tables of the party its
-      guests went to: `orderTableLabels` follows the chain of merges (`partySurvivors`, since C77 in
-      `packages/db/src/party-table-labels.ts`) to its last party and reads that party's tables, and the sent
-      work read before a table action includes the bills of every party merged into the acting one
-      (`partyFamilies`). The bill's party, label, lines and payments do not change. Run in
-      `apps/server/src/party-table-actions.test.ts`: the paid bill's sent dish gets a MOVED notice
-      naming the new tables after its guests move to a held table, after its table is joined to
-      another party, after the old merge (`mergeTabs`) combines its party, and after the party that
-      took the guests later moves, joins a table and splits it off, including through two merges;
-      the notice names the new tables when the bill was paid under another table's name; and after
-      a move to a held table the pass names the new table. A one-off probe (not kept as a test)
-      marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
-      neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels`, and not every other
-      view follows the merge (read, not run; see the open points).
+      guests went to: `orderTableLabels` follows the chain of merges (`billPartyTableLabels` and
+      `partySurvivors`, since C77 in `packages/db/src/party-table-labels.ts`) to its last party
+      and reads that party's tables, and the sent work read before a table action includes the
+      bills of every party merged into the acting one (`partyFamilies`). The bill's party, label,
+      lines and payments do not change.
+      Run in `apps/server/src/party-table-actions.test.ts`: the paid bill's sent dish gets a MOVED
+      notice naming the new tables after its guests move to a held table, after its table is joined
+      to another party, after the old merge (`mergeTabs`) combines its party, and after the party
+      that took the guests later moves, joins a table and splits it off, including through two
+      merges; the notice names the new tables when the bill was paid under another table's name; and
+      after a move to a held table the pass names the new table. A one-off probe (not kept as a
+      test) marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
+      neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels`, and not every
+      other view follows the merge (read, not run).
     Tests: `apps/server/src/party-table-actions.test.ts` and
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
     Open points: **Fixed (C77):** the manager overview's slow-orders list (`computeOverdueOrders`,
@@ -3501,11 +3502,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `partySurvivors` moved there from `apps/server/src/parties.ts`). Run in
     `packages/reporting/src/overdue-orders.test.ts`: a late dish on a paid bill whose party was
     merged twice is named after the last party's tables ("Mesa 7, 8"), where before it was named
-    by the bill's own label ("Ana").
-    `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
-    which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
-    writes a merged party's tables in one statement, so they share a joining time and their order in
-    its name is not fixed; it goes with Task 13.
+    by the bill's own label ("Ana"). **Still open:** `party.main_bill_stays`'s till wording says
+    "the table has other unpaid bills", which Split a table choosing the main bill need not
+    satisfy. The old merge (`mergeTabs`) still writes a merged party's tables in one statement, so
+    they share a joining time and their order in its name is not fixed; it goes with Task 13.
   - **Task 9 DONE (#874, 2026-09-29, main `002d54684`): dishes arriving in a party get a kitchen group, so the pass can
     mark them.** A bill that arrives in a party by Move a bill (to a held table or a free one) or
     by Split a table has each dish with no group put in a new group of the receiving party, after

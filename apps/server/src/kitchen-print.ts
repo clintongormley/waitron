@@ -258,9 +258,9 @@ interface LabelledOrder {
 /**
  * The table each order's kitchen work belongs to. A party bill names the active tables of its party,
  * or of the party it was merged into at the end of the chain of merges, together
- * ({@link partyTablesName}); or its own label once that party holds none. Any other order
- * names the table seated at it (the lowest id when several are), else the table it is delivered to,
- * else its own label; null for an unlabelled walk-up.
+ * ({@link partyTablesName}); or its own label once that party holds none, or when the chain has
+ * no end. Any other order names the table seated at it (the lowest id when several are), else the
+ * table it is delivered to, else its own label; null for an unlabelled walk-up.
  */
 export async function orderTableLabels(
   tx: Transaction,

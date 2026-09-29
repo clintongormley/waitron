@@ -22,7 +22,8 @@ export async function partyTableLabels(
 
 /**
  * The party each of `partyIds` was merged into, following the chain of merges to its end, keyed by
- * each party asked about; a party never merged answers itself.
+ * each party asked about; a party never merged answers itself, and one whose chain has no end (a
+ * cycle of merges, or no such party) has no entry.
  */
 export async function partySurvivors(
   tx: Transaction,
@@ -43,21 +44,22 @@ export async function partySurvivors(
 /**
  * The tables a party's bill is named after, keyed by each party asked about: the party's active
  * tables ({@link partyTableLabels}), or, once it holds none, those of the party it was merged into
- * at the end of the chain of merges; empty when that party holds none either.
+ * at the end of the chain of merges; empty when that party holds none either, or when the chain has
+ * no end (a cycle of merges, or no such party).
  */
 export async function billPartyTableLabels(
   tx: Transaction,
   partyIds: readonly string[],
 ): Promise<Map<string, string[]>> {
-  const own = await partyTableLabels(tx, partyIds);
-  const seatless = partyIds.filter((id) => own.get(id)!.length === 0);
-  if (seatless.length === 0) return own;
+  const labels = await partyTableLabels(tx, partyIds);
+  const seatless = partyIds.filter((id) => labels.get(id)!.length === 0);
+  if (seatless.length === 0) return labels;
   const survivorOf = await partySurvivors(tx, seatless);
-  const survivors = await partyTableLabels(tx, [...new Set(survivorOf.values())]);
-  return new Map(
-    partyIds.map((id) => [
-      id,
-      own.get(id)!.length > 0 ? own.get(id)! : survivors.get(survivorOf.get(id)!)!,
-    ]),
-  );
+  const unread = [...new Set(survivorOf.values())].filter((id) => !labels.has(id));
+  const survivors = await partyTableLabels(tx, unread);
+  for (const id of seatless) {
+    const survivor = survivorOf.get(id);
+    if (survivor !== undefined) labels.set(id, labels.get(survivor) ?? survivors.get(survivor)!);
+  }
+  return labels;
 }

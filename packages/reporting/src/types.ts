@@ -184,10 +184,11 @@ export interface OverdueOrdersInput {
 export interface OverdueOrder {
   orderId: string;
   orderNumber: number;
-  /** A party bill: the party's active tables in the order they joined, or the order's own label
-   *  once the party holds none. Any other order: the dining table it is served at (a tab's
-   *  back-pointer or a counter delivery), else the order's own label, or `null` for an unlabelled
-   *  walk-up. */
+  /** A party bill: its party's active tables in the order they joined, or, once it holds none,
+   *  those of the party it was merged into at the end of the chain of merges; the order's own
+   *  label when that party holds none either, or when the chain has no end. Any other order: the
+   *  dining table it is served at (a tab's back-pointer or a counter delivery), else the order's
+   *  own label, or `null` for an unlabelled walk-up. */
   tableLabel: string | null;
   stationName: string;
   ageMinutes: number;

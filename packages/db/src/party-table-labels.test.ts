@@ -5,7 +5,8 @@ import { CORE_MIGRATIONS } from "./migrations.js";
 import { billPartyTableLabels, partySurvivors, partyTableLabels } from "./party-table-labels.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { parties, partyTables } from "./schema/parties.js";
-import { locations, tenants } from "./schema/tenants.js";
+import { locations } from "./schema/tenants.js";
+import { seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 
@@ -19,9 +20,7 @@ describe("party table labels", () => {
     withTransaction(suite.db, fn);
 
   beforeAll(async () => {
-    await suite.db
-      .insert(tenants)
-      .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "T" });
+    await seedTenant(suite.db);
     await suite.db.insert(locations).values({
       id: LOCATION,
       name: "Room",
@@ -133,24 +132,24 @@ describe("party table labels", () => {
   });
 
   it("names a seated party after its own tables, even when it was merged into another", async () => {
-    const survivor = await party([{ label: "Mesa 9", joinedAt: "2026-09-29T20:00:00.000Z" }]);
-    const seated = await party([{ label: "Mesa 1", joinedAt: "2026-09-29T20:00:00.000Z" }]);
+    const survivor = await party([{ label: "Table 9", joinedAt: "2026-09-29T20:00:00.000Z" }]);
+    const seated = await party([{ label: "Table 1", joinedAt: "2026-09-29T20:00:00.000Z" }]);
     await merge(seated, survivor);
     expect(await inTx((tx) => billPartyTableLabels(tx, [seated]))).toEqual(
-      new Map([[seated, ["Mesa 1"]]]),
+      new Map([[seated, ["Table 1"]]]),
     );
   });
 
   it("names a party that holds no table after the tables of the party at the end of its merges", async () => {
     const survivor = await party([
-      { label: "Mesa 7", joinedAt: "2026-09-29T20:20:00.000Z" },
-      { label: "Mesa 8", joinedAt: "2026-09-29T20:21:00.000Z" },
+      { label: "Table 7", joinedAt: "2026-09-29T20:20:00.000Z" },
+      { label: "Table 8", joinedAt: "2026-09-29T20:21:00.000Z" },
     ]);
-    const middle = await party([{ label: "Mesa 6", ...LEFT }]);
-    const first = await party([{ label: "Mesa 4", ...LEFT }]);
-    const second = await party([{ label: "Mesa 5", ...LEFT }]);
-    const seated = await party([{ label: "Mesa 2", joinedAt: "2026-09-29T20:00:00.000Z" }]);
-    const alone = await party([{ label: "Mesa 3", ...LEFT }]);
+    const middle = await party([{ label: "Table 6", ...LEFT }]);
+    const first = await party([{ label: "Table 4", ...LEFT }]);
+    const second = await party([{ label: "Table 5", ...LEFT }]);
+    const seated = await party([{ label: "Table 2", joinedAt: "2026-09-29T20:00:00.000Z" }]);
+    const alone = await party([{ label: "Table 3", ...LEFT }]);
     await merge(middle, survivor);
     await merge(first, middle);
     await merge(second, survivor);
@@ -158,12 +157,38 @@ describe("party table labels", () => {
       await inTx((tx) => billPartyTableLabels(tx, [first, second, seated, alone, survivor])),
     ).toEqual(
       new Map([
-        [first, ["Mesa 7", "Mesa 8"]],
-        [second, ["Mesa 7", "Mesa 8"]],
-        [seated, ["Mesa 2"]],
+        [first, ["Table 7", "Table 8"]],
+        [second, ["Table 7", "Table 8"]],
+        [seated, ["Table 2"]],
         [alone, []],
-        [survivor, ["Mesa 7", "Mesa 8"]],
+        [survivor, ["Table 7", "Table 8"]],
       ]),
+    );
+    expect(await inTx((tx) => billPartyTableLabels(tx, [first, second]))).toEqual(
+      new Map([
+        [first, ["Table 7", "Table 8"]],
+        [second, ["Table 7", "Table 8"]],
+      ]),
+    );
+  });
+
+  it("names a party that holds no table by its own empty list when its merges form a cycle", async () => {
+    const first = await party([{ label: "Table 10", ...LEFT }]);
+    const second = await party([{ label: "Table 11", ...LEFT }]);
+    await merge(first, second);
+    await merge(second, first);
+    expect(await inTx((tx) => billPartyTableLabels(tx, [first, second]))).toEqual(
+      new Map([
+        [first, []],
+        [second, []],
+      ]),
+    );
+  });
+
+  it("names a party that does not exist by an empty list", async () => {
+    const missing = "cccccccc-9999-4000-8000-000000000001";
+    expect(await inTx((tx) => billPartyTableLabels(tx, [missing]))).toEqual(
+      new Map([[missing, []]]),
     );
   });
 });
