@@ -37,7 +37,10 @@ afterEach(() => {
 // unconditionally: the `docker` stub sleeps that many seconds on EVERY invocation.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
-// which has no systemctl).
+// which has no systemctl). `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
+// reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
+// suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
+// profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 
@@ -132,7 +135,6 @@ exit 0
 `,
 );
 stub("qrencode", "exit 0");
-// AppArmor: off unless a case turns it on, so the suite runs the same on an AppArmor host.
 stub("aa-enabled", `[ "\${WT_AA_ENABLED}" = "1" ]`);
 stub("apparmor_parser", `[ "\${WT_AA_PARSE_FAIL}" = "1" ] && exit 1; exit 0`);
 stub("install", "exit 0");
@@ -323,7 +325,8 @@ describe("waitron.sh install and the print agent's AppArmor profile", () => {
     writeFileSync(join(sb.boxDir, ".env"), "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent\n");
     const r = run(sb, ["install"]);
     expect(r.status).toBe(0);
-    expect(r.stderr).toContain("AppArmor");
+    expect(r.stderr).toContain("could not load the print agent's AppArmor profile");
+    expect(r.stderr).toContain("Docker's default profile");
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain(
       "WAITRON_PRINT_AGENT_APPARMOR",
     );

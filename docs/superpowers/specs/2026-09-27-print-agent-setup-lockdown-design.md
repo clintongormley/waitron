@@ -214,7 +214,7 @@ header.
   whether `bluetoothctl remove` is the right way to forget one. Measure on the real box; do not assume.
   _2026-09-29 (A129): on the real box the agent could not reach BlueZ at all — Docker's default
   AppArmor profile refuses the system bus. It now runs under `deploy/apparmor/waitron-print-agent`,
-  whose bus rules cover what `list`, `devices` and `scan` were measured to need. What BlueZ calls
-  back into bluetoothctl while pairing, and `trust` (a property write), are not allowed yet; the
-  real-box measurement decides them. See `docs/backlog.md`, B6._
+  whose bus rules cover what `list`, `devices` and `scan` were measured to need. The pairing call
+  itself, what BlueZ calls back into bluetoothctl while pairing, and `trust` (a property write), are
+  not allowed yet; the real-box measurement decides them. See `docs/backlog.md`, B6._
 - The permission name the two routes share with discovery, read from the existing route.

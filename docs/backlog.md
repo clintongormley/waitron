@@ -4322,14 +4322,15 @@ approved.
   host has not loaded; image-smoke runs the agent under it, with `docker-default` as the refused
   control. The agent now reports the Bluetooth side's availability in its log and `/status.json`,
   once per change, with a reason (`dbus_unreachable`, `bluez_not_answering`, `no_controller`,
-  `failed`), and asks an unavailable one again every 30 seconds rather than every poll. Left open:
-  - **Pairing and `trust` are not in the profile yet.** Nothing BlueZ calls back into
-    `bluetoothctl` while pairing (its agent, `org.bluez.Agent1`) is allowed, and neither is a
-    property write (`trust`); P2b's real-box measurement decides both and adds only what it needs.
+  `failed`), and asks an unavailable one again every 30 seconds rather than every poll. It checks
+  from the moment it starts, before it has joined a box, so the setup page's `/status.json` carries
+  the report while the owner is still setting the agent up. Left open:
+  - **Pairing and `trust` are not in the profile yet.** It allows neither the pairing call
+    (`Device1.Pair`), nor anything BlueZ calls back into `bluetoothctl` while pairing (its agent,
+    `org.bluez.Agent1`), nor a property write (`trust`); P2b's real-box measurement decides these
+    and adds only what it needs.
   - **The owner's box check:** remove the temporary `compose.override.yml`, reinstall, and run
     `docker compose exec print-agent bluetoothctl list` (handoff `2026-09-29-bluetooth-measurement`).
-  - **The availability is checked only once the agent is approved**, because the check runs with
-    the job pull; an agent still waiting to join reports nothing about Bluetooth.
   - **The setup page's HTML says nothing about it** — only `/status.json` and the log do. The page
     is English-only, with no language switch to carry a Spanish line.
   - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured with a

@@ -56,7 +56,8 @@ jobs:
           [ "$(cat /sys/module/apparmor/parameters/enabled)" = "Y" ]
           sudo apparmor_parser -r deploy/apparmor/waitron-print-agent
           sudo apt-get install -y --no-install-recommends bluez python3-dbus python3-gi
-          sudo sh -c 'python3 deploy/apparmor/fake-bluez.py > "$RUNNER_TEMP/fake-bluez.log" 2>&1 &'
+          # The log path goes in as an argument: sudo drops RUNNER_TEMP from the root shell's environment.
+          sudo sh -c 'python3 scripts/fake-bluez.py > "$1" 2>&1 &' sh "$RUNNER_TEMP/fake-bluez.log"
           for _ in $(seq 1 40); do grep -q "fake bluez ready" "$RUNNER_TEMP/fake-bluez.log" && break; sleep 0.25; done
           grep -q "fake bluez ready" "$RUNNER_TEMP/fake-bluez.log" || { cat "$RUNNER_TEMP/fake-bluez.log"; exit 1; }
 
@@ -225,6 +226,15 @@ jobs:
           docker exec "$agent" bluetoothctl --timeout 3 scan on | tee "$RUNNER_TEMP/bt-scan.txt"
           grep -q "Device 11:22:33:44:55:66 Found" "$RUNNER_TEMP/bt-scan.txt"
           grep -q "Discovering: yes" "$RUNNER_TEMP/bt-scan.txt"
+          # A BlueZ method the profile does not allow. The stand-in prints a line if one ever arrives.
+          set +e
+          docker exec "$agent" bluetoothctl remove 66:55:44:33:22:11 > "$RUNNER_TEMP/bt-remove.txt" 2>&1
+          removed=$?
+          set -e
+          cat "$RUNNER_TEMP/bt-remove.txt"
+          [ "$removed" -ne 0 ]
+          grep -q "org.freedesktop.DBus.Error.AccessDenied" "$RUNNER_TEMP/bt-remove.txt"
+          if grep -q "RemoveDevice" "$RUNNER_TEMP/fake-bluez.log"; then exit 1; fi
 
           set +e
           docker run --rm -u node --security-opt apparmor=docker-default \
@@ -235,7 +245,7 @@ jobs:
           cat "$RUNNER_TEMP/bt-control.txt"
           [ "$control" -ne 0 ]
           grep -q 'connection != NULL' "$RUNNER_TEMP/bt-control.txt"
-          ! grep -q "CI Printer" "$RUNNER_TEMP/bt-control.txt"
+          if grep -q "CI Printer" "$RUNNER_TEMP/bt-control.txt"; then exit 1; fi
 
       - name: Tear the stack down, volumes and all
         if: always()

@@ -4,10 +4,24 @@
 # f0494f1fbb1bbaf2e1b02ee20aab206f32456a63 (Copyright The Moby Authors, Apache-2.0; the licence text
 # is deploy/third-party/licenses/Apache-2.0.txt), with the profile name filled in. The D-Bus section
 # at the end is Waitron's addition: `docker-default` has no D-Bus rules, so the system bus refuses
-# the container's first message (`Hello`) and `bluetoothctl` cannot reach BlueZ at all. It allows
-# only what `bluetoothctl list`, `devices` and `scan` were measured to need against a stand-in
-# BlueZ (`deploy/apparmor/fake-bluez.py`, run by image-smoke). Nothing BlueZ calls back into
-# bluetoothctl while pairing (its agent) is allowed, and neither is setting a property (`trust`).
+# the container's first message (`Hello`) and `bluetoothctl` cannot reach BlueZ at all.
+#
+# The D-Bus rules are the messages bluetoothctl 5.82 sent for `list`, `devices`, `devices Paired`
+# and `scan on`, and the two signals `scan on` received, read with dbus-monitor against a stand-in
+# BlueZ (scripts/fake-bluez.py) on a private system bus; run with a command, bluetoothctl sent
+# nothing to BlueZ's agent manager, so it registered no pairing agent. On a GitHub Ubuntu 24.04
+# runner (AppArmor parser 4.0.1, dbus-daemon 1.14.10, Docker 28.0.4; runs 36562032152 and
+# 36562581079) those four commands worked under these rules with no denial, and `remove` was
+# refused: its `RemoveDevice` never reached the stand-in. AppArmor's own rule matcher
+# (python3-apparmor 4.0.1) reads them as refusing the other calls it was asked about too: pairing
+# (`Device1.Pair`), `Device1.Disconnect`, `StopDiscovery`, registering an agent, setting a property
+# (`trust`), a made-up BlueZ interface, and BlueZ's call-backs to a pairing agent.
+#
+# The two signals are allowed only from an unconfined sender, which the stand-in was (root, no
+# profile). A sender cannot be matched by its well-known name: `peer=(name=org.bluez)` on the
+# receive rules refused both signals on that runner. A bluetoothd running under a profile of its own
+# would not match `label=unconfined` (not tried); with its signals refused, `scan on` prints no
+# `[NEW]` or `[CHG]` lines, as it did on the runner with no receive rules at all.
 abi <abi/3.0>,
 #include <tunables/global>
 
@@ -59,8 +73,6 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
 
   # --- Waitron: the system bus, for bluetoothctl. ---
 
-  # The bus daemon: the connection handshake, and the subscriptions bluetoothctl registers for BlueZ's
-  # signals and for BlueZ's name.
   dbus send
        bus=system
        path=/org/freedesktop/DBus
@@ -68,25 +80,31 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
        member={Hello,AddMatch,RemoveMatch,GetNameOwner}
        peer=(name=org.freedesktop.DBus),
 
-  # BlueZ: its object list (how bluetoothctl finds the controller and the devices), and its own
-  # adapter, device and agent-manager methods.
   dbus send
        bus=system
+       path=/
        interface=org.freedesktop.DBus.ObjectManager
        member=GetManagedObjects
        peer=(name=org.bluez),
+
   dbus send
        bus=system
-       interface=org.bluez.*
+       path=/org/bluez/hci*
+       interface=org.bluez.Adapter1
+       member={SetDiscoveryFilter,StartDiscovery}
        peer=(name=org.bluez),
 
-  # BlueZ's change signals: a device found during a scan, and a changed property.
   dbus receive
        bus=system
+       path=/
        interface=org.freedesktop.DBus.ObjectManager
-       member={InterfacesAdded,InterfacesRemoved},
+       member=InterfacesAdded
+       peer=(label=unconfined),
+
   dbus receive
        bus=system
+       path=/org/bluez/**
        interface=org.freedesktop.DBus.Properties
-       member=PropertiesChanged,
+       member=PropertiesChanged
+       peer=(label=unconfined),
 }

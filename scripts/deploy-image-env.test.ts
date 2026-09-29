@@ -203,10 +203,19 @@ describe("the print-agent image and its compose wiring", () => {
     expect(WAITRON_SH).toContain("env_set WAITRON_PRINT_AGENT_APPARMOR waitron-print-agent");
   });
 
+  // Reads the profile as TEXT: it catches a D-Bus rule written without a member list, not a member
+  // list that has grown.
+  it("names the methods and signals in every D-Bus rule of the agent's profile", () => {
+    const rules = read("deploy/apparmor/waitron-print-agent").match(/^\s*dbus\b[^,]*,/gm) ?? [];
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) expect(rule).toMatch(/\bmember=/);
+  });
+
   it("smokes the agent under that profile against a stand-in BlueZ, with docker-default as the control", () => {
     expect(IMAGE_SMOKE).toContain("apparmor_parser -r deploy/apparmor/waitron-print-agent");
     expect(IMAGE_SMOKE).toContain('echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"');
-    expect(IMAGE_SMOKE).toContain("deploy/apparmor/fake-bluez.py");
+    expect(IMAGE_SMOKE).toContain("scripts/fake-bluez.py");
+    expect(IMAGE_SMOKE).toContain("bluetoothctl remove 66:55:44:33:22:11");
     expect(IMAGE_SMOKE).toContain("--security-opt apparmor=docker-default");
   });
 

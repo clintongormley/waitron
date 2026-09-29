@@ -2,7 +2,8 @@
 # which has no Bluetooth hardware. One powered adapter and one paired printer, and a scan that finds a
 # second device and reports a changed property — enough for `bluetoothctl list`, `devices` and
 # `scan`. Run as root with the bluez package installed, which is how it came to own `org.bluez` on the
-# runner.
+# runner. `RemoveDevice` prints a line, so a check can tell whether a call the print agent's AppArmor
+# profile must refuse ever reached it.
 import dbus
 import dbus.mainloop.glib
 import dbus.service
@@ -54,6 +55,10 @@ class Adapter(dbus.service.Object):
     @dbus.service.method("org.bluez.Adapter1", in_signature="a{sv}")
     def SetDiscoveryFilter(self, f):
         pass
+
+    @dbus.service.method("org.bluez.Adapter1", in_signature="o")
+    def RemoveDevice(self, path):
+        print("fake bluez: RemoveDevice " + path, flush=True)
 
     def announce(self):
         root.InterfacesAdded(dbus.ObjectPath(ADAPTER + "/dev_11_22_33_44_55_66"), {"org.bluez.Device1": {"Address": "11:22:33:44:55:66", "AddressType": "public", "Name": "Found", "Alias": "Found", "Paired": False, "Adapter": dbus.ObjectPath(ADAPTER), "UUIDs": NO_UUIDS}})
