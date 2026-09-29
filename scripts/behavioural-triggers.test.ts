@@ -21,6 +21,7 @@ import {
   LOCALES_REFUSAL,
   MISSING_PROFILE_REFUSAL,
   OPEN_PARENT_REFUSAL,
+  PRODUCT_ORDERING_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
   PRODUCT_ID_FIXED_REFUSAL,
   REGISTER_BINDING_REFUSAL,
@@ -41,6 +42,8 @@ import {
  *
  * It also holds `packages/db/drizzle/0004_variant_one_level.sql`'s three triggers on `products`: a
  * variant is one level deep, keeps the parent it was created with, and no product's id changes.
+ * And `packages/db/drizzle/0047_product_ordering_check.sql`'s two: `products.ordering` holds one of
+ * its three values.
  * `working_orders_enforce_transition` is re-created, with the same name, by
  * `packages/db/drizzle/0015_settled_order_freeze_new_columns.sql` and again by
  * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
@@ -74,8 +77,8 @@ import {
  * WHAT IT DOES NOT COVER. `INSERT … ON CONFLICT DO UPDATE` is not tried against any of these
  * triggers, though a `BEFORE INSERT` trigger fires on it and a `BEFORE UPDATE` one on its conflict
  * path. `INSERT OR REPLACE` is tried only against `products_variant_one_level_insert` and
- * `UPDATE OR REPLACE` only against `products_id_fixed_update`, both of
- * `0004_variant_one_level.sql`; no other trigger here, media's triggers on `products` included, is
+ * `products_ordering_check_insert`, and `UPDATE OR REPLACE` only against
+ * `products_id_fixed_update`; no other trigger here, media's triggers on `products` included, is
  * tried with either. Nor is any concurrency claim: one connection, one process.
  */
 
@@ -110,7 +113,7 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * Every behavioural trigger the migrations create, pinned by name: those of
  * `0001_behavioural_triggers.sql` (SQLite has no `BEFORE INSERT OR UPDATE`, so a rule covering more
  * than one event is split and the suffix names the event), the `products_*` names of
- * `0004_variant_one_level.sql`, `parties_clear_table_status` of
+ * `0004_variant_one_level.sql` and `0047_product_ordering_check.sql`, `parties_clear_table_status` of
  * `0036_party_rename.sql`, the `working_orders_release_main_bill*` names of
  * `0038_main_bill_release.sql` (those three re-created by
  * `0045_recreate_triggers_after_rebuild.sql`), and the `bill_payment*` names of
@@ -127,6 +130,8 @@ const EXPECTED_TRIGGERS = [
   "device_binding_rule_update",
   "device_profile_form_factor_locked",
   "products_id_fixed_update",
+  "products_ordering_check_insert",
+  "products_ordering_check_update",
   "products_variant_one_level_insert",
   "products_variant_parent_fixed_update",
   "sale_settlements_check_coverage",
@@ -1479,6 +1484,90 @@ describe("products_id_fixed_update", () => {
     expect(
       refusalFor(connection, `update products set id = id, name = 'Same id' where id = 'p-var'`),
     ).toBeUndefined();
+  });
+});
+
+/** A top-level product row carrying `ordering`, spelled into the statement as given. */
+function productOrdered(id, ordering) {
+  return (
+    `insert into products (id, catalogue_id, name, ordering, created_at, updated_at) ` +
+    `values ('${id}', 'cat', '${id}', '${ordering}', '${STAMP}', '${STAMP}')`
+  );
+}
+
+/** The stored `ordering` of a product, or `undefined` when no row has that id. */
+function orderingOf(id) {
+  return connection.prepare(`select ordering from products where id = ?`).get(id)?.ordering;
+}
+
+// `products.ordering` has no CHECK constraint, because adding one makes drizzle rebuild `products`;
+// these two triggers are what refuses any other value.
+describe("products_ordering_check_insert", () => {
+  it("accepts each of the three values", () => {
+    for (const ordering of ["public", "staff_only", "not_sold_separately"])
+      expect(refusalFor(connection, productOrdered(`p-ordered-${ordering}`, ordering))).toBe(
+        undefined,
+      );
+    expect(orderingOf("p-ordered-staff_only")).toBe("staff_only");
+  });
+
+  it("gives a product written without the column the value public", () => {
+    expect(refusalFor(connection, product("p-ordered-default"))).toBeUndefined();
+    expect(orderingOf("p-ordered-default")).toBe("public");
+  });
+
+  it("refuses an insert with any other value", () => {
+    expect(refusalFor(connection, productOrdered("p-ordered-secret", "secret"))).toBe(
+      PRODUCT_ORDERING_REFUSAL,
+    );
+    expect(orderingOf("p-ordered-secret")).toBeUndefined();
+  });
+
+  it("compares the value exactly, so a capitalised one is refused", () => {
+    expect(refusalFor(connection, productOrdered("p-ordered-caps", "Public"))).toBe(
+      PRODUCT_ORDERING_REFUSAL,
+    );
+  });
+
+  it("raises through the trigger class", () => {
+    expect(errcodeFor(connection, productOrdered("p-ordered-secret-2", "secret"))).toBe(1811);
+  });
+
+  it("refuses an INSERT OR REPLACE with any other value", () => {
+    expect(
+      refusalFor(
+        connection,
+        productOrdered("p-ordered-public", "secret").replace(
+          "insert into",
+          "insert or replace into",
+        ),
+      ),
+    ).toBe(PRODUCT_ORDERING_REFUSAL);
+    expect(orderingOf("p-ordered-public")).toBe("public");
+  });
+});
+
+describe("products_ordering_check_update", () => {
+  it("refuses an update to any other value", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update products set ordering = 'secret' where id = 'p-ordered-public'`,
+      ),
+    ).toBe(PRODUCT_ORDERING_REFUSAL);
+    expect(orderingOf("p-ordered-public")).toBe("public");
+  });
+
+  it("accepts an update to each of the three values", () => {
+    for (const ordering of ["not_sold_separately", "staff_only", "public"]) {
+      expect(
+        refusalFor(
+          connection,
+          `update products set ordering = '${ordering}' where id = 'p-ordered-public'`,
+        ),
+      ).toBeUndefined();
+      expect(orderingOf("p-ordered-public")).toBe(ordering);
+    }
   });
 });
 
