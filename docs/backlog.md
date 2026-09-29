@@ -2976,6 +2976,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       - The map tag says "Unsent" but not whose; the names did not fit a table on the map.
       - At 390 px the map already overlaps and clips crowded tables (a screenshot with no marks
         showed the same), so a table's tag can hide under a neighbour.
+      - Related to the entry above but a different problem: that one is tables overlapping each
+        other; this one is a single token near the plan's top edge being cut off by that edge. Seen
+        during campaign item A117 and left open there. Screenshots of one floor at
+        390 px showed table 2's party name cut off with no reminder anywhere, and with the "Time to
+        fire" chip adding a row, table 1's label cut off too. Measured 2026-09-29 by the
+        finish-branch run-it review (Codex), on a 390 px Spanish floor in both themes, with a token
+        placed fully inside the map: making its party's reminder due grew the token from 115 px to
+        157 px tall, and because each token is centred on its position (`translate(-50%, -50%)`,
+        `packages/ui/src/components/wt-floor-canvas.ts`) its top moved up 21 px; its label's top
+        went to 190.5 px, above the map's clipping edge at 196 px. So the chip itself cuts off a
+        label that fitted before it appeared. With the chip's line removed from `wt-table-token`
+        the same probe passed. The same run measured the Spanish chip's right edge at 143.94 px
+        against the token's right edge at 118.98 px, so the chip runs past the token's edge. Seen
+        in screenshots during A117 but not measured: a round token's "Reservada 22:30" chip does
+        the same. **Next action:** decide whether the map keeps a token inside the plan, or the
+        chip hangs off the token's edge like "Unsent".
       - The map gives its "forgotten table" corner marker no spoken name. This predates the
         branch: at `700ec7f70` `wt-floor-canvas` passes its tables no such label.
     - The table screen:
@@ -3100,25 +3116,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         2026-09-28 by the finish-branch run-it review: a no-kitchen item (water) held, the bill
         paid, its course fired, then marked served — refused `group.line_held`. **Next action:** decide whether a paid bill's line may take `sent_at`, which would
         widen `0033`'s exception.
-      - The till's floor shows no reminder mark on a table yet. The server's floor read
-        (`GET /api/tables/state`, `readSeatedParties` in `apps/server/src/working-order.ts`) carries
-        each party's `reminder` (the held group waiting and when it is due); the till's floor
-        mapping (`#toFloorTable`, `apps/till/src/screens/till-floor-screen.ts`) drops it: the
-        finish-branch run-it review called it with and without a due reminder and got identical
-        data. The table screen's Current orders shows it on the waiting group once it has a time:
-        the time it falls due, then Snooze and, where waiters fire held groups, Fire; while it is
-        snoozed, also Clear snooze (A120). **DONE (campaign item A117):** once a party's reminder
-        falls due, the floor shows a "Time to fire" chip (`floor.fire_due`) on the table's list
-        card and on its map and tray token, and nothing before then; the floor redraws itself at
-        the moment the next reminder falls due, without waiting for a new floor read. Seen while
-        doing it, OPEN and not fixed there: on a 390 px map, a token placed near the top of the
-        plan is cut off by the plan's top edge. Screenshots of the same floor at 390 px showed
-        table 2's party name cut off with no reminder anywhere, and with the chip adding a row,
-        table 1's label cut off too. Believed, not tested: each token is centred on its position
-        (`translate(-50%, -50%)`, `packages/ui/src/components/wt-floor-canvas.ts`), so a taller
-        token grows upward past the edge. The chip also runs slightly past a round token's right
-        edge in Spanish, as "Reservada 22:30" already does. **Next action:** decide whether the
-        map keeps a token inside the plan, or the chip hangs off the token's edge like "Unsent".
+      - The server's floor read (`GET /api/tables/state`, `readSeatedParties` in
+        `apps/server/src/working-order.ts`) carries each party's `reminder` (the held group waiting
+        and when it is due); since campaign item A117 the till's floor uses it only to mark a table
+        once that reminder is due, without showing the time or the group. The table screen's
+        Current orders shows it on the waiting group once it has a time: the time it falls due,
+        then Snooze and, where waiters fire held groups, Fire; while it is snoozed, also Clear
+        snooze (A120). **DONE (campaign item A117):** once a party's reminder falls due, the floor
+        shows a "Time to fire" chip (`floor.fire_due`) on the table's list card and on its map and
+        tray token, and nothing before then; the floor redraws itself at the moment the next
+        reminder falls due, without waiting for a new floor read. The chip itself can push a label
+        near the plan's top edge out of view on a 390 px map (measured by the run-it review); that
+        is left open under "The floor:".
       - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
         group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
         (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
