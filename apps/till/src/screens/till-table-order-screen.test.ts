@@ -2593,7 +2593,7 @@ describe("till-table-order-screen", () => {
     const billName = (n: number) =>
       t("table.bill_of").replace("{party}", "Ana").replace("{n}", String(n));
 
-    it("offers each open, unpresented bill of the party, defaulting to the main bill, and sends no bill for it", async () => {
+    it("offers each open, unpresented bill of the party, defaulting to the main bill, and sends no bill when nothing is picked", async () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
       await previewCafe(el);
 
@@ -2675,6 +2675,128 @@ describe("till-table-order-screen", () => {
       await previewCafe(el);
 
       expect(sendTo(el)).toBeNull();
+    });
+
+    const checkedChoice = (el: TillTableOrderScreen) =>
+      choices(el)
+        .filter((choice) => choice.checked)
+        .map(({ value, label }) => ({ value, label }));
+
+    it("keeps the chosen bill, and sends it, after a refresh shows it presented", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+
+      el.bills = [tabBill, { ...checkBill, status: "placed" }];
+      await el.updateComplete;
+
+      expect(checkedChoice(el)).toEqual([
+        { value: "wo-check", label: `${billName(2)} ${t("table.send_to_not_open")}` },
+      ]);
+      expect(confirmPreview(el)!.detail.billId).toBe("wo-check");
+    });
+
+    it("keeps the chosen bill under the name it was chosen by after it leaves the party's bills", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+
+      el.bills = [tabBill, { ...checkBill, status: "abandoned" }];
+      await el.updateComplete;
+
+      expect(checkedChoice(el)).toEqual([
+        { value: "wo-check", label: `${billName(2)} ${t("table.send_to_not_open")}` },
+      ]);
+      expect(confirmPreview(el)!.detail.billId).toBe("wo-check");
+    });
+
+    it("tells a chosen bill merged away from the bill that takes its name", async () => {
+      const thirdBill = bill({ workingOrderId: "wo-third" });
+      const { el } = await mount({
+        party: anaParty,
+        bills: [tabBill, checkBill, thirdBill],
+        orderId: "wo-4",
+      });
+      await previewCafe(el);
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+
+      el.bills = [tabBill, { ...checkBill, status: "abandoned" }, thirdBill];
+      await el.updateComplete;
+
+      expect(choices(el).map(({ value, checked, label }) => ({ value, checked, label }))).toEqual([
+        { value: "wo-4", checked: false, label: `${billName(1)} ${t("table.bill_main")}` },
+        { value: "wo-third", checked: false, label: billName(2) },
+        {
+          value: "wo-check",
+          checked: true,
+          label: `${billName(2)} ${t("table.send_to_not_open")}`,
+        },
+      ]);
+      expect(confirmPreview(el)!.detail.billId).toBe("wo-check");
+    });
+
+    it("follows the party's main bill when it moves while the preview is open and nothing was chosen", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+
+      el.party = { ...anaParty, mainBillId: "wo-check" };
+      el.bills = [{ ...tabBill, status: "placed" }, checkBill, partlyPaidBill];
+      await el.updateComplete;
+
+      expect(checkedChoice(el)).toEqual([
+        { value: "wo-check", label: `${billName(2)} ${t("table.bill_main")}` },
+      ]);
+      expect(confirmPreview(el)!.detail).not.toHaveProperty("billId");
+    });
+
+    it("sends the main bill by name when the waiter chose it, not only when another bill was", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-4"]')!.click();
+      await el.updateComplete;
+
+      expect(checkedChoice(el)).toEqual([
+        { value: "wo-4", label: `${billName(1)} ${t("table.bill_main")}` },
+      ]);
+      expect(confirmPreview(el)!.detail.billId).toBe("wo-4");
+    });
+
+    it("sends the bill chosen as the main one by name once another bill becomes the main one", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-4"]')!.click();
+      await el.updateComplete;
+
+      el.party = { ...anaParty, mainBillId: "wo-check" };
+      await el.updateComplete;
+
+      expect(checkedChoice(el)).toEqual([{ value: "wo-4", label: billName(1) }]);
+      expect(confirmPreview(el)!.detail.billId).toBe("wo-4");
+    });
+
+    it("moves the default from a new bill to the main bill another device made meanwhile", async () => {
+      const { el } = await mount({
+        party: { ...anaParty, mainBillId: null },
+        bills: [paidBill, checkBill],
+        orderId: "wo-check",
+      });
+      await previewCafe(el);
+
+      el.party = { ...anaParty, mainBillId: "wo-4" };
+      el.bills = [paidBill, checkBill, tabBill];
+      await el.updateComplete;
+
+      expect(checkedChoice(el)).toEqual([
+        { value: "wo-4", label: `${billName(3)} ${t("table.bill_main")}` },
+      ]);
+      expect(confirmPreview(el)!.detail).not.toHaveProperty("billId");
     });
   });
 
@@ -2993,6 +3115,55 @@ describe("till-table-order-screen", () => {
           t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
         ),
       );
+    });
+
+    it("says which bill a transfer takes items from, and then asks for the items and names both bills", async () => {
+      const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      const anaBill = (n: number) =>
+        t("table.bill_of").replace("{party}", "Ana").replace("{n}", String(n));
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.transfer_from").replace("{bill}", anaBill(1)),
+      );
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+      const itemsHeading = el
+        .shadowRoot!.querySelector("[data-transfer-lines] h2")!
+        .textContent!.trim();
+      expect(itemsHeading).toBe(
+        t("table.transfer_from_to").replace("{from}", anaBill(1)).replace("{to}", anaBill(2)),
+      );
+      expect(itemsHeading).toBe("Choose items to transfer from Ana · Bill 1 to Ana · Bill 2");
+    });
+
+    it("heads the transfer's items plainly once the bill they go to leaves the party's bills", async () => {
+      const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+
+      el.bills = [tabBill, { ...checkBill, status: "abandoned" }];
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-transfer-lines] h2")!.textContent!.trim()).toBe(
+        t("table.actions_title"),
+      );
+    });
+
+    it("offers nothing to transfer to, under the plain heading, for an order that belongs to no party", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+
+      const picker = el.shadowRoot!.querySelector("[data-target-picker]")!;
+      expect(picker.querySelector("h2")!.textContent!.trim()).toBe(t("table.actions_title"));
+      expect(picker.textContent).toContain(t("table.no_other_bills"));
     });
 
     it("offers nothing to merge, under the plain heading, for an order that belongs to no party", async () => {

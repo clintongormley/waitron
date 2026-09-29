@@ -90,7 +90,8 @@ export const DRAFT_SIDE_BY_SIDE_MIN_WIDTH = 720;
  * `lines`. The draft stays in `store` until the app has the server's answer: the `sent` lines (the
  * ones `lines` was built from, in order) leave it once they are added, and a refused submission is
  * kept (D9). `joinGroupId` adds the one held group's lines to that existing group. `billId` names
- * the party's bill the person chose to send to; absent, the lines go on the party's main bill.
+ * the bill the person chose under Send to; it is absent when they chose none, or chose a new bill,
+ * and the server then puts the lines on the party's main bill, making one when there is none.
  */
 export interface SubmitDraftDetail {
   lines: GroupLine[];
@@ -1208,8 +1209,10 @@ export class TillTableOrderScreen extends LitElement {
   /** The held group Add to held group joins; the first held group when unset or gone. */
   @state() private joinTarget: string | null = null;
   @state() private pendingDraft: PendingDraft | null = null;
-  /** The bill the open preview sends to: a bill id, or "" for the party's next new bill. */
-  @state() private sendTo = "";
+  /** The bill the waiter chose in the open preview, under the name it had then; null sends no
+   * bill, so the lines go on the party's main bill as the server finds it when it takes the
+   * request. */
+  @state() private sendTo: { value: string; label: string } | null = null;
   #payStore?: TabPayStore;
   /** Memoised so a render triggered by a draft change does not recompute every line's gross. */
   #lineGrossByLineNo = new Map<number, Decimal>();
@@ -1439,7 +1442,7 @@ export class TillTableOrderScreen extends LitElement {
     };
     const held = this.#heldInOrder;
     const index = held.findIndex((group) => group.id === submission.joinGroupId);
-    this.sendTo = this.party?.mainBillId ?? "";
+    this.sendTo = null;
     this.pendingDraft = {
       preview,
       ...(index < 0 ? {} : { join: { group: held[index]!, index } }),
@@ -1452,51 +1455,74 @@ export class TillTableOrderScreen extends LitElement {
     const pending = this.pendingDraft;
     if (pending === null) return;
     this.pendingDraft = null;
-    const chosen = this.#sendToChoices() === null ? "" : this.sendTo;
-    const named = chosen !== "" && chosen !== this.party?.mainBillId;
-    this.#dispatch("submit-draft", named ? { ...pending.detail, billId: chosen } : pending.detail);
+    // Sent by id even when it is the main bill: the server refuses a chosen bill that is no longer
+    // open, where sending none would put the order on the party's main bill as it stands then, or
+    // on a new one.
+    const chosen = this.sendTo;
+    this.#dispatch(
+      "submit-draft",
+      chosen === null ? pending.detail : { ...pending.detail, billId: chosen.value },
+    );
   }
 
   /**
    * Where the open preview can send: the party's open bills, and first a new bill when the party has
-   * no main bill, as its next order then makes one. Null when there is only one place to send to.
+   * no open main bill. A chosen bill stays listed and checked after it stops being an open bill of
+   * the party, marked as such, because Confirm still sends it. `checked` is the value shown chosen;
+   * null when there is only one place to send to.
    */
-  #sendToChoices(): { value: string; label: string; main: boolean }[] | null {
+  #sendToChoices(): {
+    choices: { value: string; label: string; main: boolean; closed: boolean }[];
+    checked: string;
+  } | null {
     const party = this.party;
     if (party === null) return null;
-    const open = this.#shownBills().flatMap((bill, index) =>
-      bill.status === "open" && bill.partyId === party.id
+    const chosen = this.sendTo;
+    const choices = this.#shownBills().flatMap((bill, index) =>
+      bill.partyId === party.id && (bill.status === "open" || bill.workingOrderId === chosen?.value)
         ? [
             {
               value: bill.workingOrderId,
               label: this.#billName(index),
               main: bill.workingOrderId === party.mainBillId,
+              closed: bill.status !== "open",
             },
           ]
         : [],
     );
-    const choices = open.some((choice) => choice.main)
-      ? open
-      : [{ value: "", label: t("table.send_to_new"), main: false }, ...open];
-    return choices.length > 1 ? choices : null;
+    if (chosen !== null && !choices.some((choice) => choice.value === chosen.value)) {
+      choices.push({ ...chosen, main: false, closed: true });
+    }
+    const openMain = this.#shownBills().find(
+      (bill) =>
+        bill.workingOrderId === party.mainBillId &&
+        bill.partyId === party.id &&
+        bill.status === "open",
+    );
+    if (openMain === undefined) {
+      choices.unshift({ value: "", label: t("table.send_to_new"), main: false, closed: false });
+    }
+    if (choices.length < 2) return null;
+    return { choices, checked: chosen?.value ?? openMain?.workingOrderId ?? "" };
   }
 
   #sendToChoice(): TemplateResult | typeof nothing {
-    const choices = this.#sendToChoices();
-    if (choices === null) return nothing;
+    const offered = this.#sendToChoices();
+    if (offered === null) return nothing;
     return html`<fieldset class="send-to" data-send-to>
       <legend>${t("table.send_to")}</legend>
-      ${choices.map(
+      ${offered.choices.map(
         (choice) =>
           html`<label class="send-to-option">
             <input
               type="radio"
               name="billId"
               .value=${choice.value}
-              .checked=${this.sendTo === choice.value}
+              .checked=${offered.checked === choice.value}
               @change=${(event: Event) => {
                 event.stopPropagation();
-                this.sendTo = choice.value;
+                this.sendTo =
+                  choice.value === "" ? null : { value: choice.value, label: choice.label };
               }}
             />
             <span
@@ -1504,7 +1530,7 @@ export class TillTableOrderScreen extends LitElement {
                 choice.main
                   ? html` <span class="bill-main">${t("table.bill_main")}</span>`
                   : nothing
-              }</span
+              }${choice.closed ? ` ${t("table.send_to_not_open")}` : nothing}</span
             >
           </label>`,
       )}
@@ -3477,8 +3503,8 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** The party's other untouched bills, which merge and transfer offer, each with its name. The server
-   * refuses any other bill as well. */
+  /** The party's other open bills whose outstanding amount equals their total, which merge and
+   * transfer offer, each with its name. The server decides whether it takes the chosen one. */
   #otherBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
@@ -3728,7 +3754,15 @@ export class TillTableOrderScreen extends LitElement {
         }));
     const emptyKey = forTables ? "table.no_free_tables" : "table.no_other_bills";
     return html`<section class="actions" data-target-picker>
-      <h2>${this.actionVerb === "merge" ? this.#mergeHeading() : t("table.actions_title")}</h2>
+      <h2>
+        ${
+          this.actionVerb === "merge"
+            ? this.#billsHeading("table.merge_into", { bill: this.orderId })
+            : this.actionVerb === "transfer"
+              ? this.#billsHeading("table.transfer_from", { bill: this.orderId })
+              : t("table.actions_title")
+        }
+      </h2>
       ${
         targets.length === 0
           ? html`<p class="empty">${t(emptyKey)}</p>`
@@ -3750,11 +3784,17 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #mergeHeading(): string {
-    const shown = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
-    return shown < 0
-      ? t("table.actions_title")
-      : t("table.merge_into").replace("{bill}", () => this.#billName(shown));
+  /** `key` with each `{slot}` replaced by the name of the bill it maps to, or the plain heading when
+   * one of those bills is not among the party's shown bills. */
+  #billsHeading(key: StringKey, bills: Record<string, string | null | undefined>): string {
+    const shown = this.#shownBills();
+    let heading = t(key);
+    for (const [slot, id] of Object.entries(bills)) {
+      const index = shown.findIndex((bill) => bill.workingOrderId === id);
+      if (index < 0) return t("table.actions_title");
+      heading = heading.replace(`{${slot}}`, () => this.#billName(index));
+    }
+    return heading;
   }
 
   #transferLinesStep(): TemplateResult {
@@ -3764,7 +3804,12 @@ export class TillTableOrderScreen extends LitElement {
     // offering a child row here only buys a refusal.
     const lines = this.lines.filter((line) => !this.#isChild(line));
     return html`<section class="actions" data-transfer-lines>
-      <h2>${t("table.transfer_pick_lines")}</h2>
+      <h2>
+        ${this.#billsHeading("table.transfer_from_to", {
+          from: this.orderId,
+          to: this.transferToBillId,
+        })}
+      </h2>
       ${
         lines.length === 0
           ? html`<p class="empty">${t("table.transfer_no_lines")}</p>`

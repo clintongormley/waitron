@@ -3045,7 +3045,12 @@ export class TillApp extends LitElement {
       }
       if (isGroupGone(error)) await this.#loadTabLines();
       if (!live()) return;
-      this.errorKey = lineWriteError(error);
+      // The server raises this for the bill a submission names (`requireBillOfParty`), or, when it
+      // names none, for the party's main bill (`partyMainBill`), which the server chose.
+      this.errorKey =
+        billId !== undefined && refusal?.refused === "tab.not_open"
+          ? { code: "tab.not_open" }
+          : lineWriteError(error);
       return refusal?.refused === "product.unavailable" ? "mark-sold-out" : undefined;
     } finally {
       send.done();

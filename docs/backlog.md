@@ -503,7 +503,8 @@ round to the check. Likewise a round built on a tab that is then merged into ano
 under the merged-away tab's order id and can no longer be reached. _(Task 8, 2026-09-28: the draft
 now belongs to the party, not to an order: while a check split off the party's bill is on screen
 no draft shows, and the party's draft shows on the party's own tab — `#tableDraft`,
-`apps/till/src/till-app.ts`.)_
+`apps/till/src/till-app.ts`.)_ _(2026-09-29, Task 10: the draft now shows on a split-off bill
+too.)_
 Follow-up: every remembered round (one refused sold out or after a menu change) is marked again
 against the open table's menu, so opening a table in another service zone can mark another table's
 round wrongly or clear its mark. Remember each round's zone and re-mark only that zone's rounds, or
@@ -2347,7 +2348,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `fire_control` is `waiter`)_; the till, not the server, refuses a round aimed at a split-off
     check, because the route names the party, not the bill _(table-actions Task 2, 2026-09-28:
     the groups and draft-submit routes now take an optional `billId`, and a round naming a split
-    check of the party goes onto it; the till sends none yet)_; a whole-order save replacing a held dish with another
+    check of the party goes onto it; the till sends none yet)_ _(2026-09-29, Task 10: the till no
+    longer refuses such a round; it sends `billId` from the preview's Send to choice)_; a whole-order save replacing a held dish with another
     variant moves it to a new held group at the end; the counter's whole-order save does not answer
     the party's revision; a held no-route dish outside any group gets no Send all button (whether
     one can occur on a party's tab is not established) _(Task 4, 2026-09-27: the till has no
@@ -2790,7 +2792,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       - −1 on the last-added bar at one takes the line out;
       - anyone may take a draft over, including the person it was taken from;
       - while a check split off the party's bill is on screen, no draft shows (the party's draft
-        shows on the party's own tab);
+        shows on the party's own tab); _(2026-09-29, Task 10: reversed — the draft now shows on a
+        split-off bill too.)_
       - a line counts as unsellable when the till's check or the server's says so, and the
         server's mark gives way to a newer menu read on the till;
       - Cancel on the menu-change question holds until the next publish, re-read or Send, not
@@ -2996,7 +2999,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Task 7, so the difference cannot be met from the till today.
     - A round can be sent to another open bill of the same party, such as a split check: the
       groups route and the draft-submit route take an optional `billId`. The till sends none yet;
-      Task 10 offers it. With `billId` a held round can now be sent straight to a party's split
+      Task 10 offers it. _(2026-09-29, Task 10: done — the till sends `billId` from the preview's
+      Send to choice.)_ With `billId` a held round can now be sent straight to a party's split
       check (the groups route accepts `release: "hold"` naming one,
       `apps/server/src/till-api.groups.test.ts`), which the owner's 2026-09-26 ruling
       (`tab.split_held_line`) covered only for splitting. **DECIDED (owner, 2026-09-29):** a held
@@ -3482,27 +3486,47 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       for an unnamed party, numbered in the order listed, and marks the bill new orders go to
       ("New orders"). A bill's stored label is no longer shown: a split-off bill carries its
       table's label, which read as "Mesa 4" beside "Bill 1".
-    - Merge bills and Transfer items offer the party's other untouched bills (open, nothing
-      received against them, recorded on this party), not other tables' tabs. The merge picker is
-      headed with the bill merged into. Split works on any bill of the party, one split off before
-      included.
-    - The draft now shows on a split-off bill too. When the party has more than one open bill,
-      the preview before sending has a Send to choice (native radios, `name="billId"`), defaulting
-      to the main bill, or to "A new bill" when the party has none; choosing another bill sends
-      its `billId`. When a send to a chosen bill gets no answer, the screen shows that bill.
+    - Merge bills and Transfer items offer the party's other bills that are open, recorded on
+      this party, and have nothing paid off them (outstanding equal to total), not other tables'
+      tabs. A bill whose payment was refunded in full passes that test and is still offered; the
+      server then refuses it with `bill.payments_received`. The merge picker is
+      headed with the bill merged into, and the transfer picker with the bill the items come
+      from; the transfer's items step says "Choose items to transfer from" one bill "to" the
+      other. Each of these headings falls back to the plain table-actions title when a bill it
+      names is no longer among the bills the screen lists. Split works on any bill of the party, one split off
+      before included.
+    - The draft now shows on a split-off bill too. The preview before sending has a Send to
+      choice (native radios, `name="billId"`) whenever it has more than one entry. The entries
+      are the party's open bills; first "A new bill" when the party has no open main bill; and a
+      bill picked in this preview that has since stopped being an open bill of the party
+      (presented, paid or merged away, for example), marked "(no longer open)". Nothing picked, it shows the
+      party's open main bill as chosen, or "A new bill" when there is none.
+    - A bill picked by changing the Send to choice, the main one included, is sent by its
+      `billId`; tapping the already-checked default is not a pick. The server refuses one
+      that is no longer open (`bill.presented`, `bill.paid`, or `tab.not_open` for one merged
+      away); the till shows each in its own words. With nothing picked, or "A new bill" picked,
+      no `billId` is sent, and the server puts the order on the party's main bill as it stands
+      when the server takes it, making a new one when there is none. When a send to a
+      picked bill gets no answer, the screen shows that bill only while the waiter is still on the
+      table the order was sent from and that table still holds the same party.
     - Leaving a split-off bill unpaid no longer merges it back (M7b3 is gone, spec decision 8).
     - Refusals `bill.presented`, `bill.paid`, `bill.other_party`, `bill.payments_received` and
-      `bill.line_paid` show in their own words; `tab.merge_leaves_no_table` is no longer shown.
+      `bill.line_paid` show in their own words, and so does `tab.not_open` on a send that named a
+      bill (every other path shows it as it did before); `tab.merge_leaves_no_table` is no
+      longer shown.
     - Move and Join still use the old tab routes until Task 11.
     - The server refuses a transfer carrying no items with `sale.empty_basket` (400), as a split
       with none already was, and the till never sends one.
     Tests: `apps/till/src/till-app-parties.test.ts`, `till-app-table-service.test.ts`,
-    `screens/till-table-order-screen.test.ts`, `.parties.test.ts`, `.a11y.test.ts` (merge picker
-    and Send to, both themes), `api/client.test.ts`; server `party-bill-actions.test.ts` and
+    `screens/till-table-order-screen.test.ts`, `.parties.test.ts`, `.a11y.test.ts` (merge picker,
+    transfer picker and its items step, and Send to, both themes), `api/client.test.ts`; server `party-bill-actions.test.ts` and
     `till-api.bill-actions.test.ts`. No migration.
     Open points: `tab.party_mismatch` and `tab.party_has_other_open_bill` stay in the till's
     table refusals although only the old tab merge raises them, which the till no longer calls;
-    they go with Task 13. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
+    `tab.merge_leaves_no_table` is out of those refusals (`TABLE_REFUSALS`,
+    `apps/till/src/till-app.ts`), so the till shows its generic table error for it, while its
+    message stays in `apps/till/src/i18n/codes.ts`, read by nothing else under `apps/till/src`
+    but its test. All three go with Task 13. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
     on the dark dialog (seen in the 390 px Spanish dark screenshot).
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table

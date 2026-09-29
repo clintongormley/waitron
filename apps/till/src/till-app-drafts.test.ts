@@ -1440,13 +1440,13 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
     expect(api.getTablesState.mock.calls.length).toBe(floorReads);
   });
 
-  describe("when the next person has split a check off before the save answers", () => {
+  describe("when the next person has split a bill off before the save answers", () => {
     const splitting = () => ({
       splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
       mergeBills: vi.fn().mockResolvedValue(undefined),
     });
 
-    /** Sam signs in, opens Mesa 7 from `floorTab` and splits a check off it; then the held save
+    /** Sam signs in, opens Mesa 7 from `floorTab` and splits a bill off it; then the held save
      * answers. */
     async function samSplitsBeforeTheSaveAnswers(
       el: TillApp,
@@ -1468,7 +1468,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       await flush(el, 8);
     }
 
-    it("leaves the check alone when Back to floor waited on the save", async () => {
+    it("keeps Sam on the split-off bill when Back to floor waited on the save and merges nothing back", async () => {
       const { el } = await mountApp(splitting());
       await openMesa(el);
       const answer = await editBehindHeldSave(el);
@@ -1481,7 +1481,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       expect(tableOrder(el)!.orderId).toBe("wo-check");
     });
 
-    it("leaves the check alone when choosing another tab waited on the save", async () => {
+    it("keeps Sam on the split-off bill when choosing another tab waited on the save and merges nothing back", async () => {
       const { el } = await mountApp(splitting());
       await openMesa(el);
       const answer = await editBehindHeldSave(el);
@@ -1495,7 +1495,7 @@ describe("till-app: leaving a draft while a save is out, then signing out", () =
       expect(tableOrder(el)!.orderId).toBe("wo-check");
     });
 
-    it("leaves the check alone when opening another table waited on the save", async () => {
+    it("keeps Sam on the split-off bill when opening another table waited on the save and merges nothing back", async () => {
       const { el } = await mountApp({
         getTill: vi.fn().mockResolvedValue(till(sideBySide)),
         ...splitting(),

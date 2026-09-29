@@ -549,6 +549,39 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations in the transfer picker and in the items it offers to transfer", async () => {
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      {
+        products,
+        lines,
+        statuses,
+        orderId: "wo-2",
+        party,
+        bills: [
+          ...partyBills,
+          { ...partyBills[1]!, workingOrderId: "wo-3", total: "8.00", outstanding: "8.00" },
+        ],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="transfer"]')!.click();
+    await el.updateComplete;
+    const target = el.shadowRoot!.querySelector<HTMLElement>('[data-target="wo-3"]');
+    if (target === null) throw new Error("the scan must include a bill to transfer to");
+    await expectNoA11yViolations(host);
+
+    target.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-transfer-line="1"]')!.click();
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations in the split quantity picker", async () => {
     const splitLines: TabLine[] = [
       { ...lines[0]!, quantity: "4.000" },

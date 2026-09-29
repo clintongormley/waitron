@@ -113,11 +113,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "bill.payments_received": {
     en: "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
-    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
+    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o juntar la cuenta, devuelve primero ese dinero",
   },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
     es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
+  },
+  "tab.not_open": {
+    en: "That bill is no longer open. Choose another bill and send again",
+    es: "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",
   },
   "bill.paid": {
     en: "This bill is paid",

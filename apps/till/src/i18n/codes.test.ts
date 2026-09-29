@@ -126,7 +126,7 @@ it("explains each refusal a bill paid in parts can give, in both languages, nami
     "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
   );
   expect(codeMessage("bill.payments_received", "es")).toBe(
-    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o combinar la cuenta, devuelve primero ese dinero",
+    "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o juntar la cuenta, devuelve primero ese dinero",
   );
 });
 
@@ -215,7 +215,7 @@ it("explains each refusal about a table's party, in both languages", () => {
   ]);
 });
 
-it("words the three refusals of an order sent to a bill it cannot go on, in both languages", () => {
+it("words the presented, paid and other-party refusals of an order sent to a bill it cannot go on, in both languages", () => {
   expect(codeMessage("bill.presented", "en")).toBe(
     "This bill has been presented, so it cannot be changed",
   );
@@ -226,6 +226,15 @@ it("words the three refusals of an order sent to a bill it cannot go on, in both
   expect(codeMessage("bill.paid", "es")).toBe("Esta cuenta ya está pagada");
   expect(codeMessage("bill.other_party", "en")).toBe("That bill belongs to other guests");
   expect(codeMessage("bill.other_party", "es")).toBe("Esa cuenta es de otros clientes");
+});
+
+it("words an order sent to a bill that is no longer open, in both languages", () => {
+  expect(codeMessage("tab.not_open", "en")).toBe(
+    "That bill is no longer open. Choose another bill and send again",
+  );
+  expect(codeMessage("tab.not_open", "es")).toBe(
+    "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",
+  );
 });
 
 it("explains a snooze refused because another group is the one waiting, in both languages", () => {

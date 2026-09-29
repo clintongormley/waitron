@@ -4451,7 +4451,7 @@ describe("till-app", () => {
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
-      it("split-lines switches pay and later receipt actions to the detached check", async () => {
+      it("split-lines switches pay and later receipt actions to the bill split off", async () => {
         const splitBill = vi.fn().mockResolvedValue({ billId: "wo-check" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);

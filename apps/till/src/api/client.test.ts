@@ -2561,7 +2561,7 @@ describe("TillApi: a seated party", () => {
       { transfers: [{ lineNo: 1 }], expectedPartyRevision: 3, partyId: "v1" },
     ],
   ] as const)("%s sends the party revisions it was given", async (_name, call, path, body) => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ checkId: "c1" }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "c1" }));
 
     await call(new TillApi("", fetchStub));
 

@@ -627,7 +627,8 @@ export interface DraftSubmission extends GroupCommand {
   draftRevision: number;
   groups: { lineIds: string[]; release: GroupRelease }[];
   joinGroupId?: string;
-  /** An open bill of the party to put the lines on; absent, they go on its main bill. */
+  /** The party's bill to put the lines on; the server refuses one that is not an open bill of the
+   * party. Absent, they go on the party's main bill, which the server makes if there is none. */
   billId?: string;
 }
 
@@ -1212,11 +1213,9 @@ export interface PartyBill {
   receiptAvailable: boolean;
 }
 
-/** The party revisions a table move sends (D19): the destination party's, and on a merge or transfer
- * between two parties, the source party's. An absent one is left out of the body. */
+/** The party revision a table move or join sends (D19); left out of the body when absent. */
 export interface PartyRevisions {
   expectedPartyRevision?: number;
-  expectedSourcePartyRevision?: number;
 }
 
 /** What a bill action sends of the party the till read the bill under: its revision and its id. Both

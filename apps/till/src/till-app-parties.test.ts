@@ -1765,6 +1765,48 @@ describe("till-app: the order's groups", () => {
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
   });
 
+  it("sends the round to the bill chosen in Send to after a refresh shows that bill presented", async () => {
+    let finish!: (value: unknown) => void;
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
+      updateOrderLine: vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+      submitDraft: answering({ tabId: "wo-4", revision: 6, groups: [] }),
+    });
+    const order = await openMesa(el);
+    await ringRound(el, order);
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Vino",
+      patch: { note: "note" },
+      revision: 0,
+    });
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+    await flush(el);
+    const choice = order.shadowRoot!.querySelector<HTMLInputElement>(
+      'input[name="billId"][value="wo-check"]',
+    )!;
+    choice.click();
+    await flush(el);
+    expect(choice.checked).toBe(true);
+    vi.mocked(api.getTablesState).mockResolvedValue([seated({}, { revision: 5 }), mesa7, mesa9]);
+    vi.mocked(api.getPartyBills).mockResolvedValue([tabBill, { ...checkBill, status: "placed" }]);
+
+    finish({ revision: 1, party: { id: "v1", revision: 4 } });
+    await flush(el);
+    expect(order.bills[1]!.status).toBe("placed");
+    order.shadowRoot!.querySelector<HTMLElement>("[data-draft-confirm]")!.click();
+    await flush(el);
+
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.submitDraft).mock.calls[0]![2]).toHaveProperty("billId", "wo-check");
+  });
+
   it("sends the revision the submission answered with on the party's next command", async () => {
     const { el } = await mountApp({
       submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
@@ -1954,6 +1996,24 @@ describe("till-app: the order's groups", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(codeMessage("bill.presented"));
+  });
+
+  it("shows a chosen bill merged away meanwhile in its own words", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue({ code: "tab.not_open", tabId: "wo-check" }),
+    });
+    const order = await openMesa(el);
+    await ringRound(el, order);
+
+    emit(order, "submit-draft", {
+      ...roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]),
+      billId: "wo-check",
+    });
+    await flush(el);
+
+    const text = banner(el)!.textContent!;
+    expect(text).toContain(codeMessage("tab.not_open"));
+    expect(text).not.toContain(t("table.error"));
   });
 
   it("sends a round from a party just seated when the floor could not be read after seating", async () => {
