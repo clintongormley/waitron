@@ -3436,7 +3436,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
     writes a merged party's tables in one statement, so they share a joining time and their order in
     its name is not fixed; it goes with Task 13.
-  - **Task 9 DONE (2026-09-29): dishes arriving in a party get a kitchen group, so the pass can
+  - **Task 9 DONE (#874, 2026-09-29, main `002d54684`): dishes arriving in a party get a kitchen group, so the pass can
     mark them.** A bill that arrives in a party by Move a bill (to a held table or a free one) or
     by Split a table has each dish with no group put in a new group of the receiving party, after
     its last group (`groupArrivingDishes`, `apps/server/src/order-groups.ts`): dishes already
