@@ -3110,7 +3110,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         snoozed, also Clear snooze (A120). **DONE (campaign item A117):** once a party's reminder
         falls due, the floor shows a "Time to fire" chip (`floor.fire_due`) on the table's list
         card and on its map and tray token, and nothing before then; the floor redraws itself at
-        the moment the next reminder falls due, without waiting for a new floor read.
+        the moment the next reminder falls due, without waiting for a new floor read. Seen while
+        doing it, OPEN and not fixed there: on a 390 px map, a token placed near the top of the
+        plan is cut off by the plan's top edge. Screenshots of the same floor at 390 px showed
+        table 2's party name cut off with no reminder anywhere, and with the chip adding a row,
+        table 1's label cut off too. Believed, not tested: each token is centred on its position
+        (`translate(-50%, -50%)`, `packages/ui/src/components/wt-floor-canvas.ts`), so a taller
+        token grows upward past the edge. The chip also runs slightly past a round token's right
+        edge in Spanish, as "Reservada 22:30" already does. **Next action:** decide whether the
+        map keeps a token inside the plan, or the chip hangs off the token's edge like "Unsent".
       - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
         group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
         (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
