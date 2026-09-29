@@ -34,6 +34,7 @@ function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
     status,
     total: "10.00",
     outstanding: status === "open" ? "10.00" : "0.00",
+    hasPayments: false,
     receiptAvailable: status === "settled",
   };
 }

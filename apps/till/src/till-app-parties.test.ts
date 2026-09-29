@@ -101,6 +101,7 @@ const tabBill: PartyBill = {
   status: "open",
   total: "14.00",
   outstanding: "14.00",
+  hasPayments: false,
   receiptAvailable: false,
 };
 const checkBill: PartyBill = {
@@ -110,6 +111,7 @@ const checkBill: PartyBill = {
   status: "open",
   total: "30.00",
   outstanding: "30.00",
+  hasPayments: false,
   receiptAvailable: false,
 };
 
@@ -1719,7 +1721,7 @@ describe("till-app: moving a bill", () => {
     await flush(el);
     vi.mocked(api.getPartyBills).mockResolvedValue([tabBill]);
 
-    emit(tableOrder(el)!, "move-bill", { to: { tableId: "t9" }, bills: "merge" });
+    emit(tableOrder(el)!, "move-bill", { to: { tableId: "t9", seated: null }, bills: "merge" });
     await flush(el);
 
     expect(api.moveBill).toHaveBeenCalledWith("wo-check", { tableId: "t9" }, "merge", {
@@ -1739,7 +1741,10 @@ describe("till-app: moving a bill", () => {
     emit(order, "take-payment", { workingOrderId: "wo-check" });
     await flush(el);
 
-    emit(tableOrder(el)!, "move-bill", { to: { tableId: "t7" }, bills: "merge" });
+    emit(tableOrder(el)!, "move-bill", {
+      to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
+      bills: "merge",
+    });
     await flush(el);
 
     expect(api.moveBill).toHaveBeenCalledWith("wo-check", { tableId: "t7" }, "merge", {
@@ -1751,6 +1756,59 @@ describe("till-app: moving a bill", () => {
     expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
   });
 
+  it("sends the party the bill choice named, though the floor read since seats another there", async () => {
+    const pedro = seated(
+      { id: "t7", label: "7" },
+      { id: "v8", revision: 2, mainBillId: "wo-8", tableIds: ["t7"] },
+    );
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, pedro, mesa9]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-bill", {
+      to: { tableId: "t7", seated: { id: "v7", revision: 9 } },
+      bills: "merge",
+    });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledWith("wo-4", { tableId: "t7" }, "merge", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      otherPartyId: "v7",
+      expectedOtherPartyRevision: 9,
+    });
+  });
+
+  it("leaves another table's bill on screen when the moved bill's party is read after the waiter opened it", async () => {
+    const bill7: PartyBill = { ...tabBill, workingOrderId: "wo-7", partyId: "v7" };
+    let release: (bills: PartyBill[]) => void = () => undefined;
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockImplementation((partyId: string) =>
+      partyId === "v1"
+        ? new Promise<PartyBill[]>((resolve) => (release = resolve))
+        : Promise.resolve([bill7]),
+    );
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    release([tabBill]);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.party!.id).toBe("v7");
+    expect(tableOrder(el)!.bills).toEqual([bill7]);
+  });
+
   it.each([
     ["merged into their main bill", "merge", true],
     ["kept separate when asked to", "separate", false],
@@ -1760,7 +1818,7 @@ describe("till-app: moving a bill", () => {
     });
     const order = await openMesa(el);
 
-    emit(order, "move-bill", { to: { tableId: "t7" }, bills });
+    emit(order, "move-bill", { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills });
     await flush(el);
 
     expect(api.moveBill).toHaveBeenCalledOnce();
@@ -1875,7 +1933,7 @@ describe("till-app: paying a bill by its state", () => {
   });
 
   it("takes no single payment for a partly paid bill, and says to take the rest as a bill payment", async () => {
-    const partly: PartyBill = { ...checkBill, outstanding: "10.00" };
+    const partly: PartyBill = { ...checkBill, outstanding: "10.00", hasPayments: true };
     const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([tabBill, partly]) });
     const order = await openMesa(el);
     emit(order, "take-payment", { workingOrderId: "wo-check" });
@@ -1887,6 +1945,46 @@ describe("till-app: paying a bill by its state", () => {
     expect(api.recordSale).not.toHaveBeenCalled();
     expect(api.collectOrder).not.toHaveBeenCalled();
     expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it("takes no single payment for a bill whose only payment is a card still at the reader", async () => {
+    const pending: PartyBill = { ...checkBill, hasPayments: true };
+    const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([tabBill, pending]) });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.collectOrder).not.toHaveBeenCalled();
+    expect(banner(el)!.textContent).toContain(t("bill.pay_with_bill_payments"));
+  });
+
+  it.each([
+    ["offers the original receipt when collecting filed the bill's sale", false, true],
+    ["offers no original receipt when the bill's sale was filed before", true, false],
+  ])("%s", async (_case, filedBefore, offered) => {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, receiptPrintMode: "on_request" }),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([tabBill, { ...placedCheck, receiptAvailable: filedBefore }]),
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+
+    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "30.00" });
+    await flush(el);
+
+    expect(api.collectOrder).toHaveBeenCalledOnce();
+    expect(
+      el.shadowRoot!.querySelector<HTMLElement & { originalReceiptAvailable: boolean }>(
+        "till-ticket-view",
+      )!.originalReceiptAvailable,
+    ).toBe(offered);
   });
 
   it("says to take the rest as a bill payment when the single payment is refused for money already on the bill", async () => {

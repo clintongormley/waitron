@@ -256,7 +256,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
 
     await openPicker(el);
 
-    expect(opened).toEqual([{ orderId: "wo-1" }]);
+    expect(opened).toHaveLength(1);
     expect(picker(el)!.heading).toBe(t("table.move_bill_heading").replace("{bill}", "#5 Mesa 4"));
     expect(
       [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
@@ -295,7 +295,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     target(el, "t9")!.click();
     await el.updateComplete;
 
-    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t9", bills: "merge" }]);
+    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t9", seated: null, bills: "merge" }]);
     expect(picker(el)).toBeNull();
   });
 
@@ -321,9 +321,37 @@ describe("till-held-orders: moving a counter order to a table", () => {
     dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
     await el.updateComplete;
 
-    expect(moved).toEqual([{ orderId: "wo-1", tableId: "t7", bills: "separate" }]);
+    expect(moved).toEqual([
+      { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 }, bills: "separate" },
+    ]);
     expect(billChoice(el)).toBeNull();
     expect(picker(el)).toBeNull();
+  });
+
+  it("sends the party the bill choice names, though the floor read since seats another there", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [mesa],
+      tables,
+    });
+    const moved = heard(el, "move-held-order");
+    await openPicker(el);
+    target(el, "t7")!.click();
+    await el.updateComplete;
+    const pedro = { ...luis, id: "v8", revision: 2, name: "Pedro", displayName: "Pedro" };
+    el.tables = [{ ...tables[0]!, party: pedro }, tables[1]!, tables[2]!];
+    await el.updateComplete;
+    const dialog = billChoice(el)!;
+    await dialog.updateComplete;
+
+    expect(dialog.scope).toBe(
+      t("table.move_bill_scope").replace("{bill}", "#5 Mesa 4").replace("{into}", "Luis (Mesa 7)"),
+    );
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-merge]")!.click();
+    await el.updateComplete;
+
+    expect(moved).toEqual([
+      { orderId: "wo-1", tableId: "t7", seated: { id: "v7", revision: 9 }, bills: "merge" },
+    ]);
   });
 
   it("closes the picker, sending nothing, when its dialog is dismissed", async () => {

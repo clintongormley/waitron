@@ -220,6 +220,7 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
   status: "open",
   total: "14.00",
   outstanding: "14.00",
+  hasPayments: false,
   receiptAvailable: false,
   ...over,
 });
@@ -229,7 +230,7 @@ const checkBill = bill({ workingOrderId: "wo-check", total: "30.00", outstanding
 const paidBill = bill({ workingOrderId: "wo-paid", status: "settled", outstanding: "0.00" });
 const placedBill = bill({ workingOrderId: "wo-placed", status: "placed" });
 /** Open, with money already received against it. */
-const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00" });
+const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00", hasPayments: true });
 /** Open, but recorded on a party merged into this one. */
 const mergedPartyBill = bill({ workingOrderId: "wo-merged", partyId: "v0" });
 const partyBills = () => ({
@@ -3073,7 +3074,7 @@ describe("till-table-order-screen", () => {
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
       }
-      const scope = t("table.bill_scope").replace("{n}", "2").replace("{party}", "Ana (Mesa 4)");
+      const scope = t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2");
 
       it("lists The counter and every other table with its condition, under the bill it moves", async () => {
         const { el } = await mount(onCheck());
@@ -3120,7 +3121,7 @@ describe("till-table-order-screen", () => {
 
         expect(moved).toEqual([
           { to: { counter: true }, bills: "merge" },
-          { to: { tableId: "t9" }, bills: "merge" },
+          { to: { tableId: "t9", seated: null }, bills: "merge" },
         ]);
         expect(billChoice(el)).toBeNull();
       });
@@ -3142,8 +3143,45 @@ describe("till-table-order-screen", () => {
         dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-separate]")!.click();
         await el.updateComplete;
 
-        expect(moved).toEqual([{ to: { tableId: "t7" }, bills: "separate" }]);
+        expect(moved).toEqual([
+          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "separate" },
+        ]);
         expect(billChoice(el)).toBeNull();
+      });
+
+      it("sends the party the bill choice names, though the floor read since seats another there", async () => {
+        const { el } = await mount(onCheck());
+        const moved = heard(el, "move-bill");
+        await toMoveBill(el);
+        target(el, "t7")!.click();
+        await el.updateComplete;
+        el.tables = el.tables.map((table) =>
+          table.id === "t7"
+            ? {
+                ...table,
+                party: {
+                  ...table.party!,
+                  id: "v8",
+                  revision: 2,
+                  name: "Pedro",
+                  displayName: "Pedro",
+                },
+              }
+            : table,
+        );
+        await el.updateComplete;
+
+        const dialog = billChoice(el)!;
+        expect(dialog.scope).toBe(
+          t("table.move_bill_scope").replace("{bill}", scope).replace("{into}", "Luis (Mesa 7)"),
+        );
+        await (dialog as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-bills-merge]")!.click();
+        await el.updateComplete;
+
+        expect(moved).toEqual([
+          { to: { tableId: "t7", seated: { id: "v7", revision: 9 } }, bills: "merge" },
+        ]);
       });
 
       it("sends nothing when the bill choice is cancelled", async () => {

@@ -2322,6 +2322,7 @@ describe("TillApi: a seated party", () => {
         status: "settled",
         total: "14.00",
         outstanding: "0.00",
+        hasPayments: false,
         receiptAvailable: true,
       },
     ];

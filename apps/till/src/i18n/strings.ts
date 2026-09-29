@@ -510,6 +510,7 @@ export const en = {
   "refresh.held_after_park": "The order was held, but the list of held orders could not refresh.",
   "refresh.held_after_sale":
     "The sale was recorded, but the list of held orders could not refresh.",
+  "refresh.held_after_move": "The bill was moved, but the list of held orders could not refresh.",
   "refresh.station_after_place": "The order was placed, but the kitchen queue could not refresh.",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
   "refresh.retry_in": "Trying again in {n} seconds.",
@@ -533,8 +534,6 @@ export const en = {
   "table.still_to_pay": "Still to pay at this table",
   "table.finish": "Finish table",
   "table.action_move_bill": "Move this bill",
-  // `{party}` is the party's display name with its tables, as `table.party_scope` gives it.
-  "table.bill_scope": "Bill {n} of {party}",
   "table.move_bill_heading": "Move {bill} to:",
   "table.move_bill_scope": "{bill} to {into}",
   "table.bill_move_question":
@@ -1070,6 +1069,8 @@ export const es: Record<StringKey, string> = {
     "El pedido se aparcó, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.held_after_sale":
     "La venta se registró, pero la lista de pedidos aparcados no se pudo actualizar.",
+  "refresh.held_after_move":
+    "La cuenta se movió, pero la lista de pedidos aparcados no se pudo actualizar.",
   "refresh.station_after_place":
     "El pedido se envió, pero la cola de cocina no se pudo actualizar.",
   "refresh.retry_in": "Se reintentará en {n} segundos.",
@@ -1092,7 +1093,6 @@ export const es: Record<StringKey, string> = {
   "table.still_to_pay": "Pendiente de pago en la mesa",
   "table.finish": "Cerrar mesa",
   "table.action_move_bill": "Mover esta cuenta",
-  "table.bill_scope": "Cuenta {n} de {party}",
   "table.move_bill_heading": "Mover {bill} a:",
   "table.move_bill_scope": "{bill} a {into}",
   "table.bill_move_question":

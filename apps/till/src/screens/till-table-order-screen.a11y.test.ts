@@ -117,6 +117,7 @@ const partyBills: PartyBill[] = [
     status: "settled",
     total: "14.00",
     outstanding: "0.00",
+    hasPayments: false,
     receiptAvailable: true,
   },
   {
@@ -126,6 +127,7 @@ const partyBills: PartyBill[] = [
     status: "open",
     total: "30.00",
     outstanding: "30.00",
+    hasPayments: false,
     receiptAvailable: false,
   },
 ];
@@ -532,7 +534,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         statuses,
         orderId: "wo-2",
         party,
-        bills: [partyBills[0]!, { ...partyBills[1]!, outstanding: "10.00" }],
+        bills: [partyBills[0]!, { ...partyBills[1]!, outstanding: "10.00", hasPayments: true }],
       },
       theme,
     );

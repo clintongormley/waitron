@@ -14,7 +14,6 @@ import {
   formatMoney,
   grossOf,
   MONEY_SCALE,
-  partyTablesName,
   subtractDecimal,
   sumDecimals,
   perDishOptionQuantity,
@@ -47,7 +46,16 @@ import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import "../widgets/modifier-picker.js";
 import "../widgets/bill-choice-dialog.js";
-import { partyScope, tableTarget, tableTargetStyles } from "../widgets/table-targets.js";
+import {
+  moveBillScope,
+  partyScope,
+  partyTablesLabel,
+  seatedRead,
+  tableTarget,
+  tableTargetStyles,
+  type SeatedRead,
+} from "../widgets/table-targets.js";
+import { owing, paidInPart } from "../state/bill-state.js";
 import "../widgets/party-name-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
@@ -174,6 +182,12 @@ type Destination = "fire-now" | "add-to-held" | "add-as-new";
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
 type TableVerb = "move" | "join" | "move-bill";
 type ActionVerb = TableVerb | "merge" | "transfer" | "split";
+
+/** Move this bill's choice: to a table, with who the picker showed seated there, or to the counter. */
+export interface MoveBillDetail {
+  to: { tableId: string; seated: SeatedRead } | { counter: true };
+  bills: BillChoiceDetail["bills"];
+}
 
 /** An action's preview, and the submission its Confirm sends. `leftOut`: the flagged lines it
  * leaves in the draft. */
@@ -605,6 +619,12 @@ export class TillTableOrderScreen extends LitElement {
       .status-options {
         display: flex;
         flex-wrap: wrap;
+        gap: var(--wt-space-2);
+      }
+
+      .action-options {
+        display: flex;
+        flex-direction: column;
         gap: var(--wt-space-2);
       }
 
@@ -1240,6 +1260,8 @@ export class TillTableOrderScreen extends LitElement {
   #productsById = new Map<string, TillProduct>();
   /** Built with {@link groups}, so each line's Send check is not a scan. */
   #heldGroupIds?: ReadonlySet<string>;
+  /** The party's bill on screen, when {@link bills} lists it. */
+  #shownBill: PartyBill | undefined;
   /** Built with {@link groups}: every group, and the held ones, in position order. */
   #groupsInOrder: OrderGroup[] = [];
   #heldInOrder: OrderGroup[] = [];
@@ -1280,6 +1302,7 @@ export class TillTableOrderScreen extends LitElement {
       this.reviewing = false;
       this.#browsingScroll = undefined;
     }
+    this.#shownBill = this.bills.find((bill) => bill.workingOrderId === this.orderId);
     if (changed.has("groups") || this.#heldGroupIds === undefined) {
       this.#heldGroupIds = heldGroupIds(this.groups);
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
@@ -2702,22 +2725,13 @@ export class TillTableOrderScreen extends LitElement {
   /** The bill on screen can take a payment unless the party's bills say it is paid or abandoned; a
    * presented bill is collected. */
   #chargeable(): boolean {
-    const shown = this.bills.find((bill) => bill.workingOrderId === this.orderId);
-    return shown === undefined || shown.status === "open" || shown.status === "placed";
-  }
-
-  /** The open bill on screen has received money, which the single payment refuses
-   * (`bill.payments_received`): the rest is taken as a bill payment. */
-  #partlyPaid(): PartyBill | undefined {
-    const shown = this.bills.find((bill) => bill.workingOrderId === this.orderId);
-    return shown?.status === "open" &&
-      compareDecimal(decimal(shown.outstanding), decimal(shown.total)) < 0
-      ? shown
-      : undefined;
+    const shown = this.#shownBill;
+    return shown === undefined || owing(shown);
   }
 
   #paySection(): TemplateResult {
-    const partlyPaid = this.#partlyPaid();
+    const shown = this.#shownBill;
+    const partlyPaid = shown !== undefined && paidInPart(shown) ? shown : undefined;
     return partlyPaid === undefined
       ? html`<section
           class="pay"
@@ -2755,7 +2769,7 @@ export class TillTableOrderScreen extends LitElement {
   #billsSection(): TemplateResult | typeof nothing {
     if (this.party === null) return nothing;
     const bills = this.#shownBills();
-    const unpaid = bills.filter((bill) => bill.status === "open" || bill.status === "placed");
+    const unpaid = bills.filter(owing);
     // Another bill first: the one on screen is charged from the section above.
     const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
     return html`<section class="bills" data-bills>
@@ -2831,7 +2845,7 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
         ${
-          (bill.status === "open" || bill.status === "placed") && !shown
+          owing(bill) && !shown
             ? html`<wt-button
                 size="sm"
                 variant="secondary"
@@ -3543,21 +3557,10 @@ export class TillTableOrderScreen extends LitElement {
     return partyScope(party, this.tables);
   }
 
-  /** "Bill 2 of Ana (Mesa 4)": the bill on screen by its place among the party's bills, or undefined
-   * when it is not among them. */
-  #billScope(): string | undefined {
-    const party = this.party;
+  /** The bill on screen by {@link #billName}, or undefined when the party's bills do not list it. */
+  #shownBillName(): string | undefined {
     const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
-    if (party === null || index < 0) return undefined;
-    return t("table.bill_scope")
-      .replace("{n}", String(index + 1))
-      .replace("{party}", () => this.#partyScope(party));
-  }
-
-  #tablesName(party: TableParty): string {
-    return partyTablesName(
-      party.tableIds.flatMap((id) => this.tables.find((table) => table.id === id)?.label ?? []),
-    );
+    return index < 0 ? undefined : this.#billName(index);
   }
 
   /** Every table but the party's own; Move guests also offers the party's own tables while it holds
@@ -3617,18 +3620,27 @@ export class TillTableOrderScreen extends LitElement {
       this.billChoice = { verb, table };
       return;
     }
-    this.#sendTableAction(verb, table.id, "merge");
+    this.#sendTableAction(verb, table, "merge");
   }
 
-  #sendTableAction(verb: TableVerb, tableId: string, bills: BillChoiceDetail["bills"]): void {
+  /** `table` as the picker showed it: Move this bill sends who was seated there. */
+  #sendTableAction(verb: TableVerb, table: TableState, bills: BillChoiceDetail["bills"]): void {
+    const tableId = table.id;
     if (verb === "move") this.#dispatch("move-guests", { toTableId: tableId, bills });
-    else if (verb === "move-bill") this.#dispatch("move-bill", { to: { tableId }, bills });
+    else if (verb === "move-bill")
+      this.#dispatch("move-bill", {
+        to: { tableId, seated: seatedRead(table) },
+        bills,
+      } satisfies MoveBillDetail);
     else this.#dispatch("join-tables", { tableId, bills });
     this.#closeActions();
   }
 
   #moveBillToCounter(): void {
-    this.#dispatch("move-bill", { to: { counter: true }, bills: "merge" });
+    this.#dispatch("move-bill", {
+      to: { counter: true },
+      bills: "merge",
+    } satisfies MoveBillDetail);
     this.#closeActions();
   }
 
@@ -3637,7 +3649,7 @@ export class TillTableOrderScreen extends LitElement {
     const choice = this.billChoice;
     if (choice === null) return;
     const { bills } = (event as CustomEvent<BillChoiceDetail>).detail;
-    this.#sendTableAction(choice.verb, choice.table.id, bills);
+    this.#sendTableAction(choice.verb, choice.table, bills);
   }
 
   #billChoiceDialog(): TemplateResult | typeof nothing {
@@ -3645,19 +3657,15 @@ export class TillTableOrderScreen extends LitElement {
     const own = this.party;
     const other = choice?.table.party;
     if (choice === null || own === null || other === null || other === undefined) return nothing;
-    const into = this.#partyScope(other);
+    const theirs = this.#partyScope(other);
+    const ours = this.#partyScope(own);
+    const [from, into] = choice.verb === "join" ? [theirs, ours] : [ours, theirs];
     const scope =
       choice.verb === "move-bill"
-        ? t("table.move_bill_scope")
-            .replace("{bill}", () => this.#billScope() ?? "")
-            .replace("{into}", () => into)
-        : choice.verb === "move"
-          ? t("table.combine_scope")
-              .replace("{from}", () => this.#partyScope(own))
-              .replace("{into}", () => into)
-          : t("table.combine_scope")
-              .replace("{from}", () => into)
-              .replace("{into}", () => this.#partyScope(own));
+        ? moveBillScope(this.#shownBillName() ?? "", into)
+        : t("table.combine_scope")
+            .replace("{from}", () => from)
+            .replace("{into}", () => into);
     return html`<till-bill-choice-dialog
       .scope=${scope}
       .question=${choice.verb === "move-bill" ? t("table.bill_move_question") : ""}
@@ -3679,7 +3687,7 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (naming === null || party === null) return nothing;
     return html`<till-party-name-dialog
-      .tables=${this.#tablesName(party)}
+      .tables=${partyTablesLabel(party, this.tables)}
       .value=${naming.value}
       .refusal=${naming.refusal}
       @party-name-confirm=${(event: Event) => {
@@ -3701,9 +3709,7 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (party === null) return [];
     return this.#shownBills().flatMap((bill, index) =>
-      bill.partyId === party.id &&
-      bill.workingOrderId !== party.mainBillId &&
-      (bill.status === "open" || bill.status === "placed")
+      bill.partyId === party.id && bill.workingOrderId !== party.mainBillId && owing(bill)
         ? [{ bill, name: this.#billName(index) }]
         : [],
     );
@@ -3978,9 +3984,7 @@ export class TillTableOrderScreen extends LitElement {
 
   /** A bill of the party moves whole unless it is paid: the server refuses `bill.paid`. */
   #movable(): boolean {
-    if (this.party === null) return false;
-    const shown = this.bills.find((bill) => bill.workingOrderId === this.orderId);
-    return shown === undefined || shown.status === "open" || shown.status === "placed";
+    return this.party !== null && this.#chargeable();
   }
 
   #targetPicker(): TemplateResult {
@@ -4058,7 +4062,7 @@ export class TillTableOrderScreen extends LitElement {
     const party = this.party;
     if (party === null) return t("table.actions_title");
     if (this.actionVerb === "move-bill") {
-      const bill = this.#billScope();
+      const bill = this.#shownBillName();
       return bill === undefined
         ? t("table.actions_title")
         : t("table.move_bill_heading").replace("{bill}", () => bill);

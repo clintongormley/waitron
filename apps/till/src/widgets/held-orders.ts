@@ -1,10 +1,18 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
-import { partyScope, tableTarget, tableTargetStyles } from "./table-targets.js";
+import {
+  moveBillScope,
+  partyScope,
+  seatedRead,
+  tableTarget,
+  tableTargetStyles,
+  type SeatedRead,
+} from "./table-targets.js";
+import { paidInPart } from "../state/bill-state.js";
 import "./bill-choice-dialog.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { HeldOrderSummary, TableState } from "../api/client.js";
@@ -12,6 +20,8 @@ import type { HeldOrderSummary, TableState } from "../api/client.js";
 export interface MoveHeldOrderDetail {
   orderId: string;
   tableId: string;
+  /** Who the picker showed at the table, which the move sends as read there. */
+  seated: SeatedRead;
   bills: BillChoiceDetail["bills"];
 }
 
@@ -87,6 +97,12 @@ export class TillHeldOrders extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      .action-options {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
       .picker-empty {
         margin: 0;
         color: var(--wt-color-text-muted);
@@ -109,7 +125,7 @@ export class TillHeldOrders extends LitElement {
   #openPicker(order: HeldOrderSummary): void {
     this.moving = order;
     this.choosing = null;
-    this.#emit("move-held-order-open", { orderId: order.id });
+    this.#emit("move-held-order-open", undefined);
   }
 
   #closePicker(): void {
@@ -122,16 +138,17 @@ export class TillHeldOrders extends LitElement {
       this.choosing = table;
       return;
     }
-    this.#send(table.id, "merge");
+    this.#send(table, "merge");
   }
 
-  #send(tableId: string, bills: BillChoiceDetail["bills"]): void {
+  #send(table: TableState, bills: BillChoiceDetail["bills"]): void {
     const order = this.moving;
     if (order === null) return;
     this.#closePicker();
     this.#emit("move-held-order", {
       orderId: order.id,
-      tableId,
+      tableId: table.id,
+      seated: seatedRead(table),
       bills,
     } satisfies MoveHeldOrderDetail);
   }
@@ -142,7 +159,7 @@ export class TillHeldOrders extends LitElement {
 
   #meta(order: HeldOrderSummary): string {
     const parts = [`${order.itemCount}`, formatMoney(order.total, currentLocale())];
-    if (compareDecimal(decimal(order.outstanding), decimal(order.total)) < 0)
+    if (paidInPart(order))
       parts.push(
         t("table.bill_to_pay").replace("{amount}", () =>
           formatMoney(order.outstanding, currentLocale()),
@@ -223,15 +240,12 @@ export class TillHeldOrders extends LitElement {
   }
 
   #billChoice(order: HeldOrderSummary, table: TableState): TemplateResult {
-    const into = partyScope(table.party!, this.tables);
     return html`<till-bill-choice-dialog
-      .scope=${t("table.move_bill_scope")
-        .replace("{bill}", () => this.#scope(order))
-        .replace("{into}", () => into)}
+      .scope=${moveBillScope(this.#scope(order), partyScope(table.party!, this.tables))}
       .question=${t("table.bill_move_question")}
       @bill-choice-confirm=${(event: CustomEvent<BillChoiceDetail>) => {
         event.stopPropagation();
-        this.#send(table.id, event.detail.bills);
+        this.#send(table, event.detail.bills);
       }}
       @bill-choice-cancel=${(event: Event) => {
         event.stopPropagation();

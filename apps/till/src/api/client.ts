@@ -1216,6 +1216,8 @@ export interface PartyBill {
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
   outstanding: string;
+  /** A payment is pending or received on the bill, which the single payment refuses. */
+  hasPayments: boolean;
   receiptAvailable: boolean;
 }
 
@@ -1249,15 +1251,15 @@ export interface BillRevisions {
 export type MoveBillTarget = { tableId: string } | { counter: { zoneId: string | null } };
 
 /**
- * What Move a bill sends of the parties the till read: the bill's party and its revision
- * (`partyId: null` for a bill read with no party, as a counter order), and what it read at a target
- * table, as {@link TableActionRevisions} does.
+ * What Move a bill sends of the parties the till read: the bill's party and its revision, as
+ * {@link BillRevisions} does, but `partyId: null` for a bill read with no party, as a counter order;
+ * and what it read at a target table, as {@link TableActionRevisions} does.
  */
-export interface MoveBillRevisions {
-  expectedPartyRevision?: number;
+export interface MoveBillRevisions
+  extends
+    Omit<BillRevisions, "partyId">,
+    Pick<TableActionRevisions, "otherPartyId" | "expectedOtherPartyRevision"> {
   partyId?: string | null;
-  otherPartyId?: string | null;
-  expectedOtherPartyRevision?: number;
 }
 
 /** A move's answer: the party the bill is in now (null at the counter), and the bill it ended up
