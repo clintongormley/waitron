@@ -2797,9 +2797,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Since campaign item A118 (#824, main `b4e74fa5a`; owner, 2026-09-28: "a payment could happen while food is still
       being served, so yes you should be able to mark it served"), a served mark no longer moves
       any bill's revision, so it is taken while a card payment runs on the bill; the party's
-      revision still counts it. A pending card refund of an open bill still refuses it
-      (`bill.refund_in_progress`), as before: the ruling named card payments only. **Open:** the
-      owner decides whether a pending refund should let a served mark through too.
+      revision still counts it. Since campaign item A121 (owner, 2026-09-29, on A118's question:
+      "do it"), a pending card refund of an open bill no longer refuses a served mark either; every
+      other write `bill.refund_in_progress` refused still refuses.
     - The server works out when the party's next held group should be fired: once every dish of
       the fired groups ahead of it is served, a set number of minutes after the last of them.
       Staff can put it off by five minutes. Since campaign item A116 (#821; owner, 2026-09-28:
@@ -3441,6 +3441,16 @@ pairing consumer, and a standby that has fallen behind.
 
 ### A6. Payments
 
+- **A pending card refund does not refuse joining or unjoining tables, though the bill payments
+  design says it does.** The design's §5.2 list ("each payment, refund, void, quantity change,
+  adjustment, split, transfer, join and unjoin … are refused with `bill.refund_in_progress`",
+  [bill payments design](superpowers/specs/2026-09-26-bill-payments-design.md)) names join and
+  unjoin. Codex's run-it review of #851 (campaign item A121, 2026-09-29) reported that joining a free
+  table to the party and unjoining a table without moving any dishes both succeeded while a card
+  refund of the bill was pending, on the branch and on `main` before it; its probes were temporary
+  and are not in the tree. Nobody has yet checked whether either can change what the bill charges.
+  **Next action:** the owner decides whether the code should refuse them or the design should drop
+  them from the list; then a test that tries each during a pending refund.
 - **The SumUp Solo experiments** ([runbook](research/2026-09-10-sumup-solo-experiments.md)). Question
   4 was answered on 2026-09-11: a Solo paired to SumUp's cloud cannot also take a payment on its own,
   so the owner chose a separate standalone card machine for the internet-down case
@@ -4299,6 +4309,12 @@ approved.
   slowest at 263 ms. The other root suites in the failing job ran at their usual speed
   (`ci-workflow.test.mjs` 11.9 s there, 21.1 s in the healthy run). So this one suite ran several
   times slower from its start and reached the deadline partway through; why is still unknown.)_
+  _(Third and fourth failures, 2026-09-29: `main`'s own run 36544133895 on `5582a138b`, stalled
+  in `core/0036_party_rename`; and run 36550884979, the `lint` job on #851's docs-only head
+  `9b68be49b`, stalled in `venue-service/0009_kitchen_notice_sold_in_each` with `PipeWrap` ×4,
+  `MessagePort` and `Timeout` active. In #851's report every earlier phase was slow from the first
+  baseline — migrate 174 to 2,632 ms and change feed 301 to 3,358 ms — the same shape as the second
+  failure. Queued as lane A's A122 to find the cause and fix it.)_
 - **Dependabot, switched on by #760 (2026-09-27) — DONE: the 15 security alerts fixed by lane A's
   A107 (**PR #796**, 2026-09-28).** Config:
   `.github/dependabot.yml`; how to land one of its PRs: `docs/developers/workflow-guide.md` →

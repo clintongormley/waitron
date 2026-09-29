@@ -454,6 +454,8 @@ checks are the ones below.
   every writer §4.4 names (each payment, refund, void, quantity change, adjustment, split, transfer,
   join and unjoin), abandoning the bill, and issuing its invoice are refused with
   `bill.refund_in_progress`.
+  _(2026-09-29: a served mark is not refused while a card refund is pending either; owner ruling,
+  campaign item A121.)_
 
 **Both orders of every race are tested as sequential calls** (the engine takes one write
 transaction at a time, plan Global Constraints): cash then a card's P1 on the same last €40.00 (the

@@ -2153,7 +2153,6 @@ interface ServableLine {
   servedQuantity: number;
   unitPrecision: number | null;
   sentAt: string | null;
-  billStatus: string;
   groupState: "held" | "fired" | "removed" | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
@@ -2179,7 +2178,6 @@ async function servableLines(
       servedQuantity: workingOrderLines.servedQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
       sentAt: workingOrderLines.sentAt,
-      billStatus: workingOrders.status,
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
@@ -2252,18 +2250,14 @@ function servedAmount(line: ServableLine, quantity: string, limit: number): numb
 /**
  * Give each line its new served count, and its extras children theirs in step; `served_at` is set
  * when a row is fully served and cleared when it is not. Serving is an operational fact, never
- * billing, and the filed sale does not read it, so no bill's revision moves and a card payment
- * running on the bill does not hold it up; the party's revision counts it. A pending card refund of
- * an OPEN bill refuses it (`bill.refund_in_progress`); the owner's ruling of 2026-09-28 named card
- * payments, not refunds.
+ * billing, and the filed sale does not read it, so no bill's revision moves and neither a card
+ * payment nor a card refund running on the bill holds it up; the party's revision counts it.
  */
 async function writeServed(
   tx: Transaction,
   changes: readonly { line: ServableLine; served: number }[],
 ): Promise<void> {
   if (changes.length === 0) return;
-  const openBills = changes.filter(({ line }) => line.billStatus === "open");
-  await refuseRefundInProgress(tx, [...new Set(openBills.map(({ line }) => line.workingOrderId))]);
   const at = nowIso();
   const children = await tx
     .select({

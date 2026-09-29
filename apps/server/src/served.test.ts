@@ -1156,14 +1156,37 @@ describe("a card refund pending on a bill", () => {
     });
   });
 
-  it("still refuses a served mark on an open bill while its refund is pending (bill.refund_in_progress)", async () => {
+  it("takes a served mark, its undo and a group's served mark on an open bill while its refund is pending, leaving the refund pending", async () => {
+    const v = await setupVenue();
+    const s = await croquetas(v);
+    await pendingRefund(v, s.tabId);
+
+    await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "2" }]);
+    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({ servedQuantity: 2000 });
+    await unserve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
+    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({ servedQuantity: 1000 });
+    await serveGroup(v, s.partyId, s.groupId);
+    expect(await lineById(s.partyId, s.croq.id)).toMatchObject({
+      servedQuantity: 4000,
+      servedAt: expect.any(String),
+    });
+
+    const refunds = await suite.db
+      .select({ state: billPaymentRefunds.state })
+      .from(billPaymentRefunds)
+      .innerJoin(billPayments, eq(billPayments.id, billPaymentRefunds.billPaymentId))
+      .where(eq(billPayments.workingOrderId, s.tabId));
+    expect(refunds).toEqual([{ state: "pending" }]);
+  });
+
+  it("still refuses a line void on that open bill while its refund is pending (bill.refund_in_progress)", async () => {
     const v = await setupVenue();
     const s = await croquetas(v);
     await pendingRefund(v, s.tabId);
 
     await expectRefusedWithNothingWritten(
       s.partyId,
-      () => serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]),
+      () => inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, s.croq.lineNo, "1", ALEX)),
       { code: "bill.refund_in_progress", params: { workingOrderId: s.tabId } },
     );
   });
