@@ -636,6 +636,14 @@ Two consequences:
   varios establecimientos»* — several *establishments*, which is not the same as several tills inside
   one. The per-till series conclusion still rests on AEAT's per-TPV SIF guidance.
 
+> **Correction, 2026-09-29: the Q5(c) bullet above is wrong.** It read only art. 6.1.a). The last
+> paragraph of art. 7.1.a) requires separate series for simplified and full invoices issued in the
+> same calendar year: *«Cuando el empresario o profesional expida facturas conforme a este artículo
+> y al artículo 6 para la documentación de las operaciones efectuadas en un mismo año natural, será
+> obligatoria la expedición mediante series separadas de unas y otras.»* (BOE consolidated text,
+> read 2026-09-29.) The remaining scope question is
+> [asesor-questions.md Q5(d)](asesor-questions.md); the build item is backlog A1e.
+
 ### 10.2 F3 — the "make me a proper invoice" case, which we do not model
 
 A customer who received a simplified invoice and then asks for a full one with their tax details

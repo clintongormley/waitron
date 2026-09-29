@@ -9,8 +9,10 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-27** — Q30 added for certificate permissions when consulting AEAT records.
-Earlier that day, Q26 reworded again: the owner narrowed the 2026-09-26 rule, and
+Last revised **2026-09-29** — Q5(c) answered on primary source: RD 1619/2012 art. 7.1.a) requires
+separate series for simplified and full invoices issued in the same calendar year. Q5(d) added to
+confirm the scope (F3, and simplified rectificativas); Q17(b) points to it. Before that,
+**2026-09-27** — Q30 added for certificate permissions when consulting AEAT records. Earlier that day, Q26 reworded again: the owner narrowed the 2026-09-26 rule, and
 each line now keeps its VAT class while the invoice takes the rate in force on the day it is issued;
 the question stays open. Earlier on 2026-09-27, Q26 reworded: the owner reversed the rule it asks
 about on 2026-09-26, and each line kept the VAT rate in the published menu it was sold from. Before
@@ -414,6 +416,19 @@ with one reliable till and one in a dead spot is a realistic configuration.
 > example is *varios establecimientos*, not several tills in one. See
 > [verifactu-findings.md §10.1](verifactu-findings.md). Do not re-ask (b).
 
+> **(c) answered on primary source, 2026-09-29 — the 2026-07-31 reading was incomplete.** It read
+> only art. 6.1.a)'s mandatory list. The last paragraph of art. 7.1.a) (BOE consolidated text,
+> `buscar/act.php?id=BOE-A-2012-14696`, read 2026-09-29) says:
+> *«Cuando el empresario o profesional expida facturas conforme a este artículo y al artículo 6 para
+> la documentación de las operaciones efectuadas en un mismo año natural, será obligatoria la
+> expedición mediante series separadas de unas y otras.»* So a taxpayer that issues both simplified
+> and full invoices in one calendar year must keep them in separate series. Waitron's sale and
+> substitution paths accept only a `standard` series (`packages/core/src/record-sale.ts`,
+> `packages/core/src/record-substitution.ts`), so an F1 or an F3 would share the F2 tickets' series.
+> Today every sale files as a simplified invoice (`counterparty: null` in `record-sale.ts`) and no
+> route calls `recordSubstitution`, so no full invoice has shared the series yet. Build item:
+> [backlog A1e](../backlog.md). Do not re-ask (c) as written; ask (d).
+
 > **(a) reshaped by server-as-SIF, 2026-08-01 (#33).** The subject of (a) has changed: under
 > `../superpowers/specs/2026-08-01-local-server-sif-and-failover-design.md`
 > a series belongs to the **server**-SIF, not the till, so "one series per till" is no longer the
@@ -445,6 +460,18 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 >
 > **(c)** ¿Y las facturas simplificadas (tickets) frente a las facturas completas — requieren
 > series separadas o pueden compartir serie?
+>
+> **(d)** *(añadida el 29-09-2026)* Según el último párrafo del artículo 7.1.a) del RD 1619/2012,
+> si en un mismo año natural se expiden facturas simplificadas y facturas completas, deben
+> expedirse en series separadas. Por ello vamos a usar una serie para los tickets (F2) y otra para
+> las facturas completas (F1), además de la serie de rectificativas. ¿Es correcta esta lectura? En
+> particular:
+>
+> - (i) ¿La factura de canje (F3) debe ir en la serie de las facturas completas, o necesita una serie
+>   propia?
+> - (ii) ¿Las rectificativas de facturas simplificadas (R5) deben ir en una serie distinta de las
+>   rectificativas de facturas completas (R1–R4), o pueden compartir una única serie de
+>   rectificativas?
 
 ---
 
@@ -1242,6 +1269,8 @@ first real F3 is filed:
   (`buildDestinatarios`, `packages/fiscal-verifactu/src/backend.ts`);
 - **(b)** whether an F3 must use a **dedicated series** distinct from ordinary/simplified invoices, or
   may share one, is unsourced — we reuse the `standard` series today;
+  *2026-09-29:* on our reading an F3 is a full invoice, so art. 7.1.a) keeps it out of the F2
+  tickets' series (see Q5's (c) note). Where it goes instead is asked as Q5(d)(i);
 - **(c)** whether an F3 may substitute tickets that a **different SIF** of the same taxpayer issued
   (another server/venue) is a sound *inference*, not confirmed;
 - **(d)** a positive confirmation of the exact `Destinatarios` structure for `TipoFactura` F3 (which

@@ -2004,6 +2004,20 @@ Each was judged and deliberately left; none blocks the merge.
   a helper would collapse it.** Cosmetic, and cheapest alongside the tip-collection work that touches
   `#onPayTab`.
 
+### A1e. Simplified and full invoices need separate series — OPEN (found 2026-09-29)
+
+RD 1619/2012 art. 7.1.a), last paragraph, requires separate series for simplified and full invoices
+issued in the same calendar year (quoted in
+[verifactu-findings.md §10.1](compliance/verifactu-findings.md), correction of 2026-09-29).
+Waitron's series have two purposes, `standard` and `rectificative`
+(`packages/db/src/schema/series.ts`), and both `recordSale` and `recordSubstitution` accept only
+`standard`, so an F1 or an F3 would share the F2 tickets' series. It has not happened yet: every
+sale files as a simplified invoice (`counterparty: null` in `packages/core/src/record-sale.ts`) and
+no route calls `recordSubstitution`. **Next action:** before any route issues an F1 or an F3, add a
+series for full invoices (a new purpose, provisioned by the setup wizard beside the ticket and
+rectificativa series) and make each path pick its series by invoice type. Fiscal core: owner
+sign-off at land. Asesor Q5(d) confirms where the F3 and the R5 go.
+
 ### A2. The setup wizard
 
 The restore choice now includes guided Cloud recovery of a verified test-venue snapshot. The
@@ -8588,6 +8602,7 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | Q13 (tips outside VAT base) | tip lives on `tenders.tip_amount`, never handed to the fiscal backend | **Closed** on primary source |
 | Q15 (short payment = descuento) | a *descuento* agreed at/before issuance is outside the base (LIVA 78.Tres.2º) | **Closed** on primary source |
 | Q5(a) (one series per till) | a series belongs to the server-SIF; two concurrent SIFs need **disjoint** series | needs advisor |
+| Q5(c)/(d) (tickets and full invoices in one series) | F1 and F3 would draw from the tickets' `standard` series | (c) **answered** on primary source (art. 7.1.a): separate series; (d) confirms where F3 and R5 go; build item A1e |
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — the interpretive hinge |
 | Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
