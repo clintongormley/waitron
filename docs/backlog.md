@@ -2295,8 +2295,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - An error that contains the PIN is replaced whole, before it is logged or sent back, by
     "pairing failed; the detail was withheld because it contained the PIN".
   - P2b added no server route that sends a command, and the server of that time ignored the two
-    new lists in a pull (a temporary server case sending them got a 200, recorded in commit
-    23ad42283). P2c, the next entry, sends commands and reads both lists.
+    new lists in a pull (a temporary server case sending them got a 200, recorded in #877's
+    commit message). P2c, the next entry, sends commands and reads both lists.
 
   The real-box receipt this rests on (the owner, 2026-09-29, BlueZ 5.82): after a host reboot and
   a printer power cycle the bond alone reconnected, so Pair never runs `trust`; `remove` of a
@@ -2318,14 +2318,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `feat/dashboard-bluetooth-pairing`) — BUILT.** What a manager can now do from the Printers screen.
   All of it has run against fake print agents and fake server replies only, never a Bluetooth radio:
   - Add a printer lists the Bluetooth devices the agent's scan found beside network and USB
-    printers, showing only those the agent marked as looking like a printer until **Show all
-    devices** is pressed; opening Add a printer again hides the others again. A note in the dialog
-    says printing to a Bluetooth printer is not available yet, even once it is paired.
+    printers, showing only those the agent marked as looking like a printer, and any device with a
+    Pair or Forget status on screen, until **Show all devices** is pressed; opening Add a printer
+    again hides the others again. A note in the dialog says printing to a Bluetooth printer is not
+    available yet, even once it is paired.
   - **Pair** opens a dialog asking for the printer's PIN, checked against the agent's own rule (1 to
     16 printable characters with no spaces; `isBluetoothPin` in
     `packages/print-agent/src/client.ts`) in the screen and again by the server, which refuses a bad
     one as `management.request_invalid` naming the `pin` field. Pairing adds no printer: once the
-    agent reports the device paired, its row offers Add.
+    agent reports the device paired, its row offers Add. A Pair whose device drops out of the list
+    keeps a row in the dialog showing its status, and Dismiss once it has an outcome, until it is
+    dismissed or the device comes back, marked "No longer found by the scan" while the scan does
+    not report the device.
   - **Forget pairing** sits in the row menu of a switched-off Bluetooth printer whose agent reports
     it paired now, and asks for a second, confirming click. Switching a printer off does not forget
     its pairing (read, not run: the screen's Disable calls only `deactivatePrinter`, in
@@ -2334,36 +2338,56 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the same agent's scan reported within the last 15 seconds, and a Forget only for a device the
     same agent reported paired within that time (`reportedFresh` and `DISCOVERED_TTL_MS` in
     `apps/server/src/print-api.ts`); otherwise it answers `printer.bluetooth_not_discovered` or
-    `printer.bluetooth_not_paired`.
+    `printer.bluetooth_not_paired`. For a well-formed request naming an agent id no row names,
+    both answer `agent.not_found` (404); a malformed id, address or PIN is refused before that. A
+    Bluetooth printer created or edited with a lower-case address is stored with it in upper case
+    (`storedLocalKey` in `apps/server/src/print-api.ts`).
   - The server keeps commands in memory only (`apps/server/src/printer-bluetooth-commands.ts`). It
     sends a waiting command again on every job pull until the agent's outcome arrives, then stops;
     it drops a waiting command 120 seconds after queueing it, and ignores an outcome that arrives
-    after that; it keeps a finished result for 60 seconds. An agent may have eight devices with a
+    after that; it keeps a finished result for 60 seconds. A waiting command's status carries
+    `expiresInMs`, the time left before the server drops it. An agent may have eight devices with a
     waiting command; a ninth is refused with `printer.bluetooth_command_busy`. The store keeps the
     PIN only in the waiting command, and its tests check that no status it hands out, waiting or
-    finished, contains it.
+    finished, contains it. A failure reason from the agent that contains the waiting command's PIN
+    is replaced by a fixed message (`withholdPin`, the agent's own rule, in
+    `packages/print-agent/src/client.ts`) before it is cut to 500 characters.
   - The screen shows "Pairing…" or "Forgetting the pairing…", then "Paired", "Pairing forgotten",
-    the agent's own reason for a failure, or, 120 seconds after the server accepted the command, "No
-    answer from the print agent — try again". It asks the server in the background and stops at the
-    outcome, at that cut-off, or when the screen closes.
+    the agent's own reason for a failure, or, once the `expiresInMs` the server sent with the
+    accepted command has passed, "No answer from the print agent — try again". It asks the server
+    in the background and stops at the outcome, at that cut-off, or when the screen closes.
 
-  What was run, on 2026-09-29: the brief's focused suites — the four server files
+  What was run, on 2026-09-29: the focused suites Task 12 of the plan
+  (`docs/superpowers/plans/2026-09-27-print-agent-setup-lockdown.md`) lists — the four server files
   (`printer-bluetooth-commands`, `print-api`, `print-api.printer-wiring`, `errors`: 166 tests),
   `printers-screen` and its accessibility suite (289), and `scripts/alert-codes.test.ts` with
-  `scripts/errors-reachable.test.ts` (32) — all passing. Every state above was then photographed
-  through the dashboard's browser test harness with those fakes, in English and Spanish, light and
-  dark, 1280 and 390 pixels wide; that found an agent's long failure reason widening the whole
-  device list at phone width and pushing Dismiss out of view, fixed test-first in 68b321bdf. The
-  real Printers screen, opened on the demo stack, drew with no console errors, but that stack has no
-  Bluetooth hardware, so no command was sent through it. **Nobody has yet paired or forgotten a real
-  printer through the dashboard.**
+  `scripts/errors-reachable.test.ts` (32) — all passing. Those counts predate the review fixes
+  this entry also describes (`expiresInMs`, `storedLocalKey`, `agent.not_found`, `withholdPin`, the
+  row a lost device's Pair keeps). After those fixes, on 2026-09-29,
+  `pnpm exec vitest run src/printer-bluetooth-commands.test.ts src/print-api.test.ts src/print-api.printer-wiring.test.ts src/errors.test.ts`
+  in `apps/server` passed 180 tests,
+  `pnpm exec vitest run src/screens/printers-screen.test.ts src/screens/printers-screen.a11y.test.ts`
+  in `apps/dashboard` passed 303, and
+  `pnpm vitest run scripts/alert-codes.test.ts scripts/errors-reachable.test.ts` at the root passed
+  32. After the first run, every state above was photographed through the dashboard's browser test
+  harness with those fakes, in English and Spanish, light and dark, 1280 and 390 pixels wide; that
+  found an agent's long failure reason widening the whole device list at phone width and pushing
+  Dismiss out of view, fixed test-first (the "wraps a long failure reason" case in
+  `apps/dashboard/src/screens/printers-screen.test.ts`). The row a Pair
+  keeps once its device leaves the list was added after that pass and was not photographed with
+  it; it is checked by a layout test at 390 pixels wide in `printers-screen.test.ts` and by the axe
+  accessibility check in both themes. The real Printers screen, opened on the demo stack, drew with
+  no console errors, but that stack has no Bluetooth hardware, so no command was sent through it.
+  **Nobody has yet paired or forgotten a real printer through the dashboard.**
 - **Follow-ups from P2c** (read, not run, unless a line says otherwise):
   - A command queued behind a slow pair can run out of time. The 120 seconds count from queueing
     (`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
     time (the background worker in `packages/print-agent/src/agent.ts`), and one pair can take the
-    agent up to 90 seconds (commit 4a99ecb9f). A second command waiting behind that pair can
-    therefore expire on the server before it runs; its outcome is then ignored and the screen says
-    "No answer from the print agent — try again" whatever actually happened.
+    agent up to about 90 seconds (`REGISTER_TIMEOUT_MS`, `PAIR_TIMEOUT_MS` and `EXIT_GRACE_MS`,
+    10, 75 and 5 seconds, in `apps/print-agent/src/bluetooth-command.ts`). A second command
+    waiting behind that pair can therefore expire on the server before it runs; its outcome is
+    then ignored and the screen says "No answer from the print agent — try again" whatever
+    actually happened.
   - A Printers screen element taken out of the page and put back does not restart its background
     status checks: `disconnectedCallback` stops them and `connectedCallback` only reloads the lists
     (`apps/dashboard/src/screens/printers-screen.ts`). Today nothing puts the same element back: in

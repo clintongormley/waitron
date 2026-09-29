@@ -691,6 +691,8 @@ export function createPrinterBluetoothCommands(options?: {
 
 Pin a maximum of eight pending addresses per agent, a 60-second command expiry, a 60-second result expiry, replacement/deduplication for the same `{agentId,kind,address}`, and isolation between agents. An outcome is accepted only when its id belongs to that agent's current command; another agent's id and an expired id do nothing.
 
+_2026-09-29: as built, a waiting command expires after 120 s, because a pair can take the agent up to about 90 s (`apps/print-agent/src/bluetooth-command.ts`); a finished result still lasts 60 s (`apps/server/src/printer-bluetooth-commands.ts`). Step 3's "prune on every public call" is built narrower: `enqueue`, `current`, `accept` and `latest` each prune only the agent they name, and every agent is pruned by a sweep that runs on one of those calls at most once a minute (`SWEEP_INTERVAL_MS`)._
+
 - [ ] **Step 2: Run and observe the missing module**
 
 ```bash
