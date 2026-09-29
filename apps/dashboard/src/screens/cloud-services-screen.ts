@@ -20,14 +20,14 @@ export class CloudServicesScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
       }
       wt-card {
-        max-width: var(--wt-form-max-width, 36rem);
+        max-width: calc(var(--wt-space-6) * 18);
       }
       p,
       dl {
         margin-block: var(--wt-space-4);
       }
       dt {
-        font-weight: var(--wt-font-weight-medium);
+        font-weight: var(--wt-font-weight-bold);
       }
       dd {
         margin: 0 0 var(--wt-space-3);

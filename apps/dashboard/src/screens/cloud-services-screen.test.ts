@@ -469,3 +469,38 @@ it("ages a displayed observation without extending the login or requesting Cloud
   expect(el.shadowRoot!.textContent).toContain("Health unknown");
   expect(calls).toBe(1);
 });
+
+it("draws each label in the bold weight token, and its value in the body weight", async () => {
+  setLocale("en");
+  const api = new DashboardApi("", async () =>
+    Response.json({
+      state: "not_connected",
+      code: "",
+      configured: true,
+      isPrimary: true,
+      replacementEligible: true,
+      replacementPending: true,
+      replacement: {
+        state: "complete",
+        oldInstallationId: "old-installation",
+        organisationName: "Org",
+        legalBusinessName: "Business",
+      },
+    }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("dt")).not.toBeNull();
+  const weightOf = (token: string) => {
+    const probe = document.createElement("span");
+    probe.style.fontWeight = `var(${token})`;
+    el.shadowRoot!.append(probe);
+    const weight = getComputedStyle(probe).fontWeight;
+    probe.remove();
+    return weight;
+  };
+  const bold = weightOf("--wt-font-weight-bold");
+  const normal = weightOf("--wt-font-weight-normal");
+  expect([bold, normal]).toEqual(["600", "400"]);
+  expect(getComputedStyle(el.shadowRoot!.querySelector("dt")!).fontWeight).toBe(bold);
+  expect(getComputedStyle(el.shadowRoot!.querySelector("dd")!).fontWeight).toBe(normal);
+});
