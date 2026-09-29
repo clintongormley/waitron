@@ -15,7 +15,8 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { WIZARD_LOCALE, countryName } from "../country-name.js";
+import { countryName } from "../country-name.js";
+import { currentLocale } from "../i18n/t.js";
 import { actionsStyles, errorStyles, fieldStyles } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -571,7 +572,7 @@ export class SetupVenueScreen extends LitElement {
                 value=${country.countryCode}
                 .selected=${country.countryCode === pack?.countryCode}
               >
-                ${countryName(country.countryCode, WIZARD_LOCALE)}
+                ${countryName(country.countryCode, currentLocale())}
               </option>`,
           )}
         </select>

@@ -5,7 +5,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import { actionsStyles, errorStyles } from "../form-styles.js";
 import { dispatchProvisionRequested, dispatchSetupGoto } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
-import { WIZARD_LOCALE, countryName } from "../country-name.js";
+import { countryName } from "../country-name.js";
+import { currentLocale } from "../i18n/t.js";
 import type { ProvisionBody } from "../api/client.js";
 
 /** Never renders a secret: no PIN, password, certificate passphrase or PFX bytes — the certificate
@@ -64,7 +65,7 @@ export class SetupReviewScreen extends LitElement {
         <dd data-test="summary-mode">${this.draft.mode ?? "—"}</dd>
         <dt>Country</dt>
         <dd data-test="summary-country">
-          ${venue?.country === undefined ? "—" : countryName(venue.country, WIZARD_LOCALE)}
+          ${venue?.country === undefined ? "—" : countryName(venue.country, currentLocale())}
         </dd>
         <dt>Tax ID</dt>
         <dd data-test="summary-taxId">${venue?.taxId ?? "—"}</dd>

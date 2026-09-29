@@ -20,6 +20,7 @@ import "./screens/review-screen.js";
 import "./screens/provisioning-screen.js";
 import "./screens/reset-screen.js";
 import "./screens/done-screen.js";
+import "./widgets/language-chooser.js";
 import type {
   AdoptBody,
   ApiError,
@@ -38,6 +39,10 @@ import type {
 import type { RestoredVenue } from "./screens/restore-bucket-screen.js";
 import type { ResetScreenOutcome } from "./screens/reset-screen.js";
 import { SERVER_FIELDS } from "./server-fields.js";
+import { LocaleChangeController } from "./i18n/locale-controller.js";
+import { matchBrowserLocale } from "./i18n/match-browser-locale.js";
+import type { StringKey } from "./i18n/strings.js";
+import { currentLocale, format, setLocale, t } from "./i18n/t.js";
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
@@ -111,92 +116,69 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
   return body as ProvisionBody;
 }
 
-const VENUE_ERROR_MESSAGES: Record<string, string> = {
-  "provisioning.territory_country_mismatch": "The country must match the fiscal territory.",
-  "provisioning.invalid_locales": "Choose 1 or 2 invoice locales.",
-  "provisioning.duplicate_series_code":
-    "The series code and rectificative series code must differ.",
-  "fiscal.regime_not_implemented": "That fiscal territory isn't supported yet.",
+/** Text on screen is kept as a way to word it, so a language switch re-words it in place. */
+type Message = () => string;
+
+const say =
+  (key: StringKey): Message =>
+  () =>
+    t(key);
+
+const sayWith =
+  (key: StringKey, params: Record<string, string | number>): Message =>
+  () =>
+    format(key, params);
+
+const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
+  "provisioning.territory_country_mismatch": "shell.venue_error.territory_country_mismatch",
+  "provisioning.invalid_locales": "shell.venue_error.invalid_locales",
+  "provisioning.duplicate_series_code": "shell.venue_error.duplicate_series_code",
+  "fiscal.regime_not_implemented": "shell.venue_error.regime_not_implemented",
 };
 
-const NOT_READY_MESSAGE = "The server isn't ready yet. Wait a moment, then try again.";
-
-const ADOPT_ERROR_MESSAGES: Record<string, string> = {
-  "mirror.bundle_fetch_failed":
-    "Couldn't join the primary server: it couldn't be reached, it refused the login, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server and that the login is correct, then try again.",
-  "setup.request_invalid":
-    "The server rejected the details. Check the address and login, then try again.",
-  "setup.not_ready": NOT_READY_MESSAGE,
+const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
+  "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
+  "setup.request_invalid": "shell.adopt.request_invalid",
+  "setup.not_ready": "shell.not_ready",
 };
 
-const OPERATION_CONFLICT_MESSAGE =
-  "This server has saved setup work for a different request. Resume the original setup or contact support.";
-const ALREADY_STAMPED_MESSAGE =
-  "A previous setup attempt left this server partly set up, for a different environment. Contact support to reset this server, then start setup again.";
-const ADOPT_INCOMPLETE_MESSAGE =
-  "A previous attempt to join this server to a restaurant stopped partway and left it partly set up. It cannot be finished. You can reset this server with the admin person ID and password you used to connect it, then start setup again.";
-
-const RESET_ERROR_MESSAGES: Record<string, string> = {
-  "setup.request_invalid":
-    "The server rejected the details. Check the admin person ID and password, then try again.",
-  "setup.not_ready": NOT_READY_MESSAGE,
+const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
+  "setup.request_invalid": "shell.reset.request_invalid",
+  "setup.not_ready": "shell.not_ready",
 };
 
-const RESET_GENERIC_ERROR = "The server could not be reset. Check the connection and try again.";
-
-function describeThrottle(params: Record<string, unknown> | undefined): string {
+function describeThrottle(params: Record<string, unknown> | undefined): Message {
   const seconds = params?.retryAfterSeconds;
-  if (typeof seconds !== "number") return "Too many attempts. Wait a few minutes, then try again.";
-  return `Too many attempts. Wait ${seconds} ${seconds === 1 ? "second" : "seconds"}, then try again.`;
+  if (typeof seconds !== "number") return say("shell.throttle");
+  return seconds === 1
+    ? say("shell.throttle_wait_one")
+    : sayWith("shell.throttle_wait", { seconds });
 }
 
-const KIT_DAMAGED =
-  "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.";
-const KEY_DOES_NOT_OPEN =
-  "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.";
-const NEWER_SOFTWARE =
-  "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.";
-
 /** The owner's words for each refusal a rebuild from the bucket can meet whose params add nothing. */
-const BUCKET_ERROR_MESSAGES: Record<string, string> = {
-  "backup.stream_kit_invalid":
-    "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
-  "restore.stream_pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
-  "restore.stream_pointer_unverified":
-    "The copy in the bucket was not written by the server this kit belongs to. Check that the kit is this restaurant's newest. Nothing was changed.",
-  "backup.stream_pointer_invalid":
-    "The bucket's record of its newest copy is damaged, so it cannot be rebuilt from. Nothing was changed.",
-  "restore.stream_integrity_failed":
-    "The copy read from the bucket is damaged. Nothing on this server was changed.",
-  "restore.stream_state_missing":
-    "The copy in the bucket does not hold the old server's locked settings, so it cannot be rebuilt from.",
+const BUCKET_ERROR_MESSAGES: Record<string, StringKey> = {
+  "backup.stream_kit_invalid": "shell.bucket.kit_invalid",
+  "restore.stream_pointer_missing": "shell.bucket.pointer_missing",
+  "restore.stream_pointer_unverified": "shell.bucket.pointer_unverified",
+  "backup.stream_pointer_invalid": "shell.bucket.pointer_invalid",
+  "restore.stream_integrity_failed": "shell.bucket.integrity_failed",
+  "restore.stream_state_missing": "shell.bucket.state_missing",
   // One sentence for all three, as the command line gives (`DECRYPT_PHASE_CODES`,
   // apps/server/src/restore-command.ts).
-  "recovery.passphrase_invalid": KEY_DOES_NOT_OPEN,
-  "backup.artifact_invalid": KEY_DOES_NOT_OPEN,
-  "backup.archive_invalid": KEY_DOES_NOT_OPEN,
-  "backup.stream_restore_failed":
-    "The copy could not be downloaded from the bucket. Check this server's internet connection and that the bucket still exists, then try again.",
-  "backup.stream_request_failed":
-    "The bucket did not answer, or refused the key in this kit. Check this server's internet connection and that the bucket and its key still exist, then try again.",
-  "restore.stream_disk_full":
-    "This server's disk filled while the copy was downloading. Nothing on this server was changed. Free some space and try again.",
-  "restore.environment_mismatch":
-    "The copy comes from the other environment. Choose the environment it came from.",
-  "provisioning.database_ahead": NEWER_SOFTWARE,
-  "restore.schema_too_new": NEWER_SOFTWARE,
-  "setup.already_provisioning":
-    "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
-  "setup.not_ready": NOT_READY_MESSAGE,
-  "setup.operation_conflict": OPERATION_CONFLICT_MESSAGE,
-  "setup.request_invalid":
-    "The server rejected the details. Check the kit and the environment, then try again.",
+  "recovery.passphrase_invalid": "shell.bucket.key_does_not_open",
+  "backup.artifact_invalid": "shell.bucket.key_does_not_open",
+  "backup.archive_invalid": "shell.bucket.key_does_not_open",
+  "backup.stream_restore_failed": "shell.bucket.restore_failed",
+  "backup.stream_request_failed": "shell.bucket.request_failed",
+  "restore.stream_disk_full": "shell.bucket.disk_full",
+  "restore.environment_mismatch": "shell.bucket.environment_mismatch",
+  "provisioning.database_ahead": "shell.bucket.newer_software",
+  "restore.schema_too_new": "shell.bucket.newer_software",
+  "setup.already_provisioning": "shell.bucket.already_provisioning",
+  "setup.not_ready": "shell.not_ready",
+  "setup.operation_conflict": "shell.operation_conflict",
+  "setup.request_invalid": "shell.bucket.request_invalid",
 };
-
-const CLOUD_NEWER_SOFTWARE =
-  "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.";
-const CLOUD_UNOPENABLE =
-  "This snapshot could not be opened. It is damaged, or the recovery key Waitron Cloud holds for it does not open it.";
 
 /**
  * Cloud restore refusals that pressing Restore again cannot fix. The recovery key comes from the
@@ -204,29 +186,30 @@ const CLOUD_UNOPENABLE =
  * (`createCloudRecoveryClient`, apps/server/src/cloud-recovery.ts), so the owner can correct
  * neither here.
  */
-const CLOUD_ERROR_MESSAGES: Record<string, string> = {
-  "restore.schema_too_new": CLOUD_NEWER_SOFTWARE,
-  "recovery.passphrase_invalid": CLOUD_UNOPENABLE,
-  "backup.artifact_invalid": CLOUD_UNOPENABLE,
-  "backup.archive_invalid": CLOUD_UNOPENABLE,
-  "restore.environment_mismatch":
-    "This snapshot is not from a preparation or demo venue, and Cloud recovery restores only those.",
+const CLOUD_ERROR_MESSAGES: Record<string, StringKey> = {
+  "restore.schema_too_new": "shell.cloud.newer_software",
+  "recovery.passphrase_invalid": "shell.cloud.unopenable",
+  "backup.artifact_invalid": "shell.cloud.unopenable",
+  "backup.archive_invalid": "shell.cloud.unopenable",
+  "restore.environment_mismatch": "shell.cloud.environment_mismatch",
 };
 
 /** The sentence for a bucket refusal the screen does not answer with a question of its own. */
-function describeBucketRefusal(code: unknown, params: Record<string, unknown> | undefined): string {
-  if (typeof code !== "string")
-    return "The copy could not be restored. Check the connection and try again.";
+function describeBucketRefusal(
+  code: unknown,
+  params: Record<string, unknown> | undefined,
+): Message {
+  if (typeof code !== "string") return say("shell.bucket.no_answer");
   if (
     code === "backup.stream_kit_invalid" &&
     (params?.reason === "encoding" || params?.reason === "shape")
   )
-    return KIT_DAMAGED;
+    return say("shell.bucket.kit_damaged");
   if (code === "restore.stream_pointer_unverified" && params?.reason === "venue_mismatch")
-    return "The bucket's record of its newest copy names a different restaurant from this kit. Nothing was changed.";
-  if (code === "restore.stream_venue_unconfirmed")
-    return "The copy in the bucket names no business tax id, so it cannot be confirmed or restored.";
-  return BUCKET_ERROR_MESSAGES[code] ?? `The copy could not be restored. (${code})`;
+    return say("shell.bucket.venue_mismatch");
+  if (code === "restore.stream_venue_unconfirmed") return say("shell.bucket.venue_unconfirmed");
+  const key = BUCKET_ERROR_MESSAGES[code];
+  return key === undefined ? sayWith("shell.bucket.refused_code", { code }) : say(key);
 }
 
 /** The restored copy's names, when the refusal carries all three and a tax id to confirm. */
@@ -237,12 +220,9 @@ function venueToConfirm(params: Record<string, unknown> | undefined): RestoredVe
   return { legalName, taxId, locationName };
 }
 
-const ADOPT_GENERIC_ERROR =
-  "Couldn't connect to the primary. Check the address and login, then try again.";
-
 /** Held as one value because the message and whether to offer a retry answer the same check. */
 interface ConnectionFailure {
-  message: string;
+  message: Message;
   /** False when retrying is pointless, so the screen drops its Continue action entirely. */
   canRetry: boolean;
 }
@@ -254,14 +234,10 @@ interface ConnectionFailure {
  */
 function describeConnectionFailure(error: unknown): ConnectionFailure {
   const status = (error as { status?: number } | null)?.status;
-  if (status === 404)
-    return { message: "This server is already set up. Reload to open it.", canRetry: false };
+  if (status === 404) return { message: say("shell.connection.already_set_up"), canRetry: false };
   if (status !== undefined)
-    return { message: "This server reported a problem. Try again in a moment.", canRetry: true };
-  return {
-    message: "We could not reach the server. Check its power and your network connection.",
-    canRetry: true,
-  };
+    return { message: say("shell.connection.server_problem"), canRetry: true };
+  return { message: say("shell.connection.unreachable"), canRetry: true };
 }
 
 /**
@@ -307,6 +283,30 @@ export class SetupApp extends LitElement {
 
   @property({ attribute: false }) api!: SetupApi;
 
+  @property({ attribute: false }) browserLanguages: readonly string[] = navigator.languages;
+
+  /** Held for the page's life only: a reload goes back to the browser's languages. */
+  #localeChosen = false;
+
+  constructor() {
+    super();
+    new LocaleChangeController(this, () => {
+      document.documentElement.lang = currentLocale();
+      document.title = t("shell.document_title");
+      this.requestUpdate();
+    });
+  }
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (!this.#localeChosen) setLocale(matchBrowserLocale(this.browserLanguages));
+  }
+
+  #onLocaleSelected(event: CustomEvent<{ code: string }>): void {
+    this.#localeChosen = true;
+    setLocale(event.detail.code);
+  }
+
   /** Certificate setup precedes collecting credentials and business details. */
   @state() private screen: Screen = "connection";
   /** Cleared while a fresh check is in flight, so an answer never outlives the check it answered. */
@@ -333,9 +333,9 @@ export class SetupApp extends LitElement {
     },
   };
 
-  @state() private reviewError?: string;
+  @state() private reviewError?: Message;
 
-  @state() private venueError?: string;
+  @state() private venueError?: Message;
 
   /**
    * Cleared everywhere {@link SetupApp.venueError} is: a mark surviving into the next attempt would
@@ -343,14 +343,14 @@ export class SetupApp extends LitElement {
    */
   @state() private venueInvalidField?: string;
 
-  @state() private connectError?: string;
-  @state() private restoreError?: string;
+  @state() private connectError?: Message;
+  @state() private restoreError?: Message;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the archive path. */
   @state() private restoreLiveSince?: string;
   @state() private restoreLiveUnknown = false;
   /** Handed back to the archive screen with a refusal, so the owner's entries are kept. */
   @state() private restoreRequest?: RestoreRequestDetail;
-  @state() private bucketRestoreError?: string;
+  @state() private bucketRestoreError?: Message;
   @state() private bucketLiveSince?: string;
   @state() private bucketLiveUnknown = false;
   @state() private bucketVenue?: RestoredVenue;
@@ -359,16 +359,16 @@ export class SetupApp extends LitElement {
   /** Kept apart from the other outcomes because the done screen's copy depends on which path ran. */
   @state() private rebuilt = false;
   @state() private cloudRecoveryView?: CloudRecoveryView;
-  @state() private cloudRecoveryError?: string;
+  @state() private cloudRecoveryError?: Message;
   @state() private cloudRecoveryBusy = false;
   /** Set from `restore.stream_source_live`/`restore.stream_source_unchecked` on the Cloud path. */
   @state() private cloudLiveSince?: string;
   @state() private cloudLiveUnknown = false;
-  @state() private configurationError?: string;
+  @state() private configurationError?: Message;
   @state() private configurationPreview?: ConfigurationPreview;
   @state() private fiscalTestStatus?: "accepted" | "rejected" | "uncertain";
   @state() private fiscalTestRunning = false;
-  @state() private fiscalTestError?: string;
+  @state() private fiscalTestError?: Message;
 
   /**
    * The adopt response carries this once, so the done screen is the operator's only chance to see and
@@ -383,20 +383,20 @@ export class SetupApp extends LitElement {
   @state() private mirrorJoin = false;
 
   /** `undefined` while a request is in flight, which the provisioning screen shows as such. */
-  @state() private provisionMessage?: string;
+  @state() private provisionMessage?: Message;
 
   @state() private provisionCanRetry = false;
 
   /** Set only on a terminal failure, which also clears {@link SetupApp.provisionCanRetry}. */
-  @state() private provisionReloadLabel?: string;
+  @state() private provisionReloadLabel?: Message;
 
   /** Set only for an adopt that stopped partway, the one state the reset screen can clear. */
   @state() private provisionCanReset = false;
 
   @state() private resetBusy = false;
   @state() private resetCredentialsRejected = false;
-  @state() private resetError?: string;
-  @state() private resetOutcome?: ResetScreenOutcome;
+  @state() private resetError?: Message;
+  @state() private resetOutcome?: { kind: ResetScreenOutcome["kind"]; message: Message };
 
   override firstUpdated(): void {
     void this.#boot();
@@ -534,7 +534,9 @@ export class SetupApp extends LitElement {
     this.#clearProvisionOutcome();
     this.screen = "provisioning";
     try {
-      await this.api.provision(assembleBody(this.draft));
+      await (this.#localeChosen
+        ? this.api.provision(assembleBody(this.draft), currentLocale())
+        : this.api.provision(assembleBody(this.draft)));
       if (!this.isConnected) return;
       this.screen = "done";
     } catch (error) {
@@ -552,9 +554,8 @@ export class SetupApp extends LitElement {
     const code =
       typeof (error as { code?: unknown }).code === "string" ? error.code : "server.internal";
     if (code.startsWith("provisioning.") || code.startsWith("fiscal.")) {
-      this.venueError =
-        VENUE_ERROR_MESSAGES[code] ??
-        `The venue details were rejected — please review and correct them. (${code})`;
+      const key = VENUE_ERROR_MESSAGES[code];
+      this.venueError = key === undefined ? sayWith("shell.venue_error.other", { code }) : say(key);
       this.screen = "venue";
       return;
     }
@@ -570,13 +571,13 @@ export class SetupApp extends LitElement {
         }
         this.reviewError =
           field === undefined
-            ? "The server rejected the details. Check your entries, then provision again."
-            : `The server rejected the details (field: ${field}). Check your entries, then provision again.`;
+            ? say("shell.review.request_invalid")
+            : sayWith("shell.review.request_invalid_field", { field });
         this.screen = "review";
         return;
       }
       case "person.email_invalid":
-        this.reviewError = "The admin email address is invalid. Check it, then provision again.";
+        this.reviewError = say("shell.review.email_invalid");
         this.screen = "review";
         return;
       case "setup.provisioning_secret_required":
@@ -584,36 +585,35 @@ export class SetupApp extends LitElement {
         return;
       case "setup.fiscal_test_required":
         this.fiscalTestStatus = undefined;
-        this.fiscalTestError = "Run an accepted fiscal test before activating production.";
+        this.fiscalTestError = say("shell.fiscal_test.required");
         this.screen = "fiscal-test";
         return;
       case "setup.already_provisioning":
-        this.provisionMessage = "Setup is already in progress on this server.";
+        this.provisionMessage = say("shell.already_provisioning");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.operation_conflict":
-        this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
+        this.provisionMessage = say("shell.operation_conflict");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.already_provisioned":
-        this.provisionMessage = "This server is already set up.";
+        this.provisionMessage = say("shell.already_provisioned");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload to open the till";
+        this.provisionReloadLabel = say("shell.reload_open_till");
         return;
       case "deployment.already_stamped":
-        this.provisionMessage = ALREADY_STAMPED_MESSAGE;
+        this.provisionMessage = say("shell.already_stamped");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.not_ready":
-        this.provisionMessage = NOT_READY_MESSAGE;
+        this.provisionMessage = say("shell.not_ready");
         this.provisionCanRetry = true;
         return;
       default:
-        this.provisionMessage =
-          "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.";
+        this.provisionMessage = say("shell.provision.failed");
         this.provisionCanRetry = true;
         return;
     }
@@ -681,8 +681,8 @@ export class SetupApp extends LitElement {
       } else {
         this.restoreError =
           typeof code === "string"
-            ? `The backup could not be staged. Check the file, key and environment. (${code})`
-            : "The backup could not be staged. Check the connection and try again.";
+            ? sayWith("shell.restore.staging_failed_code", { code })
+            : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }
@@ -782,9 +782,10 @@ export class SetupApp extends LitElement {
           this.cloudLiveSince = undefined;
           this.cloudLiveUnknown = true;
         } else {
-          this.cloudRecoveryError =
+          this.cloudRecoveryError = say(
             (typeof code === "string" ? CLOUD_ERROR_MESSAGES[code] : undefined) ??
-            "Cloud recovery is unavailable. Check the connection or request expiry, then try again.";
+              "shell.cloud.unavailable",
+          );
         }
         this.screen = "cloud-restore";
       }
@@ -815,8 +816,7 @@ export class SetupApp extends LitElement {
       this.screen = "configuration-preview";
     } catch {
       if (!this.isConnected) return;
-      this.configurationError =
-        "The configuration export could not be opened. Check the file and passphrase.";
+      this.configurationError = say("shell.configuration.could_not_open");
       this.screen = "live-source";
     }
   }
@@ -831,7 +831,7 @@ export class SetupApp extends LitElement {
       this.fiscalTestStatus = result.status === "not-applicable" ? "accepted" : result.status;
     } catch {
       if (!this.isConnected) return;
-      this.fiscalTestError = "The fiscal test could not run. Check the connection and try again.";
+      this.fiscalTestError = say("shell.fiscal_test.could_not_run");
     } finally {
       if (this.isConnected) this.fiscalTestRunning = false;
     }
@@ -852,19 +852,19 @@ export class SetupApp extends LitElement {
     switch (code) {
       // Not read against the saved setup: an adopt still running on the server is past "started" too.
       case "setup.already_provisioning":
-        this.provisionMessage = "Setup is already in progress on this server.";
+        this.provisionMessage = say("shell.already_provisioning");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.already_provisioned":
-        this.provisionMessage = "This server is already set up.";
+        this.provisionMessage = say("shell.already_provisioned");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.provisionReloadLabel = say("shell.reload");
         return;
       case "deployment.already_stamped":
-        this.provisionMessage = ALREADY_STAMPED_MESSAGE;
+        this.provisionMessage = say("shell.already_stamped");
         this.provisionCanRetry = false;
-        this.provisionReloadLabel = "Reload";
+        this.provisionReloadLabel = say("shell.reload");
         return;
       case "setup.adopt_incomplete":
         this.#offerReset();
@@ -878,11 +878,11 @@ export class SetupApp extends LitElement {
     if (stoppedPartway) {
       this.#offerReset();
     } else if (code === "setup.operation_conflict") {
-      this.provisionMessage = OPERATION_CONFLICT_MESSAGE;
+      this.provisionMessage = say("shell.operation_conflict");
       this.provisionCanRetry = false;
-      this.provisionReloadLabel = "Reload";
+      this.provisionReloadLabel = say("shell.reload");
     } else {
-      this.connectError = ADOPT_ERROR_MESSAGES[code] ?? ADOPT_GENERIC_ERROR;
+      this.connectError = say(ADOPT_ERROR_MESSAGES[code] ?? "shell.adopt.generic");
       this.screen = "connect";
     }
   }
@@ -896,7 +896,7 @@ export class SetupApp extends LitElement {
   }
 
   #offerReset(): void {
-    this.provisionMessage = ADOPT_INCOMPLETE_MESSAGE;
+    this.provisionMessage = say("shell.adopt.incomplete");
     this.provisionCanRetry = false;
     this.provisionReloadLabel = undefined;
     this.provisionCanReset = true;
@@ -912,11 +912,7 @@ export class SetupApp extends LitElement {
     try {
       await this.api.resetIncompleteAdopt(event.detail.credential);
       if (!this.isConnected) return;
-      this.resetOutcome = {
-        kind: "resetting",
-        message:
-          "The server is resetting and will restart. Wait a minute, then reload this page to start setup again. If joining again says the previous join stopped partway, the reset did not run: contact support.",
-      };
+      this.resetOutcome = { kind: "resetting", message: say("shell.reset.resetting") };
     } catch (error) {
       if (!this.isConnected) return;
       const { code, params } = (error ?? {}) as ApiError;
@@ -928,25 +924,19 @@ export class SetupApp extends LitElement {
           this.resetError = describeThrottle(params);
           break;
         case "setup.reset_unavailable":
-          this.resetOutcome = {
-            kind: "refused",
-            message:
-              "There is no half-finished join to reset on this server. Reload to start setup again.",
-          };
+          this.resetOutcome = { kind: "refused", message: say("shell.reset.unavailable") };
           break;
         case "setup.already_provisioning":
-          this.resetOutcome = {
-            kind: "refused",
-            message: "Setup is already in progress on this server.",
-          };
+          this.resetOutcome = { kind: "refused", message: say("shell.already_provisioning") };
           break;
         case "setup.operation_conflict":
-          this.resetOutcome = { kind: "refused", message: OPERATION_CONFLICT_MESSAGE };
+          this.resetOutcome = { kind: "refused", message: say("shell.operation_conflict") };
           break;
         default:
-          this.resetError =
+          this.resetError = say(
             (typeof code === "string" ? RESET_ERROR_MESSAGES[code] : undefined) ??
-            RESET_GENERIC_ERROR;
+              "shell.reset.generic",
+          );
       }
     } finally {
       if (this.isConnected) this.resetBusy = false;
@@ -995,6 +985,9 @@ export class SetupApp extends LitElement {
         </div>
       </header>
       ${this.#renderScreen()}
+      <setup-language-chooser
+        @locale-selected=${(e: CustomEvent<{ code: string }>) => this.#onLocaleSelected(e)}
+      ></setup-language-chooser>
     </main>`;
   }
 
@@ -1003,7 +996,7 @@ export class SetupApp extends LitElement {
       case "connection":
         return html`<setup-connection-screen
           data-test="screen-connection"
-          .errorMessage=${this.connectionFailure?.message}
+          .errorMessage=${this.connectionFailure?.message()}
           .checking=${this.connectionChecking}
           .setupUnavailable=${this.connectionFailure?.canRetry === false}
           @connection-continue=${() => void this.#continueConnection()}
@@ -1013,7 +1006,7 @@ export class SetupApp extends LitElement {
       case "restore":
         return html`<setup-restore-screen
           data-test="screen-restore"
-          .errorMessage=${this.restoreError}
+          .errorMessage=${this.restoreError?.()}
           .liveSince=${this.restoreLiveSince}
           .liveUnknown=${this.restoreLiveUnknown}
           .request=${this.restoreRequest}
@@ -1021,7 +1014,7 @@ export class SetupApp extends LitElement {
       case "restore-bucket":
         return html`<setup-restore-bucket-screen
           data-test="screen-restore-bucket"
-          .errorMessage=${this.bucketRestoreError}
+          .errorMessage=${this.bucketRestoreError?.()}
           .liveSince=${this.bucketLiveSince}
           .liveUnknown=${this.bucketLiveUnknown}
           .venue=${this.bucketVenue}
@@ -1031,7 +1024,7 @@ export class SetupApp extends LitElement {
         return html`<setup-cloud-restore-screen
           data-test="screen-cloud-restore"
           .view=${this.cloudRecoveryView}
-          .errorMessage=${this.cloudRecoveryError}
+          .errorMessage=${this.cloudRecoveryError?.()}
           .busy=${this.cloudRecoveryBusy}
           .liveSince=${this.cloudLiveSince}
           .liveUnknown=${this.cloudLiveUnknown}
@@ -1039,7 +1032,7 @@ export class SetupApp extends LitElement {
       case "live-source":
         return html`<setup-live-source-screen
           data-test="screen-live-source"
-          .errorMessage=${this.configurationError}
+          .errorMessage=${this.configurationError?.()}
         ></setup-live-source-screen>`;
       case "configuration-preview":
         return html`<setup-configuration-preview-screen
@@ -1051,7 +1044,7 @@ export class SetupApp extends LitElement {
           data-test="screen-fiscal-test"
           .status=${this.fiscalTestStatus}
           .running=${this.fiscalTestRunning}
-          .errorMessage=${this.fiscalTestError}
+          .errorMessage=${this.fiscalTestError?.()}
         ></setup-fiscal-test-screen>`;
       case "mode":
         return html`<setup-mode-screen
@@ -1062,7 +1055,7 @@ export class SetupApp extends LitElement {
       case "connect":
         return html`<setup-connect-screen
           data-test="screen-connect"
-          .errorMessage=${this.connectError}
+          .errorMessage=${this.connectError?.()}
         ></setup-connect-screen>`;
       case "admin":
         return html`<setup-admin-screen
@@ -1074,7 +1067,7 @@ export class SetupApp extends LitElement {
           data-test="screen-venue"
           .draft=${this.draft}
           .defaults=${this.venueDefaults}
-          .errorMessage=${this.venueError}
+          .errorMessage=${this.venueError?.()}
           .invalidField=${this.venueInvalidField}
         ></setup-venue-screen>`;
       case "cert":
@@ -1086,14 +1079,14 @@ export class SetupApp extends LitElement {
         return html`<setup-review-screen
           data-test="screen-review"
           .draft=${this.draft}
-          .errorMessage=${this.reviewError}
+          .errorMessage=${this.reviewError?.()}
         ></setup-review-screen>`;
       case "provisioning":
         return html`<setup-provisioning-screen
           data-test="screen-provisioning"
-          .message=${this.provisionMessage}
+          .message=${this.provisionMessage?.()}
           .canRetry=${this.provisionCanRetry}
-          .reloadLabel=${this.provisionReloadLabel}
+          .reloadLabel=${this.provisionReloadLabel?.()}
           .canReset=${this.provisionCanReset}
         ></setup-provisioning-screen>`;
       case "reset":
@@ -1101,8 +1094,8 @@ export class SetupApp extends LitElement {
           data-test="screen-reset"
           .busy=${this.resetBusy}
           .credentialsRejected=${this.resetCredentialsRejected}
-          .errorMessage=${this.resetError}
-          .outcome=${this.resetOutcome}
+          .errorMessage=${this.resetError?.()}
+          .outcome=${this.resetOutcome && { kind: this.resetOutcome.kind, message: this.resetOutcome.message() }}
         ></setup-reset-screen>`;
       case "done":
         return html`<setup-done-screen

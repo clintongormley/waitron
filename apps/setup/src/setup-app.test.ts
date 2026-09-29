@@ -8,6 +8,7 @@ import type { SetupRestoreBucketScreen } from "./screens/restore-bucket-screen.j
 import type { SetupRestoreScreen } from "./screens/restore-screen.js";
 import type { SetupDoneScreen } from "./screens/done-screen.js";
 import type { BucketRestoreRequestDetail } from "./events.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
 
 const mounted: HTMLElement[] = [];
 
@@ -3134,5 +3135,121 @@ describe("screen fallback", () => {
     expect(mode.shadowRoot!.querySelector("[data-test=environment]")?.textContent).toBe(
       "production",
     );
+  });
+});
+
+describe("the wizard's language", () => {
+  afterEach(() => {
+    setLocale("en-GB");
+  });
+
+  const unreachable = () => stubApi({ getStatus: vi.fn().mockRejectedValue(new TypeError()) });
+
+  async function mountWithBrowserLanguages(
+    languages: readonly string[],
+    api: SetupApi,
+  ): Promise<SetupApp> {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mounted.push(host);
+    const el = document.createElement("setup-app") as SetupApp;
+    el.api = api;
+    el.browserLanguages = languages;
+    host.appendChild(el);
+    await flush(el);
+    return el;
+  }
+
+  async function choose(el: SetupApp, code: string): Promise<void> {
+    const chooser = el.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("setup-language-chooser")!;
+    chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!.click();
+    await new Promise((resolve) => setTimeout(resolve));
+    await chooser.updateComplete;
+    chooser.shadowRoot!.querySelector<HTMLElement>(`[data-test=lang-${code}]`)!.click();
+    await flush(el);
+  }
+
+  it("speaks the browser's language when nothing has been chosen", async () => {
+    const el = await mountWithBrowserLanguages(["fr-FR", "es-MX"], unreachable());
+    expect(document.documentElement.lang).toBe("es-ES");
+    expect(document.title).toBe("Waitron — configura tu servidor");
+    expect(await screenText(el, "connection", "[role=alert]")).toBe(
+      "No hemos podido contactar con el servidor. Comprueba que está encendido y tu conexión de red.",
+    );
+  });
+
+  it("speaks British English when the browser names no language the wizard speaks", async () => {
+    await mountWithBrowserLanguages(["fr-FR"], unreachable());
+    expect(document.documentElement.lang).toBe("en-GB");
+    expect(document.title).toBe("Waitron — set up your server");
+  });
+
+  it("offers the language chooser, and a choice re-words the message already on screen", async () => {
+    const el = await mountWithBrowserLanguages(["en-GB"], unreachable());
+    expect(await screenText(el, "connection", "[role=alert]")).toBe(
+      "We could not reach the server. Check its power and your network connection.",
+    );
+    await choose(el, "es-ES");
+    expect(document.documentElement.lang).toBe("es-ES");
+    expect(document.title).toBe("Waitron — configura tu servidor");
+    expect(await screenText(el, "connection", "[role=alert]")).toBe(
+      "No hemos podido contactar con el servidor. Comprueba que está encendido y tu conexión de red.",
+    );
+  });
+
+  it("keeps the operator's choice when the wizard is attached again", async () => {
+    const el = await mountWithBrowserLanguages(["en-GB"], stubApi());
+    await choose(el, "es-ES");
+    const host = el.parentElement!;
+    el.remove();
+    host.appendChild(el);
+    await flush(el);
+    expect(currentLocale()).toBe("es-ES");
+  });
+
+  it("re-words a review refusal after a switch", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "person.email_invalid", params: {} });
+    const el = await mountWithBrowserLanguages(["en-GB"], stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    await choose(el, "es-ES");
+    expect(await screenText(el, "review", "[data-test=error]")).toBe(
+      "El correo del administrador no es válido. Revísalo y vuelve a configurar.",
+    );
+  });
+
+  it("re-words a provisioning outcome and its reload label after a switch", async () => {
+    const provision = vi.fn().mockRejectedValue({ code: "setup.already_provisioned", params: {} });
+    const el = await mountWithBrowserLanguages(["en-GB"], stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    await choose(el, "es-ES");
+    expect(await screenText(el, "provisioning", "[data-test=error]")).toBe(
+      "Este servidor ya está configurado.",
+    );
+    expect(await screenText(el, "provisioning", "[data-test=reload]")).toBe(
+      "Recargar para abrir la caja",
+    );
+  });
+
+  it("sends a chosen language with the provision, for the admin account", async () => {
+    const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+    const el = await mountWithBrowserLanguages(["en-GB"], stubApi({ provision }));
+    await choose(el, "es-ES");
+    provisionRequest(el);
+    await flush(el);
+    expect(provision).toHaveBeenCalledOnce();
+    expect(provision.mock.calls[0]![1]).toBe("es-ES");
+  });
+
+  it("leaves the admin account's language to the browser's header when nothing was chosen", async () => {
+    const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+    const el = await mountWithBrowserLanguages(["es-ES"], stubApi({ provision }));
+    provisionRequest(el);
+    await flush(el);
+    expect(provision).toHaveBeenCalledOnce();
+    expect(provision.mock.calls[0]).toHaveLength(1);
   });
 });

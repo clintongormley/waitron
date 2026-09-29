@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./venue-screen.js";
 import type { SetupVenueScreen } from "./venue-screen.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -104,6 +105,19 @@ const EXPECTED_VENUE = {
 afterEach(cleanupWidgets);
 
 describe("setup-venue-screen", () => {
+  it("names the countries in the wizard's language", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+      const countries = [
+        ...el.shadowRoot!.querySelectorAll<HTMLOptionElement>("[data-test=country] option"),
+      ];
+      expect(countries.map((option) => option.textContent?.trim())).toEqual(["España"]);
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
   it("collects every field and emits the nested venue patch, then a screen-agnostic advance", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);

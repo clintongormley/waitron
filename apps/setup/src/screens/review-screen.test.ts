@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { setLocale } from "../i18n/t.js";
 import "./review-screen.js";
 import type { SetupReviewScreen } from "./review-screen.js";
 import type { DeepPartial } from "../setup-app.js";
@@ -44,6 +45,18 @@ function fullDraft(): DeepPartial<ProvisionBody> {
 afterEach(cleanupWidgets);
 
 describe("setup-review-screen", () => {
+  it("names the country in the wizard's language", async () => {
+    setLocale("es-ES");
+    try {
+      const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
+        draft: fullDraft(),
+      });
+      expect(text(el, "[data-test=summary-country]")).toBe("España");
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
   it("summarises the non-secret draft fields", async () => {
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", {
       draft: fullDraft(),

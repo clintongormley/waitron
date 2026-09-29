@@ -1,6 +1,6 @@
 import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 
-/** The wizard is not translated, so it uses the locale the other apps fall back to. */
+/** The locale the wizard starts in, before the browser's languages or the operator choose one. */
 export const WIZARD_LOCALE: SupportedLocale = FALLBACK_LOCALE;
 
 const regionNames = new Map<string, Intl.DisplayNames>();

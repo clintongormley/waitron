@@ -30,7 +30,8 @@ export default defineConfig({
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
     browser: {
       enabled: true,
-      provider: playwright({}),
+      // The wizard follows navigator.languages, which is otherwise the machine's locale.
+      provider: playwright({ contextOptions: { locale: "en-GB" } }),
       headless: true,
       instances: [{ browser: "chromium" }],
       commands: {
