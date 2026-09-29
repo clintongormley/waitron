@@ -1226,6 +1226,9 @@ export interface TableState {
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
+  /** `held` while a party holds the table; `needs_cleaning` once a party has left it, until Mark
+   * cleared. */
+  condition: "free" | "held" | "needs_cleaning";
   tabId?: string;
   tabLineCount?: number;
   tabTotal?: string;
@@ -1850,17 +1853,14 @@ export class TillApi {
    * while a bill is unpaid, `party.not_open`, or `party.out_of_date` when the party changed since
    * `expectedPartyRevision` was read.
    */
-  finishTable(
-    partyId: string,
-    expectedPartyRevision: number,
-  ): Promise<{ state: "closed" | "needs_clearing" }> {
+  finishTable(partyId: string, expectedPartyRevision: number): Promise<{ state: "closed" }> {
     return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
   }
 
-  /** Free a finished party's tables → `POST /api/parties/:partyId/cleared`. Rejects `party.not_open`
-   * unless the party needs clearing, and `party.out_of_date`. */
-  async markCleared(partyId: string, expectedPartyRevision: number): Promise<void> {
-    await this.#request<void>(`/api/parties/${partyId}/cleared`, "POST", { expectedPartyRevision });
+  /** Free a table that needs cleaning → `POST /api/tables/:tableId/cleared`. A table that does not
+   * need it is left as it is; rejects `table.not_found`. */
+  async markTableCleared(tableId: string): Promise<void> {
+    await this.#request<void>(`/api/tables/${tableId}/cleared`, "POST");
   }
 
   /** Every bill of a party, merged parties' included → `GET /api/parties/:partyId/bills`. */

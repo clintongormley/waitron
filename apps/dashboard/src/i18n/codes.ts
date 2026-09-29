@@ -426,6 +426,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Another party is already seated at this table. Check the floor and try again",
     es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",
   },
+  "table.needs_cleaning": {
+    en: "That table needs clearing first. Mark it cleared on the till, then try again",
+    es: "Esa mesa está por recoger. Márcala como recogida en la caja e inténtalo de nuevo",
+  },
   "placement.invalid": {
     en: "That table position isn't valid",
     es: "Esa posición de la mesa no es válida",

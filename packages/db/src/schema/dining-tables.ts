@@ -57,6 +57,8 @@ export const diningTables = table(
     posY: smallCount("pos_y"),
     shape: floorTableShape("shape"),
     rotation: smallCount("rotation"),
+    // Set when a party leaves the table with the venue's clearing setting on; null once it is cleared.
+    needsCleaningSince: tsString("needs_cleaning_since"),
   },
   (t) => [
     unique("dining_tables_location_label_key").on(t.locationId, t.label),

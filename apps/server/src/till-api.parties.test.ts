@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  diningTables,
   locations,
   tills,
   parties,
@@ -418,34 +419,97 @@ describe("POST /api/parties/:id/groups naming a bill", () => {
   });
 });
 
-describe("POST /api/parties/:id/cleared", () => {
-  it("clears a table that needs clearing", async () => {
+describe("a table that needs cleaning", () => {
+  async function tableRow(id: string) {
+    const [row] = await withTransaction(suite.db, (tx) =>
+      tx.select().from(diningTables).where(eq(diningTables.id, id)),
+    );
+    return row!;
+  }
+  async function condition(id: string): Promise<string> {
+    const res = await app(suite.db).request("/api/tables/state", {
+      headers: { cookie: await cookie() },
+    });
+    expect(res.status).toBe(200);
+    const floor = (await res.json()) as { id: string; condition: string }[];
+    return floor.find((row) => row.id === id)!.condition;
+  }
+  /** A table whose party has finished with the venue's clearing setting on. */
+  async function finishedWithClearing(): Promise<{ tableId: string; partyId: string }> {
     await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, true));
-    const { partyId } = await seat();
-    const finished = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
-    expect(await finished.json()).toEqual({ state: "needs_clearing" });
+    try {
+      const { tableId, partyId } = await seat();
+      const finished = await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 });
+      expect(await finished.json()).toEqual({ state: "closed" });
+      return { tableId, partyId };
+    } finally {
+      await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, false));
+    }
+  }
+
+  it("POST /api/tables/:id/cleared frees it with a 204, and the floor reads it free", async () => {
+    const { tableId } = await finishedWithClearing();
+    expect(await condition(tableId)).toBe("needs_cleaning");
+
+    const res = await post(`/api/tables/${tableId}/cleared`, {});
+
+    expect(res.status).toBe(204);
+    expect((await tableRow(tableId)).needsCleaningSince).toBeNull();
+    expect(await condition(tableId)).toBe("free");
+  });
+
+  it("POST /api/tables/:id/cleared answers 204 for a table that does not need cleaning, changing nothing", async () => {
+    const { tableId, partyId, revision } = await seat();
+
+    const res = await post(`/api/tables/${tableId}/cleared`, {});
+
+    expect(res.status).toBe(204);
+    expect(await condition(tableId)).toBe("held");
+    expect(await partyRow(partyId)).toMatchObject({ state: "open", revision });
+  });
+
+  it("POST /api/tables/:id/cleared answers 404 table.not_found for an unknown or malformed id", async () => {
+    for (const id of [randomUUID(), "not-a-uuid"]) {
+      const res = await post(`/api/tables/${id}/cleared`, {});
+      expect(res.status).toBe(404);
+      expect(await res.json()).toMatchObject({
+        error: { code: "table.not_found", params: { tableId: id } },
+      });
+    }
+  });
+
+  it("POST /api/tables/:id/cleared 401s without a session, leaving the table needing cleaning", async () => {
+    const { tableId } = await finishedWithClearing();
+
+    const res = await post(`/api/tables/${tableId}/cleared`, {}, false);
+
+    expect(res.status).toBe(401);
+    expect((await tableRow(tableId)).needsCleaningSince).not.toBeNull();
+  });
+
+  it("refuses seating it with 409 table.needs_cleaning, opening no party", async () => {
+    const { tableId } = await finishedWithClearing();
+    const partiesBefore = await withTransaction(suite.db, (tx) => tx.select().from(parties));
+
+    const res = await post(`/api/tables/${tableId}/seat`, { guestCount: 2 });
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "table.needs_cleaning", params: { tableId } },
+    });
+    expect(await withTransaction(suite.db, (tx) => tx.select().from(parties))).toHaveLength(
+      partiesBefore.length,
+    );
+    expect(await condition(tableId)).toBe("needs_cleaning");
+  });
+
+  it("no longer answers the party route that cleared a whole party", async () => {
+    const { tableId, partyId } = await finishedWithClearing();
 
     const res = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: 1 });
 
-    expect(res.status).toBe(204);
-    expect((await partyRow(partyId)).state).toBe("closed");
-    await withTransaction(suite.db, (tx) => writeClearingWorkflow(tx, false));
-  });
-
-  it("answers 409 party.not_open for a party that does not need clearing", async () => {
-    const { partyId } = await seat();
-    const res = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: 0 });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "party.not_open" } });
-  });
-
-  it("refuses a bad revision as a bad field, and a malformed id as not open", async () => {
-    const { partyId } = await seat();
-    const bad = await post(`/api/parties/${partyId}/cleared`, { expectedPartyRevision: "1" });
-    expect(bad.status).toBe(400);
-    const malformed = await post(`/api/parties/nope/cleared`, { expectedPartyRevision: 0 });
-    expect(malformed.status).toBe(409);
-    expect(await malformed.json()).toMatchObject({ error: { code: "party.not_open" } });
+    expect(res.status).toBe(404);
+    expect(await condition(tableId)).toBe("needs_cleaning");
   });
 });
 

@@ -234,3 +234,14 @@ it("explains a snooze refused because another group is the one waiting, in both 
     "Solo se puede posponer el siguiente grupo por marchar. Revisa la mesa antes de volver a intentarlo",
   ]);
 });
+
+it("says a table needs cleaning, and that a table has gone, in both languages", () => {
+  expect(codeMessage("table.needs_cleaning", "en")).toBe(
+    "That table needs clearing first. Mark it cleared, then try again",
+  );
+  expect(codeMessage("table.needs_cleaning", "es")).toBe(
+    "Esa mesa está por recoger. Márcala como recogida e inténtalo de nuevo",
+  );
+  expect(codeMessage("table.not_found", "en")).toBe("That table no longer exists");
+  expect(codeMessage("table.not_found", "es")).toBe("Esa mesa ya no existe");
+});

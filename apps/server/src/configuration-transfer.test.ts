@@ -1009,3 +1009,36 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
     reasons.map((reason) => ({ ...reason, id: undefined }));
   expect(withoutId(imported)).toEqual(withoutId(prepared));
 });
+
+it("leaves a table's cleaning state behind, as it leaves its tab", async () => {
+  const source = await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(diningTables).values({
+      id: "eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee",
+      locationId: source.locationId,
+      label: "T9",
+    });
+    await tx.execute(sql`
+      update dining_tables set needs_cleaning_since = '2026-09-29T10:00:00.000Z'
+      where id = 'eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee'`);
+  });
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-29T12:00:00Z"),
+    versions,
+  );
+
+  const rows = transferred.tables.dining_tables!;
+  expect(rows.map((row) => row.label)).toContain("T9");
+  for (const row of rows) {
+    expect(row).not.toHaveProperty("needs_cleaning_since");
+    expect(row).not.toHaveProperty("tab_id");
+  }
+});

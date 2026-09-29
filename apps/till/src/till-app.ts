@@ -216,6 +216,8 @@ const TABLE_REFUSALS = new Set([
   "table.occupied",
   "table.not_shared",
   "group.held_leaves_party",
+  "table.needs_cleaning",
+  "table.not_found",
   "tab.already_open",
   "tab.not_table_tab",
   "tab.party_mismatch",
@@ -3559,18 +3561,12 @@ export class TillApp extends LitElement {
   }
 
   async #onMarkCleared(event: Event): Promise<void> {
-    const { partyId, expectedPartyRevision } = (
-      event as CustomEvent<{ partyId: string; expectedPartyRevision: number }>
-    ).detail;
+    const { tableId } = (event as CustomEvent<{ tableId: string }>).detail;
     this.errorKey = undefined;
     try {
-      await this.api.markCleared(partyId, expectedPartyRevision);
+      await this.api.markTableCleared(tableId);
     } catch (error) {
-      await this.#onTableRefusal({ partyId, ...(error as object) });
-      if ((error as { code?: string } | undefined)?.code !== "party.out_of_date") {
-        await this.#refreshFloor();
-      }
-      return;
+      this.errorKey = tableWriteError(error);
     }
     await this.#refreshFloor();
   }

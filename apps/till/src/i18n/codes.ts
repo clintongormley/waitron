@@ -27,6 +27,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Another party is already seated at this table. Check the floor and try again",
     es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",
   },
+  "table.needs_cleaning": {
+    en: "That table needs clearing first. Mark it cleared, then try again",
+    es: "Esa mesa está por recoger. Márcala como recogida e inténtalo de nuevo",
+  },
+  "table.not_found": {
+    en: "That table no longer exists",
+    es: "Esa mesa ya no existe",
+  },
   "tab.not_table_tab": {
     en: "That order is not a table's bill, so it cannot be joined to a table or merged with one",
     es: "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",

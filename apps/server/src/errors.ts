@@ -288,6 +288,11 @@ declare module "@waitron/shared" {
      */
     "table.occupied": { tableId: string };
     /**
+     * The table a party left still needs cleaning (`dining_tables.needs_cleaning_since` is set), so
+     * no party may be seated at it, moved to it or joined to it until Mark cleared.
+     */
+    "table.needs_cleaning": { tableId: string };
+    /**
      * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
      * at a closed one, at none, or the id names no table. One code for all, so the answer does not
      * confirm another tab's table exists.
@@ -306,10 +311,9 @@ declare module "@waitron/shared" {
      */
     "tab.already_open": { tableId: string };
     /**
-     * A party verb found the party is not in the state it needs — Finish needs `open`, Mark cleared
-     * needs `needs_clearing`, a new service command needs `open`, a tab path acting on a party's bill
-     * needs that party `open` (`guardParties`) — or the id names no party, or a party id in
-     * a route is not a UUID. One code for all, as `tab.not_open` is.
+     * A party verb found the party is not open — Finish, a new service command, or a tab path acting
+     * on a party's bill (`guardParties`) — or the id names no party, or a party id in a route is not
+     * a UUID. One code for all, as `tab.not_open` is.
      */
     "party.not_open": { partyId: string };
     /**

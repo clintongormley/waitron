@@ -2541,6 +2541,7 @@ describe("till-table-order-screen", () => {
       zoneId: null,
       capacity: null,
       state: "free",
+      condition: "free",
       hasOpenTab: false,
       pendingDeliveries: 0,
       pendingToServe: 0,
@@ -2773,6 +2774,29 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-move-split]")).not.toBeNull();
     });
+
+    it.each(["move", "join"])(
+      "%s → the free-table picker leaves out a table that needs cleaning",
+      async (action) => {
+        const free = tableState({ id: "t9", label: "9", state: "free" });
+        const cleaning = tableState({
+          id: "t6",
+          label: "6",
+          state: "free",
+          condition: "needs_cleaning",
+        });
+        const { el } = await mount({
+          lines: [pendingLine],
+          orderId: "wo-7",
+          tables: [free, cleaning],
+        });
+        await toMenu(el);
+        click(el, `[data-action="${action}"]`);
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector('[data-target="t9"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-target="t6"]')).toBeNull();
+      },
+    );
 
     it("join → free-table picker → dispatches join-table { tableId } and closes", async () => {
       const free = tableState({ id: "t9", state: "free" });

@@ -1313,6 +1313,7 @@ describe("TillApi", () => {
         zoneId: "z1",
         capacity: 4,
         state: "open-tab",
+        condition: "free",
         hasOpenTab: true,
         tabId: "wo9",
         tabLineCount: 3,
@@ -1337,6 +1338,7 @@ describe("TillApi", () => {
         zoneId: null,
         capacity: null,
         state: "free",
+        condition: "needs_cleaning",
         hasOpenTab: false,
         pendingDeliveries: 0,
         pendingToServe: 0,
@@ -2077,10 +2079,10 @@ describe("TillApi: a seated party", () => {
   });
 
   it("finishTable POSTs the revision it read to the party's /finish route", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "needs_clearing" }));
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ state: "closed" }));
 
     await expect(new TillApi("", fetchStub).finishTable("v1", 4)).resolves.toEqual({
-      state: "needs_clearing",
+      state: "closed",
     });
 
     expect(fetchStub).toHaveBeenCalledWith(
@@ -2100,15 +2102,26 @@ describe("TillApi: a seated party", () => {
     });
   });
 
-  it("markCleared POSTs the revision it read to the party's /cleared route (empty 204 body)", async () => {
+  it("markTableCleared POSTs to the table's /cleared route with no body (empty 204 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
 
-    await expect(new TillApi("", fetchStub).markCleared("v1", 5)).resolves.toBeUndefined();
+    await expect(new TillApi("", fetchStub).markTableCleared("t4")).resolves.toBeUndefined();
 
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/parties/v1/cleared",
-      post({ expectedPartyRevision: 5 }),
-    );
+    expect(fetchStub).toHaveBeenCalledWith("/api/tables/t4/cleared", {
+      method: "POST",
+      credentials: "include",
+    });
+  });
+
+  it("markTableCleared surfaces a missing table as { code }", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: { code: "table.not_found" } }, 404));
+
+    await expect(new TillApi("", fetchStub).markTableCleared("t4")).rejects.toMatchObject({
+      code: "table.not_found",
+      status: 404,
+    });
   });
 
   it("getPartyBills GETs the party's bills", async () => {

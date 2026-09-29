@@ -369,3 +369,12 @@ it("has English and Spanish copy for each unit code", () => {
     expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
   }
 });
+
+it("says a booking's table needs clearing on the till first, in both languages", () => {
+  expect(codeMessage("table.needs_cleaning", "en")).toBe(
+    "That table needs clearing first. Mark it cleared on the till, then try again",
+  );
+  expect(codeMessage("table.needs_cleaning", "es")).toBe(
+    "Esa mesa está por recoger. Márcala como recogida en la caja e inténtalo de nuevo",
+  );
+});

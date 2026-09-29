@@ -13,6 +13,7 @@ function table(over: Partial<TableState> = {}): TableState {
     zoneId: "z1",
     capacity: 4,
     state: "free",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,
@@ -48,6 +49,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
 function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> = {}): TableState {
   return table({
     state: "open-tab",
+    condition: "held",
     hasOpenTab: true,
     tabId: "wo-4",
     tabLineCount: 2,
@@ -230,20 +232,9 @@ describe("till-floor-screen: what a seated party owes", () => {
 });
 
 describe("till-floor-screen: a table needing clearing", () => {
-  const clearing = (id: string, label: string) =>
-    seated(
-      {
-        id,
-        label,
-        hasOpenTab: false,
-        tabId: undefined,
-        tabLineCount: undefined,
-        tabTotal: undefined,
-      },
-      { state: "needs_clearing", outstanding: "0.00", tableIds: ["t4", "t5"], revision: 6 },
-    );
+  const clearing = (id: string, label: string) => table({ id, label, condition: "needs_cleaning" });
 
-  it("says so on every table of the party, each with Mark cleared", async () => {
+  it("says so on each table that needs cleaning, each with Mark cleared", async () => {
     const el = await mountFloor([clearing("t4", "4"), { ...clearing("t5", "5"), capacity: null }]);
 
     for (const id of ["t4", "t5"]) {
@@ -257,13 +248,25 @@ describe("till-floor-screen: a table needing clearing", () => {
     expect(card(el, "t5").querySelector(".capacity")).toBeNull();
   });
 
-  it("asks to clear the party at the revision it read, from either table", async () => {
+  it("asks to clear the one table whose Mark cleared was tapped", async () => {
     const el = await mountFloor([clearing("t4", "4"), clearing("t5", "5")]);
     const cleared = capture(el, "mark-cleared");
 
     card(el, "t5").querySelector<HTMLElement>("[data-mark-cleared]")!.click();
 
-    expect(cleared).toEqual([{ partyId: "v1", expectedPartyRevision: 6 }]);
+    expect(cleared).toEqual([{ tableId: "t5" }]);
+  });
+
+  it("offers nothing to clear on a free table or a table a party holds", async () => {
+    const el = await mountFloor([
+      table({ id: "t4", label: "4" }),
+      seated({ id: "t5", label: "5" }),
+    ]);
+
+    for (const id of ["t4", "t5"]) {
+      expect(card(el, id).querySelector("[data-needs-clearing]")).toBeNull();
+      expect(card(el, id).querySelector("[data-mark-cleared]")).toBeNull();
+    }
   });
 
   it("neither opens nor seats the table when its card is tapped", async () => {
@@ -296,7 +299,7 @@ describe("till-floor-screen: a table needing clearing", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-clear-dialog] [data-mark-cleared]")!.click();
     await el.updateComplete;
 
-    expect(cleared).toEqual([{ partyId: "v1", expectedPartyRevision: 6 }]);
+    expect(cleared).toEqual([{ tableId: "t4" }]);
     expect(el.shadowRoot!.querySelector("[data-clear-dialog]")).toBeNull();
   });
 
@@ -434,22 +437,6 @@ describe("till-floor-screen: a table's unsent orders", () => {
     const el = await mountFloor([seated()]);
 
     expect(marks(el, "t4")).toEqual([]);
-  });
-
-  it("marks a table needing clearing too, so the list and the map agree", async () => {
-    const el = await mountFloor([
-      seated(
-        { hasOpenTab: false, tabId: undefined, tabLineCount: undefined, tabTotal: undefined },
-        {
-          state: "needs_clearing",
-          outstanding: "0.00",
-          unsentDrafts: [{ ownerName: "Alex", lineCount: 2 }],
-        },
-      ),
-    ]);
-
-    expect(card(el, "t4").querySelector("[data-needs-clearing]")).not.toBeNull();
-    expect(marks(el, "t4")).toEqual(["Alex has an unsent order: 2 items"]);
   });
 
   it("marks Mesa 4's token on the map with everyone's name", async () => {

@@ -28,8 +28,8 @@ import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
 
-function needsClearing(table: TableState): table is TableState & { party: TableParty } {
-  return table.party?.state === "needs_clearing";
+function needsClearing(table: TableState): boolean {
+  return table.condition === "needs_cleaning";
 }
 
 function unsentText({ ownerName, lineCount }: UnsentDraft): string {
@@ -49,8 +49,8 @@ function partyPaid(table: TableState): boolean {
 
 /**
  * The TILL live-floor screen. Tapping a free table asks for the party's guest count and then asks the
- * app to seat it; tapping a seated table asks the app to resume it. A table whose party has finished
- * but not been cleared offers Mark cleared instead. The screen itself owns NO fiscal path, because a
+ * app to seat it; tapping a seated table asks the app to resume it. A table a party has left that
+ * has not been cleared offers Mark cleared instead. The screen itself owns NO fiscal path, because a
  * tab is a PRE-FISCAL working order.
  *
  * Each zone tab has a MAP view (the shared `<wt-floor-canvas>`, with the zone's unplaced tables in a
@@ -361,8 +361,8 @@ export class TillFloorScreen extends LitElement {
   @state() private editing = false;
   /** The free table whose guest count is being asked for. */
   @state() private seating: TableState | null = null;
-  /** The table tapped on the map whose party needs clearing. */
-  @state() private clearing: (TableState & { party: TableParty }) | null = null;
+  /** The table tapped on the map that needs clearing. */
+  @state() private clearing: TableState | null = null;
 
   readonly #url = new UrlStateController(
     this,
@@ -393,9 +393,9 @@ export class TillFloorScreen extends LitElement {
     this.#emit("open-table", { tableId: table.id, seated: false, guestCount });
   }
 
-  #markCleared(party: TableParty): void {
+  #markCleared(table: TableState): void {
     this.clearing = null;
-    this.#emit("mark-cleared", { partyId: party.id, expectedPartyRevision: party.revision });
+    this.#emit("mark-cleared", { tableId: table.id });
   }
 
   #emit(type: string, detail: unknown): void {
@@ -464,8 +464,8 @@ export class TillFloorScreen extends LitElement {
 
   /**
    * A `TableState` carries both the placement half and the occupancy half, so it is passed as both. A
-   * seated party's token shows what it still owes; a party needing clearing shows that in the status
-   * chip, which it has free because the status is cleared when the party finishes.
+   * seated party's token shows what it still owes; a table needing clearing shows that in the status
+   * chip, which it has free because the status is cleared when the party leaves.
    */
   #toFloorTable(table: TableState): FloorTable {
     const tabTotal =
@@ -710,7 +710,7 @@ export class TillFloorScreen extends LitElement {
         slot="footer"
         data-mark-cleared
         variant="primary"
-        @click=${() => this.#markCleared(table.party)}
+        @click=${() => this.#markCleared(table)}
       >
         ${t("floor.mark_cleared")}
       </wt-button>
@@ -719,7 +719,7 @@ export class TillFloorScreen extends LitElement {
 
   /** A card is one button, so a table needing clearing, whose card holds its own Mark cleared, is a
    * plain box instead. */
-  #clearingCard(table: TableState & { party: TableParty }): TemplateResult {
+  #clearingCard(table: TableState): TemplateResult {
     return html`<div class="card state-${table.state} clearing" data-table=${table.id}>
       <span class="card-head">
         <span class="label">${table.label}</span>
@@ -730,12 +730,11 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
       <span class="occupancy" data-needs-clearing>${t("floor.needs_clearing")}</span>
-      ${this.#unsent(table.party)}
       <wt-button
         size="sm"
         variant="secondary"
         data-mark-cleared
-        @click=${() => this.#markCleared(table.party)}
+        @click=${() => this.#markCleared(table)}
       >
         ${t("floor.mark_cleared")}
       </wt-button>

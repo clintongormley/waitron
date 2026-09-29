@@ -18,6 +18,7 @@ const tables: TableState[] = [
     zoneId: "z1",
     capacity: 4,
     state: "open-tab",
+    condition: "free",
     hasOpenTab: true,
     tabId: "wo-1",
     tabLineCount: 3,
@@ -43,6 +44,7 @@ const tables: TableState[] = [
     zoneId: "z1",
     capacity: 2,
     state: "delivery-pending",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 1,
     pendingToServe: 0,
@@ -63,6 +65,7 @@ const tables: TableState[] = [
     zoneId: "z1",
     capacity: 6,
     state: "free",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,
@@ -83,6 +86,7 @@ const tables: TableState[] = [
     zoneId: null,
     capacity: null,
     state: "free",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,
@@ -103,6 +107,7 @@ const tables: TableState[] = [
     zoneId: "z1",
     capacity: 4,
     state: "open-tab",
+    condition: "free",
     hasOpenTab: true,
     tabId: "wo-5",
     tabLineCount: 2,
@@ -126,6 +131,7 @@ const tables: TableState[] = [
     zoneId: "z1",
     capacity: 2,
     state: "open-tab",
+    condition: "free",
     hasOpenTab: true,
     tabId: "wo-6",
     tabLineCount: 3,
@@ -153,6 +159,7 @@ const placedTables: TableState[] = [
     zoneId: "z1",
     capacity: 4,
     state: "open-tab",
+    condition: "free",
     hasOpenTab: true,
     tabId: "wo-1",
     tabLineCount: 3,
@@ -176,6 +183,7 @@ const placedTables: TableState[] = [
     zoneId: "z1",
     capacity: 2,
     state: "free",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,
@@ -201,7 +209,7 @@ const party = {
   reminder: null,
 };
 
-/** A party still owing, a paid party, and a finished party waiting to be cleared at two tables. */
+/** A party still owing, a paid party, and two tables a finished party left needing cleaning. */
 const partyTables: TableState[] = [
   {
     ...tables[0]!,
@@ -209,6 +217,7 @@ const partyTables: TableState[] = [
     label: "5",
     status: null,
     nextReservation: null,
+    condition: "held",
     party: { ...party, id: "v1", state: "open", outstanding: "44.00" },
   },
   {
@@ -220,6 +229,7 @@ const partyTables: TableState[] = [
     tabTotal: undefined,
     status: null,
     nextReservation: null,
+    condition: "held",
     party: { ...party, id: "v2", state: "open", outstanding: "0.00", tableIds: ["t7"] },
   },
   ...["t8", "t9"].map((id): TableState => ({
@@ -235,13 +245,9 @@ const partyTables: TableState[] = [
     enRoute: 0,
     status: null,
     nextReservation: null,
-    party: {
-      ...party,
-      id: "v3",
-      state: "needs_clearing",
-      outstanding: "0.00",
-      tableIds: ["t8", "t9"],
-    },
+    state: "free",
+    condition: "needs_cleaning",
+    party: null,
   })),
 ];
 
@@ -267,16 +273,19 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
   });
 
   it("has no violations with unsent orders marked, on the list and on the map", async () => {
-    const withUnsent = (table: TableState): TableState => ({
-      ...table,
-      party: {
-        ...table.party!,
-        unsentDrafts: [
-          { ownerName: "Alex", lineCount: 2 },
-          { ownerName: "", lineCount: 1 },
-        ],
-      },
-    });
+    const withUnsent = (table: TableState): TableState =>
+      table.party === null
+        ? table
+        : {
+            ...table,
+            party: {
+              ...table.party,
+              unsentDrafts: [
+                { ownerName: "Alex", lineCount: 2 },
+                { ownerName: "", lineCount: 1 },
+              ],
+            },
+          };
     const marked = partyTables.map(withUnsent);
     const list = await mountWidget<TillFloorScreen>(
       "till-floor-screen",

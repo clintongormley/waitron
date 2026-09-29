@@ -98,7 +98,7 @@ import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js
 import { listCourses, listStations } from "./kitchen.js";
 import {
   finishTable,
-  markCleared,
+  markTableCleared,
   readPartyBills,
   seatTable,
   setPartyName,
@@ -340,6 +340,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.merge_leaves_no_table": 409,
   "tab.line_not_found": 404,
   "table.occupied": 409,
+  "table.needs_cleaning": 409,
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
@@ -1509,18 +1510,12 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/parties/:id/cleared", (c) =>
+  app.post("/api/tables/:id/cleared", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const partyId = requirePartyParam(c.req.param("id"));
-      const body = await readJsonBody<{ expectedPartyRevision?: unknown }>(c);
-      const expectedPartyRevision = requireRevision(
-        body.expectedPartyRevision,
-        "expectedPartyRevision",
-      );
-      await withTransaction(deps.db, async (tx) => {
-        await markCleared(tx, { partyId, expectedPartyRevision });
-      });
+      const id = c.req.param("id");
+      if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
+      await withTransaction(deps.db, (tx) => markTableCleared(tx, id));
       return c.body(null, 204);
     }),
   );
