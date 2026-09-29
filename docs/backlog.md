@@ -3283,7 +3283,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       be null), and `bills: "merge" | "separate"`, merge by default. A bill of a party sends its
       party's revision, and a move to a table another party holds sends that party's revision too
       (`expectedOtherPartyRevision`). Both are checked before the bill's or the table's own state,
-      so of two tills acting from one read the second is told `party.out_of_date`.
+      so of two tills acting from one read the second is told `party.out_of_date`. _(2026-09-29,
+      Task 8 finish: the other party is named by id as well as revision, `otherPartyId`. The table
+      must still be held by the party the till read there, or the move is `party.out_of_date`
+      naming that party, because a party seated there since can carry the same revision number and
+      the move would otherwise land with strangers. A revision sent without the id is
+      `management.request_invalid` `{ field: "otherPartyId" }`.)_
     - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
       bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
       that party, before any revision is asked for; a `partyId` naming a party the bill has since
@@ -3360,6 +3365,75 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Open points: the move moves the bill's revision on, open or presented, without
     `bumpRevision`'s refusal of money in flight, since a move changes no amount (plan P19). Dishes
     arriving in a party join no group until Task 9.
+  - **Task 8 (branch `feat/party-table-actions`, 2026-09-29): move guests, join tables and split a
+    table, on the server.** Three new routes, `POST /api/parties/:id/move` (`{ toTableId }`),
+    `POST /api/parties/:id/join` (`{ tableId }`) and `POST /api/parties/:id/split-table`
+    (`{ tableId, billId }`, the bill null for none), in `apps/server/src/table-actions.ts`. The till
+    keeps the old tab routes until Task 11.
+    - Move guests takes the party off all its tables. To a free table, the table joins the party
+      and any manual status it had goes; the tables left behind need clearing when the venue's
+      clearing setting is on, and are free at once when it is off. Moved to a free table in another
+      zone, the party's open bills take that zone for what is ordered next. Moving to one of the
+      party's own tables is allowed while it holds another (that one leaves); its only table is
+      `table.already_in_party`.
+    - Join tables adds a table; both stay and neither's status changes. A table in another service
+      zone is `service_zone.join_mismatch`, one the party holds `table.already_in_party`.
+    - Moving guests to, or joining, a table another party holds combines the two parties
+      (`combineParties`): the absorbed party's kitchen groups and drafts move, its open and
+      presented bills move across whole, and it closes, recorded as merged. Its paid bills stay on
+      it and are listed through the family. When moving, its tables need clearing when the venue's
+      clearing setting is on; when joining, they join the other party in the order they joined the
+      absorbed one and keep their status, because their memberships end before the
+      absorbed party closes. The bill choice is `bills: "merge" | "separate"`, merge by default:
+      the incoming main bill merges into the receiving one only when both are untouched and in one
+      service mode; otherwise both stay (`merged: false`). The receiving main bill stays main; with
+      none, the incoming one becomes main if it is open; with neither, the next order makes one.
+    - Split a table starts a new unnamed party on that table, taking the chosen bill (open or
+      presented, not the main bill) as its main bill when it is open, or a new empty main bill when
+      none is chosen. A presented bill goes with its lines unchanged except their kitchen group,
+      and the new party has no main bill until it orders. Refusals: `table.not_joined` and
+      `table.not_shared` (now with `{ tableId, partyId }`), `bill.other_party`, `bill.paid`,
+      `tab.not_open`, `party.main_bill_stays` and `group.held_leaves_party`. A remaining table
+      that showed the chosen bill shows the party's main bill instead, or no bill when the party
+      has none.
+    - Every action checks the path party's revision, then the revision of the party holding the
+      target table, before any table or bill, so of two tills acting from one read the second is
+      `party.out_of_date`. A party already combined into another is `party.not_open`.
+    - The party the till read at the target table is named by id (`otherPartyId`) as well as by
+      revision, as a bill move names it. The table must still be held by that party, or the action
+      is `party.out_of_date` naming it: a party seated there since can carry the same revision
+      number, and without the id a stale move would combine the guests with strangers, or a stale
+      join land on a table now free. A revision sent without the id is
+      `management.request_invalid` `{ field: "otherPartyId" }`. The plan's Tasks 11 and 12 have the till send both.
+    - The kitchen gets a MOVED notice for each sent dish whose tables change, including a dish on
+      a main bill merged away when parties combine (it is told once, on the bill it merged into).
+    - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
+      Split a table too.
+    - A paid bill left on the absorbed party names, in the kitchen, the tables of the party its
+      guests went to: `orderTableLabels` follows the chain of merges (`partySurvivors`,
+      `apps/server/src/parties.ts`) to its last party and reads that party's tables, and the sent
+      work read before a table action includes the bills of every party merged into the acting one
+      (`partyFamilies`). The bill's party, label, lines and payments do not change. Run in
+      `apps/server/src/party-table-actions.test.ts`: the paid bill's sent dish gets a MOVED notice
+      naming the new tables after its guests move to a held table, after its table is joined to
+      another party, after the old merge (`mergeTabs`) combines its party, and after the party that
+      took the guests later moves, joins a table and splits it off, including through two merges;
+      the notice names the new tables when the bill was paid under another table's name; and after
+      a move to a held table the pass names the new table. A one-off probe (not kept as a test)
+      marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
+      neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels`, and not every other
+      view follows the merge (read, not run; see the open points).
+    Tests: `apps/server/src/party-table-actions.test.ts` and
+    `apps/server/src/till-api.table-actions.test.ts`. No migration.
+    Open points: the manager overview's slow-orders list (`computeOverdueOrders`,
+    `packages/reporting/src/overdue-orders.ts`, which keeps its own copy of the pass's table naming
+    in `readPartyTableLabels`) does not follow the merge chain, so a late dish on a paid bill left
+    on a party combined away is named there from that party's own tables or the bill's label, while
+    the pass names the tables its guests went to (found by reading, not run).
+    `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
+    which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
+    writes a merged party's tables in one statement, so they share a joining time and their order in
+    its name is not fixed; it goes with Task 13.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

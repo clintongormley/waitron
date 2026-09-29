@@ -38,7 +38,7 @@ import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { partyFamily, partyTableLabels } from "./parties.js";
+import { partyFamilies, partyFamily, partySurvivors, partyTableLabels } from "./parties.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -255,8 +255,9 @@ interface LabelledOrder {
 }
 
 /**
- * The table each order's kitchen work belongs to. A party bill names the party's active tables
- * together ({@link partyTablesName}), or its own label once the party holds none. Any other order
+ * The table each order's kitchen work belongs to. A party bill names the active tables of its party,
+ * or of the party it was merged into at the end of the chain of merges, together
+ * ({@link partyTablesName}); or its own label once that party holds none. Any other order
  * names the table seated at it (the lowest id when several are), else the table it is delivered to,
  * else its own label; null for an unlabelled walk-up.
  */
@@ -267,6 +268,11 @@ export async function orderTableLabels(
 ): Promise<Map<string, string | null>> {
   const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
   const byParty = await partyTableLabels(tx, partyIds);
+  const seatless = partyIds.filter((id) => byParty.get(id)!.length === 0);
+  const survivorOf =
+    seatless.length === 0 ? new Map<string, string>() : await partySurvivors(tx, seatless);
+  const survivors = [...new Set(survivorOf.values())].filter((id) => !byParty.has(id));
+  for (const [id, labels] of await partyTableLabels(tx, survivors)) byParty.set(id, labels);
   const others = orders.filter((order) => order.partyId === null);
   const seatedAt = others.map((order) => order.id);
   const deliveredTo = others.flatMap((order) => order.deliveryTableId ?? []);
@@ -295,7 +301,7 @@ export async function orderTableLabels(
   const labels = new Map<string, string | null>();
   for (const order of orders) {
     if (order.partyId !== null) {
-      const partyLabels = byParty.get(order.partyId)!;
+      const partyLabels = byParty.get(survivorOf.get(order.partyId) ?? order.partyId)!;
       labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
       continue;
     }
@@ -867,9 +873,10 @@ async function notifyMoved(
 }
 
 /**
- * The sent work of every open, placed or settled bill of `partyIds`, and of each of `orderIds`
- * whatever its party, keyed by bill; a bill with nothing fired is left out. Read before a table
- * action changes which tables those bills belong to.
+ * The sent work of every open, placed or settled bill of `partyIds` and of every party merged into
+ * them ({@link partyFamilies}), and of each of `orderIds` whatever its party, keyed by bill; a bill
+ * with nothing fired is left out. Read before a table action changes which tables those bills
+ * belong to.
  */
 export async function readPartiesSentWork(
   tx: Transaction,
@@ -877,9 +884,11 @@ export async function readPartiesSentWork(
   partyIds: readonly (string | null)[],
   orderIds: readonly string[] = [],
 ): Promise<Map<string, SentWork>> {
-  const ofParties = partyIds.filter((partyId): partyId is string => partyId !== null);
+  const named = partyIds.filter((partyId): partyId is string => partyId !== null);
   const work = new Map<string, SentWork>();
-  if (ofParties.length === 0 && orderIds.length === 0) return work;
+  if (named.length === 0 && orderIds.length === 0) return work;
+  const ofParties =
+    named.length === 0 ? [] : [...new Set([...(await partyFamilies(tx, named)).values()].flat())];
   const rows = await tx
     .select({
       id: workingOrders.id,

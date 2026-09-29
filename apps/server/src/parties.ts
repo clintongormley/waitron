@@ -160,6 +160,15 @@ export async function setMainBill(
     );
 }
 
+/** The party's main bill as recorded, or null. */
+export async function readMainBill(tx: Transaction, partyId: string): Promise<string | null> {
+  const [party] = await tx
+    .select({ mainBillId: parties.mainBillId })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!.mainBillId;
+}
+
 /** The service zone of the party's earliest active table; null when it holds none, or no zone. */
 export async function partyZone(
   tx: Transaction,
@@ -366,6 +375,19 @@ export async function checkAndBumpParty(
 }
 
 /**
+ * Refuse a command naming a party it read somewhere the party no longer is: `party.out_of_date`
+ * with the party's current revision, or `party.not_open` when no party has that id.
+ */
+export async function refuseMovedParty(tx: Transaction, partyId: string): Promise<never> {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  if (party === undefined) throw new AppError("party.not_open", { partyId });
+  throw new AppError("party.out_of_date", { partyId, revision: party.revision });
+}
+
+/**
  * Move the party's revision on without comparing it: for a write that is not a party command of its
  * own and carries no revision (D19), such as a line edit or a void, whose bill's revision guards it.
  */
@@ -400,6 +422,26 @@ export async function partyFamilies(
   `);
   for (const row of rows) families.get(row.root)!.push(row.id);
   return families;
+}
+
+/**
+ * The party each of `partyIds` was merged into, following the chain of merges to its end, keyed by
+ * each party asked about; a party never merged answers itself. The reverse of {@link partyFamilies}.
+ */
+export async function partySurvivors(
+  tx: Transaction,
+  partyIds: readonly string[],
+): Promise<Map<string, string>> {
+  const { rows } = await tx.execute<{ start: string; id: string }>(sql`
+    with recursive chain(start, id, next) as (
+      select p.id, p.id, p.merged_into_party_id from parties p
+      where p.id in (select value from json_each(${JSON.stringify(partyIds)}))
+      union
+      select c.start, p.id, p.merged_into_party_id from parties p join chain c on p.id = c.next
+    )
+    select start, id from chain where next is null
+  `);
+  return new Map(rows.map((row) => [row.start, row.id]));
 }
 
 async function readParty(

@@ -269,3 +269,18 @@ it("words the refusals a bill move to a table or away from its party can meet, i
   );
   expect(codeMessage("table.inactive", "es")).toBe("Esa mesa ya no está en uso. Elige otra mesa");
 });
+
+it("words Split a table's refusals of a table the party does not hold, or its only table, in both languages", () => {
+  expect(codeMessage("table.not_joined", "en")).toBe(
+    "That table is not one of these guests' tables. Reload the table and try again",
+  );
+  expect(codeMessage("table.not_joined", "es")).toBe(
+    "Esa mesa no es de estos clientes. Vuelve a cargar la mesa e inténtalo de nuevo",
+  );
+  expect(codeMessage("table.not_shared", "en")).toBe(
+    "This is the only table these guests have, so it cannot be split off",
+  );
+  expect(codeMessage("table.not_shared", "es")).toBe(
+    "Es la única mesa de estos clientes, así que no se puede separar",
+  );
+});

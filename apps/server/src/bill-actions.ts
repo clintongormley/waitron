@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { diningTables, orderGroups, parties, workingOrderLines, workingOrders } from "@waitron/db";
+import { diningTables, orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
@@ -11,7 +11,13 @@ import {
   readSentWork,
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { guardParties, requireBillOfParty, setMainBill } from "./parties.js";
+import {
+  guardParties,
+  readMainBill,
+  refuseMovedParty,
+  requireBillOfParty,
+  setMainBill,
+} from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import {
   assertDistinctTransferLines,
@@ -90,13 +96,7 @@ export async function guardPathParty(
     .where(eq(workingOrders.id, billId));
   if (bill === undefined) throw new AppError("tab.not_open", { tabId: billId });
   if (command.partyId !== undefined && command.partyId !== bill.partyId) {
-    const named = command.partyId ?? bill.partyId!;
-    const [read] = await tx
-      .select({ revision: parties.revision })
-      .from(parties)
-      .where(eq(parties.id, named));
-    if (read === undefined) throw new AppError("party.not_open", { partyId: named });
-    throw new AppError("party.out_of_date", { partyId: named, revision: read.revision });
+    await refuseMovedParty(tx, command.partyId ?? bill.partyId!);
   }
   if (bill.partyId !== null) await guardParties(tx, bill.partyId, null, command);
   return bill;
@@ -199,8 +199,6 @@ export async function mergeBills(
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
-  // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
-  // dishes merged into it would never reach the kitchen.
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
   await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId);
 }
@@ -239,14 +237,6 @@ export async function mergeCheckedBills(
   if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
 }
 
-async function readMainBill(tx: Transaction, partyId: string): Promise<string | null> {
-  const [party] = await tx
-    .select({ mainBillId: parties.mainBillId })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  return party!.mainBillId;
-}
-
 /**
  * Move the chosen items from one untouched bill of a party to another. Whole lines move; a part of
  * a line splits it, keeping its unit prices.
@@ -263,8 +253,6 @@ export async function transferItems(
   const path = await guardPathParty(tx, fromBillId, command);
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
-  // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
-  // dishes moved into it would never reach the kitchen.
   await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
 
   const before = await readSentWork(tx, cfg, fromBillId);

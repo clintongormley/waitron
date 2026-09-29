@@ -11,6 +11,8 @@ import {
   openParty,
   partyTableLabels,
   partyZone,
+  readMainBill,
+  refuseMovedParty,
   setMainBill,
 } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
@@ -27,14 +29,20 @@ import "./errors.js";
 
 export type MoveTarget = { tableId: string } | { counter: { zoneId: string | null } };
 
-export interface MoveBillOptions {
+/** The party a command read at the table it names, as {@link readTargetTable} checks it. */
+export interface OtherPartyRead {
+  /** The revision of the party holding the target table, required when one does. */
+  expectedOtherPartyRevision?: number;
+  /** The party the till read at the target table, required with its revision. */
+  otherPartyId?: string;
+}
+
+export interface MoveBillOptions extends OtherPartyRead {
   bills: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
   expectedPartyRevision?: number;
   /** The party the till read the bill under; null when it read the bill with no party. */
   partyId?: string | null;
-  /** The party holding the target table's, required when one does. */
-  expectedOtherPartyRevision?: number;
   operatorId: string;
 }
 
@@ -104,18 +112,12 @@ export async function moveBill(
   } else {
     const partyId = destination.partyId;
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
-    const [party] = await tx
-      .select({ mainBillId: parties.mainBillId })
-      .from(parties)
-      .where(eq(parties.id, partyId));
-    const main = party!.mainBillId;
+    const main = await readMainBill(tx, partyId);
     if (
       options.bills === "merge" &&
       main !== null &&
       (await isUntouched(tx, billId, moved)) &&
       (await isUntouched(tx, main)) &&
-      // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
-      // dishes merged into it would never reach the kitchen.
       (await serviceModesMatch(tx, cfg, billId, main))
     ) {
       // `before` was read while the bill was still at its old tables, so the kitchen is told below.
@@ -137,9 +139,8 @@ export async function moveBill(
 }
 
 /**
- * The destination, with the revision of a party holding the target table checked and moved on
- * first; then the table's own state. A free table is refused as a tab move refuses it, and one in a
- * zone that seats no one as seating refuses it.
+ * The destination, with the party the till read at the target table checked first, by identity and
+ * revision, and that revision moved on ({@link readTargetTable}); then the table's own state.
  */
 async function resolveDestination(
   tx: Transaction,
@@ -150,16 +151,53 @@ async function resolveDestination(
 ): Promise<Destination> {
   if ("counter" in to) return { kind: "counter", zoneId: to.counter.zoneId };
   const { tableId } = to;
+  const table = await readTargetTable(tx, cfg, tableId, source, options);
+  if (table.holding !== null && table.holding === source) {
+    throw new AppError("table.already_in_party", { tableId });
+  }
+  if (table.holding !== null) return { kind: "party", partyId: table.holding };
+  await refuseUnseatable(tx, cfg, tableId, table);
+  return { kind: "free", tableId, zoneId: table.zoneId };
+}
+
+/** A table an action names, as {@link readTargetTable} answers it. */
+export interface TargetTable {
+  /** The party holding the table now, or null. */
+  holding: string | null;
+  tabId: string | null;
+  zoneId: string | null;
+}
+
+/**
+ * The table an action moves to or joins: the party the command read there must be the one holding
+ * it now, else `party.out_of_date` for that party, since a revision alone can match a party seated
+ * there since; then the revision of a party holding it, other than `source`, checked and moved on
+ * first (P27); then refused when it does not exist, is out of use or needs clearing.
+ */
+export async function readTargetTable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  source: string | null,
+  read: OtherPartyRead,
+): Promise<TargetTable> {
+  const { otherPartyId, expectedOtherPartyRevision } = read;
+  if (otherPartyId === undefined && expectedOtherPartyRevision !== undefined) {
+    throw new AppError("management.request_invalid", { field: "otherPartyId" });
+  }
   const [holder] = await tx
     .select({ partyId: partyTables.partyId })
     .from(partyTables)
     .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt)));
   const holding = holder?.partyId ?? null;
+  if (otherPartyId !== undefined && otherPartyId !== holding) {
+    await refuseMovedParty(tx, otherPartyId);
+  }
   if (holding !== null && holding !== source) {
-    if (options.expectedOtherPartyRevision === undefined) {
+    if (expectedOtherPartyRevision === undefined) {
       throw new AppError("management.request_invalid", { field: "expectedOtherPartyRevision" });
     }
-    await checkAndBumpParty(tx, holding, options.expectedOtherPartyRevision, "open");
+    await checkAndBumpParty(tx, holding, expectedOtherPartyRevision, "open");
   }
   const [table] = await tx
     .select({
@@ -173,10 +211,19 @@ async function resolveDestination(
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   if (!table.active) throw new AppError("table.inactive", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
-  if (holding !== null && holding === source) {
-    throw new AppError("table.already_in_party", { tableId });
-  }
-  if (holding !== null) return { kind: "party", partyId: holding };
+  return { holding, tabId: table.tabId, zoneId: table.zoneId };
+}
+
+/**
+ * A table no party holds, refused as a tab move refuses it while it shows an open order, and as
+ * seating refuses one in a zone that seats no one.
+ */
+export async function refuseUnseatable(
+  tx: Transaction,
+  cfg: TillConfig,
+  tableId: string,
+  table: TargetTable,
+): Promise<void> {
   if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
     throw new AppError("table.occupied", { tableId });
   }
@@ -190,7 +237,6 @@ async function resolveDestination(
       });
     }
   }
-  return { kind: "free", tableId, zoneId: table.zoneId };
 }
 
 interface SourceParty {
@@ -345,11 +391,12 @@ async function adoptZone(
 
 /**
  * While tables still point at bills, a table of the party the bill is leaving that shows it shows
- * the party's main bill instead, or none when the bill leaving is the main bill.
+ * the party's main bill instead, or none when the bill leaving is the main bill or the party has
+ * none.
  */
-async function repointSourceTables(
+export async function repointSourceTables(
   tx: Transaction,
-  party: SourceParty,
+  party: Pick<SourceParty, "id" | "mainBillId">,
   billId: string,
 ): Promise<void> {
   const main = party.mainBillId === billId ? null : party.mainBillId;

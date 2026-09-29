@@ -132,7 +132,9 @@ function moveTo(
     {
       to: { tableId },
       ...(partyOf === null ? {} : { expectedPartyRevision: revisionOf(partyOf) }),
-      ...(holder === undefined ? {} : { expectedOtherPartyRevision: revisionOf(holder) }),
+      ...(holder === undefined
+        ? {}
+        : { otherPartyId: holder, expectedOtherPartyRevision: revisionOf(holder) }),
       ...extra,
     },
     cookie,
@@ -321,6 +323,7 @@ describe("money on a moved bill", () => {
       to: { tableId: luis.tableId },
       bills: "merge",
       expectedPartyRevision: ana.revision + 1,
+      otherPartyId: luis.partyId,
       expectedOtherPartyRevision: luis.revision,
     });
     release();
@@ -546,6 +549,7 @@ describe("two tills moving one counter order", () => {
             to: { tableId: ana.tableId },
             bills: "separate",
             partyId: null,
+            otherPartyId: ana.partyId,
             expectedOtherPartyRevision: ana.revision,
           },
           venue.cookie,
@@ -557,6 +561,7 @@ describe("two tills moving one counter order", () => {
             to: { tableId: luis.tableId },
             bills: "separate",
             partyId: null,
+            otherPartyId: luis.partyId,
             expectedOtherPartyRevision: luis.revision,
           },
           venue.cookie2,
@@ -595,6 +600,7 @@ describe("two tills moving one counter order", () => {
         to: { tableId: luis.tableId },
         partyId: ana.partyId,
         expectedPartyRevision: read,
+        otherPartyId: luis.partyId,
         expectedOtherPartyRevision: revisionOf(luis.partyId),
       },
       venue.cookie2,
@@ -614,6 +620,7 @@ describe("two tills moving one counter order", () => {
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { tableId: luis.tableId },
+      otherPartyId: luis.partyId,
       expectedOtherPartyRevision: revisionOf(luis.partyId),
     });
 
@@ -748,18 +755,86 @@ describe("the move route", () => {
   it.each([
     ["expectedPartyRevision", -1],
     ["expectedOtherPartyRevision", "3"],
+    ["otherPartyId", "not-a-uuid"],
+    ["otherPartyId", null],
   ])("answers a malformed %s with 400 management.request_invalid", async (field, value) => {
     const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { tableId: luis.tableId },
       expectedPartyRevision: revisionOf(ana.partyId),
+      otherPartyId: luis.partyId,
       expectedOtherPartyRevision: revisionOf(luis.partyId),
       [field]: value,
     });
 
     expect(answer.status).toBe(400);
     expect(answer.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+  });
+
+  it("answers the other party's revision sent without its id with 400, changing nothing", async () => {
+    const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const revisions = [revisionOf(ana.partyId), revisionOf(luis.partyId)];
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: luis.tableId },
+      expectedPartyRevision: revisions[0],
+      expectedOtherPartyRevision: revisions[1],
+    });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "otherPartyId" },
+    });
+    expect([revisionOf(ana.partyId), revisionOf(luis.partyId)]).toEqual(revisions);
+    expect(partyOfBill(billId)).toBe(ana.partyId);
+  });
+
+  it("takes the other party's id in upper case as in lower", async () => {
+    const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: luis.tableId },
+      bills: "separate",
+      expectedPartyRevision: revisionOf(ana.partyId),
+      otherPartyId: luis.partyId.toUpperCase(),
+      expectedOtherPartyRevision: revisionOf(luis.partyId),
+    });
+
+    expect(answer.status).toBe(200);
+    expect(partyOfBill(billId)).toBe(luis.partyId);
+  });
+
+  it("answers a move to a table the party it read there has left with 409 party.out_of_date", async () => {
+    const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const read = {
+      expectedPartyRevision: revisionOf(ana.partyId),
+      otherPartyId: luis.partyId,
+      expectedOtherPartyRevision: revisionOf(luis.partyId),
+    };
+    const left = await post(`/api/parties/${luis.partyId}/move`, {
+      toTableId: (
+        await post("/api/tables", {
+          label: `Mesa ${randomUUID().slice(0, 8)}`,
+          zoneId: venue.zoneId,
+        })
+      ).json.id,
+      expectedPartyRevision: read.expectedOtherPartyRevision,
+    });
+    expect(left.status).toBe(200);
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: luis.tableId },
+      ...read,
+    });
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "party.out_of_date",
+      params: { partyId: luis.partyId, revision: revisionOf(luis.partyId) },
+    });
+    expect(partyOfBill(billId)).toBe(ana.partyId);
   });
 
   it("merges by default, and answers the new codes with 409", async () => {

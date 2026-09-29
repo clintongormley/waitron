@@ -108,7 +108,9 @@ import type { PartyCommand } from "./parties.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { moveBill } from "./move-bill.js";
-import type { MoveBillOptions, MoveTarget } from "./move-bill.js";
+import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
+import { joinTables, moveGuests, splitTable } from "./table-actions.js";
+import type { TableActionOptions } from "./table-actions.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -546,25 +548,64 @@ function requireMoveTarget(value: unknown): MoveTarget {
   throw invalid("to");
 }
 
-/**
- * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, the
- * bill choice (merge by default), and the other party's revision.
- */
-function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
-  const { bills, partyId, ...rest } = body;
-  if (bills !== undefined && bills !== "merge" && bills !== "separate") throw invalid("bills");
-  const command: MoveBillOptions = {
-    ...billCommand(personId, partyId === null ? rest : body),
-    bills: bills ?? "merge",
-  };
-  if (partyId === null) command.partyId = null;
+/** A bill choice as a body carries it: merge by default, else `"separate"`. */
+function requireBillChoice(bills: unknown): "merge" | "separate" {
+  if (bills === undefined) return "merge";
+  if (bills !== "merge" && bills !== "separate") throw invalid("bills");
+  return bills;
+}
+
+/** The party the till read at the target table, and its revision, as a body carries them. */
+function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
+  const read: OtherPartyRead = {};
   if (body.expectedOtherPartyRevision !== undefined) {
-    command.expectedOtherPartyRevision = requireRevision(
+    read.expectedOtherPartyRevision = requireRevision(
       body.expectedOtherPartyRevision,
       "expectedOtherPartyRevision",
     );
   }
-  return command;
+  if (body.otherPartyId !== undefined) {
+    read.otherPartyId = requireBodyUuid(body.otherPartyId, "otherPartyId").toLowerCase();
+  }
+  return read;
+}
+
+/**
+ * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, the
+ * bill choice, and the party read at the target table.
+ */
+function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
+  const { partyId, ...rest } = body;
+  const bills = requireBillChoice(body.bills);
+  const command: MoveBillOptions = {
+    ...billCommand(personId, partyId === null ? rest : body),
+    bills,
+  };
+  if (partyId === null) command.partyId = null;
+  return { ...command, ...otherPartyRead(body) };
+}
+
+/**
+ * A table action's command: the path party's revision, the bill choice and the party read at the
+ * target table.
+ */
+function tableActionCommand(personId: string, body: Record<string, unknown>): TableActionOptions {
+  const bills = requireBillChoice(body.bills);
+  return {
+    bills,
+    expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
+    operatorId: personId,
+    ...otherPartyRead(body),
+  };
+}
+
+/** The table a move or join names, which the body must carry; a malformed id names no table. */
+function requireTargetTable(value: unknown, field: string): string {
+  if (value === undefined) throw invalid(field);
+  if (typeof value !== "string" || !isUuid(value)) {
+    throw new AppError("table.not_found", { tableId: String(value) });
+  }
+  return value.toLowerCase();
 }
 
 /**
@@ -1632,6 +1673,52 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         setPartyName(tx, { partyId, name: body.name, expectedPartyRevision }),
       );
       return c.json(named);
+    }),
+  );
+
+  for (const [path, act, field] of [
+    ["move", moveGuests, "toTableId"],
+    ["join", joinTables, "tableId"],
+  ] as const) {
+    app.post(`/api/parties/:id/${path}`, (c) =>
+      run(c, log, async () => {
+        const { personId } = await requireSession(deps, c);
+        const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
+        const body = asObject(await readRawJsonBody<unknown>(c));
+        const tableId = requireTargetTable(body[field], field);
+        const command = tableActionCommand(personId, body);
+        const result = await withTransaction(deps.db, (tx) =>
+          act(tx, deps.cfg, partyId, tableId, command),
+        );
+        return c.json(result);
+      }),
+    );
+  }
+
+  app.post("/api/parties/:id/split-table", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const { tableId } = body;
+      if (tableId === undefined) throw invalid("tableId");
+      // A malformed id names no table of the party.
+      if (typeof tableId !== "string" || !isUuid(tableId)) {
+        throw new AppError("table.not_joined", { tableId: String(tableId), partyId });
+      }
+      const billId =
+        body.billId === null ? null : requireOtherBill(body.billId, "billId").toLowerCase();
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
+      );
+      const result = await withTransaction(deps.db, (tx) =>
+        splitTable(tx, deps.cfg, partyId, tableId.toLowerCase(), billId, {
+          expectedPartyRevision,
+          operatorId: personId,
+        }),
+      );
+      return c.json(result);
     }),
   );
 

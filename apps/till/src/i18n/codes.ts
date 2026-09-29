@@ -64,8 +64,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Así estos clientes se quedarían sin mesa, así que estas cuentas no se pueden combinar de esta forma",
   },
   "table.not_shared": {
-    en: "This is the party's only table, so it cannot be separated from its bill",
-    es: "Es la única mesa de estos clientes, así que no se puede separar de su cuenta",
+    en: "This is the only table these guests have, so it cannot be split off",
+    es: "Es la única mesa de estos clientes, así que no se puede separar",
+  },
+  "table.not_joined": {
+    en: "That table is not one of these guests' tables. Reload the table and try again",
+    es: "Esa mesa no es de estos clientes. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "group.not_held": {
     en: "Those items have already gone to the kitchen. Check the table before trying again",

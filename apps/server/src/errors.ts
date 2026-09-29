@@ -281,10 +281,13 @@ declare module "@waitron/shared" {
     /** A dining table exists but is deactivated, so no tab may be opened on it. */
     "table.inactive": { tableId: string };
     /**
-     * A move/join TARGET table already has an OPEN tab, or a party still holds it (an active
-     * `party_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two bills instead.
-     * The partial unique index `party_tables_active_table_uq` allows one active membership per
-     * table; the check runs first so the index never refuses with an engine error.
+     * A move/join TARGET table already has an OPEN tab, or, for the tab routes, a party still holds
+     * it (an active `party_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two
+     * bills instead. Moving guests and joining tables combine with the party holding the table,
+     * and moving a bill joins that party; all three refuse only a table no party holds that still
+     * shows an open order (`refuseUnseatable` in `move-bill.ts`). The partial unique index `party_tables_active_table_uq`
+     * allows one active membership per table; the check runs first so the index never refuses with
+     * an engine error.
      */
     "table.occupied": { tableId: string };
     /**
@@ -292,20 +295,23 @@ declare module "@waitron/shared" {
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
     "table.needs_clearing": { tableId: string };
-    /** A bill was moved to a table its own party already holds. */
+    /**
+     * A bill was moved to a table its own party already holds, a party joined a table it holds, or
+     * guests were moved to the only table their party holds.
+     */
     "table.already_in_party": { tableId: string };
     /**
      * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
-     * at a closed one, at none, or the id names no table. One code for all, so the answer does not
-     * confirm another tab's table exists.
+     * at a closed one, at none, or the id names no table; or Split a table named a table the party
+     * does not hold. One code for all, so the answer does not confirm another tab's table exists.
      */
-    "table.not_joined": { tableId: string; tabId: string };
+    "table.not_joined": { tableId: string; tabId: string } | { tableId: string; partyId: string };
     /**
      * An un-join named the SOLE table anchoring the tab, so there is no join to carve it out of; or
-     * an un-join with no items named the party's only member table. Refused because the un-join
-     * would otherwise leave the tab, or the party, with no table.
+     * an un-join with no items, or Split a table, named the party's only member table. Refused
+     * because it would otherwise leave the tab, or the party, with no table.
      */
-    "table.not_shared": { tableId: string; tabId: string };
+    "table.not_shared": { tableId: string; tabId: string } | { tableId: string; partyId: string };
     /**
      * A table's `tab_id` already points at an OPEN working order, or a party still holds the table
      * (an active `party_tables` row) whatever its `tab_id` points at, so a second tab may not be
@@ -320,8 +326,9 @@ declare module "@waitron/shared" {
     "party.not_open": { partyId: string };
     /**
      * A command carried a party revision another write has since moved past, so it was prepared
-     * from a stale copy of the party. `revision` is the party's current one; the caller reloads and
-     * acts again. The sibling of `working_order.out_of_date`.
+     * from a stale copy of the party; or it named a party it read at a table or on a bill where that
+     * party no longer is (`refuseMovedParty`). `revision` is the party's current one; the caller
+     * reloads and acts again. The sibling of `working_order.out_of_date`.
      */
     "party.out_of_date": { partyId: string; revision: number };
     /**
@@ -331,7 +338,8 @@ declare module "@waitron/shared" {
     "party.bill_outstanding": { partyId: string };
     /**
      * The party's main bill was to leave while the party holds another bill that is open or
-     * presented: it moves only as the party's last unpaid bill (spec §13 item 5).
+     * presented: it moves only as the party's last unpaid bill (spec §13 item 5). Split a table
+     * refuses the party's main bill as the bill the new party takes.
      */
     "party.main_bill_stays": { partyId: string };
     /**
