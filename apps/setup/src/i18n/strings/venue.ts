@@ -275,7 +275,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.locale.ca_es": "Catalán (Català)",
   "venue.locale.gl_es": "Gallego (Galego)",
   "venue.locale.eu_es": "Vasco (Euskara)",
-  "venue.locale.en_gb": "Inglés",
+  "venue.locale.en_gb": "Inglés (English)",
 
   "venue.back": "Volver",
   "venue.next": "Siguiente",

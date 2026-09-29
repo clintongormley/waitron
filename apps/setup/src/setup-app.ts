@@ -256,7 +256,10 @@ export class SetupApp extends LitElement {
       main {
         box-sizing: border-box;
         width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-modal-inline-margin)));
-        margin: var(--wt-space-5) auto;
+        /* The bottom margin clears the fixed language chooser, so the last action scrolls out from
+           under it. */
+        margin: var(--wt-space-5) auto
+          calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom));
         padding: var(--wt-space-5) var(--wt-modal-inline-padding);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-lg);

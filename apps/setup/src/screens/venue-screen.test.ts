@@ -911,6 +911,14 @@ describe("setup-venue-screen in Spanish", () => {
     expect(q(el, "[data-test=back]")!.textContent).toBe("Volver");
   });
 
+  it("names English in Spanish followed by its own name, as it does the other languages", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    expect(q(el, "[data-test=locale-en-GB]")!.parentElement!.textContent!.trim()).toBe(
+      "Inglés (English)",
+    );
+  });
+
   it("redraws a Demo legal-name refusal, shown on the location name, in Spanish", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
