@@ -13,7 +13,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
@@ -799,7 +799,7 @@ export class ProfileScreen extends LitElement {
                     key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
                   return html`<div class="action-row passkey-item">
                     <span class="passkey-text"
-                      >${name} · ${new Date(key.createdAt).toLocaleDateString()}</span
+                      >${name} · ${new Date(key.createdAt).toLocaleDateString(currentLocale())}</span
                     >
                     ${
                       p.hasPassword

@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
@@ -229,6 +229,28 @@ describe("your profile", () => {
     expect(
       el.shadowRoot!.querySelector("[data-test=remove-passkey]")!.getAttribute("aria-label"),
     ).toBe(t("profile.remove_passkey_name").replace("{name}", "Work laptop"));
+  });
+  it("writes a passkey's date in the dashboard's language, not the browser's", async () => {
+    const createdAt = "2026-09-29T12:00:00Z";
+    expect(new Date(createdAt).toLocaleDateString()).not.toBe(
+      new Date(createdAt).toLocaleDateString("es-ES"),
+    );
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const profile = await apiStub().getProfile();
+      const { el } = await mount({
+        getProfile: vi.fn().mockResolvedValue({
+          ...profile,
+          passkeys: [{ ...profile.passkeys[0], createdAt }],
+        }),
+      });
+      expect(el.shadowRoot!.querySelector(".passkey-text")!.textContent).toContain(
+        new Date(createdAt).toLocaleDateString("es-ES"),
+      );
+    } finally {
+      setLocale(before);
+    }
   });
   it("explains an overlong passkey name before starting registration", async () => {
     const { el, api } = await mount();
