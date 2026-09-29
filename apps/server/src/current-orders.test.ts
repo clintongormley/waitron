@@ -560,6 +560,32 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     expect(await floorReminder(v, s.tableId)).toEqual({ groupId: s.g3.id, dueAt: T(20) });
   });
 
+  it("clears the snooze of a group reordered FORWARD, which a merge left behind the waiting one", async () => {
+    const v = await setupVenue();
+    const a = await seated(v);
+    const aFired = await group(v, a.partyId, "fire", [line(v, "croquetas")]);
+    const aHeld = await group(v, a.partyId, "hold", [line(v, "flan")]);
+    await at(T(0), () => serveGroup(v, a.partyId, aFired.id));
+    const b = await seated(v);
+    const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
+    await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
+    const command = {
+      expectedPartyRevision: await revisionOf(a.partyId),
+      expectedSourcePartyRevision: await revisionOf(b.partyId),
+      operatorId: ALEX,
+    };
+    await inTx((tx) =>
+      mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
+    );
+    expect(await remindAtOf(bHeld.id)).toBe(T(20));
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: aHeld.id, dueAt: T(10) });
+
+    await reorder(a.partyId, [bHeld.id, aHeld.id]);
+
+    expect(await remindAtOf(bHeld.id)).toBeNull();
+    expect(await floorReminder(v, a.tableId)).toEqual({ groupId: bHeld.id, dueAt: T(10) });
+  });
+
   it("moves the reminder on when group 3 is emptied, which removes it and clears its snooze", async () => {
     const v = await setupVenue();
     const s = await servedUpToGroupTwo(v);
