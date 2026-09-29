@@ -58,6 +58,8 @@ import { mountTillApi } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import { createTable } from "./tables.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 
@@ -745,6 +747,68 @@ describe("who may order a product on its own (spec §9, D12)", () => {
       .from(ticketItems)
       .where(eq(ticketItems.workingOrderId, id));
     expect(tickets).toEqual([{ lineId: stored!.id }]);
+  });
+
+  it("fires and pays a table's held standalone line after a publish makes it not sold separately", async () => {
+    const v = await setupLunch();
+    const bacon = await withBacon(v, "public");
+    const tables = await withTransaction(suite.db, (tx) =>
+      offerProducts(tx, v.cfg, { zone: "tables", productIds: [bacon.productId] }),
+    );
+    const { id: tableId } = await withTransaction(suite.db, (tx) =>
+      createTable(tx, v.cfg, { label: "Mesa 7", zoneId: tables.zoneId }),
+    );
+    const seat = await send(v, "POST", `/api/tables/${tableId}/seat`, {});
+    expect(seat.status).toBe(200);
+    const party = (await seat.json()) as { partyId: string; tabId: string; revision: number };
+    const held = await send(v, "POST", `/api/parties/${party.partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party.revision,
+      groups: [
+        {
+          lines: [{ menuItemId: tables.offerFor(bacon.productId), quantity: "1" }],
+          release: "hold",
+        },
+      ],
+    });
+    expect(held.status).toBe(200);
+    const submitted = (await held.json()) as { revision: number; groups: { id: string }[] };
+    await withTransaction(suite.db, async (tx) => {
+      await updateProduct(tx, bacon.productId, { ordering: "not_sold_separately" });
+      await offerProducts(tx, v.cfg, { zone: "tables", productIds: [bacon.productId] });
+    });
+    const served = (await (
+      await send(v, "GET", `/api/service-zones/${tables.zoneId}/offers`)
+    ).json()) as { offers: { productId: string; ordering: unknown }[] };
+    expect(served.offers.find((offer) => offer.productId === bacon.productId)?.ordering).toBe(
+      "not_sold_separately",
+    );
+
+    // A held group's kitchen item waits unfired: `fired_at` stays empty until the group is fired.
+    const ticketed = () =>
+      suite.db
+        .select({ productId: workingOrderLines.productId, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(ticketItems.workingOrderId, party.tabId));
+    expect(await ticketed()).toEqual([{ productId: bacon.productId, firedAt: null }]);
+
+    const fired = await send(
+      v,
+      "POST",
+      `/api/parties/${party.partyId}/groups/${submitted.groups[0]!.id}/fire`,
+      { submissionId: randomUUID(), expectedPartyRevision: submitted.revision },
+    );
+    expect(fired.status).toBe(200);
+    const paid = await send(v, "POST", "/api/sales", {
+      lines: [],
+      tender: { method: "cash", amount: "50.00" },
+      workingOrderId: party.tabId,
+      zoneId: tables.zoneId,
+    });
+    expect(paid.status).toBe(200);
+    expect(((await paid.json()) as { total: string }).total).toBe("2.00");
+    expect(await ticketed()).toEqual([{ productId: bacon.productId, firedAt: expect.any(String) }]);
   });
 });
 

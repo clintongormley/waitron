@@ -3176,11 +3176,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     each product's "how it is sold", until it is published again: documents published before the
     change carry no setting (measured on a seeded scratch venue, 2026-09-30). A standalone line
     already stored on a held order or tab still sends and pays after a publish makes its dish Not
-    sold separately, because it was already ordered (held order: "pays and sends a held order's
-    standalone line after a publish makes it not sold separately",
-    `apps/server/src/till-api.sell-published.test.ts`, which pays it and then sends it to the
-    kitchen; no test covers the tab); the same line in a draft is refused when the draft is sent or
-    saved, and the till marks it for removal.
+    sold separately, because it was already ordered (`apps/server/src/till-api.sell-published.test.ts`:
+    "pays and sends a held order's standalone line after a publish makes it not sold separately",
+    and "fires and pays a table's held standalone line after a publish makes it not sold
+    separately"); the same line in a draft is refused when the draft is sent or saved, and the till
+    marks it for removal.
   - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). Each
     sleeps `2 * SUBMIT_RETRY_PAUSE_MS + 50` ms while the retries pause on real time; one more test of
     that shape, "takes the party's revision from the floor read after a round that got no answer"
