@@ -279,10 +279,22 @@ function bluetoothApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listPrinters: vi.fn().mockResolvedValue([...printers, bluetoothPrinter]),
     listDiscoveredPrinters: vi.fn().mockResolvedValue(bluetooth),
     pairBluetooth: vi.fn().mockResolvedValue({
-      command: { id: "c1", kind: "pair", address: "00:11:22:33:44:55", state: "pending" },
+      command: {
+        id: "c1",
+        kind: "pair",
+        address: "00:11:22:33:44:55",
+        state: "pending",
+        expiresInMs: 120_000,
+      },
     }),
     forgetBluetoothPairing: vi.fn().mockResolvedValue({
-      command: { id: "c2", kind: "forget", address: "22:22:22:22:22:22", state: "pending" },
+      command: {
+        id: "c2",
+        kind: "forget",
+        address: "22:22:22:22:22:22",
+        state: "pending",
+        expiresInMs: 120_000,
+      },
     }),
     ...overrides,
   });
@@ -546,7 +558,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
   });
 
   it.each([
-    ["pending", {}],
+    ["pending", { expiresInMs: 120_000 }],
     ["failed", { error: "Authentication Failed" }],
   ] as const)("renders a Pair %s status accessibly", async (state, extra) => {
     const { el, host } = await mountWidget<PrintersScreen>(
@@ -573,6 +585,42 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     expect(q(el, '[data-test="discovered-command-00:11:22:33:44:55"]')).not.toBeNull();
     await expectNoA11yViolations(host);
+  });
+
+  it("renders the status row of a Pair whose device the scan lost accessibly", async () => {
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: bluetoothApi({
+          background: stubApi(false, { listDiscoveredPrinters: vi.fn().mockResolvedValue([]) }),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      q(el, '[data-test="pair-00:11:22:33:44:55"]')!.click();
+      await flush(el);
+      q(el, "[data-test=bluetooth-pin]")!.dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value: "0000" }, bubbles: true, composed: true }),
+      );
+      await flush(el);
+      q(el, "[data-test=confirm-pair]")!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(120_000);
+      await flush(el);
+      expect(q(el, '[data-test="discovered-row-00:11:22:33:44:55"]')!.textContent).toContain(
+        t("printers.bluetooth_not_seen"),
+      );
+      expect(q(el, '[data-test="discovered-command-00:11:22:33:44:55"]')!.textContent).toBe(
+        t("printers.bluetooth_no_answer"),
+      );
+      await expectNoA11yViolations(host);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders a switched-off Bluetooth printer's Forget pairing and its outcome accessibly", async () => {

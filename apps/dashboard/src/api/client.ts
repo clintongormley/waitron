@@ -749,6 +749,8 @@ export interface BluetoothCommandStatus {
   address: string;
   state: "pending" | "succeeded" | "failed";
   error?: string;
+  /** Pending only: how long until the server drops the command unanswered. */
+  expiresInMs?: number;
 }
 
 export interface DiscoveredPrinter {

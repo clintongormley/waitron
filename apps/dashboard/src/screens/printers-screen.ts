@@ -1,4 +1,4 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   focusFirstInvalid,
@@ -71,16 +71,8 @@ const bottomMessage = (...parts: (string | null)[]): string =>
 
 const refusal = (code: string | null): string | null => (code === null ? null : codeMessage(code));
 
-/** The field a `management.request_invalid` refusal names, when it names one. */
 const refusedField = (error: unknown): unknown =>
-  typeof error === "object" &&
-  error !== null &&
-  "params" in error &&
-  typeof error.params === "object" &&
-  error.params !== null &&
-  "field" in error.params
-    ? error.params.field
-    : undefined;
+  (error as { params?: { field?: unknown } } | null)?.params?.field;
 
 /** The agent's own PIN rule (`isBluetoothPin`, packages/print-agent/src/client.ts), repeated here
  * because the dashboard does not depend on that package. */
@@ -89,15 +81,13 @@ const BLUETOOTH_PIN = /^[\x21-\x7e]{1,16}$/;
 type CommandState = BluetoothCommandStatus["state"] | "no_answer";
 
 /** The screen's own copy of a command's status: the server's copy leaves with the device's row. */
-interface TrackedCommand {
-  agentId: string;
-  id: string;
-  kind: BluetoothCommandStatus["kind"];
-  address: string;
+type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
   state: CommandState;
-  error?: string;
   answerBy: number;
-}
+  /** A Pair's device as listed when its Pair dialog was opened, so its status keeps a row once the
+   * scan loses it. */
+  device?: DiscoveredPrinter;
+};
 
 const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, StringKey>> = {
   pair: {
@@ -151,9 +141,6 @@ interface EditablePrinter {
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
 export const SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
-/** The server drops a command no outcome has answered after this long (`COMMAND_TTL_MS`,
- * apps/server/src/printer-bluetooth-commands.ts), leaving no status to read. */
-export const COMMAND_ANSWER_MS = 120_000;
 
 @customElement("dashboard-printers-screen")
 export class PrintersScreen extends LitElement {
@@ -528,6 +515,9 @@ export class PrintersScreen extends LitElement {
   @state() private forgetting = false;
   #commandTimer?: ReturnType<typeof setInterval>;
   #commandReadInFlight = false;
+  /** Rebuilt in `willUpdate`, so a row's cells look these up instead of scanning per row. */
+  #printerCommands = new Map<string, [string, TrackedCommand]>();
+  #pairedReports = new Map<string, DiscoveredPrinter>();
   #commandEpoch = 0;
   /** The refresh error a failed status read showed, so the next good read can take it back. */
   #commandReadError: string | null = null;
@@ -567,6 +557,32 @@ export class PrintersScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+  }
+
+  protected override willUpdate(changed: PropertyValues): void {
+    if (changed.has("commands") || changed.has("printers")) {
+      const forgets = new Map<string, [string, TrackedCommand]>();
+      for (const entry of Object.entries(this.commands))
+        if (entry[1].kind === "forget" && !forgets.has(entry[1].address))
+          forgets.set(entry[1].address, entry);
+      this.#printerCommands = new Map();
+      for (const p of this.printers) {
+        const command =
+          p.transport === "bluetooth" ? forgets.get(String(p.localKey).toUpperCase()) : undefined;
+        if (command) this.#printerCommands.set(p.id, command);
+      }
+    }
+    if (changed.has("discovered")) {
+      this.#pairedReports = new Map();
+      for (const d of this.discovered)
+        if (
+          d.transport === "bluetooth" &&
+          d.paired === true &&
+          d.printerId !== null &&
+          !this.#pairedReports.has(d.printerId)
+        )
+          this.#pairedReports.set(d.printerId, d);
+    }
   }
 
   override disconnectedCallback(): void {
@@ -1076,35 +1092,44 @@ export class PrintersScreen extends LitElement {
     return commandKey(device.agentId, device.localKey!);
   }
 
-  #trackCommand(agentId: string, status: BluetoothCommandStatus): void {
+  #trackCommand(agentId: string, status: BluetoothCommandStatus, device?: DiscoveredPrinter): void {
+    const { expiresInMs, ...command } = status;
     const tracked: TrackedCommand = {
-      agentId,
-      id: status.id,
-      kind: status.kind,
-      address: status.address,
-      state: status.state,
-      answerBy: Date.now() + COMMAND_ANSWER_MS,
+      ...command,
+      // A pending status naming no deadline is due at once rather than on a guessed one.
+      answerBy: Date.now() + (expiresInMs ?? 0),
+      ...(device && { device }),
     };
-    if (status.error !== undefined) tracked.error = status.error;
     this.commands = { ...this.commands, [commandKey(agentId, status.address)]: tracked };
     if (status.state === "pending" && this.#commandTimer === undefined && this.isConnected)
       this.#commandTimer = setInterval(() => void this.#commandTick(), SCAN_POLL_MS);
   }
 
-  /** Settles pending commands from a read of the discovered list, or from none when the read failed. */
+  /** Settles pending commands from outcomes in `devices`, and calls the overdue rest unanswered. */
   #absorbCommands(devices: DiscoveredPrinter[]): void {
+    const pending = Object.entries(this.commands).filter(([, { state }]) => state === "pending");
+    if (pending.length === 0) return;
+    const reports = new Map<string, BluetoothCommandStatus>();
+    for (const device of devices) {
+      const key = device.transport === "bluetooth" ? this.#commandKeyOf(device) : undefined;
+      if (key !== undefined && device.bluetoothCommand && !reports.has(key))
+        reports.set(key, device.bluetoothCommand);
+    }
     const now = Date.now();
     const next = { ...this.commands };
     let changed = false;
-    for (const [key, tracked] of Object.entries(this.commands)) {
-      if (tracked.state !== "pending") continue;
-      const reported = devices.find(
-        (device) => device.transport === "bluetooth" && this.#commandKeyOf(device) === key,
-      )?.bluetoothCommand;
+    for (const [key, tracked] of pending) {
       // Matched by id: a read sent before this command existed can still carry an earlier outcome.
+      // Within one read an outcome wins over the deadline (answerBy is never before the server's own
+      // expiry, and the server records an outcome only while the command still waits); a read still
+      // in flight at the first tick past the deadline loses its outcome (#commandTick).
+      const reported = reports.get(key);
       if (reported?.id === tracked.id && reported.state !== "pending") {
-        next[key] = { ...tracked, state: reported.state };
-        if (reported.error !== undefined) next[key].error = reported.error;
+        next[key] = {
+          ...tracked,
+          state: reported.state,
+          ...(reported.error !== undefined && { error: reported.error }),
+        };
         changed = true;
       } else if (now >= tracked.answerBy) {
         next[key] = { ...tracked, state: "no_answer" };
@@ -1115,7 +1140,12 @@ export class PrintersScreen extends LitElement {
   }
 
   async #commandTick(): Promise<void> {
-    if (this.#commandReadInFlight) return;
+    if (this.#commandReadInFlight) {
+      // A read that never answers must not hold a command open past its deadline.
+      this.#absorbCommands([]);
+      this.#settleCommandPoll();
+      return;
+    }
     this.#commandReadInFlight = true;
     const epoch = this.#commandEpoch;
     let devices: DiscoveredPrinter[] | undefined;
@@ -1184,8 +1214,7 @@ export class PrintersScreen extends LitElement {
         device.localKey!,
         this.pairPin,
       );
-      // Sent even if the dialog closed meanwhile, so its status still shows in the row.
-      if (this.addingPrinter) this.#trackCommand(device.agentId, command);
+      if (this.addingPrinter) this.#trackCommand(device.agentId, command, device);
       if (epoch === this.#pairEpoch) await this.#closeModal("pair-printer-modal");
     } catch (error) {
       if (epoch !== this.#pairEpoch) return;
@@ -1200,18 +1229,7 @@ export class PrintersScreen extends LitElement {
 
   /** The agent's current pairing report for a switched-off Bluetooth printer, which Forget needs. */
   #pairedReport(p: Printer): DiscoveredPrinter | undefined {
-    if (p.transport !== "bluetooth" || p.active) return undefined;
-    return this.discovered.find(
-      (d) => d.transport === "bluetooth" && d.printerId === p.id && d.paired === true,
-    );
-  }
-
-  #printerCommand(p: Printer): [string, TrackedCommand] | undefined {
-    if (p.transport !== "bluetooth") return undefined;
-    const address = String(p.localKey).toUpperCase();
-    return Object.entries(this.commands).find(
-      ([, command]) => command.kind === "forget" && command.address === address,
-    );
+    return p.transport !== "bluetooth" || p.active ? undefined : this.#pairedReports.get(p.id);
   }
 
   #onForget(p: Printer, device: DiscoveredPrinter): void {
@@ -1803,7 +1821,7 @@ export class PrintersScreen extends LitElement {
       data-keep-open
       data-test=${`forget-pairing-${p.id}`}
       data-armed=${armed ? "true" : nothing}
-      ?disabled=${this.forgetting || this.#printerCommand(p)?.[1].state === "pending"}
+      ?disabled=${this.forgetting || this.#printerCommands.get(p.id)?.[1].state === "pending"}
       @click=${() => this.#onForget(p, device)}
       >${armed ? t("printers.bluetooth_forget_confirm") : t("printers.bluetooth_forget")}</wt-button
     >`;
@@ -1952,7 +1970,7 @@ export class PrintersScreen extends LitElement {
         label: t("printers.status"),
         cell: (p) => {
           const status = p.active ? t("printers.status_active") : t("printers.status_inactive");
-          const command = this.#printerCommand(p);
+          const command = this.#printerCommands.get(p.id);
           return command === undefined
             ? status
             : html`${status}
@@ -2700,6 +2718,28 @@ export class PrintersScreen extends LitElement {
 
   #renderNewPrinter(): TemplateResult | typeof nothing {
     if (!this.addingPrinter) return nothing;
+    const addable = this.discovered.filter((d) => this.#canAdd(d));
+    const rows = addable
+      .filter(
+        (d) =>
+          d.transport !== "bluetooth" ||
+          d.printerLike === true ||
+          this.showAllBluetooth ||
+          this.commands[this.#commandKeyOf(d)] !== undefined,
+      )
+      .sort(
+        (a, b) => Number(this.#unsupportedPagePrinter(a)) - Number(this.#unsupportedPagePrinter(b)),
+      );
+    const bluetoothKeys = (devices: DiscoveredPrinter[]) =>
+      new Set(devices.filter((d) => d.transport === "bluetooth").map((d) => this.#commandKeyOf(d)));
+    const rowKeys = bluetoothKeys(rows);
+    // A Pair whose device the list no longer shows keeps a status-only row until it is dismissed.
+    const lost = new Set(
+      Object.entries(this.commands).flatMap(([key, { device }]) =>
+        device !== undefined && !rowKeys.has(key) ? [device] : [],
+      ),
+    );
+    const listed = lost.size > 0 ? bluetoothKeys(this.discovered) : rowKeys;
     const columns: DataTableColumn<DiscoveredPrinter>[] = [
       {
         key: "name",
@@ -2719,6 +2759,7 @@ export class PrintersScreen extends LitElement {
               <div>${d.host ? `${d.host}:${d.port ?? 9100}` : (d.localKey ?? "—")}</div>
               ${d.agentName ? html`<div>${t("printers.discovered_seen_on").replace("{agent}", d.agentName)}</div>` : nothing}
               ${this.#disabledPrinter(d) ? html`<div>${t("printers.add_again_hint")}</div>` : nothing}
+              ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
             </div>
           </div>`,
       },
@@ -2747,6 +2788,12 @@ export class PrintersScreen extends LitElement {
           if (d.transport !== "bluetooth") return add;
           const key = this.#commandKeyOf(d);
           const command = this.commands[key];
+          const status = this.#renderCommand(
+            key,
+            command,
+            `discovered-command-${this.#deviceKey(d)}`,
+          );
+          if (lost.has(d)) return html`<div part="bluetooth-actions">${status}</div>`;
           // Pairing registers nothing: Add appears once the agent reports the device paired.
           return html`<div part="bluetooth-actions">
             ${
@@ -2762,12 +2809,11 @@ export class PrintersScreen extends LitElement {
                     >${t("printers.bluetooth_pair")}</wt-button
                   >`
             }
-            ${this.#renderCommand(key, command, `discovered-command-${this.#deviceKey(d)}`)}
+            ${status}
           </div>`;
         },
       },
     ];
-    const addable = this.discovered.filter((d) => this.#canAdd(d));
     const bluetooth = addable.some((d) => d.transport === "bluetooth");
     const otherDevices = addable.some((d) => d.transport === "bluetooth" && d.printerLike !== true);
     const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
@@ -2885,14 +2931,7 @@ export class PrintersScreen extends LitElement {
         data-test="discovered-table"
         aria-label=${t("printers.discovered_title")}
         .columns=${columns}
-        .rows=${addable
-          .filter(
-            (d) => d.transport !== "bluetooth" || d.printerLike === true || this.showAllBluetooth,
-          )
-          .sort(
-            (a, b) =>
-              Number(this.#unsupportedPagePrinter(a)) - Number(this.#unsupportedPagePrinter(b)),
-          )}
+        .rows=${[...rows, ...lost]}
         .rowKey=${(d: DiscoveredPrinter) => this.#deviceKey(d)}
         .emptyMessage=${this.scanning ? t("printers.scan_loading") : t("printers.no_discovered")}
       ></wt-data-table>

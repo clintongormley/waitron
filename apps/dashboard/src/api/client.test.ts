@@ -2431,6 +2431,7 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
       kind: "pair",
       address: "00:11:22:33:44:55",
       state: "pending",
+      expiresInMs: 120_000,
     } as const;
     const fetchImpl = vi
       .fn()
