@@ -4956,7 +4956,7 @@ approved.
     asked (`deploy/README.md`). On the owner's box (2026-09-29), under the new profile, a real PIN
     pairing from `docker compose exec -it print-agent bluetoothctl` succeeded and `remove` printed
     `Device has been removed`.
-  - **`scan off` and a device's `Disconnected` signals are in the profile — BUILT (A134).** That
+  - **`scan off` and a device's `Disconnected` signals are in the profile — BUILT (A134, #887).** That
     pairing on the owner's box logged four refusals: `Adapter1.StopDiscovery` (twice, from the
     interactive session) and the `Disconnected` signal on the device's `Device1` and
     `Bearer.BREDR1`. The profile now allows those three messages, and
