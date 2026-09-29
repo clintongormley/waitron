@@ -3,12 +3,21 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { HostLog } from "@waitron/print-agent";
+import {
+  type BluetoothAvailability,
+  classifyBluetoothFailure,
+  sameAvailability,
+} from "./bluetooth-availability.js";
 import { createLinuxDevices } from "./linux-devices.js";
 
 // What bluetoothctl 5.82 (the print-agent image) printed on a GitHub Ubuntu 24.04 runner on
 // 2026-09-29, as the `node` user, with the system bus socket mounted. Under Docker's
 // `docker-default` profile the bus refuses `Hello`; libdbus writes this to stderr and aborts (exit
-// 134). Under Waitron's profile with no BlueZ on the bus, it waits until its `--timeout` and exits 1.
+// 134). Under Waitron's profile with no BlueZ on the bus it printed only `Unable to open
+// mgmt_socket` and was still running when `timeout 8` killed it (exit 124, run 36558601920); a
+// Debian 13 container with its own system bus and no BlueZ did the same. With BlueZ answering,
+// `--timeout 3 devices Paired` took 3.01 s where `devices Paired` took 0.004 s (bluetoothctl 5.82
+// against scripts/fake-bluez.py), so the fake below makes `--timeout` cost the same.
 const BUS_REFUSED_STDERR = `dbus[9]: arguments to dbus_connection_get_object_path_data() were incorrect, assertion "connection != NULL" failed in file ../../dbus/dbus-connection.c line 5974.
 This is normally a bug in some application using the D-Bus library.
 
@@ -19,9 +28,11 @@ const FAKE_BLUETOOTHCTL = `#!/bin/sh
 printf '%s\\n' "$*" >> "$WT_BT_LOG"
 case "$WT_BT_MODE" in
   refused) printf '%s' "$WT_BT_STDERR" >&2; kill -ABRT $$ ;;
-  silent) echo "Unable to open mgmt_socket" >&2; exit 1 ;;
+  silent) exec sleep 30 ;;
   nocontroller) echo "No default controller available"; exit 0 ;;
-  ok) echo "Unable to open mgmt_socket" >&2; echo "Device 66:55:44:33:22:11 CI Printer"; exit 0 ;;
+  ok)
+    [ "$1" = "--timeout" ] && sleep "$2"
+    echo "Unable to open mgmt_socket" >&2; echo "Device 66:55:44:33:22:11 CI Printer"; exit 0 ;;
 esac
 exit 3
 `;
@@ -71,11 +82,15 @@ async function calls(): Promise<string[]> {
   }
 }
 
+/** A short kill deadline, so a BlueZ that never answers costs the suite a fraction of a second. */
+const LIST_DEADLINE_MS = 300;
+
 function devices() {
   return createLinuxDevices({
     sysfsRoot: sysfs,
     devRoot: "/dev",
     btDevicePath: () => "/dev/rfcomm0",
+    bluetoothListTimeoutMs: LIST_DEADLINE_MS,
     log,
     now: () => clock,
   });
@@ -120,7 +135,7 @@ describe("the Bluetooth side's availability", () => {
         msg: "bluetooth unavailable",
         fields: {
           reason: "dbus_unreachable",
-          detail: expect.stringContaining("connection != NULL"),
+          error: expect.stringContaining("connection != NULL"),
         },
       },
     ]);
@@ -131,16 +146,20 @@ describe("the Bluetooth side's availability", () => {
     });
   });
 
-  it("asks BlueZ with a bounded wait on the live path", async () => {
+  it("returns a healthy listing at once, without bluetoothctl's own timeout", async () => {
     mode("ok");
+    const started = performance.now();
     await devices().visibleDevices();
-    expect(await calls()).toEqual(["--timeout 3 devices Paired"]);
+    expect(performance.now() - started).toBeLessThan(1_500);
+    expect(await calls()).toEqual(["devices Paired"]);
   });
 
-  it("tells a BlueZ that never answers apart from a refused bus", async () => {
+  it("kills a BlueZ that never answers at the deadline, and tells it apart from a refused bus", async () => {
     mode("silent");
     const d = devices();
-    await d.visibleDevices();
+    const started = performance.now();
+    expect(await d.visibleDevices()).toEqual([USB]);
+    expect(performance.now() - started).toBeLessThan(LIST_DEADLINE_MS + 1_500);
     expect(d.bluetoothAvailability()).toMatchObject({
       available: false,
       reason: "bluez_not_answering",
@@ -201,5 +220,152 @@ describe("the Bluetooth side's availability", () => {
     clock += 30_000;
     await d.visibleDevices();
     expect(lines.map((l) => l.fields?.reason)).toEqual(["bluez_not_answering", "no_controller"]);
+  });
+});
+
+describe("the Bluetooth side, checked apart from the job poll", () => {
+  it("reports before anything asks for devices, and lists at most once per 30 seconds", async () => {
+    mode("refused");
+    const d = devices();
+    await d.checkBluetooth();
+    expect(d.bluetoothAvailability()).toMatchObject({ reason: "dbus_unreachable" });
+    expect(lines.map((l) => l.msg)).toEqual(["bluetooth unavailable"]);
+    clock += 29_999;
+    await d.checkBluetooth();
+    expect(await calls()).toHaveLength(1);
+    clock += 1;
+    await d.checkBluetooth();
+    expect(await calls()).toHaveLength(2);
+    expect(lines).toHaveLength(1);
+  });
+
+  it("adds no listing of its own while the job poll lists every time", async () => {
+    mode("ok");
+    const d = devices();
+    for (let poll = 0; poll < 20; poll += 1) {
+      await d.visibleDevices();
+      await d.checkBluetooth();
+      clock += 2_000;
+    }
+    expect(await calls()).toHaveLength(20);
+    expect(lines.map((l) => l.msg)).toEqual(["bluetooth available"]);
+  });
+
+  it("lets the job poll skip an unavailable side the check has just asked", async () => {
+    mode("silent");
+    const d = devices();
+    await d.checkBluetooth();
+    clock += 10_000;
+    expect(await d.visibleDevices()).toEqual([USB]);
+    expect(await calls()).toHaveLength(1);
+  });
+
+  it("shares a listing already running rather than starting a second", async () => {
+    mode("ok");
+    const d = devices();
+    const [devicesSeen] = await Promise.all([d.visibleDevices(), d.checkBluetooth()]);
+    expect(devicesSeen).toContainEqual(expect.objectContaining({ transport: "bluetooth" }));
+    expect(await calls()).toHaveLength(1);
+  });
+
+  it("starts a fresh listing once the last one has finished, even one that threw at once", async () => {
+    let listings = 0;
+    const d = createLinuxDevices({
+      sysfsRoot: sysfs,
+      devRoot: "/dev",
+      bluetooth: {
+        scan: async () => [],
+        pair: async () => ({ ok: false, error: "unused" }),
+        paired: () => {
+          listings += 1;
+          throw new Error("thrown before any promise");
+        },
+      },
+      now: () => clock,
+    });
+    await d.checkBluetooth();
+    clock += 30_000;
+    await d.checkBluetooth();
+    expect(listings).toBe(2);
+    expect(d.bluetoothAvailability()).toMatchObject({ reason: "failed" });
+  });
+});
+
+describe("classifyBluetoothFailure", () => {
+  const failed = (message: string, extra: Record<string, unknown> = {}): Error =>
+    Object.assign(new Error(message), extra);
+
+  it("reads a refused bus from libdbus's assertion", () => {
+    expect(classifyBluetoothFailure(failed(`Command failed\n${BUS_REFUSED_STDERR}`))).toEqual({
+      available: false,
+      reason: "dbus_unreachable",
+      detail: expect.stringContaining('assertion "connection != NULL" failed'),
+    });
+  });
+
+  it("reads a missing controller from bluetoothctl's own line", () => {
+    expect(classifyBluetoothFailure(failed("No default controller available"))).toMatchObject({
+      reason: "no_controller",
+    });
+  });
+
+  it("reads a listing killed at its deadline as BlueZ not answering", () => {
+    const killed = failed("Command failed: bluetoothctl devices Paired\n", {
+      killed: true,
+      code: null,
+      signal: "SIGKILL",
+    });
+    expect(classifyBluetoothFailure(killed)).toMatchObject({ reason: "bluez_not_answering" });
+  });
+
+  it("reports an exit it has not measured, or a missing command, as a plain failure", () => {
+    expect(classifyBluetoothFailure(failed("Command failed", { code: 1 }))).toMatchObject({
+      reason: "failed",
+    });
+    expect(
+      classifyBluetoothFailure(failed("spawn bluetoothctl ENOENT", { code: "ENOENT" })),
+    ).toEqual({
+      available: false,
+      reason: "failed",
+      detail: "spawn bluetoothctl ENOENT",
+    });
+  });
+
+  it("accepts a thrown value that is not an Error", () => {
+    expect(classifyBluetoothFailure("  bare text  ")).toEqual({
+      available: false,
+      reason: "failed",
+      detail: "bare text",
+    });
+    expect(classifyBluetoothFailure(null)).toMatchObject({ reason: "failed", detail: "null" });
+  });
+
+  it("keeps the first 500 characters of a long message", () => {
+    const detail = (classifyBluetoothFailure(failed(`  ${"x".repeat(600)}`)) as { detail: string })
+      .detail;
+    expect(detail).toBe("x".repeat(500));
+  });
+});
+
+describe("sameAvailability", () => {
+  const up: BluetoothAvailability = { available: true };
+  const refused: BluetoothAvailability = {
+    available: false,
+    reason: "dbus_unreachable",
+    detail: "one",
+  };
+
+  it("treats two available readings as the same", () => {
+    expect(sameAvailability(up, { available: true })).toBe(true);
+  });
+
+  it("treats available and unavailable as different, either way round", () => {
+    expect(sameAvailability(up, refused)).toBe(false);
+    expect(sameAvailability(refused, up)).toBe(false);
+  });
+
+  it("compares two unavailable readings by reason, not by their text", () => {
+    expect(sameAvailability(refused, { ...refused, detail: "two" })).toBe(true);
+    expect(sameAvailability(refused, { ...refused, reason: "no_controller" })).toBe(false);
   });
 });

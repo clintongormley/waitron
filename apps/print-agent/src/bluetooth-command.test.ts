@@ -24,6 +24,20 @@ describe("runBluetoothctl", () => {
     );
   });
 
+  it("kills the command at a shorter deadline when asked", async () => {
+    vi.mocked(execFile).mockImplementationOnce((...args: unknown[]) => {
+      (args[3] as (error: null, stdout: string) => void)(null, "");
+      return undefined as never;
+    });
+    await runBluetoothctl(["devices", "Paired"], { timeoutMs: 3_000 });
+    expect(execFile).toHaveBeenLastCalledWith(
+      "bluetoothctl",
+      ["devices", "Paired"],
+      expect.objectContaining({ timeout: 3_000, killSignal: "SIGKILL" }),
+      expect.any(Function),
+    );
+  });
+
   it.each(["ENOENT", "command exited 1", "command timed out"])(
     "rejects %s instead of returning an empty scan",
     async (message) => {

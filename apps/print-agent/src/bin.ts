@@ -3,7 +3,7 @@ import { serve } from "@hono/node-server";
 import { createAgent } from "@waitron/print-agent";
 import { readEnv } from "./config.js";
 import { createContainerHost, structuredLog } from "./host.js";
-import { createLinuxDevices } from "./linux-devices.js";
+import { BLUETOOTH_CHECK_TICK_MS, createLinuxDevices } from "./linux-devices.js";
 import { createServerTrustingFetch } from "./server-ca.js";
 import { createSetupApp } from "./setup-page.js";
 import { FileState } from "./state.js";
@@ -27,6 +27,10 @@ const host = createContainerHost({
   devices,
 });
 const agent = createAgent({ host });
+
+// The job poll lists Bluetooth only once the agent is approved; this reports it before then too.
+void devices.checkBluetooth();
+setInterval(() => void devices.checkBluetooth(), BLUETOOTH_CHECK_TICK_MS).unref();
 
 const page = createSetupApp({
   snapshot: () => agent.setupSnapshot(),

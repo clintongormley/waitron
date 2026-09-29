@@ -1,4 +1,5 @@
 import type { DiscoveredDevice, PairResult } from "@waitron/print-agent";
+import type { BluetoothctlRunOptions } from "./bluetooth-command.js";
 
 /**
  * The decoders are tested against fixtures synthesised in `bluetoothctl`'s documented output shape,
@@ -56,15 +57,18 @@ export function parsePairResult(text: string, mac: string): PairResult {
 
 const NO_CONTROLLER = "No default controller available";
 
-/** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. `listSeconds` bounds
- * the paired listing: with no BlueZ on the bus, bluetoothctl otherwise waits for it indefinitely. */
+/** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. `listTimeoutMs`
+ * kills the paired listing: with the system bus up and no BlueZ on it, bluetoothctl 5.82 was still
+ * waiting when killed after 8 seconds. It is a kill rather than bluetoothctl's own `--timeout`,
+ * which bluetoothctl waits out in full even after BlueZ has answered (see
+ * bluetooth-availability.test.ts). */
 export function createBluetoothctlHost(opts: {
-  run: (args: string[]) => Promise<string>;
+  run: (args: string[], runOpts?: BluetoothctlRunOptions) => Promise<string>;
   scanSeconds?: number;
-  listSeconds?: number;
+  listTimeoutMs?: number;
 }): BluetoothHost {
   const scanSeconds = opts.scanSeconds ?? 6;
-  const listTimeout = opts.listSeconds === undefined ? [] : ["--timeout", String(opts.listSeconds)];
+  const listOpts = opts.listTimeoutMs === undefined ? undefined : { timeoutMs: opts.listTimeoutMs };
   return {
     async scan(): Promise<DiscoveredDevice[]> {
       const output = await opts.run(["--timeout", String(scanSeconds), "scan", "on"]);
@@ -83,7 +87,8 @@ export function createBluetoothctlHost(opts: {
       return parsePairResult(await opts.run(["pair", mac]), mac);
     },
     async paired(): Promise<BluetoothDevice[]> {
-      const output = await opts.run([...listTimeout, "devices", "Paired"]);
+      const args = ["devices", "Paired"];
+      const output = await (listOpts === undefined ? opts.run(args) : opts.run(args, listOpts));
       if (output.replace(ANSI, "").includes(NO_CONTROLLER)) throw new Error(NO_CONTROLLER);
       return parseBluetoothctlDevices(output);
     },

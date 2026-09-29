@@ -100,10 +100,12 @@ describe("createBluetoothctlHost", () => {
     );
   });
 
-  it("paired() bounds its wait for BlueZ with bluetoothctl's own timeout when given one", async () => {
-    const run = vi.fn<(args: string[]) => Promise<string>>(async () => "");
-    await createBluetoothctlHost({ run, listSeconds: 3 }).paired();
-    expect(run).toHaveBeenCalledWith(["--timeout", "3", "devices", "Paired"]);
+  it("paired() bounds its wait for BlueZ with a kill deadline, not bluetoothctl's --timeout", async () => {
+    const run = vi.fn<(args: string[], opts?: { timeoutMs?: number }) => Promise<string>>(
+      async () => "",
+    );
+    await createBluetoothctlHost({ run, listTimeoutMs: 3_000 }).paired();
+    expect(run).toHaveBeenCalledWith(["devices", "Paired"], { timeoutMs: 3_000 });
   });
 
   it("paired() lists only bonded devices", async () => {
