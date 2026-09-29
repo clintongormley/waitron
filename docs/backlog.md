@@ -3210,7 +3210,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       refreshed removes B's mark (reproduced by the Codex review). Clearing takes no revision by the
       plan's P9. **DECIDED (owner, 2026-09-29): (a), keep the plan's P9** — a stale Mark cleared
       is accepted, and nothing changes.
-    - **DONE (C60, PR pending, 2026-09-29): the new names say "clearing", like the older ones**
+    - **DONE (C60, #855, 2026-09-29): the new names say "clearing", like the older ones**
       (`clearing_workflow`, "Mark cleared", the till's "Needs clearing"), by the owner's choice.
       `table.needs_cleaning` is now `table.needs_clearing`, `dining_tables.needs_cleaning_since` is
       `needs_clearing_since` (core migration `0041_table_needs_clearing`, one
