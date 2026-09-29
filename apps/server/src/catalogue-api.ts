@@ -1,4 +1,4 @@
-import { nonBlankTranslations } from "@waitron/catalogue";
+import { isProductOrdering, nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -1302,6 +1302,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         available?: unknown;
+        ordering?: unknown;
+        // Retired for `ordering`, declared so it can be refused rather than ignored.
         soldAlone?: unknown;
         modifiers?: unknown;
         // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
@@ -1343,8 +1345,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.available !== undefined && typeof body.available !== "boolean") {
         throw new AppError("management.request_invalid", { field: "available" });
       }
-      if (body.soldAlone !== undefined && typeof body.soldAlone !== "boolean") {
+      if (body.soldAlone !== undefined) {
         throw new AppError("management.request_invalid", { field: "soldAlone" });
+      }
+      if (body.ordering !== undefined && !isProductOrdering(body.ordering)) {
+        throw new AppError("management.request_invalid", { field: "ordering" });
       }
       screenDietOverride(body.dietOverride);
       // Applied in the SAME transaction as the create, so a product and its lists land atomically.
@@ -1367,7 +1372,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.image === undefined ? {} : { image: body.image }),
         ...(body.active === undefined ? {} : { active: body.active }),
         ...(body.available === undefined ? {} : { available: body.available }),
-        ...(body.soldAlone === undefined ? {} : { soldAlone: body.soldAlone }),
+        ...(body.ordering === undefined ? {} : { ordering: body.ordering }),
       };
       const created = await gated(sessionId, async (tx) => {
         if (customerName !== null) {
@@ -1402,6 +1407,8 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         available?: unknown;
+        ordering?: unknown;
+        // Retired for `ordering`, declared so it can be refused rather than ignored.
         soldAlone?: unknown;
         modifiers?: unknown;
         // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
@@ -1468,10 +1475,13 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         patch.available = body.available;
       }
       if (body.soldAlone !== undefined) {
-        if (typeof body.soldAlone !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "soldAlone" });
+        throw new AppError("management.request_invalid", { field: "soldAlone" });
+      }
+      if (body.ordering !== undefined) {
+        if (!isProductOrdering(body.ordering)) {
+          throw new AppError("management.request_invalid", { field: "ordering" });
         }
-        patch.soldAlone = body.soldAlone;
+        patch.ordering = body.ordering;
       }
       if (body.allergens !== undefined) {
         patch.allergens = body.allergens as ProductAllergens | null;

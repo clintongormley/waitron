@@ -33,8 +33,8 @@ beforeEach(async () => {
   input = {
     name: "Coffee",
     customerName: { en: "Coffee", es: "Café" },
-    // A non-default value so the canonical save/read round-trip proves sold_alone is actually persisted.
-    soldAlone: false,
+    // A non-default value so the canonical save/read round-trip proves ordering is actually persisted.
+    ordering: "not_sold_separately",
     description: { en: "Freshly roasted" },
     kitchenName: "BAR COFFEE",
     unitId: setup.unit.id,
@@ -579,7 +579,7 @@ describe("a variant's own page", () => {
       name: "Small",
       customerName: { en: "Small coffee" },
       kitchenName: "SM",
-      soldAlone: true,
+      ordering: "public",
       active: true,
       available: true,
       description: null,

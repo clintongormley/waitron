@@ -176,7 +176,7 @@ function emptyDraft(): ProductEditorDraft {
     unitPrice: "0.00",
     active: true,
     available: true,
-    soldAlone: true,
+    ordering: "public",
     vatClass: "general",
     variants: [],
     labelIds: [],

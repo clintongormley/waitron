@@ -23,7 +23,7 @@ const coffee: ProductEditorDraft = {
   vatClass: "reduced",
   active: true,
   available: true,
-  soldAlone: true,
+  ordering: "public",
   variants: [],
   allergens: { milk: { presence: "may_contain" } },
   dietaryDeclarations: ["vegan"],

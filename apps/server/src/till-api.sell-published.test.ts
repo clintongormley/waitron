@@ -8,6 +8,7 @@ import {
   saleLines,
   sales,
   withTransaction,
+  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -580,6 +581,130 @@ describe("an unavailable product keeps its place and cannot be ordered (Review F
       error: { code: "product.unavailable", params: { productId: v.burger.productId } },
     });
     expect(await written()).toEqual(before);
+  });
+});
+
+describe("who may order a product on its own (spec §9, D12)", () => {
+  /**
+   * Bacon — staff, customer and kitchen names all different — offered on its own on Lunch, and as an
+   * extra on Burger through a "Toppings" list. Lunch is published once Bacon's setting is written.
+   */
+  async function withBacon(v: Lunch, ordering: "public" | "staff_only" | "not_sold_separately") {
+    const bacon = await withTransaction(suite.db, async (tx) => {
+      // Burger's category, which the venue routes to a kitchen station.
+      const [{ categoryId }] = await tx
+        .select({ categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.id, v.burger.productId));
+      const bacon = await createProduct(tx, {
+        catalogueId: v.menuId,
+        categoryId,
+        name: "Bacon",
+        customerName: { [LOCALE]: "Beicon crujiente" },
+        kitchenName: "BCN",
+        pricingUnit: "each",
+        unitPrice: "2.00",
+        vatClass: "general",
+        ordering,
+      });
+      const toppings = await createExtraList(
+        tx,
+        {
+          name: "Toppings",
+          customerName: null,
+          kitchenName: null,
+          minPicks: 0,
+          maxPicks: null,
+          active: true,
+          items: [{ productId: bacon.id, maxQuantity: 2, preselected: false, price: "1.00" }],
+        },
+        LOCALE,
+      );
+      await writeProductModifiers(tx, v.burger.productId, [
+        { kind: "options", id: v.punto.listId },
+        { kind: "extras", id: toppings.id },
+      ]);
+      await setMenuItemExtraLists(tx, v.burger.offerId, [{ listId: toppings.id, items: [] }]);
+      const offer = await addProductToMenu(tx, { menuId: v.menuId, productId: bacon.id });
+      return { productId: bacon.id, offerId: offer.id, toppingsId: toppings.id };
+    });
+    await publish(v.menuId);
+    return bacon;
+  }
+
+  const baconLine = (bacon: { offerId: string }) => ({ menuItemId: bacon.offerId, quantity: "1" });
+  const burgerWithBacon = (v: Lunch, bacon: { productId: string; toppingsId: string }) => ({
+    menuItemId: v.burger.offerId,
+    quantity: "1",
+    options: [{ listId: v.punto.listId, labelId: v.punto.poco }],
+    extras: [{ listId: bacon.toppingsId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
+  });
+
+  async function servedOrdering(v: Lunch, offerId: string): Promise<unknown> {
+    const served = (await (
+      await send(v, "GET", `/api/service-zones/${v.zoneId}/offers`)
+    ).json()) as { offers: { id: string; ordering: unknown }[] };
+    return served.offers.find((offer) => offer.id === offerId)?.ordering;
+  }
+
+  // Staff only is for guest ordering, which does not exist yet, so today every order is a staff
+  // order and staff only sells exactly as public does.
+  it("sells a staff-only product on its own, on the bill and on the receipt", async () => {
+    const v = await setupLunch();
+    const bacon = await withBacon(v, "staff_only");
+    expect(await servedOrdering(v, bacon.offerId)).toBe("staff_only");
+    const response = await pay(v, [baconLine(bacon)]);
+    expect(response.status).toBe(200);
+    const ticket = (await response.json()) as {
+      total: string;
+      lines: { descriptions: Record<string, string> }[];
+    };
+    expect(ticket.total).toBe("2.00");
+    expect(ticket.lines.map((line) => line.descriptions[LOCALE])).toEqual(["Beicon crujiente"]);
+    const billed = await suite.db
+      .select({ name: workingOrderLines.name, kitchenName: workingOrderLines.kitchenName })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.productId, bacon.productId));
+    expect(billed).toEqual([{ name: "Bacon", kitchenName: "BCN" }]);
+  });
+
+  it("refuses a standalone line for a product not sold separately, writing nothing", async () => {
+    const v = await setupLunch();
+    const bacon = await withBacon(v, "not_sold_separately");
+    // Served, so the till can leave it out of search and still show it as an extra.
+    expect(await servedOrdering(v, bacon.offerId)).toBe("not_sold_separately");
+    const before = await written();
+    const refused = await pay(v, [lemonadeLine(v), baconLine(bacon)]);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: { code: "product.not_sold_separately", params: { productId: bacon.productId } },
+    });
+    expect(await written()).toEqual(before);
+  });
+
+  it("still sells a product not sold separately as an extra on another dish", async () => {
+    const v = await setupLunch();
+    const bacon = await withBacon(v, "not_sold_separately");
+    const response = await pay(v, [burgerWithBacon(v, bacon)]);
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { total: string }).total).toBe("10.00");
+  });
+
+  // The published version carries the setting, as it carries the price: the till's menu and the
+  // server's refusal change together, when the menu is published.
+  it("refuses by the published setting, so a change takes effect when the menu is published", async () => {
+    const v = await setupLunch();
+    const bacon = await withBacon(v, "public");
+    await withTransaction(suite.db, (tx) =>
+      updateProduct(tx, bacon.productId, { ordering: "not_sold_separately" }),
+    );
+    expect((await pay(v, [baconLine(bacon)])).status).toBe(200);
+    await publish(v.menuId);
+    const refused = await pay(v, [baconLine(bacon)]);
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "product.not_sold_separately" },
+    });
   });
 });
 

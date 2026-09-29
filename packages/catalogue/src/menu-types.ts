@@ -3,6 +3,7 @@ import type { ProductAllergens } from "./allergens.js";
 import type { DietDerivation, DietOverride, DietProfile } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
 import type { PricingUnit } from "./pricing.js";
+import type { ProductOrdering } from "./product-ordering.js";
 import type { VatClass } from "./vat-rates.js";
 import type { SellableUnit } from "./product-types.js";
 
@@ -39,6 +40,8 @@ export interface MenuOffer extends MenuItem {
   name: string;
   customerName: Record<string, string> | null;
   kitchenName: string | null;
+  /** The dish's own setting; a variant has none, and is ordered under its dish. */
+  ordering: ProductOrdering;
   unit: SellableUnit;
   vatClass: VatClass;
   category: string | null;

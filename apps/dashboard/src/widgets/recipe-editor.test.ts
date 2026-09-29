@@ -44,7 +44,7 @@ const PRODUCT: Product = {
   vatClass: "reduced",
   active: true,
   available: true,
-  soldAlone: true,
+  ordering: "public",
   allergens: null,
   dietOverride: null,
   manualAllergens: null,

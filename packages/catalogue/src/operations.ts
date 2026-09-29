@@ -29,6 +29,7 @@ import {
   type DietProfile,
 } from "./dietary.js";
 import type { PricingUnit } from "./pricing.js";
+import type { ProductOrdering } from "./product-ordering.js";
 import type { VatClass } from "./vat-rates.js";
 import { contentLanguages, menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
@@ -123,8 +124,8 @@ export interface CreateProductInput {
   active?: boolean;
   /** Omitted leaves it available. */
   available?: boolean;
-  /** Omitted leaves it offered standalone. */
-  soldAlone?: boolean;
+  /** Omitted leaves it `public`. */
+  ordering?: ProductOrdering;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
   dietaryDeclarations?: DietaryLabel[];
@@ -153,8 +154,8 @@ export interface UpdateProductInput {
   active?: boolean;
   /** `false` is "sold out for now". */
   available?: boolean;
-  /** Whether the product is offered standalone. */
-  soldAlone?: boolean;
+  /** Who may order the product on its own. */
+  ordering?: ProductOrdering;
   description?: Record<string, string> | null;
   kitchenName?: string | null;
   dietaryDeclarations?: DietaryLabel[] | null;
@@ -175,7 +176,7 @@ const PRODUCT_BASE_COLUMNS = {
   categoryId: effective.categoryId,
   name: products.name,
   customerName: products.customerName,
-  soldAlone: products.soldAlone,
+  ordering: products.ordering,
   pricingUnit: effective.pricingUnit,
   unitPrice: effective.unitPrice,
   vatClass: effective.vatClass,
@@ -205,7 +206,7 @@ interface RawProduct {
   categoryId: string | null;
   name: string;
   customerName: Record<string, string> | null;
-  soldAlone: boolean;
+  ordering: ProductOrdering;
   unitId: string | null;
   unitName: Record<string, string> | null;
   unitAbbreviation: Record<string, string> | null;
@@ -504,6 +505,7 @@ async function offerRowsOn(
           name: products.name,
           customerName: products.customerName,
           kitchenName: products.kitchenName,
+          ordering: products.ordering,
           ...offerLineColumns,
         })
         .from(menuItems)
@@ -593,6 +595,7 @@ async function offersOn(
       name: row.name,
       customerName: row.customerName,
       kitchenName: row.kitchenName,
+      ordering: row.ordering,
       ...offerLineValues(row, content.defaultLanguage),
       offeredModifiers: offeredByItem.get(row.id) ?? [],
       variants: variantsByItem.get(row.id) ?? [],
@@ -901,7 +904,7 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
     vatClass: input.vatClass,
     active: input.active ?? true,
     available: input.available ?? true,
-    soldAlone: input.soldAlone ?? true,
+    ordering: input.ordering ?? "public",
     manualAllergens: allergens,
     allergens: republish(allergens, null),
     dietOverride,

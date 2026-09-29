@@ -308,6 +308,25 @@ it("names a VAT change in Spanish", async () => {
   ]);
 });
 
+it.each([
+  ["en", "Bacon: how it is sold — shared product"],
+  ["es-ES", "Bacon: cómo se vende — producto compartido"],
+])("names a change to who may order a product on its own (%s)", async (locale, line) => {
+  setLocale(locale);
+  const el = await mount({
+    preview: preview([
+      {
+        kind: "product_changed",
+        productId: "p-bacon",
+        name: "Bacon",
+        fields: ["ordering"],
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([line]);
+});
+
 it("shows the live version and when it was published, apart from the pending changes", async () => {
   const el = await mount({
     preview: preview([

@@ -340,6 +340,11 @@ describe("menuDocumentHash", () => {
       (tx, f) =>
         tx.update(products).set({ categoryId: f.coldDrinks }).where(eq(products.id, f.large)),
     ],
+    // Being offered as an extra does not read the setting, so an extras item does not carry it.
+    [
+      "the extra's ordering",
+      (tx, f) => updateProduct(tx, f.extraLemon, { ordering: "not_sold_separately" }),
+    ],
     [
       "whether the offer withdraws the extra",
       async (tx, f) =>
@@ -369,6 +374,14 @@ describe("menuDocumentHash", () => {
     ["the dish's name", (tx, f) => updateProduct(tx, f.lemonade, { name: "Still lemonade" })],
     ["the dish's price", (tx, f) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })],
     ["the dish's image", (tx, f) => updateProduct(tx, f.lemonade, { image: "other.jpg" })],
+    [
+      "the dish's ordering",
+      (tx, f) => updateProduct(tx, f.lemonade, { ordering: "not_sold_separately" }),
+    ],
+    [
+      "the dish's ordering to staff only",
+      (tx, f) => updateProduct(tx, f.lemonade, { ordering: "staff_only" }),
+    ],
     [
       "the dish's allergens",
       (tx, f) =>
@@ -931,6 +944,25 @@ describe("diffMenuDocuments", () => {
         name: "Lemonade",
         fields: ["variants"],
         source: "this_menu",
+      },
+    ]);
+  });
+
+  it("names a change to the dish's ordering as the product's ordering", async () => {
+    const f = await menusFixture(fx.db);
+    const live = await build(f.dinner);
+    await app((tx) => updateProduct(tx, f.burger, { ordering: "staff_only" }));
+    const proposed = await build(f.dinner);
+    expect(proposed.offers[await app((tx) => offerOf(tx, f.dinner, f.burger))]!.ordering).toBe(
+      "staff_only",
+    );
+    expect(diffMenuDocuments(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.burger,
+        name: "Burger",
+        fields: ["ordering"],
+        source: "shared_product",
       },
     ]);
   });

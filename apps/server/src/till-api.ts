@@ -281,6 +281,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "product.variant_required": 400,
   // A line never sent whose product sold out, refused at send and at pay (spec §11.3).
   "product.unavailable": 409,
+  // A line refused against the live menu version, as a sold-out one is.
+  "product.not_sold_separately": 409,
   // A basket priced against a menu version that is no longer live: nothing was priced or written.
   "menu.version_changed": 409,
   "sale.unsupported_tender": 400,

@@ -30,6 +30,7 @@ import {
   setMenuVariants,
   setProductVariants,
   updateMenuItem,
+  updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { persons } from "@waitron/identity";
@@ -357,6 +358,19 @@ async function unsentDraftsAt(v: Venue, tableId: string) {
 
 const byOwner = (drafts: Draft[]) =>
   [...drafts].sort((a, b) => a.ownerName.localeCompare(b.ownerName));
+
+/** Pepper sauce, offered on its own and as an extra on the Burger, made not sold separately and the
+ * menu published again. */
+async function sauceNotSoldSeparately(v: Venue): Promise<void> {
+  await inTx(async (tx) => {
+    await updateProduct(tx, v.productId.sauce, { ordering: "not_sold_separately" });
+    await publishWorkingMenu(tx, v.menuId);
+  });
+}
+
+const withSauce = (v: Venue) => [
+  { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+];
 
 describe("separate drafts (spec §12 item 1)", () => {
   it("keeps Alex's and Sam's drafts apart, refuses Sam's save onto Alex's, and shows each unsent order on the table", async () => {
@@ -990,6 +1004,27 @@ describe("a refused save writes nothing", () => {
     );
   });
 
+  it("refuses a line ordering a product not sold separately on its own", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "fish")]);
+    await sauceNotSoldSeparately(v);
+    await refusedWritingNothing(
+      () => save(v, partyId, ALEX, draft.id, 0, [item(v, "fish"), item(v, "sauce")]),
+      { code: "product.not_sold_separately", params: { productId: v.productId.sauce } },
+    );
+  });
+
+  it("saves a product not sold separately as an extra on another dish", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    await sauceNotSoldSeparately(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", { extras: withSauce(v), options: [v.rare] }),
+    ]);
+    expect(draft.lines.map((line) => line.unavailable)).toEqual([false]);
+  });
+
   it("creates no draft when the first save is refused", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
@@ -1236,6 +1271,24 @@ describe("unavailable lines (spec §10)", () => {
     await db.run(sql`update products set available = 1 where id = ${v.productId.burger}`);
     expect(await draftsOf(v, partyId)).toEqual([draft]);
     expect(await storedLines(draft.id)).toEqual(stored);
+  });
+
+  // A draft saved while the product sold on its own keeps the line; a republish that stops that marks
+  // it, and sending it is refused.
+  it("marks a line whose product the menu republishes as not sold separately, and refuses sending it", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer"), item(v, "sauce")]);
+    await sauceNotSoldSeparately(v);
+    const [marked] = await draftsOf(v, partyId);
+    expect(orders(marked!)).toEqual([
+      { menuItemId: v.offer("beer"), quantity: "1.000", unavailable: false },
+      { menuItemId: v.offer("sauce"), quantity: "1.000", unavailable: true },
+    ]);
+    await refusedWritingNothing(
+      () => submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]),
+      { code: "product.not_sold_separately", params: { productId: v.productId.sauce } },
+    );
   });
 
   it("marks a line whose extras pick sells out", async () => {

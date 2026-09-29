@@ -89,7 +89,7 @@ function product(
     vatClass: "reduced",
     active: true,
     available: true,
-    soldAlone: true,
+    ordering: "public",
     allergens: null,
     dietOverride: null,
     manualAllergens: null,
@@ -491,8 +491,8 @@ describe("product-list", () => {
   it("shows a sold-on-its-own badge carrying text, not colour alone", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "dish", soldAlone: true }),
-        product({ id: "topping", soldAlone: false }),
+        product({ id: "dish", ordering: "public" }),
+        product({ id: "topping", ordering: "not_sold_separately" }),
       ],
     });
     const root = await tableRoot(el);
@@ -510,8 +510,8 @@ describe("product-list", () => {
   it("narrows the list to the products that are, or are not, sold on their own", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "dish", soldAlone: true }),
-        product({ id: "topping", soldAlone: false }),
+        product({ id: "dish", ordering: "public" }),
+        product({ id: "topping", ordering: "not_sold_separately" }),
       ],
     });
     const root = await tableRoot(el);
@@ -528,8 +528,8 @@ describe("product-list", () => {
   it("keeps a product and its variants together on both sides of the filter", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "dish", soldAlone: true }),
-        product({ id: "bun", soldAlone: false, variants: [bunVariant] }),
+        product({ id: "dish", ordering: "public" }),
+        product({ id: "bun", ordering: "not_sold_separately", variants: [bunVariant] }),
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
@@ -546,8 +546,8 @@ describe("product-list", () => {
   it("leaves a variant row's sold-on-its-own cell muted and out of the search", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "dish", soldAlone: true }),
-        product({ id: "bun", soldAlone: false, variants: [bunVariant] }),
+        product({ id: "dish", ordering: "public" }),
+        product({ id: "bun", ordering: "not_sold_separately", variants: [bunVariant] }),
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

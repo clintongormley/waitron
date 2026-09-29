@@ -25,6 +25,11 @@ interface ProductRow {
 }
 
 /** The till sells a variant only while it AND its product are Active, so that is its status. */
+/** Staff only is sold on its own too. */
+function soldAlone(product: Product): boolean {
+  return product.ordering !== "not_sold_separately";
+}
+
 function rowActive({ product, variant }: ProductRow): boolean {
   return product.active && (variant?.active ?? true);
 }
@@ -249,23 +254,23 @@ export class ProductList extends LitElement {
           return html`<span
             part="badge"
             data-test="sold-alone-badge"
-            data-sold-alone=${product.soldAlone ? "true" : "false"}
+            data-sold-alone=${soldAlone(product) ? "true" : "false"}
             >${
-              product.soldAlone ? t("product.sold_alone_badge") : t("product.not_sold_alone_badge")
+              soldAlone(product) ? t("product.sold_alone_badge") : t("product.not_sold_alone_badge")
             }</span
           >`;
         },
         searchValue: ({ product, variant }) =>
           variant
             ? ""
-            : product.soldAlone
+            : soldAlone(product)
               ? t("product.sold_alone_badge")
               : t("product.not_sold_alone_badge"),
-        sortValue: ({ product }) => (product.soldAlone ? 0 : 1),
+        sortValue: ({ product }) => (soldAlone(product) ? 0 : 1),
         filter: {
           label: t("product.sold_alone"),
           allLabel: t("product.filter_sold_alone_all"),
-          value: ({ product }) => (product.soldAlone ? "true" : "false"),
+          value: ({ product }) => (soldAlone(product) ? "true" : "false"),
           options: [
             { value: "true", label: t("product.sold_alone_badge") },
             { value: "false", label: t("product.not_sold_alone_badge") },

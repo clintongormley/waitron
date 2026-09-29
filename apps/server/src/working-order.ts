@@ -420,6 +420,9 @@ async function priceOrderLines(
     if (!offer.available) {
       throw new AppError("product.unavailable", { productId: offer.productId });
     }
+    if (offer.ordering === "not_sold_separately") {
+      throw new AppError("product.not_sold_separately", { productId: offer.productId });
+    }
     return { ...line, offer };
   });
   const invoiceLocales = await readInvoiceLocales(tx, cfg.locationId);

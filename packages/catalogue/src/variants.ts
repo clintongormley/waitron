@@ -205,7 +205,7 @@ export async function setProductVariants(
         ...values,
         parentId: productId,
         catalogueId: parent.catalogueId,
-        soldAlone: true,
+        ordering: "public",
         ...blankInherited(values),
       });
     } else {

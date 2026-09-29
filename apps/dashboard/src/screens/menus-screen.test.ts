@@ -69,7 +69,7 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     vatClass: "general",
     active: true,
     available: true,
-    soldAlone: true,
+    ordering: "public",
     allergens: null,
     dietOverride: null,
     manualAllergens: null,

@@ -52,7 +52,7 @@ const product: Product = {
   primaryCategoryId: "food",
   active: true,
   available: true,
-  soldAlone: true,
+  ordering: "public",
   variants: [],
 };
 const happyHour = { id: "l-happy", name: "Happy hour drinks", productCount: 1 };

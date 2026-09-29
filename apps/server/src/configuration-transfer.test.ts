@@ -630,7 +630,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
-      soldAlone: false,
+      ordering: "not_sold_separately",
     });
     const optionList = await createOptionList(
       tx,
@@ -758,6 +758,10 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       price: "1.50",
     });
     expect(extraLists[0]!.items[0]!.productId).not.toBe(original.shotId);
+    const shot = await tx.execute<{ ordering: string }>(
+      sql`select ordering from products where name = 'Café extra'`,
+    );
+    expect(shot.rows).toEqual([{ ordering: "not_sold_separately" }]);
 
     const menus = await tx.execute<{ id: string }>(
       sql`select id from catalogues where name = 'Modifier menu'`,

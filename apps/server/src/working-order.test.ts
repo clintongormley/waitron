@@ -1859,6 +1859,35 @@ describe("updateHeldOrder", () => {
     expect(await readLines(id)).toEqual(before);
   });
 
+  it("refuses a new line for a product not sold separately, and keeps the line already held", async () => {
+    const { cfg, cafeId, aguaId } = await setupVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, { id, lines: [{ productId: cafeId, quantity: "1" }] });
+    const before = await readLines(id);
+    await withTransaction(db, (tx) =>
+      catalogue.updateProduct(tx, cafeId, { ordering: "not_sold_separately" }),
+    );
+
+    await expect(
+      updateProducts(cfg, id, {
+        lines: [
+          { workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "1" },
+          { productId: cafeId, quantity: "1" },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: "product.not_sold_separately", params: { productId: cafeId } });
+    expect(await readLines(id)).toEqual(before);
+    await updateProducts(cfg, id, {
+      lines: [
+        { workingOrderLineId: before[0]!.id, productId: cafeId, quantity: "1" },
+        { productId: aguaId, quantity: "1" },
+      ],
+    });
+    const after = await readLines(id);
+    expect(after).toHaveLength(2);
+    expect(after[0]).toEqual(before[0]);
+  });
+
   it("keeps a raised quantity on a sellable line beside an unchanged line whose extra is sold out", async () => {
     const { cfg, zoneId, premiumCafeOfferId, extra, extras } = await parkWithExtra("1");
     const id = randomUUID();
