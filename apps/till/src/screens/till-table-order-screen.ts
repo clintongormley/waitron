@@ -3982,7 +3982,8 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  /** A bill of the party moves whole unless it is paid: the server refuses `bill.paid`. */
+  /** A bill of the party moves whole unless it is paid or abandoned: the server refuses `bill.paid`
+   * and `tab.not_open`. */
   #movable(): boolean {
     return this.party !== null && this.#chargeable();
   }

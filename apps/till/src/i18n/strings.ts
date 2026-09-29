@@ -1097,10 +1097,10 @@ export const es: Record<StringKey, string> = {
   "table.move_bill_scope": "{bill} a {into}",
   "table.bill_move_question":
     "¿Juntar esta cuenta con su cuenta principal o mantenerla como una cuenta aparte?",
-  "table.to_counter": "La barra",
+  "table.to_counter": "El mostrador",
   "held.move_to_table": "Pasar a mesa",
   "held.no_tables": "El plano no tiene mesas a las que pasarlo",
-  "counter.moved_to_table": "Pasada a {table}",
+  "counter.moved_to_table": "Pasado a {table}",
   "bill.pay_with_bill_payments":
     "Parte de esta cuenta ya está pagada: cobra el resto como pago de cuenta",
   "party.changed": "Otro dispositivo ha cambiado la mesa {table}, así que se ha vuelto a cargar.",

@@ -55,8 +55,6 @@ export class TillHeldOrders extends LitElement {
         text-align: center;
       }
 
-      /* The controls drop below the summary once both do not fit on one line, rather than
-         squeezing the summary into a column a word wide. */
       .order {
         display: flex;
         flex-wrap: wrap;

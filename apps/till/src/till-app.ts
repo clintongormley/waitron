@@ -3825,9 +3825,9 @@ export class TillApp extends LitElement {
   }
 
   /**
-   * The tab is an open working order, so `recordSale` files its stored lines and ignores the basket: `[]`
-   * is sent and `#syncIfDirty` is skipped, because it saves the counter basket, which is not the tab.
-   * Shares `submitting` with {@link #onConfirmPayment}.
+   * A presented bill is charged through `collectOrder`; an open one through `recordSale`, which files
+   * its stored lines and ignores the basket, so `[]` is sent. Neither runs `#syncIfDirty`, because it
+   * saves the counter basket, which is not the tab. Shares `submitting` with {@link #onConfirmPayment}.
    */
   async #onPayTab(event: Event): Promise<void> {
     if (this.submitting || this.activeTabId === undefined) return;

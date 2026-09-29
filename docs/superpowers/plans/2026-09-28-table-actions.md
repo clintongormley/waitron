@@ -3898,6 +3898,16 @@ only, consuming Task 8's routes.
 
 ## Task 12: The till — move a bill, to and from the counter — slug `party-till-move-bill`
 
+> 2026-09-29 (Task 12 finish): as built, these points differ from this task's text below.
+> `/collect` on the partly paid bill moved to the counter is refused `working_order.not_placed`,
+> not `bill.payments_received`: the bill is open, not placed (pinned in
+> `apps/server/src/till-api.move-bill.test.ts`). `table.move_to_counter` was not added: the counter
+> is a target in Move this bill's list, named `table.to_counter`. `party.main_bill_stays` was not
+> reworded; its wording is pinned in `apps/till/src/i18n/codes.test.ts`. `readReceivedByBill` was
+> replaced by `readPaymentsByBill` (`apps/server/src/bill-payments.ts`), which `listHeldOrders`
+> and `readBillsOfParties` both read. The Spanish strings shipped as "El mostrador" and
+> "Pasado a {table}".
+
 Spec §7 (Move a bill), decisions 11 and 12, §15 (the till, looked at). It is A81's and A82's till
 half; both are retired from lane A's queue when this lands. Plan decisions: P12, P18, P19 and P25.
 Branch `feat/party-till-move-bill`. Full review wave: it moves bills holding money, and A81 and A82

@@ -3840,53 +3840,56 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     another table or the counter, and a counter order to a table, through Task 7's
     `POST /api/bills/:id/move`; and it pays a moved bill the way the server takes it.** This is
     the till half of campaign items A81 and A82. What changes for a person using the till:
-    - The table screen's actions offer Move this bill, except on a paid bill. It lists The counter
-      first, then every other table with its state as Move guests does (a table needing clearing
-      shown disabled with its reason), under "Move Bill 2 of Ana (Mesa 4) to:". The counter and a
-      free table act at once; a table another party holds first asks whether to merge the bill
-      into that party's main bill (the default) or keep it separate, headed "Bill 2 of Ana
-      (Mesa 4) to Luis (Mesa 7)".
-    - The till sends the party's id and revision, what it read at the target table
-      (`otherPartyId` with `expectedOtherPartyRevision`, or `otherPartyId: null` for a table read
-      free), and for the counter the zone the counter's own orders are made in (the one
-      `api.setServiceZone` was given), or null when the counter's offers could not be read.
+    - The table screen's actions offer Move this bill, except on a paid or abandoned bill. It
+      lists The counter first, then every other table with its state as Move guests does (a table
+      needing clearing shown disabled with its reason), under "Move Ana · Bill 2 to:", the bill
+      named as the bills list names it. The counter and a free table act at once; a table another
+      party holds first asks whether to merge the bill into that party's main bill (the default)
+      or keep it separate, headed "Ana · Bill 2 to Luis (Mesa 7)".
+    - The till sends the party's id and revision, the party the picker showed seated at the target
+      table (`otherPartyId` with `expectedOtherPartyRevision`, or `otherPartyId: null` for a table
+      shown free), not one read from a later floor, and for the counter the zone the counter's own
+      orders are made in (the one `api.setServiceZone` was given), or null when the counter's
+      offers could not be read.
     - Afterwards the screen stays with the party, on its main bill or its first unpaid one, and
-      goes back to the floor when the party has no bill left. After a move to the counter the
-      counter's held orders are read again, so the bill is listed there under the label the server
-      gave it. `party.main_bill_stays`, `bill.paid`, `group.held_leaves_party`,
+      goes back to the floor when the party has no bill left; an answer arriving after the waiter
+      has opened another table changes nothing there. After a move to the counter the counter's
+      held orders are read again, so the bill is listed there under the label the server gave it;
+      a failed read says "The bill was moved, but the list of held orders could not refresh." `party.main_bill_stays`, `bill.paid`, `group.held_leaves_party`,
       `table.needs_clearing` and the other table refusals show in their own words;
       `party.out_of_date` reloads and says what changed.
     - Each held counter order has Move to table ("Pasar a mesa"). It reads the floor again, lists
       the tables the same way, asks the bill question at a seated table ("#12 Ana to Luis
-      (Mesa 7)"), and sends `partyId: null`. The counter stays on screen and says "Moved to
+      (Mesa 7)"), and sends `partyId: null` with the party it showed seated there. The counter stays on screen and says "Moved to
       Mesa 9"; a basket holding that order is emptied. A party's own bill, which the held list
       also shows, gets no Move to table.
     - Paying picks the path by the bill's state. A presented bill is collected through
       `/collect`, from the bill list's Take payment or the one beside a refused Finish (which now
-      offers it), and Finish then succeeds. An open bill with money already on it (from the
-      table's bills, `outstanding` below `total`; from the held list, also a payment still
-      pending) is not sent to the single payment: the till says what it still owes and "Part of
+      offers it), and Finish then succeeds; the original receipt is offered afterwards unless a
+      sale had already been filed for the bill (`receiptAvailable`). An open bill holding a
+      payment, received or still pending at the reader (the server's `hasPayments`, on the
+      table's bills and the held list alike), is not sent to the single payment: the till says what it still owes and "Part of
       this bill is already paid: take the rest as a bill payment", and the counter's pay buttons
       are disabled for it. A single payment refused `bill.payments_received` says the same. Any
       other bill pays as before. There is still no bill-payment screen (the service plan's Task
       15, lane B's B15); once it lands, that sentence should open it.
     - The held list shows what a partly paid order still owes.
     - Server: `GET /api/working-orders` (`listHeldOrders`) answers `outstanding`, `hasPayments`
-      and `partyId` for each open order.
+      and `partyId` for each open order, and a party's bills (`PartyBill`) carry `hasPayments`
+      too. Both read the payments through `readPaymentsByBill` (`apps/server/src/bill-payments.ts`).
     Tests: `apps/till/src/till-app-parties.test.ts`, `till-app.test.ts`,
     `screens/till-table-order-screen.test.ts`, `.parties.test.ts`, `.a11y.test.ts` (Move this
     bill's list, its bill choice, and the partly paid sentence, both themes),
     `screens/till-counter-screen.test.ts`, `widgets/held-orders.test.ts` and `.a11y.test.ts` (the
     picker and its bill choice, both themes), `widgets/bill-choice-dialog.test.ts` and
     `.a11y.test.ts`, `widgets/card-grid.test.ts`, `api/client.test.ts`; server
-    `till-api.move-bill.test.ts` and `working-order.test.ts`. No migration.
+    `till-api.move-bill.test.ts`, `working-order.test.ts`, `parties.test.ts` and
+    `bill-payments.test.ts`. No migration.
     Open points: `party.main_bill_stays` still reads "Move one of those instead" (Task 7's
     wording, pinned in `apps/till/src/i18n/codes.test.ts`); the plan asked for "move the other
     bills first or merge them". The plan's `table.move_to_counter` ("Move to counter") string was
     not added: the counter is a target in Move this bill's list, named `table.to_counter`, so
-    nothing would read it. The table screen cannot see a card payment still pending on a bill
-    (`PartyBill` carries no such flag); the server's `bill.payments_received` refusal is what the
-    till shows then.
+    nothing would read it.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
@@ -3903,8 +3906,8 @@ bill is refused.
   offers Take payment only on bills that are still open, so there is no button to charge it. Finish
   table is then refused because that bill is unpaid; once no open bill is left, the refusal tells
   the person to take payment but offers no button that does it. Charging it belongs to plan Task 14 (bill payments).
-  _(2026-09-29, table actions Task 12: the table screen now offers Take payment on a presented
-  bill, beside a refused Finish too, and collects it through `/collect`.)_
+  _(2026-09-29, table actions Task 12: retired. The table screen now offers Take payment on a
+  presented bill, beside a refused Finish too, and collects it through `/collect`.)_
 - **The floor and the table screen write amounts differently (plan Task 2, 2026-09-26).** The floor
   shows `44.00 €` while the table screen shows `44,00 €` in Spanish. The floor's format predates
   the parties work; Task 2 now also uses it for what a party still owes. Make the floor follow the

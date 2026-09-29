@@ -3627,7 +3627,10 @@ export async function unjoinTable(
 export interface HeldOrderSummary {
   id: string;
   orderNumber: number;
-  /** The operator-supplied label ("Mesa 4"), or null when the order was parked without one. */
+  /**
+   * The operator-supplied label ("Mesa 4"); on an open bill moved to the counter, the party's display
+   * name the server set; null when neither gave one.
+   */
   label: string | null;
   /** Number of lines on the order, 0 for a lineless order. */
   itemCount: number;
@@ -3711,7 +3714,7 @@ export interface HeldOrder {
   }[];
 }
 
-/** List the venue's open parked orders, lineless ones included. */
+/** List the venue's open bills, a party's bill and lineless ones included. */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
   cfg: TillConfig,

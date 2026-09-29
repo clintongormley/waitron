@@ -718,8 +718,9 @@ export interface TillSaleResult {
 }
 
 /**
- * One row of `GET /api/working-orders` — a parked order the counter can retrieve. `total` is the GROSS
- * (VAT-inclusive) draft total; `label` is null when the order was parked without one.
+ * One row of `GET /api/working-orders` — an open bill, a party's bill included. `total` is the GROSS
+ * (VAT-inclusive) draft total; `label` is null when neither the operator nor a move to the counter
+ * gave one.
  */
 export interface HeldOrderSummary {
   id: string;
@@ -1250,11 +1251,7 @@ export interface BillRevisions {
 /** Where Move a bill sends a bill: a table, or the counter in the counter's zone (null for none). */
 export type MoveBillTarget = { tableId: string } | { counter: { zoneId: string | null } };
 
-/**
- * What Move a bill sends of the parties the till read: the bill's party and its revision, as
- * {@link BillRevisions} does, but `partyId: null` for a bill read with no party, as a counter order;
- * and what it read at a target table, as {@link TableActionRevisions} does.
- */
+/** Move a bill's revisions; `partyId` is null for a bill read with no party, as a counter order. */
 export interface MoveBillRevisions
   extends
     Omit<BillRevisions, "partyId">,

@@ -116,7 +116,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) selectedDiet: DietPredicate | null = null;
   /** A sale is in flight: the visible half of the app's single-flight double-file guard. */
   @property({ type: Boolean }) busy = false;
-  /** A basket line must be resolved before paying (till-app's refresh flow). */
+  /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
   @property({ type: Boolean }) payHeld = false;
   /** When undefined the grid renders nothing. */
   @property({ attribute: false }) counterTab?: TabDef;
