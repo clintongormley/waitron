@@ -47,14 +47,14 @@ import {
  * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
  * with its served exception and a refusal to move a line off an order that is not open, by
  * `packages/db/drizzle/0033_line_served_exception.sql`. Both are re-created by
- * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill that
- * moves whole. Some triggers ACT rather than refuse.
+ * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
+ * Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
  * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`):
  * a table's service status comes off when the party leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
  * And the two of `packages/db/drizzle/0038_main_bill_release.sql`: a party's `main_bill_id` is
- * cleared when that bill leaves `open`, or moves to another party.
+ * cleared when that bill leaves `open`, or leaves the party (to another party or to the counter).
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
  * whatever the row, so they have no accepting control here.
@@ -634,8 +634,9 @@ describe("working_orders_enforce_transition", () => {
   });
 });
 
-/** Every column of `working_orders` a presented bill's move must leave as it is. */
+/** The columns of `working_orders` the placed → placed exception does not hold unchanged. */
 const MOVABLE_ORDER_COLUMNS = new Set(["status", "party_id", "delivery_table_id", "revision"]);
+/** Every column of `working_orders` a presented bill's move must leave as it is. */
 const FROZEN_PLACED_ORDER_COLUMNS = connection
   .prepare(`select name from pragma_table_info('working_orders') order by cid`)
   .all()

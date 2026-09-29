@@ -255,7 +255,17 @@ it("words the refusals a bill move to a table or away from its party can meet, i
   expect(codeMessage("party.main_bill_stays", "en")).toBe(
     "This is the table's main bill, and the table has other unpaid bills. Move one of those instead",
   );
+  expect(codeMessage("party.main_bill_stays", "es")).toBe(
+    "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve una de esas",
+  );
+  expect(codeMessage("table.already_in_party", "en")).toBe(
+    "Those guests already have that table. Choose another table",
+  );
   expect(codeMessage("table.already_in_party", "es")).toBe(
     "Esa mesa ya es de estos clientes. Elige otra mesa",
   );
+  expect(codeMessage("table.inactive", "en")).toBe(
+    "That table is no longer in use. Choose another table",
+  );
+  expect(codeMessage("table.inactive", "es")).toBe("Esa mesa ya no está en uso. Elige otra mesa");
 });

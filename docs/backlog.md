@@ -3246,7 +3246,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `party.out_of_date`.
     - Merging bills, or transferring items between them, sends the kitchen no MOVED slip while
       the party holds a table: every bill of such a party names the same tables
-      (`orderTableLabels`), and `enqueueMovedSlips` sends a slip only when the tables named change.
+      (`orderTableLabels`), and `enqueueMovedSlips` sends a slip only when the tables named change
+      (unless its caller forces one, as the bill move does to or from the counter; Task 7).
       The party-wide notices in the Task 4 entry above are for merging tabs.
     Tests: `apps/server/src/party-bill-actions.test.ts` (each refusal reads back that the party,
     its tables, and each bill's row, lines and payments are unchanged; the two-tills cases run in
@@ -3283,8 +3284,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
       bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
       that party, before any revision is asked for; a `partyId` naming a party the bill has since
-      left is refused the same way. A request with no `partyId` and no revision for a party's bill
-      stays `management.request_invalid` `{ field: "expectedPartyRevision" }`. **Task 12's till
+      left is refused the same way, and one naming no party at all is refused `party.not_open`. A
+      request with no `partyId` and no revision for a party's bill stays `management.request_invalid`
+      `{ field: "expectedPartyRevision" }`. **Task 12's till
       must send `partyId: null` when it moves a counter order**, or a second till moving the same
       order is told its request is malformed rather than out of date.
     - A bill holding a payment, a card at the reader or an invoice is never merged, so it keeps
@@ -3331,9 +3333,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `table.already_in_party`; the till also gained wording for `table.inactive`. Migration: core
     `0042_placed_bill_moves` re-creates `working_orders_enforce_transition` and
     `working_order_lines_require_open_parent_update` from the text a migrated database stores,
-    each with one exception for a presented bill (plan P14): its row may change party, lose its
-    delivery table and move its revision on, and its lines may change kitchen group, with every
-    other column unchanged. `scripts/behavioural-triggers.test.ts` tries each other column of both
+    each with one exception for a presented bill (plan P14): its row may change its party, its
+    delivery table and its revision, and its lines may change kitchen group, with every other
+    column unchanged. `scripts/behavioural-triggers.test.ts` tries each other column of both
     tables against the exception.
 
     Upgrade measured 2026-09-29 on a scratch venue in `/tmp`: migrated to main `59dafa994`'s

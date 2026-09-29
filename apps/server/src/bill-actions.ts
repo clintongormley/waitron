@@ -74,9 +74,10 @@ async function refuseTouched(tx: Transaction, billId: string, status: BillStatus
 
 /**
  * The party of the path bill, checked and moved on (`party.not_open`, then `party.out_of_date`).
- * A command naming a party the bill is no longer in is `party.out_of_date` whatever revision it
- * sends, and so is one that read the bill with no party (`partyId: null`) once it has one, naming
- * that party. A bill of no party has no revision.
+ * A command naming a party the bill is not in is `party.out_of_date` whatever revision it sends,
+ * or `party.not_open` when no party has that id; one that read the bill with no party
+ * (`partyId: null`) once it has one is `party.out_of_date`, naming that party. A bill of no party
+ * has no revision.
  */
 export async function guardPathParty(
   tx: Transaction,

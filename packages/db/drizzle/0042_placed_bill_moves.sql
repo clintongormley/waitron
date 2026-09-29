@@ -1,9 +1,11 @@
--- The two triggers as a migrated database stores them, each with one exception for a presented
--- (`placed`) bill that moves whole to another party or to the counter: its fiscal content is
--- unchanged (spec §9). The bill's row may change party, lose its delivery table and move its
--- revision on, so that list names every other column of `working_orders`. Its lines may change
--- kitchen group, which is kitchen state, not invoice content, so that list names every other column
--- of `working_order_lines`. A column added to either table goes into its list too.
+-- `working_orders_enforce_transition` from `0019_settled_order_freeze_visit_id.sql`, as stored once
+-- `0036_party_rename.sql` renamed `visit_id` to `party_id`, and
+-- `working_order_lines_require_open_parent_update` from `0033_line_served_exception.sql`, each
+-- re-created with one exception for a presented (`placed`) bill. Its row may stay `placed` and
+-- change its party, its delivery table and its revision, so that list names every other column of
+-- `working_orders` but `status`. Its lines may change kitchen group, which is kitchen state, not
+-- invoice content, so that list names every other column of `working_order_lines`. A column added
+-- to either table goes into its list too.
 DROP TRIGGER working_orders_enforce_transition;
 --> statement-breakpoint
 CREATE TRIGGER working_orders_enforce_transition

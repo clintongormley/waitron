@@ -241,8 +241,9 @@ export interface BillState {
 
 /**
  * Whether the bill is untouched: open, not being paid in full at a reader, and holding no payment,
- * one given back in full or being given back included. `known` is the bill's state when the caller
- * has just read it.
+ * one given back in full or being given back included. Stricter than `requireUntouched`
+ * (bill-actions.ts), which does not count a card payment in full at the reader (`payment_attempt_at`
+ * set) as touching the bill. `known` is the bill's state when the caller has just read it.
  */
 export async function isUntouched(
   tx: Transaction,
@@ -270,7 +271,7 @@ const movedRevision = sql`${workingOrders.revision} + 1`;
 /**
  * The bill joins the party: no longer delivered to a table, its revision moved on, and, while it is
  * open, its service context taking `zoneId` for what is added later. A presented bill keeps its own
- * zone, since its collection settles the invoice it already has. Answers the bill's state.
+ * zone. Answers the bill's state.
  */
 export async function takeIntoParty(
   tx: Transaction,
