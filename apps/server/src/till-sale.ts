@@ -855,7 +855,7 @@ async function payIntegrated(
     const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
-    // `working_orders_enforce_transition` refuses any write that keeps an order placed.
+    // `working_orders_enforce_transition` refuses its `payment_attempt_at` being set.
     const attemptAt = wasPlaced ? null : nowIso();
     if (attemptAt !== null) {
       await tx

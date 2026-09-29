@@ -1,5 +1,7 @@
-import { asc, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import {
+  addProductToMenu,
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
@@ -7,8 +9,10 @@ import {
   listAvailableProducts,
 } from "@waitron/catalogue";
 import {
+  billPayments,
   diningTables,
   parties,
+  partyTables,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -18,6 +22,7 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
+import { allowMenuInZone } from "@waitron/venue-service";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   locationId as brandLocationId,
@@ -25,15 +30,23 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { takeBillPayment } from "../bill-payments.js";
 import { deploymentEnvironment } from "../config.js";
-import { ALL_MODULES } from "../modules.js";
+import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { placeGroups } from "../order-groups.js";
 import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { createTable } from "../tables.js";
 import type { TillConfig } from "../till-config.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "../till-sale.js";
-import { addTabRound, joinTable, listTablesWithState, splitOffCheck } from "../working-order.js";
+import {
+  addTabRound,
+  joinTable,
+  listTablesWithState,
+  parkOrder,
+  splitOffCheck,
+} from "../working-order.js";
+import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 
 /**
@@ -52,6 +65,7 @@ const MENU: { name: string; customer: string; kitchen: string; price: string }[]
   { name: "Flan", customer: "Flan de huevo", kitchen: "FLAN", price: "5.00" },
   { name: "Paella", customer: "Paella valenciana", kitchen: "PAELLA", price: "20.00" },
   { name: "Tarta", customer: "Tarta de queso", kitchen: "TARTA", price: "15.00" },
+  { name: "Caña", customer: "Caña de cerveza", kitchen: "CANA", price: "3.00" },
 ];
 
 export interface PartyVenue {
@@ -61,8 +75,13 @@ export interface PartyVenue {
   cfg: TillConfig;
   /** The "tables" zone. */
   tables: ZoneOffers;
+  /** The venue's counter-default zone, selling the same offers as the tables zone. */
+  counter: ZoneOffers;
   /** The offer selling the product named `name` in the tables zone. */
   item(name: string): string;
+  /** The offer selling the product named `name` in the counter zone. */
+  counterItem(name: string): string;
+  productId(name: string): string;
   /** A fresh dining table, in the tables zone unless another is named. */
   table(label: string, zoneId?: string): Promise<string>;
 }
@@ -123,7 +142,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     tipsEnabled: false,
     orderFlow: "prepay",
   };
-  const { tables, productIds } = await withTransaction(db, async (tx) => {
+  const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Carta" });
     const platos = await createCategory(tx, { name: { [LOCALE]: "Platos" } });
     for (const product of MENU) {
@@ -142,6 +161,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     const available = (await listAvailableProducts(tx, cfg.locationId)).products;
     return {
       tables: await offerProducts(tx, cfg, { zone: "tables" }),
+      counter: await offerProducts(tx, cfg, { zone: "counter" }),
       productIds: new Map(available.map((p) => [p.name, p.id])),
     };
   });
@@ -151,7 +171,10 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     clock,
     cfg,
     tables,
+    counter,
     item: (name) => tables.offerFor(productIds.get(name)!),
+    counterItem: (name) => counter.offerFor(productIds.get(name)!),
+    productId: (name) => productIds.get(name)!,
     table: (label, zoneId = tables.zoneId) =>
       withTransaction(db, async (tx) => {
         const { id } = await createTable(tx, cfg, { label, zoneId });
@@ -378,4 +401,91 @@ export async function linesOf(
       .where(eq(workingOrderLines.workingOrderId, billId))
       .orderBy(asc(workingOrderLines.lineNo)),
   );
+}
+
+/** An open counter order of no party in the counter zone, one of each dish named. */
+export async function counterOrder(v: PartyVenue, ...names: string[]): Promise<string> {
+  const id = randomUUID();
+  await parkOrder({ db: v.db }, v.cfg, {
+    id,
+    zoneId: v.counter.zoneId,
+    lines: names.map((name) => ({ menuItemId: v.counterItem(name), quantity: "1" })),
+    operatorId: OPERATOR,
+  });
+  return id;
+}
+
+/**
+ * A menu of its own offering the product at `price`, allowed in the zone and made its default, and
+ * published; answers the offer. Every other zone keeps selling the product at its own price.
+ */
+export async function pricedInZone(
+  v: PartyVenue,
+  zoneId: string,
+  productName: string,
+  price: string,
+): Promise<string> {
+  return inTx(v, async (tx) => {
+    const menu = await createCatalogue(tx, { name: `Precios ${randomUUID().slice(0, 8)}` });
+    const offer = await addProductToMenu(tx, {
+      menuId: menu.id,
+      productId: v.productId(productName),
+      grossPrice: price,
+    });
+    await allowMenuInZone(tx, v.cfg, zoneId, menu.id, { makeDefault: true });
+    await publishWorkingMenu(tx, menu.id);
+    return offer.id;
+  });
+}
+
+/** The party holding the table now, or null. */
+export async function partyAt(v: HasDb, tableId: string): Promise<string | null> {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ partyId: partyTables.partyId })
+      .from(partyTables)
+      .where(and(eq(partyTables.tableId, tableId), isNull(partyTables.leftAt))),
+  );
+  return row?.partyId ?? null;
+}
+
+/** A cash contribution of `amount` towards the bill; answers the payment's id. */
+export async function cashContribution(
+  v: PartyVenue,
+  billId: string,
+  amount: string,
+): Promise<string> {
+  const result = await takeBillPayment(
+    { db: v.db, backend: v.backend, clock: v.clock },
+    v.cfg,
+    billId,
+    {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+    },
+    OPERATOR,
+  );
+  return result.payment.id;
+}
+
+/** The bill's payments, oldest first. */
+export async function paymentsOf(v: HasDb, billId: string) {
+  return inTx(v, (tx) =>
+    tx
+      .select()
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, billId))
+      .orderBy(asc(billPayments.createdAt)),
+  );
+}
+
+/** The service zone the bill's context names, or null when it has none. */
+export async function zoneOf(v: Pick<PartyVenue, "db" | "cfg">, billId: string) {
+  const context = await inTx(v, (tx) => VENUE_SERVICE.findOrderContext(tx, v.cfg, billId));
+  return context?.zoneId ?? null;
 }

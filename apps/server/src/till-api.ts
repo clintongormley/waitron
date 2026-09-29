@@ -107,6 +107,8 @@ import {
 import type { PartyCommand } from "./parties.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
+import { moveBill } from "./move-bill.js";
+import type { MoveBillOptions, MoveTarget } from "./move-bill.js";
 import {
   bumpGroupReady,
   fireGroup,
@@ -344,6 +346,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.line_not_found": 404,
   "table.occupied": 409,
   "table.needs_clearing": 409,
+  "table.already_in_party": 409,
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
@@ -357,6 +360,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "party.not_open": 409,
   "party.out_of_date": 409,
   "party.bill_outstanding": 409,
+  "party.main_bill_stays": 409,
   "submission.id_reused": 409,
   "draft.taken_over": 409,
   "draft.already_submitted": 409,
@@ -454,7 +458,8 @@ function requireRevision(
     | "revision"
     | "draftRevision"
     | "expectedPartyRevision"
-    | "expectedSourcePartyRevision" = "revision",
+    | "expectedSourcePartyRevision"
+    | "expectedOtherPartyRevision" = "revision",
 ): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
     throw new AppError("management.request_invalid", { field });
@@ -509,6 +514,42 @@ function billCommand(personId: string, body: Record<string, unknown>): BillComma
   const command: BillCommand = partyCommand(personId, body);
   if (body.partyId !== undefined) {
     command.partyId = requireBodyUuid(body.partyId, "partyId").toLowerCase();
+  }
+  return command;
+}
+
+/** A plain object whose keys are exactly `keys`. */
+function hasExactly(value: unknown, keys: string[]): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const own = Object.keys(value);
+  return own.length === keys.length && keys.every((key) => own.includes(key));
+}
+
+/** A move's target: exactly one of a table's id, or the counter with its zone id or null. */
+function requireMoveTarget(value: unknown): MoveTarget {
+  if (hasExactly(value, ["tableId"])) {
+    const { tableId } = value;
+    if (typeof tableId === "string" && isUuid(tableId)) return { tableId: tableId.toLowerCase() };
+  } else if (hasExactly(value, ["counter"]) && hasExactly(value.counter, ["zoneId"])) {
+    const { zoneId } = value.counter;
+    if (zoneId === null) return { counter: { zoneId: null } };
+    if (typeof zoneId === "string" && isUuid(zoneId)) {
+      return { counter: { zoneId: zoneId.toLowerCase() } };
+    }
+  }
+  throw invalid("to");
+}
+
+/** A move's command: {@link billCommand}'s, the bill choice (merge by default), and the other party's revision. */
+function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
+  const { bills } = body;
+  if (bills !== undefined && bills !== "merge" && bills !== "separate") throw invalid("bills");
+  const command: MoveBillOptions = { ...billCommand(personId, body), bills: bills ?? "merge" };
+  if (body.expectedOtherPartyRevision !== undefined) {
+    command.expectedOtherPartyRevision = requireRevision(
+      body.expectedOtherPartyRevision,
+      "expectedOtherPartyRevision",
+    );
   }
   return command;
 }
@@ -2138,6 +2179,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         transferItems(tx, deps.cfg, fromBillId, toBillId, transfers, command),
       );
       return c.body(null, 204);
+    }),
+  );
+
+  // A move changes no amount, so nothing is invoiced here.
+  app.post("/api/bills/:id/move", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const billId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const to = requireMoveTarget(body.to);
+      const command = moveCommand(personId, body);
+      const result = await withTransaction(deps.db, (tx) =>
+        moveBill(tx, deps.cfg, billId, to, command),
+      );
+      return c.json(result);
     }),
   );
 

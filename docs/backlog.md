@@ -3268,6 +3268,64 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       a `prepay` bill fires its items again.
     - A table of the party still pointing at the merged-away bill is pointed at the surviving one,
       so the old till screens do not show an abandoned bill; its membership is unchanged.
+  - **Task 7 built on the server (branch `feat/party-move-bill`, 2026-09-29): move a whole bill to
+    another party, to a free table, to the counter, or from the counter into a party.** This is the
+    server half of campaign items A81 (a counter order seated at a table) and A82 (a table's bill
+    taken to the counter); the till half is Task 12. One new route, `POST /api/bills/:id/move`
+    (`apps/server/src/move-bill.ts`, `apps/server/src/till-api.ts`):
+    - The body names where the bill goes, `{ tableId }` or `{ counter: { zoneId } }` (the zone may
+      be null), and `bills: "merge" | "separate"`, merge by default. A bill of a party sends its
+      party's revision, and a move to a table another party holds sends that party's revision too
+      (`expectedOtherPartyRevision`). Both are checked before the bill's or the table's own state,
+      so of two tills acting from one read the second is told `party.out_of_date`.
+    - The bill keeps its id, so its payments, a card payment still at the reader and its retry,
+      its refunds and an invoice already issued all stay with it. Nothing is repriced. A paid
+      bill is refused `bill.paid`; a merged-away one `tab.not_open`.
+    - Into a party: merged into that party's main bill only when both bills are untouched AND in
+      the same service mode once the moved bill has taken the party's zone; otherwise it stays a
+      separate bill and the answer says `merged: false`. A move is never refused because the two
+      bills' modes differ (plan P15); merging across modes would make a pay-first bill unpayable, as Task 5
+      found. To a free table: a new unnamed party opens there with the bill as its main bill. To
+      the counter: the bill leaves its party and, while it is open, is labelled with the party's
+      display name. A counter order already at the counter is refused `management.request_invalid`
+      `{ field: "to" }`.
+    - An open bill takes the receiving side's zone for what is ordered next (a party's earliest
+      table's zone, or the zone the till sends for the counter); a presented bill keeps its own.
+    - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
+      otherwise), and the party's next order then starts a new one. A table the bill's own party
+      holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is
+      refused as seating refuses it, and so is a free table in a zone that seats no one
+      (`service_zone.mode_incompatible`).
+    - Held dishes cannot leave a party (`group.held_leaves_party`); sent dishes leave their kitchen
+      group and keep their ticket and served state. The kitchen gets a MOVED notice for each sent
+      dish whose table changes, and always for a move to or from the counter, even when the label
+      reads the same on both sides (plan P17, which flags for the owner that such a slip can name
+      the same table as where the dish came from and where it went; the slip's text was not
+      checked here).
+    - A table of the party the bill leaves that still pointed at it is pointed at the party's main
+      bill, or at none.
+
+    New codes, each 409 with English and Spanish wording on the till: `party.main_bill_stays` and
+    `table.already_in_party`; the till also gained wording for `table.inactive`. Migration: core
+    `0042_placed_bill_moves` re-creates `working_orders_enforce_transition` and
+    `working_order_lines_require_open_parent_update` from the text a migrated database stores,
+    each with one exception for a presented bill (plan P14): its row may change party, lose its
+    delivery table and move its revision on, and its lines may change kitchen group, with every
+    other column unchanged. `scripts/behavioural-triggers.test.ts` tries each other column of both
+    tables against the exception.
+
+    Upgrade measured 2026-09-29 on a scratch venue in `/tmp`: migrated to main `59dafa994`'s
+    migrations (the branch's journal set back to main's, and `0042` moved aside), seeded through
+    the party harness with a party's split bill placed by hand and a counter order placed in a
+    pay-first zone. There, moving the placed split bill to another party was refused by the
+    engine with `lines may only be written while the order is open`. The branch's migrations were
+    then applied to the same folder through `applyMigrations`: both placed bills read back with
+    the same rows, and both then moved into another party, still `placed`, the split bill's line
+    now outside its group. The server was not booted on it.
+
+    Open points: the move bumps an open bill's revision without `bumpRevision`'s refusal of money
+    in flight, since a move changes no amount (plan P19); a presented bill's revision is not moved
+    on, though the trigger now allows it. Dishes arriving in a party join no group until Task 9.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

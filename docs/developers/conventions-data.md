@@ -1286,6 +1286,9 @@ the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
 `packages/db/drizzle/0033_line_served_exception.sql`,
 `packages/db/drizzle/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
 `parties.main_bill_id`),
+`packages/db/drizzle/0042_placed_bill_moves.sql` (a presented bill moving whole; its snapshot, on
+2026-09-29, equalled `0041`'s with `id` and `prevId` removed and keys sorted, except that
+`_meta.columns` no longer carries `0041`'s one column rename),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql` and
 `packages/media/drizzle/0003_published_image_references.sql`) each carry their own

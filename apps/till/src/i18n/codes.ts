@@ -35,6 +35,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That table no longer exists",
     es: "Esa mesa ya no existe",
   },
+  "table.inactive": {
+    en: "That table is no longer in use. Choose another table",
+    es: "Esa mesa ya no está en uso. Elige otra mesa",
+  },
+  "table.already_in_party": {
+    en: "Those guests already have that table. Choose another table",
+    es: "Esa mesa ya es de estos clientes. Elige otra mesa",
+  },
+  "party.main_bill_stays": {
+    en: "This is the table's main bill, and the table has other unpaid bills. Move one of those instead",
+    es: "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve una de esas",
+  },
   "tab.not_table_tab": {
     en: "That order is not a table's bill, so it cannot be joined to a table or merged with one",
     es: "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",

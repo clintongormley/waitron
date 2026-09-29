@@ -2439,18 +2439,34 @@ export async function assertServiceModesMatch(
 ): Promise<void> {
   const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId);
   const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId);
-  if (
-    (fromContext === null) !== (toContext === null) ||
-    (fromContext !== null &&
-      toContext !== null &&
-      fromContext.serviceMode !== toContext.serviceMode)
-  ) {
+  if (!modesMatch(fromContext, toContext)) {
     throw new AppError("service_zone.mode_incompatible", {
       zoneId: toContext?.zoneId ?? "unscoped",
       expected: fromContext?.serviceMode ?? "unscoped",
       actual: toContext?.serviceMode ?? "unscoped",
     });
   }
+}
+
+/** {@link assertServiceModesMatch} as an answer rather than a refusal. */
+export async function serviceModesMatch(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromOrderId: string,
+  toOrderId: string,
+): Promise<boolean> {
+  return modesMatch(
+    await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId),
+    await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId),
+  );
+}
+
+function modesMatch(
+  from: { serviceMode: string } | null,
+  to: { serviceMode: string } | null,
+): boolean {
+  if (from === null || to === null) return from === to;
+  return from.serviceMode === to.serviceMode;
 }
 
 /**
@@ -3386,7 +3402,7 @@ export async function carveOffLines(
  * Refuse `group.held_leaves_party` for the lowest-numbered of these lines whose group is held: a
  * group belongs to its party (D1), so held work leaves only once fired.
  */
-async function refuseHeldLeavingParty(
+export async function refuseHeldLeavingParty(
   tx: Transaction,
   tabId: string,
   lineIds: readonly string[],
@@ -3405,7 +3421,7 @@ async function refuseHeldLeavingParty(
 }
 
 /** Take these lines, and their extras children, out of their group: they left its party. */
-async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+export async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
   await tx
     .update(workingOrderLines)

@@ -77,7 +77,7 @@ async function refuseTouched(tx: Transaction, billId: string, status: BillStatus
  * A command naming a party the bill is no longer in is `party.out_of_date` whatever revision it
  * sends. A bill of no party has no revision.
  */
-async function guardPathParty(
+export async function guardPathParty(
   tx: Transaction,
   billId: string,
   command: BillCommand,
@@ -201,7 +201,20 @@ export async function mergeBills(
   const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
   // Paying a prepay bill fires its lines, and one already sent fails it (`ticket.already_fired`).
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
+  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId);
+}
 
+/**
+ * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
+ * untouched bills of `partyId`, in one service mode.
+ */
+export async function mergeCheckedBills(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  intoBillId: string,
+  fromBillId: string,
+): Promise<void> {
   const [party] = await tx
     .select({ mainBillId: parties.mainBillId })
     .from(parties)
