@@ -600,7 +600,10 @@ export class ProfileScreen extends LitElement {
       }
       const code =
         this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
-      const message = codeMessage(code);
+      const message =
+        code === "account_action.invalid" && this.mode === "email"
+          ? t("profile.email_code_refused")
+          : codeMessage(code);
       const paramsField = (error as { params?: { field?: unknown } } | null)?.params?.field;
       const field =
         code === "profile.invalid" && typeof paramsField === "string"
