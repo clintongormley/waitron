@@ -53,7 +53,7 @@ import {
 import type { GrossOrder, LineExtras, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
-import { cashChange } from "./bill-allocation.js";
+import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -1465,8 +1465,10 @@ export function toPayOutcome(
 /**
  * Collect and settle a PLACED order, in one transaction, by whether a sale already names it, not by
  * its zone's service mode:
- *  - a sale exists: collect SETTLES it and files NO second fiscal record. A `card` tender also
- *    writes the manual-card `payments` row, so reconciliation sees it.
+ *  - a sale exists: collect SETTLES it and files NO second fiscal record. When something is owed,
+ *    a `card` tender also writes the manual-card `payments` row, so reconciliation sees it. A bill
+ *    whose amount due is exactly zero settles with no tender, no `payments` row and no drawer
+ *    opening; one below zero is refused with `sale.tender_shortfall` and stays placed.
  *  - no sale: collect files one from the order's stored locked lines (`fileImmediateSale`).
  *
  * No duplicate backstop is needed: a concurrent collect's whole transaction runs after the winner
@@ -1508,7 +1510,7 @@ export async function collectOrder(
       // Nothing is owed once corrections reach the invoice's total, so no money changes hands and
       // no tender is written (`tenders_amount_ck` refuses one of zero or less). Below zero,
       // `settleSale` refuses the empty tender list with `sale.tender_shortfall`.
-      const paysNothing = compareDecimal(outstanding.amountDue, decimal("0")) <= 0;
+      const paysNothing = compareDecimal(outstanding.amountDue, ZERO) <= 0;
 
       await settleSale(tx, {
         saleId: outstanding.saleId,

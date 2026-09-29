@@ -3,7 +3,14 @@ import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { drawerOpens, invoiceSeries, saleSettlements, sales, tenders } from "@waitron/db";
+import {
+  drawerOpens,
+  invoiceSeries,
+  saleSettlements,
+  sales,
+  tenders,
+  workingOrders,
+} from "@waitron/db";
 import { recordCorrection } from "@waitron/core";
 import { loginWithPin } from "@waitron/identity";
 import { payments } from "@waitron/payments";
@@ -117,8 +124,8 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
 });
 
 describe("collecting an invoice that carries a corrective invoice", () => {
-  // Tarta's 18.00 invoice (21% VAT), corrected by a credit note of -2.00 base (-2.42): the
-  // customer owes 15.58.
+  // Tarta's 18.00 invoice (21% VAT), corrected by default by a credit note of -2.00 base (-2.42):
+  // the customer owes 15.58.
   async function correctedTarta(
     credit: { base: string; total: string } = { base: "2.00", total: "-2.42" },
   ): Promise<{ billId: string; saleId: string }> {
@@ -208,19 +215,20 @@ describe("collecting an invoice that carries a corrective invoice", () => {
   function drawerOpensOf(saleId: string) {
     return inTx(venue, (tx) =>
       tx
-        .select({ saleId: drawerOpens.saleId })
+        .select({ saleId: drawerOpens.saleId, reason: drawerOpens.reason })
         .from(drawerOpens)
         .where(eq(drawerOpens.saleId, saleId)),
     );
   }
 
-  function settlementsOf(saleId: string) {
-    return inTx(venue, (tx) =>
+  async function collectedAtOf(billId: string): Promise<string | null> {
+    const [row] = await inTx(venue, (tx) =>
       tx
-        .select({ saleId: saleSettlements.saleId })
-        .from(saleSettlements)
-        .where(eq(saleSettlements.saleId, saleId)),
+        .select({ collectedAt: workingOrders.collectedAt })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId)),
     );
+    return row!.collectedAt;
   }
 
   // Tarta's 18.00 is a 14.88 base at 21%: a credit note of that base reverses the whole invoice.
@@ -231,7 +239,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
 
     await collectCash(billId);
 
-    expect(await drawerOpensOf(saleId)).toEqual([{ saleId }]);
+    expect(await drawerOpensOf(saleId)).toEqual([{ saleId, reason: "cash_sale" }]);
   });
 
   it("closes a cash collection of a bill that owes nothing, with no tender and no drawer", async () => {
@@ -240,7 +248,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     const ticket = await collectCash(billId);
 
     expect(await tendersOf(saleId)).toEqual([]);
-    expect(await settlementsOf(saleId)).toEqual([{ saleId }]);
+    expect((await salesOf(billId))[0]!.settledAt).not.toBeNull();
+    expect(await collectedAtOf(billId)).not.toBeNull();
     expect(await drawerOpensOf(saleId)).toEqual([]);
     expect(ticket.tender).toEqual({ method: "unpaid" });
     expect(await statusOf(venue, billId)).toBe("settled");
@@ -258,7 +267,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     );
 
     expect(await tendersOf(saleId)).toEqual([]);
-    expect(await settlementsOf(saleId)).toEqual([{ saleId }]);
+    expect((await salesOf(billId))[0]!.settledAt).not.toBeNull();
+    expect(await collectedAtOf(billId)).not.toBeNull();
     const paid = await inTx(venue, (tx) =>
       tx
         .select({ amount: payments.amount })
@@ -280,7 +290,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     });
 
     expect(await tendersOf(saleId)).toEqual([]);
-    expect(await settlementsOf(saleId)).toEqual([]);
+    expect(await salesOf(billId)).toEqual([{ id: saleId, total: 1800, settledAt: null }]);
+    expect(await collectedAtOf(billId)).toBeNull();
     expect(await statusOf(venue, billId)).toBe("placed");
   });
 });
