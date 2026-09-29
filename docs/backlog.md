@@ -2065,7 +2065,7 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
   "Provisioning…", with no retry. The connection check releases itself in the same case. The app
   mounts the wizard once and never removes it, so this may be unreachable in use.
 
-**Demo gaps on the setup wizard's venue screen, as they stand after C47s (2026-09-29), left
+**Demo gaps on the setup wizard's venue screen, as they stand after C47s (#840, 2026-09-29), left
 unfixed** — the first two date from 2026-09-23 and were rewritten for the new behaviour; each
 says whether it was seen in a run or only read in the code:
 
@@ -3555,7 +3555,7 @@ ongoing overhaul listed at the top of Track A.
   keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image
-  library's delete confirmation also keeps its refusal in the dialog's body. Since C47s the setup
+  library's delete confirmation also keeps its refusal in the dialog's body. Since C47s (#840) the setup
   wizard's forms follow the rule too: the admin, connect, reset, venue, certificate, restore,
   bucket-restore, Cloud-restore and live-source screens. The wizard's screens with no fields —
   review, fiscal test, connection and provisioning — keep their refusal paragraph, as the cloud
