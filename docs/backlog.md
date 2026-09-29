@@ -3210,7 +3210,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       cleared and the server ignores a clear whose time no longer matches.
     - New names say "cleaning" (`table.needs_cleaning`, `needs_cleaning_since`), older ones
       "clearing" (`clearing_workflow`, "Mark cleared"). Free to rename until a venue is live.
-  - **Task 5 DONE (PR pending, 2026-09-29): split, merge and transfer between a party's bills,
+  - **Task 5 DONE (#852, 2026-09-29): split, merge and transfer between a party's bills,
     on the server.** Nothing changes on the till yet: it keeps using the old tab routes until
     Task 10. Three new routes land beside them (`apps/server/src/bill-actions.ts`,
     `apps/server/src/till-api.ts`):
