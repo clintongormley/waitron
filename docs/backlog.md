@@ -5005,7 +5005,7 @@ approved.
   writing the fetched script into the temp file beside it, which `cp -p` has given that user
   (install reports a failed fetch; the README says to download to the home folder instead);
   nothing checks a fetched script before running it beyond what the fetch of `compose.yml` already
-  trusts — the same GitHub URL over HTTPS.
+  trusts — the same GitHub URL over HTTPS. (#890, main `869fc0776`.)
 
 ### B5. The recovery page and degraded mode
 
