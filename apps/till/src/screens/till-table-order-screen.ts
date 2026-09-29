@@ -56,7 +56,7 @@ import {
   type SeatedRead,
 } from "../widgets/table-targets.js";
 import { owing, paidInPart } from "../state/bill-state.js";
-import { LONGEST_TIMER_MS, reminderDueAt } from "../state/release-reminder.js";
+import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
@@ -1350,12 +1350,7 @@ export class TillTableOrderScreen extends LitElement {
     clearTimeout(this.#reminderTimer);
     const dueAt = reminderDueAt(this.currentOrders?.reminder);
     if (this.now !== undefined || this.#reminderDue || dueAt === Number.POSITIVE_INFINITY) return;
-    // A longer delay overflows the browser's timer, which then fires at once, and again on every
-    // redraw.
-    this.#reminderTimer = setTimeout(
-      () => this.requestUpdate(),
-      Math.min(dueAt - Date.now(), LONGEST_TIMER_MS),
-    );
+    this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(dueAt));
   }
 
   #lineGross(line: TabLine): Decimal {

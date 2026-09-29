@@ -27,7 +27,7 @@ import { countText, named, t } from "../i18n/t.js";
 import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
-import { LONGEST_TIMER_MS, reminderDueAt } from "../state/release-reminder.js";
+import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -315,8 +315,7 @@ export class TillFloorScreen extends LitElement {
         border: 1px solid var(--wt-color-success);
       }
 
-      /* Words on a neutral chip, the warning colour only as its border: never text on the warning
-         colour. Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
+      /* Mirrors @waitron/ui's wt-table-token .badge.fire-due. */
       .badge.fire-due {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -435,12 +434,7 @@ export class TillFloorScreen extends LitElement {
       if (dueAt > this.#drawnAt && dueAt < next) next = dueAt;
     }
     if (next === Number.POSITIVE_INFINITY) return;
-    // A longer delay overflows the browser's timer, which then fires at once, and again on every
-    // redraw.
-    this.#reminderTimer = setTimeout(
-      () => this.requestUpdate(),
-      Math.min(next - Date.now(), LONGEST_TIMER_MS),
-    );
+    this.#reminderTimer = setTimeout(() => this.requestUpdate(), delayUntil(next));
   }
 
   /** A seated table resumes; a table needing clearing offers Mark cleared; a free one asks for guests. */
