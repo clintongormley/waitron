@@ -5,7 +5,7 @@ import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import type {
@@ -748,7 +748,9 @@ export class BackupScreen extends LitElement {
         ${
           s.keyRotatedAt
             ? html`<dt>${t("backup.status.rotated")}</dt>
-                <dd data-test="key-rotated">${new Date(s.keyRotatedAt).toLocaleString()}</dd>`
+                <dd data-test="key-rotated">
+                  ${new Date(s.keyRotatedAt).toLocaleString(currentLocale())}
+                </dd>`
             : nothing
         }
         ${
@@ -772,7 +774,7 @@ export class BackupScreen extends LitElement {
     const first = s.backupStatus.destinations[0];
     if (first === undefined || first.lastBackupAt === null)
       return html`${t("backup.status.never")}`;
-    const when = new Date(first.lastBackupAt).toLocaleString();
+    const when = new Date(first.lastBackupAt).toLocaleString(currentLocale());
     return first.stale
       ? html`${when} — <span class="stale">${t("backup.status.stale")}</span>`
       : html`${when} — ${t("backup.status.fresh")}`;

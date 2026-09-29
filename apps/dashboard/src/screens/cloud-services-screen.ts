@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { CloudConnectionStatus, DashboardApi } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 @customElement("dashboard-cloud-services-screen")
 export class CloudServicesScreen extends LitElement {
@@ -118,7 +118,7 @@ export class CloudServicesScreen extends LitElement {
     const installation = s.installation;
     const date = (value: string | null | undefined) =>
       value
-        ? html`<time datetime=${value}>${new Date(value).toLocaleString()}</time>`
+        ? html`<time datetime=${value}>${new Date(value).toLocaleString(currentLocale())}</time>`
         : t("cloud.never_contacted");
     const names = {
       remote_access: "cloud.remote",
@@ -303,7 +303,7 @@ export class CloudServicesScreen extends LitElement {
                             s.state === "awaiting_cloud"
                               ? html`<p>${t("cloud.code")}</p>
                                   <p class="code">${s.code}</p>
-                                  ${s.expiresAt ? html`<p>${t("cloud.expires")}: <time datetime=${s.expiresAt}>${new Date(s.expiresAt).toLocaleString()}</time></p>` : nothing}
+                                  ${s.expiresAt ? html`<p>${t("cloud.expires")}: <time datetime=${s.expiresAt}>${new Date(s.expiresAt).toLocaleString(currentLocale())}</time></p>` : nothing}
                                   ${s.openCloudUrl ? html`<a href=${s.openCloudUrl} target="_blank" rel="noopener noreferrer">${t("cloud.open")}</a>` : nothing}`
                               : html`<p>${t("cloud.confirm_help")}</p>
                                   <dl>

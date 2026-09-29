@@ -14,7 +14,7 @@ import type {
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 
 type Field = keyof StreamBucketBody;
 
@@ -636,7 +636,7 @@ export class StreamSettingsPanel extends LitElement {
       <dd data-test="stream-lag">${lag}</dd>
       <dt>${t("stream.status.last")}</dt>
       <dd data-test="stream-last">
-        ${last === null ? t("stream.status.never") : new Date(last).toLocaleString()}
+        ${last === null ? t("stream.status.never") : new Date(last).toLocaleString(currentLocale())}
       </dd>
     `;
   }
