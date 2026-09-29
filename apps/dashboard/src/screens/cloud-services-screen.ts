@@ -27,11 +27,16 @@ export class CloudServicesScreen extends LitElement {
         margin-block: var(--wt-space-4);
       }
       dt {
-        font-weight: var(--wt-font-weight-bold);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-normal);
       }
       dd {
         margin: 0 0 var(--wt-space-3);
         overflow-wrap: anywhere;
+        color: var(--wt-color-text);
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
       }
       .code {
         font-size: var(--wt-font-size-xl);
