@@ -5811,21 +5811,22 @@ approved.
   replaced…", which holds the copy of `/--.*$/` in `scripts/module-graph-honesty.test.ts`: a fix to
   one touches the other's code.
 
-- **Four more guards handle comments on their own — OPEN (found 2026-09-27 reviewing A95; read, not
-  run, except the `write-path-tables` shapes, run on one small input each).** `scripts/spawn-timeout-budget.test.ts` has its own `withoutComments` (line 32), which
-  guesses a regular expression from the one character before the `/` (line 64).
-  `scripts/write-path-tables.test.ts` has its own line-by-line `withoutComments` (line 96), and its
-  header lists three shapes it gets wrong; run 2026-09-27 on one small input each, `blankComments`
-  handled all three and the file's own function got all three wrong.
-  `scripts/errors-reachable.test.ts` and `scripts/module-seams.test.ts` strip no comments on
-  purpose, so an import written inside a comment counts. The reason errors-reachable's header and
-  `docs/developers/testing-guide.md` give — a block stripper mis-parses a `/*` inside a string
-  literal — does not hold for the shared reader: the A95 guards' new cases put a `/*` inside a
-  string, and the reader left it alone. Each of the four could adopt `blankComments`
-  (`packages/shared/src/source-comments.ts`), and each would need a case that fails before the
-  switch and passes after it. `scripts/column-vocabulary.test.ts` also has a `withoutComments`, left
-  out on purpose: it runs only on the text between an import's braces, which its header says holds
-  no string or template literal.
+- **Two root guards use the shared comment reader — DONE (A128, 2026-09-29); two
+  comment-blind guards remain OPEN.** `scripts/spawn-timeout-budget.test.ts` and
+  `scripts/write-path-tables.test.ts` now use `blankComments` from
+  `packages/shared/src/source-comments.ts`. Five new cases failed before the switch and passed
+  after it: a commented-out timeout bound after a returned regular expression; a block comment
+  opening after code and continuing onto another line; writes after strings containing `/*` or
+  `//`; and a write after a template line beginning with `/*`. Existing assertions are unchanged.
+  Both guards still read text, with the scope and detection limits their headers describe; the
+  shared reader still guesses whether a slash starts a regular expression.
+
+  `scripts/errors-reachable.test.ts` and `scripts/module-seams.test.ts` remain out of A128's scope:
+  they deliberately strip no comments, so an import written inside one counts. The next action is
+  to add a failing commented-import case for each, then adopt the shared reader and update their
+  stated limits and `docs/developers/testing-guide.md`. `scripts/column-vocabulary.test.ts` also
+  has a `withoutComments`, left out on purpose: it runs only on the text between an import's
+  braces, which its header says holds no string or template literal.
 
 - **No guard holds a MODULE migration set to its declared schema — LANDED for four of them
   (**PR #491**).** `packages/db/src/testing/schema-conformance.ts` is a reusable suite factory that
@@ -5956,13 +5957,11 @@ approved.
   **What #430's review left behind, none of it taken there.** The allowance list is a JSON file
   rather than the annotated TypeScript constant every sibling guard uses, because the plan named a
   file that outlives the grants; the justification for each entry is a doc comment beside the
-  `JSON.parse` instead, which no test reads. The guard's comment reader still has a hole of the shape
-  it was rewritten to close — a line inside a template literal whose first characters open a block
-  comment swallows the code below it — narrowed to line-leading openers rather than closed. The
-  shared reader `blankComments` (`packages/shared/src/source-comments.ts`) handles that shape and
-  the header's other two (run 2026-09-27 on one small input each; adoption is the "Four more
-  guards" entry). And the detector only reads a builder call whose receiver looks like a
-  database handle, so a write through a handle named something else is invisible; that was the price
+  `JSON.parse` instead, which no test reads. A128 (2026-09-29) replaced the guard's comment
+  reader with shared `blankComments`; its three known failures now have regression cases (see
+  "Two root guards use the shared comment reader" above). The detector still only reads a builder
+  call whose receiver looks like a database handle, so a write through a handle named something
+  else is invisible; that was the price
   of not reporting `cache.delete(nodes)` on an ordinary `Set`.
 
   **Next action:** decide before the flip between three shapes. Grow the guard an operation column,
