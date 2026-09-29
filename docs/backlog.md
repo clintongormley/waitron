@@ -156,7 +156,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 6. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
    (*Detail → Reporting*); refusing requests from a device that is not enrolled (A4); the pairing
    alert, "devices tried to join" (A5); Logging Slice 2, the one-touch bug report (A9); the
-   dashboard Bluetooth pairing, P2c (A3; the print agent's side, P2b, is built);
+   first real Bluetooth pairing at the box through the dashboard (A3; the print agent's side, P2b,
+   and the dashboard's, P2c, are built);
    paying at the table from a handheld (A6, Slice 2).
 
 Then the on-prem mirror and failover — slices 3 to 5 of the storage design — then the cloud primary,
@@ -2293,8 +2294,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     forgets them all.
   - An error that contains the PIN is replaced whole, before it is logged or sent back, by
     "pairing failed; the detail was withheld because it contained the PIN".
-  - No server route sends a command yet; that is P2c. The server ignores the two new lists in a
-    pull (a temporary server case sending them got a 200, recorded in commit 23ad42283).
+  - P2b added no server route that sends a command, and the server of that time ignored the two
+    new lists in a pull (a temporary server case sending them got a 200, recorded in commit
+    23ad42283). P2c, the next entry, sends commands and reads both lists.
 
   The real-box receipt this rests on (the owner, 2026-09-29, BlueZ 5.82): after a host reboot and
   a printer power cycle the bond alone reconnected, so Pair never runs `trust`; `remove` of a
@@ -2312,23 +2314,74 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   36585218089 and 36586467212), and image-smoke pairs and forgets the stand-in's PIN printer
   under the profile through `scripts/bluetoothctl-pair.mjs` and `bluetoothctl remove`, not
   through the agent's own code. None of this has run on the real box.
-- **Open for P2c, the plan's third branch (`feat/dashboard-bluetooth-pairing`, plan Tasks 9–12):**
-  - The dashboard's Pair needs a PIN field accepting 1 to 16 printable ASCII characters with no
-    spaces: the agent drops a pair command whose PIN is outside that (read in
-    `packages/print-agent/src/client.ts`; `client.test.ts` tries both sides of the rule).
-  - The server must keep sending a command until its outcome arrives. The agent holds at most eight
-    commands, counting queued, running and those whose outcome is not yet sent, and a new one
-    arriving past that is not remembered, so it is taken only when the server sends it again once
-    there is room; it also reads only the first eight commands in a reply. The server must also
-    stop sending a command once its outcome has arrived, because the agent remembers only its last
-    eight command ids.
-  - The server must never store, log or echo the PIN.
-- **Open, needs the box:** a first real pairing through the agent, under the shipped profile with
-  `autopair` off; whether a real Bluetooth service sends `Agent1.Release` (its "your pairing agent
-  is no longer needed" message), which the profile does not allow and the stand-in never sends;
-  and printing over RFCOMM (Bluetooth's serial-cable channel) from INSIDE the print-agent
-  container — the owner printed from the host only. The last belongs with Bluetooth delivery,
-  below, still unbuilt.
+- **The dashboard's Bluetooth pairing (P2c, the plan's third branch,
+  `feat/dashboard-bluetooth-pairing`) — BUILT.** What a manager can now do from the Printers screen.
+  All of it has run against fake print agents and fake server replies only, never a Bluetooth radio:
+  - Add a printer lists the Bluetooth devices the agent's scan found beside network and USB
+    printers, showing only those the agent marked as looking like a printer until **Show all
+    devices** is pressed; opening Add a printer again hides the others again. A note in the dialog
+    says printing to a Bluetooth printer is not available yet, even once it is paired.
+  - **Pair** opens a dialog asking for the printer's PIN, checked against the agent's own rule (1 to
+    16 printable characters with no spaces; `isBluetoothPin` in
+    `packages/print-agent/src/client.ts`) in the screen and again by the server, which refuses a bad
+    one as `management.request_invalid` naming the `pin` field. Pairing adds no printer: once the
+    agent reports the device paired, its row offers Add.
+  - **Forget pairing** sits in the row menu of a switched-off Bluetooth printer whose agent reports
+    it paired now, and asks for a second, confirming click. Switching a printer off does not forget
+    its pairing (read, not run: the screen's Disable calls only `deactivatePrinter`, in
+    `apps/dashboard/src/screens/printers-screen.ts`).
+  - Both need the existing `printer.manage` permission. The server takes a Pair only for a device
+    the same agent's scan reported within the last 15 seconds, and a Forget only for a device the
+    same agent reported paired within that time (`reportedFresh` and `DISCOVERED_TTL_MS` in
+    `apps/server/src/print-api.ts`); otherwise it answers `printer.bluetooth_not_discovered` or
+    `printer.bluetooth_not_paired`.
+  - The server keeps commands in memory only (`apps/server/src/printer-bluetooth-commands.ts`). It
+    sends a waiting command again on every job pull until the agent's outcome arrives, then stops;
+    it drops a waiting command 120 seconds after queueing it, and ignores an outcome that arrives
+    after that; it keeps a finished result for 60 seconds. An agent may have eight devices with a
+    waiting command; a ninth is refused with `printer.bluetooth_command_busy`. The store keeps the
+    PIN only in the waiting command, and its tests check that no status it hands out, waiting or
+    finished, contains it.
+  - The screen shows "Pairing…" or "Forgetting the pairing…", then "Paired", "Pairing forgotten",
+    the agent's own reason for a failure, or, 120 seconds after the server accepted the command, "No
+    answer from the print agent — try again". It asks the server in the background and stops at the
+    outcome, at that cut-off, or when the screen closes.
+
+  What was run, on 2026-09-29: the brief's focused suites — the four server files
+  (`printer-bluetooth-commands`, `print-api`, `print-api.printer-wiring`, `errors`: 166 tests),
+  `printers-screen` and its accessibility suite (289), and `scripts/alert-codes.test.ts` with
+  `scripts/errors-reachable.test.ts` (32) — all passing. Every state above was then photographed
+  through the dashboard's browser test harness with those fakes, in English and Spanish, light and
+  dark, 1280 and 390 pixels wide; that found an agent's long failure reason widening the whole
+  device list at phone width and pushing Dismiss out of view, fixed test-first in 68b321bdf. The
+  real Printers screen, opened on the demo stack, drew with no console errors, but that stack has no
+  Bluetooth hardware, so no command was sent through it. **Nobody has yet paired or forgotten a real
+  printer through the dashboard.**
+- **Follow-ups from P2c** (read, not run, unless a line says otherwise):
+  - A command queued behind a slow pair can run out of time. The 120 seconds count from queueing
+    (`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
+    time (the background worker in `packages/print-agent/src/agent.ts`), and one pair can take the
+    agent up to 90 seconds (commit 4a99ecb9f). A second command waiting behind that pair can
+    therefore expire on the server before it runs; its outcome is then ignored and the screen says
+    "No answer from the print agent — try again" whatever actually happened.
+  - A Printers screen element taken out of the page and put back does not restart its background
+    status checks: `disconnectedCallback` stops them and `connectedCallback` only reloads the lists
+    (`apps/dashboard/src/screens/printers-screen.ts`). Today nothing puts the same element back: in
+    a throwaway browser test, going Printers → Printing rules → Printers gave a new element and left
+    the first one detached, and a language switch rebuilds the screen through
+    `keyed(currentLocale(), …)` in `apps/dashboard/src/dashboard-app.ts` (read, not run). It matters
+    only if the app starts keeping screen elements.
+  - Seen while photographing, and older than P2c: the printers table's empty message is the English
+    "No matches" on a Spanish dashboard, because the screen sets no `noMatchesMessage` and
+    `wt-data-table` falls back to English (checked on `main`); and at phone width a Bluetooth
+    address breaks mid-group ("00:11:22:33:44:5" then "5"), from the device-details width limit
+    added on 2026-09-11.
+- **Open, needs the box:** a first real pairing, and a Forget, through the dashboard and the agent,
+  under the shipped profile with `autopair` off; whether a real Bluetooth service sends
+  `Agent1.Release` (its "your pairing agent is no longer needed" message), which the profile does
+  not allow and the stand-in never sends; and printing over RFCOMM (Bluetooth's serial-cable
+  channel) from INSIDE the print-agent container — the owner printed from the host only. The last
+  belongs with Bluetooth delivery, below, still unbuilt.
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
   pairing plan must not make a paired device claim work or say that it can print.
@@ -8740,7 +8793,7 @@ while it holds decisions still open.
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
-| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | two of three branches built (#732, and P2b in #877); P2c to go | A3 |
+| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c on `feat/dashboard-bluetooth-pairing`); a real pairing at the box to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
