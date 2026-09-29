@@ -40,7 +40,8 @@ const UNAVAILABLE = "bluetooth unavailable";
 const INCOMPLETE = "pairing did not complete";
 const REGISTER_TIMEOUT_MS = 10_000;
 /** bluetoothd waits 60 s for an agent's answer, plus paging the printer, plus the 3 s before
- * bluetoothd retries a bonding after a refused automatic PIN (research-pin-report.md, step 4). */
+ * bluetoothd retries a bonding after a refused automatic PIN (READ, bluez 5.82 src/agent.c and
+ * src/adapter.c). */
 const PAIR_TIMEOUT_MS = 75_000;
 const EXIT_GRACE_MS = 5_000;
 // READ, bluez 5.82 client/agent.c (the PIN prompt also measured): every agent question is
@@ -60,8 +61,8 @@ function spawnBluetoothctl(): ChildProcessWithoutNullStreams {
 
 /**
  * Pairs through bluetoothctl's interactive shell, because its one-shot `pair` registers no agent and
- * so cannot answer a PIN request. The conversation was measured against a stand-in BlueZ with the
- * image's bluetoothctl 5.82 (P2b research-pin-report.md); the lines the tests mark READ (a refused
+ * so cannot answer a PIN request. The conversation was measured 2026-09-29 with the image's
+ * bluetoothctl 5.82, all three pipes, against a stand-in BlueZ on a private D-Bus; the lines the tests mark READ (a refused
  * agent, no controller, the non-PIN prompts) come from the bluez 5.82 source and were not run. The
  * exit status is ignored: it was 0 whatever the outcome once `quit` was written. bluetoothctl echoes
  * the PIN to stdout on a line of its own, so of the lines printed after the PIN was written an error
@@ -121,7 +122,8 @@ export function pairWithBluetoothctl(
       } else if (pinWritten) {
         return;
       } else if (pin === undefined) {
-        // Measured (pipe-eof): at the end of its input bluetoothctl answers the request with "" and exits.
+        // Measured against the stand-in: at the end of its input bluetoothctl answers the request with
+        // "" and exits.
         finish(fail("this printer needs a PIN"), "end");
       } else {
         child.stdin.write(`${pin}\n`);
@@ -141,7 +143,7 @@ export function pairWithBluetoothctl(
       if (failed === null) return;
       const name = failed[1]!;
       if (name === "org.bluez.Error.AlreadyExists") finish({ ok: true, localKey: address }, "quit");
-      // bluetoothd cancels the request when our answer is late (research-pin-report.md, step 4).
+      // bluetoothd cancels the request when our answer is late.
       else if (name === "org.bluez.Error.AuthenticationFailed" && canceled)
         finish(fail("the printer stopped waiting for the PIN"), "quit");
       else if (name === "org.bluez.Error.AuthenticationFailed" && pinWritten)

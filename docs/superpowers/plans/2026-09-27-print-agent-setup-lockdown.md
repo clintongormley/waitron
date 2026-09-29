@@ -542,6 +542,8 @@ export interface PullReply {
 }
 ```
 
+_2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin; the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the P2c entry in `docs/backlog.md`._
+
 - [ ] **Step 1: Write failing parser/body tests**
 
 Add client tests that accept no `bluetoothCommands` (old server), accept up to eight valid commands, normalize MACs to uppercase, and drop invalid ids/kinds/MACs and every entry after the eighth. Assert `pullJobs` sends `pairedBluetooth` and `bluetoothOutcomes` exactly.
@@ -650,6 +652,8 @@ Use the full meaningful-code finish path and required Claude run-it review. Wait
 ---
 
 ## P2c — Server command channel and dashboard pairing
+
+_2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin; the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the P2c entry in `docs/backlog.md`._
 
 ### Task 9: Build the bounded in-memory command store
 
@@ -943,7 +947,7 @@ Run the Codex `finish-branch` skill with the required Claude run-it review, push
 ## Real-box measurement — required before P2b, not before P1 or P2a
 
 _2026-09-29 (A129): the print agent now runs under `deploy/apparmor/waitron-print-agent`, which allows only the bus messages `bluetoothctl list`, `devices` and `scan` were seen to send. Pairing, `trust`, `connect` and `remove` are not among them (`remove` was measured refused on a CI runner), so under it these steps would measure the profile, not BlueZ. Run them with pairing allowed: keep the owner's `compose.override.yml` that sets `apparmor=unconfined` until the measurement is done. See `docs/backlog.md`, B6._
-_2026-09-29 (P2b, Task D): the profile now allows pairing with a PIN through interactive `bluetoothctl`, and `remove`; `trust` and `disconnect` were measured still refused (probe run 36585218089, receipts in the profile's header)._
+_2026-09-29 (P2b, Task D): the profile now allows pairing with a PIN through interactive `bluetoothctl`, and `remove`; `trust` and `disconnect` were measured still refused (probe run 36585218089, receipts in the profile's header). The owner took the real-box measurement on 2026-09-29 (BlueZ 5.82: the bond alone reconnected after a host reboot and a printer power cycle; `docs/backlog.md`, the entry on the print agent's Bluetooth side (P2b), and the `info` and `remove` output in `apps/print-agent/src/bluetooth.test.ts`), and the profile still allows no `connect`: `Device1.Connect` is not among the members `deploy/apparmor/waitron-print-agent` names._
 
 Run this on the deployed box from the directory that owns `deploy/compose.yml`, replacing the address with the first real Bluetooth receipt printer. Save the complete command output, BlueZ version, box image SHA, printer make/model, and the times at which the printer and host were restarted. Because the container reaches the host BlueZ daemon through `/run/dbus/system_bus_socket`, restarting only the container does not test bond/trust persistence.
 

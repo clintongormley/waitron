@@ -82,6 +82,10 @@ stops the job pull, the same way a failed scan does not today.
   by that same agent's own scan** and still fresh, so the button cannot pair an arbitrary device. The
   agent runs the pairing it already knows how to do (`Host.pair`, `packages/print-agent/src/host.ts`).
   The dashboard shows that pairing is under way, then the result — paired, or the reason it failed.
+  _2026-09-29 (P2b): `BluetoothCommand` also carries an optional `pin` (1–16 printable ASCII
+  characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin; the
+  dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the
+  P2c entry in `docs/backlog.md`._
 - **Forget pairing.** A switched-off Bluetooth printer (`POST /management-api/printers/:id/deactivate`
   already exists) shows a **Forget pairing** action. The server refuses it unless that agent reports
   the address among its paired devices. The agent removes the pairing (`bluetoothctl remove <address>`

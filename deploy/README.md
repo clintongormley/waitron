@@ -69,7 +69,8 @@ operator therefore types the PIN for every printer, `0000` included. `install` r
 the file changed, so installing again does not interrupt it. A box with no `bluetooth.service`
 gets one line saying so. If the file cannot be written or Bluetooth will not restart, `install`
 says so, removes the file again and restarts Bluetooth without it, and carries on; the next
-`install` tries again. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
+`install` tries again. If Bluetooth will not restart even without the file, `install` says Bluetooth
+may be stopped and to run `systemctl restart bluetooth` or restart the box. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
 so. It also changes nothing when another drop-in of `bluetooth.service` sets the daemon command
 (`ExecStart`), or cannot be read, and names that file: writing its own would drop that file's
 options or be overridden by it. A `waitron-noautopair.conf` an earlier `install` wrote stays in
@@ -336,7 +337,7 @@ command against it treat that entrypoint differently:
 
 `.env.example` documents every line. A box reached at `waitron.local` needs none of them set by
 hand: without AppArmor a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
-listing Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
+listing, pairing and forgetting Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
 there once it has loaded the profile.
 The box holds no database credential, because there is no database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A

@@ -177,8 +177,8 @@ hook, or how tests are scheduled:
   `packages` outputs before treating a green PR as evidence about the workspace.
 - **No front-end bundle is built by a pull request that changed no image input.** In CI the SPAs
   are `vite build`-ed only inside `deploy/Dockerfile`, which on a pull request runs only when
-  `deploy/` or a file image-smoke runs (`scripts/fake-bluez.py`, `scripts/bluetoothctl-pair.mjs`) changed
-  (`isImageInputPath`, `scripts/changed-scope.mjs`) — and wherever it does run it builds them
+  `deploy/` or a file `IMAGE_SMOKE_FILES` names (`scripts/changed-scope.mjs`) changed
+  (`isImageInputPath`, in the same file) — and wherever it does run it builds them
   without opening one, so a bundle that renders nothing passes anyway. Cost: the vite 6 → 8 bundler
   replacement had to take its build evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every

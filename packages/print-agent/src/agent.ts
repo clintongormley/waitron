@@ -22,7 +22,8 @@ import { Router } from "./router.js";
  * cuts the sleep short so its outcome goes out at once. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
-/** The wire's cap on commands per reply and on outcomes per pull. */
+/** How many Bluetooth commands the agent holds at once (queued, running, or with an unsent
+ * outcome), so also the most outcomes one pull carries, and how many taken ids it remembers. */
 const BLUETOOTH_COMMAND_LIMIT = 8;
 const PIN_WITHHELD = "pairing failed; the detail was withheld because it contained the PIN";
 
@@ -196,7 +197,6 @@ export function createAgent(opts: AgentOptions): Agent {
     return failed;
   }
 
-  /** A listing that keeps failing the same way is logged once, not on every pull. */
   async function listPairedBluetooth(): Promise<PairedBluetoothDevice[]> {
     try {
       const paired = await host.pairedBluetooth();
@@ -263,9 +263,10 @@ export function createAgent(opts: AgentOptions): Agent {
     bluetoothWorking = false;
   }
 
-  /** An id is remembered before its command starts, so a resent id never runs twice. A command
-   * arriving while eight are already held (queued, running, or with an unsent outcome) is not
-   * remembered, so the server's next resend of it is taken instead. */
+  /** An id is remembered before its command starts, so a resent id does not run again while it is
+   * among the last `BLUETOOTH_COMMAND_LIMIT` taken. A command arriving while that many are already
+   * held (queued, running, or with an unsent outcome) is not remembered, so the server's next resend
+   * of it is taken instead. */
   function acceptBluetoothCommands(commands: BluetoothCommand[]): void {
     for (const command of commands) {
       if (executedBluetoothCommands.has(command.id)) continue;

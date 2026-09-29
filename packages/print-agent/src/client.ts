@@ -26,7 +26,8 @@ export interface BluetoothCommand {
   kind: BluetoothCommandKind;
   /** Always a full upper-case `XX:XX:XX:XX:XX:XX`, never bluetoothctl's `*` (every device). */
   address: string;
-  /** The operator's PIN, on `pair` only: 1–16 printable ASCII characters. Never log it. */
+  /** The operator's PIN, on `pair` only: 1–16 printable ASCII characters, no spaces. Never
+   * log it. */
   pin?: string;
 }
 

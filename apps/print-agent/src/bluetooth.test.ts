@@ -504,8 +504,8 @@ describe("forget() through the real runBluetoothctl", () => {
   });
 });
 
-// A stand-in `bluetoothctl` on PATH speaking the measured interactive protocol (research-pin-report.md,
-// "Q2"): prompts with no newline, the PIN echoed back, `quit` read last. It records what it was sent,
+// A stand-in `bluetoothctl` on PATH speaking the interactive protocol measured 2026-09-29 with the
+// image's bluetoothctl 5.82 against a stand-in BlueZ: prompts with no newline, the PIN echoed back, `quit` read last. It records what it was sent,
 // so the pipes are proven against a real child process and the real `spawn`.
 describe("pair() through the real spawn", () => {
   const MAC = "86:67:7A:00:00:01";
@@ -523,7 +523,7 @@ describe("pair() through the real spawn", () => {
       [
         "#!/bin/sh",
         `log="${join(dir, "stdin.log")}"`,
-        // Given a command, the real one runs one-shot and registers no agent (research-pin-report Q1a).
+        // Given a command, the real one runs one-shot and registers no agent (measured the same way).
         `if [ "$#" -ne 0 ]; then echo "one-shot $*" > "$log"; exit 1; fi`,
         `printf 'Waiting to connect to bluetoothd...'`,
         `printf '${pad}Agent registered\\n${prompt}' ''`,

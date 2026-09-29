@@ -36,7 +36,8 @@ export function fakeHost(
   statuses: AgentStatus[];
   logs: string[];
   sleeps: number[];
-  /** The device-listing and Bluetooth-command methods called, by name, in call order. */
+  /** The calls made to `visibleDevices`, `pair`, `pairedBluetooth` and `forgetBluetooth`, by name,
+   * in call order. */
   calls: string[];
 } {
   let config = overrides.config === undefined ? null : overrides.config;

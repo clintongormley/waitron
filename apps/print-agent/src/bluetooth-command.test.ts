@@ -70,7 +70,7 @@ describe("runBluetoothctl", () => {
 });
 
 // Chunk shapes measured 2026-09-29 against a stand-in BlueZ with the image's bluetoothctl 5.82,
-// stdin/stdout/stderr all pipes (research-pin-report.md, "Q2"; raw chunks in p2b-pin/out/*.out).
+// stdin/stdout/stderr all pipes.
 // Every event line is cleared with "\r" + 79 spaces + "\r" and followed by the coloured prompt with
 // no newline; the agent's PIN prompt has no newline either.
 const MAC = "86:67:7A:00:00:01";
@@ -186,7 +186,7 @@ describe("pairWithBluetoothctl — the conversation", () => {
     }
   });
 
-  // pipe-eof: ending stdin at the prompt made bluetoothctl answer "" and exit.
+  // Measured with the stand-in above: ending stdin at the prompt made bluetoothctl answer "" and exit.
   it("answers the PIN prompt by ending its input when no PIN was given, and says a PIN is needed", async () => {
     const { child, result } = registered(undefined);
     child.say(PIN_PROMPT);
@@ -397,9 +397,10 @@ describe("pairWithBluetoothctl — outcomes", () => {
   });
 });
 
-// bluetoothctl echoes the PIN on a line of its own (every piped run in research-pin-report.md, Q2).
-// Nothing printed after the PIN was written is quoted, and nothing quoted is altered: a masked copy of
-// a line the reader can reconstruct (the address) would give the PIN away by its gaps.
+// bluetoothctl echoes the PIN on a line of its own (every piped run measured). Of the lines printed
+// after the PIN was written, only a name shaped `org.bluez.Error.<letters>` from a `Failed to pair:`
+// line is quoted, and nothing quoted is altered: a masked copy of a line the reader can reconstruct
+// (the address) would give the PIN away by its gaps.
 describe("pairWithBluetoothctl — the PIN never leaves the runner", () => {
   const PIN = "Zq7~";
 
