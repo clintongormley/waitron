@@ -48,6 +48,20 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("reads the server's answer to a configuration export made with the browser's own fetch", async () => {
+    // exportConfiguration reads a body only from the Response fetch returned, so a read means the
+    // server answered.
+    const readers = [vi.spyOn(Response.prototype, "json"), vi.spyOn(Response.prototype, "blob")];
+    try {
+      await new DashboardApi("", fetch)
+        .exportConfiguration("a strong passphrase")
+        .catch(() => undefined);
+      expect(readers.flatMap((reader) => reader.mock.calls)).not.toHaveLength(0);
+    } finally {
+      for (const reader of readers) reader.mockRestore();
+    }
+  });
+
   it("rejects a failed configuration export with the envelope's code and the HTTP status", async () => {
     const response = new Response(
       JSON.stringify({ error: { code: "backup.managed_by_environment" } }),
