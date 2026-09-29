@@ -23,9 +23,9 @@ type Phase = "form" | "pairing" | "expired" | "failed";
  * The SumUp ADD-READER DIALOG (`readerAdd.kind === "pairing-poll"`). Pressing _Pair_ POSTs the code;
  * the dialog then polls the reader's status until it pairs, the code's lifetime runs out, or a read
  * fails. The `processing` reader row an accepted attempt created is unpaired when the attempt expires,
- * fails, or the dialog is closed or removed before it pairs, so no un-paired orphan lingers to be picked
- * as a device default. A pair request that answers `paired` after the dialog closed is still reported
- * through `onAdded`.
+ * fails, or the dialog is closed or removed before a status read reports it paired — even if the reader
+ * has just paired on the device — so no un-paired orphan lingers to be picked as a device default. A
+ * pair request that answers `paired` after the dialog closed is still reported through `onAdded`.
  */
 @customElement("sumup-add-reader")
 export class SumUpAddReader extends LitElement {
@@ -115,7 +115,7 @@ export class SumUpAddReader extends LitElement {
     try {
       result = await this.#client().addReader({ name: this.name, code: this.code });
     } catch (error) {
-      // The server inserts the row only after the seat pairs, so a refused POST leaves no orphan.
+      // The server inserts the row only after SumUp accepts the code, so a refused request leaves no row.
       this.refusal =
         codeOf(error) === "payment.pairing_refused"
           ? t("payments.sumup.pairing_failed")
