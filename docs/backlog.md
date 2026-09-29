@@ -3436,7 +3436,7 @@ ongoing overhaul listed at the top of Track A.
   more often, so the add-person, edit-person and profile forms now show `person.display_name_taken`
   beside the display-name field. Left open, not fixed: on the add-person and edit-person forms
   (`apps/dashboard/src/widgets/person-form.ts`, `person-edit.ts`) a `person.email_taken` refusal still
-  shows only in the error summary, not beside the email field as the form rule in
+  shows only in the form's bottom message (the error summary until C47), not beside the email field as the form rule in
   [design-system.md](developers/design-system.md) asks; the profile screen already places it. Also
   left as they were, from #827's review: the profile screen clears a taken-name message differently
   from the two staff forms (after an edit its summary keeps the sentence until the next save, and a
@@ -3511,6 +3511,25 @@ ongoing overhaul listed at the top of Track A.
   axe at 1280 px over the dashboard with this branch's production changes reverted to a5474be6e: six
   colour-contrast failures at 4.32:1 in the light theme, none in the dark; the narrow-drawer cases
   pass.
+
+- **A form says what went wrong under each field and once beside its action button, never in a
+  box at the top (C47 part 1, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
+  message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
+  (`packages/ui-core/src/interactive.ts`) moves focus to the first marked field after a failed
+  submission. Every form in `apps/dashboard` follows it: after the first failed press each bad field
+  shows its message, the bottom message asks to fix the marked fields and the action stays disabled
+  until they are fixed; a refusal that names no field on the form (a failed save, a conflict) is the
+  bottom message instead and leaves the action working, so the person can try again.
+  `docs/developers/design-system.md` → Forms states the rule. Left open, not done: (1) the dashboard
+  module screens (adjustments reasons, image library, Stripe and SumUp connect and add-reader, venue
+  operations) still show `wt-form-error-summary` at the top — part 2; (2) the setup wizard's screens —
+  part 3, now that C42 has landed; (3) the till's forms are C48; (4) `wt-form-error-summary` is
+  deleted once nothing uses it; (5) the backups panel's refusal paragraph
+  (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays where it was, directly under the
+  form's buttons, because it also reports a refused Turn off, when no form is open;
+  (6) the profile screen, opened with required details missing, marks those fields at once, before
+  any press (two existing tests pin it), unlike every other form; (7) `placeErrors` is written twice,
+  in `menus-screen.ts` and `sections-screen.ts`.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
