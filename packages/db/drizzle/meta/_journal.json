@@ -337,6 +337,13 @@
       "when": 1790721009777,
       "tag": "0047_product_ordering_check",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1790721756705,
+      "tag": "0048_drop_sold_alone",
+      "breakpoints": true
     }
   ]
 }
