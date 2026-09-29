@@ -1,6 +1,7 @@
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import {
   diningTables,
+  orderGroups,
   parties,
   partyTableLabels,
   partyTables,
@@ -88,9 +89,10 @@ export async function moveBill(
 
   // Read before the bill's party changes, which clears the party's main bill when it is this bill.
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
+  let firers: ReadonlyMap<string, string> = new Map();
   if (source !== null) {
     await refuseMainBillLeaving(tx, source, billId);
-    await leaveParty(tx, billId);
+    firers = await leaveParty(tx, billId);
     await repointSourceTables(tx, source, billId);
   }
   const before = await readSentWork(tx, cfg, billId);
@@ -115,7 +117,7 @@ export async function moveBill(
       tableId: destination.tableId,
     });
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId);
-    await groupArrivingDishes(tx, partyId, billId, options.operatorId);
+    await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers);
     if (open) await setMainBill(tx, partyId, billId);
     result = { partyId, billId, merged: false };
   } else {
@@ -123,7 +125,7 @@ export async function moveBill(
     const moved = await takeIntoParty(tx, cfg, billId, partyId, await partyZone(tx, cfg, partyId));
     // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
     // whose own lines keep theirs.
-    await groupArrivingDishes(tx, partyId, billId, options.operatorId);
+    await groupArrivingDishes(tx, partyId, billId, options.operatorId, firers);
     const main = await readMainBill(tx, partyId);
     if (
       options.bills === "merge" &&
@@ -355,12 +357,21 @@ export async function takeIntoParty(
 
 /**
  * The bill leaves its party: refused `group.held_leaves_party` while a dish of it is held for the
- * kitchen, and its sent dishes leave their groups, keeping their ticket and served state.
+ * kitchen, and its sent dishes leave their groups, keeping their ticket and served state. Returns,
+ * by line id, who fired each dish's group, for the dishes that were in one.
  */
-export async function leaveParty(tx: Transaction, billId: string): Promise<void> {
+export async function leaveParty(
+  tx: Transaction,
+  billId: string,
+): Promise<ReadonlyMap<string, string>> {
   const lines = await tx
-    .select({ id: workingOrderLines.id, groupId: workingOrderLines.groupId })
+    .select({
+      id: workingOrderLines.id,
+      groupId: workingOrderLines.groupId,
+      firedBy: orderGroups.firedBy,
+    })
     .from(workingOrderLines)
+    .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
     );
@@ -373,6 +384,9 @@ export async function leaveParty(tx: Transaction, billId: string): Promise<void>
     tx,
     lines.filter((line) => line.groupId !== null).map((line) => line.id),
   );
+  const firers = new Map<string, string>();
+  for (const line of lines) if (line.firedBy !== null) firers.set(line.id, line.firedBy);
+  return firers;
 }
 
 /**
