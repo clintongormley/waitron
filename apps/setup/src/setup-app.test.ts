@@ -1,3 +1,4 @@
+import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { SetupApp, assembleBody } from "./setup-app.js";
@@ -1461,6 +1462,120 @@ describe("setup-app", () => {
     await flush(el);
     expect(adopt).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+  });
+
+  describe("what the operator typed on the connect form", () => {
+    const TYPED = {
+      primaryUrl: "https://primary.example",
+      personId: "op-7",
+      password: "  kept secret ",
+      totp: "123456",
+    };
+
+    const input = (connect: HTMLElement, field: string) =>
+      connect
+        .shadowRoot!.querySelector(`[data-test=${field}]`)!
+        .shadowRoot!.querySelector("input")!;
+
+    /** Types every field through the real inputs and presses Connect. */
+    async function typeAndConnect(el: SetupApp): Promise<void> {
+      goto(el, "connect");
+      await el.updateComplete;
+      const connect = await screenHost(el, "connect");
+      for (const [field, value] of Object.entries(TYPED)) {
+        await userEvent.fill(input(connect, field), value);
+      }
+      connect.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
+      await flush(el);
+    }
+
+    const sentBody = {
+      primaryUrl: "https://primary.example",
+      credential: { personId: "op-7", password: "  kept secret ", totp: "123456" },
+    };
+
+    it.each([
+      [
+        "names a field",
+        { code: "setup.request_invalid", params: { field: "credential.password" } },
+      ],
+      ["names no field", { code: "mirror.bundle_fetch_failed", params: {} }],
+    ])(
+      "is still in every field after a refusal that %s, and Connect sends it again",
+      async (_label, refusal) => {
+        const adopt = vi
+          .fn()
+          .mockRejectedValueOnce({ ...refusal, status: 400 })
+          .mockResolvedValue({ adopted: true, restarting: true });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        await typeAndConnect(el);
+        expect(adopt).toHaveBeenCalledWith(sentBody);
+
+        const connect = await screenHost(el, "connect");
+        for (const [field, value] of Object.entries(TYPED)) {
+          expect(input(connect, field).value).toBe(value);
+        }
+        const button = connect.shadowRoot!.querySelector("[data-test=connect]") as HTMLElement & {
+          disabled: boolean;
+        };
+        expect(button.disabled).toBe(false);
+
+        button.click();
+        await flush(el);
+        expect(adopt).toHaveBeenCalledTimes(2);
+        expect(adopt).toHaveBeenLastCalledWith(sentBody);
+        expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+      },
+    );
+
+    it("shows a refusal naming a field under that field, with the typed values kept", async () => {
+      const adopt = vi.fn().mockRejectedValue({
+        code: "setup.request_invalid",
+        params: { field: "credential.password" },
+        status: 400,
+      });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(connect.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
+        "Check the admin password.",
+      );
+      expect(input(connect, "password").value).toBe(TYPED.password);
+    });
+
+    it("is dropped from the shell once a later Connect succeeds", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValueOnce({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 })
+        .mockResolvedValue({ adopted: true, restarting: true });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: sentBody });
+      (await screenHost(el, "connect"))
+        .shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!
+        .click();
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
+      expect(readState(el, ["connectRequest"])).toEqual({ connectRequest: undefined });
+    });
+
+    it("is not kept once the operator leaves the connect screen", async () => {
+      const adopt = vi.fn().mockRejectedValue({
+        code: "mirror.bundle_fetch_failed",
+        params: {},
+        status: 502,
+      });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      goto(el, "role");
+      await el.updateComplete;
+      goto(el, "connect");
+      await el.updateComplete;
+      const connect = await screenHost(el, "connect");
+      for (const field of Object.keys(TYPED)) {
+        expect(input(connect, field).value).toBe("");
+      }
+    });
   });
 
   describe("an adopt refusal read against the saved setup operation", () => {

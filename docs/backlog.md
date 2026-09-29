@@ -4567,9 +4567,13 @@ ongoing overhaul listed at the top of Track A.
   ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); the two retention boxes
   are hand-built `<input type="number">`s rather than the shared `wt-input` that Forms prefers, left
   so because switching changes how an older test fills them in; and no test covers only the second
-  box being invalid, or where focus lands after a failed check on the Save form (#860's review); (5) the setup connect screen comes back EMPTY after a
-  refusal — the shell rebuilds it — so the refused field is marked on an empty input (seen with a
-  throwaway test during C54, `apps/setup/src/setup-app.ts` `#renderScreen` "connect"); (6) the setup
+  box being invalid, or where focus lands after a failed check on the Save form (#860's review);
+  (5) **DONE (C64, 2026-09-29):** the setup connect screen no
+  longer comes back empty after a refusal that routes back to it. The shell keeps the body it sent,
+  in this tab's memory only, and hands it back to the rebuilt form (`connectRequest` in
+  `apps/setup/src/setup-app.ts`, the screen's `request`), as the restore screens already did; leaving
+  the screen or a successful Connect drops it. Tests: "what the operator typed on the connect form"
+  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case; (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also
@@ -4605,8 +4609,8 @@ ongoing overhaul listed at the top of Track A.
   and `apps/dashboard/src/screens/categories-screen.a11y.test.ts`. Still open there, read and not
   run: the same screen's delete dialog draws its message in the dialog's body, below the preview,
   rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`).
-  **Next action:** the owner decided on 2026-09-29 that (5) is queued as C64 and the setup screens'
-  wording under a refused field in (1) as C62; the other open points, and the delete dialog's
+  **Next action:** the owner decided on 2026-09-29 that the setup screens' wording under a refused
+  field in (1) is queued as C62; the other open points, and the delete dialog's
   message noted above, still wait for the owner to say which are worth doing.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in

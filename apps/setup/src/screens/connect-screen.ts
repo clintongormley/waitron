@@ -74,6 +74,9 @@ export class SetupConnectScreen extends LitElement {
   /** A field the shell found an adopt refusal to be about. It never disables Connect. */
   @property() invalidField?: ConnectField;
 
+  /** The body the shell last sent, returned with a refusal so the operator's entries are kept. */
+  @property({ attribute: false }) request?: AdoptBody;
+
   @state() private values: Record<ConnectField, string> = {
     primaryUrl: "",
     personId: "",
@@ -96,6 +99,15 @@ export class SetupConnectScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
     if (changed.has("invalidField")) this.fieldRefusalDismissed = false;
+    if (changed.has("request") && this.request !== undefined) {
+      const { primaryUrl, credential } = this.request;
+      this.values = {
+        primaryUrl,
+        personId: credential.personId,
+        password: credential.password,
+        totp: credential.totp ?? "",
+      };
+    }
   }
 
   protected override updated(changed: PropertyValues<this>): void {

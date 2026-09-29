@@ -28,7 +28,7 @@ export function dispatchProvisionRequested(el: EventTarget): void {
 
 /**
  * Carries the whole {@link AdoptBody}, unlike `provision-requested`: the primary's address and login
- * never enter the shell's draft, so the password is not kept.
+ * never enter the shell's draft.
  */
 export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
   el.dispatchEvent(
@@ -36,7 +36,7 @@ export function dispatchAdoptRequested(el: EventTarget, body: AdoptBody): void {
   );
 }
 
-/** Carries the login itself, for the same reason as `adopt-requested`: the shell does not keep it. */
+/** Carries the login itself; the shell does not keep it. */
 export function dispatchResetRequested(el: EventTarget, credential: ResetCredential): void {
   el.dispatchEvent(
     new CustomEvent("reset-requested", { detail: { credential }, bubbles: true, composed: true }),
