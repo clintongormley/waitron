@@ -142,6 +142,9 @@ const seatedTable: TableState = {
     revision: 3,
     guestCount: 2,
     state: "open",
+    name: null,
+    displayName: "2",
+    mainBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
@@ -434,9 +437,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
-    mergeTabs: vi.fn().mockResolvedValue(undefined),
-    transferLines: vi.fn().mockResolvedValue(undefined),
-    splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
+    mergeBills: vi.fn().mockResolvedValue(undefined),
+    transferItems: vi.fn().mockResolvedValue(undefined),
+    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     listStatuses: vi.fn().mockResolvedValue([]),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
@@ -4404,52 +4407,52 @@ describe("till-app", () => {
         expect(tableOrder(el)).not.toBeNull();
       });
 
-      it("merge-tabs absorbs another tab then reloads this tab's lines AND the floor", async () => {
-        const mergeTabs = vi.fn().mockResolvedValue(undefined);
+      it("merge-bills absorbs another bill then reloads this bill's lines AND the floor", async () => {
+        const mergeBills = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          mergeTabs,
+          mergeBills,
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
         expect(getTablesState).toHaveBeenCalledTimes(1);
 
-        emit(screen, "merge-tabs", { fromTabId: "wo-9", freeSourceTable: true });
+        emit(screen, "merge-bills", { fromBillId: "wo-9" });
         await flush(el);
 
-        expect(mergeTabs).toHaveBeenCalledWith("wo-7", "wo-9", true, {});
+        expect(mergeBills).toHaveBeenCalledWith("wo-7", "wo-9", {});
         // The current tab absorbed the other's lines (reload) and the floor changed (reload).
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
       it("transfer-lines moves selected lines out then reloads this tab's lines AND the floor", async () => {
-        const transferLines = vi.fn().mockResolvedValue(undefined);
+        const transferItems = vi.fn().mockResolvedValue(undefined);
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const { el } = await mountApp({
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          transferLines,
+          transferItems,
         });
         const screen = await toTableOrder(el, openTable);
         expect(getTabLines).toHaveBeenCalledTimes(1);
 
-        emit(screen, "transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] });
+        emit(screen, "transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(transferLines).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
+        expect(transferItems).toHaveBeenCalledWith("wo-7", "wo-9", [{ lineNo: 1 }], {});
         expect(getTabLines).toHaveBeenCalledTimes(2);
         expect(getTablesState).toHaveBeenCalledTimes(2);
       });
 
       it("split-lines switches pay and later receipt actions to the detached check", async () => {
-        const splitTab = vi.fn().mockResolvedValue({ checkId: "wo-check" });
+        const splitBill = vi.fn().mockResolvedValue({ billId: "wo-check" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const getTablesState = vi.fn().mockResolvedValue([openTable]);
         const recordSale = vi.fn().mockResolvedValue(saleResult);
@@ -4458,7 +4461,7 @@ describe("till-app", () => {
           getTablesState,
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          splitTab,
+          splitBill,
           recordSale,
           reprint,
         });
@@ -4467,7 +4470,7 @@ describe("till-app", () => {
         emit(screen, "split-lines", { transfers: [{ lineNo: 1 }] });
         await flush(el);
 
-        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {});
+        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1 }], {});
         expect(getTabLines).toHaveBeenLastCalledWith("wo-check");
         expect(tableOrder(el)!.orderId).toBe("wo-check");
         expect(getTablesState).toHaveBeenCalledTimes(2);
@@ -4485,20 +4488,20 @@ describe("till-app", () => {
       });
 
       it("a modifier-dish partial split refusal keeps the origin open and explains the full-line rule", async () => {
-        const splitTab = vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" });
+        const splitBill = vi.fn().mockRejectedValue({ code: "tab.transfer_modifier_line" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          splitTab,
+          splitBill,
         });
         const screen = await toTableOrder(el, openTable);
 
         emit(screen, "split-lines", { transfers: [{ lineNo: 1, quantity: "1" }] });
         await flush(el);
 
-        expect(splitTab).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {});
+        expect(splitBill).toHaveBeenCalledWith("wo-7", [{ lineNo: 1, quantity: "1" }], {});
         expect(tableOrder(el)!.orderId).toBe("wo-7");
         expect(getTabLines).toHaveBeenCalledTimes(1);
         expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent).toContain(
@@ -4507,13 +4510,13 @@ describe("till-app", () => {
       });
 
       it("a refusal to split held kitchen work keeps the origin open and says to send it or fire its group first", async () => {
-        const splitTab = vi.fn().mockRejectedValue({ code: "tab.split_held_line" });
+        const splitBill = vi.fn().mockRejectedValue({ code: "tab.split_held_line" });
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
-          splitTab,
+          splitBill,
         });
         const screen = await toTableOrder(el, openTable);
 

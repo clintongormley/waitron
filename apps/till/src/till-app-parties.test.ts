@@ -63,6 +63,9 @@ function party(over: Partial<TableParty> = {}): TableParty {
     revision: 3,
     guestCount: 3,
     state: "open",
+    name: null,
+    displayName: "4",
+    mainBillId: "wo-4",
     outstanding: "44.00",
     billCount: 1,
     tableIds: ["t4"],
@@ -225,9 +228,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     sendLines: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
-    mergeTabs: vi.fn().mockResolvedValue(undefined),
-    transferLines: vi.fn().mockResolvedValue(undefined),
-    splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
+    mergeBills: vi.fn().mockResolvedValue(undefined),
+    transferItems: vi.fn().mockResolvedValue(undefined),
+    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     reprint: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
@@ -1087,7 +1090,7 @@ describe("till-app: the party on a handheld", () => {
   }
 
   it.each([
-    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab", { checkId: "wo-check" }],
+    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill", { billId: "wo-check" }],
     ["join-table", { tableId: "t9" }, "joinTable", undefined],
   ] as const)(
     "refuses %s sent from an order read before a glance at the floor saw another device's change",
@@ -1270,29 +1273,6 @@ describe("till-app: every table move sends the party revision it last read", () 
   it.each([
     ["move-tab", { toTableId: "t9" }, "moveTab", ["wo-4", "t9", { expectedPartyRevision: 3 }]],
     ["join-table", { tableId: "t9" }, "joinTable", ["wo-4", "t9", { expectedPartyRevision: 3 }]],
-    [
-      "merge-tabs",
-      { fromTabId: "wo-7", freeSourceTable: true },
-      "mergeTabs",
-      ["wo-4", "wo-7", true, { expectedPartyRevision: 3, expectedSourcePartyRevision: 9 }],
-    ],
-    [
-      "transfer-lines",
-      { toTabId: "wo-7", transfers: [{ lineNo: 1 }] },
-      "transferLines",
-      [
-        "wo-4",
-        "wo-7",
-        [{ lineNo: 1 }],
-        { expectedPartyRevision: 9, expectedSourcePartyRevision: 3 },
-      ],
-    ],
-    [
-      "split-lines",
-      { transfers: [{ lineNo: 1 }] },
-      "splitTab",
-      ["wo-4", [{ lineNo: 1 }], { expectedPartyRevision: 3 }],
-    ],
   ] as const)("%s", async (type, detail, method, args) => {
     const { el } = await mountApp();
     const order = await openMesa(el);
@@ -1305,19 +1285,78 @@ describe("till-app: every table move sends the party revision it last read", () 
     ).toHaveBeenCalledWith(...args);
   });
 
-  it("sends no source revision when both bills belong to the same party", async () => {
-    const joined = seated({ id: "t5", label: "5", tabId: "wo-check", hasOpenTab: true });
-    const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([mesa4, joined]),
-    });
+  it.each([
+    [
+      "merge-bills",
+      { fromBillId: "wo-check" },
+      "mergeBills",
+      ["wo-4", "wo-check", { expectedPartyRevision: 3, partyId: "v1" }],
+    ],
+    [
+      "transfer-lines",
+      { toBillId: "wo-check", transfers: [{ lineNo: 1 }] },
+      "transferItems",
+      ["wo-4", "wo-check", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }],
+    ],
+    [
+      "split-lines",
+      { transfers: [{ lineNo: 1 }] },
+      "splitBill",
+      ["wo-4", [{ lineNo: 1 }], { expectedPartyRevision: 3, partyId: "v1" }],
+    ],
+  ] as const)("%s sends the party revision it last read", async (type, detail, method, args) => {
+    const { el } = await mountApp();
     const order = await openMesa(el);
 
-    emit(order, "merge-tabs", { fromTabId: "wo-check", freeSourceTable: true });
+    emit(order, type, detail);
     await flush(el);
 
-    expect(api.mergeTabs).toHaveBeenCalledWith("wo-4", "wo-check", true, {
-      expectedPartyRevision: 3,
+    expect(
+      (api as unknown as Record<string, ReturnType<typeof vi.fn>>)[method],
+    ).toHaveBeenCalledWith(...args);
+  });
+
+  it("sends no transfer that carries no items", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+
+    emit(order, "transfer-lines", { toBillId: "wo-check", transfers: [] });
+    await flush(el);
+
+    expect(api.transferItems).not.toHaveBeenCalled();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("leaves an unpaid split-off bill listed when the waiter leaves it and comes back, and merges nothing (decision 8)", async () => {
+    // The old methods are stubbed back in: were anything still to split through `splitTab` and put
+    // the bill back through `mergeTabs`, this case would see it.
+    const { el } = await mountApp({
+      splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
+      mergeTabs: vi.fn().mockResolvedValue(undefined),
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
     });
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const reopened = tableOrder(el)!;
+    reopened.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    const listed = [...reopened.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill]")].map(
+      (row) => row.dataset.bill,
+    );
+    expect(listed).toContain(checkBill.workingOrderId);
+    expect(api.mergeBills).not.toHaveBeenCalled();
+    expect(
+      (api as unknown as { mergeTabs: ReturnType<typeof vi.fn> }).mergeTabs,
+    ).not.toHaveBeenCalled();
+    expect(api.transferItems).not.toHaveBeenCalled();
   });
 
   it("moves a party whose tab has been paid, from the paid tab", async () => {
@@ -1363,212 +1402,6 @@ const onTablet = () => ({
 });
 const tabletOrderCard = (el: TillApp) =>
   tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
-
-describe("till-app: a party's split-off bill left unpaid goes back with the party's revision", () => {
-  const orderCard = tabletOrderCard;
-
-  /** The floor reads the party at revision 3 until the split, and at 4 once the split has moved it. */
-  function floorAcrossSplit() {
-    let split = false;
-    return {
-      getTablesState: vi.fn(async () => [
-        split ? seated({}, { revision: 4 }) : mesa4,
-        mesa7,
-        mesa9,
-      ]),
-      splitTab: vi.fn(async () => {
-        split = true;
-        return { checkId: "wo-check" };
-      }),
-    };
-  }
-
-  it("sends the revision the floor read after the split when a till goes Back", async () => {
-    const { el } = await mountApp(floorAcrossSplit());
-    const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-check");
-
-    emit(tableOrder(el)!, "back-to-floor");
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-4", "wo-check", false, {
-      expectedPartyRevision: 4,
-    });
-    expect(banner(el)).toBeNull();
-  });
-
-  it("reads the floor once after the merge when a till goes Back", async () => {
-    const { el } = await mountApp(floorAcrossSplit());
-    const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-
-    emit(tableOrder(el)!, "back-to-floor");
-    await flush(el);
-
-    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-  });
-
-  it("sends the returned party's revision, not the next table's, when a tablet opens another table", async () => {
-    const { el } = await mountApp({
-      ...floorAcrossSplit(),
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tablet }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
-    });
-    const screen = await toFloor(el);
-    emit(screen, "open-table", { tableId: "t4", seated: true });
-    await flush(el);
-    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-    expect(orderCard(el)!.orderId).toBe("wo-check");
-
-    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-4", "wo-check", false, {
-      expectedPartyRevision: 4,
-    });
-    expect(orderCard(el)!.orderId).toBe("wo-7");
-  });
-
-  it("sends the revision the merge moved the party to when a tablet comes back to its table", async () => {
-    let revision = 3;
-    const { el } = await mountApp({
-      ...onTablet(),
-      getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
-      splitTab: vi.fn(async () => {
-        revision = 4;
-        return { checkId: "wo-check" };
-      }),
-      mergeTabs: vi.fn(async () => {
-        revision = 5;
-      }),
-    });
-    const screen = await toFloor(el);
-    emit(screen, "open-table", { tableId: "t4", seated: true });
-    await flush(el);
-    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
-    await flush(el);
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-
-    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
-    await flush(el);
-    emit(orderCard(el)!, "finish-table", {});
-    await flush(el);
-
-    expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 5);
-  });
-
-  it("sends the revision the merge moved the party to when a handheld comes back to its Order tab", async () => {
-    let revision = 3;
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-      getTablesState: vi.fn(async () => [seated({}, { revision }), mesa7, mesa9]),
-      splitTab: vi.fn(async () => {
-        revision = 4;
-        return { checkId: "wo-check" };
-      }),
-      mergeTabs: vi.fn(async () => {
-        revision = 5;
-      }),
-    });
-    await toFloor(el);
-    emit(shell(el), "open-table", { tableId: "t4", seated: true });
-    await flush(el);
-    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    expect(orderCard(el)!.orderId).toBe("wo-4");
-    emit(orderCard(el)!, "finish-table", {});
-    await flush(el);
-
-    expect(api.finishTable).toHaveBeenCalledExactlyOnceWith("v1", 5);
-  });
-
-  /** A handheld with the party's bill split off, on its Order tab. */
-  async function splitOnHandheld(mergeTabs: () => Promise<void>) {
-    const { el } = await mountApp({
-      ...floorAcrossSplit(),
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: phone }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
-      mergeTabs: vi.fn(mergeTabs),
-    });
-    await toFloor(el);
-    emit(shell(el), "open-table", { tableId: "t4", seated: true });
-    await flush(el);
-    emit(orderCard(el)!, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-    return el;
-  }
-
-  it("reads the floor once when a handheld leaves its Order tab twice before the merge answers", async () => {
-    let answerMerge!: () => void;
-    const el = await splitOnHandheld(() => new Promise<void>((resolve) => (answerMerge = resolve)));
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    answerMerge();
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-  });
-
-  it("reads the floor again when a handheld leaves its Order tab after the merge has answered", async () => {
-    const el = await splitOnHandheld(async () => undefined);
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-  });
-
-  it("keeps the bill held, without sending it again, when the party changed elsewhere first", async () => {
-    const { el } = await mountApp({
-      ...floorAcrossSplit(),
-      mergeTabs: vi
-        .fn()
-        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 6 }),
-    });
-    const order = await openMesa(el);
-    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
-    await flush(el);
-
-    emit(tableOrder(el)!, "back-to-floor");
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-    expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
-    expect(floor(el)).not.toBeNull();
-  });
-});
 
 /** The floor reads `before` until the test says the other device has acted, then `after`. */
 function floorThat(before: TableState[], after: TableState[]) {
@@ -1616,7 +1449,7 @@ describe("till-app: another device changed the table first", () => {
     const split = seated({}, { revision: 5, billCount: 2, outstanding: "44.00" });
     const reads = floorThat([mesa4], [split]);
     const { el } = await mountApp({
-      splitTab: vi
+      splitBill: vi
         .fn()
         .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 }),
       getTablesState: reads.getTablesState,
@@ -1678,7 +1511,7 @@ describe("till-app: another device changed the table first", () => {
       ],
     );
     const { el } = await mountApp({
-      transferLines: vi
+      transferItems: vi
         .fn()
         .mockRejectedValue({ code: "party.out_of_date", partyId: "v7", revision: 10 }),
       getTablesState: reads.getTablesState,
@@ -1686,7 +1519,7 @@ describe("till-app: another device changed the table first", () => {
     const order = await openMesa(el);
     reads.other.acted = true;
 
-    emit(order, "transfer-lines", { toTabId: "wo-7", transfers: [{ lineNo: 1 }] });
+    emit(order, "transfer-lines", { toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "7"));
@@ -1697,39 +1530,8 @@ describe("till-app: another device changed the table first", () => {
     ["table.occupied", "join-table", { tableId: "t9" }, "joinTable"],
     ["table.needs_clearing", "move-tab", { toTableId: "t9" }, "moveTab"],
     ["table.needs_clearing", "join-table", { tableId: "t9" }, "joinTable"],
-    ["party.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
-    [
-      "group.held_leaves_party",
-      "transfer-lines",
-      { toTabId: "wo-7", transfers: [{ lineNo: 1 }] },
-      "transferLines",
-    ],
-    [
-      "group.held_leaves_party",
-      "merge-tabs",
-      { fromTabId: "wo-7", freeSourceTable: false },
-      "mergeTabs",
-    ],
+    ["party.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
     ["tab.not_table_tab", "join-table", { tableId: "t9" }, "joinTable"],
-    ["tab.not_table_tab", "merge-tabs", { fromTabId: "wo-7", freeSourceTable: false }, "mergeTabs"],
-    [
-      "tab.party_mismatch",
-      "merge-tabs",
-      { fromTabId: "wo-7", freeSourceTable: false },
-      "mergeTabs",
-    ],
-    [
-      "tab.party_has_other_open_bill",
-      "merge-tabs",
-      { fromTabId: "wo-7", freeSourceTable: false },
-      "mergeTabs",
-    ],
-    [
-      "tab.merge_leaves_no_table",
-      "merge-tabs",
-      { fromTabId: "wo-7", freeSourceTable: true },
-      "mergeTabs",
-    ],
   ] as const)("shows %s in its own words after %s", async (code, type, detail, method) => {
     const { el } = await mountApp({ [method]: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
@@ -2077,27 +1879,81 @@ describe("till-app: the order's groups", () => {
     expect(api.moveTab).toHaveBeenCalledWith("wo-7", "t9", { expectedPartyRevision: 9 });
   });
 
-  it("sends no round while a split-off check is the order on screen, and says what a refused round said", async () => {
-    const { el } = await mountApp();
+  it("sends the party's draft from a bill split off the main bill, naming no bill unless one is chosen", async () => {
+    const { el } = await mountApp({
+      submitDraft: answering({ tabId: "wo-4", revision: 4, groups: [] }),
+    });
     const order = await openMesa(el);
     emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
-    const round = new WorkingOrderStore();
-    round.addProduct(cafe, "1");
+    const onCheck = tableOrder(el)!;
+    await ringRound(el, onCheck);
 
-    emit(tableOrder(el)!, "submit-draft", {
-      lines: [{ menuItemId: "menu-item-cafe", quantity: "1" }],
-      groups: [{ release: "fire", lineIndexes: [0] }],
-      store: round,
-      sent: round.lines,
+    emit(onCheck, "submit-draft", roundDetail(onCheck, [{ release: "fire", lineIndexes: [0, 1] }]));
+    await flush(el);
+
+    expect(api.submitDraft).toHaveBeenCalledOnce();
+    expect(vi.mocked(api.submitDraft).mock.calls[0]![2]).not.toHaveProperty("billId");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("sends an order to the bill the waiter chose", async () => {
+    const { el } = await mountApp({
+      submitDraft: answering({ tabId: "wo-check", revision: 4, groups: [] }),
+    });
+    const order = await openMesa(el);
+    await ringRound(el, order);
+
+    emit(order, "submit-draft", {
+      ...roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]),
+      billId: "wo-check",
     });
     await flush(el);
 
-    expect(api.submitDraft).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(t("table.error"));
-    expect(round.lineCount).toBe(1);
+    expect(api.submitDraft).toHaveBeenCalledWith(
+      "v1",
+      expect.any(String),
+      expect.objectContaining({ billId: "wo-check" }),
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+
+  it("shows the chosen bill when a send to it got no answer", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+    await ringRound(el, order);
+
+    emit(order, "submit-draft", {
+      ...roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]),
+      billId: "wo-check",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
+
+    expect(api.submitDraft).toHaveBeenCalledTimes(3);
+    expect(banner(el)!.textContent).toContain(t("table.round_unconfirmed"));
     expect(tableOrder(el)!.orderId).toBe("wo-check");
+  });
+
+  it("shows a refusal of the chosen bill in its own words", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.presented", workingOrderId: "wo-check" }),
+    });
+    const order = await openMesa(el);
+    await ringRound(el, order);
+
+    emit(order, "submit-draft", {
+      ...roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]),
+      billId: "wo-check",
+    });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("bill.presented"));
   });
 
   it("sends a round from a party just seated when the floor could not be read after seating", async () => {

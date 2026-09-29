@@ -6,8 +6,10 @@ import { currentLocale, t } from "../i18n/t.js";
 import type {
   OfferedModifier,
   OrderGroup,
+  PartyBill,
   PrintProblem,
   TabLine,
+  TableParty,
   TableState,
   TillProduct,
   TillZoneMenu,
@@ -195,6 +197,44 @@ function orderGroup(id: string, state: OrderGroup["state"]): OrderGroup {
     summary: "",
   };
 }
+
+const anaParty: TableParty = {
+  id: "v1",
+  revision: 3,
+  guestCount: 3,
+  state: "open",
+  name: "Ana",
+  displayName: "Ana",
+  mainBillId: "wo-4",
+  outstanding: "44.00",
+  billCount: 5,
+  tableIds: ["t4"],
+  unsentDrafts: [],
+  reminder: null,
+};
+const bill = (over: Partial<PartyBill>): PartyBill => ({
+  workingOrderId: "wo-4",
+  partyId: "v1",
+  label: null,
+  status: "open",
+  total: "14.00",
+  outstanding: "14.00",
+  receiptAvailable: false,
+  ...over,
+});
+/** The party's main bill, and a bill split off it, both untouched. */
+const tabBill = bill({});
+const checkBill = bill({ workingOrderId: "wo-check", total: "30.00", outstanding: "30.00" });
+const paidBill = bill({ workingOrderId: "wo-paid", status: "settled", outstanding: "0.00" });
+const placedBill = bill({ workingOrderId: "wo-placed", status: "placed" });
+/** Open, with money already received against it. */
+const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00" });
+/** Open, but recorded on a party merged into this one. */
+const mergedPartyBill = bill({ workingOrderId: "wo-merged", partyId: "v0" });
+const partyBills = () => ({
+  party: anaParty,
+  bills: [tabBill, checkBill, paidBill, placedBill, partlyPaidBill, mergedPartyBill],
+});
 
 describe("till-table-order-screen", () => {
   it("registers as a custom element", () => {
@@ -2534,6 +2574,110 @@ describe("till-table-order-screen", () => {
     });
   });
 
+  describe("sending an order to another bill of the party", () => {
+    /** Rings a café into the draft and opens Fire all now's preview. */
+    async function previewCafe(el: TillTableOrderScreen): Promise<void> {
+      grid(el).shadowRoot!.querySelector<HTMLElement>("wt-button.tile")!.click();
+      await el.updateComplete;
+      await openPreview(el, "fire-all");
+    }
+    const sendTo = (el: TillTableOrderScreen) =>
+      previewDialog(el).querySelector<HTMLFieldSetElement>("[data-send-to]");
+    const choices = (el: TillTableOrderScreen) =>
+      [...sendTo(el)!.querySelectorAll<HTMLInputElement>('input[type="radio"]')].map((radio) => ({
+        name: radio.name,
+        value: radio.value,
+        checked: radio.checked,
+        label: radio.closest("label")!.textContent!.replace(/\s+/g, " ").trim(),
+      }));
+    const billName = (n: number) =>
+      t("table.bill_of").replace("{party}", "Ana").replace("{n}", String(n));
+
+    it("offers each open, unpresented bill of the party, defaulting to the main bill, and sends no bill for it", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+
+      expect(sendTo(el)!.querySelector("legend")!.textContent!.trim()).toBe(t("table.send_to"));
+      expect(choices(el)).toEqual([
+        {
+          name: "billId",
+          value: "wo-4",
+          checked: true,
+          label: `${billName(1)} ${t("table.bill_main")}`,
+        },
+        { name: "billId", value: "wo-check", checked: false, label: billName(2) },
+        { name: "billId", value: "wo-part", checked: false, label: billName(5) },
+      ]);
+      const captured = confirmPreview(el);
+      expect(captured!.detail).not.toHaveProperty("billId");
+    });
+
+    it("puts the chosen bill in submit-draft's detail", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+      const captured = confirmPreview(el);
+
+      expect(captured!.detail.billId).toBe("wo-check");
+    });
+
+    it("defaults to the main bill even on a bill split off it", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
+      await previewCafe(el);
+
+      expect(choices(el).find((choice) => choice.checked)!.value).toBe("wo-4");
+    });
+
+    it("starts again from the main bill each time the preview opens", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await previewCafe(el);
+      sendTo(el)!.querySelector<HTMLInputElement>('input[value="wo-check"]')!.click();
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-draft-dismiss]")!.click();
+      await el.updateComplete;
+
+      await openPreview(el, "fire-all");
+
+      expect(choices(el).find((choice) => choice.checked)!.value).toBe("wo-4");
+    });
+
+    it("offers no choice, and names no bill, when the party has one open bill", async () => {
+      const { el } = await mount({
+        party: anaParty,
+        bills: [tabBill, paidBill, placedBill, mergedPartyBill],
+        orderId: "wo-4",
+      });
+      await previewCafe(el);
+
+      expect(sendTo(el)).toBeNull();
+      expect(confirmPreview(el)!.detail).not.toHaveProperty("billId");
+    });
+
+    it("offers a new bill first, and by default, when the party has no main bill", async () => {
+      const { el } = await mount({
+        party: { ...anaParty, mainBillId: null },
+        bills: [paidBill, checkBill],
+        orderId: "wo-check",
+      });
+      await previewCafe(el);
+
+      expect(choices(el).map(({ value, checked, label }) => ({ value, checked, label }))).toEqual([
+        { value: "", checked: true, label: t("table.send_to_new") },
+        { value: "wo-check", checked: false, label: billName(2) },
+      ]);
+      expect(confirmPreview(el)!.detail).not.toHaveProperty("billId");
+    });
+
+    it("offers no choice for an order that belongs to no party", async () => {
+      const { el } = await mount({ orderId: "wo-4" });
+      await previewCafe(el);
+
+      expect(sendTo(el)).toBeNull();
+    });
+  });
+
   describe("table actions (TS-3/TS-4)", () => {
     const tableState = (over: Partial<TableState> = {}): TableState => ({
       id: "t1",
@@ -2572,6 +2716,12 @@ describe("till-table-order-screen", () => {
       input.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true }));
       await el.updateComplete;
     };
+
+    /** The ids the open target picker offers, in order. */
+    const targetIds = (el: TillTableOrderScreen) =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-target]")].map(
+        (target) => target.dataset.target,
+      );
 
     it("shows all five action verbs with Split enabled and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
@@ -2812,67 +2962,67 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
     });
 
-    it("merge → other-open-tab picker (EXCLUDES the current tab) → dispatches merge-tabs and closes", async () => {
-      const own = tableState({ id: "t2", state: "open-tab", hasOpenTab: true, tabId: "wo-7" });
-      const other = tableState({
-        id: "t3",
-        label: "3",
-        state: "open-tab",
-        hasOpenTab: true,
-        tabId: "wo-9",
-      });
-      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [own, other] });
+    it("merge lists the party's other untouched bills only, and dispatches merge-bills { fromBillId }", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
       await toMenu(el);
       click(el, '[data-action="merge"]');
       await el.updateComplete;
-      // The current tab's own table (tabId === orderId) is not a merge source.
-      expect(el.shadowRoot!.querySelector('[data-target="wo-7"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-target="wo-9"]')).not.toBeNull();
 
+      expect(targetIds(el)).toEqual(["wo-check"]);
+      expect(el.shadowRoot!.querySelector('[data-target="wo-check"]')!.textContent).toContain(
+        t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
+      );
       let captured: CustomEvent | undefined;
-      el.addEventListener("merge-tabs", (e) => (captured = e as CustomEvent));
-      click(el, '[data-target="wo-9"]');
+      el.addEventListener("merge-bills", (e) => (captured = e as CustomEvent));
+      click(el, '[data-target="wo-check"]');
       await el.updateComplete;
-      expect(captured!.detail).toEqual({ fromTabId: "wo-9", freeSourceTable: true });
+      expect(captured!.composed).toBe(true);
+      expect(captured!.detail).toEqual({ fromBillId: "wo-check" });
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
     });
 
-    it("lists a JOINED tab (two tables, one tabId) once in the merge picker", async () => {
-      // A joined tab spans several dining_tables rows all pointing at one tabId; the picker chooses a
-      // BILL, so it must dedupe to one entry (not one per covered table).
-      const joinedA = tableState({
-        id: "t3",
-        label: "3",
-        state: "open-tab",
-        hasOpenTab: true,
-        tabId: "wo-9",
-      });
-      const joinedB = tableState({
-        id: "t4",
-        label: "4",
-        state: "open-tab",
-        hasOpenTab: true,
-        tabId: "wo-9",
-      });
-      const { el } = await mount({
-        lines: [pendingLine],
-        orderId: "wo-7",
-        tables: [joinedA, joinedB],
-      });
+    it("says which bill the chosen one merges into before anything is chosen", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
       await toMenu(el);
       click(el, '[data-action="merge"]');
       await el.updateComplete;
-      expect(el.shadowRoot!.querySelectorAll('[data-target="wo-9"]')).toHaveLength(1);
+
+      expect(el.shadowRoot!.querySelector("[data-target-picker] h2")!.textContent!.trim()).toBe(
+        t("table.merge_into").replace(
+          "{bill}",
+          t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
+        ),
+      );
     });
 
-    it("transfer → tab picker → line selection → dispatches transfer-lines with a whole-line entry", async () => {
-      const other = tableState({ id: "t3", state: "open-tab", hasOpenTab: true, tabId: "wo-9" });
-      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [other] });
+    it("offers nothing to merge, under the plain heading, for an order that belongs to no party", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+
+      const picker = el.shadowRoot!.querySelector("[data-target-picker]")!;
+      expect(picker.querySelector("h2")!.textContent!.trim()).toBe(t("table.actions_title"));
+      expect(picker.textContent).toContain(t("table.no_other_bills"));
+    });
+
+    it("names the merge verb for bills", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-4" });
+      await toMenu(el);
+
+      expect(el.shadowRoot!.querySelector('[data-action="merge"]')!.textContent!.trim()).toBe(
+        t("table.action_merge_bills"),
+      );
+    });
+
+    it("transfer offers the same bills as merge, then dispatches transfer-lines { toBillId, transfers }", async () => {
+      const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
       click(el, '[data-action="transfer"]');
       await el.updateComplete;
-      // Picking the destination tab advances to the line-picker step (does NOT dispatch yet).
-      click(el, '[data-target="wo-9"]');
+      expect(targetIds(el)).toEqual(["wo-check"]);
+      // Picking the destination bill advances to the line-picker step (does NOT dispatch yet).
+      click(el, '[data-target="wo-check"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-transfer-lines]")).not.toBeNull();
       // Confirm is a no-op until at least one line is selected.
@@ -2891,23 +3041,66 @@ describe("till-table-order-screen", () => {
       click(el, "[data-transfer-confirm]");
       await el.updateComplete;
       expect(captured!.composed).toBe(true);
-      expect(captured!.detail).toEqual({ toTabId: "wo-9", transfers: [{ lineNo: 1 }] });
+      expect(captured!.detail).toEqual({ toBillId: "wo-check", transfers: [{ lineNo: 1 }] });
       expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+    });
+
+    it("dispatches no transfer while no item is chosen, even when Confirm is pressed", async () => {
+      const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+      let sent = false;
+      el.addEventListener("transfer-lines", () => (sent = true));
+
+      el.shadowRoot!.querySelector<HTMLElement>("[data-transfer-confirm]")!
+        .shadowRoot!.querySelector<HTMLButtonElement>("button")!
+        .click();
+      await el.updateComplete;
+
+      expect(sent).toBe(false);
+      expect(el.shadowRoot!.querySelector("[data-transfer-lines]")).not.toBeNull();
+    });
+
+    it("offers Split on a bill split off before, as on the main bill", async () => {
+      const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-check" });
+      await toMenu(el);
+      let captured: CustomEvent | undefined;
+      el.addEventListener("split-lines", (e) => (captured = e as CustomEvent));
+
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+
+      expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }] });
+    });
+
+    it("merges into the bill on screen from the main bill when the bill on screen was split off", async () => {
+      const { el } = await mount({ ...partyBills(), orderId: "wo-check" });
+      await toMenu(el);
+      click(el, '[data-action="merge"]');
+      await el.updateComplete;
+
+      expect(targetIds(el)).toEqual(["wo-4"]);
     });
 
     it("transfer line-picker offers dishes only, never a child extras row", async () => {
       // The server REFUSES a directly named child and cascades a dish's children with the dish instead.
       const child = { ...pendingLine, lineNo: 2, parentLineNo: 1, quantity: "1.000" };
-      const other = tableState({ id: "t3", state: "open-tab", hasOpenTab: true, tabId: "wo-9" });
       const { el } = await mount({
+        ...partyBills(),
         lines: [pendingLine, child],
-        orderId: "wo-7",
-        tables: [other],
+        orderId: "wo-4",
       });
       await toMenu(el);
       click(el, '[data-action="transfer"]');
       await el.updateComplete;
-      click(el, '[data-target="wo-9"]');
+      click(el, '[data-target="wo-check"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector('[data-transfer-line="1"]')).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-transfer-line="2"]')).toBeNull();
@@ -2923,14 +3116,18 @@ describe("till-table-order-screen", () => {
       );
     });
 
-    it("shows an empty-state when there are no other open tabs to merge", async () => {
-      const own = tableState({ id: "t2", state: "open-tab", hasOpenTab: true, tabId: "wo-7" });
-      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [own] });
+    it("shows an empty-state when the party has no other bill to merge", async () => {
+      const { el } = await mount({
+        lines: [pendingLine],
+        orderId: "wo-4",
+        party: anaParty,
+        bills: [tabBill, paidBill, placedBill],
+      });
       await toMenu(el);
       click(el, '[data-action="merge"]');
       await el.updateComplete;
       expect(el.shadowRoot!.querySelector("[data-target-picker]")!.textContent).toContain(
-        t("table.no_other_tabs"),
+        t("table.no_other_bills"),
       );
     });
 

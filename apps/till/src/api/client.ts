@@ -627,6 +627,8 @@ export interface DraftSubmission extends GroupCommand {
   draftRevision: number;
   groups: { lineIds: string[]; release: GroupRelease }[];
   joinGroupId?: string;
+  /** An open bill of the party to put the lines on; absent, they go on its main bill. */
+  billId?: string;
 }
 
 /** The groups placed, and the draft as it is left: null once every line was sent. */
@@ -1182,6 +1184,12 @@ export interface TableParty {
   revision: number;
   guestCount: number | null;
   state: "open" | "needs_clearing" | "closed";
+  /** The name staff gave the party, or null. */
+  name: string | null;
+  /** `name`, or else the party's tables' labels. */
+  displayName: string;
+  /** The bill an order that names none goes on; null until the party's next order makes one. */
+  mainBillId: string | null;
   outstanding: string;
   billCount: number;
   tableIds: string[];
@@ -1209,6 +1217,13 @@ export interface PartyBill {
 export interface PartyRevisions {
   expectedPartyRevision?: number;
   expectedSourcePartyRevision?: number;
+}
+
+/** What a bill action sends of the party the till read the bill under: its revision and its id. Both
+ * are left out for a bill of no party. */
+export interface BillRevisions {
+  expectedPartyRevision?: number;
+  partyId?: string;
 }
 
 /**
@@ -2166,59 +2181,48 @@ export class TillApi {
   }
 
   /**
-   * Combine ANOTHER open tab onto this one → `POST /api/tabs/:tabId/merge`, where the path names the
-   * DESTINATION tab and `fromTabId` the source, whose lines move here before it is abandoned.
-   * `freeSourceTable` frees the vacated table, and takes it out of its party if it has one
-   * (`true`), or re-points it at this tab (`false`).
-   * PRE-FISCAL. Rejects `tab.not_open`, `tab.merge_self`, `tab.not_table_tab`, `tab.party_mismatch`,
-   * `tab.party_has_other_open_bill`, `tab.merge_leaves_no_table` or `bill.payments_received`, and
-   * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
-   * missing revision.
+   * Put the chosen items of a bill on a new bill of the same party → `POST /api/bills/:billId/split`,
+   * answering the new bill's id. Rejects, among others, `bill.paid`, `bill.presented`,
+   * `bill.line_paid`, `tab.split_held_line`, `tab.transfer_modifier_line`, `party.not_open` and
+   * `party.out_of_date`.
    */
-  async mergeTabs(
-    orderId: string,
-    fromTabId: string,
-    freeSourceTable: boolean,
-    revisions: PartyRevisions = {},
+  splitBill(
+    billId: string,
+    transfers: readonly TabTransfer[],
+    revisions: BillRevisions,
+  ): Promise<{ billId: string }> {
+    return this.#request(`/api/bills/${billId}/split`, "POST", { transfers, ...revisions });
+  }
+
+  /**
+   * Move every item of `fromBillId` onto `intoBillId`, two untouched bills of one party →
+   * `POST /api/bills/:intoBillId/merge`. Rejects, among others, `bill.presented`, `bill.paid`,
+   * `bill.other_party`, `bill.payments_received`, `tab.not_open` and `party.out_of_date`.
+   */
+  async mergeBills(
+    intoBillId: string,
+    fromBillId: string,
+    revisions: BillRevisions,
   ): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/merge`, "POST", {
-      fromTabId,
-      freeSourceTable,
+    await this.#request<void>(`/api/bills/${intoBillId}/merge`, "POST", {
+      fromBillId,
       ...revisions,
     });
   }
 
   /**
-   * Move SELECTED items OUT of this tab into another open tab → `POST /api/tabs/:tabId/transfer`, where
-   * the path names the SOURCE tab (see {@link TabTransfer}). PRE-FISCAL. Rejects `tab.not_open`,
-   * `tab.transfer_self`, `tab.line_not_found`, `tab.transfer_quantity_invalid` or
-   * `tab.transfer_duplicate_line`, and on a party's tab `party.not_open`, `party.out_of_date`, or
-   * `management.request_invalid` for a missing revision.
+   * Move the chosen items from one untouched bill of a party to another →
+   * `POST /api/bills/:fromBillId/transfer` (see {@link TabTransfer}). Rejects as
+   * {@link mergeBills} does, and `bill.line_paid` and `sale.empty_basket`.
    */
-  async transferLines(
-    orderId: string,
-    toTabId: string,
+  async transferItems(
+    fromBillId: string,
+    toBillId: string,
     transfers: readonly TabTransfer[],
-    revisions: PartyRevisions = {},
+    revisions: BillRevisions,
   ): Promise<void> {
-    await this.#request<void>(`/api/tabs/${orderId}/transfer`, "POST", {
-      toTabId,
-      transfers,
-      ...revisions,
-    });
-  }
-
-  /**
-   * Carve selected items from a table tab into a detached check, ready for the existing pay path.
-   * On a party's tab rejects `party.not_open`, `party.out_of_date`, or `management.request_invalid`
-   * for a missing revision.
-   */
-  splitTab(
-    orderId: string,
-    transfers: readonly TabTransfer[],
-    revisions: PartyRevisions = {},
-  ): Promise<{ checkId: string }> {
-    return this.#request<{ checkId: string }>(`/api/tabs/${orderId}/split`, "POST", {
+    await this.#request<void>(`/api/bills/${fromBillId}/transfer`, "POST", {
+      toBillId,
       transfers,
       ...revisions,
     });

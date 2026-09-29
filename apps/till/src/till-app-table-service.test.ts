@@ -9,7 +9,6 @@ import {
 } from "./widgets/test-helpers.js";
 import { productUnit } from "./widgets/product-name.js";
 import { TillApp } from "./till-app.js";
-import { ServerRouter } from "./api/server-router.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { formatMoney } from "@waitron/shared";
@@ -76,6 +75,9 @@ const seatedTable: TableState = {
     revision: 3,
     guestCount: 2,
     state: "open",
+    name: null,
+    displayName: "2",
+    mainBillId: "wo-7",
     outstanding: "12.00",
     billCount: 1,
     tableIds: ["t2"],
@@ -267,9 +269,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveTab: vi.fn().mockResolvedValue(undefined),
     joinTable: vi.fn().mockResolvedValue(undefined),
-    mergeTabs: vi.fn().mockResolvedValue(undefined),
-    transferLines: vi.fn().mockResolvedValue(undefined),
-    splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
+    mergeBills: vi.fn().mockResolvedValue(undefined),
+    transferItems: vi.fn().mockResolvedValue(undefined),
+    splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
     recordSale: vi.fn().mockResolvedValue(saleResult),
     logout: vi.fn().mockResolvedValue(undefined),
     listDrafts: drafts.listDrafts,
@@ -522,9 +524,9 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["set-status", { statusId: "s1" }, "setTableStatus"],
     ["move-tab", { toTableId: "t9" }, "moveTab"],
     ["join-table", { tableId: "t9" }, "joinTable"],
-    ["merge-tabs", { fromTabId: "wo-9", freeSourceTable: true }, "mergeTabs"],
-    ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
-    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
+    ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
+    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
     ["pay-tab", { method: "cash", amount: "10.00" }, "recordSale"],
   ] as const)("%s sends nothing to the server", async (type, detail, method) => {
     const { el, screen } = await toEmptyOrderTab();
@@ -559,7 +561,7 @@ describe("till-app table ordering: refused and failed table actions", () => {
       "updateOrderLine",
     ],
     ["send-lines", { lineNos: [1] }, "sendLines"],
-    ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
+    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
   ] as const)(
     "a %s refused because a card payment of the order is running says so",
     async (type, detail, method) => {
@@ -581,8 +583,8 @@ describe("till-app table ordering: refused and failed table actions", () => {
 
   it.each([
     ["join-table", { tableId: "t9" }, "joinTable"],
-    ["merge-tabs", { fromTabId: "wo-9", freeSourceTable: true }, "mergeTabs"],
-    ["transfer-lines", { toTabId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferLines"],
+    ["merge-bills", { fromBillId: "wo-9" }, "mergeBills"],
+    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
   ] as const)(
     "a refused %s shows table.error and re-reads neither the tab nor the floor",
     async (type, detail, method) => {
@@ -603,9 +605,46 @@ describe("till-app table ordering: refused and failed table actions", () => {
     },
   );
 
+  it.each(["bill.presented", "bill.paid", "bill.other_party", "bill.payments_received"])(
+    "a merge refused %s says so in that code's own words",
+    async (code) => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        mergeBills: vi.fn().mockRejectedValue({ code }),
+      });
+      const screen = await toTableOrder(el);
+
+      emit(screen, "merge-bills", { fromBillId: "wo-9" });
+      await flush(el);
+
+      const text = banner(el)!.textContent!;
+      expect(text).toContain(codeMessage(code));
+      expect(text).not.toContain(t("table.error"));
+    },
+  );
+
+  it.each([
+    ["transfer-lines", { toBillId: "wo-9", transfers: [{ lineNo: 1 }] }, "transferItems"],
+    ["split-lines", { transfers: [{ lineNo: 1 }] }, "splitBill"],
+  ] as const)(
+    "a %s refused because an item is already paid for says so in that code's own words",
+    async (type, detail, method) => {
+      const { el } = await mountApp({
+        ...seatedFloor(),
+        [method]: vi.fn().mockRejectedValue({ code: "bill.line_paid" }),
+      });
+      const screen = await toTableOrder(el);
+
+      emit(screen, type, detail);
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage("bill.line_paid"));
+    },
+  );
+
   it("a split refused for any other reason shows table.error and keeps paying the original tab", async () => {
     const { el } = await mountApp({
-      splitTab: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
+      splitBill: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
     });
     const screen = await toTableOrder(el);
 
@@ -1737,535 +1776,6 @@ describe("till-app table ordering: logout while a request is waiting for the ser
     expect(el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("till-tab-shell")).toBeNull();
     expect((el as unknown as { operatorName: string }).operatorName).toBe("");
-  });
-});
-
-describe("till-app table ordering: a split-off bill left unpaid goes back to its table", () => {
-  const checkLine: TabLine = { ...tabLine, lineNo: 3 };
-  const otherTable: TableState = { ...openTable, id: "t3", label: "3", tabId: "wo-8" };
-  const handheld = {
-    getTill: vi.fn().mockResolvedValue({ ...till, canvas: phoneCanvas }),
-    getDeviceIdentity: vi
-      .fn()
-      .mockResolvedValue({ deviceId: "h1", formFactor: "phone-portrait", stationId: null }),
-  };
-  const tabletCanvas: CanvasDef = {
-    formFactor: "tablet-landscape",
-    tabs: [
-      {
-        key: "floor",
-        title: "Floor",
-        columns: 24,
-        cards: [
-          { type: "floor-plan", colSpan: 12, rowSpan: 12, config: {} },
-          { type: "table-order", colSpan: 12, rowSpan: 12, config: {} },
-        ],
-      },
-    ],
-  };
-
-  /** Lines by order, so a test can tell which order the screen was last read for. */
-  const linesOf = () =>
-    vi.fn((orderId: string) =>
-      Promise.resolve({
-        lines: [orderId === "wo-check" ? checkLine : tabLine],
-        revision: 0,
-        editSentLines: true,
-      }),
-    );
-
-  async function splitOnTill(overrides: Record<string, unknown> = {}) {
-    const { el } = await mountApp({ getTabLines: linesOf(), ...overrides });
-    const screen = await toTableOrder(el);
-    emit(screen, "split-lines", { transfers: [{ lineNo: 3 }] });
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-check");
-    return el;
-  }
-
-  async function splitOnHandheld(overrides: Record<string, unknown> = {}) {
-    const { el } = await mountApp({ ...handheld, getTabLines: linesOf(), ...overrides });
-    await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    await openFromFloor(el, openTable);
-    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-check");
-    return el;
-  }
-
-  const activeTabId = (el: TillApp) => (el as unknown as { activeTabId?: string }).activeTabId;
-  const lastCall = (fn: unknown) => {
-    const order = vi.mocked(fn as () => unknown).mock.invocationCallOrder;
-    return order[order.length - 1]!;
-  };
-
-  it("merges the check back into the tab when a till goes Back, before the floor is read again", async () => {
-    const el = await splitOnTill();
-
-    emit(tableOrder(el)!, "back-to-floor");
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
-    expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
-    expect(activeTabId(el)).toBe("wo-7");
-    expect(floor(el)).not.toBeNull();
-    expect(banner(el)).toBeNull();
-  });
-
-  it("merges the check back when a handheld leaves its Order tab, and shows the tab's own lines on return", async () => {
-    const el = await splitOnHandheld();
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
-    expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
-
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-7");
-    expect(tableOrder(el)!.lines).toEqual([tabLine]);
-  });
-
-  it("merges the check back before a tablet opens another table beside it", async () => {
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tabletCanvas }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
-      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
-      getTabLines: linesOf(),
-    });
-    await logIn(el);
-    await openFromFloor(el, openTable);
-    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-check");
-
-    await openFromFloor(el, otherTable);
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
-    expect(lastCall(api.getTabLines)).toBeGreaterThan(lastCall(api.mergeTabs));
-    expect(tableOrder(el)!.orderId).toBe("wo-8");
-  });
-
-  it("leaves a paid check alone when the waiter then leaves", async () => {
-    const el = await splitOnHandheld();
-    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
-    await flush(el);
-    expect(api.recordSale).toHaveBeenCalledWith([], { method: "cash", amount: "3.00" }, "wo-check");
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(api.mergeTabs).not.toHaveBeenCalled();
-  });
-
-  it("says the bill is in Held orders when the server refuses to merge it back, and still reaches the floor", async () => {
-    const el = await splitOnHandheld({
-      mergeTabs: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
-    });
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
-    expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
-    expect(floor(el)).not.toBeNull();
-
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    expect(tableOrder(el)!.orderId).toBe("wo-check");
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-  });
-
-  it("does not merge a check whose payment is still running when the waiter goes Back", async () => {
-    let settle!: (result: TillSaleResult) => void;
-    const el = await splitOnTill({
-      recordSale: vi.fn(() => new Promise<TillSaleResult>((resolve) => (settle = resolve))),
-    });
-    emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
-    await flush(el);
-
-    emit(tableOrder(el)!, "back-to-floor");
-    await flush(el);
-
-    expect(api.mergeTabs).not.toHaveBeenCalled();
-    expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
-
-    settle(saleResult);
-    await flush(el);
-    expect(ticket(el)).not.toBeNull();
-    expect(banner(el)).toBeNull();
-  });
-
-  it("leaves the check in Held orders when the operator logs out, and does not merge it after the next login", async () => {
-    const el = await splitOnHandheld();
-
-    emit(shell(el), "logout");
-    await flush(el);
-    await logIn(el);
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(api.mergeTabs).not.toHaveBeenCalled();
-  });
-
-  it("forgets the tab a check came from when the operator logs out before the split answers", async () => {
-    let answer!: (value: { checkId: string }) => void;
-    const { el } = await mountApp({
-      ...handheld,
-      getTabLines: linesOf(),
-      splitTab: vi.fn(() => new Promise((resolve) => (answer = resolve))),
-    });
-    await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    await openFromFloor(el, openTable);
-    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-    await flush(el);
-
-    emit(shell(el), "logout");
-    await flush(el);
-    answer({ checkId: "wo-check" });
-    await flush(el);
-    await logIn(el);
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(api.mergeTabs).not.toHaveBeenCalled();
-  });
-
-  describe("a server switch", () => {
-    /** Used only as the event source the app subscribes to; nothing here probes a server. */
-    const router = () =>
-      new ServerRouter({
-        origin: "https://box.deli.test",
-        fetchImpl: vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))),
-        storage: { getItem: () => null, setItem: () => undefined },
-      });
-    const switchServer = (source: ServerRouter) =>
-      source.dispatchEvent(
-        new CustomEvent("server-changed", {
-          detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
-        }),
-      );
-
-    async function mountWithRouter(overrides: Record<string, unknown> = {}) {
-      api = stubApi({ ...handheld, getTabLines: linesOf(), ...overrides });
-      const source = router();
-      const { el } = await mountWidget<TillApp>("till-app", { api, router: source });
-      await logIn(el);
-      emit(shell(el), "tab-select", { key: "floor" });
-      await flush(el);
-      await openFromFloor(el, openTable);
-      return { el, source };
-    }
-
-    async function leaveAfterNextLogin(el: TillApp) {
-      await logIn(el);
-      emit(shell(el), "tab-select", { key: "order" });
-      await flush(el);
-      emit(shell(el), "tab-select", { key: "floor" });
-      await flush(el);
-    }
-
-    it("forgets the tab a check came from, so leaving the check after the next login merges nothing", async () => {
-      const { el, source } = await mountWithRouter();
-      emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-      await flush(el);
-      expect(tableOrder(el)!.orderId).toBe("wo-check");
-
-      switchServer(source);
-      await flush(el);
-      await leaveAfterNextLogin(el);
-
-      expect(api.mergeTabs).not.toHaveBeenCalled();
-    });
-
-    it("forgets the tab of a split that answers after the switch", async () => {
-      let answer!: (value: { checkId: string }) => void;
-      const { el, source } = await mountWithRouter({
-        splitTab: vi.fn(() => new Promise((resolve) => (answer = resolve))),
-      });
-      emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-      await flush(el);
-
-      switchServer(source);
-      await flush(el);
-      answer({ checkId: "wo-check" });
-      await flush(el);
-      await leaveAfterNextLogin(el);
-
-      expect(api.mergeTabs).not.toHaveBeenCalled();
-    });
-
-    it("lets the next operator open a table while a merge started before the switch never answers", async () => {
-      const { el, source } = await mountWithRouter({
-        mergeTabs: vi.fn(() => new Promise<void>(() => undefined)),
-      });
-      emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-      await flush(el);
-      emit(shell(el), "tab-select", { key: "floor" });
-      await flush(el);
-      expect(api.mergeTabs).toHaveBeenCalledOnce();
-
-      switchServer(source);
-      await flush(el);
-      await logIn(el);
-      emit(shell(el), "tab-select", { key: "floor" });
-      await flush(el);
-      const reads = vi.mocked(api.getTabLines).mock.calls.length;
-      await openFromFloor(el, openTable);
-
-      expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-7"]]);
-      expect(tableOrder(el)!.orderId).toBe("wo-7");
-    });
-
-    it("keeps the switch message on the lock screen when a merge started before it is refused", async () => {
-      let refuse!: (reason: unknown) => void;
-      const { el, source } = await mountWithRouter({
-        mergeTabs: vi.fn(() => new Promise<void>((_resolve, reject) => (refuse = reject))),
-      });
-      emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-      await flush(el);
-      emit(shell(el), "tab-select", { key: "floor" });
-      await flush(el);
-
-      switchServer(source);
-      await flush(el);
-      refuse({ code: "order.payment_in_flight" });
-      await flush(el);
-
-      expect(el.shadowRoot!.textContent).toContain(t("server.switched"));
-      expect(el.shadowRoot!.textContent).not.toContain(t("table.check_kept_held"));
-    });
-  });
-
-  it("lets the next operator open a table while a merge started before logout never answers", async () => {
-    const el = await splitOnHandheld({
-      mergeTabs: vi.fn(() => new Promise<void>(() => undefined)),
-    });
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-
-    emit(shell(el), "logout");
-    await flush(el);
-    await logIn(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    const reads = vi.mocked(api.getTabLines).mock.calls.length;
-    await openFromFloor(el, openTable);
-
-    expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-7"]]);
-    expect(tableOrder(el)!.orderId).toBe("wo-7");
-  });
-
-  it("does not put the tab back on screen when a merge started before logout succeeds after it", async () => {
-    let finish!: () => void;
-    const el = await splitOnHandheld({
-      mergeTabs: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    });
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    emit(shell(el), "logout");
-    await flush(el);
-    const reads = vi.mocked(api.getTabLines).mock.calls.length;
-    finish();
-    await flush(el);
-
-    expect(activeTabId(el)).toBe("wo-check");
-    expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([]);
-  });
-
-  it("makes a second exit wait for the merge the first one started before reading the floor", async () => {
-    let finish!: () => void;
-    const el = await splitOnHandheld({
-      mergeTabs: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    });
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    expect(vi.mocked(api.getTablesState).mock.calls.length - reads).toBe(0);
-
-    finish();
-    await flush(el);
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-    expect(lastCall(api.getTablesState)).toBeGreaterThan(lastCall(api.mergeTabs));
-  });
-
-  it("does not put a tablet back on the tab when a table it was opening arrived during the merge", async () => {
-    const freeTable: TableState = {
-      ...openTable,
-      id: "t5",
-      label: "5",
-      zoneId: null,
-      state: "free",
-      hasOpenTab: false,
-      tabId: undefined,
-    };
-    let opened!: (value: { tabId: string; orderNumber: number }) => void;
-    let finish!: () => void;
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tabletCanvas }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
-      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable, freeTable]),
-      getTabLines: linesOf(),
-      seatTable: vi.fn(() => new Promise((resolve) => (opened = resolve))),
-      mergeTabs: vi.fn(() => new Promise<void>((resolve) => (finish = resolve))),
-    });
-    await logIn(el);
-    await openFromFloor(el, openTable);
-    await openFromFloor(el, freeTable);
-    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-    await flush(el);
-    await openFromFloor(el, otherTable);
-    expect(api.mergeTabs).toHaveBeenCalledExactlyOnceWith("wo-7", "wo-check", false, {});
-    opened({ tabId: "wo-new", orderNumber: 12 });
-    await flush(el);
-    const reads = vi.mocked(api.getTabLines).mock.calls.length;
-
-    finish();
-    await flush(el);
-
-    expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-8"]]);
-    expect(tableOrder(el)!.orderId).toBe("wo-8");
-  });
-
-  it("says it cannot confirm the bill went back when the merge got no answer, and does not retry", async () => {
-    const el = await splitOnHandheld({
-      mergeTabs: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
-    });
-
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-
-    expect(banner(el)!.textContent).toContain(t("table.check_return_unconfirmed"));
-    expect(banner(el)!.textContent).not.toContain(t("table.check_kept_held"));
-    expect(floor(el)).not.toBeNull();
-    emit(shell(el), "tab-select", { key: "order" });
-    await flush(el);
-    emit(shell(el), "tab-select", { key: "floor" });
-    await flush(el);
-    expect(api.mergeTabs).toHaveBeenCalledOnce();
-  });
-
-  describe("beside a change to a dish that was not saved", () => {
-    const lateRefusal = "Tu cambio en Café de la mesa 2 no se ha guardado.";
-    const dishChange = { lineNo: 1, lineName: "Café", patch: { note: "sin azúcar" }, revision: 0 };
-
-    /** Changes the tab's dish, splits the check off, then the change is refused once the check is on
-     * screen, so its banner names the tab's dish. */
-    async function splitWithRefusedChange(overrides: Record<string, unknown> = {}) {
-      let refuse!: (reason: unknown) => void;
-      const { el } = await mountApp({
-        getTabLines: linesOf(),
-        updateOrderLine: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
-        ...overrides,
-      });
-      const screen = await toTableOrder(el);
-      emit(screen, "change-line", dishChange);
-      await flush(el);
-      emit(screen, "split-lines", { transfers: [{ lineNo: 3 }] });
-      await flush(el);
-      expect(tableOrder(el)!.orderId).toBe("wo-check");
-      return { el, refuse: (reason: unknown) => refuse(reason) };
-    }
-
-    it.each([
-      ["refuses", { code: "order.payment_in_flight" }, "table.check_kept_held"],
-      ["does not answer", new TypeError("Failed to fetch"), "table.check_return_unconfirmed"],
-    ] as const)(
-      "keeps the refused change on screen when the merge %s on the way back to the floor",
-      async (_case, failure, message) => {
-        const { el, refuse } = await splitWithRefusedChange({
-          mergeTabs: vi.fn().mockRejectedValue(failure),
-        });
-        refuse({ code: "ticket.already_started" });
-        await flush(el);
-        expect(banner(el)!.textContent).toContain(lateRefusal);
-
-        emit(tableOrder(el)!, "back-to-floor");
-        await flush(el);
-
-        expect(banner(el)!.textContent).toContain(lateRefusal);
-        expect(banner(el)!.textContent).toContain(t(message));
-      },
-    );
-
-    it("keeps the refused change when the check being paid is kept, and after that payment succeeds", async () => {
-      let settle!: (result: TillSaleResult) => void;
-      const { el, refuse } = await splitWithRefusedChange({
-        recordSale: vi.fn(() => new Promise<TillSaleResult>((resolve) => (settle = resolve))),
-      });
-      emit(tableOrder(el)!, "pay-tab", { method: "cash", amount: "3.00" });
-      await flush(el);
-      refuse({ code: "ticket.already_started" });
-      await flush(el);
-
-      emit(tableOrder(el)!, "back-to-floor");
-      await flush(el);
-      expect(api.mergeTabs).not.toHaveBeenCalled();
-      expect(banner(el)!.textContent).toContain(lateRefusal);
-      expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
-
-      settle(saleResult);
-      await flush(el);
-      expect(ticket(el)).not.toBeNull();
-      expect(banner(el)!.textContent).toContain(lateRefusal);
-      expect(banner(el)!.textContent).not.toContain(t("table.check_kept_held"));
-    });
-  });
-
-  it("still says the bill is in Held orders once a tablet has opened the other table", async () => {
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, canvas: tabletCanvas }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "tb1", formFactor: "tablet-landscape", stationId: null }),
-      getTablesState: vi.fn().mockResolvedValue([openTable, otherTable]),
-      getTabLines: linesOf(),
-      mergeTabs: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
-    });
-    await logIn(el);
-    await openFromFloor(el, openTable);
-    emit(tableOrder(el)!, "split-lines", { transfers: [{ lineNo: 3 }] });
-    await flush(el);
-
-    await openFromFloor(el, otherTable);
-    await flush(el);
-
-    expect(tableOrder(el)!.orderId).toBe("wo-8");
-    expect(banner(el)!.textContent).toContain(t("table.check_kept_held"));
-  });
-
-  it("never merges when a till goes Back from an ordinary tab", async () => {
-    const { el } = await mountApp();
-    const screen = await toTableOrder(el);
-
-    emit(screen, "back-to-floor");
-    await flush(el);
-
-    expect(api.mergeTabs).not.toHaveBeenCalled();
-    expect(floor(el)).not.toBeNull();
   });
 });
 

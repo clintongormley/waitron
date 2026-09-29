@@ -439,6 +439,8 @@ before building, as the PR records. No migration. Left open: if the waiter leave
 itself answers, the bill arrives after they have gone and is not merged back (it stays in Held
 orders); and the counter's Held orders list shows every open order, a table's own tab included
 (seen in the same run, not investigated).
+_(2026-09-29, table actions Task 10: retired. The till no longer merges a split-off bill back; it
+stays listed among the party's bills until it is paid or merged by hand (spec decision 8).)_
 **Menus Task 7 (tills sell from the published version), landed as #719 (2026-09-27):** a till
 is offered, and every new line is charged, what each menu's published version says: the dish, its
 variant, its extras and its options. What is still read from the current rows: whether each product
@@ -736,6 +738,9 @@ reload, on another device, after logging out, after a server switch, while the c
 paid, or when the server refuses the merge, the check stays in the counter's Held orders, where it
 can be paid; when the merge gets no answer the till says it cannot tell which of the two places the
 check is in.
+_(2026-09-29, table actions Task 10: the till no longer merges the check back on its own. A change
+of mind is now undone by Merge bills on the party's table screen, by hand. Whether that still
+covers the no-Void decision is for the owner.)_
 The durable link between a check and its table is lane B's party record, landed as #715: a split
 check carries its party, the till's table screen lists it among the party's bills, and Finish
 table is refused while it is unpaid.
@@ -3244,7 +3249,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `party.out_of_date`, not a code describing what the first till did. Checked before the
       revision: whether the path bill exists, a merge or transfer onto the same bill, and for split
       an empty or repeated batch of items. Transfer checks for repeated items after the bills and,
-      like the old tab transfer, does not refuse an empty batch. A counter order has no party and so
+      like the old tab transfer, does not refuse an empty batch. _(2026-09-29, Task 10: it now
+      does, with `sale.empty_basket`, before the revision.)_ A counter order has no party and so
       no revision. A till may also
       send `partyId`, the party it read the bill under; a bill that has since left that party is
       `party.out_of_date`.
@@ -3469,6 +3475,35 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Tests: `apps/server/src/party-arriving-dishes.test.ts`. Seven cases in
     `party-move-bill.test.ts` and `party-table-actions.test.ts` that pinned an arriving bill's
     lines outside any group now expect the new group, every other value unchanged. No migration.
+  - **Task 10 DONE (2026-09-29, branch `feat/party-till-bills`): the till lists a party's bills
+    by name and splits, merges and transfers between them through Task 5's routes.** What changes
+    for a person using the till:
+    - The table screen names each bill after the party: "Ana · Bill 1", or "Mesa 4, 5 · Bill 2"
+      for an unnamed party, numbered in the order listed, and marks the bill new orders go to
+      ("New orders"). A bill's stored label is no longer shown: a split-off bill carries its
+      table's label, which read as "Mesa 4" beside "Bill 1".
+    - Merge bills and Transfer items offer the party's other untouched bills (open, nothing
+      received against them, recorded on this party), not other tables' tabs. The merge picker is
+      headed with the bill merged into. Split works on any bill of the party, one split off before
+      included.
+    - The draft now shows on a split-off bill too. When the party has more than one open bill,
+      the preview before sending has a Send to choice (native radios, `name="billId"`), defaulting
+      to the main bill, or to "A new bill" when the party has none; choosing another bill sends
+      its `billId`. When a send to a chosen bill gets no answer, the screen shows that bill.
+    - Leaving a split-off bill unpaid no longer merges it back (M7b3 is gone, spec decision 8).
+    - Refusals `bill.presented`, `bill.paid`, `bill.other_party`, `bill.payments_received` and
+      `bill.line_paid` show in their own words; `tab.merge_leaves_no_table` is no longer shown.
+    - Move and Join still use the old tab routes until Task 11.
+    - The server refuses a transfer carrying no items with `sale.empty_basket` (400), as a split
+      with none already was, and the till never sends one.
+    Tests: `apps/till/src/till-app-parties.test.ts`, `till-app-table-service.test.ts`,
+    `screens/till-table-order-screen.test.ts`, `.parties.test.ts`, `.a11y.test.ts` (merge picker
+    and Send to, both themes), `api/client.test.ts`; server `party-bill-actions.test.ts` and
+    `till-api.bill-actions.test.ts`. No migration.
+    Open points: `tab.party_mismatch` and `tab.party_has_other_open_bill` stay in the till's
+    table refusals although only the old tab merge raises them, which the till no longer calls;
+    they go with Task 13. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
+    on the dark dialog (seen in the 390 px Spanish dark screenshot).
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
@@ -3508,7 +3543,8 @@ bill is refused.
 - **A merge within one party with `freeSourceTable: true` frees the source bill's tables AND takes
   them out of the party — done (A111).** The owner's rule of 2026-09-28: a split-off bill has its
   own table because those guests moved there, so merging it back with `freeSourceTable: true` (what
-  the till's "Merge a bill" sends) frees that table and ends its membership, as the whole-party
+  the till's "Merge a bill" sent until table actions Task 10, whose Merge bills uses
+  `POST /api/bills/:id/merge` and frees no table) frees that table and ends its membership, as the whole-party
   merge already did. A merge that would free every table the party holds is refused with
   `tab.merge_leaves_no_table`. Merging a split check at no table back into the party's own bill
   frees no table, so a table joined to that bill with `joinTable` stays in the party (a case in

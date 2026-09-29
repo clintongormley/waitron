@@ -98,6 +98,9 @@ const party: TableParty = {
   revision: 2,
   guestCount: 3,
   state: "open",
+  name: "Ana",
+  displayName: "Ana",
+  mainBillId: "wo-2",
   outstanding: "30.00",
   billCount: 2,
   tableIds: ["t4"],
@@ -354,6 +357,26 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       await expectNoA11yViolations(host);
     });
 
+    it("has no violations in the preview's Send to choice", async () => {
+      const { el, host } = await withDraft(
+        {
+          party,
+          bills: [
+            ...partyBills,
+            { ...partyBills[1]!, workingOrderId: "wo-3", total: "8.00", outstanding: "8.00" },
+          ],
+        },
+        false,
+      );
+      el.shadowRoot!.querySelector<HTMLElement>('[data-draft-action="fire-all"]')!.click();
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      if (el.shadowRoot!.querySelector("[data-send-to]") === null)
+        throw new Error("the scan must include the Send to choice");
+      await expectNoA11yViolations(host);
+    });
+
     it("has no violations in a later addition's destination and held-group picker", async () => {
       const group = (id: string, position: number, state: OrderGroup["state"]): OrderGroup => ({
         id,
@@ -497,6 +520,33 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
         throw new Error("the scan must include both the sent line and Reprint");
       await expectNoA11yViolations(host);
     });
+  });
+
+  it("has no violations in the merge picker listing the party's other bills", async () => {
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      {
+        products,
+        lines,
+        statuses,
+        orderId: "wo-2",
+        party,
+        bills: [
+          ...partyBills,
+          { ...partyBills[1]!, workingOrderId: "wo-3", total: "8.00", outstanding: "8.00" },
+        ],
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="merge"]')!.click();
+    await el.updateComplete;
+    if (el.shadowRoot!.querySelector('[data-target="wo-3"]') === null)
+      throw new Error("the scan must include a bill to merge");
+    await expectNoA11yViolations(host);
   });
 
   it("has no violations in the split quantity picker", async () => {
