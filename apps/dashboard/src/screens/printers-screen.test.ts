@@ -5347,6 +5347,42 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
+  it("wraps a long failure reason under Pair, keeping Dismiss in view on a phone-width list", async () => {
+    // Under MAX_OUTCOME_ERROR_LENGTH (500), so the agent and server pass all of it through.
+    const reason = "org.bluez.Error.AuthenticationFailed ".repeat(13).trim();
+    const background = stubApi({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue([
+        {
+          ...barPrinter,
+          bluetoothCommand: { ...pendingCommand("pair"), state: "failed", error: reason },
+        },
+      ]),
+    });
+    const { el } = await mountPairing([barPrinter], { background });
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await openPair(el);
+      typeField(el, sel("bluetooth-pin"), PIN);
+      await flush(el);
+      q(el, sel("confirm-pair"))!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      const status = q(el, sel(`discovered-command-${ADDRESS}`))!;
+      expect(status.textContent).toContain(reason);
+      const scroll = q(el, sel("discovered-table"))!.shadowRoot!.querySelector(".scroll")!;
+      const view = scroll.getBoundingClientRect();
+      expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
+      const dismiss = q(el, sel(`dismiss-discovered-command-${ADDRESS}`))!.getBoundingClientRect();
+      expect(dismiss.right).toBeLessThanOrEqual(view.right);
+      expect(status.getBoundingClientRect().right).toBeLessThanOrEqual(view.right);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("drops a pairing's status when Add printer closes", async () => {
     const { el } = await mountPairing([barPrinter]);
     await openDiscovery(el);

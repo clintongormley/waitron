@@ -198,13 +198,17 @@ export class PrintersScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      /* wt-data-table is at least max-content wide, so an agent's reason (up to
+         MAX_OUTCOME_ERROR_LENGTH characters) that does not wrap widens the whole list. */
       wt-data-table::part(bluetooth-actions) {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: var(--wt-space-2);
-        align-items: center;
+        align-items: flex-start;
       }
       wt-data-table::part(bluetooth-status) {
+        max-width: 40vw;
+        overflow-wrap: anywhere;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
