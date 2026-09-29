@@ -22,7 +22,6 @@ import {
 import "./errors.js";
 
 // Collecting a presented bill follows its issuance history, not its zone's service mode (spec §9).
-// Each case retargets its placed bill's zone directly, and opens its own bill.
 let venue: BillVenue;
 let invoiceFirstZone: string;
 let issueAtPaymentZone: string;
@@ -118,8 +117,8 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
 });
 
 describe("collecting an invoice that carries a corrective invoice", () => {
-  // Tarta's 18.00 invoice, corrected by a credit note of -2.00 base at 10% VAT (-2.20): the
-  // customer owes 15.80.
+  // Tarta's 18.00 invoice (21% VAT), corrected by a credit note of -2.00 base (-2.42): the
+  // customer owes 15.58.
   async function correctedTarta(): Promise<{ billId: string; saleId: string }> {
     const billId = await placedTarta(invoiceFirstZone);
     const [issued] = await salesOf(billId);
@@ -143,15 +142,15 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         nodeId: venue.cfg.nodeId,
         seriesId: brandSeriesId(series!.id),
         correctsSaleId: brandSaleId(issued!.id),
-        total: "-2.20",
+        total: "-2.42",
         lines: [
           {
             lineNo: 1,
             name: "Descuento",
             descriptions: { [venue.cfg.locale]: "Descuento" },
-            quantity: "1",
-            unitPrice: "-2.00",
-            vatRate: "10.00",
+            quantity: "-1",
+            unitPrice: "2.00",
+            vatRate: "21.00",
             lineTotal: "-2.00",
           },
         ],
@@ -176,8 +175,8 @@ describe("collecting an invoice that carries a corrective invoice", () => {
 
     const ticket = await collectCash(billId);
 
-    expect(await tendersOf(saleId)).toEqual([{ method: "cash", amount: 1580, cash: 2000 }]);
-    expect(ticket.tender).toEqual({ method: "cash", change: "4.20" });
+    expect(await tendersOf(saleId)).toEqual([{ method: "cash", amount: 1558, cash: 2000 }]);
+    expect(ticket.tender).toEqual({ method: "cash", change: "4.42" });
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(registroCount(venue, billId)).toBe(1);
   });
@@ -192,14 +191,15 @@ describe("collecting an invoice that carries a corrective invoice", () => {
       venue.operatorId,
     );
 
-    expect(await tendersOf(saleId)).toEqual([{ method: "card", amount: 1580, cash: null }]);
+    expect(await tendersOf(saleId)).toEqual([{ method: "card", amount: 1558, cash: null }]);
     const paid = await inTx(venue, (tx) =>
       tx
         .select({ amount: payments.amount, saleId: payments.saleId })
         .from(payments)
         .where(eq(payments.workingOrderId, billId)),
     );
-    expect(paid).toEqual([{ amount: 1580, saleId }]);
+    expect(paid).toEqual([{ amount: 1558, saleId }]);
     expect(await statusOf(venue, billId)).toBe("settled");
+    expect(registroCount(venue, billId)).toBe(1);
   });
 });
