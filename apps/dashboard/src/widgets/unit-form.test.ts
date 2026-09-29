@@ -18,6 +18,18 @@ function change(el: UnitForm, testId: string, value: string): void {
   }
 }
 
+async function bottomOf(el: UnitForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const errorOf = (el: UnitForm, testId: string): string | null =>
+  el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
+const saveOf = (el: UnitForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!;
+
 describe("unit-form", () => {
   it("offers precision as exactly 0, 1, 2 or 3", async () => {
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
@@ -95,9 +107,18 @@ describe("unit-form", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await el.updateComplete;
 
-    expect(
-      el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.querySelectorAll("li"),
-    ).toHaveLength(3);
+    for (const [testId, message] of [
+      ["name-es", t("units.name_required")],
+      ["abbreviation-es", t("units.abbreviation_required")],
+    ])
+      expect(el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error")).toBe(
+        message,
+      );
+    expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(
+      t("units.precision_invalid"),
+    );
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=name-es]")!.hasAttribute("required")).toBe(
       true,
     );
@@ -198,13 +219,6 @@ describe("unit-form", () => {
     );
   });
 
-  const summaryOf = (el: UnitForm): string[] =>
-    [
-      ...el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.querySelectorAll("li"),
-    ].map((li) => li.textContent!.trim());
-  const errorOf = (el: UnitForm, testId: string): string | null =>
-    el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
-
   for (const field of ["name", "abbreviation"])
     it(`shows a refused ${field} translation beside the language the server named, not the first`, async () => {
       const message = codeMessage("unit.translation_required");
@@ -217,15 +231,14 @@ describe("unit-form", () => {
           params: { field, language: "en" },
         }),
       });
-      const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-      await summary.updateComplete;
 
       expect(errorOf(el, `${field}-en`)).toBe(message);
       expect(errorOf(el, `${field}-es`)).toBe("");
-      expect(summaryOf(el)).toEqual([message]);
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(saveOf(el).hasAttribute("disabled")).toBe(true);
     });
 
-  it("keeps a refused translation for a language the form does not show in its summary", async () => {
+  it("keeps a refused translation for a language the form does not show in its bottom message, leaving Save working", async () => {
     const message = codeMessage("unit.translation_required");
     const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
       open: true,
@@ -235,10 +248,9 @@ describe("unit-form", () => {
         params: { field: "name", language: "fr" },
       }),
     });
-    const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-    await summary.updateComplete;
 
-    expect(summaryOf(el)).toEqual([message]);
+    expect(await bottomOf(el)).toBe(message);
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
     for (const testId of ["name-es", "name-en", "abbreviation-es", "abbreviation-en"])
       expect(errorOf(el, testId)).toBe("");
   });
@@ -335,6 +347,142 @@ describe("unit-form", () => {
     );
     expect(seen).not.toHaveBeenCalled();
   });
+
+  it("says nothing about errors before the first submission, and Save works", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+    });
+    change(el, "name-es", "");
+    await el.updateComplete;
+
+    expect(errorOf(el, "name-es")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("on an invalid submission focuses the first invalid field and disables Save", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+    });
+    change(el, "name-es", "caja");
+    await el.updateComplete;
+    saveOf(el).click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    const abbreviation = el.shadowRoot!.querySelector("[data-test=abbreviation-es]")!;
+    expect(abbreviation.shadowRoot!.activeElement).toBe(
+      abbreviation.shadowRoot!.querySelector("input"),
+    );
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+    });
+    saveOf(el).click();
+    await el.updateComplete;
+
+    change(el, "name-es", "caja");
+    await el.updateComplete;
+    expect(errorOf(el, "name-es")).toBe("");
+    expect(errorOf(el, "abbreviation-es")).toBe(t("units.abbreviation_required"));
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+    change(el, "name-es", " ");
+    await el.updateComplete;
+    expect(errorOf(el, "name-es")).toBe(t("units.name_required"));
+
+    change(el, "name-es", "caja");
+    change(el, "abbreviation-es", "cj");
+    await el.updateComplete;
+    expect(errorOf(el, "abbreviation-es")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("clears a field's refusal when that field changes, and Save works again", async () => {
+    const message = codeMessage("unit.precision_invalid");
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+      value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+      fieldErrors: unitRefusalErrors({ code: "unit.precision_invalid", params: {} }),
+    });
+    expect(el.shadowRoot!.querySelector("#precision-error")!.textContent).toBe(message);
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+    change(el, "name-es", "caja grande");
+    await el.updateComplete;
+    expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+    change(el, "precision", "1");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("#precision-error")).toBeNull();
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("focuses the field a refusal names when the refusal arrives", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+      value: { id: "u1", name: { es: "caja" }, abbreviation: { es: "cj" }, precision: 0 },
+    });
+    el.fieldErrors = unitRefusalErrors({ code: "unit.precision_invalid", params: {} });
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(el.shadowRoot!.activeElement).toBe(
+      el.shadowRoot!.querySelector("[data-test=precision]"),
+    );
+  });
+
+  it("drops a refusal that names no field when the form is submitted again", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+      fieldErrors: unitRefusalErrors({ code: "server.internal" }),
+    });
+    expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+
+    saveOf(el).click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("shows the refusal and the generic sentence together when both apply", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+      fieldErrors: {
+        _form: codeMessage("server.internal"),
+        precision: codeMessage("unit.precision_invalid"),
+      },
+    });
+    expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
+  });
+
+  it("starts again when reopened: no messages and Save working", async () => {
+    const { el } = await mountWidget<UnitForm>("dashboard-unit-form", {
+      open: true,
+      locales: ["es"],
+    });
+    saveOf(el).click();
+    await el.updateComplete;
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+
+    expect(errorOf(el, "name-es")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+  });
 });
 
 describe("unitRefusalErrors", () => {
@@ -363,7 +511,7 @@ describe("unitRefusalErrors", () => {
         ).toEqual({ [`${field}-${language}`]: message });
   });
 
-  it("keeps a refusal that names no field of the form for the summary alone", () => {
+  it("keeps a refusal that names no field of the form for the bottom message alone", () => {
     for (const error of [
       refusal("content.translation_invalid", {}),
       refusal("content.translation_required", { language: "es" }),

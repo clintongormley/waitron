@@ -1,6 +1,13 @@
-import { expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { LitElement } from "lit";
-import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./interactive.js";
+import {
+  delegatesFocusShadowRootOptions,
+  dispatchWtChange,
+  focusFirstInvalid,
+  uniqueId,
+} from "./interactive.js";
+import { cleanup, host, mount } from "./test-helpers.js";
+import "./components/wt-input.js";
 
 test("uniqueId returns an incrementing, prefix-scoped id", () => {
   // A prefix no component uses, so this is insulated from whatever count the component test
@@ -42,4 +49,52 @@ test("dispatchWtChange stops the native event and dispatches a composed, bubblin
   expect(received?.detail).toEqual({ value: "42" });
   expect(received?.bubbles).toBe(true);
   expect(received?.composed).toBe(true);
+});
+
+describe("focusFirstInvalid", () => {
+  afterEach(cleanup);
+
+  test("focuses the first field marked invalid, inside the fields' own shadow roots", async () => {
+    await mount(`<div>
+      <wt-input label="Name" name="name"></wt-input>
+      <wt-input label="Email" name="email" error="Enter an email address"></wt-input>
+      <wt-input label="PIN" name="pin" error="Enter a PIN"></wt-input>
+    </div>`);
+    const fields = host.querySelectorAll("wt-input");
+
+    const focused = await focusFirstInvalid(host);
+
+    const inner = fields[1]!.shadowRoot!.querySelector("input")!;
+    expect(focused).toBe(inner);
+    expect(fields[1]!.shadowRoot!.activeElement).toBe(inner);
+  });
+
+  test("waits for an error set in the same turn to render before looking", async () => {
+    await mount(`<div><wt-input label="Name" name="name"></wt-input></div>`);
+    const field = host.querySelector("wt-input")!;
+    field.error = "Enter a name";
+
+    const focused = await focusFirstInvalid(host);
+
+    expect(focused).toBe(field.shadowRoot!.querySelector("input"));
+  });
+
+  test("finds a native control marked invalid in light DOM", async () => {
+    await mount(
+      `<div><select name="unit"></select><select name="precision" aria-invalid="true"></select></div>`,
+    );
+
+    const focused = await focusFirstInvalid(host);
+
+    expect(focused).toBe(host.querySelector('[name="precision"]'));
+    expect(document.activeElement).toBe(focused);
+  });
+
+  test("skips a disabled invalid control and returns null when nothing is invalid", async () => {
+    await mount(
+      `<div><select name="a" aria-invalid="true" disabled></select><input name="b" aria-invalid="false"></div>`,
+    );
+
+    expect(await focusFirstInvalid(host)).toBeNull();
+  });
 });

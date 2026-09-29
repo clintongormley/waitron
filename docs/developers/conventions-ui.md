@@ -10,7 +10,8 @@ the one-line version of each rule and points here for the rest.
 ## New or changed forms use the shared UI contract in `docs/developers/design-system.md` → Forms
 
 Required fields are visibly marked; an attempted invalid submission shows explanatory text beside
-every bad field and one localized “problem with this form” summary. Every input has a semantic
+every bad field and one localized message beside the primary action, which stays disabled until
+every field error is fixed — no summary at the top (owner, 2026-09-28). Every input has a semantic
 `name` (plus the standard `autocomplete` purpose when one exists), never a generated widget id as
 its identity. Password reveal buttons use the input's `end` slot and an action-specific accessible
 label. An inline confirmation embedded IN a form suspends that form's Save and implicit Enter

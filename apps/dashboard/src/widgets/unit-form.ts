@@ -1,9 +1,8 @@
 import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type { Unit, UnitInput } from "../api/client.js";
@@ -13,7 +12,7 @@ import { t } from "../i18n/t.js";
 type UnitField = "name" | "precision" | "abbreviation";
 type TranslatedField = `${"name" | "abbreviation"}-${string}`;
 /** `name` and `abbreviation` mark the first locale's input; `_form`, and a translated field whose
- * language the form does not show, are shown in the summary alone. */
+ * language the form does not show, are shown in the bottom message alone. */
 export type UnitFormErrors = Partial<Record<UnitField | TranslatedField | "_form", string>>;
 
 /** A refused unit write, keyed by this form's fields. */
@@ -77,7 +76,9 @@ export class UnitForm extends LitElement {
   @state() private names: Record<string, string> = {};
   @state() private abbreviations: Record<string, string> = {};
   @state() private precision = "0";
-  @state() private localErrors: Partial<Record<UnitField, string>> = {};
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
     const needsDraft =
@@ -98,31 +99,21 @@ export class UnitForm extends LitElement {
         ),
       };
       this.precision = String(this.value?.precision ?? 0);
-      this.localErrors = {};
+      this.attempted = false;
     }
+    if (changed.has("fieldErrors") || (this.open && needsDraft)) this.dismissed = new Set();
   }
 
-  #changeName(locale: string, event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.names = { ...this.names, [locale]: event.detail.value };
-    this.localErrors = { ...this.localErrors, name: undefined };
+  protected override updated(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
+      void focusFirstInvalid(this.shadowRoot!);
   }
 
-  #changeAbbreviation(locale: string, event: CustomEvent<{ value: string }>): void {
-    event.stopPropagation();
-    this.abbreviations = { ...this.abbreviations, [locale]: event.detail.value };
-    this.localErrors = { ...this.localErrors, abbreviation: undefined };
+  #dismiss(...keys: string[]): void {
+    this.dismissed = new Set([...this.dismissed, ...keys]);
   }
 
-  #changePrecision(event: Event): void {
-    event.stopPropagation();
-    this.precision = (event.target as HTMLSelectElement).value;
-    this.localErrors = { ...this.localErrors, precision: undefined };
-  }
-
-  #submit(event: Event): void {
-    event.stopPropagation();
-    if (this.busy) return;
+  #validate(): Partial<Record<UnitField, string>> {
     const defaultLocale = this.locales[0];
     const precision = Number(this.precision);
     const errors: Partial<Record<UnitField, string>> = {};
@@ -140,8 +131,57 @@ export class UnitForm extends LitElement {
     ) {
       errors.precision = t("units.precision_invalid");
     }
-    this.localErrors = errors;
-    if (Object.keys(errors).length > 0) return;
+    return errors;
+  }
+
+  /** The keys of `errors` that a field this form shows displays. */
+  #fieldKeys(errors: UnitFormErrors): string[] {
+    const shown = new Set([
+      "name",
+      "abbreviation",
+      "precision",
+      ...this.locales.flatMap((locale) => [`name-${locale}`, `abbreviation-${locale}`]),
+    ]);
+    return Object.entries(errors)
+      .filter(([key, message]) => Boolean(message) && shown.has(key))
+      .map(([key]) => key);
+  }
+
+  #errors(): UnitFormErrors {
+    const refused = Object.fromEntries(
+      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
+    );
+    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
+  }
+
+  #changeName(locale: string, event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.names = { ...this.names, [locale]: event.detail.value };
+    this.#dismiss("name", `name-${locale}`);
+  }
+
+  #changeAbbreviation(locale: string, event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    this.abbreviations = { ...this.abbreviations, [locale]: event.detail.value };
+    this.#dismiss("abbreviation", `abbreviation-${locale}`);
+  }
+
+  #changePrecision(event: Event): void {
+    event.stopPropagation();
+    this.precision = (event.target as HTMLSelectElement).value;
+    this.#dismiss("precision");
+  }
+
+  #submit(event: Event): void {
+    event.stopPropagation();
+    if (this.busy) return;
+    this.attempted = true;
+    this.#dismiss(...Object.keys(this.fieldErrors));
+    if (Object.keys(this.#validate()).length > 0) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
+      return;
+    }
+    const precision = Number(this.precision);
 
     const name = { ...this.names };
     for (const locale of this.locales) {
@@ -168,7 +208,14 @@ export class UnitForm extends LitElement {
   }
 
   override render() {
-    const errors: UnitFormErrors = { ...this.fieldErrors, ...this.localErrors };
+    const errors = this.#errors();
+    const fieldKeys = new Set(this.#fieldKeys(errors));
+    const formMessages = Object.entries(errors)
+      .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
+      .map(([, message]) => message!);
+    const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
+      " ",
+    );
     return html`
       <wt-modal
         heading=${this.value ? t("units.edit") : t("units.create")}
@@ -177,10 +224,6 @@ export class UnitForm extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]"))}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${Object.values(errors).filter((message): message is string => Boolean(message))}
-        ></wt-form-error-summary>
         ${this.locales.map(
           (locale, index) => html`
             <wt-input
@@ -235,7 +278,7 @@ export class UnitForm extends LitElement {
               : ""
           }</label
         >
-        <wt-form-actions slot="footer">
+        <wt-form-actions slot="footer" .error=${bottom}>
           <wt-button
             slot="cancel"
             data-test="cancel"
@@ -247,7 +290,7 @@ export class UnitForm extends LitElement {
           <wt-button
             data-test="submit"
             variant="primary"
-            ?disabled=${this.busy}
+            ?disabled=${this.busy || fieldKeys.size > 0}
             @click=${this.#submit}
             >${t("action.save")}</wt-button
           >

@@ -1,7 +1,12 @@
 export { applyTokens } from "./tokens/index.js";
 export { TickingClock } from "./ticking-clock.js";
 export { baseStyles, disabledStyles, floorTrayStyles, selectStyles } from "./base-styles.js";
-export { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "./interactive.js";
+export {
+  delegatesFocusShadowRootOptions,
+  dispatchWtChange,
+  focusFirstInvalid,
+  uniqueId,
+} from "./interactive.js";
 export { WtButton } from "./components/wt-button.js";
 export type { WtButtonVariant, WtButtonSize, WtButtonAlign } from "./components/wt-button.js";
 export { WtIcon, registerIcons } from "./components/wt-icon.js";

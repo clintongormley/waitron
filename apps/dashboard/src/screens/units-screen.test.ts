@@ -285,48 +285,48 @@ describe("units-screen", () => {
     );
     await flush(el);
     await form.updateComplete;
-    const summary = form.shadowRoot!.querySelector("wt-form-error-summary")!;
-    await summary.updateComplete;
+    const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
     return {
       el,
       form,
-      summary: [...summary.shadowRoot!.querySelectorAll("li")].map((li) => li.textContent!.trim()),
+      bottom: actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "",
       fieldError: (testId: string) =>
         form.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error"),
     };
   }
 
   it("retains the editor on a failed write and says why inside it", async () => {
-    const { el, form, summary } = await refusedCreate({ code: "server.internal" });
+    const { el, form, bottom } = await refusedCreate({ code: "server.internal" });
     expect(form.open).toBe(true);
-    expect(summary).toEqual([codeMessage("server.internal")]);
+    expect(bottom).toBe(codeMessage("server.internal"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
   it("places server validation beside the offending field", async () => {
-    const { form, summary } = await refusedCreate({ code: "unit.precision_invalid" });
+    const { form, bottom } = await refusedCreate({ code: "unit.precision_invalid" });
     expect(form.fieldErrors).toEqual({ precision: codeMessage("unit.precision_invalid") });
-    expect(summary).toEqual([codeMessage("unit.precision_invalid")]);
+    expect(bottom).toBe(t("form.fix_fields"));
   });
 
   it("puts a refused abbreviation beside the abbreviation, not the name", async () => {
-    const { summary, fieldError } = await refusedCreate({
+    const { bottom, fieldError } = await refusedCreate({
       code: "unit.translation_required",
       params: { field: "abbreviation", language: "es" },
     });
     expect(fieldError("abbreviation-es")).toBe(codeMessage("unit.translation_required"));
     expect(fieldError("name-es")).toBe("");
-    expect(summary).toEqual([codeMessage("unit.translation_required")]);
+    expect(bottom).toBe(t("form.fix_fields"));
   });
 
   it("puts a refused translation beside the language the server named, not the form's first", async () => {
-    const { summary, fieldError } = await refusedCreate({
+    const { bottom, fieldError } = await refusedCreate({
       code: "unit.translation_required",
       params: { field: "name", language: "en" },
     });
     expect(fieldError("name-en")).toBe(codeMessage("unit.translation_required"));
     expect(fieldError("name-es")).toBe("");
-    expect(summary).toEqual([codeMessage("unit.translation_required")]);
+    expect(bottom).toBe(t("form.fix_fields"));
   });
 
   it("keeps the editor closed when refresh fails after a successful write", async () => {

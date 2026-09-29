@@ -37,3 +37,35 @@ export function dispatchWtChange<T>(host: HTMLElement, event: Event, detail: T):
   event.stopPropagation();
   host.dispatchEvent(new CustomEvent<T>("wt-change", { detail, bubbles: true, composed: true }));
 }
+
+type MaybeUpdating = Element & { isUpdatePending?: boolean; updateComplete?: Promise<unknown> };
+
+function* walk(root: ParentNode): Generator<Element> {
+  for (const child of Array.from(root.children)) {
+    yield child;
+    if (child.shadowRoot) yield* walk(child.shadowRoot);
+    yield* walk(child);
+  }
+}
+
+/** Focuses the first control marked `aria-invalid="true"` under `root`, looking inside open shadow
+ * roots in document order, once every Lit element there has rendered — so a field whose `error`
+ * was set in the same turn is found. Returns the focused control, or null. */
+export async function focusFirstInvalid(root: ParentNode): Promise<HTMLElement | null> {
+  for (;;) {
+    const pending = [...walk(root)].filter((el: MaybeUpdating) => el.isUpdatePending === true);
+    if (pending.length === 0) break;
+    await Promise.all(pending.map((el: MaybeUpdating) => el.updateComplete));
+  }
+  for (const el of walk(root)) {
+    if (
+      el instanceof HTMLElement &&
+      el.getAttribute("aria-invalid") === "true" &&
+      !el.matches(":disabled")
+    ) {
+      el.focus();
+      return el;
+    }
+  }
+  return null;
+}
