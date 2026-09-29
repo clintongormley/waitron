@@ -140,8 +140,10 @@ load_print_agent_apparmor() {
 # 2c. On the owner's box (BlueZ 5.82, 2026-09-29) bluetoothd's autopair plugin answered a PIN-1234
 #     printer's PIN request with 0000 before any agent was asked; bluetoothd's retry then went over
 #     Low Energy, which that printer refuses, so it never paired. With the plugin off the agent was
-#     asked and the printer bonded. This drop-in re-runs the unit's own ExecStart with the plugin
-#     off. Bluetooth is restarted only when the drop-in changed, and a failure never stops the install.
+#     asked and the printer bonded. The plugin does this for a device whose class marks it as a
+#     printer (read in plugins/autopair.c, BlueZ 5.82). This drop-in re-runs the unit's own
+#     ExecStart with the plugin off. Bluetooth is restarted only when the drop-in changed, and a
+#     failure never stops the install.
 BLUETOOTH_DROPIN="${WAITRON_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
 disable_bluetooth_autopair() {
   local unit exec_start tmp
@@ -165,8 +167,8 @@ disable_bluetooth_autopair() {
     return 0
   fi
   printf '%s\n' \
-    "# Written by waitron.sh install: with bluetoothd's autopair plugin on, a printer's first PIN" \
-    "# request is answered with 0000 before the print agent is asked for the printer's own PIN." \
+    "# Written by waitron.sh install: bluetoothd's autopair plugin answers 0000 to the first PIN" \
+    "# request of a device whose class marks it as a printer, before the print agent is asked." \
     "[Service]" \
     "ExecStart=" \
     "ExecStart=$exec_start --noplugin=autopair" > "$tmp"
@@ -180,11 +182,13 @@ disable_bluetooth_autopair() {
     && as_root systemctl restart bluetooth; then
     echo "waitron.sh: switched off bluetoothd's autopair plugin, so a Bluetooth printer's PIN comes from the operator"
   else
-    # Removed, and the unit reloaded and restarted without it, so Bluetooth runs as it did before
-    # and the next install finds no drop-in and tries again.
+    # Runs whether the failure came before or after the drop-in was written. Removes whatever
+    # drop-in is at that path, an older, different one included, then reloads and restarts
+    # Bluetooth without it, so the next install finds none and tries again.
     as_root rm -f "$BLUETOOTH_DROPIN" || true
-    as_root systemctl daemon-reload || true
-    as_root systemctl restart bluetooth || true
+    if ! { as_root systemctl daemon-reload && as_root systemctl restart bluetooth; }; then
+      echo "waitron.sh: Bluetooth did not restart after the autopair drop-in was removed, so Bluetooth may be stopped — run 'systemctl restart bluetooth' or restart the box" >&2
+    fi
     echo "waitron.sh: could not switch off bluetoothd's autopair plugin — a Bluetooth printer whose PIN is not 0000 may not pair; the next install tries again" >&2
   fi
   rm -f "$tmp"

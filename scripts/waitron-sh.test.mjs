@@ -44,7 +44,8 @@ afterEach(() => {
 // `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
 // which is where each case points the Bluetooth drop-in. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
-// does; WT_BT_RESTART_FAIL makes `systemctl restart bluetooth` fail. `mktemp` fails when its
+// does; WT_BT_RESTART_FAIL=1 makes every `systemctl restart bluetooth` fail, and =first only the
+// first one in a case. `rm` is logged and then run for real. `mktemp` fails when its
 // arguments contain WT_MKTEMP_FAIL, and otherwise runs the real one.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
@@ -139,6 +140,8 @@ out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; e
 exit 0
 `,
 );
+const REAL_RM = spawnSync("bash", ["-c", "command -v rm"], { encoding: "utf8" }).stdout.trim();
+stub("rm", `exec "${REAL_RM}" "$@"`);
 const REAL_MKTEMP = spawnSync("bash", ["-c", "command -v mktemp"], {
   encoding: "utf8",
 }).stdout.trim();
@@ -164,7 +167,10 @@ stub(
   `
 case "$*" in
   "show -p FragmentPath --value bluetooth.service") [ -n "\${WT_BT_UNIT}" ] && echo "\${WT_BT_UNIT}" ;;
-  "restart bluetooth") [ "\${WT_BT_RESTART_FAIL}" = "1" ] && exit 1 ;;
+  "restart bluetooth")
+    n=$(cat "\${WT_LOG}.restarts" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.restarts"
+    [ "\${WT_BT_RESTART_FAIL}" = "1" ] && exit 1
+    [ "\${WT_BT_RESTART_FAIL}" = "first" ] && [ "$n" = "1" ] && exit 1 ;;
 esac
 exit 0
 `,
@@ -211,7 +217,7 @@ function sandbox({
     env: {
       WT_SANDBOX: root,
       WT_BT_UNIT: unit,
-      WT_BT_RESTART_FAIL: bluetoothRestartFail ? "1" : "0",
+      WT_BT_RESTART_FAIL: bluetoothRestartFail === true ? "1" : bluetoothRestartFail || "0",
       WT_MKTEMP_FAIL: mktempFail,
       WAITRON_BLUETOOTH_DROPIN: dropIn,
       WT_LOG: log,
@@ -487,21 +493,31 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     const r = run(sb, ["install"]);
     expect(r.status).toBe(0);
     expect(r.stderr).toContain("could not switch off bluetoothd's autopair plugin");
+    // The restart without the drop-in failed too, so Bluetooth may be down: say so, and how to recover.
+    expect(r.stderr).toContain("Bluetooth may be stopped");
+    expect(r.stderr).toContain("systemctl restart bluetooth");
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 
   it("removes a drop-in Bluetooth would not restart with, so the next install tries again", () => {
     const failed = sandbox({
       bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
-      bluetoothRestartFail: true,
+      bluetoothRestartFail: "first",
     });
-    expect(run(failed, ["install"]).status).toBe(0);
+    const r = run(failed, ["install"]);
+    expect(r.status).toBe(0);
     expect(existsSync(failed.dropIn)).toBe(false);
-    // Put back the unit as it was: the removal is followed by another reload.
+    // After the failed restart: remove the drop-in, reload, restart again — in that order.
     const log = calls(failed);
-    expect(log.lastIndexOf("systemctl daemon-reload")).toBeGreaterThan(
-      log.indexOf("systemctl restart bluetooth"),
-    );
+    const failedRestart = log.indexOf("systemctl restart bluetooth");
+    const removed = log.indexOf(`rm -f ${failed.dropIn}`);
+    const reloaded = log.lastIndexOf("systemctl daemon-reload");
+    const restarted = log.lastIndexOf("systemctl restart bluetooth");
+    expect(removed).toBeGreaterThan(failedRestart);
+    expect(reloaded).toBeGreaterThan(removed);
+    expect(restarted).toBeGreaterThan(reloaded);
+    // That second restart worked, so there is no warning that Bluetooth may be down.
+    expect(r.stderr).not.toContain("Bluetooth may be stopped");
 
     const retried = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
     writeFileSync(retried.log, "");
