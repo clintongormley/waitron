@@ -3502,7 +3502,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `partySurvivors` moved there from `apps/server/src/parties.ts`). Run in
     `packages/reporting/src/overdue-orders.test.ts`: a late dish on a paid bill whose party was
     merged twice is named after the last party's tables ("Mesa 7, 8"), where before it was named
-    by the bill's own label ("Ana"). **Still open:** `party.main_bill_stays`'s till wording says
+    by the bill's own label ("Ana"). (#880, main `d4324632e`.) A party with no table whose chain of
+    merges never ends (an unknown id, or two parties recorded as merged into each other, which the
+    database accepts) is named by the bill's own label, as before; whether any till action can make
+    such a loop was not checked. Left by C77's review, not done: the rule for a bill of NO party
+    (its seated table, else its delivery table, else its label) is still written three times —
+    `orderTableLabels` (`apps/server/src/kitchen-print.ts`), the `tableLabel` subquery in
+    `computeOverdueOrders`, and `apps/server/src/receipt-order.ts`; moving `orderTableLabels` itself
+    into `@waitron/db` would leave one. And `partyFamilies`, the reverse lookup of
+    `partySurvivors`, stayed in `apps/server/src/parties.ts`, so the two merge-chain queries now
+    live in different packages. **Still open:** `party.main_bill_stays`'s till wording says
     "the table has other unpaid bills", which Split a table choosing the main bill need not
     satisfy. The old merge (`mergeTabs`) still writes a merged party's tables in one statement, so
     they share a joining time and their order in its name is not fixed; it goes with Task 13.
