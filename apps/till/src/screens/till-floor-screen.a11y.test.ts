@@ -263,7 +263,7 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations rendering seated parties: owing, paid, and needing clearing", async () => {
+  it("has no violations rendering seated parties (owing, paid) and tables needing clearing", async () => {
     const { host } = await mountWidget<TillFloorScreen>(
       "till-floor-screen",
       { zones, tables: partyTables },

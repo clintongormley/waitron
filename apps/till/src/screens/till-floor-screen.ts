@@ -49,8 +49,8 @@ function partyPaid(table: TableState): boolean {
 
 /**
  * The TILL live-floor screen. Tapping a free table asks for the party's guest count and then asks the
- * app to seat it; tapping a seated table asks the app to resume it. A table a party has left that
- * has not been cleared offers Mark cleared instead. The screen itself owns NO fiscal path, because a
+ * app to seat it; tapping a seated table asks the app to resume it. A table that needs cleaning
+ * offers Mark cleared instead. The screen itself owns NO fiscal path, because a
  * tab is a PRE-FISCAL working order.
  *
  * Each zone tab has a MAP view (the shared `<wt-floor-canvas>`, with the zone's unplaced tables in a

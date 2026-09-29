@@ -1226,8 +1226,8 @@ export interface TableState {
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
-  /** `held` while a party holds the table; `needs_cleaning` once a party has left it, until Mark
-   * cleared. */
+  /** `held` while a party holds the table; `needs_cleaning` after Finish table with the clearing
+   * setting on, until Mark cleared. */
   condition: "free" | "held" | "needs_cleaning";
   tabId?: string;
   tabLineCount?: number;
@@ -1842,7 +1842,8 @@ export class TillApi {
   /**
    * Seat a party at a free table → `POST /api/tables/:tableId/seat`, which opens its tab. `guestCount`
    * is sent as an explicit null when none was given. A table a party already holds rejects
-   * `tab.already_open`; `table.not_found` and `table.inactive` surface as a rejected `{ code }`.
+   * `tab.already_open`; `table.not_found`, `table.inactive` and `table.needs_cleaning` surface as a
+   * rejected `{ code }`.
    */
   seatTable(tableId: string, guestCount: number | null): Promise<SeatResult> {
     return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", { guestCount });
@@ -2134,7 +2135,8 @@ export class TillApi {
 
   /**
    * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
-   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`, `tab.not_open`, and
+   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`,
+   * `table.needs_cleaning`, `tab.not_open`, and
    * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
    * missing revision.
    */

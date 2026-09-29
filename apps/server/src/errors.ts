@@ -288,7 +288,7 @@ declare module "@waitron/shared" {
      */
     "table.occupied": { tableId: string };
     /**
-     * The table a party left still needs cleaning (`dining_tables.needs_cleaning_since` is set), so
+     * The table still needs cleaning (`dining_tables.needs_cleaning_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
     "table.needs_cleaning": { tableId: string };
