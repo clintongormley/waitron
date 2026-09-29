@@ -3619,7 +3619,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     message stays in `apps/till/src/i18n/codes.ts`, read by nothing else under `apps/till/src`
     but its test. All three go with Task 13. Unchecked Send to radios are Chromium's own dark-theme control, dim grey
     on the dark dialog (seen in the 390 px Spanish dark screenshot).
-  - **Task 11 DONE (2026-09-29, branch `feat/party-till-tables`): the till moves guests, joins
+  - **Task 11 DONE (#881, 2026-09-29, main `bc5f5cae7`): the till moves guests, joins
     tables, splits a table and names the party, through Task 8's routes and Task 2's
     `PUT /api/parties/:id/name`.** What changes for a person using the till:
     - The table screen's actions offer Move guests, Join a table, Split a table (only while the
