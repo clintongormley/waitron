@@ -2751,7 +2751,9 @@ export class TillApp extends LitElement {
   }
 
   /** Takes the order's party from the floor just read, before the order's lines and bills are read
-   * after it. A floor that does not list the table, as after a failed read, keeps the party known. */
+   * after it. A floor that does not list the table keeps the party known. The floor's copy is taken
+   * without comparing revisions, so a floor kept after a failed {@link #refreshFloor} can put back
+   * an older copy than the screen's. */
   #rememberOrderParty(): void {
     const row = this.tables.find((table) => table.id === this.activeTableId);
     if (row !== undefined) this.orderParty = row.party;
@@ -3518,8 +3520,8 @@ export class TillApp extends LitElement {
    * The bill on screen moves whole to another table or to the counter, in the zone the counter's
    * orders are made in. The screen stays with this party, on its main bill or {@link billToOpen}'s,
    * and goes back to the floor when the party has no bill left. A failed read of the floor after the
-   * move keeps the last floor. Once the waiter has left the bill, the move opens no other bill, does
-   * not go back to the floor and says nothing about bills kept apart.
+   * move keeps the last floor and the party on screen. Once the waiter has left the bill, the move
+   * opens no other bill, does not go back to the floor and says nothing about bills kept apart.
    */
   async #onMoveBill(event: Event): Promise<void> {
     const { to, bills } = (event as CustomEvent<MoveBillDetail>).detail;
@@ -3548,9 +3550,9 @@ export class TillApp extends LitElement {
       return;
     }
     if (!toTable) void this.#refreshAfterWrite("held", "refresh.held_after_move");
-    await this.#refreshFloor();
+    const floorRead = await this.#refreshFloor();
     if (this.#hasLeftOrder(billId, visit)) return;
-    this.#rememberOrderParty();
+    if (floorRead) this.#rememberOrderParty();
     const { bills: read } = await this.#loadPartyBills();
     if (this.#hasLeftOrder(billId, visit)) return;
     const next = this.#billAfterMove(billId, read);

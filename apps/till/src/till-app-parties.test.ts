@@ -1715,6 +1715,27 @@ describe("till-app: moving a bill", () => {
     expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
   });
 
+  it("keeps the party on screen, not the older copy on the kept floor, when the floor cannot be read after the move", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const { el } = await mountApp({ getPartyBills: bills });
+    const order = await openMesa(el);
+    emit(order, "fire-group", { groupId: "g3" });
+    await flush(el);
+    expect(tableOrder(el)!.party?.revision).toBe(4);
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue([tabBill]);
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+
+    emit(tableOrder(el)!, "move-bill", { to: { counter: true }, bills: "merge" });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.tables).toEqual([mesa4, mesa7, mesa9]);
+    expect(tableOrder(el)!.party).toEqual({ ...mesa4.party, revision: 4 });
+  });
+
   it("says the move stands when the held orders cannot be read again after a move to the counter", async () => {
     const { el } = await mountApp();
     const order = await openMesa(el);
