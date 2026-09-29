@@ -4313,10 +4313,11 @@ approved.
 
 ### B6. The print-agent process
 
-- **The print agent reaches BlueZ under its own AppArmor profile, and says when it cannot — BUILT
+- **The print agent runs under its own AppArmor profile, and says when it cannot reach BlueZ — BUILT
   (A129).** On the owner's box (2026-09-29) Docker's default profile refused the agent's system-bus
   `Hello`, so `bluetoothctl` aborted and the agent silently listed no Bluetooth printers.
-  `deploy/apparmor/waitron-print-agent` is Docker's default profile plus the bus rules `bluetoothctl
+  `deploy/apparmor/waitron-print-agent` is Moby's `docker-default` template (moby/profiles at
+  `f0494f1fbb1bbaf2e1b02ee20aab206f32456a63`) plus the bus rules `bluetoothctl
   list`, `devices` and `scan` were measured to need against a stand-in BlueZ on a CI runner;
   `waitron.sh install` loads it where AppArmor is on and only then names it in `.env`
   (`WAITRON_PRINT_AGENT_APPARMOR`), because Docker refuses to start a container naming a profile the

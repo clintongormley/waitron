@@ -558,8 +558,8 @@ jobs:
   # Publishing the image is the separate `publish` job below.
   #
   # It earns its place by proving two things no developer's machine can — a non-root process
-  # binding 443 under host networking, and the print agent reaching BlueZ under its AppArmor profile
-  # (image-smoke.yml carries the full receipt). That is worth
+  # binding 443 under host networking, and the print agent reaching a stand-in BlueZ under its
+  # AppArmor profile (image-smoke.yml carries the full receipt). That is worth
   # running when the box image's inputs change, and wasted work on the many PRs that cannot touch
   # them.
   #

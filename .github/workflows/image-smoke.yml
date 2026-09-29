@@ -6,7 +6,7 @@ name: image-smoke
 # `publish` on every main push) and image-nightly.yml (the scheduled + on-request safety net).
 #
 # It earns its place by proving two things no developer's machine can. First, the print agent
-# reaches BlueZ under its own AppArmor profile, an option Docker Desktop ignores (measured on 29.3.0;
+# reaches a stand-in BlueZ (scripts/fake-bluez.py) under its own AppArmor profile, an option Docker Desktop ignores (measured on 29.3.0;
 # deploy/compose.yml). Second, the runner is real Linux, so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that namespace keeps
 # the kernel's ip_unprivileged_port_start=1024, so a non-root process reaches 443 only because the
 # image sets cap_net_bind_service on node. Docker Desktop's "host" network is its own Linux VM's, so
@@ -236,7 +236,7 @@ jobs:
       # `Hello` and bluetoothctl aborted, so no Bluetooth printer could ever appear. The agent here
       # runs under the shipped profile, as the unprivileged user, with compose's own socket mount;
       # the control is the same image and mount under docker-default, which must still be refused.
-      - name: The print agent reaches BlueZ under its profile, and Docker's default profile does not
+      - name: The print agent reaches a stand-in BlueZ under its profile, and Docker's default profile does not
         run: |
           set -euo pipefail
           agent=$(docker compose ps -q print-agent)

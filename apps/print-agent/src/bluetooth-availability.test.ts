@@ -15,9 +15,10 @@ import { createLinuxDevices } from "./linux-devices.js";
 // `docker-default` profile the bus refuses `Hello`; libdbus writes this to stderr and aborts (exit
 // 134). Under Waitron's profile with no BlueZ on the bus it printed only `Unable to open
 // mgmt_socket` and was still running when `timeout 8` killed it (exit 124, run 36558601920); a
-// Debian 13 container with its own system bus and no BlueZ did the same. With BlueZ answering,
-// `--timeout 3 devices Paired` took 3.01 s where `devices Paired` took 0.004 s (bluetoothctl 5.82
-// against scripts/fake-bluez.py), so the fake below makes `--timeout` cost the same.
+// Debian 13 container with its own system bus and no BlueZ did the same. With a stand-in BlueZ
+// (scripts/fake-bluez.py) answering, under Waitron's profile on the same kind of runner, run
+// 36562581079 timed `--timeout 3 devices Paired` at 3.064 s and `devices Paired` at 0.057 s, each
+// through `docker exec`, so the fake below makes `--timeout` cost the same.
 const BUS_REFUSED_STDERR = `dbus[9]: arguments to dbus_connection_get_object_path_data() were incorrect, assertion "connection != NULL" failed in file ../../dbus/dbus-connection.c line 5974.
 This is normally a bug in some application using the D-Bus library.
 

@@ -356,16 +356,13 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
 - **The print agent runs under `deploy/apparmor/waitron-print-agent`, named through
-  `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it** — Docker refuses to start a
-  container naming an unloaded profile (measured on Docker 28.0.4, Ubuntu 24.04). A new
-  `bluetoothctl` call needs a new bus rule, and on a pull request image-smoke runs only when an
-  image input changed (`deploy/`, or `scripts/fake-bluez.py`), so a change to `apps/print-agent`
-  alone is not checked against the profile. Guards, weaker than their names: of the agent's own
-  `bluetoothctl` calls, image-smoke runs only its paired listing (it waits for `bluetooth.available` in
-  `/status.json`); every other command it checks is one written into its Bluetooth step; the
-  bus-rule cases in `scripts/deploy-image-env.test.ts` read the profile as TEXT and check only that
-  each allowing rule names its interface and members literally, with no glob — not that a literal
-  list has not grown. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a new `bluetoothctl` call
+  needs its own bus rule.** Cost: on the owner's box (2026-09-29) Docker's default profile refused
+  the agent's first bus message and it silently listed no Bluetooth printers. Guards, weaker than
+  their names: image-smoke runs only the agent's paired listing and the commands its Bluetooth step
+  names, and not on a pull request that changed no image input; `scripts/deploy-image-env.test.ts`
+  reads the profile as TEXT for globbed bus rules, not for a grown literal list. See
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail shows the failed start's own lines — the error, its cause chain (up to five
   levels in all), the stack and an `AppError`'s params — through `redactSecrets` and

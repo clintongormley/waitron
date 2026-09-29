@@ -326,7 +326,8 @@ it did not before, is refused at the bus until the profile gains a rule for it. 
 image-smoke runs the agent under the profile, and on a pull request image-smoke runs only when an
 image input changed — a path under `deploy/`, or a file only image-smoke runs, such as
 `scripts/fake-bluez.py` (`isImageInputPath`, `scripts/changed-scope.mjs`; the `image` job's `if:` in
-`.github/workflows/ci.yml`); on a push to `main` it also runs whenever code changed. Of the agent's
+`.github/workflows/ci.yml`), so a pull request that changes only `apps/print-agent` is not checked
+against the profile; on a push to `main` it also runs whenever code changed. Of the agent's
 own `bluetoothctl` calls, image-smoke runs only the paired listing, by waiting for
 `bluetooth.available` in the agent's `/status.json`; every other command it checks is written into
 its Bluetooth step, so a new call is checked only once that step runs it too.
