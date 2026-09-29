@@ -143,6 +143,17 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     await expectNoA11yViolations(host);
   });
 
+  test("the editor after a refusal that names no field", async () => {
+    const el = await screen(theme, {
+      updateReason: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   test("the deactivation confirmation", async () => {
     const el = await screen(theme);
     await press(el, "deactivate-c");

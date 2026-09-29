@@ -11,7 +11,7 @@ const en = {
   "payments.stripe.cancel_url": "Cancel URL",
   "payments.stripe.connect": "Connect",
   "payments.stripe.connected_as": "Connected as {name}",
-  "payments.stripe.form_problem": "There is a problem with this form",
+  "payments.stripe.fix_fields": "Correct the highlighted fields to continue.",
   "payments.stripe.secret_key_required": "Enter your Stripe secret key",
   "payments.stripe.connect_failed": "That secret key was not accepted. Check it and try again.",
   "payments.stripe.add_reader_heading": "Add a Stripe reader",
@@ -35,7 +35,7 @@ const es: Record<keyof typeof en, string> = {
   "payments.stripe.cancel_url": "URL de cancelación",
   "payments.stripe.connect": "Conectar",
   "payments.stripe.connected_as": "Conectado como {name}",
-  "payments.stripe.form_problem": "Hay un problema con este formulario",
+  "payments.stripe.fix_fields": "Corrige los campos marcados para continuar.",
   "payments.stripe.secret_key_required": "Introduce tu clave secreta de Stripe",
   "payments.stripe.connect_failed":
     "No se aceptó esa clave secreta. Compruébala e inténtalo de nuevo.",

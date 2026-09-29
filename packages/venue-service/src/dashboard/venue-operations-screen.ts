@@ -10,6 +10,7 @@ import {
   baseStyles,
   ContentLanguageController,
   currentContentLanguages,
+  focusFirstInvalid,
   selectStyles,
   submitOnEnter,
   UrlStateController,
@@ -42,6 +43,16 @@ type Editor =
   | { kind: "route"; row?: PreparationRoute }
   | { kind: "delete"; name: string; action: () => Promise<unknown> };
 type Action = { key: string; label: string; run: () => void; disabled?: boolean };
+/** `check` reads the fields and returns a message per invalid one; `save` runs only once `check`
+ * returns none. */
+type EditorContent = {
+  heading: string;
+  body: TemplateResult;
+  check: () => Record<string, string>;
+  save: () => void;
+};
+/** A `management.request_invalid` refusal's `field`, onto the control that holds it. */
+type ServerFields = Record<string, string>;
 
 @customElement("dashboard-venue-operations-screen")
 export class VenueOperationsScreen extends LitElement {
@@ -115,13 +126,22 @@ export class VenueOperationsScreen extends LitElement {
     this,
     () => this.api.liveData,
     () => {
-      this.error = t("venue.load_error");
+      this.loadError = t("venue.load_error");
     },
   );
   #loaded = false;
   @state() private model?: VenueServiceView;
-  @state() private error?: string;
+  @state() private loadError?: string;
+  /** A refusal of a list action that saved at once, with no editor open. */
+  @state() private actionError?: string;
+  /** The open editor's check results, or with none open, the instant settings' refusals. */
   @state() private fieldErrors: Record<string, string> = {};
+  /** The server's refusal of an editor field, until the operator changes that field or saves again. */
+  @state() private refusedFields: Record<string, string> = {};
+  /** A refusal that names no field the editor shows, until the operator saves again. */
+  @state() private editorError?: string;
+  /** Save has been pressed in the open editor, so it re-checks its fields on every change. */
+  @state() private attempted = false;
   @state() private busy = false;
   @state() private view: View = "status";
   @state() private editor?: Editor;
@@ -165,11 +185,11 @@ export class VenueOperationsScreen extends LitElement {
         },
         (value) => {
           this.model = value;
-          this.error = undefined;
+          this.loadError = undefined;
         },
       );
     } catch {
-      this.error = t("venue.load_error");
+      this.loadError = t("venue.load_error");
     }
   }
   #value(name: string): string {
@@ -180,13 +200,12 @@ export class VenueOperationsScreen extends LitElement {
   }
   #open(editor: Editor): void {
     this.editor = editor;
-    this.fieldErrors = {};
-    this.error = undefined;
+    this.actionError = undefined;
+    this.#restart();
   }
   #close(): void {
     this.editor = undefined;
-    this.fieldErrors = {};
-    this.error = undefined;
+    this.#restart();
     void this.updateComplete.then(() => {
       if (this.#opener?.isConnected) this.#opener.focus();
       else this.renderRoot.querySelector<HTMLElement>("wt-tabs")?.focus();
@@ -198,31 +217,64 @@ export class VenueOperationsScreen extends LitElement {
     this.view = event.detail.value;
     this.#url.write({ dashboard: "venue-operations", view: this.view });
   }
-  async #save(action: () => Promise<unknown>): Promise<void> {
+  #restart(): void {
+    this.attempted = false;
+    this.fieldErrors = {};
+    this.refusedFields = {};
+    this.editorError = undefined;
+  }
+  async #save(action: () => Promise<unknown>, fields: ServerFields = {}): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.error = undefined;
     const editor = this.editor;
+    if (editor === undefined) this.actionError = undefined;
     try {
       await action();
       if (this.editor === editor) this.#close();
       await this.#load();
     } catch (error) {
-      const code = codeOf(error ?? {});
-      this.error =
-        code === "route.duplicate"
-          ? t("venue.route_duplicate")
-          : code === "department.has_active_zones"
-            ? t("venue.department_has_zones")
-            : t("venue.save_error");
+      if (editor === undefined) this.actionError = this.#refusal(codeOf(error ?? {}));
+      else this.#refused(error, fields);
     } finally {
       this.busy = false;
     }
   }
+  #refusal(code: string): string {
+    return code === "route.duplicate"
+      ? t("venue.route_duplicate")
+      : code === "department.has_active_zones"
+        ? t("venue.department_has_zones")
+        : t("venue.save_error");
+  }
+  #refused(error: unknown, fields: ServerFields): void {
+    const code = codeOf(error ?? {});
+    const field = (error as { params?: { field?: unknown } } | undefined)?.params?.field;
+    if (
+      code === "management.request_invalid" &&
+      typeof field === "string" &&
+      Object.hasOwn(fields, field)
+    ) {
+      this.refusedFields = { [fields[field]!]: t("venue.field_refused") };
+      this.#focusInvalid();
+    } else {
+      this.editorError = this.#refusal(code);
+    }
+  }
+  /** The screen's shadow root also holds the lists, so only the editor is searched. */
+  #focusInvalid(): void {
+    void this.updateComplete.then(() => {
+      const modal = this.renderRoot.querySelector("wt-modal");
+      if (modal) void focusFirstInvalid(modal);
+    });
+  }
+  /** What each editor field shows: its refusal, unless the field's own check finds something. */
+  #errors(): Record<string, string> {
+    return { ...this.refusedFields, ...this.fieldErrors };
+  }
   async #saveEditSentLines(editSentLines: boolean): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.error = undefined;
+    this.actionError = undefined;
     this.fieldErrors = {};
     try {
       await this.api.saveSettings({ editSentLines });
@@ -237,7 +289,7 @@ export class VenueOperationsScreen extends LitElement {
   async #saveKitchenTicketGrouping(kitchenTicketGrouping: KitchenTicketGrouping): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.error = undefined;
+    this.actionError = undefined;
     this.fieldErrors = {};
     try {
       await this.api.saveKitchenTicketGrouping(kitchenTicketGrouping);
@@ -252,7 +304,7 @@ export class VenueOperationsScreen extends LitElement {
   async #saveReleaseReminderMinutes(releaseReminderMinutes: number | null): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.error = undefined;
+    this.actionError = undefined;
     this.fieldErrors = {};
     try {
       await this.api.saveReleaseReminderMinutes(releaseReminderMinutes);
@@ -267,7 +319,7 @@ export class VenueOperationsScreen extends LitElement {
   async #savePrintHeldWork(printHeldWork: boolean): Promise<void> {
     if (this.busy) return;
     this.busy = true;
-    this.error = undefined;
+    this.actionError = undefined;
     this.fieldErrors = {};
     try {
       await this.api.savePrintHeldWork(printHeldWork);
@@ -279,23 +331,21 @@ export class VenueOperationsScreen extends LitElement {
       this.busy = false;
     }
   }
-  #validate(fields: readonly { name: string; label: string }[]): boolean {
-    this.fieldErrors = Object.fromEntries(
-      fields
-        .filter((field) => this.#value(field.name).trim() === "")
-        .map((field) => [field.name, `${field.label}: ${t("venue.field_required")}`]),
+  #required(names: readonly string[]): Record<string, string> {
+    return Object.fromEntries(
+      names
+        .filter((name) => this.#value(name).trim() === "")
+        .map((name) => [name, t("venue.field_required")]),
     );
-    this.error = undefined;
-    return Object.keys(this.fieldErrors).length === 0;
   }
   #fieldError(name: string) {
-    return this.fieldErrors[name]
-      ? html`<p id=${`error-${name}`} class="field-error" data-field-error=${name}>
-          ${this.fieldErrors[name]}
-        </p>`
+    const message = this.#errors()[name];
+    return message
+      ? html`<p id=${`error-${name}`} class="field-error" data-field-error=${name}>${message}</p>`
       : nothing;
   }
   #input(name: string, label: string, value = "", type = "text") {
+    const invalid = !!this.#errors()[name];
     return html`<label
       ><span>${label} <span class="required">*</span></span
       ><input
@@ -303,8 +353,8 @@ export class VenueOperationsScreen extends LitElement {
         type=${type}
         .value=${value}
         required
-        aria-invalid=${!!this.fieldErrors[name]}
-        aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
+        aria-invalid=${invalid}
+        aria-describedby=${invalid ? `error-${name}` : nothing}
       />${this.#fieldError(name)}</label
     >`;
   }
@@ -316,14 +366,15 @@ export class VenueOperationsScreen extends LitElement {
     required = true,
     disabled = false,
   ) {
+    const invalid = !!this.#errors()[name];
     return html`<label
       ><span>${label}${required ? html` <span class="required">*</span>` : nothing}</span
       ><select
         name=${name}
         ?required=${required}
         ?disabled=${disabled}
-        aria-invalid=${!!this.fieldErrors[name]}
-        aria-describedby=${this.fieldErrors[name] ? `error-${name}` : nothing}
+        aria-invalid=${invalid}
+        aria-describedby=${invalid ? `error-${name}` : nothing}
       >
         ${choices.map((choice) => html`<option value=${choice.id} ?selected=${choice.id === value}>${choice.name}</option>`)}</select
       >${this.#fieldError(name)}</label
@@ -839,31 +890,30 @@ export class VenueOperationsScreen extends LitElement {
       closesAt: row.closesAt.slice(0, 5),
     }));
   }
-  #editorContent(editor: Editor): { heading: string; body: TemplateResult; save: () => void } {
+  #editorContent(editor: Editor): EditorContent {
     const model = this.model!;
     switch (editor.kind) {
       case "department":
         return {
           heading: t(editor.row ? "venue.edit_department" : "venue.add_department"),
           body: html`${this.#input("department-name", t("venue.name"), editor.row?.name)}${this.#input("trading-name", t("venue.trading_name"), editor.row?.tradingName)}${this.#select("department-mode", t("venue.service_style"), this.#modes(), editor.row?.defaultServiceMode ?? "prepay")}`,
+          check: () => this.#required(["department-name", "trading-name", "department-mode"]),
           save: () => {
-            if (
-              !this.#validate([
-                { name: "department-name", label: t("venue.name") },
-                { name: "trading-name", label: t("venue.trading_name") },
-                { name: "department-mode", label: t("venue.service_style") },
-              ])
-            )
-              return;
             const input = {
               name: this.#value("department-name").trim(),
               tradingName: this.#value("trading-name").trim(),
               defaultServiceMode: this.#value("department-mode") as ServiceMode,
             };
-            void this.#save(() =>
-              editor.row
-                ? this.api.updateDepartment(editor.row.id, input)
-                : this.api.createDepartment(input),
+            void this.#save(
+              () =>
+                editor.row
+                  ? this.api.updateDepartment(editor.row.id, input)
+                  : this.api.createDepartment(input),
+              {
+                name: "department-name",
+                tradingName: "trading-name",
+                defaultServiceMode: "department-mode",
+              },
             );
           },
         };
@@ -876,29 +926,26 @@ export class VenueOperationsScreen extends LitElement {
             DAYS.map((day) => ({ id: String(day), name: t(`venue.day.${day}`) })),
             String(editor.row?.weekday ?? 0),
           )}${this.#input("hours-opens", t("venue.opens"), editor.row?.opensAt.slice(0, 5), "time")}${this.#input("hours-closes", t("venue.closes"), editor.row?.closesAt.slice(0, 5), "time")}`,
+          check: () => {
+            const missing = this.#required(["hours-department", "hours-opens", "hours-closes"]);
+            if (Object.keys(missing).length > 0) return missing;
+            return this.#value("hours-opens") === this.#value("hours-closes")
+              ? {
+                  "hours-opens": t("venue.time_distinct"),
+                  "hours-closes": t("venue.time_distinct"),
+                }
+              : {};
+          },
           save: () => {
-            if (
-              !this.#validate([
-                { name: "hours-department", label: t("venue.department") },
-                { name: "hours-opens", label: t("venue.opens") },
-                { name: "hours-closes", label: t("venue.closes") },
-              ])
-            )
-              return;
             const departmentId = this.#value("hours-department");
             const opensAt = this.#value("hours-opens");
             const closesAt = this.#value("hours-closes");
-            if (opensAt === closesAt) {
-              this.fieldErrors = {
-                "hours-opens": t("venue.time_distinct"),
-                "hours-closes": t("venue.time_distinct"),
-              };
-              return;
-            }
             const hours = [
               ...this.#hours(departmentId, editor.index),
               { weekday: Number(this.#value("hours-weekday")), opensAt, closesAt },
             ];
+            // The server names the list sent (`hours`) or an interval of it (`hours.N`), never one of
+            // these controls.
             void this.#save(() => this.api.replaceHours(departmentId, hours));
           },
         };
@@ -912,15 +959,17 @@ export class VenueOperationsScreen extends LitElement {
             model.departments.filter((row) => row.active),
             configured?.departmentId,
           )}${this.#select(`zone-mode-${editor.row.id}`, t("venue.service_style"), this.#modes(true), configured?.serviceModeOverride ?? "", false)}`,
+          check: () => this.#required([`zone-department-${editor.row.id}`]),
           save: () => {
-            const name = `zone-department-${editor.row.id}`;
-            if (!this.#validate([{ name, label: t("venue.department") }])) return;
             const serviceMode = this.#value(`zone-mode-${editor.row.id}`);
             const input = {
-              departmentId: this.#value(name),
+              departmentId: this.#value(`zone-department-${editor.row.id}`),
               serviceMode: serviceMode === "" ? null : (serviceMode as ServiceMode),
             };
-            void this.#save(() => this.api.configureZone(editor.row.id, input));
+            void this.#save(() => this.api.configureZone(editor.row.id, input), {
+              departmentId: `zone-department-${editor.row.id}`,
+              serviceMode: `zone-mode-${editor.row.id}`,
+            });
           },
         };
       }
@@ -945,25 +994,23 @@ export class VenueOperationsScreen extends LitElement {
                 .checked=${assignment?.isDefault ?? false}
                 ?disabled=${assignment?.isDefault === true}
             /></label>`,
-          save: () => {
-            if (
-              !this.#validate([
-                { name: "assignment-menu", label: t("venue.menu_name") },
-                { name: "assignment-order", label: t("venue.display_order") },
-              ])
-            )
-              return;
+          check: () => {
+            const missing = this.#required(["assignment-menu", "assignment-order"]);
+            if (Object.keys(missing).length > 0) return missing;
             const displayOrder = Number(this.#value("assignment-order"));
-            if (!Number.isInteger(displayOrder) || displayOrder < 0) {
-              this.fieldErrors = { "assignment-order": t("venue.order_invalid") };
-              return;
-            }
+            return Number.isInteger(displayOrder) && displayOrder >= 0
+              ? {}
+              : { "assignment-order": t("venue.order_invalid") };
+          },
+          save: () => {
+            const displayOrder = Number(this.#value("assignment-order"));
             const menuId = this.#value("assignment-menu");
             const makeDefault = this.renderRoot.querySelector<HTMLInputElement>(
               '[name="assignment-default"]',
             )!.checked;
-            void this.#save(() =>
-              this.api.allowMenu(editor.zoneId, menuId, { displayOrder, makeDefault }),
+            void this.#save(
+              () => this.api.allowMenu(editor.zoneId, menuId, { displayOrder, makeDefault }),
+              { displayOrder: "assignment-order" },
             );
           },
         };
@@ -973,14 +1020,8 @@ export class VenueOperationsScreen extends LitElement {
         return {
           heading: t(row ? "venue.edit_route" : "venue.add_route"),
           body: html`${this.#select("route-subject", t("venue.product_or_category"), [...model.categories.map((category) => ({ id: `category:${category.id}`, name: `${t("venue.category")}: ${this.#name(category.name)}` })), ...model.products.map((product) => ({ id: `product:${product.id}`, name: `${t("venue.product")}: ${product.name}` }))], row ? (row.productId === null ? `category:${row.categoryId}` : `product:${row.productId}`) : undefined)}${this.#select("route-zone", t("venue.zone"), [{ id: "", name: t("venue.all_zones") }, ...model.floorZones], row?.zoneId ?? "", false)}${this.#select("route-target", t("venue.station"), [...model.stations, { id: "none", name: t("venue.no_preparation") }], row?.noPreparation ? "none" : (row?.stationId ?? undefined))}`,
+          check: () => this.#required(["route-subject", "route-target"]),
           save: () => {
-            if (
-              !this.#validate([
-                { name: "route-subject", label: t("venue.product_or_category") },
-                { name: "route-target", label: t("venue.station") },
-              ])
-            )
-              return;
             const [kind, id] = this.#value("route-subject").split(":");
             const target = this.#value("route-target");
             const input = {
@@ -988,8 +1029,16 @@ export class VenueOperationsScreen extends LitElement {
               zoneId: this.#value("route-zone") || null,
               ...(target === "none" ? { noPreparation: true } : { stationId: target }),
             };
-            void this.#save(() =>
-              row ? this.api.updateRoute(row.id, input) : this.api.createRoute(input),
+            void this.#save(
+              () => (row ? this.api.updateRoute(row.id, input) : this.api.createRoute(input)),
+              {
+                subject: "route-subject",
+                categoryId: "route-subject",
+                productId: "route-subject",
+                zoneId: "route-zone",
+                target: "route-target",
+                stationId: "route-target",
+              },
             );
           },
         };
@@ -998,22 +1047,53 @@ export class VenueOperationsScreen extends LitElement {
         return {
           heading: t("venue.confirm_remove"),
           body: html`<p>${editor.name}</p>`,
+          check: () => ({}),
           save: () => {
             void this.#save(editor.action);
           },
         };
     }
   }
-  #summary() {
-    return html`<wt-form-error-summary
-      heading=${t("venue.form_error_heading")}
-      .errors=${[...Object.values(this.fieldErrors), ...(this.error ? [this.error] : [])]}
-    ></wt-form-error-summary>`;
+  /** A load failure, and with no editor open, a refusal of something saved at once. An open editor
+   * says its own refusals beside its buttons. */
+  #pageAlert() {
+    const messages = [
+      ...(this.loadError ? [this.loadError] : []),
+      ...(this.editor
+        ? []
+        : [...Object.values(this.fieldErrors), ...(this.actionError ? [this.actionError] : [])]),
+    ];
+    return html`<div role="alert" data-test="page-alert">
+      ${messages.map((message) => html`<p>${message}</p>`)}
+    </div>`;
+  }
+  #submit(content: EditorContent): void {
+    this.attempted = true;
+    this.refusedFields = {};
+    this.editorError = undefined;
+    this.fieldErrors = content.check();
+    if (Object.keys(this.fieldErrors).length === 0) {
+      content.save();
+      return;
+    }
+    this.#focusInvalid();
   }
   #modal() {
     if (!this.editor) return nothing;
     const editor = this.editor;
     const content = this.#editorContent(editor);
+    const invalid = Object.keys(this.#errors()).length > 0;
+    const recheck = (event: Event) => {
+      // A field that holds focus as the editor closes reports its change after the editor has gone.
+      if (this.editor !== editor) return;
+      const name = (event.target as HTMLInputElement).name;
+      if (Object.hasOwn(this.refusedFields, name)) {
+        const refused = { ...this.refusedFields };
+        delete refused[name];
+        this.refusedFields = refused;
+      }
+      if (this.attempted) this.fieldErrors = content.check();
+    };
     return keyed(
       editor,
       html`<wt-modal
@@ -1030,9 +1110,10 @@ export class VenueOperationsScreen extends LitElement {
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'));
         }}
       >
-        ${this.#summary()}
-        <div class="form">${content.body}</div>
-        <wt-form-actions slot="footer"
+        <div class="form" @input=${recheck} @change=${recheck}>${content.body}</div>
+        <wt-form-actions
+          slot="footer"
+          .error=${[...(this.editorError ? [this.editorError] : []), ...(invalid ? [t("venue.fix_fields")] : [])].join(" ")}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -1043,8 +1124,8 @@ export class VenueOperationsScreen extends LitElement {
           ><wt-button
             data-test="save-editor"
             variant=${editor.kind === "delete" ? "danger" : "primary"}
-            ?disabled=${this.busy}
-            @click=${content.save}
+            ?disabled=${this.busy || invalid}
+            @click=${() => this.#submit(content)}
             >${t(editor.kind === "delete" ? "venue.confirm" : "venue.save")}</wt-button
           ></wt-form-actions
         >
@@ -1053,7 +1134,7 @@ export class VenueOperationsScreen extends LitElement {
   }
   override render() {
     return html`<h1>${t("venue.title")}</h1>
-      ${this.editor ? nothing : this.#summary()}
+      ${this.#pageAlert()}
       ${
         this.model
           ? html`<wt-tabs

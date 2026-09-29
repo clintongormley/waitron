@@ -1,10 +1,10 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
@@ -40,66 +40,78 @@ export class StripeAddReader extends LitElement {
 
   @state() private name = "";
   @state() private reference = "";
-  @state() private errors: string[] = [];
+  @state() private attempted = false;
+  /** A refusal that names no field, shown beside Add until the next press. */
+  @state() private refusal = "";
   @state() private busy = false;
+  #closed = false;
+
+  #close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.onClose();
+  }
 
   #onField(event: CustomEvent<{ value: string }>, field: "name" | "reference"): void {
     event.stopPropagation();
     this[field] = event.detail.value;
   }
 
-  #validate(): string[] {
-    const errors: string[] = [];
-    if (this.name.trim() === "") errors.push("payments.stripe.reader_name_required");
-    if (this.reference.trim() === "") errors.push("payments.stripe.reader_id_required");
-    return errors;
+  #fieldErrors(): { name: string; reference: string } {
+    if (!this.attempted) return { name: "", reference: "" };
+    return {
+      name: this.name.trim() === "" ? t("payments.stripe.reader_name_required") : "",
+      reference: this.reference.trim() === "" ? t("payments.stripe.reader_id_required") : "",
+    };
   }
 
   async #add(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.busy) return; // single-flight
-    const errorKeys = this.#validate();
-    if (errorKeys.length > 0) {
-      this.errors = errorKeys.map((k) => t(k as Parameters<typeof t>[0]));
+    this.attempted = true;
+    this.refusal = "";
+    const errors = this.#fieldErrors();
+    if (errors.name !== "" || errors.reference !== "") {
+      await this.updateComplete;
+      await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    this.errors = [];
     this.busy = true;
     try {
       await new StripePaymentsClient(this.request).addReader({
         name: this.name,
         reference: this.reference,
       });
+      // The reader exists whether or not the dialog is still open, so the host refreshes its list;
+      // a cancelled or removed dialog does not close again.
       this.onAdded();
-      this.onClose();
+      if (this.isConnected) this.#close();
     } catch (error) {
-      this.errors = [
+      this.refusal =
         codeOf(error) === "reader.not_found" || codeOf(error) === "server.internal"
           ? t("payments.stripe.add_failed")
-          : codeMessage(codeOf(error)),
-      ];
+          : codeMessage(codeOf(error));
     } finally {
       this.busy = false;
     }
   }
 
   override render(): TemplateResult {
+    const errors = this.#fieldErrors();
+    const blocked = errors.name !== "" || errors.reference !== "";
     return html`
       <wt-dialog
         heading=${t("payments.stripe.add_reader_heading")}
         .open=${true}
-        @wt-close=${() => this.onClose()}
+        @wt-close=${() => this.#close()}
       >
-        <wt-form-error-summary
-          heading=${t("payments.stripe.form_problem")}
-          .errors=${this.errors}
-        ></wt-form-error-summary>
         <wt-input
           class="field"
           name="name"
           data-test="reader-name"
           label=${t("payments.stripe.reader_name")}
           required
+          error=${errors.name}
           .value=${this.name}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "name")}
         ></wt-input>
@@ -115,20 +127,28 @@ export class StripeAddReader extends LitElement {
           data-test="reader-id"
           label=${t("payments.stripe.reader_id")}
           required
+          error=${errors.reference}
           .value=${this.reference}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "reference")}
         ></wt-input>
-        <wt-button slot="footer" data-test="cancel" @click=${() => this.onClose()}
-          >${t("payments.stripe.cancel")}</wt-button
-        >
-        <wt-button
+        <wt-form-actions
           slot="footer"
-          variant="primary"
-          data-test="add"
-          ?loading=${this.busy}
-          @click=${(e: Event) => void this.#add(e)}
-          >${t("payments.stripe.add")}</wt-button
+          .error=${[this.refusal, blocked ? t("payments.stripe.fix_fields") : ""]
+            .filter(Boolean)
+            .join(" ")}
         >
+          <wt-button slot="cancel" data-test="cancel" @click=${() => this.#close()}
+            >${t("payments.stripe.cancel")}</wt-button
+          >
+          <wt-button
+            variant="primary"
+            data-test="add"
+            ?loading=${this.busy}
+            ?disabled=${blocked}
+            @click=${(e: Event) => void this.#add(e)}
+            >${t("payments.stripe.add")}</wt-button
+          >
+        </wt-form-actions>
       </wt-dialog>
     `;
   }

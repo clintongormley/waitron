@@ -209,10 +209,17 @@ function alert(el: AdjustmentReasonsScreen): string {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim() ?? "";
 }
 
-function summary(el: AdjustmentReasonsScreen): string {
-  const summaries = [...el.shadowRoot!.querySelectorAll("wt-form-error-summary")];
-  return summaries.map((each) => each.shadowRoot!.textContent ?? "").join(" ");
+/** The open form's one message, shown beside its primary action. */
+function bottom(el: AdjustmentReasonsScreen): string {
+  const actions = modal(el)!.querySelector("wt-form-actions")!;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+
+function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disabled: boolean } {
+  return find(el, `[data-test="${test}"]`) as HTMLElement & { disabled: boolean };
+}
+
+const FIX_FIELDS = "Correct the highlighted fields to continue.";
 
 describe("the reasons list", () => {
   it("lists the active reasons in their order, with what each allows, its limits and roles", async () => {
@@ -509,7 +516,7 @@ describe("the editor", () => {
     });
   });
 
-  it("explains an invalid submission beside each field and in one summary, keeping the values", async () => {
+  it("explains an invalid submission beside each field and in one message beside Save, keeping the values", async () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "add-reason");
@@ -525,11 +532,9 @@ describe("the editor", () => {
       maxAmount: "Enter an amount above 0 with at most two decimals, such as 30.00.",
       approverRole: "The approving role must be the same as, or above, the role that applies it.",
     };
-    const text = summary(el);
-    expect(text).toContain("There is a problem with this form");
+    expect(bottom(el)).toBe(FIX_FIELDS);
     for (const [key, message] of Object.entries(expected)) {
       expect(besideField(el, key), key).toBe(message);
-      expect(text).toContain(message);
     }
     expect(field(el, "maxPercent").value).toBe("150");
     expect(modal(el)).not.toBeNull();
@@ -607,7 +612,7 @@ describe("the editor", () => {
     expect(api.createReason).toHaveBeenCalledTimes(1);
   });
 
-  it("puts the server's refusal of a field beside that field and in the summary", async () => {
+  it("puts the server's refusal of a field beside that field, and says so beside Save", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi.fn().mockRejectedValue({
@@ -620,7 +625,7 @@ describe("the editor", () => {
     await press(el, "save-editor");
     const message = "Enter a percentage above 0 and up to 100, with at most two decimals.";
     expect(besideField(el, "maxPercent")).toBe(message);
-    expect(summary(el)).toContain(message);
+    expect(bottom(el)).toBe(FIX_FIELDS);
     expect(modal(el)).not.toBeNull();
   });
 
@@ -644,7 +649,7 @@ describe("the editor", () => {
     await press(el, "edit-c");
     await press(el, "save-editor");
     expect(besideField(el, fieldName)).toBe(message);
-    expect(summary(el)).toContain(message);
+    expect(bottom(el)).toBe(FIX_FIELDS);
   });
 
   it("shows a name already in use beside the name", async () => {
@@ -661,11 +666,11 @@ describe("the editor", () => {
     await toggleAction(el, "comp");
     await press(el, "save-editor");
     expect(besideField(el, "name")).toBe("Another active reason already has this name");
-    expect(summary(el)).toContain("Another active reason already has this name");
+    expect(bottom(el)).toBe(FIX_FIELDS);
     expect(modal(el)).not.toBeNull();
   });
 
-  it("explains any other refusal in the summary and keeps the editor open", async () => {
+  it("explains any other refusal beside Save and keeps the editor open", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi
@@ -675,7 +680,7 @@ describe("the editor", () => {
     );
     await press(el, "edit-c");
     await press(el, "save-editor");
-    expect(summary(el)).toContain("That reason could not be found. It may have been removed");
+    expect(bottom(el)).toBe("That reason could not be found. It may have been removed");
     expect(modal(el)).not.toBeNull();
   });
 
@@ -778,6 +783,153 @@ describe("the editor", () => {
   });
 });
 
+describe("the editor's messages", () => {
+  it("says nothing and keeps Save working before the first press, even with a field wrong", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "add-reason");
+    await type(el, "maxPercent", "150");
+    for (const key of ["name", "actions", "maxPercent"]) expect(besideField(el, key), key).toBe("");
+    expect(bottom(el)).toBe("");
+    expect(button(el, "save-editor").disabled).toBe(false);
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+  });
+
+  it("marks the fields on a failed press, says so beside Save, focuses the first and holds Save", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "add-reason");
+    await press(el, "save-editor");
+    expect(besideField(el, "name")).toBe("Enter a name.");
+    expect(besideField(el, "actions")).toBe("Choose at least one action.");
+    expect(actionBox(el, "cancel").getAttribute("aria-invalid")).toBe("true");
+    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "name"));
+    expect(button(el, "save-editor").disabled).toBe(true);
+    expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+  });
+
+  it("focuses the first action when the actions are the first thing wrong", async () => {
+    const el = await mount(fakeApi());
+    await press(el, "edit-c");
+    await toggleAction(el, "comp");
+    await toggleAction(el, "discount_percent");
+    await press(el, "save-editor");
+    expect(el.shadowRoot!.activeElement).toBe(actionBox(el, "cancel"));
+  });
+
+  it("re-checks on every change: fixing every field brings Save back, breaking one holds it again", async () => {
+    const api = fakeApi();
+    const el = await mount(api);
+    await press(el, "add-reason");
+    await press(el, "save-editor");
+    await type(el, "name", "Birthday");
+    expect(besideField(el, "name")).toBe("");
+    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(button(el, "save-editor").disabled).toBe(true);
+    await toggleAction(el, "comp");
+    expect(besideField(el, "actions")).toBe("");
+    expect(actionBox(el, "cancel").getAttribute("aria-invalid")).toBe("false");
+    expect(bottom(el)).toBe("");
+    expect(button(el, "save-editor").disabled).toBe(false);
+    await type(el, "maxPercent", "150");
+    expect(besideField(el, "maxPercent")).toBe(
+      "Enter a percentage above 0 and up to 100, with at most two decimals.",
+    );
+    expect(bottom(el)).toBe(FIX_FIELDS);
+    expect(button(el, "save-editor").disabled).toBe(true);
+    await type(el, "maxPercent", "15");
+    expect(button(el, "save-editor").disabled).toBe(false);
+    await press(el, "save-editor");
+    expect(api.createReason).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds Save after the server refuses a field, until that field changes", async () => {
+    const el = await mount(
+      fakeApi({
+        updateReason: vi.fn().mockRejectedValue({
+          code: "management.request_invalid",
+          params: { field: "maxPercentBp" },
+        }),
+      }),
+    );
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(button(el, "save-editor").disabled).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "maxPercent"));
+    await type(el, "name", "Complaints");
+    expect(button(el, "save-editor").disabled).toBe(true);
+    await type(el, "maxPercent", "20");
+    expect(besideField(el, "maxPercent")).toBe("");
+    expect(bottom(el)).toBe("");
+    expect(button(el, "save-editor").disabled).toBe(false);
+  });
+
+  it("marks every name in the languages when the server refuses the names", async () => {
+    const el = await mount(
+      fakeApi({
+        updateReason: vi
+          .fn()
+          .mockRejectedValue({ code: "adjustment_reason.invalid", params: { field: "names" } }),
+      }),
+    );
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(el.shadowRoot!.activeElement).toBe(field(el, "names-en"));
+    await type(el, "names-es", "Queja grave");
+    expect(besideField(el, "names")).toBe("");
+    expect(button(el, "save-editor").disabled).toBe(false);
+  });
+
+  it("says a refusal that names no field beside Save and keeps Save working, until the next press", async () => {
+    const api = fakeApi({
+      updateReason: vi.fn().mockRejectedValueOnce({ code: "server.internal" }),
+    });
+    const el = await mount(api);
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(bottom(el)).toBe("Something went wrong, try again");
+    expect(button(el, "save-editor").disabled).toBe(false);
+    for (const key of ["name", "actions", "maxPercent", "maxAmount"]) {
+      expect(besideField(el, key), key).toBe("");
+    }
+    await type(el, "name", "");
+    expect(bottom(el)).toBe(`Something went wrong, try again ${FIX_FIELDS}`);
+    await press(el, "save-editor");
+    expect(bottom(el)).toBe(FIX_FIELDS);
+    await type(el, "name", "Complaint");
+    await press(el, "save-editor");
+    expect(api.updateReason).toHaveBeenCalledTimes(2);
+    expect(modal(el)).toBeNull();
+  });
+
+  it("starts again when the editor is reopened", async () => {
+    const el = await mount(
+      fakeApi({ updateReason: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+    );
+    await press(el, "add-reason");
+    await press(el, "save-editor");
+    await press(el, "cancel-editor");
+    await press(el, "add-reason");
+    expect(besideField(el, "name")).toBe("");
+    expect(bottom(el)).toBe("");
+    expect(button(el, "save-editor").disabled).toBe(false);
+    await press(el, "cancel-editor");
+    await press(el, "edit-c");
+    await press(el, "save-editor");
+    expect(bottom(el)).toBe("Something went wrong, try again");
+    await press(el, "cancel-editor");
+    await press(el, "edit-c");
+    expect(bottom(el)).toBe("");
+  });
+
+  it("says it in Spanish when the dashboard does", async () => {
+    setLocale("es");
+    const el = await mount(fakeApi());
+    await press(el, "add-reason");
+    await press(el, "save-editor");
+    expect(bottom(el)).toBe("Corrige los campos marcados para continuar.");
+  });
+});
+
 describe("deactivating", () => {
   const menuFocused = (el: AdjustmentReasonsScreen) =>
     table(el).shadowRoot!.activeElement?.getAttribute("label");
@@ -845,6 +997,7 @@ describe("deactivating", () => {
     await press(el, "deactivate-c");
     await press(el, "confirm-deactivate");
     expect(modal(el)).not.toBeNull();
-    expect(summary(el)).toContain("Something went wrong, try again");
+    expect(bottom(el)).toBe("Something went wrong, try again");
+    expect(button(el, "confirm-deactivate").disabled).toBe(false);
   });
 });

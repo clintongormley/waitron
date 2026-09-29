@@ -1,10 +1,9 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
@@ -43,6 +42,23 @@ export class SumUpConnectForm extends LitElement {
       .confirm {
         color: var(--wt-color-success, var(--wt-color-text));
       }
+      .merchant {
+        display: block;
+      }
+      .required,
+      .field-error {
+        color: var(--wt-color-danger);
+      }
+      .required {
+        margin-inline-start: var(--wt-space-1);
+      }
+      .field-error {
+        margin: var(--wt-space-1) 0 0;
+        font-size: var(--wt-font-size-sm);
+      }
+      select[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -57,7 +73,9 @@ export class SumUpConnectForm extends LitElement {
   @state() private affiliateKey = "";
   @state() private merchants: AmbiguousMerchant[] | null = null;
   @state() private merchantCode = "";
-  @state() private errors: string[] = [];
+  @state() private attempted = false;
+  /** A refusal that names no field, shown beside Connect until the next press. */
+  @state() private refusal = "";
   @state() private busy = false;
   @state() private connectedName: string | null = null;
 
@@ -78,24 +96,34 @@ export class SumUpConnectForm extends LitElement {
     this.merchantCode = (event.target as HTMLSelectElement).value;
   }
 
-  /** Validate the required fields; returns the error message keys to show, or `[]` when valid. */
-  #validate(): string[] {
-    const errors: string[] = [];
-    if (this.apiKey.trim() === "") errors.push("payments.sumup.api_key_required");
-    if (this.merchants !== null && this.merchantCode === "")
-      errors.push("payments.sumup.merchant_required");
-    return errors;
+  #fieldErrors(): { apiKey: string; merchant: string } {
+    const apiKeyMissing = this.attempted && this.apiKey.trim() === "";
+    const merchantMissing = this.attempted && this.merchants !== null && this.merchantCode === "";
+    return {
+      apiKey: apiKeyMissing ? t("payments.sumup.api_key_required") : "",
+      merchant: merchantMissing ? t("payments.sumup.merchant_required") : "",
+    };
+  }
+
+  #blocked(): boolean {
+    const errors = this.#fieldErrors();
+    return errors.apiKey !== "" || errors.merchant !== "";
+  }
+
+  async #focusFirstInvalid(): Promise<void> {
+    await this.updateComplete;
+    await focusFirstInvalid(this.shadowRoot!);
   }
 
   async #connect(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.busy) return; // single-flight
-    const errorKeys = this.#validate();
-    if (errorKeys.length > 0) {
-      this.errors = errorKeys.map((k) => t(k as Parameters<typeof t>[0]));
+    this.attempted = true;
+    this.refusal = "";
+    if (this.#blocked()) {
+      await this.#focusFirstInvalid();
       return;
     }
-    this.errors = [];
     this.busy = true;
     try {
       const result = await this.#client().connect({
@@ -108,11 +136,13 @@ export class SumUpConnectForm extends LitElement {
       this.onConnected();
     } catch (error) {
       if (codeOf(error) === MERCHANT_AMBIGUOUS) {
-        // The key spans several merchants: switch to the picker, no error banner.
+        // The key spans several merchants: switch to the picker, not yet marked as missing.
         this.merchants = ambiguousMerchants(error);
-        this.errors = [];
+        this.attempted = false;
+      } else if (codeOf(error) === "payment.provider_credential_rejected") {
+        this.refusal = t("payments.sumup.connect_failed");
       } else {
-        this.errors = [codeMessageOrConnect(error)];
+        this.refusal = codeMessage(codeOf(error));
       }
     } finally {
       this.busy = false;
@@ -125,12 +155,9 @@ export class SumUpConnectForm extends LitElement {
         ${t("payments.sumup.connected_as").replace("{name}", this.connectedName)}
       </p>`;
     }
+    const errors = this.#fieldErrors();
+    const blocked = this.#blocked();
     return html`
-      <wt-form-error-summary
-        heading=${t("payments.sumup.form_problem")}
-        .errors=${this.errors}
-      ></wt-form-error-summary>
-
       <wt-input
         class="field"
         type="password"
@@ -138,6 +165,7 @@ export class SumUpConnectForm extends LitElement {
         data-test="api-key"
         label=${t("payments.sumup.api_key")}
         required
+        error=${errors.apiKey}
         .value=${this.apiKey}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "apiKey")}
       ></wt-input>
@@ -172,40 +200,54 @@ export class SumUpConnectForm extends LitElement {
 
       ${
         this.merchants !== null
-          ? html`<label class="field"
-              >${t("payments.sumup.merchant_prompt")}
-              <select data-test="merchant" @change=${(e: Event) => this.#onMerchant(e)}>
-                <option value="" .selected=${this.merchantCode === ""}></option>
-                ${this.merchants.map(
-                  (m) =>
-                    html`<option value=${m.code} .selected=${m.code === this.merchantCode}>
-                      ${m.name}
-                    </option>`,
-                )}
-              </select>
-            </label>`
+          ? html`<div class="field">
+              <label class="merchant"
+                >${t("payments.sumup.merchant_prompt")}<span class="required" aria-hidden="true"
+                  >*</span
+                >
+                <select
+                  data-test="merchant"
+                  name="merchantCode"
+                  required
+                  aria-invalid=${errors.merchant !== "" ? "true" : "false"}
+                  aria-describedby=${errors.merchant !== "" ? "merchant-error" : nothing}
+                  @change=${(e: Event) => this.#onMerchant(e)}
+                >
+                  <option value="" .selected=${this.merchantCode === ""}></option>
+                  ${this.merchants.map(
+                    (m) =>
+                      html`<option value=${m.code} .selected=${m.code === this.merchantCode}>
+                        ${m.name}
+                      </option>`,
+                  )}
+                </select></label
+              >${
+                errors.merchant !== ""
+                  ? html`<p id="merchant-error" class="field-error" data-test="merchant-error">
+                      ${errors.merchant}
+                    </p>`
+                  : nothing
+              }
+            </div>`
           : nothing
       }
 
-      <wt-form-actions>
+      <wt-form-actions
+        .error=${[this.refusal, blocked ? t("payments.sumup.fix_fields") : ""]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <wt-button
           variant="primary"
           data-test="connect"
           ?loading=${this.busy}
+          ?disabled=${blocked}
           @click=${(e: Event) => void this.#connect(e)}
           >${t("payments.sumup.connect")}</wt-button
         >
       </wt-form-actions>
     `;
   }
-}
-
-/** A rejected connect that is not the merchant-ambiguous case: prefer the SumUp-specific "key not
- * accepted" copy for the rejected-credential code, else the shared code copy. */
-function codeMessageOrConnect(error: unknown): string {
-  return codeOf(error) === "payment.provider_credential_rejected"
-    ? t("payments.sumup.connect_failed")
-    : codeMessage(codeOf(error));
 }
 
 declare global {

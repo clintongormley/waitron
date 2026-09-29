@@ -1,10 +1,9 @@
 import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import { StripePaymentsClient } from "./client.js";
@@ -36,7 +35,9 @@ export class StripeConnectForm extends LitElement {
   @state() private webhookSecret = "";
   @state() private successUrl = "";
   @state() private cancelUrl = "";
-  @state() private errors: string[] = [];
+  @state() private attempted = false;
+  /** A refusal that names no field, shown beside Connect until the next press. */
+  @state() private refusal = "";
   @state() private busy = false;
   @state() private connectedName: string | null = null;
 
@@ -45,14 +46,25 @@ export class StripeConnectForm extends LitElement {
     this[field] = event.detail.value;
   }
 
+  #secretKeyError(): string {
+    const missing = this.attempted && this.secretKey.trim() === "";
+    return missing ? t("payments.stripe.secret_key_required") : "";
+  }
+
+  async #focusFirstInvalid(): Promise<void> {
+    await this.updateComplete;
+    await focusFirstInvalid(this.shadowRoot!);
+  }
+
   async #connect(event: Event): Promise<void> {
     event.stopPropagation();
     if (this.busy) return; // single-flight
-    if (this.secretKey.trim() === "") {
-      this.errors = [t("payments.stripe.secret_key_required")];
+    this.attempted = true;
+    this.refusal = "";
+    if (this.#secretKeyError() !== "") {
+      await this.#focusFirstInvalid();
       return;
     }
-    this.errors = [];
     this.busy = true;
     try {
       const result = await new StripePaymentsClient(this.request).connect({
@@ -64,11 +76,10 @@ export class StripeConnectForm extends LitElement {
       this.connectedName = result.merchantName;
       this.onConnected();
     } catch (error) {
-      this.errors = [
+      this.refusal =
         codeOf(error) === "payment.provider_credential_rejected"
           ? t("payments.stripe.connect_failed")
-          : codeMessage(codeOf(error)),
-      ];
+          : codeMessage(codeOf(error));
     } finally {
       this.busy = false;
     }
@@ -80,11 +91,9 @@ export class StripeConnectForm extends LitElement {
         ${t("payments.stripe.connected_as").replace("{name}", this.connectedName)}
       </p>`;
     }
+    const secretKeyError = this.#secretKeyError();
+    const blocked = secretKeyError !== "";
     return html`
-      <wt-form-error-summary
-        heading=${t("payments.stripe.form_problem")}
-        .errors=${this.errors}
-      ></wt-form-error-summary>
       <wt-input
         class="field"
         type="password"
@@ -92,6 +101,7 @@ export class StripeConnectForm extends LitElement {
         data-test="secret-key"
         label=${t("payments.stripe.secret_key")}
         required
+        error=${secretKeyError}
         .value=${this.secretKey}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "secretKey")}
       ></wt-input>
@@ -120,11 +130,16 @@ export class StripeConnectForm extends LitElement {
         .value=${this.cancelUrl}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(e, "cancelUrl")}
       ></wt-input>
-      <wt-form-actions>
+      <wt-form-actions
+        .error=${[this.refusal, blocked ? t("payments.stripe.fix_fields") : ""]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <wt-button
           variant="primary"
           data-test="connect"
           ?loading=${this.busy}
+          ?disabled=${blocked}
           @click=${(e: Event) => void this.#connect(e)}
           >${t("payments.stripe.connect")}</wt-button
         >

@@ -230,3 +230,44 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+describe.each(["light", "dark"] as const)("department editor accessibility (%s)", (theme) => {
+  test("after a failed press: the marked fields and the message beside Save", async () => {
+    setLocale("en");
+    await mountThemed("<div></div>", theme);
+    const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;
+    el.api = {
+      load: vi.fn().mockResolvedValue({
+        readiness: [],
+        departments: [],
+        zones: [],
+        routes: [],
+        hours: [],
+        zoneMenus: [],
+        menus: [],
+        categories: [],
+        stations: [],
+        floorZones: [],
+        products: [],
+        settings: { editSentLines: true },
+      }),
+      createDepartment: vi.fn(),
+    } as unknown as VenueServiceApi;
+    host.append(el);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+    tabs.shadowRoot!.querySelector<HTMLButtonElement>('[data-key="departments"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-department"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="save-editor"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-field-error="department-name"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+});

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { DashboardRequest } from "@waitron/dashboard-kit";
+import { registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
 import { SumUpAddReader, PAIRING_LIFETIME_MS, PAIRING_POLL_MS } from "./sumup-add-reader.js";
@@ -71,6 +71,31 @@ async function setInput(el: SumUpAddReader, testId: string, value: string): Prom
   q(el, `[data-test=${testId}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value } }),
   );
+  await el.updateComplete;
+}
+
+async function bottomOf(el: SumUpAddReader): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function fieldError(el: SumUpAddReader, testId: string): string {
+  return (q(el, `[data-test=${testId}]`) as unknown as { error: string }).error;
+}
+
+function pairDisabled(el: SumUpAddReader): boolean {
+  return q(el, "[data-test=pair]")!.hasAttribute("disabled");
+}
+
+function focused(el: SumUpAddReader, testId: string): boolean {
+  const field = q(el, `[data-test=${testId}]`)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
+}
+
+async function pressPair(el: SumUpAddReader): Promise<void> {
+  q(el, "[data-test=pair]")!.click();
+  await el.updateComplete;
   await el.updateComplete;
 }
 
@@ -283,20 +308,290 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("shows the failed copy and does NOT unpair when the pair POST itself is rejected", async () => {
+  it("keeps the form and says a refused pair POST beside Pair, and does NOT unpair", async () => {
     vi.useFakeTimers();
     try {
       const request = stubRequest({
         add: () => {
-          throw { code: "payment.provider_credential_rejected" };
+          throw { code: "payment.pairing_refused" };
         },
       });
       const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
 
       await fillAndPair(el);
-      expect(text(el, "[data-test=pairing-failed]")).toBe(t("payments.sumup.pairing_failed"));
-      expect(q(el, "[data-test=try-again]")).not.toBeNull();
+      expect(await bottomOf(el)).toBe(t("payments.sumup.pairing_failed"));
+      expect(q(el, "[data-test=pairing-failed]")).toBeNull();
+      expect(q(el, "[data-test=try-again]")).toBeNull();
+      expect((q(el, "[data-test=reader-name]") as unknown as { value: string }).value).toBe(
+        "Front counter",
+      );
+      expect((q(el, "[data-test=pairing-code]") as unknown as { value: string }).value).toBe(
+        "ABCD1234",
+      );
+      expect(fieldError(el, "pairing-code")).toBe("");
+      expect(pairDisabled(el)).toBe(false);
       expect(request.unpairCalls()).toBe(0); // no row was created, nothing to unpair
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says the shared code copy beside Pair for any other refusal of the pair POST", async () => {
+    vi.useFakeTimers();
+    try {
+      registerCodeMessages({
+        "reader.provider_disconnected": {
+          en: "SumUp add-reader copy for this test",
+          es: "SumUp add-reader copy for this test",
+        },
+      });
+      const request = stubRequest({
+        add: () => {
+          throw { code: "reader.provider_disconnected" };
+        },
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      expect(await bottomOf(el)).toBe("SumUp add-reader copy for this test");
+      expect(pairDisabled(el)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops the refusal when Pair is pressed again, and shows it beside the field message meanwhile", async () => {
+    vi.useFakeTimers();
+    try {
+      let adds = 0;
+      const request = stubRequest({
+        add: () => {
+          if (adds++ === 0) throw { code: "payment.pairing_refused" };
+          return { id: "r1", status: "processing" };
+        },
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      await setInput(el, "pairing-code", "");
+      expect(await bottomOf(el)).toBe(
+        `${t("payments.sumup.pairing_failed")} ${t("payments.sumup.fix_fields")}`,
+      );
+      expect(pairDisabled(el)).toBe(true);
+
+      await setInput(el, "pairing-code", "EFGH5678");
+      expect(await bottomOf(el)).toBe(t("payments.sumup.pairing_failed"));
+      q(el, "[data-test=pair]")!.click();
+      await vi.advanceTimersByTimeAsync(0);
+      await el.updateComplete;
+
+      expect(request.addCalls()).toBe(2);
+      expect(await bottomOf(el)).toBe("");
+      expect(q(el, "[data-test=pairing-progress]")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("calls onClose once when Cancel is pressed while the pair POST is pending", async () => {
+    vi.useFakeTimers();
+    try {
+      const add = deferred<AddReaderResult>();
+      const request = stubRequest({ add: () => add.promise });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+
+      await fillAndPair(el);
+      q(el, "[data-test=cancel]")!.click();
+      expect(onClose).toHaveBeenCalledTimes(1);
+
+      add.resolve({ id: "r1", status: "paired" });
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(request.statusCalls()).toBe(0);
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(request.unpairCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("unpairs the reader a pair POST created when it returns processing after Cancel", async () => {
+    vi.useFakeTimers();
+    try {
+      const add = deferred<AddReaderResult>();
+      const request = stubRequest({ add: () => add.promise });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+
+      await fillAndPair(el);
+      q(el, "[data-test=cancel]")!.click();
+      add.resolve({ id: "r1", status: "processing" });
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(request).toHaveBeenCalledWith(UNPAIR_PATH, "POST");
+      expect(request.unpairCalls()).toBe(1);
+      expect(request.statusCalls()).toBe(0);
+      expect(onAdded).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports, and does not unpair, a reader whose pair POST returns paired after the dialog was detached", async () => {
+    vi.useFakeTimers();
+    try {
+      const add = deferred<AddReaderResult>();
+      const request = stubRequest({ add: () => add.promise });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+
+      await fillAndPair(el);
+      el.remove();
+      add.resolve({ id: "r1", status: "paired" });
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(request.unpairCalls()).toBe(0);
+      expect(request.statusCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("unpairs the processing reader once when Cancel is pressed while polling and the host then removes the dialog", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => ({ online: false, pairingStatus: "processing" }),
+      });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+      onClose.mockImplementation(() => el.remove());
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      expect(request.statusCalls()).toBe(1);
+
+      q(el, "[data-test=cancel]")!.click();
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(el.isConnected).toBe(false);
+      expect(request).toHaveBeenCalledWith(UNPAIR_PATH, "POST");
+      expect(request.unpairCalls()).toBe(1);
+      expect(request.statusCalls()).toBe(1);
+      expect(onAdded).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("unpairs the processing reader when the dialog is detached while polling", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => ({ online: false, pairingStatus: "processing" }),
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      el.remove();
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(request.unpairCalls()).toBe(1);
+      expect(request.statusCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not unpair a paired reader when the host removes the dialog after it finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => ({ online: false, pairingStatus: "paired" }),
+      });
+      const onAdded = vi.fn();
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", {
+        request,
+        onAdded,
+        onClose,
+      });
+      onClose.mockImplementation(() => el.remove());
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+
+      expect(onAdded).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(el.isConnected).toBe(false);
+      expect(request.unpairCalls()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not unpair again when an expired dialog is removed", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => ({ online: false, pairingStatus: "processing" }),
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+      expect(request.unpairCalls()).toBe(1);
+
+      el.remove();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(request.unpairCalls()).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops polling and calls onClose once when Cancel is pressed while pairing", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => ({ online: false, pairingStatus: "paired" }),
+      });
+      const onClose = vi.fn();
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request, onClose });
+
+      await fillAndPair(el);
+      q(el, "[data-test=cancel]")!.click();
+      await vi.advanceTimersByTimeAsync(PAIRING_LIFETIME_MS);
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(request.statusCalls()).toBe(0);
+      expect(request.unpairCalls()).toBe(1); // the processing row, unpaired at Cancel
     } finally {
       vi.useRealTimers();
     }
@@ -335,11 +630,8 @@ describe("sumup-add-reader", () => {
       await el.updateComplete;
 
       expect(request).not.toHaveBeenCalled();
-      const summary = q(el, "wt-form-error-summary");
-      expect((summary as unknown as { errors: string[] }).errors).toEqual([
-        t("payments.sumup.reader_name_required"),
-        t("payments.sumup.pairing_code_required"),
-      ]);
+      expect(fieldError(el, "reader-name")).toBe(t("payments.sumup.reader_name_required"));
+      expect(fieldError(el, "pairing-code")).toBe(t("payments.sumup.pairing_code_required"));
     } finally {
       vi.useRealTimers();
     }
@@ -380,6 +672,7 @@ describe("sumup-add-reader", () => {
 
       expect(request.statusCalls()).toBe(0);
       expect(onAdded).not.toHaveBeenCalled();
+      expect(request.unpairCalls()).toBe(1);
     } finally {
       vi.useRealTimers();
     }
@@ -434,6 +727,7 @@ describe("sumup-add-reader", () => {
 
       expect(onAdded).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
+      expect(request.unpairCalls()).toBe(1); // sent at detach, before the read answered
     } finally {
       vi.useRealTimers();
     }
@@ -454,6 +748,17 @@ describe("sumup-add-reader", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onAdded).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("calls onClose once however many times the dialog is closed", async () => {
+    const request = stubRequest({});
+    const onClose = vi.fn();
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request, onClose });
+
+    q(el, "[data-test=cancel]")!.click();
+    q(el, "[data-test=cancel]")!.click();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it("calls onClose when the dialog is dismissed with Escape", async () => {
@@ -482,5 +787,94 @@ describe("sumup-add-reader", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(onAdded).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about errors before the first press, and Pair works", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    await setInput(el, "reader-name", "Front");
+    await setInput(el, "reader-name", "");
+
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(fieldError(el, "pairing-code")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(pairDisabled(el)).toBe(false);
+  });
+
+  it("on an invalid press marks the fields, says so beside Pair, focuses the first and disables Pair", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    await setInput(el, "pairing-code", "ABCD1234");
+    await pressPair(el);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(fieldError(el, "reader-name")).toBe(t("payments.sumup.reader_name_required"));
+    expect(fieldError(el, "pairing-code")).toBe("");
+    expect(await bottomOf(el)).toBe(t("payments.sumup.fix_fields"));
+    expect(pairDisabled(el)).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "reader-name")).toBe(true));
+    expect((q(el, "[data-test=pairing-code]") as unknown as { value: string }).value).toBe(
+      "ABCD1234",
+    );
+  });
+
+  it("re-checks every change after a failed press, and Pair works again once both are filled", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    await pressPair(el);
+    await setInput(el, "reader-name", "Front");
+    expect(fieldError(el, "reader-name")).toBe("");
+    expect(fieldError(el, "pairing-code")).toBe(t("payments.sumup.pairing_code_required"));
+    expect(pairDisabled(el)).toBe(true);
+
+    await setInput(el, "pairing-code", "ABCD1234");
+    expect(fieldError(el, "pairing-code")).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(pairDisabled(el)).toBe(false);
+
+    await setInput(el, "reader-name", " ");
+    expect(fieldError(el, "reader-name")).toBe(t("payments.sumup.reader_name_required"));
+    expect(pairDisabled(el)).toBe(true);
+  });
+
+  it("starts the form again after Try again: the cleared code is not marked and Pair works", async () => {
+    vi.useFakeTimers();
+    try {
+      const request = stubRequest({
+        status: () => {
+          throw { code: "server.internal" };
+        },
+      });
+      const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+      await fillAndPair(el);
+      await vi.advanceTimersByTimeAsync(PAIRING_POLL_MS);
+      await el.updateComplete;
+      q(el, "[data-test=try-again]")!.click();
+      await el.updateComplete;
+
+      expect((q(el, "[data-test=reader-name]") as unknown as { value: string }).value).toBe(
+        "Front counter",
+      );
+      expect(fieldError(el, "pairing-code")).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(pairDisabled(el)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ends the form in one action row with Cancel on the left and Pair as the primary action", async () => {
+    const request = stubRequest({});
+    const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
+
+    const actions = q(el, "wt-form-actions")!;
+    expect(actions.getAttribute("slot")).toBe("footer");
+    expect(actions.querySelector("[data-test=cancel]")!.getAttribute("slot")).toBe("cancel");
+    expect(actions.querySelector("[data-test=pair]")!.getAttribute("variant")).toBe("primary");
+    expect(q(el, "wt-form-error-summary")).toBeNull();
   });
 });

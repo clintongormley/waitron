@@ -3561,36 +3561,73 @@ ongoing overhaul listed at the top of Track A.
   review, fiscal test, connection and provisioning — keep their refusal paragraph, as the cloud
   services screen does, and in Demo the venue screen's "Demo invoice settings have not loaded yet."
   alert (`data-test=defaults-error`, with its retry button) stays above the form, as a load failure
-  rather than a refusal. Left open, not done: (1) the dashboard module screens
-  (adjustments reasons, Stripe and SumUp connect and add-reader, venue operations) still show
-  `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's Demo gaps, listed
-  under *Demo gaps on the setup wizard's venue screen* earlier in this file; (3) the till's forms are
-  C48; (4) `wt-form-error-summary` is deleted once
-  nothing uses it — besides the module screens, the `packages/ui` workbench demo
-  (`packages/ui/demo/main.ts`) and the consumer test page `packages/ui-core/test/consumer/main.ts`,
-  which `packages/ui-core/test/package-consumer.test.mjs` loads, still use it; (5) the profile
-  screen, opened with required details missing, marks those fields at once, before any press (two
-  existing tests pin it), unlike every other form; (6) the form plumbing is hand-written per form:
+  rather than a refusal. Since C47 part 2 the dashboard module screens follow the rule too: the
+  adjustment reasons editor, the Stripe and SumUp connect forms and add-reader dialogs, and the venue
+  operations editors. A refused card-provider key (`payment.provider_credential_rejected`) is said
+  beside Connect and leaves it working, because the code carries only the provider's id: each
+  package's `card-provider.ts` `connect()` raises it for an empty key, for any failure of its one
+  lookup call to the provider and, in SumUp's, when that lookup finds no merchant. A refused SumUp
+  pairing request is said beside Pair, with the form kept. On the venue operations screen a failed
+  load, and with no editor open a refused list action or setting that saves at once, is a plain
+  alert where the summary was; an open editor keeps its own refusal beside Save, apart from a failed
+  list refresh, and puts a server refusal that names a field under that field. Left open, not done:
+  (1) the setup wizard's Demo gaps, listed under *Demo gaps on the setup wizard's venue screen*
+  earlier in this file; (2) the till's forms are C48; (3) `wt-form-error-summary` is deleted once
+  nothing uses it — besides its own files and exports in `packages/ui-core` and `packages/ui`, the
+  till's forms (`apps/till/src/screens/till-enrol-screen.ts`,
+  `apps/till/src/screens/till-table-order-screen.ts`, `apps/till/src/widgets/seat-dialog.ts`), the
+  `packages/ui` workbench demo (`packages/ui/demo/main.ts`) and the consumer test page
+  `packages/ui-core/test/consumer/main.ts`, which `packages/ui-core/test/package-consumer.test.mjs`
+  loads, still use it; of the other test files that name it, the till's three and
+  `packages/ui/src/core-compatibility.test.ts` read it, and the rest only check that it is absent;
+  (4) the profile screen, opened with required details missing, marks those fields at once, before
+  any press (two existing tests pin it), unlike every other form; (5) the form plumbing is
+  hand-written per form:
   assembling the bottom message (a refusal's sentences, then `form.fix_fields`, joined), waiting for
   the render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-  which refusals the person has since changed — an `attempted` flag beside either a `dismissed` set,
-  a `refused` map or, in the image library, a single `refusal` holding one field and its error
-  code: three styles, the last used only there. Each of these pieces appears in many forms
+  which refusals the person has since changed — an `attempted` flag beside one of five shapes: a
+  `dismissed` set or a `refused` map in `apps/dashboard`; in the image library, a single `refusal`
+  holding one field and its error code; in the four Stripe and SumUp connect and add-reader forms, a
+  plain `refusal` string; and in the adjustment reasons and venue operations screens, a
+  `refusedFields` map beside an `editorError` string. Each of these pieces appears in many forms
   (`grep -rl form.fix_fields apps/dashboard/src` lists the dashboard's; the image library, `packages/media/src/dashboard/image-library.ts`, uses its
-  own key `image.fix_fields` and is not in that list), and `placeErrors` is written twice, in
+  own key `image.fix_fields` and is not in that list; the four module packages each use their own
+  sentence — `adjustments.fix_fields`, `payments.stripe.fix_fields`, `payments.sumup.fix_fields`
+  and `venue.fix_fields`), and `placeErrors` is written twice, in
   `menus-screen.ts` and `sections-screen.ts`; a follow-up could move the first two into one helper
   in `apps/dashboard/src/widgets/form-fields.ts` and the state into a controller in
   `apps/dashboard/src/state/`, but that covers the dashboard only: `packages/media` cannot import
   from `apps/dashboard` (the dashboard depends on `@waitron/dashboard-modules`, which depends on
   `@waitron/media`, so it would be a dependency loop), so a helper meant to cover the module screens
   and the image library too would have to live in a package they can all reach, such as
-  `@waitron/ui`; (7) the image picker's error message is not read to a screen reader:
+  `@waitron/ui`, which all four module packages already depend on; (6) the image picker's error message is not read to a screen reader:
   `apps/dashboard/src/widgets/category-form.ts` and `apps/dashboard/src/screens/sections-screen.ts`
   put `aria-describedby="category-image-error"` / `"section-image-error"` on the
   `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
   (`docs/developers/design-system.md` → Forms); now that the Choose image button inside it carries
   `aria-invalid` and takes focus, a screen reader hears "invalid" with no reason. The
   `aria-describedby` on the host predates C47 part 1 (both files carry it at 4fcac1646).
+  Found during part 2 and not fixed: (a) a bad Stripe reader id reaches the add-reader dialog as
+  `server.internal`, so it cannot be told from a server fault — the Stripe seat's `readers.add`
+  (`packages/payments-stripe/src/card-provider.ts`) lets the Stripe library's own error through,
+  and the error boundary (`packages/server-kit/src/error-boundary.ts`) answers anything that is not
+  an `AppError` with `server.internal`; (b) the Stripe add-reader dialog
+  (`packages/payments-stripe/src/dashboard/stripe-add-reader.ts`) shows "Reader ID" twice, a
+  separate label carrying the help icon and then the input's own label, where `wt-input`'s `help`
+  slot would do; (c) a refused save of a venue operations setting that saves at once shows twice,
+  beside the control and in the screen's alert (`#pageAlert`,
+  `packages/venue-service/src/dashboard/venue-operations-screen.ts`), as it did before part 2, and
+  existing tests pin both; (d) `wt-switch` cannot be marked invalid, so a server refusal of an
+  adjustment reason's note-required switch would show its message and hold Save but move focus
+  nowhere — though the server refuses `noteRequired` only when it is not a true/false value
+  (`requireFlag`, `packages/adjustments/src/routes.ts`) and the screen always sends one from its
+  switch, so the refusal is not expected from this screen; (e) in a screenshot of a `wt-modal`
+  editor after a refusal that names no field, a blue line runs along the top of the footer, which
+  looks like the modal's scrolling body showing a focus ring — not traced, and not checked against
+  `main`; (f) `closes on Escape without saving` in
+  `packages/adjustments/src/dashboard/reasons-screen.test.ts` failed twice in about five runs while
+  other browser suites ran beside it, then passed 27 times in a row; the failure text was not kept
+  and the cause is not established. (e) and (f) are observations from the implementer's session.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

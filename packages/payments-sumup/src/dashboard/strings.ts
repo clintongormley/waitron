@@ -5,13 +5,6 @@ import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 // translation, not schema vocabulary. The module registers its catalogue at load — before any t()
 // runs — so importing this module's `t` is enough to make the strings resolve; the panel also declares
 // these strings so the screen registers them on mount.
-//
-// NOTE: the ERROR-CODE copy for `payment.provider_merchant_ambiguous`,
-// `payment.provider_credential_rejected`, `payment.pairing_expired` and `payment.pairing_refused`
-// lives centrally in `apps/dashboard/src/i18n/codes.ts` (registered via `registerCodeMessages`).
-// This panel is self-contained: it renders its OWN screen strings for the pairing
-// outcomes (`pairing_expired`, `pairing_failed`) and falls back to the shared `codeMessage` for a
-// rejected connect, so it needs no code copy of its own here.
 
 const en = {
   "payments.sumup.name": "SumUp",
@@ -26,8 +19,7 @@ const en = {
   "payments.sumup.connected_as": "Connected as {name}",
   "payments.sumup.merchant_prompt":
     "This key covers more than one merchant. Choose which one to connect.",
-  "payments.sumup.merchant_label": "Merchant",
-  "payments.sumup.form_problem": "There is a problem with this form",
+  "payments.sumup.fix_fields": "Correct the highlighted fields to continue.",
   "payments.sumup.api_key_required": "Enter your SumUp API key",
   "payments.sumup.merchant_required": "Choose a merchant to connect",
   "payments.sumup.connect_failed": "That API key was not accepted. Check it and try again.",
@@ -59,8 +51,7 @@ const es: Record<keyof typeof en, string> = {
   "payments.sumup.connect": "Conectar",
   "payments.sumup.connected_as": "Conectado como {name}",
   "payments.sumup.merchant_prompt": "Esta clave abarca más de un comercio. Elige cuál conectar.",
-  "payments.sumup.merchant_label": "Comercio",
-  "payments.sumup.form_problem": "Hay un problema con este formulario",
+  "payments.sumup.fix_fields": "Corrige los campos marcados para continuar.",
   "payments.sumup.api_key_required": "Introduce tu clave de API de SumUp",
   "payments.sumup.merchant_required": "Elige un comercio para conectar",
   "payments.sumup.connect_failed":
