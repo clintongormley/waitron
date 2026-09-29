@@ -3011,7 +3011,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     another party's bill. Migrations: core `0037_party_main_bill` adds the two `parties` columns
     `name` and `main_bill_id`, and `0038_main_bill_release` adds two triggers on
     `working_orders`. They clear a party's main bill when that bill stops being open, or when it
-    moves to another party. Nothing is rebuilt.
+    leaves the party (to another party or, since Task 7, to the counter). Nothing is rebuilt.
 
     Upgrade measured 2026-09-28. A scratch venue in `/tmp` was migrated and seeded on main
     `e15dcb6d0` with its own code: a party with an open tab holding a dish, a party whose tab was
@@ -3247,7 +3247,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `party.out_of_date`.
     - Merging bills, or transferring items between them, sends the kitchen no MOVED slip while
       the party holds a table: every bill of such a party names the same tables
-      (`orderTableLabels`), and `enqueueMovedSlips` sends a slip only when the tables named change.
+      (`orderTableLabels`), and `enqueueMovedSlips` sends a slip only when the tables named change
+      (unless its caller forces one, as the bill move does to or from the counter; Task 7).
       The party-wide notices in the Task 4 entry above are for merging tabs.
     Tests: `apps/server/src/party-bill-actions.test.ts` (each refusal reads back that the party,
     its tables, and each bill's row, lines and payments are unchanged; the two-tills cases run in
@@ -3266,9 +3267,98 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `service_zone.mode_incompatible`, before changing either bill, as the old tab transfer does.
       Why: in the same reproduction, merging or transferring already-fired items onto the `prepay`
       bill succeeded, but paying that bill then failed with `ticket.already_fired`, because paying
-      a `prepay` bill fires its items again.
+      a `prepay` bill fires its items again. (2026-09-29, Task 7's review fix: paying a `prepay`
+      bill now sends only the dishes not yet sent, so that failure is gone. The refusal stays:
+      merged or transferred into a table bill, a `prepay` bill's unsent dishes would never reach the
+      kitchen, because a table bill sends nothing when it is paid.)
     - A table of the party still pointing at the merged-away bill is pointed at the surviving one,
       so the old till screens do not show an abandoned bill; its membership is unchanged.
+  - **Task 7 built on the server (branch `feat/party-move-bill`, 2026-09-29): move a whole bill to
+    another party, to a free table, to the counter, or from the counter into a party.** This is the
+    server half of campaign items A81 (a counter order seated at a table) and A82 (a table's bill
+    taken to the counter); the till half is Task 12. One new route, `POST /api/bills/:id/move`
+    (`apps/server/src/move-bill.ts`, `apps/server/src/till-api.ts`):
+    - The body names where the bill goes, `{ tableId }` or `{ counter: { zoneId } }` (the zone may
+      be null), and `bills: "merge" | "separate"`, merge by default. A bill of a party sends its
+      party's revision, and a move to a table another party holds sends that party's revision too
+      (`expectedOtherPartyRevision`). Both are checked before the bill's or the table's own state,
+      so of two tills acting from one read the second is told `party.out_of_date`.
+    - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
+      bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
+      that party, before any revision is asked for; a `partyId` naming a party the bill has since
+      left is refused the same way, and one naming no party at all is refused `party.not_open`. A
+      request with no `partyId` and no revision for a party's bill stays `management.request_invalid`
+      `{ field: "expectedPartyRevision" }`. **Task 12's till
+      must send `partyId: null` when it moves a counter order**, or a second till moving the same
+      order is told its request is malformed rather than out of date.
+    - A bill holding a payment, a card at the reader or an invoice is never merged, so it keeps
+      its id, and its payments, a card payment still at the reader and its retry, its refunds and
+      its invoice all stay with it. Nothing is repriced. A paid bill is refused `bill.paid`; a
+      merged-away one `tab.not_open`.
+    - Into a party: merged into that party's main bill only when both bills are untouched (open,
+      holding no payment, one being given back included, and not being paid in full at a reader)
+      AND in the same service mode once the moved bill has taken the party's zone; otherwise it stays a
+      separate bill and the answer says `merged: false`. A move is never refused because the two
+      bills' modes differ (plan P15); merged into a table bill, a pay-first or invoice-first bill's unsent
+      dishes would never reach the kitchen, because a table bill sends nothing when it is paid. To a free table: a new unnamed party opens there with the bill as its main bill. To
+      the counter: the bill leaves its party and, while it is open, is labelled with the party's
+      display name. A counter order already at the counter is refused `management.request_invalid`
+      `{ field: "to" }`.
+    - An open bill takes the receiving side's zone for what is ordered next (a party's earliest
+      table's zone, or the zone the till sends for the counter); a presented bill keeps its own.
+    - A move between service modes sends no dish twice. A dish one mode left unsent is given to the
+      kitchen by the next: at a move into table service from another mode, as a round is (a later
+      course's dish held for its course), or when the pay-first bill is paid or the invoice-first one
+      placed. Paying a pay-first bill and placing an invoice-first one send only the dishes not yet sent, so a table bill
+      whose dishes were sent can be moved to such a counter and still be paid (by cash, or by a
+      card already at the reader when it moved) or placed, getting its one invoice. Before this
+      fix the payment was refused `ticket.already_fired` after the card had been charged. An open
+      bill that enters table service from another mode has its unsent dishes sent at the move, as
+      a round is sent, because table service sends nothing when the bill is paid. Before this fix
+      a pay-first counter order moved to a table-service table and then paid had no dish sent to
+      the kitchen.
+      Such a move is refused `product.unavailable`, changing nothing, when one of those unsent
+      dishes cannot be sold now, as placing an order refuses it. A bill already in table service
+      has no dish newly sent when it moves, so a
+      no-preparation dish waiting for a later course keeps waiting.
+    - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
+      otherwise), and the party's next order then starts a new one. A table the bill's own party
+      holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is
+      refused as seating refuses it, and so is a free table in a zone that seats no one
+      (`service_zone.mode_incompatible`). A table no party holds that still shows an open order is
+      `table.occupied`, as a tab move refuses it: the old tab move can put a counter order there.
+      At the route a malformed table id is `table.not_found` and a malformed counter zone id
+      `shared.invalid_id`, as the seat, tab and sale routes answer them.
+    - Held dishes cannot leave a party (`group.held_leaves_party`); sent dishes leave their kitchen
+      group and keep their ticket and served state. The kitchen gets a MOVED notice for each sent
+      dish whose table changes, and always for a move to or from the counter, even when the label
+      reads the same on both sides (plan P17, which flags for the owner that such a slip can name
+      the same table as where the dish came from and where it went; the slip's text was not
+      checked here).
+    - A table of the party the bill leaves that still pointed at it is pointed at the party's main
+      bill, or at none.
+
+    New codes, each 409 with English and Spanish wording on the till: `party.main_bill_stays` and
+    `table.already_in_party`; the till also gained wording for `table.inactive`. Migration: core
+    `0042_placed_bill_moves` re-creates `working_orders_enforce_transition` and
+    `working_order_lines_require_open_parent_update` from the text a migrated database stores,
+    each with one exception for a presented bill (plan P14): its row may change its party, its
+    delivery table and its revision, and its lines may change kitchen group, with every other
+    column unchanged. `scripts/behavioural-triggers.test.ts` tries each other column of both
+    tables against the exception.
+
+    Upgrade measured 2026-09-29 on a scratch venue in `/tmp`: migrated to main `59dafa994`'s
+    migrations (the branch's journal set back to main's, and `0042` moved aside), seeded through
+    the party harness with a party's split bill placed by hand and a counter order placed in a
+    pay-first zone. There, moving the placed split bill to another party was refused by the
+    engine with `lines may only be written while the order is open`. The branch's migrations were
+    then applied to the same folder through `applyMigrations`: both placed bills read back with
+    the same rows, and both then moved into another party, still `placed`, the split bill's line
+    now outside its group. The server was not booted on it.
+
+    Open points: the move moves the bill's revision on, open or presented, without
+    `bumpRevision`'s refusal of money in flight, since a move changes no amount (plan P19). Dishes
+    arriving in a party join no group until Task 9.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from

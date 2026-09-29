@@ -25,7 +25,6 @@ import {
   sales,
   tenders,
   withTransaction,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -42,13 +41,13 @@ import { formatInvoiceNumber, recordSale, settleSale } from "@waitron/core";
 import type { FiscalBackend } from "@waitron/fiscal";
 import {
   createOpenOrder,
-  fireableLineColumns,
   fireLines,
   priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
   refusePaymentInFlight,
   toVatBreakdown,
+  unsentDishLines,
 } from "./working-order.js";
 import type { GrossOrder, LineExtras, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
@@ -855,7 +854,7 @@ async function payIntegrated(
     const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
     // D22). A placed order's priced columns are already frozen, and
-    // `working_orders_enforce_transition` refuses any write that keeps an order placed.
+    // `working_orders_enforce_transition` refuses its `payment_attempt_at` being set.
     const attemptAt = wasPlaced ? null : nowIso();
     if (attemptAt !== null) {
       await tx
@@ -1229,7 +1228,7 @@ async function finalizeRecovery(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
-    // A placed order was fired when it was placed; an open one has not entered preparation yet.
+    // A placed order was fired when it was placed; an open pay-first one's unsent dishes go now.
     if (locked?.status === "open") {
       await firePrepayOrder(tx, cfg, req.id);
     }
@@ -1267,7 +1266,10 @@ async function finalizeRecovery(
   });
 }
 
-/** Fire an open order at payment when its frozen service context uses the prepay flow. */
+/**
+ * Fire an open order's unsent dishes at payment when its service context uses the prepay flow. A
+ * bill moved here from a table has dishes already sent, which are not sent again.
+ */
 export async function firePrepayOrder(
   tx: Transaction,
   cfg: TillConfig,
@@ -1277,14 +1279,7 @@ export async function firePrepayOrder(
   if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
     return;
   }
-
-  const lines = await tx
-    .select(fireableLineColumns)
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
-    .orderBy(workingOrderLines.lineNo);
-
-  await fireLines(tx, cfg, workingOrderId, lines);
+  await fireLines(tx, cfg, workingOrderId, await unsentDishLines(tx, workingOrderId));
 }
 
 /**

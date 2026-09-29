@@ -768,6 +768,8 @@ export async function readSentWork(
  * for `toOrderId` now differs from the one `before` read, each of `before`'s fired items now on
  * `toOrderId` gets a `moved` notice, at the quantity its ticket asks for, and a MOVED slip where its
  * station has an active printer. `splitFrom` maps a ticket item a split made to the one it copied.
+ * `force` tells the kitchen whatever the two labels read: a bill moved to or from the counter can
+ * read the same on both sides.
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
@@ -775,10 +777,11 @@ export async function enqueueMovedSlips(
   before: SentWork,
   toOrderId: string,
   splitFrom: ReadonlyMap<string, string> = new Map(),
+  options: { force?: boolean } = {},
 ): Promise<void> {
   if (before.ticketItemIds.size === 0) return;
   const header = await readOrderHeader(tx, cfg, toOrderId);
-  if (header.tableLabel === before.tableLabel) return;
+  if (options.force !== true && header.tableLabel === before.tableLabel) return;
   const fired = await readTicketItemsOn(tx, [toOrderId]);
   await notifyMoved(tx, cfg, before, toOrderId, header, fired.get(toOrderId) ?? [], splitFrom);
 }

@@ -44,7 +44,7 @@ export const parties = table(
     billRequestedAt: tsString("bill_requested_at"),
     name: label("name"),
     // The party's main bill. Two triggers on working_orders clear it when that bill leaves `open`
-    // or moves to another party (`0038_main_bill_release.sql`).
+    // or leaves the party (to another party or to the counter) (`0038_main_bill_release.sql`).
     mainBillId: id("main_bill_id").references((): AnySQLiteColumn => workingOrders.id),
     revision: count("revision").notNull().default(0),
   },

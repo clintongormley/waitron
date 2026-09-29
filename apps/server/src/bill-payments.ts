@@ -441,6 +441,13 @@ export async function refuseBillWithPayments(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<void> {
+  if (await holdsPayment(tx, workingOrderId)) {
+    throw new AppError("bill.payments_received", { workingOrderId });
+  }
+}
+
+/** Whether the bill holds a pending or received payment, one given back in full included. */
+export async function holdsPayment(tx: Transaction, workingOrderId: string): Promise<boolean> {
   const [held] = await tx
     .select({ id: billPayments.id })
     .from(billPayments)
@@ -451,7 +458,7 @@ export async function refuseBillWithPayments(
       ),
     )
     .limit(1);
-  if (held !== undefined) throw new AppError("bill.payments_received", { workingOrderId });
+  return held !== undefined;
 }
 
 /** The net applied money each of these bills has received, for those that have received any. */

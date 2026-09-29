@@ -74,13 +74,15 @@ async function refuseTouched(tx: Transaction, billId: string, status: BillStatus
 
 /**
  * The party of the path bill, checked and moved on (`party.not_open`, then `party.out_of_date`).
- * A command naming a party the bill is no longer in is `party.out_of_date` whatever revision it
- * sends. A bill of no party has no revision.
+ * A command naming a party the bill is not in is `party.out_of_date` whatever revision it sends,
+ * or `party.not_open` when no party has that id; one that read the bill with no party
+ * (`partyId: null`) once it has one is `party.out_of_date`, naming that party. A bill of no party
+ * has no revision.
  */
-async function guardPathParty(
+export async function guardPathParty(
   tx: Transaction,
   billId: string,
-  command: BillCommand,
+  command: Omit<BillCommand, "partyId"> & { partyId?: string | null },
 ): Promise<PathBill> {
   const [bill] = await tx
     .select({ partyId: workingOrders.partyId, status: workingOrders.status })
@@ -88,15 +90,13 @@ async function guardPathParty(
     .where(eq(workingOrders.id, billId));
   if (bill === undefined) throw new AppError("tab.not_open", { tabId: billId });
   if (command.partyId !== undefined && command.partyId !== bill.partyId) {
+    const named = command.partyId ?? bill.partyId!;
     const [read] = await tx
       .select({ revision: parties.revision })
       .from(parties)
-      .where(eq(parties.id, command.partyId));
-    if (read === undefined) throw new AppError("party.not_open", { partyId: command.partyId });
-    throw new AppError("party.out_of_date", {
-      partyId: command.partyId,
-      revision: read.revision,
-    });
+      .where(eq(parties.id, named));
+    if (read === undefined) throw new AppError("party.not_open", { partyId: named });
+    throw new AppError("party.out_of_date", { partyId: named, revision: read.revision });
   }
   if (bill.partyId !== null) await guardParties(tx, bill.partyId, null, command);
   return bill;
@@ -199,14 +199,29 @@ export async function mergeBills(
   if (intoBillId === fromBillId) throw new AppError("tab.merge_self", { tabId: intoBillId });
   const path = await guardPathParty(tx, intoBillId, command);
   const partyId = await requireUntouchedPair(tx, intoBillId, path, fromBillId);
-  // Paying a prepay bill fires its lines, and one already sent fails it (`ticket.already_fired`).
+  // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
+  // dishes merged into it would never reach the kitchen.
   await assertServiceModesMatch(tx, cfg, fromBillId, intoBillId);
+  await mergeCheckedBills(tx, cfg, partyId, intoBillId, fromBillId);
+}
 
-  const [party] = await tx
-    .select({ mainBillId: parties.mainBillId })
-    .from(parties)
-    .where(eq(parties.id, partyId));
-  const before = await readSentWork(tx, cfg, fromBillId);
+/**
+ * {@link mergeBills} after its checks, for a caller that has made them itself: both bills are
+ * untouched bills of `partyId`, in one service mode. `known.mainBillId` is the party's main bill as
+ * the caller has just read it. `known.kitchenTold` is set by a caller that tells the kitchen of
+ * `fromBillId`'s sent dishes itself, from what it read before `fromBillId` joined the party.
+ */
+export async function mergeCheckedBills(
+  tx: Transaction,
+  cfg: TillConfig,
+  partyId: string,
+  intoBillId: string,
+  fromBillId: string,
+  known: { mainBillId?: string | null; kitchenTold?: boolean } = {},
+): Promise<void> {
+  const mainBillId =
+    known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
+  const before = known.kitchenTold === true ? null : await readSentWork(tx, cfg, fromBillId);
   await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, { modesChecked: true });
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
@@ -220,8 +235,16 @@ export async function mergeBills(
     .update(diningTables)
     .set({ tabId: intoBillId })
     .where(eq(diningTables.tabId, fromBillId));
-  if (party!.mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
-  await enqueueMovedSlips(tx, cfg, before, intoBillId);
+  if (mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
+  if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
+}
+
+async function readMainBill(tx: Transaction, partyId: string): Promise<string | null> {
+  const [party] = await tx
+    .select({ mainBillId: parties.mainBillId })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return party!.mainBillId;
 }
 
 /**
@@ -240,7 +263,8 @@ export async function transferItems(
   const path = await guardPathParty(tx, fromBillId, command);
   await requireUntouchedPair(tx, fromBillId, path, toBillId);
   assertDistinctTransferLines(fromBillId, transfers);
-  // Paying a prepay bill fires its lines, and one already sent fails it (`ticket.already_fired`).
+  // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
+  // dishes moved into it would never reach the kitchen.
   await assertServiceModesMatch(tx, cfg, fromBillId, toBillId);
 
   const before = await readSentWork(tx, cfg, fromBillId);

@@ -1286,13 +1286,16 @@ the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
 `packages/db/drizzle/0033_line_served_exception.sql`,
 `packages/db/drizzle/0038_main_bill_release.sql` (two triggers on `working_orders` that clear
 `parties.main_bill_id`),
+`packages/db/drizzle/0042_placed_bill_moves.sql` (a presented bill changing party),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql` and
 `packages/media/drizzle/0003_published_image_references.sql`) each carry their own
 `meta/000N_snapshot.json`, so they are not snapshot-less; but on 2026-09-26 (2026-09-27 for
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
-`0033_line_served_exception.sql` and `0038_main_bill_release.sql`) each of those files equalled the one before it once `id` and `prevId` were removed and keys sorted, so the
-snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
+`0033_line_served_exception.sql` and `0038_main_bill_release.sql`, and 2026-09-29 for
+`0042_placed_bill_moves.sql`) each of those files equalled the one before it once `id` and
+`prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
+`0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
 does not reproduce it.
 
 ## Drizzle picks what to apply from `max(created_at)` alone

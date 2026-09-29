@@ -292,6 +292,8 @@ declare module "@waitron/shared" {
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
     "table.needs_clearing": { tableId: string };
+    /** A bill was moved to a table its own party already holds. */
+    "table.already_in_party": { tableId: string };
     /**
      * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
      * at a closed one, at none, or the id names no table. One code for all, so the answer does not
@@ -327,6 +329,11 @@ declare module "@waitron/shared" {
      * is placed, or open with items on it: the table cannot be finished while a bill is unpaid.
      */
     "party.bill_outstanding": { partyId: string };
+    /**
+     * The party's main bill was to leave while the party holds another bill that is open or
+     * presented: it moves only as the party's last unpaid bill (spec §13 item 5).
+     */
+    "party.main_bill_stays": { partyId: string };
     /**
      * A submission id already recorded in this scope arrived with another command kind or other
      * arguments. The id is the device's own, made fresh for each person's action.

@@ -367,3 +367,39 @@ export async function tendersOfBill(venue: BillVenue, billId: string) {
       .where(eq(sales.workingOrderId, billId)),
   );
 }
+
+/**
+ * A party seated at a fresh table through the till's routes, one of each named dish sent to the
+ * kitchen as one group on its main bill, in order (line 1, 2, …). `revision` is the party's after
+ * the order.
+ */
+export async function seatedWith(
+  venue: BillVenue,
+  ...names: string[]
+): Promise<{ partyId: string; tabId: string; tableId: string; revision: number }> {
+  const table = await send(venue.app, venue.cookie, "POST", "/api/tables", {
+    label: `Mesa ${randomUUID().slice(0, 8)}`,
+    zoneId: venue.zoneId,
+  });
+  const tableId = table.json.id as string;
+  const seated = await send(venue.app, venue.cookie, "POST", `/api/tables/${tableId}/seat`, {});
+  if (seated.status !== 200) throw new Error(`seatedWith: seating answered ${seated.status}`);
+  const partyId = seated.json.partyId as string;
+  if (names.length > 0) {
+    const ordered = await send(venue.app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: seated.json.revision,
+      groups: [
+        {
+          lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+          release: "fire",
+        },
+      ],
+    });
+    if (ordered.status !== 200) throw new Error(`seatedWith: ordering answered ${ordered.status}`);
+  }
+  const [row] = venue.db.all<{ revision: number }>(
+    sql`select revision from parties where id = ${partyId}`,
+  );
+  return { partyId, tabId: seated.json.tabId as string, tableId, revision: row!.revision };
+}

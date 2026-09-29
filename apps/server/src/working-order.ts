@@ -1034,14 +1034,8 @@ export async function openTab(
     }
   }
 
-  if (table.tabId !== null) {
-    const [openTabRow] = await tx
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
-    if (openTabRow !== undefined) {
-      throw new AppError("tab.already_open", { tableId: req.tableId });
-    }
+  if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
+    throw new AppError("tab.already_open", { tableId: req.tableId });
   }
   // A party still holds the table after its tabs settle, until Finish table.
   if (await tableHeld(tx, req.tableId)) {
@@ -1093,6 +1087,27 @@ export const fireableLineColumns = {
 type FireableLine = {
   [K in keyof typeof fireableLineColumns]: GetColumnData<(typeof fireableLineColumns)[K]>;
 };
+
+/**
+ * The order's dish lines the kitchen has not been given, in line order: never stamped sent and
+ * holding no ticket item. A held or recalled dish that goes to a station holds one; a
+ * no-preparation dish is stamped sent when it fires, so one still held is returned.
+ */
+export async function unsentDishLines(tx: Transaction, orderId: string): Promise<FireableLine[]> {
+  return tx
+    .select(fireableLineColumns)
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, orderId),
+        isNull(workingOrderLines.parentLineId),
+        isNull(workingOrderLines.sentAt),
+        isNull(ticketItems.id),
+      ),
+    )
+    .orderBy(workingOrderLines.lineNo);
+}
 
 /**
  * Fire lines to the kitchen: one `ticket_items` row per line, its station and course RESOLVED and
@@ -1363,7 +1378,7 @@ async function heldNoRouteLines(
  * ticket item — never fired, held, or recalled — so a sold-out dish is never sent to the kitchen
  * again, whether or not the line was stamped sent before.
  */
-async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+export async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
   const [refused] = await tx
     .select({ productId: workingOrderLines.productId })
@@ -1386,7 +1401,7 @@ async function assertSendable(tx: Transaction, lineIds: readonly string[]): Prom
   }
 }
 
-async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
+export async function isOpenOrder(tx: Transaction, orderId: string): Promise<boolean> {
   const [order] = await tx
     .select({ status: workingOrders.status })
     .from(workingOrders)
@@ -2439,18 +2454,34 @@ export async function assertServiceModesMatch(
 ): Promise<void> {
   const fromContext = await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId);
   const toContext = await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId);
-  if (
-    (fromContext === null) !== (toContext === null) ||
-    (fromContext !== null &&
-      toContext !== null &&
-      fromContext.serviceMode !== toContext.serviceMode)
-  ) {
+  if (!modesMatch(fromContext, toContext)) {
     throw new AppError("service_zone.mode_incompatible", {
       zoneId: toContext?.zoneId ?? "unscoped",
       expected: fromContext?.serviceMode ?? "unscoped",
       actual: toContext?.serviceMode ?? "unscoped",
     });
   }
+}
+
+/** {@link assertServiceModesMatch} as an answer rather than a refusal. */
+export async function serviceModesMatch(
+  tx: Transaction,
+  cfg: TillConfig,
+  fromOrderId: string,
+  toOrderId: string,
+): Promise<boolean> {
+  return modesMatch(
+    await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId),
+    await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId),
+  );
+}
+
+function modesMatch(
+  from: { serviceMode: string } | null,
+  to: { serviceMode: string } | null,
+): boolean {
+  if (from === null || to === null) return from === to;
+  return from.serviceMode === to.serviceMode;
 }
 
 /**
@@ -2737,14 +2768,8 @@ async function assertTableAvailable(
   if (table.needsClearingSince !== null) {
     throw new AppError("table.needs_clearing", { tableId });
   }
-  if (table.tabId !== null) {
-    const [pointed] = await tx
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(and(eq(workingOrders.id, table.tabId), eq(workingOrders.status, "open")));
-    if (pointed !== undefined) {
-      throw new AppError("table.occupied", { tableId });
-    }
+  if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
+    throw new AppError("table.occupied", { tableId });
   }
   // Checked here so the partial unique index on active memberships never refuses with an engine error.
   if (await tableHeld(tx, tableId)) {
@@ -3386,7 +3411,7 @@ export async function carveOffLines(
  * Refuse `group.held_leaves_party` for the lowest-numbered of these lines whose group is held: a
  * group belongs to its party (D1), so held work leaves only once fired.
  */
-async function refuseHeldLeavingParty(
+export async function refuseHeldLeavingParty(
   tx: Transaction,
   tabId: string,
   lineIds: readonly string[],
@@ -3405,7 +3430,7 @@ async function refuseHeldLeavingParty(
 }
 
 /** Take these lines, and their extras children, out of their group: they left its party. */
-async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+export async function clearGroups(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
   await tx
     .update(workingOrderLines)
@@ -4923,15 +4948,11 @@ export async function placeOrder(
     const orderFlow = serviceContext?.serviceMode ?? cfg.orderFlow;
 
     // Placing changes no line's quantity, course or note, so the lines read now are the ones fired.
-    const lines = await tx
-      .select(fireableLineColumns)
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id))
-      .orderBy(workingOrderLines.lineNo);
-    // Nothing on an open order has fired yet, so every dish line is about to be sent.
+    // Read before the stamp below. A bill moved here from a table has dishes already sent.
+    const lines = await unsentDishLines(tx, id);
     await assertSendable(
       tx,
-      lines.filter((line) => line.parentLineId === null).map((line) => line.id),
+      lines.map((line) => line.id),
     );
     // Placing commits the whole order, a course the kitchen holds included, so every line is sent.
     // Stamped while the order is still open, which is the only time a line may be written.

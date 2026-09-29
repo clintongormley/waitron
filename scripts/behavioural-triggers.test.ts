@@ -46,13 +46,15 @@ import {
  * `packages/db/drizzle/0019_settled_order_freeze_visit_id.sql`, and
  * `working_order_lines_require_open_parent_update` by `0027_line_vat_class_triggers.sql` and again,
  * with its served exception and a refusal to move a line off an order that is not open, by
- * `packages/db/drizzle/0033_line_served_exception.sql`. Some triggers ACT rather than refuse.
+ * `packages/db/drizzle/0033_line_served_exception.sql`. Both are re-created by
+ * `packages/db/drizzle/0042_placed_bill_moves.sql`, with an exception each for a presented bill.
+ * Some triggers ACT rather than refuse.
  * `parties_clear_table_status` (`packages/db/drizzle/0020_visit_clears_table_status.sql`,
  * re-created under this name by `packages/db/drizzle/0036_party_rename.sql`):
  * a table's service status comes off when the party leaves `open`, on every table still a
  * member of it. It replaced `working_orders_clear_table_status`, which cleared it when a tab settled.
  * And the two of `packages/db/drizzle/0038_main_bill_release.sql`: a party's `main_bill_id` is
- * cleared when that bill leaves `open`, or moves to another party.
+ * cleared when that bill leaves `open`, or leaves the party (to another party or to the counter).
  * `packages/db/drizzle/0024_bill_payment_triggers.sql` adds the state guards on `bill_payments` and
  * `bill_payment_refunds`, and a trigger on each refusing every delete — those two refuse by design
  * whatever the row, so they have no accepting control here.
@@ -430,6 +432,23 @@ function seed(connection) {
     line("line-open-moves", "wo-served-open", '{"es":"Plato","ca":"Plat"}'),
     line("line-served-relocale", "wo-served-relocale", '{"es":"Plato","ca":"Plat"}'),
     `update working_orders set status = 'placed' where id = 'wo-served-placed'`,
+
+    // Presented bills that move whole (P14): each allowed case writes a row of its own, so no case's
+    // write changes what another case reads. The refusals share rows, since a refused write
+    // changes nothing.
+    workingOrder("wo-moves-party", "open"),
+    workingOrder("wo-moves-delivery", "open"),
+    workingOrder("wo-moves-revision", "open"),
+    workingOrder("wo-moves-frozen", "open"),
+    workingOrder("wo-moves-lines", "open"),
+    line("line-moves-into-group", "wo-moves-lines", '{"es":"Plato","ca":"Plat"}'),
+    line("line-moves-out-of-group", "wo-moves-lines", '{"es":"Plato","ca":"Plat"}'),
+    line("line-moves-frozen", "wo-moves-lines", '{"es":"Plato","ca":"Plat"}'),
+    line("line-moves-deleted", "wo-moves-lines", '{"es":"Plato","ca":"Plat"}'),
+    `update working_order_lines set group_id = 'group' where id = 'line-moves-out-of-group'`,
+    `update working_orders set status = 'placed' ` +
+      `where id in ('wo-moves-party', 'wo-moves-delivery', 'wo-moves-revision', ` +
+      `'wo-moves-frozen', 'wo-moves-lines')`,
     `update working_orders set status = 'settled', settled_at = '${STAMP}' ` +
       `where id in ('wo-served-settled', 'wo-served-orphan', 'wo-served-relocale')`,
   ];
@@ -612,6 +631,95 @@ describe("working_orders_enforce_transition", () => {
           `where id = 'wo-settled-payment'`,
       ),
     ).toBe(TRANSITION_REFUSAL);
+  });
+});
+
+/**
+ * The columns of `working_orders` the placed → placed exception's list does not name: `status`,
+ * which it requires to stay `placed`, and the three a move may change.
+ */
+const MOVABLE_ORDER_COLUMNS = new Set(["status", "party_id", "delivery_table_id", "revision"]);
+/** Every column of `working_orders` a presented bill's move must leave as it is. */
+const FROZEN_PLACED_ORDER_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_orders') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => !MOVABLE_ORDER_COLUMNS.has(name));
+
+describe("working_orders_enforce_transition's exception for a presented bill", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_PLACED_ORDER_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "label", "payment_attempt_at", "settled_at"]),
+    );
+  });
+
+  it("accepts a presented bill changing its party alone", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set party_id = 'party-frozen' where id = 'wo-moves-party'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts a presented bill losing its delivery table alone", () => {
+    connection.exec(
+      `update working_orders set delivery_table_id = 'dt-bystander' where id = 'wo-moves-delivery'`,
+    );
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set delivery_table_id = null where id = 'wo-moves-delivery'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("accepts a presented bill's revision moving on alone", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set revision = revision + 1 where id = 'wo-moves-revision'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses a presented bill's label, or its payment attempt, changed alone", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set label = 'Mesa 9' where id = 'wo-moves-frozen'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set payment_attempt_at = '${STAMP}' where id = 'wo-moves-frozen'`,
+      ),
+    ).toBe(TRANSITION_REFUSAL);
+  });
+
+  it.each(FROZEN_PLACED_ORDER_COLUMNS)(
+    "refuses a presented bill changing its party and also %s",
+    (column) => {
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set party_id = 'party-frozen', ${column} = 'changed' ` +
+            `where id = 'wo-moves-frozen'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    },
+  );
+
+  it("still refuses a presented bill going back to open, alone or with a party change", () => {
+    for (const also of ["", ", party_id = 'party-frozen'"]) {
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set status = 'open'${also} where id = 'wo-moves-frozen'`,
+        ),
+      ).toBe(TRANSITION_REFUSAL);
+    }
   });
 });
 
@@ -805,6 +913,79 @@ describe("working_order_lines_require_open_parent_update's served exception", ()
           `where id = 'line-served-relocale'`,
       ),
     ).toBe(LOCALES_REFUSAL);
+  });
+});
+
+/** Every column of the line except its kitchen group, read from the migrated table. */
+const FROZEN_GROUPED_LINE_COLUMNS = connection
+  .prepare(`select name from pragma_table_info('working_order_lines') order by cid`)
+  .all()
+  .map((row) => String(row.name))
+  .filter((name) => name !== "group_id");
+
+describe("working_order_lines_require_open_parent_update's kitchen-group exception", () => {
+  it("reads the table's columns, so the per-column cases below are not vacuous", () => {
+    expect(FROZEN_GROUPED_LINE_COLUMNS).toEqual(
+      expect.arrayContaining(["id", "quantity", "unit_price_gross", "served_quantity"]),
+    );
+  });
+
+  it("accepts a presented bill's line joining a group, and leaving one", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set group_id = 'group' where id = 'line-moves-into-group'`,
+      ),
+    ).toBeUndefined();
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set group_id = null where id = 'line-moves-out-of-group'`,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("refuses a presented bill's line changing its quantity or its price alone", () => {
+    for (const change of ["quantity = 2000", "unit_price_gross = 1"]) {
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set ${change} where id = 'line-moves-frozen'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    }
+  });
+
+  it.each(FROZEN_GROUPED_LINE_COLUMNS)(
+    "refuses a presented bill's line changing its group and also %s",
+    (column) => {
+      const value = CHANGED_VALUE[column] ?? `'changed'`;
+      expect(
+        refusalFor(
+          connection,
+          `update working_order_lines set group_id = 'group', ${column} = ${value} ` +
+            `where id = 'line-moves-frozen'`,
+        ),
+      ).toBe(OPEN_PARENT_REFUSAL);
+    },
+  );
+
+  it("still refuses a line inserted under a presented bill, or deleted from one", () => {
+    expect(
+      refusalFor(connection, line("line-moves-added", "wo-moves-lines", '{"es":"a","ca":"b"}')),
+    ).toBe(OPEN_PARENT_REFUSAL);
+    expect(
+      refusalFor(connection, `delete from working_order_lines where id = 'line-moves-deleted'`),
+    ).toBe(OPEN_PARENT_REFUSAL);
+  });
+
+  it("refuses a paid bill's line changing its group alone", () => {
+    expect(
+      refusalFor(
+        connection,
+        `update working_order_lines set group_id = 'group' where id = 'line-served-unchanged'`,
+      ),
+    ).toBe(OPEN_PARENT_REFUSAL);
   });
 });
 

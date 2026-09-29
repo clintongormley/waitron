@@ -245,3 +245,27 @@ it("says a table needs clearing, and that a table has gone, in both languages", 
   expect(codeMessage("table.not_found", "en")).toBe("That table no longer exists");
   expect(codeMessage("table.not_found", "es")).toBe("Esa mesa ya no existe");
 });
+
+it("words the refusals a bill move to a table or away from its party can meet, in both languages", () => {
+  for (const code of ["party.main_bill_stays", "table.already_in_party", "table.inactive"]) {
+    for (const locale of ["en", "es"]) {
+      expect(codeMessage(code, locale)).not.toBe(codeMessage("some.unmapped_code", locale));
+    }
+  }
+  expect(codeMessage("party.main_bill_stays", "en")).toBe(
+    "This is the table's main bill, and the table has other unpaid bills. Move one of those instead",
+  );
+  expect(codeMessage("party.main_bill_stays", "es")).toBe(
+    "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve una de esas",
+  );
+  expect(codeMessage("table.already_in_party", "en")).toBe(
+    "Those guests already have that table. Choose another table",
+  );
+  expect(codeMessage("table.already_in_party", "es")).toBe(
+    "Esa mesa ya es de estos clientes. Elige otra mesa",
+  );
+  expect(codeMessage("table.inactive", "en")).toBe(
+    "That table is no longer in use. Choose another table",
+  );
+  expect(codeMessage("table.inactive", "es")).toBe("Esa mesa ya no está en uso. Elige otra mesa");
+});

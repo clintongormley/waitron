@@ -258,7 +258,8 @@ describe("working_orders state machine (enforce_transition)", () => {
       ),
     );
     expect(engineErrorMessage(e1)).toBe(TRANSITION_REFUSAL);
-    // placed → placed is not an allowed edge, so a label edit is refused too.
+    // placed → placed may change only the party, the delivery table and the revision, so a label
+    // edit is refused.
     const e2 = await captureError(() =>
       inTx((tx) =>
         tx.update(workingOrders).set({ label: "late label" }).where(eq(workingOrders.id, id)),
