@@ -40,6 +40,11 @@ export function named(name: string, withName: string, unnamed: string): string {
   return name === "" ? unnamed : withName.replace("{name}", () => name);
 }
 
+/** The hour and minute of `at`, as the active locale writes a time of day. */
+export function clockTime(at: Date | number): string {
+  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(at);
+}
+
 /** Strips the region subtag ("es-ES" → "es"); a missing language degrades to the English text. */
 export function pickLocale(entry: { en: string; es: string }, l: string = locale): string {
   const lang = l.replace(/-.*$/, "");

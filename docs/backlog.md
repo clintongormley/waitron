@@ -2373,7 +2373,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Current orders — every group of the party with each dish from every bill of the party, paid
     ones included and abandoned ones left out, an "Added later" mark on a group started as a later
     addition, and the serving controls; a group's summary shows only when Current orders cannot be
-    read)_; group numbers are the server's positions,
+    read)_ _(A119, 2026-09-29: the mark is gone; a fired group's header shows when it was fired and
+    who fired it, a held group's when it was held and who held it, and the name is left out when
+    there is no person record; owner 2026-09-28: "show when and who")_; group numbers are the
+    server's positions,
     so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
     older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
     44 px); per-line Send, Change and Cancel have no guard against a second press while the first is
@@ -2819,9 +2822,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `0033`), and on a second venue in two steps (`0033` as it stood at `c1a1c667f`, then `0034`).
       Every row was kept; tables (148), triggers (72) and indexes (291) were the same before and
       after, with only that trigger's text changed; `pragma foreign_key_check` found nothing.
-      Existing groups read `added_later` false and existing lines `served_quantity` 0, so a line
-      marked served before the upgrade keeps `served_at` with a served count of 0 (no backfill, by
-      the pre-live rule).
+      Groups existing at that upgrade read `added_later` false and existing lines `served_quantity`
+      0, so a line marked served before the upgrade keeps `served_at` with a served count of 0 (no
+      backfill, by the pre-live rule). `0034`'s column is dropped again by core
+      `0040_drop_order_group_added_later` (campaign item A119), a plain `DROP COLUMN` that rebuilds
+      no table. Measured 2026-09-29: a scratch venue migrated at main `8235f63e7` (core `0039` there
+      is `0039_table_needs_cleaning`), holding one party
+      with four groups (two fired, one of them marked added later, one held, one removed), six
+      group events and four lines, then migrated with the branch's sets: the groups and group
+      events read the same but for the dropped column, every line kept its group, tables (149),
+      triggers (419, with the change feed installed) and indexes (294) were the same by name, and
+      `pragma foreign_key_check` found nothing.
     - Left open:
       - Once a venue's invoice languages change, marking a line served on a paid bill is refused.
         The two locale triggers on order lines (`working_order_lines_check_locales_update` and
@@ -2847,14 +2858,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         orders shows it on the waiting group once it has a time: the time it falls due, then Snooze
         and, where waiters fire held groups, Fire. **Next action:** a mark on the table's token when
         a party's reminder is due.
-      - Merging one party into another keeps a snooze on a group that is no longer the one
-        waiting. `moveGroupsToParty` (`apps/server/src/order-groups.ts`, reached from `mergeTabs`)
-        moves each absorbed group without touching its `remind_at`, so a snoozed waiting group of
-        the absorbed party lands behind the other party's held groups with its snooze intact.
-        Measured 2026-09-29 with a throwaway test on the A116 branch, reminder at 10 minutes: once
-        the group ahead was fired and served at 20:30, the moved group became the waiting one due
-        at its leftover 20:20 instead of 20:40. It predates A116. **Next action:** the owner
-        decides whether a merge clears a moved group's snooze.
+      - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
+        group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
+        (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
+        (`apps/server/src/order-groups.ts`, reached from `mergeTabs`) moves each absorbed group
+        without touching its `remind_at`, so a snoozed waiting group of the absorbed party lands
+        behind the other party's held groups with its snooze intact. Measured 2026-09-29 with a
+        throwaway test on the A116 branch, reminder at 10 minutes: once the group ahead was fired
+        and served at 20:30, the moved group became the waiting one due at its leftover 20:20, not
+        the 20:40 it would have without the snooze. It predates A116. **Next action:** campaign item
+        A120 — a server command beside `group.snooze` that clears the snooze, and a Clear snooze
+        action on the till's Current orders; like a snooze, it applies only to the group the
+        reminder is waiting on, so a moved group can be cleared once it becomes the waiting one.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card

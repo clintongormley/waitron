@@ -21,7 +21,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import {
@@ -59,7 +59,6 @@ import {
   mergeTabs,
   recallLines,
   splitOffCheck,
-  updateOrderLine,
 } from "./working-order.js";
 import "./errors.js";
 
@@ -888,7 +887,8 @@ describe("readCurrentOrders (spec §4)", () => {
           state: "fired",
           firedAt: expect.any(String),
           remindAt: null,
-          addedLater: false,
+          sentAt: expect.any(String),
+          sentBy: null,
           rows: [
             row({
               lineId: croqLine!.id,
@@ -918,7 +918,8 @@ describe("readCurrentOrders (spec §4)", () => {
           state: "held",
           firedAt: null,
           remindAt: null,
-          addedLater: true,
+          sentAt: expect.any(String),
+          sentBy: null,
           rows: [
             row({
               lineId: steak.id,
@@ -1109,9 +1110,8 @@ describe("a party that has left", () => {
   });
 });
 
-describe("which groups were added later (spec §4; recorded as order_groups.added_later)", () => {
-  type LineInput = DraftLineInput;
-  const item = (v: Venue, dish: Dish): LineInput => ({
+describe("where each submission's groups go (spec §3)", () => {
+  const item = (v: Venue, dish: Dish): DraftLineInput => ({
     menuItemId: v.offer(dish),
     variantId: null,
     menuVersionId: null,
@@ -1122,7 +1122,7 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
     courseId: null,
     noMerge: false,
   });
-  const save = (v: Venue, partyId: string, operatorId: string, lines: LineInput[]) =>
+  const save = (v: Venue, partyId: string, operatorId: string, lines: DraftLineInput[]) =>
     inTx((tx) => saveDraft(tx, v.cfg, partyId, operatorId, { draftId: null, revision: 0, lines }));
   const submit = async (
     v: Venue,
@@ -1141,87 +1141,35 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
       }),
     );
   };
-  const later = async (partyId: string) =>
-    Object.fromEntries(
-      (await currentOrders(partyId)).groups.map((g) => [g.position, g.addedLater]),
-    );
-  const stored = async (groupId: string) => {
-    const [row] = await suite.db
-      .select({ addedLater: orderGroups.addedLater })
-      .from(orderGroups)
-      .where(eq(orderGroups.id, groupId));
-    return row!.addedLater;
-  };
+  const placed = async (partyId: string) =>
+    (await currentOrders(partyId)).groups.map((g) => [
+      g.position,
+      g.state,
+      g.rows.map((r) => r.name),
+    ]);
 
-  it("marks every group of the first submission as the order, and a later submission's as added", async () => {
+  it("numbers a draft's partial sends, and drafts sent after them, in the order they were sent", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const command = await args(s.partyId);
-    const { groups } = await inTx((tx) =>
-      submitGroups(tx, v.cfg, s.partyId, {
-        ...command,
-        groups: [
-          { release: "fire", lines: [line(v, "croquetas")] },
-          { release: "hold", lines: [line(v, "steak")] },
-          { release: "hold", lines: [line(v, "flan")] },
-        ],
-      }),
-    );
-    const drinks = await group(v, s.partyId, "fire", [line(v, "water")]);
+    const alex = await save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
+    const mia = await save(v, s.partyId, MIA, [item(v, "water")]);
+    const { draft: rest } = await submit(v, s.partyId, alex, [
+      { lineIds: [alex.lines[0]!.id], release: "fire" },
+    ]);
+    await submit(v, s.partyId, mia, [{ lineIds: [mia.lines[0]!.id], release: "fire" }]);
+    await submit(v, s.partyId, rest!, [{ lineIds: [rest!.lines[0]!.id], release: "hold" }]);
+    const dessert = await save(v, s.partyId, ALEX, [item(v, "flan")]);
+    await submit(v, s.partyId, dessert, [{ lineIds: [dessert.lines[0]!.id], release: "hold" }]);
 
-    expect(await later(s.partyId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
-    expect(await Promise.all(groups.map((g) => stored(g.id)))).toEqual([false, false, false]);
-    expect(await stored(drinks.id)).toBe(true);
-  });
-
-  it("marks a draft's partial submissions as the order when the draft was started before any group, and a draft started after as added", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    const alex = await at(T(0), () =>
-      save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]),
-    );
-    const mia = await at(T(1), () => save(v, s.partyId, MIA, [item(v, "water")]));
-    const { draft: rest } = await at(T(2), () =>
-      submit(v, s.partyId, alex, [{ lineIds: [alex.lines[0]!.id], release: "fire" }]),
-    );
-    await at(T(3), () =>
-      submit(v, s.partyId, rest!, [{ lineIds: [rest!.lines[0]!.id], release: "hold" }]),
-    );
-    await at(T(4), () =>
-      submit(v, s.partyId, mia, [{ lineIds: [mia.lines[0]!.id], release: "fire" }]),
-    );
-    const dessert = await at(T(20), () => save(v, s.partyId, ALEX, [item(v, "flan")]));
-    await at(T(21), () =>
-      submit(v, s.partyId, dessert, [{ lineIds: [dessert.lines[0]!.id], release: "hold" }]),
-    );
-
-    expect(await later(s.partyId)).toEqual({ 1: false, 2: false, 3: false, 4: true });
-  });
-
-  it("marks the group an edit adds for the kitchen as added", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    await group(v, s.partyId, "fire", [line(v, "croquetas")]);
-    const [croq] = await linesByName(s.partyId);
-    const [bill] = await suite.db
-      .select({ revision: workingOrders.revision })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, s.tabId));
-
-    await inTx((tx) =>
-      updateOrderLine(tx, v.cfg, s.tabId, croq!.lineNo, { quantity: "3" }, bill!.revision, MIA),
-    );
-
-    const read = await currentOrders(s.partyId);
-    expect(
-      read.groups.map((g) => [g.position, g.addedLater, g.rows.map((r) => r.quantity)]),
-    ).toEqual([
-      [1, false, ["1.000"]],
-      [2, true, ["2.000"]],
+    expect(await placed(s.partyId)).toEqual([
+      [1, "fired", ["croquetas"]],
+      [2, "fired", ["water"]],
+      [3, "held", ["steak"]],
+      [4, "held", ["flan"]],
     ]);
   });
 
-  it("keeps a group's own flag when a later submission adds to it", async () => {
+  it("puts a later submission joined to a held group in that group, starting none", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const first = await args(s.partyId);
@@ -1234,70 +1182,144 @@ describe("which groups were added later (spec §4; recorded as order_groups.adde
         ],
       }),
     );
-    const mains = groups[1]!;
     const command = await args(s.partyId);
     await inTx((tx) =>
       submitGroups(tx, v.cfg, s.partyId, {
         ...command,
         groups: [{ release: "hold", lines: [line(v, "flan")] }],
-        joinGroupId: mains.id,
+        joinGroupId: groups[1]!.id,
       }),
     );
 
-    expect(await later(s.partyId)).toEqual({ 1: false, 2: false });
+    expect(await placed(s.partyId)).toEqual([
+      [1, "fired", ["croquetas"]],
+      [2, "held", ["steak", "flan"]],
+    ]);
   });
+});
 
-  it("gives a group a move starts the flag of the groups its lines left", async () => {
+describe("when each group was sent and who sent it (spec §4; owner 2026-09-28)", () => {
+  const staff = async (displayName: string) => {
+    const [row] = await suite.db
+      .insert(persons)
+      .values({ displayName })
+      .returning({ id: persons.id });
+    return row!.id;
+  };
+  const submitAs = async (
+    v: Venue,
+    partyId: string,
+    operatorId: string,
+    release: GroupRelease,
+    lines: GroupLine[],
+  ) => {
+    const command = { ...(await args(partyId)), operatorId };
+    const { groups } = await inTx((tx) =>
+      submitGroups(tx, v.cfg, partyId, { ...command, groups: [{ release, lines }] }),
+    );
+    return groups[0]!;
+  };
+  const fireAs = async (v: Venue, partyId: string, groupId: string, operatorId: string) => {
+    const command = { ...(await args(partyId)), operatorId };
+    await inTx((tx) => fireGroup(tx, v.cfg, partyId, groupId, command));
+  };
+  const stored = async (groupId: string) => {
+    const [row] = await suite.db
+      .select({
+        createdAt: orderGroups.createdAt,
+        firedAt: orderGroups.firedAt,
+        submittedBy: orderGroups.submittedBy,
+        firedBy: orderGroups.firedBy,
+      })
+      .from(orderGroups)
+      .where(eq(orderGroups.id, groupId));
+    return row!;
+  };
+  const sent = async (partyId: string) =>
+    (await currentOrders(partyId)).groups.map((g) => [g.id, g.sentAt, g.sentBy]);
+
+  it("shows a group fired at once as sent when it fired, by the person who fired it", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const first = await args(s.partyId);
-    const { groups } = await inTx((tx) =>
-      submitGroups(tx, v.cfg, s.partyId, {
-        ...first,
-        groups: [{ release: "hold", lines: [line(v, "croquetas"), line(v, "steak")] }],
-      }),
+    const alex = await staff("Alex");
+    const starters = await at(T(0), () =>
+      submitAs(v, s.partyId, alex, "fire", [line(v, "croquetas")]),
     );
-    const extra = await group(v, s.partyId, "hold", [line(v, "flan")]);
-    const move = async (lineId: string) => {
-      const command = await args(s.partyId);
-      await inTx((tx) =>
-        moveLinesToGroup(tx, v.cfg, s.partyId, [{ lineId, quantity: "1" }], "new", command),
-      );
-    };
 
-    await move(groups[0]!.lineIds[0]!);
-    await move(extra.lineIds[0]!);
+    const { firedAt } = await stored(starters.id);
+    expect(firedAt).toBe(T(0));
+    expect(await sent(s.partyId)).toEqual([[starters.id, firedAt, "Alex"]]);
+  });
+
+  it("shows a held group as sent when it was held, by the person who held it", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const alex = await staff("Alex");
+    const mains = await at(T(0), () => submitAs(v, s.partyId, alex, "hold", [line(v, "steak")]));
+
+    const { createdAt } = await stored(mains.id);
+    expect(createdAt).toBe(T(0));
+    expect(await sent(s.partyId)).toEqual([[mains.id, createdAt, "Alex"]]);
+  });
+
+  it("shows a held group fired later by someone else as sent when it fired, by the person who fired it", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const alex = await staff("Alex");
+    const mia = await staff("Mía");
+    const mains = await at(T(0), () => submitAs(v, s.partyId, alex, "hold", [line(v, "steak")]));
+    await at(T(7), () => fireAs(v, s.partyId, mains.id, mia));
+
+    expect(await stored(mains.id)).toEqual({
+      createdAt: T(0),
+      firedAt: T(7),
+      submittedBy: alex,
+      firedBy: mia,
+    });
+    expect(await sent(s.partyId)).toEqual([[mains.id, T(7), "Mía"]]);
+  });
+
+  it("shows a group moved lines start as sent when they moved, by the person who moved them", async () => {
+    const v = await setupVenue();
+    const s = await seated(v);
+    const alex = await staff("Alex");
+    const mia = await staff("Mía");
+    const mains = await at(T(0), () =>
+      submitAs(v, s.partyId, alex, "hold", [line(v, "steak"), line(v, "flan")]),
+    );
+    const command = { ...(await args(s.partyId)), operatorId: mia };
+    await at(T(9), () =>
+      inTx((tx) =>
+        moveLinesToGroup(
+          tx,
+          v.cfg,
+          s.partyId,
+          [{ lineId: mains.lineIds[1]!, quantity: "1" }],
+          "new",
+          command,
+        ),
+      ),
+    );
 
     const read = await currentOrders(s.partyId);
-    expect(read.groups.map((g) => [g.rows.map((r) => r.name), g.addedLater])).toEqual([
-      [["steak"], false],
-      [["croquetas"], false],
-      [["flan"], true],
+    expect(read.groups.map((g) => [g.rows.map((r) => r.name), g.sentAt, g.sentBy])).toEqual([
+      [["steak"], T(0), "Alex"],
+      [["flan"], T(9), "Mía"],
     ]);
   });
 
-  it("keeps each group's flag when another party is merged in", async () => {
+  it("reads no sender, and still the time, when the person has no record", async () => {
     const v = await setupVenue();
-    const a = await seated(v);
-    const aFirst = await group(v, a.partyId, "fire", [line(v, "croquetas")]);
-    const b = await seated(v);
-    const bFirst = await group(v, b.partyId, "fire", [line(v, "flan")]);
-    const bLater = await group(v, b.partyId, "hold", [line(v, "water")]);
-    const command = {
-      expectedPartyRevision: await revisionOf(a.partyId),
-      expectedSourcePartyRevision: await revisionOf(b.partyId),
-      operatorId: ALEX,
-    };
-
-    await inTx((tx) =>
-      mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
+    const s = await seated(v);
+    const nobody = randomUUID();
+    const starters = await at(T(0), () =>
+      submitAs(v, s.partyId, nobody, "fire", [line(v, "croquetas")]),
     );
+    const mains = await at(T(1), () => submitAs(v, s.partyId, nobody, "hold", [line(v, "steak")]));
 
-    const read = await currentOrders(a.partyId);
-    expect(read.groups.map((g) => [g.id, g.addedLater])).toEqual([
-      [aFirst.id, false],
-      [bFirst.id, false],
-      [bLater.id, true],
+    expect(await sent(s.partyId)).toEqual([
+      [starters.id, T(0), null],
+      [mains.id, T(1), null],
     ]);
   });
 });

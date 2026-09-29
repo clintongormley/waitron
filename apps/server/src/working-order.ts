@@ -146,7 +146,6 @@ import {
   requireGroup,
   requireOperator,
   startGroup,
-  partyHasGroup,
   type HeldChange,
   type ReleaseReminder,
   type PartyCommandArgs,
@@ -4452,12 +4451,10 @@ async function applyLineEdits(
   // one fired now, one held, as the lines' `kitchen` says. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
   if (order.partyId !== null) {
-    let addedLater: boolean | undefined;
     for (const as of pricedAs) {
       if (as.kind !== "line" || as.kitchen === "none" || newGroups.has(as.kitchen)) continue;
       const actorId = requireOperator(operatorId);
-      addedLater ??= await partyHasGroup(tx, order.partyId);
-      const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId, addedLater);
+      const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId);
       await recordGroupEvent(tx, {
         partyId: order.partyId,
         groupId,

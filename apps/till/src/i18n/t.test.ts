@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from "vitest";
-import { countText, currentLocale, setLocale, subscribeLocale, t } from "./t.js";
+import { clockTime, countText, currentLocale, setLocale, subscribeLocale, t } from "./t.js";
 import { catalogues, en } from "./strings.js";
 
 afterEach(() => {
@@ -16,6 +16,15 @@ it("says a count of one with its singular key and any other count with the plura
   setLocale("es-ES");
   expect(countText(3, many, one)).toBe(t(many, "es-ES").replace("{n}", "3"));
   expect(countText(1, many, one)).toBe(t(one, "es-ES"));
+});
+
+it("writes a time of day as two-digit hours and minutes in the active locale, from a date or a timestamp", () => {
+  const fivePastNine = new Date(2026, 8, 28, 9, 5);
+  setLocale("en-GB");
+  expect(clockTime(fivePastNine)).toBe("09:05");
+  expect(clockTime(fivePastNine.getTime())).toBe("09:05");
+  setLocale("fi-FI");
+  expect(clockTime(fivePastNine)).toBe("09.05");
 });
 
 it("resolves an English base key to Spanish", () => {

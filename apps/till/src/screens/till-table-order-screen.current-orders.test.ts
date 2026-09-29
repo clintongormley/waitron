@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TabLine, PartyBill } from "../api/client.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
@@ -12,6 +12,8 @@ import {
   fish,
   flan,
   groups,
+  heldAt,
+  laterHeldAt,
   now,
   orderGroup,
   row,
@@ -20,6 +22,7 @@ import {
   tarta,
 } from "./till-table-order-screen.current-orders.test-helpers.js";
 
+beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
@@ -56,7 +59,7 @@ function capture(el: TillTableOrderScreen, type: string): CustomEvent[] {
 }
 
 describe("Current orders in the Tab drawer", () => {
-  it("lists the groups in sequence with every bill's rows, held, fired and added-later told apart", async () => {
+  it("lists the groups in sequence with every bill's rows, held and fired told apart", async () => {
     const { el } = await mountCurrent();
     expect(text(q(el, "[data-groups] h2")!)).toBe(t("table.groups_title"));
     const shown = all(el, "[data-group]");
@@ -79,18 +82,51 @@ describe("Current orders in the Tab drawer", () => {
       ["l-flan"],
       ["l-tarta"],
     ]);
-    expect(shown.map((group) => group.querySelector("[data-group-added-later]") !== null)).toEqual([
-      false,
-      false,
-      true,
-      false,
-    ]);
-    expect(text(q(el, '[data-group="g3"] [data-group-added-later]')!)).toBe(
-      t("table.group_added_later"),
-    );
     expect(text(q(el, '[data-group="g4"] [data-group-kitchen]')!)).toBe(t("table.group_held"));
     // The rows stand for the server's summary.
     expect(el.shadowRoot!.querySelector("[data-group-summary]")).toBeNull();
+  });
+
+  describe("each group's head says when it was sent and by whom", () => {
+    const clock = (iso: string) =>
+      new Intl.DateTimeFormat(currentLocale(), { hour: "2-digit", minute: "2-digit" }).format(
+        new Date(iso),
+      );
+    const sentOf = (el: TillTableOrderScreen) =>
+      ["g1", "g2", "g3", "g4"].map((id) =>
+        text(q(el, `[data-group="${id}"] .group-head [data-group-sent]`)!),
+      );
+    // Group 1's sent time differs from its fired time, so showing the one for the other fails.
+    const sentBeforeFired = "2026-09-28T19:45:00.000Z";
+    const mountSent = () =>
+      mountCurrent({
+        currentOrders: current({
+          groups: current().groups.map((group) =>
+            group.id === "g1" ? { ...group, sentAt: sentBeforeFired } : group,
+          ),
+        }),
+      });
+
+    it("in English: fired groups say Sent, held ones Held, and a sender with no name is left out", async () => {
+      const { el } = await mountSent();
+      expect(sentOf(el)).toEqual([
+        `Sent ${clock(sentBeforeFired)} by Luis`,
+        `Sent ${clock(fired)}`,
+        `Held ${clock(heldAt)} by Ana`,
+        `Held ${clock(laterHeldAt)}`,
+      ]);
+    });
+
+    it("in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mountSent();
+      expect(sentOf(el)).toEqual([
+        `Enviado a las ${clock(sentBeforeFired)} por Luis`,
+        `Enviado a las ${clock(fired)}`,
+        `En espera desde las ${clock(heldAt)}, por Ana`,
+        `En espera desde las ${clock(laterHeldAt)}`,
+      ]);
+    });
   });
 
   it("says of each row only what was recorded, and how much of a partly served one is served", async () => {

@@ -3613,7 +3613,8 @@ describe("till-app: Current orders", () => {
         state: "fired",
         firedAt: "2026-09-28T19:50:00.000Z",
         remindAt: null,
-        addedLater: false,
+        sentAt: "2026-09-28T19:50:00.000Z",
+        sentBy: "Luis",
         rows: [
           {
             lineId: "line-1",
@@ -3778,7 +3779,8 @@ describe("till-app: Current orders", () => {
           state: "held",
           firedAt: null,
           remindAt: null,
-          addedLater: false,
+          sentAt: "2026-09-28T20:02:00.000Z",
+          sentBy: "Ana",
           rows: [
             {
               lineId: "line-9",

@@ -9,8 +9,8 @@ import { current, groups, now } from "./till-table-order-screen.current-orders.t
 afterEach(cleanupWidgets);
 
 // The fixture holds every row state Current orders draws: fired minutes ago, ready, en route,
-// preparing, no kitchen item, partly served, served, held with extras, a group added later, rows in
-// no group, and a due reminder with Snooze and Fire.
+// preparing, no kitchen item, partly served, served, held with extras, groups whose sender is named
+// and groups whose sender is not, rows in no group, and a due reminder with Snooze and Fire.
 describe.each(["light", "dark"] as const)("Current orders a11y (%s theme)", (theme) => {
   async function mountDrawer(over: Partial<TillTableOrderScreen> = {}) {
     const mounted = await mountWidget<TillTableOrderScreen>(
