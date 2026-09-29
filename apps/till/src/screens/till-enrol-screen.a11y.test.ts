@@ -59,7 +59,7 @@ describe.each(["light", "dark"] as const)("till-enrol-screen a11y (%s theme)", (
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the refusal banner (danger-on-surface, not muted text)", async () => {
+  it("has no violations with a refusal shown beside Ask to join", async () => {
     const { el, host } = await mountWidget<TillEnrolScreen>(
       "till-enrol-screen",
       { api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.pairing_closed" }) }) },
@@ -67,7 +67,22 @@ describe.each(["light", "dark"] as const)("till-enrol-screen a11y (%s theme)", (
     );
     await flush(el);
     await knock(el);
-    expect(el.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations with an empty name refused", async () => {
+    const { el, host } = await mountWidget<TillEnrolScreen>(
+      "till-enrol-screen",
+      { api: stubApi() },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).not.toBe("");
     await expectNoA11yViolations(host);
   });
 });

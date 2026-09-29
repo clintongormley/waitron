@@ -31,6 +31,15 @@ function query(el: TillEnrolScreen, selector: string): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>(selector);
 }
 
+/** The form's one message beside Ask to join. */
+function bottomMessage(el: TillEnrolScreen): string {
+  return (query(el, "wt-form-actions") as HTMLElement & { error: string }).error;
+}
+
+function submitButton(el: TillEnrolScreen): HTMLElement & { disabled: boolean } {
+  return query(el, "[data-submit]") as HTMLElement & { disabled: boolean };
+}
+
 function typeName(el: TillEnrolScreen, value: string): void {
   const input = query(el, "[data-name]") as HTMLElement & { value: string };
   input.value = value;
@@ -82,7 +91,7 @@ it("asks only for a name — no key field, no profile picker, no binding picker"
   expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
 });
 
-it("explains an attempted empty submission beside the field and in the form summary", async () => {
+it("explains an attempted empty submission beside the field and once beside the button, with no summary", async () => {
   const join = vi.fn();
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ join }),
@@ -93,12 +102,35 @@ it("explains an attempted empty submission beside the field and in the form summ
   expect(join).not.toHaveBeenCalled();
   const field = query(el, "[data-name]")!;
   expect((field as HTMLElement & { error: string }).error).toBe(t("form.name_required"));
-  const summary = query(el, "wt-form-error-summary") as HTMLElement & {
-    heading: string;
-    errors: string[];
-  };
-  expect(summary.heading).toBe(t("form.error_heading"));
-  expect(summary.errors).toEqual([t("form.name_required")]);
+  expect(bottomMessage(el)).toBe(t("form.fix_fields"));
+  expect(query(el, "wt-form-error-summary")).toBeNull();
+  expect(submitButton(el).disabled).toBe(true);
+  const native = field.shadowRoot!.querySelector("input")!;
+  await vi.waitFor(() => expect(field.shadowRoot!.activeElement).toBe(native));
+});
+
+it("re-checks the name as it is typed after a refused press, and the button works again once it is filled", async () => {
+  const join = vi.fn().mockResolvedValue({ joinId: "jr-1", verificationNumber: "47" });
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
+    api: stubApi({ join }),
+  });
+  await flush(el);
+  query(el, "[data-submit]")!.click();
+  await el.updateComplete;
+
+  typeName(el, "Front counter");
+  await el.updateComplete;
+
+  expect((query(el, "[data-name]") as HTMLElement & { error: string }).error).toBe("");
+  expect(bottomMessage(el)).toBe("");
+  expect(submitButton(el).disabled).toBe(false);
+
+  typeName(el, "");
+  await el.updateComplete;
+
+  expect(bottomMessage(el)).toBe(t("form.fix_fields"));
+  expect(submitButton(el).disabled).toBe(true);
+  expect(join).not.toHaveBeenCalled();
 });
 
 it("posts only the name and shows the two-digit number, announced, with 'waiting for approval'", async () => {
@@ -250,27 +282,59 @@ it("tells the operator to ask for pairing mode when the server says pairing_clos
   });
   await flush(el);
   await knock(el);
-  const banner = query(el, "[data-error]")!;
-  expect(banner.textContent!.trim()).toBe(codeMessage("device.pairing_closed"));
+  expect(bottomMessage(el)).toBe(codeMessage("device.pairing_closed"));
   // Without this, the assertion above passes by degrading with the resolver's table.
-  expect(banner.textContent!.trim()).not.toBe(codeMessage("server.internal"));
-  expect(banner.textContent).toContain("Allow new devices");
-  expect(banner.getAttribute("role")).toBe("alert");
+  expect(bottomMessage(el)).not.toBe(codeMessage("server.internal"));
+  expect(bottomMessage(el)).toContain("Allow new devices");
+  // The one message sits beside the button, announced there; nothing is left at the top.
+  const actions = query(el, "wt-form-actions")!;
+  await (actions as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+  expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
+  expect(query(el, "[data-error]")).toBeNull();
   // Still on the name form, with the name retained, so Ask to join is one tap once pairing is on.
   expect(query(el, "[data-name]")).not.toBeNull();
   expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
 });
 
-it("folds every other refusal into the generic sentence and clears it on a retype", async () => {
+it("folds every other refusal into the generic sentence and keeps it until the next press", async () => {
+  let settle!: (value: unknown) => void;
+  const join = vi
+    .fn()
+    .mockRejectedValueOnce({ code: "device.join_rate_limited" })
+    .mockReturnValue(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
-    api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.join_rate_limited" }) }),
+    api: stubApi({ join }),
   });
   await flush(el);
   await knock(el);
-  expect(query(el, "[data-error]")!.textContent!.trim()).toBe(codeMessage("server.internal"));
+  expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+  expect(submitButton(el).disabled).toBe(false);
   typeName(el, "Front counter 2");
   await el.updateComplete;
-  expect(query(el, "[data-error]")).toBeNull();
+  expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+  query(el, "[data-submit]")!.click();
+  await el.updateComplete;
+  expect(bottomMessage(el)).toBe("");
+  settle({ joinId: "jr-1", verificationNumber: "47" });
+  await flush(el);
+});
+
+it("shows a refusal and the name's own message together when the name is emptied after a refusal", async () => {
+  const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
+    api: stubApi({ join: vi.fn().mockRejectedValue({ code: "device.pairing_closed" }) }),
+  });
+  await flush(el);
+  await knock(el);
+  typeName(el, "");
+  await el.updateComplete;
+  expect((query(el, "[data-name]") as HTMLElement & { error: string }).error).toBe(
+    t("form.name_required"),
+  );
+  expect(bottomMessage(el)).toBe(`${codeMessage("device.pairing_closed")} ${t("form.fix_fields")}`);
 });
 
 it("falls back to the generic sentence for a rejection carrying no code at all", async () => {
@@ -279,7 +343,7 @@ it("falls back to the generic sentence for a rejection carrying no code at all",
   });
   await flush(el);
   await knock(el);
-  expect(query(el, "[data-error]")!.textContent!.trim()).toBe(codeMessage("server.internal"));
+  expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
 });
 
 it("ignores a second tap while a knock is in flight", async () => {
@@ -367,7 +431,7 @@ it("drops a refusal that lands after teardown", async () => {
   el.remove();
   reject({ code: "device.pairing_closed" });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(query(el, "[data-error]")).toBeNull();
+  expect(bottomMessage(el)).toBe("");
 });
 
 it("does not emit `enrolled` for an approval that lands after teardown", async () => {

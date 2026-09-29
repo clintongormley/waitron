@@ -1,8 +1,7 @@
-import { LitElement, type TemplateResult, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "../widgets/language-chooser.js";
@@ -59,17 +58,6 @@ export class TillEnrolScreen extends LitElement {
         letter-spacing: 0.1em;
         text-align: center;
       }
-
-      /* The refusal banner — the danger-on-surface pairing the lock/station screens use (a11y-safe in
-         both themes), never behind muted text. */
-      .error {
-        margin: 0;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-danger);
-        color: var(--wt-color-on-danger);
-        font-weight: var(--wt-font-weight-bold);
-      }
     `,
   ];
 
@@ -96,16 +84,20 @@ export class TillEnrolScreen extends LitElement {
 
   #onName(event: Event): void {
     this.name = (event as CustomEvent<{ value: string }>).detail.value;
-    this.errorCode = "";
   }
 
   /** A refused knock returns to the `name` phase: the name is the only thing the operator can change. */
   async #join(): Promise<void> {
     if (this.busy) return;
     this.attempted = true;
-    if (this.name === "") return;
-    this.busy = true;
     this.errorCode = "";
+    if (this.name === "") {
+      await this.updateComplete;
+      const form = this.shadowRoot!.querySelector(".screen");
+      if (form !== null) await focusFirstInvalid(form);
+      return;
+    }
+    this.busy = true;
     try {
       const { joinId, verificationNumber } = await this.api.join(this.name);
       if (!this.isConnected) return;
@@ -168,18 +160,13 @@ export class TillEnrolScreen extends LitElement {
 
   #renderName(): TemplateResult {
     const nameError = this.attempted && this.name === "" ? t("form.name_required") : "";
+    const bottom = [
+      ...(this.errorCode === "" ? [] : [codeMessage(this.errorCode)]),
+      ...(nameError === "" ? [] : [t("form.fix_fields")]),
+    ].join(" ");
     return html`
       <h1 class="title">${t("device.join_name_title")}</h1>
       <p class="hint">${t("device.join_name_hint")}</p>
-      ${
-        this.errorCode === ""
-          ? nothing
-          : html`<p class="error" role="alert" data-error>${codeMessage(this.errorCode)}</p>`
-      }
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${nameError === "" ? [] : [nameError]}
-      ></wt-form-error-summary>
       <wt-input
         @keydown=${(e: KeyboardEvent) =>
           submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
@@ -194,12 +181,12 @@ export class TillEnrolScreen extends LitElement {
           this.#onName(e);
         }}
       ></wt-input>
-      <wt-form-actions>
+      <wt-form-actions .error=${bottom}>
         <slot name="actions-before" slot="cancel"></slot>
         <wt-button
           data-submit
           variant="primary"
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || nameError !== ""}
           @click=${() => void this.#join()}
         >
           ${t("device.join_submit")}

@@ -5,7 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import {
   addDecimal,
@@ -40,7 +40,7 @@ import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layo
 import "../widgets/basket.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
@@ -3812,7 +3812,6 @@ export class TillTableOrderScreen extends LitElement {
     if (next.has(line.lineNo)) next.delete(line.lineNo);
     else next.set(line.lineNo, this.#displayQty(line.quantity));
     this.splitQuantities = next;
-    this.splitAttempted = false;
   }
 
   #setSplitQuantity(lineNo: number, quantity: string): void {
@@ -3875,10 +3874,15 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Full quantities omit `quantity`; partial plain dishes carry their exact selected decimal. Modifier
    * children are absent from the picker and move with their whole parent on the server. */
-  #confirmSplit(): void {
+  async #confirmSplit(): Promise<void> {
     if (this.splitQuantities.size === 0) return;
     this.splitAttempted = true;
-    if (this.#splitErrors().length > 0) return;
+    if (this.#splitErrors().length > 0) {
+      await this.updateComplete;
+      const form = this.shadowRoot!.querySelector("[data-split-lines]");
+      if (form !== null) await focusFirstInvalid(form);
+      return;
+    }
     const transfers: TabTransfer[] = this.lines
       .filter((line) => !this.#isChild(line) && this.splitQuantities.has(line.lineNo))
       .map((line) => {
@@ -4139,25 +4143,23 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="actions" data-split-lines>
       <h2>${t("table.split_pick_lines")}</h2>
       <p data-split-help>${t("table.split_options_together")}</p>
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${errors}
-      ></wt-form-error-summary>
       ${
         lines.length === 0
           ? html`<p class="empty">${t("table.split_no_lines")}</p>`
           : html`<div class="action-options">${lines.map((line) => this.#splitLineRow(line))}</div>`
       }
-      <wt-button
-        class="transfer-confirm"
-        data-split-confirm
-        variant="primary"
-        ?disabled=${this.splitQuantities.size === 0}
-        @click=${() => this.#confirmSplit()}
-      >
-        ${t("table.split_confirm")}
-      </wt-button>
-      ${this.#backButton()}
+      <wt-form-actions .error=${errors.length > 0 ? t("form.fix_fields") : ""}>
+        ${this.#backButton("cancel")}
+        <wt-button
+          class="transfer-confirm"
+          data-split-confirm
+          variant="primary"
+          ?disabled=${this.splitQuantities.size === 0 || errors.length > 0}
+          @click=${() => void this.#confirmSplit()}
+        >
+          ${t("table.split_confirm")}
+        </wt-button>
+      </wt-form-actions>
     </section>`;
   }
 
@@ -4230,8 +4232,9 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #backButton(): TemplateResult {
+  #backButton(slot?: string): TemplateResult {
     return html`<wt-button
+      slot=${slot ?? nothing}
       class="action-back"
       data-action-back
       variant="secondary"

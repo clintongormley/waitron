@@ -2833,6 +2833,13 @@ describe("till-table-order-screen", () => {
     }
     const click = (el: TillTableOrderScreen, selector: string) =>
       el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
+    const splitBottom = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "[data-split-lines] wt-form-actions",
+      )!;
+    const splitConfirm = (el: TillTableOrderScreen) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-split-confirm]")!;
+
     const setSplitQuantity = async (el: TillTableOrderScreen, lineNo: number, value: string) => {
       const field = el.shadowRoot!.querySelector<HTMLElement>(`[data-split-quantity="${lineNo}"]`)!;
       const input = field.shadowRoot!.querySelector("input")!;
@@ -2950,13 +2957,114 @@ describe("till-table-order-screen", () => {
           '[data-split-quantity="1"]',
         )!;
         expect(field.error).toBe(t("table.split_quantity_decimal_error"));
-        const summary = el.shadowRoot!.querySelector<
-          HTMLElement & { heading: string; errors: string[] }
-        >("wt-form-error-summary")!;
-        expect(summary.heading).toBe(t("form.error_heading"));
-        expect(summary.errors).toEqual([t("table.split_quantity_decimal_error")]);
+        expect(splitBottom(el).error).toBe(t("form.fix_fields"));
+        expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
+        expect(splitConfirm(el).disabled).toBe(true);
       },
     );
+
+    /** A weighed line and a plain dish, on the split step with both picked. */
+    const splitTwoLines = async () => {
+      const weight = {
+        ...pendingLine,
+        productId: "jamon",
+        unitPrecision: 3,
+        quantity: "0.750",
+        unitPriceGross: "20.00",
+      };
+      const cheese = {
+        ...weight,
+        lineNo: 2,
+        productId: "queso",
+        quantity: "0.500",
+      };
+      const { el } = await mount({ lines: [weight, cheese], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      click(el, '[data-split-line="2"]');
+      await el.updateComplete;
+      return el;
+    };
+
+    it("split says nothing about a bad quantity until Split is pressed", async () => {
+      const el = await splitTwoLines();
+
+      await setSplitQuantity(el, 1, "0");
+
+      const field = el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        '[data-split-quantity="1"]',
+      )!;
+      expect(field.error).toBe("");
+      expect(splitBottom(el).error).toBe("");
+      expect(splitConfirm(el).disabled).toBe(false);
+    });
+
+    it("split re-checks each quantity as it changes after a refused press, and Split works again once all are fixed", async () => {
+      const el = await splitTwoLines();
+      let captured: CustomEvent | undefined;
+      el.addEventListener("split-lines", (event) => (captured = event as CustomEvent));
+      await setSplitQuantity(el, 1, "0");
+      await setSplitQuantity(el, 2, "9");
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+      const error = (lineNo: number) =>
+        el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+          `[data-split-quantity="${lineNo}"]`,
+        )!.error;
+      expect(error(1)).toBe(t("table.split_quantity_decimal_error"));
+      expect(error(2)).toBe(t("table.split_quantity_decimal_error"));
+
+      await setSplitQuantity(el, 1, "0.5");
+
+      expect(error(1)).toBe("");
+      expect(error(2)).toBe(t("table.split_quantity_decimal_error"));
+      expect(splitBottom(el).error).toBe(t("form.fix_fields"));
+      expect(splitConfirm(el).disabled).toBe(true);
+
+      await setSplitQuantity(el, 2, "0.25");
+
+      expect(error(2)).toBe("");
+      expect(splitBottom(el).error).toBe("");
+      expect(splitConfirm(el).disabled).toBe(false);
+      click(el, "[data-split-confirm]");
+      expect(captured!.detail).toEqual({
+        transfers: [
+          { lineNo: 1, quantity: "0.5" },
+          { lineNo: 2, quantity: "0.25" },
+        ],
+      });
+    });
+
+    it("split keeps a bad quantity's message when another dish is unpicked after a refused press", async () => {
+      const el = await splitTwoLines();
+      await setSplitQuantity(el, 1, "0");
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+
+      click(el, '[data-split-line="2"]');
+      await el.updateComplete;
+
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { error: string }>('[data-split-quantity="1"]')!
+          .error,
+      ).toBe(t("table.split_quantity_decimal_error"));
+      expect(splitBottom(el).error).toBe(t("form.fix_fields"));
+      expect(splitConfirm(el).disabled).toBe(true);
+    });
+
+    it("split moves the cursor to the first bad quantity when Split is refused", async () => {
+      const el = await splitTwoLines();
+      await setSplitQuantity(el, 2, "0");
+
+      click(el, "[data-split-confirm]");
+
+      const field = el.shadowRoot!.querySelector<HTMLElement>('[data-split-quantity="2"]')!;
+      await vi.waitFor(() =>
+        expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input")),
+      );
+    });
 
     // A line sold as a variant names the VARIANT as its product, and a variant is never a till
     // product of its own (the till's products are the offers' parents), so the split has to read the

@@ -4429,14 +4429,16 @@ ongoing overhaul listed at the top of Track A.
   alert where the summary was; an open editor keeps its own refusal beside Save, apart from a failed
   list refresh, and puts a server refusal that names a field under that field. Left open, not done:
   (1) the setup wizard's Demo gaps, listed under *Demo gaps on the setup wizard's venue screen*
-  earlier in this file; (2) the till's forms are C48; (3) `wt-form-error-summary` is deleted once
+  earlier in this file; (2) **done by C48:** the till's forms follow the rule — the seat dialog,
+  the device join screen and the bill split step (the split step's top summary, from Task 10's
+  #875, included). The join screen's refusals, which named no field, moved from a banner at the top
+  to the message beside Ask to join, where each now stays until the next press rather than going
+  on a retype; (3) `wt-form-error-summary` is deleted once
   nothing uses it — besides its own files and exports in `packages/ui-core` and `packages/ui`, the
-  till's forms (`apps/till/src/screens/till-enrol-screen.ts`,
-  `apps/till/src/screens/till-table-order-screen.ts`, `apps/till/src/widgets/seat-dialog.ts`), the
   `packages/ui` workbench demo (`packages/ui/demo/main.ts`) and the consumer test page
   `packages/ui-core/test/consumer/main.ts`, which `packages/ui-core/test/package-consumer.test.mjs`
-  loads, still use it; of the other test files that name it, the till's three and
-  `packages/ui/src/core-compatibility.test.ts` read it, and the rest only check that it is absent;
+  loads, still use it; of the other test files that name it,
+  `packages/ui/src/core-compatibility.test.ts` reads it, and the rest only check that it is absent;
   (4) the profile screen, opened with required details missing, marks those fields at once, before
   any press (two existing tests pin it), unlike every other form; (5) the form plumbing is
   hand-written per form:
