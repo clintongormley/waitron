@@ -1,10 +1,11 @@
 # Third-party software in the Waitron box image
 
 The box image carries software written by others under their own licences. This folder is
-copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips and
-Litestream; the npm packages bundled into the server, the web apps and the print-agent have no
-notice file yet, and the print-agent image, built by the same `deploy/Dockerfile`, has no
-`/app/third-party/` at all (`docs/backlog.md`).
+copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream
+and the Moby template the print agent's AppArmor profile is copied from; the npm packages bundled
+into the server, the web apps and the print-agent have no notice file yet, and the print-agent
+image, built by the same `deploy/Dockerfile`, has no `/app/third-party/` at all
+(`docs/backlog.md`).
 
 ## libvips and the libraries built into it
 
@@ -41,6 +42,18 @@ info@waitron.io, naming the image's tag.
 
 These are the terms of sections 6(b) and 6(d) of the GNU General Public License version 3, which
 the LGPL version 3 incorporates.
+
+## The print agent's AppArmor profile
+
+`deploy/apparmor/waitron-print-agent` is not in either image: `waitron.sh install` copies it to
+`/etc/apparmor.d/waitron-print-agent` on the box itself. Everything in it above its D-Bus section is
+copied from Moby's `docker-default` template, `apparmor/template.go` in
+<https://github.com/moby/profiles> at commit `f0494f1fbb1bbaf2e1b02ee20aab206f32456a63`,
+Copyright The Moby Authors, licensed under the Apache License, Version 2.0. The profile's own header
+says so and gives the licence's address, <https://www.apache.org/licenses/LICENSE-2.0>, because that
+header is the only part of this notice that reaches `/etc/apparmor.d`.
+
+- `licenses/Apache-2.0.txt` is that licence.
 
 ## Litestream
 

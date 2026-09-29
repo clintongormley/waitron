@@ -388,3 +388,30 @@ describe("createContainerHost — the rest of the seam", () => {
     });
   });
 });
+
+describe("createContainerHost — its own devices", () => {
+  it("logs the default device source's Bluetooth availability through the host's log", async () => {
+    const lines: string[] = [];
+    const sink = {
+      info: (line: string) => lines.push(line),
+      warn: (line: string) => lines.push(line),
+      error: (line: string) => lines.push(line),
+    };
+    const savedPath = process.env.PATH;
+    process.env.PATH = join(dir, "no-bluetoothctl-here");
+    try {
+      const host = createContainerHost({
+        env: baseEnv,
+        state: new FileState(dir),
+        log: sink,
+        onStatus: () => {},
+      });
+      await host.visibleDevices();
+    } finally {
+      process.env.PATH = savedPath;
+    }
+    expect(lines.map((line) => JSON.parse(line) as Record<string, unknown>)).toContainEqual(
+      expect.objectContaining({ level: "warn", msg: "bluetooth unavailable", reason: "failed" }),
+    );
+  });
+});

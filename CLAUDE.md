@@ -175,11 +175,12 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
-- **No front-end bundle is built by a pull request that did not touch `deploy/`.** In CI the SPAs
+- **No front-end bundle is built by a pull request that changed no image input.** In CI the SPAs
   are `vite build`-ed only inside `deploy/Dockerfile`, which on a pull request runs only when
-  `deploy/` changed — and wherever it does run it builds them without opening one, so a bundle that
-  renders nothing passes anyway. Cost: the vite 6 → 8 bundler replacement had to take its build
-  evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
+  `deploy/` or a file only image-smoke runs (`scripts/fake-bluez.py`) changed
+  (`isImageInputPath`, `scripts/changed-scope.mjs`) — and wherever it does run it builds them
+  without opening one, so a bundle that renders nothing passes anyway. Cost: the vite 6 → 8 bundler
+  replacement had to take its build evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
   Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
   box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts`,
@@ -354,6 +355,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A container that must reach a hot-plugged USB printer mounts `/dev:/dev:ro`**, plus
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
+- **The print agent runs under `deploy/apparmor/waitron-print-agent`, named through
+  `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it; a `bluetoothctl` call that
+  sends a bus message the profile does not list is refused until the profile gains a rule for it.**
+  Cost: on the owner's box (2026-09-29) Docker's default profile refused
+  the agent's first bus message and it silently listed no Bluetooth printers. Guards, weaker than
+  their names: image-smoke runs only the agent's paired listing and the commands its Bluetooth step
+  names, and not on a pull request that changed no image input; `scripts/deploy-image-env.test.ts`
+  reads the profile as TEXT for globbed bus rules, not for a grown literal list. See
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail shows the failed start's own lines — the error, its cause chain (up to five
   levels in all), the stack and an `AppError`'s params — through `redactSecrets` and

@@ -547,4 +547,24 @@ describe("createSetupApp — GET /status.json", () => {
     expect(body).not.toHaveProperty("token");
     expect((await request(app, "/status.json", undefined, "192.168.20.5")).status).toBe(403);
   });
+
+  it("adds the Bluetooth side's availability once it has been checked", async () => {
+    const unavailable = {
+      available: false as const,
+      reason: "dbus_unreachable" as const,
+      detail: 'assertion "connection != NULL" failed',
+    };
+    const checked: { bluetooth?: typeof unavailable } = {};
+    const app = createSetupApp(deps({ bluetooth: () => checked.bluetooth }));
+    expect(
+      await (await request(app, "/status.json", undefined, "127.0.0.1")).json(),
+    ).not.toHaveProperty("bluetooth");
+    checked.bluetooth = unavailable;
+    expect(await (await request(app, "/status.json", undefined, "127.0.0.1")).json()).toMatchObject(
+      {
+        phase: "unconfigured",
+        bluetooth: unavailable,
+      },
+    );
+  });
 });

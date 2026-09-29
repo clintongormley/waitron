@@ -307,6 +307,35 @@ The cgroup rule ADDS major 180 to Docker's default device whitelist (null, zero,
 tty, …); a class that is neither a Docker default nor 180 (e.g. hidraw) is what gets denied. Pinned
 by `scripts/deploy-image-env.test.ts`; built in #308.
 
+## The print agent runs under its own AppArmor profile, and a `bluetoothctl` call that sends a bus message the profile does not list is refused
+
+Docker's default AppArmor profile refuses the system bus, so under it `bluetoothctl` cannot reach
+BlueZ: on the owner's box (2026-09-29) the bus refused the agent's first message, `Hello`, and the
+agent listed no Bluetooth printers. `deploy/apparmor/waitron-print-agent` is Moby's `docker-default`
+template plus bus rules for the messages `bluetoothctl list`, `devices` and `scan` were seen to send
+against a stand-in BlueZ (`scripts/fake-bluez.py`); every other bus message is refused, pairing
+included. `waitron.sh install` loads it where AppArmor is on and only then writes
+`WAITRON_PRINT_AGENT_APPARMOR` to `.env`; `deploy/compose.yml` falls back to `docker-default`
+without it. The order matters because Docker refuses to start a container naming a profile the host
+has not loaded — measured 2026-09-29 on a GitHub runner (Ubuntu 24.04.5, Docker 28.0.4, AppArmor
+parser 4.0.1), with both `docker run` and compose. Docker Desktop 29.3.0, which has no AppArmor,
+ignored the option.
+
+So a `bluetoothctl` call that sends a bus message the profile does not list — from a new command,
+or an old one that starts sending it — is refused at the bus until the profile gains a rule for it. Nothing outside
+image-smoke runs the agent under the profile, and on a pull request image-smoke runs only when an
+image input changed — a path under `deploy/`, or a file only image-smoke runs, such as
+`scripts/fake-bluez.py` (`isImageInputPath`, `scripts/changed-scope.mjs`; the `image` job's `if:` in
+`.github/workflows/ci.yml`), so a pull request that changes only `apps/print-agent` is not checked
+against the profile; on a push to `main` it also runs whenever code changed. Of the agent's
+own `bluetoothctl` calls, image-smoke runs only the paired listing, by waiting for
+`bluetooth.available` in the agent's `/status.json`; every other command it checks is written into
+its Bluetooth step, so a new call is checked only once that step runs it too.
+`scripts/deploy-image-env.test.ts` reads the profile as text and checks that every rule allowing bus
+messages names its interface and members literally — no `*`, `?` or `[…]`, though a `{a,b}` list is
+accepted — while paths may keep their globs; it does not notice a literal list that has grown. Built
+in A129; the receipts are in the profile's header.
+
 **The recovery page**
 
 ## The unauthenticated recovery page: curated title and action, and the failed start's own lines

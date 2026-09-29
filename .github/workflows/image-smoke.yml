@@ -2,11 +2,12 @@ name: image-smoke
 
 # The box image a restaurant actually runs: built, brought up on blank volumes, and smoke-tested.
 # A REUSABLE workflow (`workflow_call`) with no trigger of its own, called from two places so its
-# steps exist once: ci.yml's `image` job (scoped to deploy changes on a pull request, and gating
+# steps exist once: ci.yml's `image` job (scoped to image-input changes on a pull request, and gating
 # `publish` on every main push) and image-nightly.yml (the scheduled + on-request safety net).
 #
-# It earns its place by proving the one thing no developer's machine can. The runner is real Linux,
-# so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that namespace keeps
+# It earns its place by proving two things no developer's machine can. First, the print agent
+# reaches a stand-in BlueZ (scripts/fake-bluez.py) under its own AppArmor profile, an option Docker Desktop ignores (measured on 29.3.0;
+# deploy/compose.yml). Second, the runner is real Linux, so deploy/compose.yml's `network_mode: host` is the SHIPPED profile here — and that namespace keeps
 # the kernel's ip_unprivileged_port_start=1024, so a non-root process reaches 443 only because the
 # image sets cap_net_bind_service on node. Docker Desktop's "host" network is its own Linux VM's, so
 # a Mac stack-up has to override the file to bridge + published ports, and Docker's bridge namespace
@@ -35,16 +36,32 @@ jobs:
       - uses: actions/checkout@v7
 
       # deploy/.env is where waitron.sh puts a real box's and it is gitignored, so compose reads it
-      # with no flag. It carries nothing but the two tags this job builds, so compose runs those rather
-      # than resolving the published `:main` images and pulling them. It is written first so every
-      # later step reads the same file, the `if: always()` teardown included.
+      # with no flag. It carries the two tags this job builds, so compose runs those rather than
+      # resolving the published `:main` images and pulling them, and the AppArmor profile line
+      # waitron.sh writes on a box with AppArmor. It is written first so every later step reads the
+      # same file, the `if: always()` teardown included.
       - name: Point compose at the images this job builds
         run: |
           set -euo pipefail
           {
             echo "WAITRON_IMAGE=waitron:ci"
             echo "WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:ci"
+            echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"
           } > deploy/.env
+
+      # What waitron.sh does on a box with AppArmor, so the stack below runs the agent under the
+      # shipped profile; compose would refuse to start it otherwise. The stand-in BlueZ is for the
+      # Bluetooth check further down: the runner has no Bluetooth hardware or kernel module.
+      - name: Load the print agent's AppArmor profile, and put a stand-in BlueZ on the system bus
+        run: |
+          set -euo pipefail
+          [ "$(cat /sys/module/apparmor/parameters/enabled)" = "Y" ]
+          sudo apparmor_parser -r deploy/apparmor/waitron-print-agent
+          sudo apt-get install -y --no-install-recommends bluez python3-dbus python3-gi
+          # The log path goes in as an argument: sudo drops RUNNER_TEMP from the root shell's environment.
+          sudo sh -c 'python3 scripts/fake-bluez.py > "$1" 2>&1 &' sh "$RUNNER_TEMP/fake-bluez.log"
+          for _ in $(seq 1 40); do grep -q "fake bluez ready" "$RUNNER_TEMP/fake-bluez.log" && break; sleep 0.25; done
+          grep -q "fake bluez ready" "$RUNNER_TEMP/fake-bluez.log" || { cat "$RUNNER_TEMP/fake-bluez.log"; exit 1; }
 
       # These ports are bound in the HOST namespace — not by every container this job starts, but by
       # whichever services declare `network_mode: host` in deploy/compose.yml. A bridged service
@@ -193,6 +210,65 @@ jobs:
           cat status.json; echo
           [ "$code" = "200" ]
           [ "$(jq -r .serverUrl status.json)" = "https://127.0.0.1" ]
+
+      # The agent here is never approved, so its job poll, which lists Bluetooth only once approved,
+      # has not run: `bluetooth` in status.json can be set only by bin.ts's check at start-up or by
+      # its timer. `available: true` proves one of the two ran in the agent's own process, under the
+      # profile, and reached the stand-in BlueZ started before the stack; it does not say which of
+      # the two. The 40 seconds cover one 30-second back-off after a failed first check, the timer's
+      # 5-second tick and the listing's 3-second kill.
+      - name: The print agent reports Bluetooth available before it has joined
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          for _ in $(seq 1 40); do
+            if curl -s -o status.json http://127.0.0.1:9110/status.json \
+              && jq -e '.bluetooth.available == true' status.json > /dev/null; then
+              cat status.json; echo
+              exit 0
+            fi
+            sleep 1
+          done
+          cat status.json; echo
+          exit 1
+
+      # The owner's box, 2026-09-29: under Docker's default profile the bus refused the agent's
+      # `Hello` and bluetoothctl aborted, so no Bluetooth printer could ever appear. The agent here
+      # runs under the shipped profile, as the unprivileged user, with compose's own socket mount;
+      # the control is the same image and mount under docker-default, which must still be refused.
+      - name: The print agent reaches a stand-in BlueZ under its profile, and Docker's default profile does not
+        run: |
+          set -euo pipefail
+          agent=$(docker compose ps -q print-agent)
+          [ "$(docker inspect -f '{{.AppArmorProfile}}' "$agent")" = "waitron-print-agent" ]
+          docker exec "$agent" bluetoothctl --timeout 5 list | tee "$RUNNER_TEMP/bt-list.txt"
+          grep -q "Controller 00:11:22:33:44:55 waitron-ci" "$RUNNER_TEMP/bt-list.txt"
+          docker exec "$agent" bluetoothctl --timeout 5 devices Paired | tee "$RUNNER_TEMP/bt-paired.txt"
+          grep -q "Device 66:55:44:33:22:11 CI Printer" "$RUNNER_TEMP/bt-paired.txt"
+          # A device found during a scan, and a changed property, arrive only as BlueZ's signals.
+          docker exec "$agent" bluetoothctl --timeout 3 scan on | tee "$RUNNER_TEMP/bt-scan.txt"
+          grep -q "Device 11:22:33:44:55:66 Found" "$RUNNER_TEMP/bt-scan.txt"
+          grep -q "Discovering: yes" "$RUNNER_TEMP/bt-scan.txt"
+          # A BlueZ method the profile does not allow. The stand-in prints a line if one ever arrives.
+          set +e
+          docker exec "$agent" bluetoothctl remove 66:55:44:33:22:11 > "$RUNNER_TEMP/bt-remove.txt" 2>&1
+          removed=$?
+          set -e
+          cat "$RUNNER_TEMP/bt-remove.txt"
+          [ "$removed" -ne 0 ]
+          grep -q "org.freedesktop.DBus.Error.AccessDenied" "$RUNNER_TEMP/bt-remove.txt"
+          if grep -q "RemoveDevice" "$RUNNER_TEMP/fake-bluez.log"; then exit 1; fi
+
+          set +e
+          docker run --rm -u node --security-opt apparmor=docker-default \
+            -v /run/dbus/system_bus_socket:/run/dbus/system_bus_socket \
+            waitron-print-agent:ci bluetoothctl --timeout 5 devices Paired > "$RUNNER_TEMP/bt-control.txt" 2>&1
+          control=$?
+          set -e
+          cat "$RUNNER_TEMP/bt-control.txt"
+          [ "$control" -ne 0 ]
+          grep -q 'connection != NULL' "$RUNNER_TEMP/bt-control.txt"
+          if grep -q "CI Printer" "$RUNNER_TEMP/bt-control.txt"; then exit 1; fi
 
       - name: Tear the stack down, volumes and all
         if: always()

@@ -129,12 +129,35 @@ describe("isImageInputPath", () => {
     expect(isImageInputPath("deploy/README.md")).toBe(true);
   });
 
+  // Image-smoke's stand-in BlueZ lives outside deploy/, and nothing but image-smoke runs it.
+  it("treats the stand-in BlueZ image-smoke runs as an image input", () => {
+    expect(isImageInputPath("scripts/fake-bluez.py")).toBe(true);
+  });
+
+  // Reads image-smoke.yml as TEXT and sees only literal `scripts/…` paths, so a script reached
+  // through a variable or outside `scripts/` is invisible to it.
+  it("treats every scripts/ file image-smoke.yml names as an image input", () => {
+    const workflow = readFileSync(
+      join(import.meta.dirname, "..", ".github", "workflows", "image-smoke.yml"),
+      "utf8",
+    );
+    const named = [
+      ...new Set(
+        [...workflow.matchAll(/scripts\/[\w./-]+/g)].map((match) => match[0].replace(/\.+$/, "")),
+      ),
+    ];
+
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((path) => !isImageInputPath(path))).toEqual([]);
+  });
+
   it.each([
     "packages/db/src/index.ts",
     "apps/server/src/index.ts",
     "docs/backlog.md",
     ".github/workflows/ci.yml",
     "deployment/x.ts",
+    "scripts/changed-scope.mjs",
   ])("treats %s as NOT an image input", (path) => {
     expect(isImageInputPath(path)).toBe(false);
   });

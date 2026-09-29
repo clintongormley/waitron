@@ -67,13 +67,23 @@ export function isRootScopePath(path) {
 }
 
 /**
- * True for everything under `deploy/`, the box image's build and runtime inputs, whose change is what
- * re-runs ci.yml's `image` smoke on a pull request. The WHOLE directory on purpose: matching too
- * broadly only re-runs the smoke on a `deploy/README.md` edit, while a named-file list would silently
- * SKIP it on a new input file nobody remembered to add. The trailing slash keeps out `deployment/`.
+ * Files outside `deploy/` that only image-smoke runs, so a change to one is checked nowhere else.
+ * It must hold every `scripts/` file `.github/workflows/image-smoke.yml` runs. Guard: the
+ * image-smoke case in scripts/changed-scope.test.mjs, weaker than its name — it reads the workflow
+ * as text and sees only literal `scripts/…` paths. The workflow file itself is not an image input,
+ * by a recorded decision (ci.yml's `image` job comment): an edit to it is left to image-nightly.yml.
+ */
+const IMAGE_SMOKE_FILES = ["scripts/fake-bluez.py"];
+
+/**
+ * True for everything under `deploy/`, the box image's build and runtime inputs, and for the files
+ * `IMAGE_SMOKE_FILES` names: a change to either is what re-runs ci.yml's `image` smoke on a pull
+ * request. The WHOLE directory on purpose: matching too broadly only re-runs the smoke on a
+ * `deploy/README.md` edit, while a named-file list would silently SKIP it on a new input file nobody
+ * remembered to add. The trailing slash keeps out `deployment/`.
  */
 export function isImageInputPath(path) {
-  return path.startsWith("deploy/");
+  return path.startsWith("deploy/") || IMAGE_SMOKE_FILES.includes(path);
 }
 
 /** True when a change to `path` cannot affect any test, build or type-check result. */

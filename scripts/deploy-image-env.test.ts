@@ -76,6 +76,40 @@ function thrown(run: () => unknown): { code?: unknown; params?: { variable?: unk
   throw new Error("expected a throw, got none");
 }
 
+/** Each `dbus` rule of an AppArmor profile that allows rather than denies, from its keyword to the
+ * comma that ends it; a comma inside `( )` or `{ }` does not. A rule is found where it begins a
+ * line or follows a `,` or `{` on one. Comments are dropped first. */
+function dbusAllowRules(profile: string): string[] {
+  const text = profile.replace(/#.*$/gm, "");
+  const rules: string[] = [];
+  for (const start of text.matchAll(/(?:^|[,{])[ \t]*((?:(?:audit|allow|deny)\s+)*)dbus\b/gm)) {
+    const from = start.index + start[0].length - start[1]!.length - "dbus".length;
+    let depth = 0;
+    let end = -1;
+    for (let i = start.index + start[0].length; i < text.length && end < 0; i += 1) {
+      const c = text[i];
+      if (c === "(" || c === "{") depth += 1;
+      else if (c === ")" || c === "}") depth -= 1;
+      else if (c === "," && depth === 0) end = i;
+    }
+    if (end < 0) throw new Error(`unterminated dbus rule at offset ${from}`);
+    if (!/\bdeny\b/.test(start[1]!)) rules.push(text.slice(from, end + 1));
+  }
+  return rules;
+}
+
+const BUS_NAME = String.raw`[A-Za-z_][\w.]*`;
+const LITERAL_BUS_NAMES = new RegExp(`^(?:${BUS_NAME}|\\{${BUS_NAME}(?:,${BUS_NAME})*\\})$`);
+
+/** Which of a rule's `interface=` and `member=` are missing, or not a literal name or `{a,b}` list
+ * of them — any other value is a glob. */
+function unnamedBusFields(rule: string): string[] {
+  return ["interface", "member"].filter((key) => {
+    const value = new RegExp(`(?:^|[\\s(,])${key}=("[^"]*"|\\{[^}]*\\}|[^\\s,)]+)`).exec(rule)?.[1];
+    return value === undefined || !LITERAL_BUS_NAMES.test(value.replace(/^"(.*)"$/, "$1"));
+  });
+}
+
 describe("the container image's environment", () => {
   it("parses as a non-empty ENV block", () => {
     // A parser that silently returned {} would make every assertion below vacuous.
@@ -189,6 +223,78 @@ describe("the print-agent image and its compose wiring", () => {
       "print-agent service",
     );
     expect(agent).toMatch(/^ {4}network_mode: host$/m);
+  });
+
+  it("runs the agent under the AppArmor profile waitron.sh loads, else under Docker's default", () => {
+    const agent = only(
+      COMPOSE,
+      /\n {2}print-agent:([\s\S]*?)(?=\n(?: {2}[a-zA-Z][\w-]*:|[a-zA-Z])|$)/,
+      "print-agent service",
+    );
+    expect(agent).toMatch(/^ {6}- "apparmor=\$\{WAITRON_PRINT_AGENT_APPARMOR:-docker-default\}"$/m);
+    expect(read("deploy/apparmor/waitron-print-agent")).toMatch(/^profile waitron-print-agent /m);
+    expect(WAITRON_SH).toContain("/deploy/apparmor/waitron-print-agent");
+    expect(WAITRON_SH).toContain("env_set WAITRON_PRINT_AGENT_APPARMOR waitron-print-agent");
+  });
+
+  // Reads the profile as TEXT: it catches an allowing D-Bus rule whose interface or members are
+  // missing or a glob, not a literal list that has grown.
+  it("names the interface and methods of every D-Bus rule the agent's profile allows, with no glob", () => {
+    const rules = dbusAllowRules(read("deploy/apparmor/waitron-print-agent"));
+    expect(rules.length).toBeGreaterThan(0);
+    for (const rule of rules) expect(unnamedBusFields(rule), rule).toEqual([]);
+  });
+
+  it("reads a D-Bus rule to its own closing comma, not to a comma inside ( ) or { }", () => {
+    const profile = `  dbus (send, receive) bus=system interface=org.bluez.Adapter1
+       member={StartDiscovery,StopDiscovery} peer=(name=org.bluez, label=unconfined),
+  deny dbus send interface=org.bluez.* member=*,
+  # dbus send member=*,
+  audit dbus receive interface=org.bluez.Device1 member=*,`;
+    expect(dbusAllowRules(profile)).toEqual([
+      `dbus (send, receive) bus=system interface=org.bluez.Adapter1
+       member={StartDiscovery,StopDiscovery} peer=(name=org.bluez, label=unconfined),`,
+      "audit dbus receive interface=org.bluez.Device1 member=*,",
+    ]);
+    expect(unnamedBusFields(dbusAllowRules(profile)[0]!)).toEqual([]);
+  });
+
+  it("finds a D-Bus rule that follows a , or { on the same line, not only one that begins it", () => {
+    const profile = `  deny mount, dbus send bus=system interface=org.bluez.* member=*,
+  profile inner { audit dbus receive interface=org.bluez.Device1 member=*, }`;
+    expect(dbusAllowRules(profile)).toEqual([
+      "dbus send bus=system interface=org.bluez.* member=*,",
+      "audit dbus receive interface=org.bluez.Device1 member=*,",
+    ]);
+  });
+
+  it("refuses a member or interface that is missing or a glob, and leaves the path alone", () => {
+    const rule = (fields: string) => `dbus send bus=system path=/org/bluez/** ${fields},`;
+    expect(unnamedBusFields(rule("interface=org.bluez.Adapter1 member=StartDiscovery"))).toEqual(
+      [],
+    );
+    expect(unnamedBusFields(rule('interface="org.bluez.Adapter1" member={A,B}'))).toEqual([]);
+    expect(unnamedBusFields(rule("interface=org.bluez.Adapter1 member=*"))).toEqual(["member"]);
+    expect(unnamedBusFields(rule("interface=org.bluez.* member=StartDiscovery"))).toEqual([
+      "interface",
+    ]);
+    expect(unnamedBusFields(rule("interface=org.bluez.Adapter1 member={Start*,Stop}"))).toEqual([
+      "member",
+    ]);
+    expect(unnamedBusFields(rule("interface=org.bluez.Adapter? member=[SG]et"))).toEqual([
+      "interface",
+      "member",
+    ]);
+    expect(unnamedBusFields(rule("member=StartDiscovery"))).toEqual(["interface"]);
+  });
+
+  it("smokes the agent under that profile against a stand-in BlueZ, with docker-default as the control", () => {
+    expect(IMAGE_SMOKE).toContain("apparmor_parser -r deploy/apparmor/waitron-print-agent");
+    expect(IMAGE_SMOKE).toContain('echo "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent"');
+    expect(IMAGE_SMOKE).toContain("scripts/fake-bluez.py");
+    expect(IMAGE_SMOKE).toContain("bluetoothctl remove 66:55:44:33:22:11");
+    expect(IMAGE_SMOKE).toContain("--security-opt apparmor=docker-default");
+    expect(IMAGE_SMOKE).toContain("jq -e '.bluetooth.available == true' status.json");
   });
 
   it("has retired the standalone agent Dockerfile", () => {

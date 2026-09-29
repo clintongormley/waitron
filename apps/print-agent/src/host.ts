@@ -40,7 +40,7 @@ export interface ContainerHostOptions {
 
 const FALLBACK_NAME = "print-agent";
 
-function structuredLog(sink: LineSink): HostLog {
+export function structuredLog(sink: LineSink): HostLog {
   const emit =
     (level: "info" | "warn" | "error") =>
     (msg: string, fields?: Record<string, unknown>): void => {
@@ -55,8 +55,9 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     usb: new UsbTransport(),
     bluetooth: new BluetoothTransport(),
   });
-  const devices = opts.devices ?? createLinuxDevices();
   const now = opts.now ?? (() => Date.now());
+  const log = structuredLog(opts.log ?? console);
+  const devices = opts.devices ?? createLinuxDevices({ log, now });
   return {
     hostname,
     setupUrl: () => opts.env.setupUrl ?? null,
@@ -82,7 +83,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     fetch: opts.fetch ?? fetch,
     now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    log: structuredLog(opts.log ?? console),
+    log,
     status: opts.onStatus,
     probeNetwork,
     markPagePrinters: createPagePrinterMarker({

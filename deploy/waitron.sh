@@ -76,7 +76,8 @@ ensure_docker() {
 
 # .env line editing: set/replace or remove a KEY, preserving 0600 and never touching other lines. It
 # CREATES .env when there is none, which is now the normal first install — the box has no pre-boot
-# secret, so a plain `install` writes nothing here and a branch install writes only the image pins.
+# secret, so a plain `install` writes only WAITRON_PRINT_AGENT_APPARMOR, and only on a box where it
+# loaded that profile (load_print_agent_apparmor); a branch install adds the image pins.
 # The rewrite is ATOMIC — the new content is built in a temp file BESIDE .env and renamed onto it only
 # after the write fully succeeds. It never truncates .env in place: a write that failed mid-way there
 # would empty the file and lose whichever image the box is pinned to, after which a bare
@@ -106,6 +107,33 @@ fetch_box_files() {
   fetch "${RAW_BASE}/${ref}/deploy/compose.yml" "$WAITRON_DIR/compose.yml"
   fetch "${RAW_BASE}/${ref}/deploy/.env.example" "$WAITRON_DIR/.env.example"
   echo "waitron.sh: wrote compose.yml from ${ref} (any local compose.yml edits were overwritten)"
+}
+
+# 2b. The print agent's AppArmor profile, from the INSTALLED ref like compose.yml. Docker's default
+#     profile keeps the agent off the system bus, so bluetoothctl cannot reach BlueZ; this one allows
+#     the bus messages bluetoothctl's listing and scan send. .env names the profile only once
+#     apparmor_parser has loaded it, because Docker refuses to start a container that names a profile
+#     the host has not loaded — compose then falls back to docker-default rather than leaving the
+#     agent down. Written into /etc/apparmor.d so the boot-time apparmor.service can load it again;
+#     that reload after a reboot is not yet measured.
+PRINT_AGENT_PROFILE=/etc/apparmor.d/waitron-print-agent
+load_print_agent_apparmor() {
+  local ref="$1" tmp
+  if ! aa-enabled --quiet 2>/dev/null; then
+    env_unset WAITRON_PRINT_AGENT_APPARMOR
+    return 0
+  fi
+  tmp="$(mktemp "$WAITRON_DIR/waitron-print-agent.XXXXXX")" || die "could not create a temp file in $WAITRON_DIR"
+  if fetch "${RAW_BASE}/${ref}/deploy/apparmor/waitron-print-agent" "$tmp" \
+    && as_root install -m 0644 "$tmp" "$PRINT_AGENT_PROFILE" \
+    && as_root apparmor_parser -r "$PRINT_AGENT_PROFILE"; then
+    env_set WAITRON_PRINT_AGENT_APPARMOR waitron-print-agent
+    echo "waitron.sh: loaded the print agent's AppArmor profile"
+  else
+    env_unset WAITRON_PRINT_AGENT_APPARMOR
+    echo "waitron.sh: could not load the print agent's AppArmor profile — it runs under Docker's default profile, which keeps it from Bluetooth printers" >&2
+  fi
+  rm -f "$tmp"
 }
 
 # 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
@@ -319,6 +347,7 @@ cmd_install() {
   ensure_docker
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"
+  load_print_agent_apparmor "$ref"
   select_image "$ref"
   cd "$WAITRON_DIR"
   docker compose up -d --remove-orphans

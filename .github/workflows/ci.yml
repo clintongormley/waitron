@@ -218,8 +218,8 @@ jobs:
           code=$(printf '%s\n' "$out" | sed -n 's/^code=//p')
           scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
           packages=$(printf '%s\n' "$out" | sed -n 's/^packages=//p')
-          # Whether the box image's inputs (deploy/) changed. The `image` job reads it to scope its
-          # smoke to those changes on a pull request; a main push still runs it on `code` alone.
+          # Whether the box image's inputs (deploy/, and the files only image-smoke runs) changed.
+          # The `image` job runs on it; a main push also runs it on `code` alone.
           deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
           # main always runs the full suite: it is what verifies the pull request's narrowing. The
@@ -557,21 +557,24 @@ jobs:
   # here AND from the nightly `image-nightly.yml`, so those ~90 lines exist in exactly one place.
   # Publishing the image is the separate `publish` job below.
   #
-  # It earns its place by proving the one thing no developer's machine can — a non-root process
-  # binding 443 under host networking (image-smoke.yml carries the full receipt). That is worth
+  # It earns its place by proving two things no developer's machine can — a non-root process
+  # binding 443 under host networking, and the print agent reaching a stand-in BlueZ under its
+  # AppArmor profile (image-smoke.yml carries the full receipt). That is worth
   # running when the box image's inputs change, and wasted work on the many PRs that cannot touch
   # them.
   #
-  # WHEN IT RUNS. On a PULL REQUEST, only when `deploy/` changed (`needs.changes.outputs.deploy`,
-  # fed by `isImageInputPath` in scripts/changed-packages.mjs) — most PRs skip it. On a PUSH to
-  # `main` or a `v*` tag it runs on `code` alone, because `publish` ships the image off this smoke
+  # WHEN IT RUNS. Whenever an image input changed (`needs.changes.outputs.deploy`, fed by
+  # `isImageInputPath` in scripts/changed-scope.mjs: `deploy/`, plus the files only image-smoke runs,
+  # such as scripts/fake-bluez.py) — on its own, because a change to such a file under `scripts/` is
+  # root scope, which answers `code=false`. Otherwise, most PRs skip it. On a PUSH to `main` or a
+  # `v*` tag it also runs on `code` alone, because `publish` ships the image off this smoke
   # passing, so every published image was booted first. Drift on quiet days, and an edit to the image
   # workflow itself, are covered by image-nightly.yml (a schedule plus a manual `workflow_dispatch`).
   # ONE `if:` line, so the line-based guard in scripts/ci-workflow.test.mjs reads it — that guard
   # pins the deploy wiring and this pull-request-only event split.
   image:
     needs: changes
-    if: needs.changes.outputs.code == 'true' && (github.event_name != 'pull_request' || needs.changes.outputs.deploy == 'true')
+    if: needs.changes.outputs.deploy == 'true' || (needs.changes.outputs.code == 'true' && github.event_name != 'pull_request')
     permissions:
       contents: read
     uses: ./.github/workflows/image-smoke.yml

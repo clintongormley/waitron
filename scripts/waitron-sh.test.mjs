@@ -37,7 +37,10 @@ afterEach(() => {
 // unconditionally: the `docker` stub sleeps that many seconds on EVERY invocation.
 // `systemctl` and `sudo` are stubbed so ensure_docker's `sudo -n systemctl enable --now docker` is a
 // no-op and the suite is hermetic on Linux with or without passwordless sudo (not just on macOS,
-// which has no systemctl).
+// which has no systemctl). `aa-enabled`, `apparmor_parser` and `install` are stubbed for the same
+// reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
+// suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
+// profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 
@@ -132,6 +135,9 @@ exit 0
 `,
 );
 stub("qrencode", "exit 0");
+stub("aa-enabled", `[ "\${WT_AA_ENABLED}" = "1" ]`);
+stub("apparmor_parser", `[ "\${WT_AA_PARSE_FAIL}" = "1" ] && exit 1; exit 0`);
+stub("install", "exit 0");
 stub("systemctl", "exit 0");
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
@@ -147,6 +153,8 @@ function sandbox({
   envWriteFail = false,
   pullFail = false,
   hang = "",
+  apparmor = false,
+  apparmorParseFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
@@ -169,6 +177,8 @@ function sandbox({
       WT_MV_FAIL: envWriteFail ? "1" : "0",
       WT_PULL_FAIL: pullFail ? "1" : "0",
       WT_HANG: hang,
+      WT_AA_ENABLED: apparmor ? "1" : "0",
+      WT_AA_PARSE_FAIL: apparmorParseFail ? "1" : "0",
     },
   };
 }
@@ -279,6 +289,62 @@ describe("waitron.sh install <ref>", () => {
     const env = readFileSync(join(sb.boxDir, ".env"), "utf8");
     expect(env).toMatch(/^WAITRON_IMAGE=waitron:my-branch$/m);
     expect(env).toMatch(/^WAITRON_PRINT_AGENT_IMAGE=waitron-print-agent:my-branch$/m);
+  });
+});
+
+describe("waitron.sh install and the print agent's AppArmor profile", () => {
+  const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
+  const PROFILE = "/etc/apparmor.d/waitron-print-agent";
+
+  it("fetches the installed ref's profile, loads it, and names it in .env before starting", () => {
+    const sb = sandbox({ apparmor: true });
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const profileUrl =
+      "https://raw.githubusercontent.com/clintongormley/waitron/my-branch/deploy/apparmor/waitron-print-agent";
+    const fetched = log.findIndex(
+      (c) => c.startsWith("curl ") && c.split(" ").some((arg) => arg === profileUrl),
+    );
+    const installed = log.findIndex(
+      (c) => c.startsWith("install -m 0644 ") && c.endsWith(` ${PROFILE}`),
+    );
+    const loaded = log.indexOf(`apparmor_parser -r ${PROFILE}`);
+    const up = log.findIndex((c) => c.startsWith("docker compose") && / up -d /.test(`${c} `));
+    expect(fetched).toBeGreaterThanOrEqual(0);
+    expect(installed).toBeGreaterThan(fetched);
+    expect(loaded).toBeGreaterThan(installed);
+    expect(up).toBeGreaterThan(loaded);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).toMatch(
+      /^WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent$/m,
+    );
+  });
+
+  it("falls back to Docker's default profile, and says so, when the profile will not load", () => {
+    const sb = sandbox({ apparmor: true, apparmorParseFail: true });
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent\n");
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("could not load the print agent's AppArmor profile");
+    expect(r.stderr).toContain("Docker's default profile");
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain(
+      "WAITRON_PRINT_AGENT_APPARMOR",
+    );
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+
+  it("names no profile, and loads none, on a host without AppArmor", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_PRINT_AGENT_APPARMOR=waitron-print-agent\n");
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    expect(
+      log.filter((c) => c.startsWith("apparmor_parser") || c.includes("deploy/apparmor/")),
+    ).toEqual([]);
+    expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain(
+      "WAITRON_PRINT_AGENT_APPARMOR",
+    );
   });
 });
 

@@ -942,6 +942,8 @@ Run the Codex `finish-branch` skill with the required Claude run-it review, push
 
 ## Real-box measurement — required before P2b, not before P1 or P2a
 
+_2026-09-29 (A129): the print agent now runs under `deploy/apparmor/waitron-print-agent`, which allows only the bus messages `bluetoothctl list`, `devices` and `scan` were seen to send. Pairing, `trust`, `connect` and `remove` are not among them (`remove` was measured refused on a CI runner), so under it these steps would measure the profile, not BlueZ. Run them with pairing allowed: keep the owner's `compose.override.yml` that sets `apparmor=unconfined` until the measurement is done. See `docs/backlog.md`, B6._
+
 Run this on the deployed box from the directory that owns `deploy/compose.yml`, replacing the address with the first real Bluetooth receipt printer. Save the complete command output, BlueZ version, box image SHA, printer make/model, and the times at which the printer and host were restarted. Because the container reaches the host BlueZ daemon through `/run/dbus/system_bus_socket`, restarting only the container does not test bond/trust persistence.
 
 First capture and pair:

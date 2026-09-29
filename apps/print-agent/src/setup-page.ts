@@ -2,6 +2,7 @@ import { getConnInfo } from "@hono/node-server/conninfo";
 import type { AgentPhase, AgentSetupSnapshot, AgentStatus } from "@waitron/print-agent";
 import { Hono, type Context } from "hono";
 import { isIP } from "node:net";
+import type { BluetoothAvailability } from "./bluetooth-availability.js";
 
 export interface SetupDeps {
   snapshot: () => Promise<AgentSetupSnapshot>;
@@ -12,6 +13,7 @@ export interface SetupDeps {
   envLocked: boolean;
   defaultName: string;
   now: () => number;
+  bluetooth?: () => BluetoothAvailability | undefined;
 }
 
 function escapeHtml(value: string): string {
@@ -255,7 +257,8 @@ export function createSetupApp(deps: SetupDeps): Hono {
   app.get("/status.json", async (c) => {
     const snapshot = await deps.snapshot();
     if (networkRefused(snapshot, c)) return forbidden(c);
-    return c.json(snapshot.status);
+    const bluetooth = deps.bluetooth?.();
+    return c.json(bluetooth === undefined ? snapshot.status : { ...snapshot.status, bluetooth });
   });
 
   return app;

@@ -2,7 +2,8 @@ import { hostname } from "node:os";
 import { serve } from "@hono/node-server";
 import { createAgent } from "@waitron/print-agent";
 import { readEnv } from "./config.js";
-import { createContainerHost } from "./host.js";
+import { createContainerHost, structuredLog } from "./host.js";
+import { BLUETOOTH_CHECK_TICK_MS, createLinuxDevices } from "./linux-devices.js";
 import { createServerTrustingFetch } from "./server-ca.js";
 import { createSetupApp } from "./setup-page.js";
 import { FileState } from "./state.js";
@@ -17,13 +18,19 @@ const trustingFetch = await createServerTrustingFetch({
   stateDir: env.stateDir,
   log: (msg, fields) => console.info(JSON.stringify({ level: "info", msg, ...fields })),
 });
+const devices = createLinuxDevices({ log: structuredLog(console) });
 const host = createContainerHost({
   env,
   state,
   fetch: trustingFetch,
   onStatus: () => {},
+  devices,
 });
 const agent = createAgent({ host });
+
+// The job poll lists Bluetooth only once the agent is approved; this reports it before then too.
+void devices.checkBluetooth();
+setInterval(() => void devices.checkBluetooth(), BLUETOOTH_CHECK_TICK_MS).unref();
 
 const page = createSetupApp({
   snapshot: () => agent.setupSnapshot(),
@@ -34,6 +41,7 @@ const page = createSetupApp({
   envLocked: env.serverUrl !== undefined,
   defaultName: env.name ?? hostname(),
   now: () => host.now(),
+  bluetooth: () => devices.bluetoothAvailability(),
 });
 
 // Published on the LAN by default (0.0.0.0); a venue wanting loopback changes the compose publish line.
