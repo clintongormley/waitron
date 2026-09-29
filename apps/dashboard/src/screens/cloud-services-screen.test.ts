@@ -470,7 +470,7 @@ it("ages a displayed observation without extending the login or requesting Cloud
   expect(calls).toBe(1);
 });
 
-it("draws each label in the bold weight token, and its value in the body weight", async () => {
+it("draws each label at the normal weight, small and muted, and each value bold, as the typography roles say", async () => {
   setLocale("en");
   const api = new DashboardApi("", async () =>
     Response.json({
@@ -490,17 +490,31 @@ it("draws each label in the bold weight token, and its value in the body weight"
   );
   const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
   await expect.poll(() => el.shadowRoot!.querySelector("dt")).not.toBeNull();
-  const weightOf = (token: string) => {
+  const resolve = (property: "fontWeight" | "color" | "fontSize", token: string) => {
     const probe = document.createElement("span");
-    probe.style.fontWeight = `var(${token})`;
+    probe.style[property] = `var(${token})`;
     el.shadowRoot!.append(probe);
-    const weight = getComputedStyle(probe).fontWeight;
+    const value = getComputedStyle(probe)[property];
     probe.remove();
-    return weight;
+    return value;
   };
-  const bold = weightOf("--wt-font-weight-bold");
-  const normal = weightOf("--wt-font-weight-normal");
+  const bold = resolve("fontWeight", "--wt-font-weight-bold");
+  const normal = resolve("fontWeight", "--wt-font-weight-normal");
+  const muted = resolve("color", "--wt-color-text-muted");
+  const text = resolve("color", "--wt-color-text");
+  const small = resolve("fontSize", "--wt-font-size-sm");
+  const body = resolve("fontSize", "--wt-font-size-md");
   expect([bold, normal]).toEqual(["600", "400"]);
-  expect(getComputedStyle(el.shadowRoot!.querySelector("dt")!).fontWeight).toBe(bold);
-  expect(getComputedStyle(el.shadowRoot!.querySelector("dd")!).fontWeight).toBe(normal);
+  expect(muted).not.toBe(text);
+  expect(small).not.toBe(body);
+  const labels = [...el.shadowRoot!.querySelectorAll("dt")].map((dt) => getComputedStyle(dt));
+  const values = [...el.shadowRoot!.querySelectorAll("dd")].map((dd) => getComputedStyle(dd));
+  expect(labels.length).toBeGreaterThan(1);
+  expect(values).toHaveLength(labels.length);
+  for (const label of labels) {
+    expect([label.fontWeight, label.color, label.fontSize]).toEqual([normal, muted, small]);
+  }
+  for (const value of values) {
+    expect([value.fontWeight, value.color, value.fontSize]).toEqual([bold, text, body]);
+  }
 });

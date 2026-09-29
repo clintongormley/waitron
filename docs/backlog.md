@@ -764,10 +764,17 @@ The Cloud services screen's two reads of undeclared names (its labels' weight an
 now read declared tokens. The guard, `scripts/style-token-names.test.ts`, is weaker than its name
 in the ways its header states, and excuses the five till reads under A4 in its `FALLBACK_READS`; an
 entry that is no longer needed fails the guard, and nothing stops one being added, so keeping the
-list from growing is a job for review. **Open question:** the labels now use the bold weight, as
-the C69 queue entry asked, but design-system.md's "Typography roles" table gives a field label the
-normal weight, muted, and its value the bold weight, which `content-languages-screen.ts` follows;
-whether the Cloud services screen should follow that table instead is the owner's call.
+list from growing is a job for review. **Settled (owner, 2026-09-29: "B"; fixed in C75):** the Cloud
+services screen now follows design-system.md's "Typography roles" table, as
+`content-languages-screen.ts` does: each field label small, normal weight and muted, each value
+bold. A computed-style case in `cloud-services-screen.test.ts` checks every label and value on a
+connected screen.
+
+**Open: the Cloud services screen writes its dates in the browser's language, not the dashboard's.**
+It formats them with `toLocaleString()` and no locale argument, so with Spanish chosen in the
+dashboard, a browser set to US English shows "9/29/2026, 1:43:33 PM" (seen on C75's Spanish
+screenshots, taken in a US-English headless Chromium). `backup-screen.ts` and
+`stream-settings-panel.ts` format the same way. Found by C75, not fixed there.
 
 **Also open, and product-wide: the primary blue fails the accessibility contrast bar as text on the
 page background, in the light theme.** Measured against the shipped values in
