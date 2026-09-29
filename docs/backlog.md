@@ -3516,7 +3516,9 @@ ongoing overhaul listed at the top of Track A.
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
   message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
   (`packages/ui-core/src/interactive.ts`) moves focus to the first marked field after a failed
-  submission. The forms in `apps/dashboard` follow it: after the first failed press each bad field
+  submission. The forms in `apps/dashboard` follow it, and so, since C47m, does the image library's
+  upload and edit dialog (`packages/media/src/dashboard/image-library.ts`): after the first failed
+  press each bad field
   shows its message, the bottom message asks to fix the marked fields and the action stays disabled
   until they are fixed; a refusal that names no field on the form (a failed save, a conflict) is the
   bottom message instead and leaves the action working, so the person can try again.
@@ -3526,13 +3528,12 @@ ongoing overhaul listed at the top of Track A.
   refusal paragraph (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays directly under the
   form's buttons, because it also reports a refused Turn off, when no form is open; the cloud
   services screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons,
-  and shows a refusal as a plain alert; and the delete confirmations in
+  and shows a refusal as a plain alert; the delete confirmations in
   `apps/dashboard/src/screens/labels-panel.ts` and `apps/dashboard/src/screens/sections-screen.ts`
-  keep their refusal in the dialog's body, as does the image library's delete confirmation
-  (`packages/media/src/dashboard/image-library.ts`), whose upload and edit dialog follows the rule
-  since C47m; and the sections editor's member-list edit and reload
+  keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
-  because each member change is saved at once, not on a submit. Left open, not done: (1) the dashboard module screens
+  because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image
+  library's delete confirmation also keeps its refusal in the dialog's body. Left open, not done: (1) the dashboard module screens
   (adjustments reasons, Stripe and SumUp connect and add-reader, venue operations) still show
   `wt-form-error-summary` at the top — C47 part 2, lane B; (2) the setup wizard's screens — C47s, lane C; (3) the till's forms are C48; (4) `wt-form-error-summary` is deleted once
   nothing uses it — besides the module screens, the `packages/ui` workbench demo
@@ -3542,12 +3543,18 @@ ongoing overhaul listed at the top of Track A.
   existing tests pin it), unlike every other form; (6) the form plumbing is hand-written per form:
   assembling the bottom message (a refusal's sentences, then `form.fix_fields`, joined), waiting for
   the render and then calling `focusFirstInvalid`, and the state that remembers the first press and
-  which refusals the person has since changed — an `attempted` flag beside either a `dismissed` set
-  or a `refused` map, two styles — each appear in many forms (`grep -rl form.fix_fields
-  apps/dashboard/src` lists them), and `placeErrors` is written twice, in `menus-screen.ts` and
-  `sections-screen.ts`; a follow-up could move the first two into one helper in
-  `apps/dashboard/src/widgets/form-fields.ts` and the state into a controller in
-  `apps/dashboard/src/state/`; (7) the image picker's error message is not read to a screen reader:
+  which refusals the person has since changed — an `attempted` flag beside either a `dismissed` set,
+  a `refused` map or, in the image library, a single `refusal` holding one field and its error
+  code: three styles, the last used only there. Each of these pieces appears in many forms
+  (`grep -rl form.fix_fields apps/dashboard/src` lists the dashboard's; the image library, `packages/media/src/dashboard/image-library.ts`, uses its
+  own key `image.fix_fields` and is not in that list), and `placeErrors` is written twice, in
+  `menus-screen.ts` and `sections-screen.ts`; a follow-up could move the first two into one helper
+  in `apps/dashboard/src/widgets/form-fields.ts` and the state into a controller in
+  `apps/dashboard/src/state/`, but that covers the dashboard only: `packages/media` cannot import
+  from `apps/dashboard` (the dashboard depends on `@waitron/dashboard-modules`, which depends on
+  `@waitron/media`, so it would be a dependency loop), so a helper meant to cover the module screens
+  and the image library too would have to live in a package they can all reach, such as
+  `@waitron/ui`; (7) the image picker's error message is not read to a screen reader:
   `apps/dashboard/src/widgets/category-form.ts` and `apps/dashboard/src/screens/sections-screen.ts`
   put `aria-describedby="category-image-error"` / `"section-image-error"` on the
   `dashboard-image-upload` host, and an id outside a shadow root describes nothing inside it
