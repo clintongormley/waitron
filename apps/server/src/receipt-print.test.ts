@@ -44,7 +44,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import { collectOrder, recordTillSale, reprintSale } from "./till-sale.js";
-import { createOpenOrder, openTab, parkOrder, placeOrder } from "./working-order.js";
+import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
 import { bytesInclude, decodeTicket, printedLines } from "./testing/decode-ticket.js";
@@ -60,6 +60,7 @@ import {
   split,
 } from "./testing/party-venue.js";
 import { readReceiptOrder } from "./receipt-order.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 /**
  * The auto-print hook: a `print_jobs` outbox row and a `drawer_opens` audit row written atomically
@@ -400,7 +401,7 @@ describe("receipt grouping after table changes", () => {
         expect(collected.orderLabel).toBe("Terrace 6");
       }
       await withTransaction(suite.db, async (tx) => {
-        await openTab(tx, cfg, { tableId });
+        await openPartyTab(tx, cfg, { tableId });
       });
       await reprintSale({ db: suite.db, backend }, cfg, orderId);
       const receiptTexts = (await printJobsFor(cfg))
@@ -868,7 +869,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
     if (name !== undefined) await nameParty(v, partyId, name);
     await orderForParty(v, partyId, ["Burger"], tabId);
 

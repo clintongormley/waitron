@@ -1191,7 +1191,7 @@ export interface TableParty {
   id: string;
   revision: number;
   guestCount: number | null;
-  state: "open" | "needs_clearing" | "closed";
+  state: "open" | "closed";
   /** The name staff gave the party, or null. */
   name: string | null;
   /** `name`, or else the party's tables' labels. */
@@ -1269,13 +1269,13 @@ export interface MoveBillResult {
 
 /**
  * One row of the live-floor occupancy read-model from `GET /api/tables/state`. A table is
- * `"open-tab"` while a party holds it, paid or not. `tabLineCount`/`tabTotal` are present iff a tab
- * is open.
- * `tabTotal` is the tab's gross draft total as a two-place decimal string. `status` is the table's MANUAL service status,
- * independent of occupancy. `pendingToServe` counts the open tab's lines still to deliver,
- * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
- * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
- * `pendingDeliveries` (uncollected counter deliveries).
+ * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
+ * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
+ * the party's open bills, the total as a two-place decimal string. `status` is the table's MANUAL
+ * service status, independent of occupancy. `pendingToServe` counts the lines of the party's open
+ * and presented bills still to deliver, `readyToServe` those the kitchen has bumped `ready` but the
+ * waiter has not served, and `enRoute` those the pass has dispatched but the waiter has not
+ * acknowledged; all three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
  */
 export interface TableState {
   id: string;

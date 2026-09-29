@@ -222,7 +222,7 @@ describe("computeOverdueOrders", () => {
     expect(await run()).toEqual([]);
   });
 
-  it("carries the dining table's label when the order is a tab", async () => {
+  it("carries the dining table's label when the order is delivered to a table", async () => {
     const seeded = await seedFiredOrder(
       suite.db,
       {
@@ -237,14 +237,14 @@ describe("computeOverdueOrders", () => {
     expect(rows).toEqual([expect.objectContaining({ orderId: seeded.orderId, tableLabel: "12" })]);
   });
 
-  it("carries the order's own label where no table points at it, and the table's where one does", async () => {
+  it("carries the order's own label with no delivery table, and the table's with one", async () => {
     const seed = {
       tillId: venue.tillId,
       nodeId: venue.nodeId,
       locationId: venue.locationId,
       stationId,
     };
-    // A check split off a tab: no table, the tab's table label as its own.
+    // An order with no table, labelled.
     const check = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
     const tab = await seedFiredOrder(suite.db, seed, {
       orderNumber: 2,

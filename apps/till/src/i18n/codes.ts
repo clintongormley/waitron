@@ -19,10 +19,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A bill for this table is still unpaid. Take payment before finishing the table",
     es: "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
   },
-  "table.occupied": {
-    en: "That table is already taken. Choose a free table",
-    es: "Esa mesa ya está ocupada. Elige una mesa libre",
-  },
   "tab.already_open": {
     en: "Another party is already seated at this table. Check the floor and try again",
     es: "Ya hay clientes sentados en esta mesa. Revisa la sala e inténtalo de nuevo",
@@ -46,22 +42,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "party.main_bill_stays": {
     en: "This is the table's main bill, and the table has other unpaid bills. Move one of those instead",
     es: "Es la cuenta principal de la mesa, y la mesa tiene otras cuentas sin pagar. Mueve una de esas",
-  },
-  "tab.not_table_tab": {
-    en: "That order is not a table's bill, so it cannot be joined to a table or merged with one",
-    es: "Ese pedido no es la cuenta de una mesa, así que no se puede unir a una mesa ni combinar con una",
-  },
-  "tab.party_mismatch": {
-    en: "One of these bills belongs to seated guests and the other does not, so they cannot be merged",
-    es: "Una de estas cuentas es de clientes sentados y la otra no, así que no se pueden combinar",
-  },
-  "tab.party_has_other_open_bill": {
-    en: "That separate bill's guests still have another open bill. Merge their table's bill instead",
-    es: "Los clientes de esa cuenta separada aún tienen otra cuenta abierta. Combina en su lugar la cuenta de su mesa",
-  },
-  "tab.merge_leaves_no_table": {
-    en: "That would leave these guests without a table, so these bills cannot be merged this way",
-    es: "Así estos clientes se quedarían sin mesa, así que estas cuentas no se pueden combinar de esta forma",
   },
   "service_zone.join_mismatch": {
     en: "Those tables are in different service areas, so they cannot be joined",

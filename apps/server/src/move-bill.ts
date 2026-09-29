@@ -28,7 +28,6 @@ import {
   assertSendable,
   clearGroups,
   fireLines,
-  isOpenOrder,
   refuseHeldLeavingParty,
   serviceModesMatch,
   unsentDishLines,
@@ -93,7 +92,6 @@ export async function moveBill(
   if (source !== null) {
     await refuseMainBillLeaving(tx, source, billId);
     firers = await leaveParty(tx, billId);
-    await repointSourceTables(tx, source, billId);
   }
   const before = await readSentWork(tx, cfg, billId);
 
@@ -173,7 +171,7 @@ async function resolveDestination(
     throw new AppError("table.already_in_party", { tableId });
   }
   if (table.holding !== null) return { kind: "party", partyId: table.holding };
-  await refuseUnseatable(tx, cfg, tableId, table);
+  await refuseUnseatable(tx, cfg, table);
   return { kind: "free", tableId, zoneId: table.zoneId };
 }
 
@@ -181,7 +179,6 @@ async function resolveDestination(
 export interface TargetTable {
   /** The party holding the table now, or null. */
   holding: string | null;
-  tabId: string | null;
   zoneId: string | null;
 }
 
@@ -224,7 +221,6 @@ export async function readTargetTable(
   const [table] = await tx
     .select({
       active: diningTables.active,
-      tabId: diningTables.tabId,
       zoneId: diningTables.zoneId,
       needsClearingSince: diningTables.needsClearingSince,
     })
@@ -233,22 +229,15 @@ export async function readTargetTable(
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   if (!table.active) throw new AppError("table.inactive", { tableId });
   if (table.needsClearingSince !== null) throw new AppError("table.needs_clearing", { tableId });
-  return { holding, tabId: table.tabId, zoneId: table.zoneId };
+  return { holding, zoneId: table.zoneId };
 }
 
-/**
- * A table no party holds, refused as a tab move refuses it while it shows an open order, and as
- * seating refuses one in a zone that seats no one.
- */
+/** A table no party holds, refused as seating refuses one in a zone that seats no one. */
 export async function refuseUnseatable(
   tx: Transaction,
   cfg: TillConfig,
-  tableId: string,
   table: TargetTable,
 ): Promise<void> {
-  if (table.tabId !== null && (await isOpenOrder(tx, table.tabId))) {
-    throw new AppError("table.occupied", { tableId });
-  }
   if (table.zoneId !== null) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
     if (context.serviceMode !== "table_tab") {
@@ -421,32 +410,4 @@ async function adoptZone(
     unsent.map((line) => line.id),
   );
   await fireLines(tx, cfg, billId, unsent);
-}
-
-/**
- * While tables still point at bills, a table of the party the bill is leaving that shows it shows
- * the party's main bill instead, or none when the bill leaving is the main bill or the party has
- * none.
- */
-export async function repointSourceTables(
-  tx: Transaction,
-  party: Pick<SourceParty, "id" | "mainBillId">,
-  billId: string,
-): Promise<void> {
-  const main = party.mainBillId === billId ? null : party.mainBillId;
-  await tx
-    .update(diningTables)
-    .set({ tabId: main })
-    .where(
-      and(
-        eq(diningTables.tabId, billId),
-        inArray(
-          diningTables.id,
-          tx
-            .select({ id: partyTables.tableId })
-            .from(partyTables)
-            .where(and(eq(partyTables.partyId, party.id), isNull(partyTables.leftAt))),
-        ),
-      ),
-    );
 }

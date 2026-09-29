@@ -54,17 +54,11 @@ import {
   addTabRound,
   createOpenOrder,
   fireCourse,
-  joinTable,
   listExpoQueue,
   listStationQueue,
-  mergeTabs,
-  openTab,
   parkOrder,
   recallLines,
   sendLines,
-  splitOffCheck,
-  transferLines,
-  unjoinTable,
   updateHeldOrder,
   updateOrderLine,
   voidTabLine,
@@ -88,6 +82,10 @@ import {
   type GroupRelease,
 } from "./order-groups.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
+import { joinTables } from "./table-actions.js";
+import { moveBill } from "./move-bill.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -540,16 +538,6 @@ describe("the spec's example (§3, §12 item 3)", () => {
     const [flan] = await linesIn(s.partyId, result.groups[0]!.id);
     expect(flan).toMatchObject({ workingOrderId: result.tabId, name: DISHES.flan.staff });
   });
-
-  it("puts a submission on the party's main bill even when its tables point at no tab", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    await db.run(sql`update dining_tables set tab_id = null where tab_id = ${s.tabId}`);
-
-    const result = await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "beer")] }]);
-
-    expect(result.tabId).toBe(s.tabId);
-  });
 });
 
 describe("fire all now", () => {
@@ -810,11 +798,12 @@ describe("editing held groups", () => {
     const groupId = groups[0]!.id;
     const [water, steak] = await linesIn(s.partyId, groupId);
     const revision = await revisionOf(s.partyId);
-    const { checkId } = await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo, quantity: "2" }], {
-        expectedPartyRevision: revision,
-        operatorId: ALEX,
-      }),
+    const checkId = await onSecondBill(
+      v,
+      s,
+      [{ lineNo: water!.lineNo, quantity: "2" }],
+      revision,
+      ALEX,
     );
     const [checkWater] = await linesOfBill(checkId);
 
@@ -1064,13 +1053,8 @@ describe("firing", () => {
     const groupId = groups[0]!.id;
     const [, water] = await linesIn(s.partyId, groupId);
     const revision = await revisionOf(s.partyId);
-    // The check is opened after the tab, so its line is released second.
-    await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo }], {
-        expectedPartyRevision: revision,
-        operatorId: ALEX,
-      }),
-    );
+    // The second bill is opened after the tab, so its line is released second.
+    await onSecondBill(v, s, [{ lineNo: water!.lineNo }], revision, ALEX);
     await db.run(sql`update products set available = 0 where id = ${v.productId.water}`);
 
     await expectRefusedWithNothingWritten(v, s.partyId, () => fire(v, s.partyId, groupId), {
@@ -1216,14 +1200,13 @@ describe("stale screens (D19)", () => {
     ]);
     const groupId = groups[0]!.id;
     const [water] = await linesIn(s.partyId, groupId);
-    // A held line with no ticket may go onto a check (the kept `tab.split_held_line` refuses only
-    // a held line the kitchen has a ticket for).
     const revision = await revisionOf(s.partyId);
-    const { checkId } = await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo, quantity: "1" }], {
-        expectedPartyRevision: revision,
-        operatorId: ALEX,
-      }),
+    const checkId = await onSecondBill(
+      v,
+      s,
+      [{ lineNo: water!.lineNo, quantity: "1" }],
+      revision,
+      ALEX,
     );
     const billRevisions = async () =>
       db
@@ -1731,39 +1714,62 @@ describe("a held line on a paid bill", () => {
 });
 
 /** The PartyCommand a tab path is sent, at both parties' current revisions. */
-async function tabCommand(partyId: string, sourcePartyId?: string) {
-  return {
-    expectedPartyRevision: await revisionOf(partyId),
-    ...(sourcePartyId === undefined || sourcePartyId === partyId
-      ? {}
-      : { expectedSourcePartyRevision: await revisionOf(sourcePartyId) }),
-    operatorId: ALEX,
-  };
+/** What a bill action on the party is sent: its revision as read now, and who acts. */
+async function billCommand(partyId: string) {
+  return { expectedPartyRevision: await revisionOf(partyId), operatorId: ALEX };
 }
 
-async function transfer(
+/**
+ * A party's bill, with its lines as `fill` rings them, taken to the counter with no zone: a bill of
+ * no party that keeps the table zone's service mode.
+ */
+async function billOfNoParty(
   v: Venue,
-  from: Seated,
-  to: { partyId: string; tabId: string },
-  transfers: { lineNo: number; quantity?: string }[],
-) {
-  const command = await tabCommand(to.partyId, from.partyId);
-  return inTx((tx) => transferLines(tx, v.cfg, from.tabId, to.tabId, transfers, command));
-}
-
-/** A second table seated at the party's own tab, so the tab can give one of them back. */
-async function joined(v: Venue, s: Seated): Promise<string> {
-  return inTx(async (tx) => {
+  fill: (tx: Transaction, billId: string) => Promise<void>,
+): Promise<string> {
+  const { tabId, partyId } = await inTx(async (tx) => {
     const { id: tableId } = await createTable(tx, v.cfg, {
-      label: `J-${randomUUID().slice(0, 6)}`,
+      label: `N-${randomUUID().slice(0, 6)}`,
       zoneId: v.zoneId,
     });
-    await joinTable(tx, v.cfg, s.tabId, tableId, {
-      expectedPartyRevision: await revisionOf(s.partyId),
-      operatorId: ALEX,
-    });
-    return tableId;
+    const opened = await openPartyTab(tx, v.cfg, { tableId });
+    await fill(tx, opened.tabId);
+    return opened;
   });
+  await inTx(async (tx) =>
+    moveBill(
+      tx,
+      v.cfg,
+      tabId,
+      { counter: { zoneId: null } },
+      { ...(await billCommand(partyId)), bills: "separate", partyId },
+    ),
+  );
+  return tabId;
+}
+
+/**
+ * The chosen items of the party's tab transferred onto a new, empty bill of the party, sent at
+ * `revision` by `operatorId`. A held line can reach a second bill only this way: a split refuses
+ * held work.
+ */
+async function onSecondBill(
+  v: Venue,
+  s: Seated,
+  transfers: { lineNo: number; quantity?: string }[],
+  revision: number,
+  operatorId: string,
+): Promise<string> {
+  const billId = randomUUID();
+  await inTx(async (tx) => {
+    await createOpenOrder(tx, v.cfg, billId, [], null, { partyId: s.partyId });
+    await VENUE_SERVICE.copyOrderContext(tx, v.cfg, s.tabId, billId);
+    await transferItems(tx, v.cfg, s.tabId, billId, transfers, {
+      expectedPartyRevision: revision,
+      operatorId,
+    });
+  });
+  return billId;
 }
 
 async function linesOfBill(tabId: string) {
@@ -1783,72 +1789,7 @@ async function linesOfBill(tabId: string) {
 }
 
 describe("a line leaving its party", () => {
-  it.each([
-    ["whole", undefined],
-    ["part", "1"],
-  ] as const)(
-    "refuses to transfer a held-group line (%s) to another party's tab (group.held_leaves_party), writing nothing",
-    async (_, quantity) => {
-      const v = await setupVenue();
-      const s = await specExample(v);
-      const other = await seated(v);
-      const [steak] = await linesIn(s.partyId, s.mains);
-      const before = [await snapshot(v, s.partyId), await snapshot(v, other.partyId)];
-
-      await expect(
-        transfer(v, s, other, [{ lineNo: steak!.lineNo, quantity }]),
-      ).rejects.toMatchObject({
-        code: "group.held_leaves_party",
-        params: { tabId: s.tabId, lineNo: steak!.lineNo },
-      });
-
-      expect([await snapshot(v, s.partyId), await snapshot(v, other.partyId)]).toEqual(before);
-    },
-  );
-
-  it.each([
-    ["whole", undefined],
-    ["part", "1"],
-  ] as const)(
-    "moves a fired-group line (%s) to another party's tab with no group, and prints the MOVED slip",
-    async (_, quantity) => {
-      const v = await setupVenue();
-      const s = await seated(v);
-      const { groups } = await submit(v, s.partyId, [
-        { release: "fire", lines: [line(v, "steak", "2")] },
-      ]);
-      const other = await seated(v);
-      const [steak] = await linesIn(s.partyId, groups[0]!.id);
-      const revisions = [await revisionOf(s.partyId), await revisionOf(other.partyId)];
-      const jobsBefore = (await printed(v)).length;
-
-      await transfer(v, s, other, [{ lineNo: steak!.lineNo, quantity: quantity ?? undefined }]);
-
-      const landed = await linesOfBill(other.tabId);
-      expect(landed).toHaveLength(1);
-      expect(landed[0]).toMatchObject({
-        groupId: null,
-        creditedTo: ALEX,
-        quantity: quantity === undefined ? 2000 : 1000,
-      });
-      if (quantity !== undefined) {
-        // The part left behind stays in its group.
-        expect((await linesOfBill(s.tabId))[0]).toMatchObject({
-          groupId: groups[0]!.id,
-          quantity: 1000,
-        });
-      }
-      const jobs = await printed(v);
-      expect(jobs).toHaveLength(jobsBefore + 1);
-      expect(jobs.at(-1)).toContain("MOVED");
-      expect(jobs.at(-1)).toContain(DISHES.steak.kitchen);
-      expect([await revisionOf(s.partyId), await revisionOf(other.partyId)]).toEqual(
-        revisions.map((revision) => revision + 1),
-      );
-    },
-  );
-
-  it("clears the group of a moved dish's extras lines too", async () => {
+  it("clears the group of a dish's extras lines too when its bill leaves the party", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     await submit(v, s.partyId, [
@@ -1864,11 +1805,22 @@ describe("a line leaving its party", () => {
         ],
       },
     ]);
-    const other = await seated(v);
+    const { billId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: 1 }], await billCommand(s.partyId)),
+    );
+    expect((await linesOfBill(billId)).map((row) => row.groupId)).not.toContain(null);
 
-    await transfer(v, s, other, [{ lineNo: 1 }]);
+    await inTx(async (tx) =>
+      moveBill(
+        tx,
+        v.cfg,
+        billId,
+        { counter: { zoneId: null } },
+        { ...(await billCommand(s.partyId)), bills: "separate", partyId: s.partyId },
+      ),
+    );
 
-    const landed = await linesOfBill(other.tabId);
+    const landed = await linesOfBill(billId);
     expect(landed).toHaveLength(2);
     expect(landed.map((row) => row.groupId)).toEqual([null, null]);
   });
@@ -1877,85 +1829,33 @@ describe("a line leaving its party", () => {
     ["whole", undefined],
     ["part", "1"],
   ] as const)(
-    "keeps the group of a held line (%s) transferred to another tab of the same party",
+    "keeps the group of a held line (%s) transferred to another bill of the same party",
     async (_, quantity) => {
       const v = await setupVenue();
       const s = await specExample(v);
-      // A second tab of the same party, anchored to a table of its own.
       const secondTab = randomUUID();
       await inTx(async (tx) => {
-        const { id: tableId } = await createTable(tx, v.cfg, {
-          label: `S-${randomUUID().slice(0, 6)}`,
-          zoneId: v.zoneId,
-        });
         await createOpenOrder(tx, v.cfg, secondTab, [], null, { partyId: s.partyId });
         await VENUE_SERVICE.copyOrderContext(tx, v.cfg, s.tabId, secondTab);
-        await tx.update(diningTables).set({ tabId: secondTab }).where(eq(diningTables.id, tableId));
       });
       const [steak] = await linesIn(s.partyId, s.mains);
       const revision = await revisionOf(s.partyId);
 
-      await transfer(v, s, { partyId: s.partyId, tabId: secondTab }, [
-        { lineNo: steak!.lineNo, quantity },
-      ]);
+      await inTx(async (tx) =>
+        transferItems(
+          tx,
+          v.cfg,
+          s.tabId,
+          secondTab,
+          [{ lineNo: steak!.lineNo, quantity }],
+          await billCommand(s.partyId),
+        ),
+      );
 
       expect(await linesOfBill(secondTab)).toMatchObject([{ groupId: s.mains }]);
       expect(await revisionOf(s.partyId)).toBe(revision + 1);
     },
   );
-
-  it("refuses to take a held-group line to the table's own new bill on an unjoin (group.held_leaves_party), writing nothing", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const tableId = await joined(v, s);
-    const [steak] = await linesIn(s.partyId, s.mains);
-    const before = await snapshot(v, s.partyId);
-    const partyCount = async () => (await db.select({ id: parties.id }).from(parties)).length;
-    const partiesBefore = await partyCount();
-    const command = await tabCommand(s.partyId);
-
-    await expect(
-      inTx((tx) =>
-        unjoinTable(
-          tx,
-          v.cfg,
-          s.tabId,
-          tableId,
-          [{ lineNo: steak!.lineNo, quantity: "1" }],
-          command,
-        ),
-      ),
-    ).rejects.toMatchObject({
-      code: "group.held_leaves_party",
-      params: { tabId: s.tabId, lineNo: steak!.lineNo },
-    });
-
-    expect(await snapshot(v, s.partyId)).toEqual(before);
-    expect(await partyCount()).toBe(partiesBefore);
-  });
-
-  it("takes a fired-group line to the table's own new bill on an unjoin with no group, and prints the MOVED slip", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const tableId = await joined(v, s);
-    const [croquettes] = await linesIn(s.partyId, s.cold);
-    const jobsBefore = (await printed(v)).length;
-    const command = await tabCommand(s.partyId);
-
-    const { tabId } = await inTx((tx) =>
-      unjoinTable(tx, v.cfg, s.tabId, tableId, [{ lineNo: croquettes!.lineNo }], command),
-    );
-
-    expect(await linesOfBill(tabId!)).toMatchObject([{ id: croquettes!.id, groupId: null }]);
-    expect((await groupsOf(s.partyId)).groups.find((g) => g.id === s.cold)!.lineIds).toEqual([]);
-    const jobs = await printed(v);
-    expect(jobs).toHaveLength(jobsBefore + 2);
-    expect(jobs.at(-1)).toContain("MOVED");
-    expect(jobs.at(-1)).toContain(DISHES.cold.kitchen);
-    // The beer left on the tab now belongs to one table where it belonged to two (spec §8).
-    expect(jobs.at(-2)).toContain("MOVED");
-    expect(jobs.at(-2)).toContain(DISHES.beer.kitchen);
-  });
 });
 
 describe("merging two bills (D2)", () => {
@@ -1969,11 +1869,15 @@ describe("merging two bills (D2)", () => {
     const from = await specExample(v);
     // The source's held groups no longer sit in the order they were made.
     await reorder(from.partyId, [from.desserts, from.warm, from.mains]);
-    const command = await tabCommand(into.partyId, from.partyId);
+    const command = {
+      bills: "merge" as const,
+      expectedPartyRevision: await revisionOf(into.partyId),
+      otherPartyId: from.partyId,
+      expectedOtherPartyRevision: await revisionOf(from.partyId),
+      operatorId: ALEX,
+    };
 
-    await inTx((tx) =>
-      mergeTabs(tx, v.cfg, into.tabId, from.tabId, { freeSourceTable: false, ...command }),
-    );
+    await inTx((tx) => joinTables(tx, v.cfg, into.partyId, from.tableId, command));
 
     const { groups } = await groupsOf(into.partyId);
     expect(groups.map((group) => [group.id, group.position, group.state])).toEqual([
@@ -2008,8 +1912,8 @@ describe("merging two bills (D2)", () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [croquettes] = await linesIn(s.partyId, s.cold);
-    const { checkId } = await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: ALEX,
       }),
@@ -2019,11 +1923,9 @@ describe("merging two bills (D2)", () => {
       .from(orderGroups)
       .where(eq(orderGroups.partyId, s.partyId))
       .orderBy(orderGroups.id);
-    const command = await tabCommand(s.partyId);
+    const command = await billCommand(s.partyId);
 
-    await inTx((tx) =>
-      mergeTabs(tx, v.cfg, s.tabId, checkId, { freeSourceTable: false, ...command }),
-    );
+    await inTx((tx) => mergeBills(tx, v.cfg, s.tabId, checkId, command));
 
     expect(
       await db
@@ -2039,90 +1941,8 @@ describe("merging two bills (D2)", () => {
   });
 });
 
-describe("merging a party's tab into a bill of no party", () => {
-  async function noPartyTab(v: Venue): Promise<string> {
-    return inTx(async (tx) => {
-      const { id: tableId } = await createTable(tx, v.cfg, {
-        label: `N-${randomUUID().slice(0, 6)}`,
-        zoneId: v.zoneId,
-      });
-      return (await openTab(tx, v.cfg, { tableId })).tabId;
-    });
-  }
-
-  it("refuses a tab holding a held-group line before looking at the line (tab.party_mismatch), writing nothing", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    const into = await noPartyTab(v);
-    const before = [await snapshot(v, s.partyId), await linesOfBill(into)];
-    const command = { expectedSourcePartyRevision: await revisionOf(s.partyId), operatorId: ALEX };
-
-    await expect(
-      inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command })),
-    ).rejects.toMatchObject({ code: "tab.party_mismatch", params: { tabId: into } });
-
-    expect([await snapshot(v, s.partyId), await linesOfBill(into)]).toEqual(before);
-  });
-
-  it("refuses a tab of fired groups (tab.party_mismatch), writing nothing", async () => {
-    const v = await setupVenue();
-    const s = await seated(v);
-    await submit(v, s.partyId, [
-      {
-        release: "fire",
-        lines: [
-          {
-            ...line(v, "steak"),
-            extras: [
-              { listId: v.extrasListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
-            ],
-          },
-          line(v, "beer"),
-        ],
-      },
-    ]);
-    const into = await noPartyTab(v);
-    const before = [await snapshot(v, s.partyId), await linesOfBill(into)];
-    const command = { expectedSourcePartyRevision: await revisionOf(s.partyId), operatorId: ALEX };
-
-    await expect(
-      inTx((tx) => mergeTabs(tx, v.cfg, into, s.tabId, { freeSourceTable: true, ...command })),
-    ).rejects.toMatchObject({ code: "tab.party_mismatch", params: { tabId: into } });
-
-    expect([await snapshot(v, s.partyId), await linesOfBill(into)]).toEqual(before);
-  });
-});
-
 describe("a group split across bills of its party", () => {
-  /** A held group of a no-route Water ×2 and a Steak, with one Water on a check. */
-  async function splitNoRoute(v: Venue) {
-    const s = await seated(v);
-    const { groups } = await submit(v, s.partyId, [
-      { release: "hold", lines: [line(v, "water", "2"), line(v, "steak")] },
-    ]);
-    const groupId = groups[0]!.id;
-    const [water] = await linesIn(s.partyId, groupId);
-    const revision = await revisionOf(s.partyId);
-    const { checkId } = await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo, quantity: "1" }], {
-        expectedPartyRevision: revision,
-        operatorId: ALEX,
-      }),
-    );
-    return { ...s, groupId, checkId, revisionBeforeSplit: revision };
-  }
-
-  it("keeps the group and credit of a held no-route line split onto a check, and moves the party's revision on", async () => {
-    const v = await setupVenue();
-    const s = await splitNoRoute(v);
-
-    expect(await linesOfBill(s.checkId)).toMatchObject([
-      { groupId: s.groupId, creditedTo: ALEX, quantity: 1000, sentAt: null },
-    ]);
-    expect(await revisionOf(s.partyId)).toBe(s.revisionBeforeSplit + 1);
-  });
-
-  it("refuses device A's fire after device B split the group's line onto a check, then fires every line", async () => {
+  it("refuses device A's fire after device B moved the group's line onto another bill, then fires every line", async () => {
     const v = await setupVenue();
     const s = await seated(v);
     const { groups } = await submit(v, s.partyId, [
@@ -2131,11 +1951,12 @@ describe("a group split across bills of its party", () => {
     const groupId = groups[0]!.id;
     const seenByA = await revisionOf(s.partyId);
     const [water] = await linesIn(s.partyId, groupId);
-    const { checkId } = await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: water!.lineNo, quantity: "1" }], {
-        expectedPartyRevision: seenByA,
-        operatorId: MIA,
-      }),
+    const checkId = await onSecondBill(
+      v,
+      s,
+      [{ lineNo: water!.lineNo, quantity: "1" }],
+      seenByA,
+      MIA,
     );
 
     await expectRefusedWithNothingWritten(
@@ -2159,8 +1980,8 @@ describe("a group split across bills of its party", () => {
     const [croquettes] = await linesIn(s.partyId, s.cold);
     const revision = await revisionOf(s.partyId);
 
-    const { checkId } = await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
+    const { billId: checkId } = await inTx((tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
         expectedPartyRevision: revision,
         operatorId: MIA,
       }),
@@ -2183,7 +2004,7 @@ describe("a group split across bills of its party", () => {
       s.partyId,
       () =>
         inTx((tx) =>
-          splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: steak!.lineNo, quantity: "1" }], {
+          splitBill(tx, v.cfg, s.tabId, [{ lineNo: steak!.lineNo, quantity: "1" }], {
             expectedPartyRevision: revision,
             operatorId: ALEX,
           }),
@@ -2251,12 +2072,11 @@ describe("sending lines on their own", () => {
     ]);
   });
 
-  it("sends a recalled line that lost its group by moving to another party's tab", async () => {
+  it("sends a recalled line that is in no group", async () => {
     const v = await setupVenue();
-    const s = await seated(v);
-    await submit(v, s.partyId, [{ release: "fire", lines: [line(v, "steak")] }]);
     const other = await seated(v);
-    await transfer(v, s, other, [{ lineNo: 1 }]);
+    // A round, not a group submission, leaves the fired line in no group.
+    await inTx((tx) => addTabRound(tx, v.cfg, other.tabId, [line(v, "steak")]));
     const [moved] = await linesOfBill(other.tabId);
     await inTx((tx) => recallLines(tx, v.cfg, other.tabId, [moved!.lineNo]));
     expect(await firedTicketLineIds(other.partyId)).toEqual([]);
@@ -2792,17 +2612,11 @@ describe("edits inside groups (D19)", () => {
 
   it("credits nobody and starts no group for an edit with no operator on a bill of no party", async () => {
     const v = await setupVenue();
-    const tabId = await inTx(async (tx) => {
-      const { id: tableId } = await createTable(tx, v.cfg, {
-        label: `N-${randomUUID().slice(0, 6)}`,
-        zoneId: v.zoneId,
-      });
-      const { tabId: id } = await openTab(tx, v.cfg, { tableId });
-      await addTabRound(tx, v.cfg, id, [{ ...line(v, "steak"), release: true }], {
+    const tabId = await billOfNoParty(v, (tx, id) =>
+      addTabRound(tx, v.cfg, id, [{ ...line(v, "steak"), release: true }], {
         creditedTo: ALEX,
-      });
-      return id;
-    });
+      }),
+    );
     expect(await linesOfBill(tabId)).toMatchObject([{ sentAt: expect.any(String) }]);
 
     await changeLine(v, tabId, 1, { quantity: "2" });
@@ -2849,8 +2663,8 @@ describe("the bill a group's first event names", () => {
       joinGroupId: held,
     });
     const [croquettes] = await linesIn(s.partyId, first);
-    const { checkId } = await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo }], {
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: ALEX,
       }),
@@ -2911,7 +2725,7 @@ describe("credit (D5)", () => {
         label: `O-${randomUUID().slice(0, 6)}`,
         zoneId: v.zoneId,
       });
-      return openTab(tx, v.cfg, {
+      return openPartyTab(tx, v.cfg, {
         tableId,
         lines: [{ menuItemId: v.offer("flan"), quantity: "1" }],
         operatorId: MIA,
@@ -2969,8 +2783,8 @@ async function specExampleOnTwoBills(v: Venue) {
   const s = await specExample(v);
   const [croquettes] = await linesIn(s.partyId, s.cold);
   const revision = await revisionOf(s.partyId);
-  const { checkId } = await inTx((tx) =>
-    splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
+  const { billId: checkId } = await inTx((tx) =>
+    splitBill(tx, v.cfg, s.tabId, [{ lineNo: croquettes!.lineNo, quantity: "1" }], {
       expectedPartyRevision: revision,
       operatorId: MIA,
     }),
@@ -3345,15 +3159,11 @@ describe("the kitchen and the pass read a party's groups", () => {
     expect(board.find((row) => row.orderId === s.checkId)).toBeUndefined();
   });
 
-  it("puts a fired line moved in from another party in one section with no group, first", async () => {
+  it("puts a fired line in no group in one section with no group, first", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
-    const other = await seated(v);
-    const { groups } = await submit(v, other.partyId, [
-      { release: "fire", lines: [line(v, "steak")] },
-    ]);
-    const [steak] = await linesIn(other.partyId, groups[0]!.id);
-    await transfer(v, other, s, [{ lineNo: steak!.lineNo }]);
+    // A round, not a group submission, leaves the fired line in no group.
+    await inTx((tx) => addTabRound(tx, v.cfg, s.tabId, [line(v, "steak")]));
 
     const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
       (row) => row.orderId === s.tabId,
@@ -3368,18 +3178,12 @@ describe("the kitchen and the pass read a party's groups", () => {
 
   it("keeps a bill of no party in course sections, with no party and no groups", async () => {
     const v = await setupVenue();
-    const tabId = await inTx(async (tx) => {
-      const { id: tableId } = await createTable(tx, v.cfg, {
-        label: `C-${randomUUID().slice(0, 6)}`,
-        zoneId: v.zoneId,
-      });
-      const { tabId } = await openTab(tx, v.cfg, { tableId });
-      await addTabRound(tx, v.cfg, tabId, [
+    const tabId = await billOfNoParty(v, (tx, id) =>
+      addTabRound(tx, v.cfg, id, [
         { menuItemId: v.offer("beer"), quantity: "1" },
         { menuItemId: v.offer("steak"), quantity: "1" },
-      ]);
-      return tabId;
-    });
+      ]),
+    );
 
     const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
       (row) => row.orderId === tabId,

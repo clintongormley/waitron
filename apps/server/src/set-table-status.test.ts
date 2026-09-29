@@ -14,8 +14,9 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable, setTableStatus } from "./tables.js";
-import { listTablesWithState, openTab } from "./working-order.js";
+import { listTablesWithState } from "./working-order.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 const LOCALE = "es-ES";
 // The whole manifest (`manifestSets()`), applied in order — the tables here belong to modules (e.g.
@@ -192,7 +193,7 @@ describe("openTab clears a stale status (design §3b(2))", () => {
     expect(await statusOf(tableId)).toBe(activeStatusId);
     // Opening an EMPTY tab (no initial round) needs no product — it just anchors the tab to the table
     // and clears any stale manual status.
-    await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     expect(await statusOf(tableId)).toBeNull();
   });
 });

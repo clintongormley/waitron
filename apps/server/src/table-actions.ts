@@ -9,7 +9,6 @@ import {
   leaveParty,
   readTargetTable,
   refuseUnseatable,
-  repointSourceTables,
   takeIntoParty,
   type BillState,
   type OtherPartyRead,
@@ -78,7 +77,7 @@ export async function moveGuests(
   if (table.holding === partyId && held.length === 1) {
     throw new AppError("table.already_in_party", { tableId: toTableId });
   }
-  if (table.holding === null) await refuseUnseatable(tx, cfg, toTableId, table);
+  if (table.holding === null) await refuseUnseatable(tx, cfg, table);
 
   const before = await readPartiesSentWork(tx, cfg, [partyId]);
   const zoneBefore = await partyZone(tx, cfg, partyId);
@@ -87,7 +86,7 @@ export async function moveGuests(
   const mainBillId = await readMainBill(tx, partyId);
   // A turnover, as seating one: no manual status carries over to these guests.
   if (table.holding === null) {
-    await addTable(tx, partyId, toTableId, mainBillId, { clearStatus: true });
+    await addTable(tx, partyId, toTableId, { clearStatus: true });
   }
   // The table moved to is now the party's only one.
   if (table.zoneId !== null && table.zoneId !== zoneBefore) {
@@ -121,11 +120,11 @@ export async function joinTables(
   if (table.holding !== null) {
     return combineAt(tx, cfg, table.holding, partyId, "join", options, zoneId);
   }
-  await refuseUnseatable(tx, cfg, tableId, table);
+  await refuseUnseatable(tx, cfg, table);
 
   const before = await readPartiesSentWork(tx, cfg, [partyId]);
   const mainBillId = await readMainBill(tx, partyId);
-  await addTable(tx, partyId, tableId, mainBillId, { clearStatus: false });
+  await addTable(tx, partyId, tableId, { clearStatus: false });
   await enqueueMovedSlipsFor(tx, cfg, before);
   return { partyId, mainBillId, merged: false };
 }
@@ -233,9 +232,7 @@ export async function combineParties(
     .set({ state: "closed", closedAt: at, closedBy: args.operatorId, mergedIntoPartyId: into })
     .where(eq(parties.id, from));
 
-  const mainBillId = await readMainBill(tx, into);
-  if (mainBillId !== null) await setMainBill(tx, into, mainBillId);
-  return { merged: mergedInto.size > 0, mainBillId, mergedInto };
+  return { merged: mergedInto.size > 0, mainBillId: await readMainBill(tx, into), mergedInto };
 }
 
 /**
@@ -260,16 +257,14 @@ export async function splitTable(
   if (billId !== null) {
     await refuseUnsplittableBill(tx, partyId, partyMain, billId);
     firers = await leaveParty(tx, billId);
-    await repointSourceTables(tx, { id: partyId, mainBillId: partyMain }, billId);
   }
 
   const before = await readPartiesSentWork(tx, cfg, [partyId]);
   await leaveTables(tx, [tableId]);
   const [table] = await tx
-    .update(diningTables)
-    .set({ tabId: null })
-    .where(eq(diningTables.id, tableId))
-    .returning({ zoneId: diningTables.zoneId });
+    .select({ zoneId: diningTables.zoneId })
+    .from(diningTables)
+    .where(eq(diningTables.id, tableId));
   const { partyId: newParty } = await openParty(tx, {
     guestCount: null,
     operatorId: options.operatorId,
@@ -287,7 +282,6 @@ export async function splitTable(
       mainBillId = billId;
     }
   }
-  if (partyMain !== null) await setMainBill(tx, partyId, partyMain);
   await enqueueMovedSlipsFor(tx, cfg, before);
   return { partyId: newParty, mainBillId };
 }
@@ -313,19 +307,17 @@ async function refuseUnsplittableBill(
   if (billId === partyMain) throw new AppError("party.main_bill_stays", { partyId });
 }
 
-/** The table joins the party and shows its main bill; `clearStatus` also clears its manual status. */
+/** The table joins the party; `clearStatus` also clears its manual status. */
 async function addTable(
   tx: Transaction,
   partyId: string,
   tableId: string,
-  mainBillId: string | null,
   options: { clearStatus: boolean },
 ): Promise<void> {
   await tx.insert(partyTables).values({ partyId, tableId });
-  await tx
-    .update(diningTables)
-    .set({ tabId: mainBillId, ...(options.clearStatus ? { statusId: null } : {}) })
-    .where(eq(diningTables.id, tableId));
+  if (options.clearStatus) {
+    await tx.update(diningTables).set({ statusId: null }).where(eq(diningTables.id, tableId));
+  }
 }
 
 async function billsTaking(

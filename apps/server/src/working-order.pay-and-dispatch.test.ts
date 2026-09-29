@@ -58,7 +58,6 @@ import {
   listHeldOrders,
   listStationQueue,
   markCollected,
-  openTab,
   parkOrder,
   placeOrder,
   recallLines,
@@ -75,6 +74,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { collectOrder, payWorkingOrder } from "./till-sale.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // The working-order verbs driven on a venue provisioned through `applyVenue`, with a real
 // `VerifactuBackend` on the settle path, so a case here can follow an order through
@@ -2377,7 +2377,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     const tabId = await withTransaction(suite.db, async (tx) => {
       const tables = await offerProducts(tx, cfg, { zone: "tables" });
       const tableId = await addTable(tx, cfg, tables.zoneId);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addTabRound(
         tx,
         cfg,
@@ -2454,7 +2454,7 @@ describe("coursing editing verbs — setLineCourse racing fireCourse (Copilot #1
       await setProductCourse(tx, cfg, cafe.id, postres.id);
       const tables = await offerProducts(tx, cfg, { zone: "tables" });
       const tableId = await addTable(tx, cfg, tables.zoneId);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addTabRound(
         tx,
         cfg,
@@ -2541,7 +2541,7 @@ describe("coursing editing verbs — recallLines racing fireCourse (Copilot #191
       await setProductCourse(tx, cfg, cafe.id, postres.id);
       const tables = await offerProducts(tx, cfg, { zone: "tables" });
       const tableId = await addTable(tx, cfg, tables.zoneId);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addTabRound(
         tx,
         cfg,

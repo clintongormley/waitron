@@ -40,7 +40,7 @@ import {
   updateTable,
   updateZone,
 } from "./tables.js";
-import { advanceTicketItem, fireLines, listTablesWithState, openTab } from "./working-order.js";
+import { advanceTicketItem, fireLines, listTablesWithState } from "./working-order.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import "./errors.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -700,7 +700,7 @@ describe("listTablesWithState — timingBand (KDS order-timing alerts)", () => {
     const { cfg, cafeId, aguaId, tableId, offers } = await setupTabVenue();
 
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([
           { productId: cafeId, quantity: "1" },

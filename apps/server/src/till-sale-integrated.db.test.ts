@@ -55,7 +55,6 @@ import {
   addTabRound,
   createOpenOrder,
   listStationQueue,
-  openTab,
   parkOrder,
   placeOrder,
   updateOrderLine,
@@ -73,6 +72,7 @@ import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -1402,7 +1402,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       const offer = offers.offerFor(cafe.id);
       const tab = async (label: string) => {
         const table = await createTable(tx, cfg, { label, zoneId: offers.zoneId });
-        const { tabId: id } = await openTab(tx, cfg, { tableId: table.id });
+        const { tabId: id } = await openPartyTab(tx, cfg, { tableId: table.id });
         await addTabRound(tx, cfg, id, [{ menuItemId: offer, quantity: "2" }]);
         return id;
       };

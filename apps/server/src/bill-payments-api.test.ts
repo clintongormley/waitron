@@ -10,6 +10,7 @@ import {
   billPayments,
   deviceProfiles,
   drawerOpens,
+  parties,
   printJobs,
   products,
   saleLines,
@@ -53,8 +54,8 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import { openTab } from "./working-order.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // The bill payment routes (bill payments design §8 tests 2, 4, 5, 6, 7, 8, 9, 11, 14 and 15, and plan
 // D8), driven over HTTP against a provisioned venue that files real Veri*Factu records. Each case
@@ -292,7 +293,7 @@ async function tabWith(...names: string[]): Promise<string> {
       label: `M-${randomUUID().slice(0, 8)}`,
       zoneId: venue.offers.zoneId,
     });
-    const { tabId } = await openTab(tx, venue.cfg, {
+    const { tabId } = await openPartyTab(tx, venue.cfg, {
       tableId: table.id,
       lines: names.map((name) => ({ menuItemId: offer(name), quantity: "1" })),
     });
@@ -323,6 +324,29 @@ async function request(
   // A refusal answers `{ error: { code, params } }`; read as its code and params.
   const json = (parsed.error as Record<string, unknown> | undefined) ?? parsed;
   return { status: res.status, json };
+}
+
+/** The revision of the party the bill belongs to, as a bill route is sent it. */
+async function partyRevisionOf(billId: string): Promise<number> {
+  const [row] = await inTx((tx) =>
+    tx
+      .select({ revision: parties.revision })
+      .from(workingOrders)
+      .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+      .where(eq(workingOrders.id, billId)),
+  );
+  return row!.revision;
+}
+
+/** Split the items onto a new bill of the party, through the bill route. */
+async function splitOff(
+  billId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  return request("POST", `/api/bills/${billId}/split`, {
+    transfers,
+    expectedPartyRevision: await partyRevisionOf(billId),
+  });
 }
 
 interface PaymentBody {
@@ -680,7 +704,7 @@ describe("a contribution (design §8 test 2)", () => {
         label: `M-${randomUUID().slice(0, 8)}`,
         zoneId: venue.offers.zoneId,
       });
-      return (await openTab(tx, venue.cfg, { tableId: table.id })).tabId;
+      return (await openPartyTab(tx, venue.cfg, { tableId: table.id })).tabId;
     });
 
     const refused = await contribute(billId, "5.00");
@@ -837,26 +861,17 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect(await lineTotals(billId)).toEqual(["35.00", "25.00", "3.00"]);
   });
 
-  it("refuses moving the steak to another table's tab, or splitting it off", async () => {
+  it("refuses splitting the steak off", async () => {
     const billId = await steakPaid();
-    const other = await tabWith("Ensalada");
 
-    const moved = await request("POST", `/api/tabs/${billId}/transfer`, {
-      toTabId: other,
-      transfers: [{ lineNo: 2 }],
-    });
-    const split = await request("POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 2 }],
-    });
+    const split = await splitOff(billId, [{ lineNo: 2 }]);
 
-    expect(moved.status).toBe(409);
-    expect(moved.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 2 } });
     expect(split.status).toBe(409);
     expect(split.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 2 } });
     expect(await lineTotals(billId)).toEqual(["35.00", "25.00", "3.00"]);
   });
 
-  it("lets the unpaid beers of a line move and be cut, and refuses cutting the paid one", async () => {
+  it("lets the unpaid beers of a line be split off and cut, and refuses cutting the paid one", async () => {
     const billId = await tabWith("Paella", "Caña");
     const lines = await request("GET", `/api/working-orders/${billId}/lines`);
     const raised = await request("PUT", `/api/working-orders/${billId}/lines/2`, {
@@ -873,12 +888,8 @@ describe("an item already paid for (design §8 test 5)", () => {
       tip: "0.00",
     });
     expect(paid.status).toBe(200);
-    const other = await tabWith("Ensalada");
 
-    const moved = await request("POST", `/api/tabs/${billId}/transfer`, {
-      toTabId: other,
-      transfers: [{ lineNo: 2, quantity: "2" }],
-    });
+    const moved = await splitOff(billId, [{ lineNo: 2, quantity: "2" }]);
     const cutTooFar = await request("DELETE", `/api/working-orders/${billId}/lines/2?quantity=2`);
     const cut = await request("DELETE", `/api/working-orders/${billId}/lines/2?quantity=1`);
 
@@ -1083,11 +1094,9 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
     const billId = await bill120();
     expect((await contribute(billId, "50.00")).status).toBe(200);
 
-    const split = await request("POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 4 }, { lineNo: 5 }],
-    });
+    const split = await splitOff(billId, [{ lineNo: 4 }, { lineNo: 5 }]);
     expect(split.status).toBe(200);
-    const checkId = split.json.checkId as string;
+    const checkId = split.json.billId as string;
 
     const checkPaid = await contribute(checkId, "30.00");
     expect(checkPaid.json).toMatchObject({ invoice: { total: "30.00" } });
@@ -1112,9 +1121,7 @@ describe("a split after a contribution (design §8 test 6, §4.2)", () => {
     const billId = await bill120();
     expect((await contribute(billId, "100.00")).status).toBe(200);
 
-    const refused = await request("POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 1 }],
-    });
+    const refused = await splitOff(billId, [{ lineNo: 1 }]);
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
@@ -1276,51 +1283,13 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     await expectInvoicedOnDeviceTill(billId, 2500);
   });
 
-  it("issues the invoice when a transfer leaves the bill exactly paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
-    const other = await tabWith("Ensalada");
-    expect((await contribute(billId, "25.00")).status).toBe(200);
-
-    const moved = await request("POST", `/api/tabs/${billId}/transfer`, {
-      toTabId: other,
-      transfers: [{ lineNo: 2 }],
-    });
-
-    expect(moved.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
-  });
-
   it("issues the invoice when a split leaves the bill exactly paid", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const split = await request("POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 2 }],
-    });
+    const split = await splitOff(billId, [{ lineNo: 2 }]);
 
     expect(split.status).toBe(200);
-    await expectInvoicedOnDeviceTill(billId, 2500);
-  });
-
-  it("issues the invoice when an unjoin leaves the bill exactly paid", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
-    const second = await inTx((tx) =>
-      createTable(tx, venue.cfg, {
-        label: `M-${randomUUID().slice(0, 8)}`,
-        zoneId: venue.offers.zoneId,
-      }),
-    );
-    expect((await request("POST", `/api/tabs/${billId}/join`, { tableId: second.id })).status).toBe(
-      200,
-    );
-    expect((await contribute(billId, "25.00")).status).toBe(200);
-
-    const unjoined = await request("POST", `/api/tabs/${billId}/unjoin`, {
-      tableId: second.id,
-      transfers: [{ lineNo: 2 }],
-    });
-
-    expect(unjoined.status).toBe(200);
     await expectInvoicedOnDeviceTill(billId, 2500);
   });
 
@@ -1408,10 +1377,8 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
 describe("the bottle (design §8 test 9, §7)", () => {
   it("files one line of €30.00 and three tenders of €10.00", async () => {
     const tabId = await tabWith("Paella", "Botella tinto");
-    const split = await request("POST", `/api/tabs/${tabId}/split`, {
-      transfers: [{ lineNo: 2 }],
-    });
-    const bottleBill = split.json.checkId as string;
+    const split = await splitOff(tabId, [{ lineNo: 2 }]);
+    const bottleBill = split.json.billId as string;
 
     for (let i = 0; i < 3; i++) {
       expect((await contribute(bottleBill, "10.00")).status).toBe(200);
@@ -1614,15 +1581,13 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
 
   it("refuses merging a check holding money back into its tab", async () => {
     const tabId = await bill120();
-    const split = await request("POST", `/api/tabs/${tabId}/split`, {
-      transfers: [{ lineNo: 5 }],
-    });
-    const checkId = split.json.checkId as string;
+    const split = await splitOff(tabId, [{ lineNo: 5 }]);
+    const checkId = split.json.billId as string;
     expect((await contribute(checkId, "5.00")).status).toBe(200);
 
-    const refused = await request("POST", `/api/tabs/${tabId}/merge`, {
-      fromTabId: checkId,
-      freeSourceTable: false,
+    const refused = await request("POST", `/api/bills/${tabId}/merge`, {
+      fromBillId: checkId,
+      expectedPartyRevision: await partyRevisionOf(tabId),
     });
 
     expect(refused.status).toBe(409);
@@ -2355,9 +2320,7 @@ describe("refund first (design §4.3, §6a)", () => {
   it("refuses moving €30.00 out by the €20.00 excess, and moves it after a €20.00 refund (design §8 test 7)", async () => {
     const { billId, paymentId } = await sixtyHoldingFifty();
 
-    const refused = await request("POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 2 }, { lineNo: 3 }],
-    });
+    const refused = await splitOff(billId, [{ lineNo: 2 }, { lineNo: 3 }]);
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
       code: "bill.received_exceeds_total",
@@ -2368,9 +2331,7 @@ describe("refund first (design §4.3, §6a)", () => {
     expect(
       (await refund(billId, paymentId, { appliedAmount: "20.00", tipAmount: "0.00" })).status,
     ).toBe(200);
-    const moved = await request("POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 2 }, { lineNo: 3 }],
-    });
+    const moved = await splitOff(billId, [{ lineNo: 2 }, { lineNo: 3 }]);
 
     expect(moved.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["30.00"]);

@@ -55,17 +55,16 @@ import type { IntegratedPayDeps } from "./till-sale.js";
 import {
   addTabRound,
   createOpenOrder,
-  openTab,
   parkOrder,
   placeOrder,
   priceStoredOrderForIssuance,
   readOrderRevision,
-  splitOffCheck,
   updateHeldOrder,
 } from "./working-order.js";
 import type { GrossOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 
 // Path by path: a line records its classification snapshot when it is added to the order, each
 // filing path copies it onto the sale line, and nothing after it re-classifies.
@@ -316,7 +315,7 @@ async function openTableTab(v: Venue, lines: { menuItemId: string; quantity: str
       label: `Mesa ${tableId.slice(0, 4)}`,
       active: true,
     });
-    const { tabId } = await openTab(tx, v.cfg, { tableId });
+    const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
     await addTabRound(tx, v.cfg, tabId, lines);
     return tabId;
   });
@@ -583,8 +582,8 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       { menuItemId: v.tables.offerFor(v.products.negroni), quantity: "2" },
     ]);
     await moveCocktailsToSpirits(v);
-    const { checkId } = await withTransaction(suite.db, (tx) =>
-      splitOffCheck(tx, v.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    const { billId: checkId } = await withTransaction(suite.db, (tx) =>
+      splitPartyBill(tx, v.cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
     await payWorkingOrder(deps(), v.cfg, {

@@ -55,12 +55,12 @@ import {
   markGroupServed,
   markServed,
   recallLines,
-  splitOffCheck,
   unmarkServed,
   updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
 import "./errors.js";
+import { splitBill } from "./bill-actions.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.
@@ -419,8 +419,8 @@ async function croquetas(v: Venue) {
 /** Splits one Croquetas onto a second bill and marks that bill abandoned; answers the row it holds,
  * after checking Current orders leaves it out. */
 async function abandonedSplitRow(v: Venue, s: Awaited<ReturnType<typeof croquetas>>) {
-  const { checkId } = await inTx(async (tx) =>
-    splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
+  const { billId: checkId } = await inTx(async (tx) =>
+    splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
       expectedPartyRevision: await revisionOf(s.partyId),
       operatorId: ALEX,
     }),
@@ -519,8 +519,8 @@ describe("served by quantity (§12 item 5)", () => {
       line(v, "water", "2"),
     ]);
     const croq = await lineNamed(s.partyId, "croquetas");
-    const { checkId } = await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croq.lineNo, quantity: "1" }], {
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croq.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),
@@ -1198,8 +1198,8 @@ describe("a partly served line split or cut", () => {
     const s = await croquetas(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "3" }]);
 
-    const { checkId } = await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "2" }], {
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "2" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: ALEX,
       }),
@@ -1220,7 +1220,7 @@ describe("a partly served line split or cut", () => {
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
 
     await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: ALEX,
       }),
@@ -1240,7 +1240,7 @@ describe("a partly served line split or cut", () => {
     const servedAt = await backdateServed(s.croq.id);
 
     await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: s.croq.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: ALEX,
       }),

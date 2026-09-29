@@ -15,8 +15,9 @@ import {
   statusOf,
   type BillVenue,
 } from "./testing/bill-venue.js";
-import { addTabRound, splitOffCheck } from "./working-order.js";
+import { addTabRound } from "./working-order.js";
 import "./errors.js";
+import { splitBill } from "./bill-actions.js";
 
 // The HTTP surface of split, merge and transfer between a party's bills (table actions plan,
 // Task 5): the session guard, the id and body screens, the answers and the status of each code.
@@ -67,8 +68,8 @@ async function revisionOf(partyId: string): Promise<number> {
 async function twoBills(): Promise<{ partyId: string; main: string; second: string }> {
   const { partyId, tabId } = await seated("Paella", "Caña");
   const expectedPartyRevision = await revisionOf(partyId);
-  const { checkId } = await inTx(venue, (tx) =>
-    splitOffCheck(tx, venue.cfg, tabId, [{ lineNo: 2 }], {
+  const { billId: checkId } = await inTx(venue, (tx) =>
+    splitBill(tx, venue.cfg, tabId, [{ lineNo: 2 }], {
       expectedPartyRevision,
       operatorId: venue.operatorId,
     }),

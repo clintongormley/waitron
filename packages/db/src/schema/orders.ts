@@ -1,6 +1,5 @@
 import type { OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
@@ -74,11 +73,9 @@ export const workingOrders = table(
     status: workingOrderStatus("status").notNull().default("open"),
     openedAt: tsString("opened_at").notNull().$defaultFn(nowIso),
     settledAt: tsString("settled_at"),
-    // Set ⇒ this (counter) order is DELIVERED TO that table, not a tab: a tab is the reverse link
-    // (`dining_tables.tab_id` points at the order). The two tables name each other, so the
-    // `AnySQLiteColumn` annotation stops TypeScript inferring each table's type from the other's.
+    // Set ⇒ this counter order is delivered to that table; a party's bill names its party instead.
     /* v8 ignore start */
-    deliveryTableId: id("delivery_table_id").references((): AnySQLiteColumn => diningTables.id),
+    deliveryTableId: id("delivery_table_id").references(() => diningTables.id),
     /* v8 ignore stop */
     collectedAt: tsString("collected_at"),
     revision: count("revision").notNull().default(0),

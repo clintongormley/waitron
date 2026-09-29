@@ -15,8 +15,9 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createCourse, deactivateCourse, setProductCourse } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testing/bill-venue.js";
-import { addTabRound, splitOffCheck } from "./working-order.js";
+import { addTabRound } from "./working-order.js";
 import "./errors.js";
+import { splitBill } from "./bill-actions.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
 // status each refusal maps to, and the answer's shape. What the commands do is pinned in
@@ -239,8 +240,8 @@ describe("POST /api/parties/:id/groups", () => {
       expectedPartyRevision: await revisionOf(party.partyId),
       operatorId: venue.operatorId,
     };
-    const { checkId } = await inTx(venue, (tx) =>
-      splitOffCheck(tx, venue.cfg, party.tabId, [{ lineNo: 2 }], command),
+    const { billId: checkId } = await inTx(venue, (tx) =>
+      splitBill(tx, venue.cfg, party.tabId, [{ lineNo: 2 }], command),
     );
     const submissionId = randomUUID();
     const body = {
@@ -858,32 +859,7 @@ describe("GET /api/working-orders/:id/lines", () => {
   });
 });
 
-describe("the tab routes that move or release lines, on a party with groups", () => {
-  it("refuses 409 group.held_leaves_party for a held line transferred to another party's tab, writing nothing", async () => {
-    const party = await withGroups();
-    const other = await seated();
-    const lineNo = (
-      (await call("GET", `/api/working-orders/${party.tabId}/lines`)).json.lines as {
-        lineNo: number;
-        groupId: string | null;
-      }[]
-    ).find((line) => line.groupId === party.tarta.id)!.lineNo;
-    const before = [await snapshot(party), await snapshot(other)];
-
-    const refused = await call("POST", `/api/tabs/${party.tabId}/transfer`, {
-      toTabId: other.tabId,
-      transfers: [{ lineNo }],
-      expectedPartyRevision: await revisionOf(other.partyId),
-      expectedSourcePartyRevision: await revisionOf(party.partyId),
-    });
-
-    expect(refused.status).toBe(409);
-    expect(refused.json).toEqual(
-      refusal("group.held_leaves_party", { tabId: party.tabId, lineNo }),
-    );
-    expect([await snapshot(party), await snapshot(other)]).toEqual(before);
-  });
-
+describe("the tab routes that release lines, on a party with groups", () => {
   it("refuses 409 group.line_held for a held line sent on its own, writing nothing", async () => {
     const party = await withGroups();
     const lineNo = (

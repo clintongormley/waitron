@@ -1,5 +1,5 @@
 import "./errors.js";
-import { eq, or, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   diningTables,
   parties,
@@ -49,17 +49,12 @@ export async function readReceiptOrder(
       orderNumber: order.orderNumber,
     };
   }
+  if (order.deliveryTableId === null) {
+    return { orderLabel: order.label, orderNumber: order.orderNumber };
+  }
   const [table] = await tx
     .select({ label: diningTables.label })
     .from(diningTables)
-    .where(
-      or(
-        eq(diningTables.tabId, workingOrderId),
-        order.deliveryTableId === null ? undefined : eq(diningTables.id, order.deliveryTableId),
-      ),
-    )
-    // Match the kitchen display: prefer a seated tab, with the table id breaking joins consistently.
-    .orderBy(sql`(${diningTables.tabId} = ${workingOrderId}) desc nulls last`, diningTables.id)
-    .limit(1);
-  return { orderLabel: table?.label ?? order.label, orderNumber: order.orderNumber };
+    .where(eq(diningTables.id, order.deliveryTableId));
+  return { orderLabel: table!.label, orderNumber: order.orderNumber };
 }

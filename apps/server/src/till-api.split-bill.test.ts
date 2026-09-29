@@ -13,6 +13,7 @@ import {
   parties,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -46,9 +47,10 @@ import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
-import { addTabRound, joinTable, openTab } from "./working-order.js";
+import { addTabRound } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // The HTTP surface of the split, un-join and merge routes: the session guard, the malformed-`:id`/`tableId`
 // screens, the result shapes and the STATUS mapping for `table.not_joined`. The successful merge case also
@@ -115,7 +117,6 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** `seriesId` is unused by the split/unjoin routes: the detached check files only when paid. */
 function makeCfg(tillId: string, locationId: string, nodeId: string): TillConfig {
   return {
     tillId: brandTillId(tillId),
@@ -171,8 +172,18 @@ async function openSession(db: Database): Promise<string> {
   return session.token;
 }
 
+/** The revision of the party the bill belongs to, as a bill route is sent it. */
+async function partyRevisionOf(db: Database, billId: string): Promise<number> {
+  const [row] = await db
+    .select({ revision: parties.revision })
+    .from(workingOrders)
+    .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+    .where(eq(workingOrders.id, billId));
+  return row!.revision;
+}
+
 /** Seeds one open tab on table A carrying `aQty` café lines (line_no 1), plus a mounted app and a
- * logged-in cookie, for the split tests to drive `POST /api/tabs/:id/split` against. */
+ * logged-in cookie. */
 async function setupTabApp(
   aQty = "2",
 ): Promise<{ app: Hono; d: TillApiDeps; tabA: string; tableA: string; cookie: string }> {
@@ -182,7 +193,7 @@ async function setupTabApp(
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tableA } = await withTransaction(suite.db, async (tx) => {
     const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const tabAResult = await openTab(tx, d.cfg, {
+    const tabAResult = await openPartyTab(tx, d.cfg, {
       tableId: a.id,
       lines: [{ menuItemId: cafeMenuItemId, quantity: aQty }],
     });
@@ -190,339 +201,6 @@ async function setupTabApp(
   });
   return { app, d, tabA, tableA, cookie };
 }
-
-/** Seeds one open tab covering TWO tables (A opened it and carries a café line; B is joined to the same
- * tab), plus a mounted app + cookie, for the un-join tests to drive `POST /api/tabs/:id/unjoin` against.
- * `tableFree` is a third table that is NOT joined to anything, for the `table.not_joined` case. */
-async function setupJoinedApp(): Promise<{
-  app: Hono;
-  d: TillApiDeps;
-  tabA: string;
-  tableB: string;
-  tableFree: string;
-  cookie: string;
-}> {
-  const app = new Hono();
-  const d = deps(suite.db);
-  mountTillApi(app, d, collect([]));
-  const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-  const { tabA, tableB, tableFree } = await withTransaction(suite.db, async (tx) => {
-    const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const free = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const tabAResult = await openTab(tx, d.cfg, {
-      tableId: a.id,
-      lines: [{ menuItemId: cafeMenuItemId, quantity: "2" }],
-    });
-    await joinTable(tx, d.cfg, tabAResult.tabId, b.id);
-    return { tabA: tabAResult.tabId, tableB: b.id, tableFree: free.id };
-  });
-  return { app, d, tabA, tableB, tableFree, cookie };
-}
-
-describe("POST /api/tabs/:id/split", () => {
-  it("401s without a session (session.required)", async () => {
-    const { app, tabA } = await setupTabApp();
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ transfers: [{ lineNo: 1 }] }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-
-  it("rejects a malformed :id with 4xx tab.not_open, not an opaque 500", async () => {
-    const { app, cookie } = await setupTabApp();
-    const res = await app.request("/api/tabs/not-a-uuid/split", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: [{ lineNo: 1 }] }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
-    });
-  });
-
-  it("splits selected items off the tab into a NEW check (200 { checkId })", async () => {
-    const { app, tabA, cookie } = await setupTabApp("3");
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: [{ lineNo: 1, quantity: "1" }] }),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { checkId: string };
-    expect(body.checkId).toMatch(/^[0-9a-f-]{36}$/);
-
-    // The minted check is a NEW open working order carrying the carved-off quantity, with NO table
-    // pointing at it (a table-LESS payment unit); the origin tab keeps the remainder.
-    // `working_order_lines.quantity` is a count of whole THOUSANDTHS, read as text so the assertion
-    // is about the stored number and not about which engine renders an eight-byte integer as what.
-    const check = await suite.db.execute<{ status: string; quantity: string }>(sql`
-      select wo.status, cast(wol.quantity as text) as quantity
-      from working_orders wo join working_order_lines wol on wol.working_order_id = wo.id
-      where wo.id = ${body.checkId}`);
-    expect(check.rows).toEqual([{ status: "open", quantity: "1000" }]);
-    const anchored = await suite.db.execute<{ count: number }>(
-      sql`select cast(count(*) as int) as count from dining_tables where tab_id = ${body.checkId}`,
-    );
-    expect(anchored.rows[0]!.count).toBe(0);
-    const origin = await suite.db.execute<{ quantity: string }>(
-      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${tabA}`,
-    );
-    // 3 − 1 = 2 units remain on the origin tab, stored as 2000 thousandths
-    expect(origin.rows).toEqual([{ quantity: "2000" }]);
-  });
-
-  it("400 tab.split_held_line when a named line is held for the kitchen", async () => {
-    const { app, d, tabA, cookie } = await setupTabApp();
-    await seedKitchenStation(suite.db, { locationId: d.cfg.locationId });
-    // Offered again so the product's preparation route points at the new station.
-    await withTransaction(suite.db, (tx) => offerProducts(tx, d.cfg, { zone: "tables" }));
-    await withTransaction(suite.db, (tx) =>
-      addTabRound(tx, d.cfg, tabA, [{ menuItemId: cafeMenuItemId, quantity: "1", hold: true }]),
-    );
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: [{ lineNo: 2 }] }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.split_held_line", params: { tabId: tabA, lineNo: 2 } },
-    });
-  });
-
-  it("409 tab.not_open when the tab is not open", async () => {
-    const { app, cookie } = await setupTabApp();
-    const res = await app.request(`/api/tabs/${randomUUID()}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: [{ lineNo: 1 }] }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
-  });
-
-  it("400 management.request_invalid when transfers is absent, not an opaque 500", async () => {
-    const { app, tabA, cookie } = await setupTabApp();
-    // Body `{}` → `transfers` undefined, which `splitOffCheck` would reach as `transfers.length`.
-    // Refused at the boundary as the generic request-shape 400 naming the field.
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({}),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "transfers" } },
-    });
-  });
-
-  it("400 management.request_invalid when transfers is not an array", async () => {
-    const { app, tabA, cookie } = await setupTabApp();
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: 5 }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "transfers" } },
-    });
-  });
-
-  it("400 management.request_invalid for a literal JSON null body, not an opaque 500 (Copilot)", async () => {
-    const { app, tabA, cookie } = await setupTabApp();
-    // A literal JSON `null` body parses successfully, so `body.transfers` would throw before the
-    // array-shape screen ran. Refused by the object/null/array guard, naming "body".
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: "null",
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-  });
-
-  it("400 management.request_invalid for an empty (unparseable) body, not an opaque 500", async () => {
-    const { app, tabA, cookie } = await setupTabApp();
-    // Unlike a literal `null` body, an empty body is invalid JSON; the route sends it to the SAME
-    // body-shape refusal (field "body").
-    const res = await app.request(`/api/tabs/${tabA}/split`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: "",
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-  });
-});
-
-describe("POST /api/tabs/:id/unjoin", () => {
-  it("401s without a session (session.required)", async () => {
-    const { app, tabA, tableB } = await setupJoinedApp();
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tableId: tableB }),
-    });
-    expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
-  });
-
-  it("rejects a malformed :id with 4xx tab.not_open, not an opaque 500", async () => {
-    const { app, tableB, cookie } = await setupJoinedApp();
-    const res = await app.request("/api/tabs/not-a-uuid/unjoin", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: tableB }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.not_open", params: { tabId: "not-a-uuid" } },
-    });
-  });
-
-  it("rejects a malformed tableId with 4xx table.not_joined, not an opaque 500", async () => {
-    const { app, tabA, cookie } = await setupJoinedApp();
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: "nope" }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "table.not_joined", params: { tableId: "nope", tabId: tabA } },
-    });
-  });
-
-  it("409 table.not_joined for a table not joined to the tab", async () => {
-    const { app, tabA, tableFree, cookie } = await setupJoinedApp();
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: tableFree }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "table.not_joined", params: { tableId: tableFree, tabId: tabA } },
-    });
-  });
-
-  it("409 table.not_shared un-joining WITH items a table that solely anchors its tab", async () => {
-    // A plain single-table tab (setupTabApp): tableA is the ONLY table on tabA. A WITH-items un-join has
-    // no join to split off, so it must 409 table.not_shared rather than mint a new tab and strand it.
-    const { app, tabA, tableA, cookie } = await setupTabApp();
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: tableA, transfers: [{ lineNo: 1 }] }),
-    });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "table.not_shared", params: { tableId: tableA, tabId: tabA } },
-    });
-  });
-
-  it("un-joins WITH items into a new anchored tab (200 { tabId })", async () => {
-    const { app, tabA, tableB, cookie } = await setupJoinedApp();
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: tableB, transfers: [{ lineNo: 1 }] }),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { tabId: string };
-    expect(body.tabId).toMatch(/^[0-9a-f-]{36}$/);
-
-    // The detached table now anchors the NEW tab, which carries the moved line; the origin tab lost it.
-    const anchored = await suite.db.execute<{ tab_id: string | null }>(
-      sql`select tab_id from dining_tables where id = ${tableB}`,
-    );
-    expect(anchored.rows[0]!.tab_id).toBe(body.tabId);
-    const moved = await suite.db.execute<{ quantity: string }>(
-      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${body.tabId}`,
-    );
-    expect(moved.rows).toEqual([{ quantity: "2000" }]); // two units, as a count of thousandths
-    const origin = await suite.db.execute<{ count: number }>(
-      sql`select cast(count(*) as int) as count from working_order_lines where working_order_id = ${tabA}`,
-    );
-    expect(origin.rows[0]!.count).toBe(0);
-  });
-
-  it("un-joins WITHOUT items, freeing the table (200 {})", async () => {
-    const { app, tabA, tableB, cookie } = await setupJoinedApp();
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: tableB }),
-    });
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({});
-
-    // The freed table points at no tab; the origin tab keeps its line.
-    const freed = await suite.db.execute<{ tab_id: string | null }>(
-      sql`select tab_id from dining_tables where id = ${tableB}`,
-    );
-    expect(freed.rows[0]!.tab_id).toBeNull();
-    const origin = await suite.db.execute<{ quantity: string }>(
-      sql`select cast(quantity as text) as quantity from working_order_lines where working_order_id = ${tabA}`,
-    );
-    expect(origin.rows).toEqual([{ quantity: "2000" }]); // two units, as a count of thousandths
-  });
-
-  it("400 management.request_invalid when transfers is present but not an array", async () => {
-    const { app, tabA, tableB, cookie } = await setupJoinedApp();
-    // `transfers` is OPTIONAL here (absent = free-the-table, tested above), so the route screens only a
-    // PRESENT non-array — which `unjoinTable`'s `transferLines` would otherwise reach as `.length` → 500.
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ tableId: tableB, transfers: 5 }),
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "transfers" } },
-    });
-  });
-
-  it("400 management.request_invalid for a literal JSON null body, not an opaque 500 (Copilot)", async () => {
-    const { app, tabA, cookie } = await setupJoinedApp();
-    // Same degenerate input as the /split case above: a literal JSON `null` body parses to `null`
-    // itself, so `body.tableId` would throw before `isUuid` ever ran. Refused by the object/null/array
-    // guard naming "body", before the `table.not_joined` a well-formed-but-wrong `tableId` gets.
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: "null",
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-  });
-
-  it("400 management.request_invalid for an empty (unparseable) body, not an opaque 500", async () => {
-    const { app, tabA, cookie } = await setupJoinedApp();
-    // An empty body is invalid JSON; the route sends it to the SAME field "body" refusal a null body gets.
-    const res = await app.request(`/api/tabs/${tabA}/unjoin`, {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie },
-      body: "",
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "body" } },
-    });
-  });
-});
 
 /** The suite shares one database, and an earlier case may already have seeded the default station. */
 async function kitchenStation(config: TillConfig): Promise<string> {
@@ -534,7 +212,7 @@ async function kitchenStation(config: TillConfig): Promise<string> {
 }
 
 /** The merge the till sends when a waiter leaves an unpaid split-off check without paying it. */
-describe("POST /api/tabs/:id/merge of a check back into the tab it was split from", () => {
+describe("POST /api/bills/:id/merge of a check back into the tab it was split from", () => {
   /** A tab whose second line was sent to a kitchen with a printer, then split whole onto a check. */
   async function splitSentLine(): Promise<{
     app: Hono;
@@ -567,12 +245,15 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
     );
     const [ticket] = await ticketsOn(tabA);
     expect(ticket).toMatchObject({ lineNo: 2, quantity: 2000 });
-    const split = await app.request(`/api/tabs/${tabA}/split`, {
+    const split = await app.request(`/api/bills/${tabA}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: [{ lineNo: 2 }] }),
+      body: JSON.stringify({
+        transfers: [{ lineNo: 2 }],
+        expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
+      }),
     });
-    const { checkId } = (await split.json()) as { checkId: string };
+    const { billId: checkId } = (await split.json()) as { billId: string };
     return { app, tabA, checkId, cookie, printerId, ticket: ticket! };
   }
 
@@ -620,13 +301,16 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
     expect((await ticketsOn(checkId)).map((item) => item.id)).toEqual([ticket.id]);
     const jobsBefore = await printJobCount(printerId);
 
-    const res = await app.request(`/api/tabs/${tabA}/merge`, {
+    const res = await app.request(`/api/bills/${tabA}/merge`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ fromTabId: checkId, freeSourceTable: false }),
+      body: JSON.stringify({
+        fromBillId: checkId,
+        expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
+      }),
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
     expect(await ticketsOn(tabA)).toEqual([
       { id: ticket.id, quantity: ticket.quantity, lineNo: expect.any(Number) },
     ]);
@@ -642,10 +326,13 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
       sql`update working_orders set payment_attempt_at = '2026-09-26T10:00:00.000Z' where id = ${checkId}`,
     );
 
-    const res = await app.request(`/api/tabs/${tabA}/merge`, {
+    const res = await app.request(`/api/bills/${tabA}/merge`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ fromTabId: checkId, freeSourceTable: false }),
+      body: JSON.stringify({
+        fromBillId: checkId,
+        expectedPartyRevision: await partyRevisionOf(suite.db, tabA),
+      }),
     });
 
     expect(res.status).toBe(409);
@@ -659,7 +346,7 @@ describe("POST /api/tabs/:id/merge of a check back into the tab it was split fro
 });
 
 /** The same merge on a seated party's tab, whose split-off check belongs to the party too. */
-describe("POST /api/tabs/:id/merge of a seated party's check back into its tab", () => {
+describe("POST /api/bills/:id/merge of a seated party's check back into its tab", () => {
   /** A party seated through the till's seat route, a round of three cafés, and one of them split off
    * onto a check; the revision is the party's as the floor reads it after the split. */
   async function seatedSplit(): Promise<{
@@ -701,12 +388,12 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
       ],
     });
     expect(round.status).toBe(200);
-    const split = await post(`/api/tabs/${tabId}/split`, {
+    const split = await post(`/api/bills/${tabId}/split`, {
       transfers: [{ lineNo: 1, quantity: "1" }],
       expectedPartyRevision: ((await round.json()) as { revision: number }).revision,
     });
     expect(split.status).toBe(200);
-    const { checkId } = (await split.json()) as { checkId: string };
+    const { billId: checkId } = (await split.json()) as { billId: string };
     const floor = await app.request("/api/tables/state", { headers: { cookie } });
     const row = ((await floor.json()) as { id: string; party: { revision: number } | null }[]).find(
       (candidate) => candidate.id === table.id,
@@ -738,13 +425,12 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
     const { post, tabId, checkId, partyId, revision } = await seatedSplit();
     const before = await partyOf(partyId);
 
-    const res = await post(`/api/tabs/${tabId}/merge`, {
-      fromTabId: checkId,
-      freeSourceTable: false,
+    const res = await post(`/api/bills/${tabId}/merge`, {
+      fromBillId: checkId,
       expectedPartyRevision: revision,
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
     expect(await quantitiesOn(checkId)).toEqual([]);
     expect(await quantitiesOn(tabId)).toEqual(["2000", "1000"]);
     expect(before).toMatchObject({ state: "open", members: [{ leftAt: null }] });
@@ -754,10 +440,7 @@ describe("POST /api/tabs/:id/merge of a seated party's check back into its tab",
   it("refuses the merge sent without a revision, leaving the check's line on it", async () => {
     const { post, tabId, checkId } = await seatedSplit();
 
-    const res = await post(`/api/tabs/${tabId}/merge`, {
-      fromTabId: checkId,
-      freeSourceTable: false,
-    });
+    const res = await post(`/api/bills/${tabId}/merge`, { fromBillId: checkId });
 
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -782,7 +465,7 @@ describe("a split-off check after the till that made it has forgotten it", () =>
     const { tabId, personId, profileId } = await withTransaction(db, async (tx) => {
       const offers = await offerProducts(tx, venueCfg, { zone: "tables" });
       const table = await createTable(tx, venueCfg, { label: "Mesa 5", zoneId: offers.zoneId });
-      const tab = await openTab(tx, venueCfg, {
+      const tab = await openPartyTab(tx, venueCfg, {
         tableId: table.id,
         lines: offers.toOfferLines([{ productId: cafeId, quantity: "2" }]),
       });
@@ -833,13 +516,16 @@ describe("a split-off check after the till that made it has forgotten it", () =>
 
   it("is in Held orders under its table's name, and pays there through the sale route", async () => {
     const { app, tabId, cookie } = await provisionedTab();
-    const split = await app.request(`/api/tabs/${tabId}/split`, {
+    const split = await app.request(`/api/bills/${tabId}/split`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ transfers: [{ lineNo: 1, quantity: "1" }] }),
+      body: JSON.stringify({
+        transfers: [{ lineNo: 1, quantity: "1" }],
+        expectedPartyRevision: await partyRevisionOf(venueSuite.db, tabId),
+      }),
     });
     expect(split.status).toBe(200);
-    const { checkId } = (await split.json()) as { checkId: string };
+    const { billId: checkId } = (await split.json()) as { billId: string };
 
     expect((await heldOrders(app, cookie)).find((order) => order.id === checkId)).toMatchObject({
       label: "Mesa 5",

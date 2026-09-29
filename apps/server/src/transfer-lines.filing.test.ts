@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -27,10 +28,13 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { openTab, transferLines } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { transferItems } from "./bill-actions.js";
+import { partyRevisionOfOrder } from "./parties.js";
+import { createOpenOrder } from "./working-order.js";
 
 /**
  * H2 after a partial transfer: each tab files its own single fiscal record, at its own locked price.
@@ -164,7 +168,7 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 /**
- * A fresh venue with two open tabs, each on its own dining table, each holding café×4. Returns the tab
+ * A fresh venue with two open bills of one party, each holding café×4. Returns the bill
  * (working_order) ids to transfer between.
  */
 async function setupTwoTabs(): Promise<{
@@ -177,16 +181,20 @@ async function setupTwoTabs(): Promise<{
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const a = await createTable(tx, cfg, { label: "A", zoneId: offers.zoneId });
-    const b = await createTable(tx, cfg, { label: "B", zoneId: offers.zoneId });
-    const ta = await openTab(tx, cfg, {
+    const ta = await openPartyTab(tx, cfg, {
       tableId: a.id,
       lines: [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
     });
-    const tb = await openTab(tx, cfg, {
-      tableId: b.id,
-      lines: [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
-    });
-    return { tabA: ta.tabId, tabB: tb.tabId };
+    const tb = randomUUID();
+    await createOpenOrder(
+      tx,
+      cfg,
+      tb,
+      [{ menuItemId: offers.offerFor(cafe.id), quantity: "4" }],
+      null,
+      { partyId: ta.partyId, zoneId: offers.zoneId },
+    );
+    return { tabA: ta.tabId, tabB: tb };
   });
   return { cfg, tabA, tabB, cafe };
 }
@@ -237,7 +245,12 @@ describe("H2 — after a partial transfer, each tab files its OWN single registr
   it("transfer 1 café A→B, then pay BOTH tabs → exactly one sale + one registro each, at the locked price", async () => {
     const { cfg, tabA, tabB } = await setupTwoTabs(); // A: café×4, B: café×4
     await withTransaction(suite.db, async (tx) => {
-      await transferLines(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }]); // A→B: 1 café (partial split)
+      const party = (await partyRevisionOfOrder(tx, tabA))!;
+      // A→B: 1 café (partial split).
+      await transferItems(tx, cfg, tabA, tabB, [{ lineNo: 1, quantity: "1" }], {
+        expectedPartyRevision: party.revision,
+        operatorId: randomUUID(),
+      });
     });
 
     // A now holds café×3; B holds café×4 + café×1. `lines: []` files from the stored locked lines.

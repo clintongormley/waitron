@@ -14,7 +14,7 @@ import { diningTables } from "./dining-tables.js";
 import { workingOrders } from "./orders.js";
 import { locations, tenants, tills } from "./tenants.js";
 
-// The proofs-by-deletion switch off EVERY foreign key at once, so they separate "a foreign key
+// The proof by deletion switches off EVERY foreign key at once, so it separates "a foreign key
 // refused this" from "a CHECK or a trigger did", not one foreign key from another;
 // `pragma foreign_key_list` is read alongside to pin WHICH key covers the column.
 const LOCATION_A = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -35,7 +35,7 @@ async function withForeignKeysOff(
   }
 }
 
-describe("table↔tab link columns (mutual FKs)", () => {
+describe("an order's delivery table", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   let nodeA = "";
@@ -81,20 +81,11 @@ describe("table↔tab link columns (mutual FKs)", () => {
     });
   }
 
-  it("the two link columns round-trip and each FK resolves a valid reference", async () => {
-    const tableId = await openTable("T-vis");
+  it("working_orders.delivery_table_id round-trips a table's id", async () => {
+    const tableId = await openTable("T-delivered");
     const woId = await openWo();
     await inTx((tx) =>
-      tx.update(diningTables).set({ tabId: woId }).where(eq(diningTables.id, tableId)),
-    );
-    await inTx((tx) =>
       tx.update(workingOrders).set({ deliveryTableId: tableId }).where(eq(workingOrders.id, woId)),
-    );
-    const [table] = await inTx((tx) =>
-      tx
-        .select({ tabId: diningTables.tabId })
-        .from(diningTables)
-        .where(eq(diningTables.id, tableId)),
     );
     const [order] = await inTx((tx) =>
       tx
@@ -102,36 +93,7 @@ describe("table↔tab link columns (mutual FKs)", () => {
         .from(workingOrders)
         .where(eq(workingOrders.id, woId)),
     );
-    expect(table!.tabId).toBe(woId);
     expect(order!.deliveryTableId).toBe(tableId);
-  });
-
-  it("dining_tables.tab_id is covered by a foreign key at working_orders.id, and that key is what refuses a dangling pointer", async () => {
-    const tableId = await openTable("T-tabfk");
-    const keys = suite.db.all<{ table: string; from: string; to: string }>(
-      sql.raw(`select "table", "from", "to" from pragma_foreign_key_list('dining_tables')`),
-    );
-    expect(keys.filter((key) => key.from === "tab_id")).toEqual([
-      { table: "working_orders", from: "tab_id", to: "id" },
-    ]);
-
-    const e = await captureError(() =>
-      inTx((tx) =>
-        tx.update(diningTables).set({ tabId: randomUUID() }).where(eq(diningTables.id, tableId)),
-      ),
-    );
-    expect(isRefusal(e, FOREIGN_KEY_VIOLATION)).toBe(true);
-
-    // Proof by deletion: with foreign keys off, the same dangling pointer is accepted.
-    await withForeignKeysOff(suite.db, async () => {
-      await inTx((tx) =>
-        tx.update(diningTables).set({ tabId: randomUUID() }).where(eq(diningTables.id, tableId)),
-      );
-    });
-    // Put the row back to a value the restored key accepts, so it does not outlive this case.
-    await inTx((tx) =>
-      tx.update(diningTables).set({ tabId: null }).where(eq(diningTables.id, tableId)),
-    );
   });
 
   it("working_orders.delivery_table_id is covered by a foreign key at dining_tables.id, and that key is what refuses a dangling pointer", async () => {

@@ -53,7 +53,6 @@ import type { IntegratedPayDeps } from "./till-sale.js";
 import {
   addTabRound,
   createOpenOrder,
-  openTab,
   parkOrder,
   placeOrder,
   priceStoredOrder,
@@ -63,6 +62,7 @@ import {
 } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // A line takes the VAT class the zone's published menu version froze, when its price locks, and
 // issuance files that stored class's rate on every path. Every product is published at `reduced`
@@ -290,7 +290,7 @@ async function openTableTab(
       label: `Mesa ${tableId.slice(0, 4)}`,
       active: true,
     });
-    const { tabId } = await openTab(tx, v.cfg, { tableId });
+    const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
     await addTabRound(tx, v.cfg, tabId, lines);
     return tabId;
   });

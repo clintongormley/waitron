@@ -61,7 +61,6 @@ import {
   listHeldOrders,
   listStationQueue,
   markCourseAway,
-  openTab,
   parkOrder,
   placeOrder,
   priceStoredOrder,
@@ -1001,7 +1000,7 @@ describe("openTab service context", () => {
         values (${randomUUID()}, ${cfg.locationId}, 'Offer table', ${zoneId}, ${nowIso()})
         returning id`);
 
-      const { tabId } = await openTab(tx, cfg, {
+      const { tabId } = await openPartyTab(tx, cfg, {
         tableId: table.rows[0]!.id,
         lines: [{ menuItemId: premiumCafeOfferId, quantity: "1" }],
       });
@@ -1032,7 +1031,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Round table', ${zoneId}, ${nowIso()})
         returning id`);
-      const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
 
@@ -1094,8 +1093,8 @@ describe("openTab service context", () => {
         values (${randomUUID()}, ${cfg.locationId}, 'Downstairs', ${downstairsZone.rows[0]!.id},
           ${nowIso()})
         returning id`);
-      const upstairs = await openTab(tx, cfg, { tableId: upstairsTable.rows[0]!.id });
-      const downstairs = await openTab(tx, cfg, { tableId: downstairsTable.rows[0]!.id });
+      const upstairs = await openPartyTab(tx, cfg, { tableId: upstairsTable.rows[0]!.id });
+      const downstairs = await openPartyTab(tx, cfg, { tableId: downstairsTable.rows[0]!.id });
 
       await addTabRound(tx, cfg, upstairs.tabId, [
         { menuItemId: premiumCafeOfferId, quantity: "1" },
@@ -1131,7 +1130,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Deli shelf', ${zoneId}, ${nowIso()})
         returning id`);
-      const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       await addTabRound(tx, cfg, tabId, [{ menuItemId: premiumCafeOfferId, quantity: "1" }]);
 
@@ -1150,7 +1149,7 @@ describe("openTab service context", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Counter table', ${zoneId}, ${nowIso()})
         returning id`);
-      await expect(openTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
+      await expect(openPartyTab(tx, cfg, { tableId: table.rows[0]!.id })).rejects.toMatchObject({
         code: "service_zone.mode_incompatible",
         params: { zoneId, expected: "table_tab", actual: "prepay" },
       });
@@ -2892,7 +2891,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {});
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [line(cafe)]);
 
@@ -2932,7 +2931,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Two of a kind', ${zoneId}, ${nowIso()})
         returning id`);
-      const { tabId } = await openTab(tx, cfg, { tableId: table.rows[0]!.id });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId: table.rows[0]!.id });
 
       const resolveRoutes = vi.spyOn(VENUE_SERVICE, "resolvePreparationRoutes");
       try {
@@ -3896,7 +3895,7 @@ describe("fireCourse / hold-and-fire (KDS-2 auto-fire-first + held-item advance 
       await setProductCourse(tx, cfg, main, pri.id);
       await setProductCourse(tx, cfg, dessert, post.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Round 1: starter (Entrantes, earliest) auto-fires; main (Principales) is held.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
@@ -4018,7 +4017,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Ring both: starter (Entrantes, earliest) auto-fires; main (Principales) is HELD — it is line 2.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
@@ -4051,7 +4050,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
 
       // A null target clears the course (skipping the requireLiveCourse screen).
@@ -4075,7 +4074,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       // A lone Entrantes line is the order's earliest (only) course, so it auto-fires at round-send.
       await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
@@ -4098,7 +4097,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
       // An id naming no course of this venue — screened by requireLiveCourse BEFORE the line is resolved.
@@ -4123,7 +4122,7 @@ describe("setLineCourse (A1: move a held line to another course)", () => {
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
       // A live target course, so we get PAST requireLiveCourse to the line-resolution miss.
@@ -4173,7 +4172,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       await setProductCourse(tx, cfg, main1, pri.id);
       await setProductCourse(tx, cfg, main2, pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Ring three: starter (Entrantes, earliest) auto-fires as line 1; both Principales mains are HELD
       // — main1 is line 2, main2 is line 3.
@@ -4219,7 +4218,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       await setProductCourse(tx, cfg, main, pri.id);
       await setProductCourse(tx, cfg, dessert, post.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Principales) and dessert (line 3, Postres) are held.
       await addRound(tx, cfg, tabId, [line(starter), line(main), line(dessert)]);
@@ -4248,7 +4247,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
       // Send line 2 once — it fires. Age line 1's (already-fired) stamps so a re-fire that wrongly matched
@@ -4305,7 +4304,7 @@ describe("sendLines (A2: fire specific held lines / send-all)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Ring both: starter auto-fires (prints at Cocina); main (Principales, Barra) is HELD — no Barra
       // print yet, because a held line prints only when it is sent.
@@ -4341,7 +4340,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // A lone earliest-course line auto-fires at round-send — fired but not yet started (state queued).
       await addRound(tx, cfg, tabId, [line(starter)]);
@@ -4365,7 +4364,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
       // The kitchen begins the (fired) line — advance it to `preparing` via the real bump verb.
@@ -4392,7 +4391,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
       // Cook it through to READY, then dispatch it to the floor (away). markCourseAway stamps away_at ONLY
@@ -4424,7 +4423,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Principales) is HELD — fired_at already null.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
@@ -4446,7 +4445,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
       const starter = await makeProduct(tx, cfg, catalogueId, {});
       await setProductCourse(tx, cfg, starter, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
 
       await expect(recallLines(tx, cfg, tabId, [999])).rejects.toMatchObject({
@@ -4510,7 +4509,7 @@ describe("correction slips on recall & void (A6)", () => {
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // A lone earliest-course line auto-fires at round-send — it prints (fire ticket) at Cocina.
       await addRound(tx, cfg, tabId, [line(starter)]);
@@ -4538,7 +4537,7 @@ describe("correction slips on recall & void (A6)", () => {
       const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
       const main = await namedProduct(tx, cfg, catalogueId, "Chuleton", pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2, Principales) is HELD — never printed.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
@@ -4565,7 +4564,7 @@ describe("correction slips on recall & void (A6)", () => {
       const ent = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
       const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [line(starter)]);
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
@@ -4594,7 +4593,7 @@ describe("correction slips on recall & void (A6)", () => {
       );
       const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas");
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(starter)]);
       const [{ revision }] = await tx
         .select({ revision: workingOrders.revision })
@@ -4624,7 +4623,7 @@ describe("correction slips on recall & void (A6)", () => {
       const starter = await namedProduct(tx, cfg, catalogueId, "Croquetas", ent.id);
       const main = await namedProduct(tx, cfg, catalogueId, "Chuleton", pri.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // starter (line 1) auto-fires; main (line 2) is HELD — never printed.
       await addRound(tx, cfg, tabId, [line(starter), line(main)]);
@@ -4663,7 +4662,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       await setProductCourse(tx, cfg, olives, ent.id);
       await setProductCourse(tx, cfg, bread, ent.id);
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       // Both starters sit in the EARLIEST course, so both WOULD auto-fire — but line 2 carries hold:true.
       await addRound(tx, cfg, tabId, [
@@ -4704,7 +4703,7 @@ describe("addTabRound hold-on-send (A3)", () => {
       const plain = await makeProduct(tx, cfg, catalogueId, {});
       const extra = await addExtra(tx, catalogueId, modified, "Extra");
       const tableId = await makeTable(tx, cfg);
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
 
       await addRound(tx, cfg, tabId, [
         {
@@ -4870,14 +4869,14 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const cafe = await makeProduct(tx, cfg, catalogueId, {}); // null course → fires immediately
 
-      // A TAB at a known-labelled table: dining_tables.tab_id back-points at the order.
+      // A party's tab at a known-labelled table.
       const { zoneId } = await tableOffers(tx, cfg);
       const { rows } = await tx.execute<{ id: string }>(sql`
         insert into dining_tables (id, location_id, label, zone_id, created_at)
         values (${randomUUID()}, ${cfg.locationId}, 'Mesa 5', ${zoneId}, ${nowIso()})
         returning id`);
       const tableId = rows[0]!.id;
-      const { tabId } = await openTab(tx, cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId });
       await addRound(tx, cfg, tabId, [line(cafe)]);
 
       // A WALK-UP counter order, no table → tableLabel omitted.
@@ -4899,7 +4898,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
     const { partyId, tabId } = await seat(v, mesa4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
 
     const board = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
 
@@ -5153,9 +5152,8 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
     return { listId: list.id, productId: offered.id };
   }
 
-  /** Open an OPEN order with extras lines and point a fresh table at it → a real tab: a bill of no
-   *  party passes `assertPartyBillOpen` only with the `dining_tables.tab_id` back-pointer. Skips
-   *  firing, so no station is required. */
+  /** An OPEN bill with extras lines for a party seated at a fresh table: `openTab` does not thread
+   *  `extras`, so the bill is built directly. Skips firing, so no station is required. */
   async function openExtrasTab(
     tx: Transaction,
     cfg: TillConfig,
@@ -5164,10 +5162,11 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
   ): Promise<string> {
     const id = randomUUID();
     const offers = await tableOffers(tx, cfg);
+    const { partyId } = await openPartyTab(tx, cfg, { tableId });
     await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
       zoneId: offers.zoneId,
+      partyId,
     });
-    await tx.execute(sql`update dining_tables set tab_id = ${id} where id = ${tableId}`);
     return id;
   }
 
@@ -5574,7 +5573,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
   /** Open a fresh empty tab in the venue and return its id — the addTabRound host these cases fire on. */
   async function openEmptyTab(tx: Transaction, cfg: TillConfig): Promise<string> {
     const tableId = await makeTable(tx, cfg);
-    const { tabId } = await openTab(tx, cfg, { tableId });
+    const { tabId } = await openPartyTab(tx, cfg, { tableId });
     return tabId;
   }
 

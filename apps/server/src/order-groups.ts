@@ -106,7 +106,7 @@ export async function submitGroups(
   const { submissionId, expectedPartyRevision, operatorId, ...body } = input;
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     submissionId,
     "group.submit",
     { partyId, operatorId, ...body },
@@ -251,7 +251,7 @@ export async function fireGroup(
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     "group.fire",
     { partyId, groupId, operatorId: args.operatorId },
@@ -324,7 +324,7 @@ async function passStep(
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     kind,
     { partyId, groupId, operatorId: args.operatorId },
@@ -463,7 +463,7 @@ export async function reorderHeldGroups(
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     "group.reorder",
     { partyId, heldGroupIds, operatorId: args.operatorId },
@@ -527,7 +527,7 @@ export async function snoozeReminder(
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     "group.snooze",
     { partyId, groupId, minutes, operatorId: args.operatorId },
@@ -560,7 +560,7 @@ export async function unsnoozeReminder(
   void cfg;
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     "group.unsnooze",
     { partyId, groupId, operatorId: args.operatorId },
@@ -590,7 +590,7 @@ export async function moveLinesToGroup(
 ): Promise<{ revision: number }> {
   return runServiceCommand(
     tx,
-    { kind: "visit", partyId },
+    { kind: "party", partyId },
     args.submissionId,
     "group.move",
     { partyId, moves, target, operatorId: args.operatorId },

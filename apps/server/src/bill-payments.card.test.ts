@@ -16,6 +16,7 @@ import {
   tabWith,
   tendersOfBill,
   type BillVenue,
+  partyRevisionOf,
 } from "./testing/bill-venue.js";
 import { addTabRound } from "./working-order.js";
 import "./errors.js";
@@ -876,10 +877,11 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
 
   it("refuses a void, a round and abandoning the bill while its card is at the reader, and leaves another bill of the party alone", async () => {
     const billId = await tabWithDishes("Paella", "Tarta", "Caña", "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/tabs/${billId}/split`, {
+    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
       transfers: [{ lineNo: 3 }, { lineNo: 4 }],
+      expectedPartyRevision: await partyRevisionOf(venue, billId),
     });
-    const otherBill = split.json.checkId as string;
+    const otherBill = split.json.billId as string;
     const card = await heldCard(billId, "10.00");
 
     const voided = await send(
@@ -888,7 +890,7 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
       "DELETE",
       `/api/working-orders/${billId}/lines/2`,
     );
-    // The bill has no party, so the round is the function a group submission calls.
+    // The round is the function a group submission calls.
     const round = await inTx(venue, (tx) =>
       addTabRound(tx, venue.cfg, billId, [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }]),
     ).catch((error: unknown) => error);

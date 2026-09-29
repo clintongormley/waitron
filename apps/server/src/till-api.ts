@@ -67,7 +67,6 @@ import {
   cancelPlacedOrder,
   fireCourse,
   getHeldOrder,
-  joinTable,
   listExpoQueue,
   listHeldOrders,
   listStationQueue,
@@ -76,8 +75,6 @@ import {
   markCourseAway,
   markGroupServed,
   markServed,
-  mergeTabs,
-  moveTab,
   parkOrder,
   placeOrder,
   readTabLines,
@@ -85,9 +82,6 @@ import {
   sendLines,
   sendToPrep,
   setLineCourse,
-  splitOffCheck,
-  transferLines,
-  unjoinTable,
   unmarkServed,
   readOrderRevision,
   updateHeldOrder,
@@ -104,7 +98,6 @@ import {
   setPartyName,
   partyRevisionOfOrder,
 } from "./parties.js";
-import type { PartyCommand } from "./parties.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
 import { moveBill } from "./move-bill.js";
@@ -341,12 +334,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "placement.invalid": 400,
   "tab.already_open": 409,
   "tab.not_open": 409,
-  "tab.not_table_tab": 409,
-  "tab.party_mismatch": 409,
-  "tab.party_has_other_open_bill": 409,
-  "tab.merge_leaves_no_table": 409,
   "tab.line_not_found": 404,
-  "table.occupied": 409,
   "table.needs_clearing": 409,
   "table.already_in_party": 409,
   "tab.merge_self": 400,
@@ -460,7 +448,6 @@ function requireRevision(
     | "revision"
     | "draftRevision"
     | "expectedPartyRevision"
-    | "expectedSourcePartyRevision"
     | "expectedOtherPartyRevision" = "revision",
 ): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
@@ -487,33 +474,18 @@ function requireGuestCount(value: unknown): number | null {
 }
 
 /**
- * A tab route's party revisions and the acting person. A revision may be absent here: the verb
- * refuses its absence only where the tab belongs to a party.
+ * A bill route's command: the party revision, the party the till read the bill under, and the
+ * acting person. A revision may be absent here: the verb refuses its absence only where the bill
+ * belongs to a party.
  */
-function partyCommand(
-  personId: string,
-  body: { expectedPartyRevision?: unknown; expectedSourcePartyRevision?: unknown },
-  crossesParties = false,
-): PartyCommand {
-  const command: PartyCommand = { operatorId: personId };
+function billCommand(personId: string, body: Record<string, unknown>): BillCommand {
+  const command: BillCommand = { operatorId: personId };
   if (body.expectedPartyRevision !== undefined) {
     command.expectedPartyRevision = requireRevision(
       body.expectedPartyRevision,
       "expectedPartyRevision",
     );
   }
-  if (crossesParties && body.expectedSourcePartyRevision !== undefined) {
-    command.expectedSourcePartyRevision = requireRevision(
-      body.expectedSourcePartyRevision,
-      "expectedSourcePartyRevision",
-    );
-  }
-  return command;
-}
-
-/** A bill route's command: {@link partyCommand}'s, and the party the till read the bill under. */
-function billCommand(personId: string, body: Record<string, unknown>): BillCommand {
-  const command: BillCommand = partyCommand(personId, body);
   if (body.partyId !== undefined) {
     command.partyId = requireBodyUuid(body.partyId, "partyId").toLowerCase();
   }
@@ -529,7 +501,8 @@ function hasExactly(value: unknown, keys: string[]): value is Record<string, unk
 
 /**
  * A move's target: exactly one of a table's id, or the counter with its zone id or null. A
- * malformed table id is refused as the seat and tab routes refuse one, a zone id as the sale route.
+ * malformed table id is refused as the seat, Move guests and Join tables routes refuse one, a zone
+ * id as the sale route.
  */
 function requireMoveTarget(value: unknown): MoveTarget {
   if (hasExactly(value, ["tableId"])) {
@@ -2131,109 +2104,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.post("/api/tabs/:id/move", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ toTableId: string; expectedPartyRevision?: unknown }>(c);
-      if (!isUuid(body.toTableId))
-        throw new AppError("table.not_found", { tableId: body.toTableId });
-      const command = partyCommand(personId, body);
-      await withTransaction(deps.db, async (tx) => {
-        await moveTab(tx, deps.cfg, tabId, body.toTableId, command);
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/tabs/:id/join", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const tabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{ tableId: string; expectedPartyRevision?: unknown }>(c);
-      if (!isUuid(body.tableId)) throw new AppError("table.not_found", { tableId: body.tableId });
-      const command = partyCommand(personId, body);
-      await withTransaction(deps.db, async (tx) => {
-        await joinTable(tx, deps.cfg, tabId, body.tableId, command);
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/tabs/:id/merge", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const intoTabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{
-        fromTabId: string;
-        freeSourceTable: boolean;
-        expectedPartyRevision?: unknown;
-        expectedSourcePartyRevision?: unknown;
-      }>(c);
-      if (!isUuid(body.fromTabId)) throw new AppError("tab.not_open", { tabId: body.fromTabId });
-      const command = partyCommand(personId, body, true);
-      await withTransaction(deps.db, async (tx) => {
-        await mergeTabs(tx, deps.cfg, intoTabId, body.fromTabId, {
-          freeSourceTable: body.freeSourceTable,
-          ...command,
-        });
-      });
-      return c.body(null, 200);
-    }),
-  );
-
-  app.post("/api/tabs/:id/transfer", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const fromTabId = requireTabParam(c.req.param("id"));
-      const body = await readJsonBody<{
-        toTabId: string;
-        transfers: { lineNo: number; quantity?: string }[];
-        expectedPartyRevision?: unknown;
-        expectedSourcePartyRevision?: unknown;
-      }>(c);
-      if (!isUuid(body.toTabId)) throw new AppError("tab.not_open", { tabId: body.toTabId });
-      const command = partyCommand(personId, body, true);
-      await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          await transferLines(tx, deps.cfg, fromTabId, body.toTabId, body.transfers, command);
-          await issueIfFullyPaid(tx, fiscal, saleCfg, fromTabId, personId);
-        }),
-      );
-      return c.body(null, 200);
-    }),
-  );
-
-  // Spins selected items off into a new table-less check; nothing files until it is paid.
-  app.post("/api/tabs/:id/split", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const fromTabId = requireTabParam(c.req.param("id"));
-      // `readRawJsonBody`, not `readJsonBody`: a null, empty or malformed body must be refused as
-      // field "body", not coalesced to `{}`.
-      const body = await readRawJsonBody<{
-        transfers: { lineNo: number; quantity?: string }[];
-        expectedPartyRevision?: unknown;
-      }>(c);
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      // Only the array shape is screened; the verb raises the domain errors for bad contents.
-      if (!Array.isArray(body.transfers)) {
-        throw new AppError("management.request_invalid", { field: "transfers" });
-      }
-      const command = partyCommand(personId, body);
-      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          const split = await splitOffCheck(tx, deps.cfg, fromTabId, body.transfers, command);
-          await issueIfFullyPaid(tx, fiscal, saleCfg, fromTabId, personId);
-          return split;
-        }),
-      );
-      return c.json(result);
-    }),
-  );
-
   app.post("/api/bills/:id/split", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);
@@ -2293,45 +2163,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const command = moveCommand(personId, body);
       const result = await withTransaction(deps.db, (tx) =>
         moveBill(tx, deps.cfg, billId, to, command),
-      );
-      return c.json(result);
-    }),
-  );
-
-  app.post("/api/tabs/:id/unjoin", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const tabId = requireTabParam(c.req.param("id"));
-      // Raw parse, as in `/split`.
-      const body = await readRawJsonBody<{
-        tableId: string;
-        transfers?: { lineNo: number; quantity?: string }[];
-        expectedPartyRevision?: unknown;
-      }>(c);
-      // Body shape first: a missing body is a request-shape fault, not `table.not_joined`.
-      if (typeof body !== "object" || body === null || Array.isArray(body)) {
-        throw new AppError("management.request_invalid", { field: "body" });
-      }
-      if (!isUuid(body.tableId))
-        throw new AppError("table.not_joined", { tableId: body.tableId, tabId });
-      // Optional (absent frees the table); only a present non-array is refused.
-      if (body.transfers !== undefined && !Array.isArray(body.transfers)) {
-        throw new AppError("management.request_invalid", { field: "transfers" });
-      }
-      const command = partyCommand(personId, body);
-      const result = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          const unjoined = await unjoinTable(
-            tx,
-            deps.cfg,
-            tabId,
-            body.tableId,
-            body.transfers,
-            command,
-          );
-          await issueIfFullyPaid(tx, fiscal, saleCfg, tabId, personId);
-          return unjoined;
-        }),
       );
       return c.json(result);
     }),
