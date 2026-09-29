@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { saleSettlements, sales } from "@waitron/db";
+import { invoiceSeries, saleSettlements, sales, tenders } from "@waitron/db";
+import { recordCorrection } from "@waitron/core";
+import { loginWithPin } from "@waitron/identity";
+import { payments } from "@waitron/payments";
+import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { parkOrder, placeOrder } from "./working-order.js";
 import { collectOrder } from "./till-sale.js";
@@ -18,7 +22,6 @@ import {
 import "./errors.js";
 
 // Collecting a presented bill follows its issuance history, not its zone's service mode (spec §9).
-// Each case retargets its placed bill's zone directly, and opens its own bill.
 let venue: BillVenue;
 let invoiceFirstZone: string;
 let issueAtPaymentZone: string;
@@ -110,5 +113,93 @@ describe("collecting a presented bill follows its invoice, not its zone (spec §
     expect(after[0]!.settledAt).not.toBeNull();
     expect(registroCount(venue, id)).toBe(1);
     expect(await statusOf(venue, id)).toBe("settled");
+  });
+});
+
+describe("collecting an invoice that carries a corrective invoice", () => {
+  // Tarta's 18.00 invoice (21% VAT), corrected by a credit note of -2.00 base (-2.42): the
+  // customer owes 15.58.
+  async function correctedTarta(): Promise<{ billId: string; saleId: string }> {
+    const billId = await placedTarta(invoiceFirstZone);
+    const [issued] = await salesOf(billId);
+    await inTx(venue, async (tx) => {
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(
+          and(
+            eq(invoiceSeries.nodeId, venue.cfg.nodeId),
+            eq(invoiceSeries.purpose, "rectificative"),
+          ),
+        );
+      const session = await loginWithPin(tx, {
+        tillId: venue.cfg.tillId,
+        personId: venue.adminId,
+        pin: "1234",
+      });
+      await recordCorrection(tx, venue.backend, {
+        tillId: venue.cfg.tillId,
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(series!.id),
+        correctsSaleId: brandSaleId(issued!.id),
+        total: "-2.42",
+        lines: [
+          {
+            lineNo: 1,
+            name: "Descuento",
+            descriptions: { [venue.cfg.locale]: "Descuento" },
+            quantity: "-1",
+            unitPrice: "2.00",
+            vatRate: "21.00",
+            lineTotal: "-2.00",
+          },
+        ],
+        clock: venue.clock,
+        authz: { sessionId: session.id },
+      });
+    });
+    return { billId, saleId: issued!.id };
+  }
+
+  function tendersOf(saleId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ method: tenders.method, amount: tenders.amount, cash: tenders.cashTendered })
+        .from(tenders)
+        .where(eq(tenders.saleId, saleId)),
+    );
+  }
+
+  it("settles a cash collection at the corrected amount the customer owes", async () => {
+    const { billId, saleId } = await correctedTarta();
+
+    const ticket = await collectCash(billId);
+
+    expect(await tendersOf(saleId)).toEqual([{ method: "cash", amount: 1558, cash: 2000 }]);
+    expect(ticket.tender).toEqual({ method: "cash", change: "4.42" });
+    expect(await statusOf(venue, billId)).toBe("settled");
+    expect(registroCount(venue, billId)).toBe(1);
+  });
+
+  it("settles a manual card collection, and its payment row, at the corrected amount", async () => {
+    const { billId, saleId } = await correctedTarta();
+
+    await collectOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: billId, lines: [], tender: { method: "card", amount: "18.00" } },
+      venue.operatorId,
+    );
+
+    expect(await tendersOf(saleId)).toEqual([{ method: "card", amount: 1558, cash: null }]);
+    const paid = await inTx(venue, (tx) =>
+      tx
+        .select({ amount: payments.amount, saleId: payments.saleId })
+        .from(payments)
+        .where(eq(payments.workingOrderId, billId)),
+    );
+    expect(paid).toEqual([{ amount: 1558, saleId }]);
+    expect(await statusOf(venue, billId)).toBe("settled");
+    expect(registroCount(venue, billId)).toBe(1);
   });
 });
