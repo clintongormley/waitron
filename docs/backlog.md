@@ -3086,7 +3086,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `formatReceipt` print `TOTAL 18,00`, `Efectivo 22,20` and `Cambio 4,20`. **PARKED (owner,
         2026-09-29)** until the product can issue a corrective invoice; the owner's points for that
         design are on the corrective-invoice entry (R5, above).
-      - **DONE (C59, 2026-09-29): a bill corrected to zero is collected in cash or by manual card,
+      - **DONE (C59, #849, 2026-09-29): a bill corrected to zero is collected in cash or by manual card,
         and closes.** The owner's
         answer (2026-09-29): "yes just close the bill". When corrections bring the amount due to
         zero, `collectOrder` (`apps/server/src/till-sale.ts`) settles the sale with no tender row,
