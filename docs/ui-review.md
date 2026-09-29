@@ -74,7 +74,7 @@ needs CLAUDE.md §3's classification line and nothing else.
 
 | # | Area | App | Status | Corrections logged |
 | --- | --- | --- | --- | --- |
-| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in onboarding flow corrections (#347) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser. Since 2026-09-28 (C39) the wizard is a centred page with the Waitron logo, not a modal. Since 2026-09-29 (C40) the first choice screen's certificate note shows only when the connection step was skipped because the server offers no certificate to download (for example, when it presents one an installer supplied). |
+| 1 | First-run setup & onboarding wizard | setup | 🔧 | B1 connection flow implemented on its feature branch. Walked on the real box 2026-09-13; what that walk found is specced in onboarding flow corrections (#347) and fixed on the `onboarding` branch — the wizard is a centred modal instead of a full-width page, it asks your name before your display name, tooltips stay on screen, the province question comes before the answer derived from it, your account is created in your browser's language, and a first sign-in offers you a passkey. Not merged at the time of writing. Still open: the device trust walkthrough, and the A2 wizard items — chiefly that the wizard's own text is English only, with no language chooser. Since 2026-09-28 (C39) the wizard is a centred page with the Waitron logo, not a modal. Since 2026-09-29 (C40) the first choice screen's certificate note shows only when the connection step was skipped because the server offers no certificate to download (for example, when it presents one an installer supplied). Since 2026-09-29 (C42) the wizard reads in Spanish or English, opens in the browser's language, and has the language chooser at the bottom right of every screen. |
 | 2 | Till login & shift start (PIN) | till | 🔍 | shown 2026-09-01 — see candidates below, awaiting owner |
 | 3 | Counter / walk-up sales — menu, basket, modifiers, notes, park/retrieve, pay, receipt | till | 🔍 | shown 2026-09-01 — candidates below, awaiting owner |
 | 4 | Tables & tabs — floor view, open / move / join / merge / transfer / split | till | ⬜ | |
@@ -124,7 +124,7 @@ Owner scope: **all UI**. Landed as #249. Plan: UI navigation and controls.
   Its menu opens upwards. Kitchen displays change language locally because no staff member is signed in.
 
 The setup wizard receives the form behavior. It has no translated UI or language chooser, and wizard
-steps are not tabs; this change does not persist setup credentials or unfinished form contents.
+steps are not tabs; this change does not persist setup credentials or unfinished form contents. (Since 2026-09-29, C42, the wizard is translated and has the language chooser.)
 
 ### 2 — Till login & shift start
 

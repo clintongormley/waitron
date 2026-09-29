@@ -2001,7 +2001,9 @@ first is still open:
 - *Setup always stores a language on the account.* If the browser sends no language, or one Waitron
   does not ship, the account gets the venue's language saved as though chosen — so the stored value
   cannot tell "chose Spanish" from "said nothing", and it does not follow a later change to the venue
-  default. Keep this, or store a language only when the browser asked for one?
+  default. Keep this, or store a language only when the browser asked for one? Since C42 a
+  language picked in the wizard is sent as the provision's `Accept-Language`, so a choice made there
+  is stored like any other browser answer.
 - *The modal is always full height* — gone with the modal (C39, #828, owner decision 2026-09-28). Every
   setup screen now sits in a column centred on the page, at most 704px wide, with the Waitron logo
   at the top. The logo is the brand lockup drawn inline, so its word follows the theme; the
@@ -2010,14 +2012,32 @@ first is still open:
 
 **Still open after #334**, each one something the branch consciously did not take:
 
-- *The wizard has no translated text and no language chooser.* It is English only, on a box whose
-  venue may well not be. The account it creates now gets the operator's browser language, so the
-  dashboard opens in the right language, but the wizard itself does not. Translating it means every
-  visible string across its screens plus the per-operating-system certificate instructions, into
-  English and Spanish, using the same catalogue the dashboard registers through
-  `@waitron/dashboard-kit`, and a chooser seeded from the browser's preference. Deferred from the
-  2026-09-13 corrections by owner decision, as much bigger than everything else in that branch put
-  together.
+- *The wizard has no translated text and no language chooser* — DONE (C42, 2026-09-29). Every screen
+  reads in Spanish or English from the wizard's own catalogue (`apps/setup/src/i18n/`, the till's
+  pattern rather than `@waitron/dashboard-kit`'s), opens in the browser's language when it is one
+  Waitron ships and in English otherwise, and offers the language chooser at the bottom right of
+  every screen. A choice lasts for the page's life only. When the operator chose, the provision
+  request carries that language as its `Accept-Language`, so the admin account gets it; when they
+  did not, the browser's own header decides as before. Left open by it:
+  - *The configuration preview names what it will copy by database table* (`products`,
+    `menu_item_variant_overrides`, `print_agents`…) in both languages, as it did before C42
+    (`apps/setup/src/screens/configuration-preview-screen.ts`). The names come from each module's
+    `configuration-transfer.ts` list; about fifty can arrive. Give them operator words, grouped, or
+    keep the table names.
+  - *The Review screen scrolls sideways at 390px* when a value is long (a 56-character email made
+    it 530px wide in English, 537px in Spanish): its `auto 1fr` columns (on main since 512999e30)
+    never narrow below the longest value.
+  - *The Cloud restore screen shows capture and expiry times as the server's raw ISO text* in both
+    languages, and the Review screen shows invoice languages as codes (`es-ES, en-GB`).
+  - *The file pickers' "Choose File / No file chosen" follow the browser's language*, not the
+    chooser; the browser draws them.
+  - *The Spanish certificate export steps name Chrome, macOS and Firefox menus from memory*
+    ("Gestionar certificados importados de Windows", "Acceso a Llaveros", "Sus certificados"…), and
+    the FNMT links still open FNMT's English pages. Check them on real Spanish systems with the item
+    below.
+  - `OLD_BOX_PROBLEM` (`apps/setup/src/screens/old-box-question.ts`) is kept, English only, because
+    `cloud-restore-screen.test.ts` imports it; the screens call `oldBoxProblem()`. Point the test at
+    the function and delete the constant.
 - *The certificate export help has never been followed on a real machine.* Nobody exported a
   certificate through Windows', macOS' or Firefox's own certificate store while reading the new
   guidance, so the instructions are unverified against the thing they describe. Fold this into the
