@@ -2289,9 +2289,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `evaluateAdjustment` counts a cancel's reduction against the reason's euro limit, and it
     throws a `RangeError` on a malformed request (a negative amount, or a percentage discount
     without a percentage from 1 to 10000) rather than returning a verdict. Left from the review:
-    the reasons screen keeps its own copy of the role list and role names (in seniority order,
-    where the dashboard's `rolesByName` sorts by name) and of the placeholder-filling helper in
-    `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into
+    the reasons screen keeps its own copy of the role list and role names (C51 now sorts its
+    dropdowns by displayed name, with a separate seniority order for validation) and of the
+    placeholder-filling helper in `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into
     `@waitron/dashboard-kit`. **Next action:** do that move if a third module screen needs them.
   - **Task 2 landed as #715** (2026-09-27): a record per seated party. Core tables `parties`,
     `party_tables` (one active membership per table) and `service_commands`, and
@@ -3661,11 +3661,11 @@ ongoing overhaul listed at the top of Track A.
   dashboard's three role lists — the add-person and edit-person forms and the Staff screen's role
   filter — sort by the displayed name in the current language (`rolesByName`,
   `apps/dashboard/src/i18n/domain.ts`), so a custom role's name would take its place among them. The
-  adjustments module's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`) still
-  lists its two role dropdowns lowest to highest: that list's order also drives the screen's own
-  check that the approving role is at least as senior as the applying one (the server checks
-  separately, with `roleAtLeast`), and a custom role has no place in that order until the ladder
-  question is answered.
+  adjustments module's reasons screen now sorts both role dropdowns by the displayed name in the
+  current language too (C51, 2026-09-29). Its client-side seniority check keeps a separate ordering;
+  the roles design still needs to decide where custom roles belong in that check. The sorting uses
+  the same `Intl.Collator` options locally: the dashboard's `rolesByName` lives inside
+  `apps/dashboard`, outside the module's shared dependencies.
 - **`wt-select` in `packages/ui`** (owner decision 2026-09-12): every screen writes its own raw
   `<select>`, so a rule alone could not be guarded. Sorts by the label the person reads with
   `Intl.Collator`; lists in a lifecycle order say so; then migrate the screens, including the filter
