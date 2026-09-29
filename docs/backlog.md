@@ -6359,7 +6359,7 @@ reading unless marked run:
   `option-label-form.ts` does; a test in each cancels, closes the form, waits for the dialog's
   close report and counts one `wt-cancel`. A review run with the three checks removed counted two
   in each (2026-09-29).
-  **DONE (C74, 2026-09-29):** the category form's `wt-close` handler checks `this.open` too; its
+  **DONE (C74, #878, 2026-09-29):** the category form's `wt-close` handler checks `this.open` too; its
   new test in `category-form.test.ts` counted two cancels without the check and one with it. The
   variant form stays OPEN, for lane B's B13 reason above.
 - Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
@@ -6368,7 +6368,7 @@ reading unless marked run:
   2026-09-29 by a review seat with a browser test that opened a product, opened its Unit form,
   pressed Escape (`userEvent.keyboard("{Escape}")`) and found the product editor's `open` false
   (`expected false to be true`). The same test failed the same way with C68's changes reverted, so
-  it predates C68. The same test did not fail for the Extras and Options forms. **DIAGNOSED (C74,
+  it predates C68. The same test did not fail for the Extras and Options forms. **DIAGNOSED (C74, #878,
   2026-09-29): reproduced when both dialogs were opened by synthetic events and the case ran first
   in its file; with the Unit form opened by a real click (`userEvent.click`) it did not reproduce,
   run first or in its place in the full file. The product editor was opened synthetically in every
