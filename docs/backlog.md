@@ -6359,13 +6359,30 @@ reading unless marked run:
   `option-label-form.ts` does; a test in each cancels, closes the form, waits for the dialog's
   close report and counts one `wt-cancel`. A review run with the three checks removed counted two
   in each (2026-09-29).
+  **DONE (C74, 2026-09-29):** the category form's `wt-close` handler checks `this.open` too; its
+  new test in `category-form.test.ts` counted two cancels without the check and one with it. The
+  variant form stays OPEN, for lane B's B13 reason above.
 - Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
   (`apps/dashboard/src/screens/catalogue-screen.ts` mounts it at about line 711) also closes the
   product editor behind it; in the same test the Unit form sent exactly one cancel. Measured
   2026-09-29 by a review seat with a browser test that opened a product, opened its Unit form,
   pressed Escape (`userEvent.keyboard("{Escape}")`) and found the product editor's `open` false
   (`expected false to be true`). The same test failed the same way with C68's changes reverted, so
-  it predates C68. The same test did not fail for the Extras and Options forms. Not yet diagnosed.
+  it predates C68. The same test did not fail for the Extras and Options forms. **DIAGNOSED (C74,
+  2026-09-29): reproduced when both dialogs were opened by synthetic events and the case ran first
+  in its file; with the Unit form opened by a real click (`userEvent.click`) it did not reproduce,
+  run first or in its place in the full file. The product editor was opened synthetically in every
+  run. Not tried by hand.** The failure follows the ORDER of the cases, not the form: in the failing
+  run one Escape fired `cancel` on BOTH dialogs, the form's and the product editor's; in a passing
+  run only on the form's. With Extras, Options and Unit all opened synthetically in that order, only
+  Extras, run first, closed both dialogs; the Unit case, run third, passed. With the Unit form
+  opened by a synthetic `.click()` instead of a real click, the case fails run first (HeadlessChrome
+  153, Vitest browser mode). A review seat re-ran both experiments on 2026-09-29 and they held. We
+  believe Chromium grouped the two dialogs so one Escape closed both; why the order of the cases
+  changes that was not established, and opening the form by a key press was not tried. Pinned by
+  "closes only the unit form when Escape is pressed in it" in `catalogue-screen.test.ts`, which
+  opens the form by a real click. No product code changed for this item (C74's product change is the
+  category form's, in the entry above). Closed unless it is seen by hand.
 - `login-screen.ts` checks an account link's purpose with `=== null`, so a reply with no purpose at
   all would pass; the server always sends one.
 - My Schedule's load-failed banner (`loadFailed` in

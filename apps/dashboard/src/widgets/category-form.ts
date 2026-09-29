@@ -239,7 +239,9 @@ export class CategoryForm extends LitElement {
         if (this.busy && event.key === "Escape") event.preventDefault();
       }}
       @wt-close=${(event: Event) => {
-        if (!this.busy && !this.pickerOpen) this.#emit(event, "wt-cancel", {});
+        // The dialog also reports a close it was told to make, a task later; by then the screen has
+        // closed this form and a second cancel would be about nothing.
+        if (!this.busy && !this.pickerOpen && this.open) this.#emit(event, "wt-cancel", {});
         else event.stopPropagation();
       }}
     >
