@@ -55,7 +55,22 @@ If the profile does not load, `install` says so and leaves the line out, and the
 Docker's default: its USB and network printers work and Bluetooth does not. The line is never written
 before the profile has loaded, because Docker refuses to start a container that names a profile the
 box has not loaded. It goes in `/etc/apparmor.d/` because that is the folder the boot-time
-`apparmor.service` loads profiles from (read on Ubuntu 24.04; a box restart has not been tried).
+`apparmor.service` loads profiles from. On the owner's box, 2026-09-29, a restart reloaded it:
+afterwards `.env` still named the profile and `bluetoothctl list` inside the print agent still
+reached the Bluetooth service.
+
+On a box whose Bluetooth service runs under systemd (`bluetooth.service`), `install` also writes
+`/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf`. It runs the unit's own Bluetooth
+daemon command with `--noplugin=autopair` added. BlueZ's `autopair` plugin answers a printer's
+first PIN request with `0000` by itself, so a printer whose PIN is anything else never reaches the
+print agent, which holds the PIN the operator typed. On the owner's box (BlueZ 5.82, 2026-09-29) a
+printer with PIN 1234 failed to pair with the plugin on and paired with it off. The operator
+therefore types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
+the file changed, so installing again does not interrupt it. A box with no `bluetooth.service`
+gets one line saying so. If the file cannot be written or Bluetooth will not restart, `install`
+says so and carries on. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
+so. To undo it, delete the file, then run `systemctl daemon-reload` and
+`systemctl restart bluetooth`.
 
 A plain `install` on a box without AppArmor writes no `deploy/.env` at all. The box has no secret it
 needs before it boots: the venue's databases are files in the `state` volume that open with no

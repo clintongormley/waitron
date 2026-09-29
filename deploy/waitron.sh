@@ -111,11 +111,12 @@ fetch_box_files() {
 
 # 2b. The print agent's AppArmor profile, from the INSTALLED ref like compose.yml. Docker's default
 #     profile keeps the agent off the system bus, so bluetoothctl cannot reach BlueZ; this one allows
-#     the bus messages bluetoothctl's listing and scan send. .env names the profile only once
-#     apparmor_parser has loaded it, because Docker refuses to start a container that names a profile
-#     the host has not loaded — compose then falls back to docker-default rather than leaving the
-#     agent down. Written into /etc/apparmor.d so the boot-time apparmor.service can load it again;
-#     that reload after a reboot is not yet measured.
+#     the bus messages bluetoothctl's listing, scan, pairing and remove send. .env names the profile
+#     only once apparmor_parser has loaded it, because Docker refuses to start a container that names
+#     a profile the host has not loaded — compose then falls back to docker-default rather than
+#     leaving the agent down. Written into /etc/apparmor.d so the boot-time apparmor.service loads it
+#     again: on the owner's box, 2026-09-29, after a restart `.env` still named it and
+#     `bluetoothctl list` in the agent still reached BlueZ.
 PRINT_AGENT_PROFILE=/etc/apparmor.d/waitron-print-agent
 load_print_agent_apparmor() {
   local ref="$1" tmp
@@ -132,6 +133,51 @@ load_print_agent_apparmor() {
   else
     env_unset WAITRON_PRINT_AGENT_APPARMOR
     echo "waitron.sh: could not load the print agent's AppArmor profile — it runs under Docker's default profile, which keeps it from Bluetooth printers" >&2
+  fi
+  rm -f "$tmp"
+}
+
+# 2c. bluetoothd's autopair plugin answers a printer's first PIN request with 0000 itself, so a
+#     printer whose PIN is anything else never reaches the agent that holds the operator's PIN
+#     (measured on the owner's box, BlueZ 5.82, 2026-09-29: with the plugin off, the agent was asked
+#     and a PIN-1234 printer bonded). This drop-in re-runs the unit's own ExecStart with the plugin
+#     off. Bluetooth is restarted only when the drop-in changed, and a failure never stops the install.
+BLUETOOTH_DROPIN="${WAITRON_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
+disable_bluetooth_autopair() {
+  local unit exec_start tmp
+  unit="$(systemctl show -p FragmentPath --value bluetooth.service 2>/dev/null || true)"
+  if [ -z "$unit" ] || [ ! -r "$unit" ]; then
+    echo "waitron.sh: no bluetooth.service on this host — Bluetooth pairing left as it is"
+    return 0
+  fi
+  exec_start="$(sed -nE 's/^[[:space:]]*ExecStart[[:space:]]*=[[:space:]]*//p' "$unit" | tail -n 1)"
+  if [ -z "$exec_start" ]; then
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — $unit names no ExecStart" >&2
+    return 0
+  fi
+  case " $exec_start" in
+    *" --noplugin"* | *" -P"*)
+      echo "waitron.sh: could not switch off bluetoothd's autopair plugin — bluetooth.service already chooses its plugins ($exec_start); left as it is" >&2
+      return 0 ;;
+  esac
+  tmp="$(mktemp "$WAITRON_DIR/waitron-noautopair.XXXXXX")" || die "could not create a temp file in $WAITRON_DIR"
+  printf '%s\n' \
+    "# Written by waitron.sh install: bluetoothd's autopair plugin answers a printer's PIN request" \
+    "# with 0000 itself, before the print agent can give it the printer's own PIN." \
+    "[Service]" \
+    "ExecStart=" \
+    "ExecStart=$exec_start --noplugin=autopair" > "$tmp"
+  if [ -f "$BLUETOOTH_DROPIN" ] && cmp -s "$tmp" "$BLUETOOTH_DROPIN"; then
+    rm -f "$tmp"
+    return 0
+  fi
+  if as_root install -d -m 0755 "$(dirname "$BLUETOOTH_DROPIN")" \
+    && as_root install -m 0644 "$tmp" "$BLUETOOTH_DROPIN" \
+    && as_root systemctl daemon-reload \
+    && as_root systemctl restart bluetooth; then
+    echo "waitron.sh: switched off bluetoothd's autopair plugin, so a Bluetooth printer's PIN comes from the operator"
+  else
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — a Bluetooth printer whose PIN is not 0000 may not pair" >&2
   fi
   rm -f "$tmp"
 }
@@ -348,6 +394,7 @@ cmd_install() {
   mkdir -p "$WAITRON_DIR" || die "cannot create $WAITRON_DIR — run as root, or set WAITRON_DIR to a writable path"
   fetch_box_files "$ref"
   load_print_agent_apparmor "$ref"
+  disable_bluetooth_autopair
   select_image "$ref"
   cd "$WAITRON_DIR"
   docker compose up -d --remove-orphans

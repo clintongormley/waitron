@@ -41,6 +41,10 @@ afterEach(() => {
 // reason: `aa-enabled` answers "off" unless a case sets WT_AA_ENABLED, so an AppArmor host runs the
 // suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
+// `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
+// which is where each case points the Bluetooth drop-in. `systemctl show … FragmentPath` answers
+// WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
+// does; WT_BT_RESTART_FAIL makes `systemctl restart bluetooth` fail.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 
@@ -137,8 +141,26 @@ exit 0
 stub("qrencode", "exit 0");
 stub("aa-enabled", `[ "\${WT_AA_ENABLED}" = "1" ]`);
 stub("apparmor_parser", `[ "\${WT_AA_PARSE_FAIL}" = "1" ] && exit 1; exit 0`);
-stub("install", "exit 0");
-stub("systemctl", "exit 0");
+stub(
+  "install",
+  `
+dest="\${@: -1}"
+case "$dest" in
+  "\${WT_SANDBOX}"/*) if [ "$1" = "-d" ]; then mkdir -p "$dest"; else cp "\${@: -2:1}" "$dest"; fi ;;
+esac
+exit 0
+`,
+);
+stub(
+  "systemctl",
+  `
+case "$*" in
+  "show -p FragmentPath --value bluetooth.service") [ -n "\${WT_BT_UNIT}" ] && echo "\${WT_BT_UNIT}" ;;
+  "restart bluetooth") [ "\${WT_BT_RESTART_FAIL}" = "1" ] && exit 1 ;;
+esac
+exit 0
+`,
+);
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 
@@ -155,17 +177,33 @@ function sandbox({
   hang = "",
   apparmor = false,
   apparmorParseFail = false,
+  bluetoothExecStart = null,
+  bluetoothRestartFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
   const boxDir = join(root, "box");
   const log = join(root, "calls.log");
   mkdirSync(boxDir, { recursive: true });
+  let unit = "";
+  if (bluetoothExecStart !== null) {
+    unit = join(root, "bluetooth.service");
+    writeFileSync(
+      unit,
+      `[Unit]\nDescription=Bluetooth service\n\n[Service]\nType=dbus\nBusName=org.bluez\nExecStart=${bluetoothExecStart}\n`,
+    );
+  }
+  const dropIn = join(root, "bluetooth.service.d", "waitron-noautopair.conf");
   return {
     boxDir,
     log,
     root,
+    dropIn,
     env: {
+      WT_SANDBOX: root,
+      WT_BT_UNIT: unit,
+      WT_BT_RESTART_FAIL: bluetoothRestartFail ? "1" : "0",
+      WAITRON_BLUETOOTH_DROPIN: dropIn,
       WT_LOG: log,
       WT_TRADING_ENV: tradingEnv,
       WT_DB_STAMP: dbStamp,
@@ -345,6 +383,101 @@ describe("waitron.sh install and the print agent's AppArmor profile", () => {
     expect(readFileSync(join(sb.boxDir, ".env"), "utf8")).not.toContain(
       "WAITRON_PRINT_AGENT_APPARMOR",
     );
+  });
+});
+
+describe("waitron.sh install and bluetoothd's autopair plugin", () => {
+  const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
+  // The drop-in's last two lines: an empty ExecStart= clears the unit's own, then the replacement.
+  const dropInFor = (execStart) => `ExecStart=\nExecStart=${execStart} --noplugin=autopair\n`;
+
+  it("re-sets ExecStart to the host's own bluetoothd with autopair off, then reloads and restarts Bluetooth", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/lib/bluetooth/bluetoothd" });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const dropIn = readFileSync(sb.dropIn, "utf8");
+    expect(dropIn).toMatch(/^\[Service\]$/m);
+    expect(dropIn.endsWith(dropInFor("/usr/lib/bluetooth/bluetoothd"))).toBe(true);
+    const log = calls(sb);
+    const installed = log.findIndex(
+      (c) => c.startsWith("install -m 0644 ") && c.endsWith(sb.dropIn),
+    );
+    const reloaded = log.indexOf("systemctl daemon-reload");
+    const restarted = log.indexOf("systemctl restart bluetooth");
+    const up = log.findIndex((c) => c.startsWith("docker compose") && / up -d /.test(`${c} `));
+    expect(installed).toBeGreaterThanOrEqual(0);
+    expect(reloaded).toBeGreaterThan(installed);
+    expect(restarted).toBeGreaterThan(reloaded);
+    expect(up).toBeGreaterThan(restarted);
+    expect(r.stdout).toContain("autopair");
+  });
+
+  it("keeps the arguments the host's unit already passes", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd -E" });
+    expect(run(sb, ["install"]).status).toBe(0);
+    expect(
+      readFileSync(sb.dropIn, "utf8").endsWith(dropInFor("/usr/libexec/bluetooth/bluetoothd -E")),
+    ).toBe(true);
+  });
+
+  it("does not restart Bluetooth when the drop-in it would write is already there", () => {
+    const first = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    expect(run(first, ["install"]).status).toBe(0);
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    mkdirSync(dirname(sb.dropIn), { recursive: true });
+    writeFileSync(sb.dropIn, readFileSync(first.dropIn, "utf8"));
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    expect(log.filter((c) => c.endsWith(sb.dropIn))).toEqual([]);
+    expect(log).not.toContain("systemctl daemon-reload");
+    expect(log).not.toContain("systemctl restart bluetooth");
+  });
+
+  it("rewrites a drop-in whose content differs, and restarts Bluetooth", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    mkdirSync(dirname(sb.dropIn), { recursive: true });
+    writeFileSync(
+      sb.dropIn,
+      "[Service]\nExecStart=\nExecStart=/usr/sbin/bluetoothd --noplugin=autopair\n",
+    );
+    expect(run(sb, ["install"]).status).toBe(0);
+    expect(
+      readFileSync(sb.dropIn, "utf8").endsWith(dropInFor("/usr/libexec/bluetooth/bluetoothd")),
+    ).toBe(true);
+    expect(calls(sb)).toContain("systemctl restart bluetooth");
+  });
+
+  it("says so in one line, and changes nothing, on a host with no bluetooth.service", () => {
+    const sb = sandbox();
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout.split("\n").filter((l) => l.includes("bluetooth.service"))).toHaveLength(1);
+    expect(existsSync(sb.dropIn)).toBe(false);
+    const log = calls(sb);
+    expect(log).not.toContain("systemctl daemon-reload");
+    expect(log).not.toContain("systemctl restart bluetooth");
+  });
+
+  it("leaves a unit that already chooses its plugins alone, and says so", () => {
+    const sb = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd --noplugin=sap" });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("--noplugin=sap");
+    expect(existsSync(sb.dropIn)).toBe(false);
+    expect(calls(sb)).not.toContain("systemctl restart bluetooth");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+
+  it("carries on with the install when Bluetooth will not restart, and says so", () => {
+    const sb = sandbox({
+      bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
+      bluetoothRestartFail: true,
+    });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("could not switch off bluetoothd's autopair plugin");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 });
 
