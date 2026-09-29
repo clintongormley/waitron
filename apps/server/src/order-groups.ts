@@ -1023,7 +1023,6 @@ export interface CurrentOrderGroup {
 
 /** What the party has ordered and what is known of it (spec §4 Current orders). */
 export interface CurrentOrders {
-  /** The party's revision, which the served and snooze commands send back. */
   revision: number;
   reminder: ReleaseReminder | null;
   /** In sequence, removed ones left out. */
