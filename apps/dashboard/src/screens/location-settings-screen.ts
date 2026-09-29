@@ -18,6 +18,9 @@ export class LocationSettingsScreen extends LitElement {
       :host {
         display: block;
       }
+      wt-form-actions {
+        margin-top: var(--wt-space-4);
+      }
     `,
   ];
   @property({ attribute: false }) api!: DashboardApi;

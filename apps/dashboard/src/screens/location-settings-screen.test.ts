@@ -131,6 +131,16 @@ describe("location invoice description", () => {
     expect(q(el, "[name=operationDescription]").getAttribute("error")).toBe("");
     expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
   });
+  it("leaves the spacing token between the field and the action row", async () => {
+    const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
+      api: api(),
+    });
+    await flush(el);
+    el.style.setProperty("--wt-space-4", "23px");
+    const field = q(el, "[name=operationDescription]").getBoundingClientRect();
+    const actions = q(el, "wt-form-actions").getBoundingClientRect();
+    expect(actions.top - field.bottom).toBe(23);
+  });
   it("retries a failed read and then shows the form", async () => {
     const client = api({
       getLocationSettings: vi

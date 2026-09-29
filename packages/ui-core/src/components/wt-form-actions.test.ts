@@ -84,6 +84,24 @@ test("on a narrow row, puts the message on its own line above the actions", asyn
   expect(primary.right).toBe(row.right);
 });
 
+test("on a narrow row, keeps cancel level with the primary action below the message", async () => {
+  const el = (await mount(
+    '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  )) as WtFormActions;
+  host.style.width = "320px";
+  el.error = "Correct the highlighted fields to continue.";
+  await el.updateComplete;
+
+  const message = el
+    .shadowRoot!.querySelector<HTMLElement>("[data-error]")!
+    .getBoundingClientRect();
+  const cancel = el.querySelector<HTMLElement>('[slot="cancel"]')!.getBoundingClientRect();
+  const primary = el.querySelector<HTMLElement>("wt-button:not([slot])")!.getBoundingClientRect();
+  expect(message.bottom).toBeLessThanOrEqual(primary.top);
+  expect(cancel.top).toBe(primary.top);
+  expect(cancel.bottom).toBe(primary.bottom);
+});
+
 test("paints the message from the danger token", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
