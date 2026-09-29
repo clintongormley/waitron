@@ -1012,7 +1012,7 @@ export interface CurrentOrderGroup {
   position: number;
   state: "held" | "fired";
   firedAt: string | null;
-  /** A snooze's time, until the group fires, empties or moves in a reorder. */
+  /** A snooze's time, until it is cleared or the group fires, empties or moves in a reorder. */
   remindAt: string | null;
   /** A fired group's firing; a held group's holding. */
   sentAt: string;
