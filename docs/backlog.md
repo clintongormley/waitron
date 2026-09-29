@@ -2452,7 +2452,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   and where the printer falls among them; then open Add a printer repeatedly, record on which scan
   the printer is first marked, and look for `bluetooth info failed` lines in
   `docker compose logs print-agent`.
-- **Pairing a Bluetooth printer and adding it are one step (A138, owner 2026-09-29) — DONE.** In
+- **Pairing a Bluetooth printer and adding it are one step (A138, owner 2026-09-29) — DONE (#899).** In
   Add a printer, an unpaired Bluetooth device offers Pair and add: it asks for the PIN, pairs, and
   when the agent reports the pairing succeeded it opens the same form Add opens, prefilled, with no
   second press on the row. A failed or unanswered pairing opens no form, and its reason stays in the
