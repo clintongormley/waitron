@@ -22,7 +22,7 @@ describe("installed country packs", () => {
     expect(getVenueSetupCountryPack("GB")).toBeUndefined();
   });
 
-  it("carries no display name, which the wizard takes from the browser in its own language", () => {
+  it("carries no display name", () => {
     for (const pack of COUNTRY_PACKS) expect(Object.keys(pack)).not.toContain("name");
   });
 
