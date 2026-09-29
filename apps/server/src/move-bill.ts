@@ -1,5 +1,12 @@
 import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
-import { diningTables, parties, partyTables, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  diningTables,
+  parties,
+  partyTableLabels,
+  partyTables,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, partyDisplayName } from "@waitron/shared";
 import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
@@ -10,7 +17,6 @@ import { groupArrivingDishes } from "./order-groups.js";
 import {
   checkAndBumpParty,
   openParty,
-  partyTableLabels,
   partyZone,
   readMainBill,
   refuseMovedParty,

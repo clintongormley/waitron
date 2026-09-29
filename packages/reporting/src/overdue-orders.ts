@@ -1,9 +1,8 @@
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
-  diningTables,
+  billPartyTableLabels,
   kitchenStations,
-  partyTables,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -18,26 +17,6 @@ import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
  */
 function minutesSince(stamp: string, nowMs: number): number {
   return Math.floor((nowMs - Date.parse(stamp)) / 60_000);
-}
-
-/**
- * Each party's active tables' labels, in the order the tables joined it. A copy of
- * `apps/server/src/parties.ts`'s `partyTableLabels`, which this package cannot import.
- */
-async function readPartyTableLabels(
-  tx: Transaction,
-  partyIds: readonly string[],
-): Promise<Map<string, string[]>> {
-  const labels = new Map(partyIds.map((id) => [id, [] as string[]]));
-  if (partyIds.length === 0) return labels;
-  const rows = await tx
-    .select({ partyId: partyTables.partyId, label: diningTables.label })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
-    .orderBy(partyTables.joinedAt, partyTables.id);
-  for (const row of rows) labels.get(row.partyId)!.push(row.label);
-  return labels;
 }
 
 /**
@@ -149,7 +128,7 @@ export async function computeOverdueOrders(
     late.push({ orderId, order, band, worstLine: worstLine! });
   }
 
-  const partyLabels = await readPartyTableLabels(tx, [
+  const partyLabels = await billPartyTableLabels(tx, [
     ...new Set(late.flatMap(({ order }) => order.partyId ?? [])),
   ]);
   const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => {

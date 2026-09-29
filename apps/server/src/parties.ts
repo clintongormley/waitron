@@ -186,23 +186,6 @@ export async function partyZone(
   return table?.zoneId ?? null;
 }
 
-/** Each party's active tables' labels, in the order the tables joined it. */
-export async function partyTableLabels(
-  tx: Transaction,
-  partyIds: readonly string[],
-): Promise<Map<string, string[]>> {
-  const labels = new Map(partyIds.map((id) => [id, [] as string[]]));
-  if (partyIds.length === 0) return labels;
-  const rows = await tx
-    .select({ partyId: partyTables.partyId, label: diningTables.label })
-    .from(partyTables)
-    .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
-    .orderBy(partyTables.joinedAt, partyTables.id);
-  for (const row of rows) labels.get(row.partyId)!.push(row.label);
-  return labels;
-}
-
 /** Name the party, or with an empty name clear it; a party command guarded by its revision. */
 export async function setPartyName(
   tx: Transaction,
@@ -422,26 +405,6 @@ export async function partyFamilies(
   `);
   for (const row of rows) families.get(row.root)!.push(row.id);
   return families;
-}
-
-/**
- * The party each of `partyIds` was merged into, following the chain of merges to its end, keyed by
- * each party asked about; a party never merged answers itself. The reverse of {@link partyFamilies}.
- */
-export async function partySurvivors(
-  tx: Transaction,
-  partyIds: readonly string[],
-): Promise<Map<string, string>> {
-  const { rows } = await tx.execute<{ start: string; id: string }>(sql`
-    with recursive chain(start, id, next) as (
-      select p.id, p.id, p.merged_into_party_id from parties p
-      where p.id in (select value from json_each(${JSON.stringify(partyIds)}))
-      union
-      select c.start, p.id, p.merged_into_party_id from parties p join chain c on p.id = c.next
-    )
-    select start, id from chain where next is null
-  `);
-  return new Map(rows.map((row) => [row.start, row.id]));
 }
 
 async function readParty(
