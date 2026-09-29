@@ -3644,10 +3644,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       holds, and `otherPartyId: null` for a table it read free. The server now takes null as "read
       free" (`readTargetTable`, `apps/server/src/move-bill.ts`, shared by move, join and move a
       bill): a party seated there since is `party.out_of_date` naming that party, with nothing
-      written, where it was 400 `management.request_invalid` (Task 8's open point 2). The till
-      reloads and says the table changed. Null naming the moving party's own table gets the
-      ordinary own-table rules instead (a join is `table.already_in_party`). Null sent together
-      with `expectedOtherPartyRevision` is 400 `management.request_invalid`
+      written, where it was 400 `management.request_invalid` (an open point in #869's
+      description). The till reloads and says the table changed. Null naming the moving party's
+      own table gets the ordinary own-table rules instead (a join is `table.already_in_party`).
+      Null sent together with `expectedOtherPartyRevision` is 400 `management.request_invalid`
       `{ field: "otherPartyId" }`.
     - `table.already_in_party`, `table.not_joined`, `table.inactive`, `party.main_bill_stays`,
       `service_zone.join_mismatch` and `service_zone.mode_incompatible` show in their own words;
