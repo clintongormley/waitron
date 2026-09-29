@@ -408,6 +408,45 @@ describe("Print API — the agent lifecycle end to end", () => {
     }
   });
 
+  it("the Bluetooth Pair and Forget routes require printer.manage — 401 unauth, 403 staff, 202 manager", async () => {
+    const app = mountApp(tenantA);
+    const { agentId, token } = await joinAndAccept(app, "Bluetooth");
+    const address = "0A:1B:2C:3D:4E:5F";
+    const pulled = await send(app, "POST", "/print-api/agent/jobs", {
+      bearer: token,
+      body: {
+        scanned: [{ transport: "bluetooth", localKey: address }],
+        pairedBluetooth: [{ localKey: address }],
+      },
+    });
+    expect(pulled.status).toBe(200);
+    const routes = [
+      {
+        path: `/management-api/print-agents/${agentId}/bluetooth/pair`,
+        body: { address, pin: "0000" },
+      },
+      { path: `/management-api/print-agents/${agentId}/bluetooth/forget`, body: { address } },
+    ];
+
+    for (const { path, body } of routes) {
+      const unauth = await send(app, "POST", path, { body });
+      expect(unauth.status).toBe(401);
+      expect((await unauth.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+
+      const staff = await send(app, "POST", path, { cookie: staffCookie, body });
+      expect(staff.status).toBe(403);
+      expect((await staff.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+
+      const manager = await send(app, "POST", path, { cookie: managerCookie, body });
+      expect(manager.status).toBe(202);
+      expect(await manager.json()).toMatchObject({ command: { address, state: "pending" } });
+    }
+  });
+
   it("allow-again reactivates a revoked agent (printer.manage)", async () => {
     const app = mountApp(tenantA);
     const { agentId } = await joinAndAccept(app, "Reactivable");

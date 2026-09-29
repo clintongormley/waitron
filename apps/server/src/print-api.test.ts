@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -21,7 +21,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { enqueuePrintJob, esc } from "@waitron/printing";
-import type { NetworkProbe } from "@waitron/print-agent";
+import type { BluetoothCommand, NetworkProbe } from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -124,6 +124,7 @@ function mountApp(
     enrolRateLimiter?: EnrolRateLimiter;
     venueLocale?: SupportedLocale;
     listIpv4?: () => string[];
+    log?: Logger;
   } = {},
 ): Hono {
   const app = new Hono();
@@ -140,7 +141,7 @@ function mountApp(
       venueLocale: opts.venueLocale ?? "es-ES",
       listIpv4: opts.listIpv4,
     },
-    noopLog,
+    opts.log ?? noopLog,
   );
   return app;
 }
@@ -238,12 +239,18 @@ interface PullReply {
   jobs: PullJob[];
   discoveryUntil: number | null;
   networkProbes?: NetworkProbe[];
+  bluetoothCommands?: BluetoothCommand[];
 }
 
 async function pull(
   app: Hono,
   token: string,
-  inventory: { visible?: unknown; scanned?: unknown } = {},
+  inventory: {
+    visible?: unknown;
+    scanned?: unknown;
+    pairedBluetooth?: unknown;
+    bluetoothOutcomes?: unknown;
+  } = {},
 ): Promise<PullReply> {
   const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body: inventory });
   expect(res.status).toBe(200);
@@ -2286,5 +2293,517 @@ describe("printer layout and calibration requests", () => {
     expect(await finder.json()).toMatchObject({
       error: { code: "management.request_invalid", params: { field: "startTable" } },
     });
+  });
+});
+
+describe("Bluetooth Pair and Forget commands", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Distinctive enough that finding it in a body is never a coincidence.
+  const PIN = "Zq7#Pw";
+
+  function randomMac(): string {
+    return Array.from(randomBytes(6), (b) => b.toString(16).padStart(2, "0").toUpperCase()).join(
+      ":",
+    );
+  }
+
+  function scannedMac(mac: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+    return { transport: "bluetooth", localKey: mac, ...extra };
+  }
+
+  async function command(
+    app: Hono,
+    agentId: string,
+    kind: "pair" | "forget",
+    body: unknown,
+  ): Promise<Response> {
+    return send(app, "POST", `/management-api/print-agents/${agentId}/bluetooth/${kind}`, {
+      cookie: managerCookie,
+      body,
+    });
+  }
+
+  async function discoveredRows(app: Hono): Promise<Record<string, unknown>[]> {
+    const res = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    expect(res.status).toBe(200);
+    return (await res.json()) as Record<string, unknown>[];
+  }
+
+  it("refuses Pair with printer.bluetooth_not_discovered when the agent has not scanned the address", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app, "Pairing agent");
+    const mac = randomMac();
+    // Reported as paired and visible, but never scanned: neither is a scan.
+    await pull(app, token, {
+      visible: [{ transport: "bluetooth", localKey: mac }],
+      scanned: [],
+      pairedBluetooth: [{ localKey: mac }],
+    });
+
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "printer.bluetooth_not_discovered", params: { address: mac } },
+    });
+    expect((await pull(app, token)).bluetoothCommands).toBeUndefined();
+  });
+
+  it("refuses Pair when only another agent scanned the address", async () => {
+    const app = mountApp();
+    const scanner = await joinAndAccept(app, "Scanner");
+    const other = await joinAndAccept(app, "Other");
+    const mac = randomMac();
+    await pull(app, scanner.token, { scanned: [scannedMac(mac)] });
+
+    const res = await command(app, other.agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "printer.bluetooth_not_discovered", params: { address: mac } },
+    });
+    expect((await pull(app, other.token)).bluetoothCommands).toBeUndefined();
+  });
+
+  it("refuses Pair on a network scan of the same text, which is not a Bluetooth scan", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [{ transport: "usb", localKey: mac }] });
+
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: { code: "printer.bluetooth_not_discovered" } });
+  });
+
+  it("refuses Forget with printer.bluetooth_not_paired when the agent reports no pairing, even one it scanned", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac)], pairedBluetooth: [] });
+
+    const res = await command(app, agentId, "forget", { address: mac });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      error: { code: "printer.bluetooth_not_paired", params: { address: mac } },
+    });
+  });
+
+  it("refuses Forget when only another agent reports the pairing", async () => {
+    const app = mountApp();
+    const holder = await joinAndAccept(app, "Holder");
+    const other = await joinAndAccept(app, "Other");
+    const mac = randomMac();
+    await pull(app, holder.token, { pairedBluetooth: [{ localKey: mac }] });
+
+    const res = await command(app, other.agentId, "forget", { address: mac });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "printer.bluetooth_not_paired", params: { address: mac } },
+    });
+    expect((await pull(app, other.token)).bluetoothCommands).toBeUndefined();
+  });
+
+  it("refuses Pair once the scan is older than the discovered list keeps it, even while the pairing report is fresh", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const scannedAt = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(scannedAt);
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+
+    vi.spyOn(Date, "now").mockReturnValue(scannedAt + 10_000);
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
+    vi.spyOn(Date, "now").mockReturnValue(scannedAt + 15_001);
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
+
+    const pair = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    expect(pair.status).toBe(409);
+    expect(await pair.json()).toMatchObject({
+      error: { code: "printer.bluetooth_not_discovered" },
+    });
+    // The control: the same entry's pairing report is fresh, so Forget is accepted.
+    const forget = await command(app, agentId, "forget", { address: mac });
+    expect(forget.status).toBe(202);
+  });
+
+  it("accepts Pair up to fifteen seconds after the scan, the window the discovered list shows", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const scannedAt = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(scannedAt);
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+    vi.spyOn(Date, "now").mockReturnValue(scannedAt + 15_000);
+
+    expect((await discoveredRows(app)).filter((r) => r.localKey === mac)).toHaveLength(1);
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(202);
+  });
+
+  it("refuses the ninth distinct address for one agent with printer.bluetooth_command_busy", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const macs = Array.from({ length: 9 }, randomMac);
+    await pull(app, token, { scanned: macs.map((mac) => scannedMac(mac)) });
+
+    for (const mac of macs.slice(0, 8)) {
+      expect((await command(app, agentId, "pair", { address: mac, pin: PIN })).status).toBe(202);
+    }
+    const ninth = await command(app, agentId, "pair", { address: macs[8], pin: PIN });
+    expect(ninth.status).toBe(429);
+    expect(await ninth.json()).toEqual({
+      error: { code: "printer.bluetooth_command_busy", params: {} },
+    });
+    expect((await pull(app, token)).bluetoothCommands).toHaveLength(8);
+  });
+
+  it("refuses a malformed address or PIN with management.request_invalid naming the field", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac)], pairedBluetooth: [{ localKey: mac }] });
+
+    const refusals: [kind: "pair" | "forget", body: unknown, field: string][] = [
+      ["pair", { pin: PIN }, "address"],
+      ["pair", { address: "AA:BB:CC:DD:EE", pin: PIN }, "address"],
+      ["pair", { address: "*", pin: PIN }, "address"],
+      ["pair", { address: 42, pin: PIN }, "address"],
+      ["forget", {}, "address"],
+      ["forget", { address: `${mac}:00` }, "address"],
+      ["pair", { address: mac }, "pin"],
+      ["pair", { address: mac, pin: "" }, "pin"],
+      ["pair", { address: mac, pin: "12 34" }, "pin"],
+      ["pair", { address: mac, pin: "1".repeat(17) }, "pin"],
+      ["pair", { address: mac, pin: 1234 }, "pin"],
+    ];
+    for (const [kind, body, field] of refusals) {
+      const res = await command(app, agentId, kind, body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const agentPath = `/management-api/print-agents/not-a-uuid/bluetooth/pair`;
+    const badAgent = await send(app, "POST", agentPath, {
+      cookie: managerCookie,
+      body: { address: mac, pin: PIN },
+    });
+    expect(badAgent.status).toBe(400);
+    expect((await pull(app, token)).bluetoothCommands).toBeUndefined();
+  });
+
+  it("normalises a lower-case address to upper case", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+
+    const res = await command(app, agentId, "pair", { address: mac.toLowerCase(), pin: PIN });
+    expect(res.status).toBe(202);
+    expect(((await res.json()) as { command: { address: string } }).command.address).toBe(mac);
+    expect((await pull(app, token)).bluetoothCommands).toEqual([
+      { id: expect.any(String), kind: "pair", address: mac, pin: PIN },
+    ]);
+  });
+
+  it("sends a Pair to the named agent's pulls, and only its pulls, until the pull that carries its outcome", async () => {
+    const app = mountApp();
+    const target = await joinAndAccept(app, "Target");
+    const bystander = await joinAndAccept(app, "Bystander");
+    const mac = randomMac();
+    await pull(app, target.token, { scanned: [scannedMac(mac, { printerLike: true })] });
+    await pull(app, bystander.token, { scanned: [scannedMac(mac)] });
+
+    const res = await command(app, target.agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(202);
+    const { command: queued } = (await res.json()) as { command: { id: string } };
+    expect(queued).toEqual({
+      id: expect.any(String),
+      kind: "pair",
+      address: mac,
+      state: "pending",
+    });
+
+    const expected = [{ id: queued.id, kind: "pair", address: mac, pin: PIN }];
+    expect((await pull(app, target.token)).bluetoothCommands).toEqual(expected);
+    expect((await pull(app, target.token)).bluetoothCommands).toEqual(expected);
+    expect((await pull(app, bystander.token)).bluetoothCommands).toBeUndefined();
+    // An outcome from another agent naming this id does not settle it.
+    await pull(app, bystander.token, { bluetoothOutcomes: [{ id: queued.id, ok: true }] });
+    expect((await pull(app, target.token)).bluetoothCommands).toEqual(expected);
+
+    const settled = await pull(app, target.token, {
+      scanned: [scannedMac(mac, { printerLike: true })],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothOutcomes: [{ id: queued.id, ok: true }],
+    });
+    expect(settled.bluetoothCommands).toBeUndefined();
+    expect((await pull(app, target.token)).bluetoothCommands).toBeUndefined();
+
+    const row = (await discoveredRows(app)).find(
+      (r) => r.agentId === target.agentId && r.localKey === mac,
+    );
+    expect(row).toMatchObject({
+      transport: "bluetooth",
+      printerLike: true,
+      paired: true,
+      bluetoothCommand: { id: queued.id, kind: "pair", address: mac, state: "succeeded" },
+    });
+    const bystanderRow = (await discoveredRows(app)).find(
+      (r) => r.agentId === bystander.agentId && r.localKey === mac,
+    );
+    expect(bystanderRow).not.toHaveProperty("bluetoothCommand");
+    expect(bystanderRow).not.toHaveProperty("paired");
+    expect(bystanderRow).not.toHaveProperty("printerLike");
+  });
+
+  it("sends a Forget without a PIN, and keeps a failed outcome's reason bounded to 500 characters", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac, name: "Bolsillo" }] });
+
+    const res = await command(app, agentId, "forget", { address: mac, pin: PIN });
+    expect(res.status).toBe(202);
+    const { command: queued } = (await res.json()) as { command: { id: string } };
+    expect((await pull(app, token)).bluetoothCommands).toEqual([
+      { id: queued.id, kind: "forget", address: mac },
+    ]);
+
+    const reason = `Failed to remove device: ${"x".repeat(600)}`;
+    await pull(app, token, {
+      pairedBluetooth: [{ localKey: mac, name: "Bolsillo" }],
+      bluetoothOutcomes: [{ id: queued.id, ok: false, error: reason }],
+    });
+    const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+    expect(row).toMatchObject({
+      agentId,
+      transport: "bluetooth",
+      name: "Bolsillo",
+      paired: true,
+      bluetoothCommand: {
+        id: queued.id,
+        kind: "forget",
+        address: mac,
+        state: "failed",
+        error: reason.slice(0, 500),
+      },
+    });
+  });
+
+  it("ignores malformed outcomes and paired reports", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    const { command: queued } = (await res.json()) as { command: { id: string } };
+
+    const bad = randomMac();
+    const reply = await pull(app, token, {
+      pairedBluetooth: [null, "x", { localKey: "not-a-mac" }, { localKey: 7 }, { name: bad }],
+      bluetoothOutcomes: [
+        null,
+        { id: queued.id },
+        { id: queued.id, ok: "yes" },
+        { id: queued.id, ok: true, error: 5 },
+        { id: 7, ok: true },
+      ],
+    });
+    expect(reply.bluetoothCommands).toEqual([
+      { id: queued.id, kind: "pair", address: mac, pin: PIN },
+    ]);
+    const rows = await discoveredRows(app);
+    expect(rows.filter((r) => r.agentId === agentId && r.paired === true)).toEqual([]);
+    expect(rows.filter((r) => r.agentId === agentId).map((r) => r.localKey)).toEqual([mac]);
+
+    // A non-array field is no report at all, and the pull still succeeds.
+    const odd = await pull(app, token, { pairedBluetooth: {}, bluetoothOutcomes: "done" });
+    expect(odd.bluetoothCommands).toHaveLength(1);
+  });
+
+  it("takes at most eight outcomes from one pull", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    const { command: queued } = (await res.json()) as { command: { id: string } };
+
+    const filler = Array.from({ length: 8 }, () => ({ id: randomUUID(), ok: true }));
+    const late = await pull(app, token, {
+      bluetoothOutcomes: [...filler, { id: queued.id, ok: true }],
+    });
+    expect(late.bluetoothCommands).toHaveLength(1);
+    const settled = await pull(app, token, { bluetoothOutcomes: [{ id: queued.id, ok: true }] });
+    expect(settled.bluetoothCommands).toBeUndefined();
+  });
+
+  it("expires a command two minutes after it was queued and a result a minute after it arrived", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const first = randomMac();
+    const second = randomMac();
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
+    await command(app, agentId, "pair", { address: first, pin: PIN });
+    const res = await command(app, agentId, "pair", { address: second, pin: PIN });
+    const { command: queued } = (await res.json()) as { command: { id: string } };
+    await pull(app, token, { bluetoothOutcomes: [{ id: queued.id, ok: true }] });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 59_999);
+    await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
+    let rows = await discoveredRows(app);
+    expect(rows.find((r) => r.localKey === second)).toMatchObject({
+      bluetoothCommand: { state: "succeeded" },
+    });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 60_000);
+    await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
+    rows = await discoveredRows(app);
+    expect(rows.find((r) => r.localKey === second)).not.toHaveProperty("bluetoothCommand");
+    expect(rows.find((r) => r.localKey === first)).toMatchObject({
+      bluetoothCommand: { state: "pending" },
+    });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 120_000);
+    const reply = await pull(app, token, { scanned: [scannedMac(first), scannedMac(second)] });
+    expect(reply.bluetoothCommands).toBeUndefined();
+    rows = await discoveredRows(app);
+    expect(rows.find((r) => r.localKey === first)).not.toHaveProperty("bluetoothCommand");
+  });
+
+  it("never returns or logs the PIN outside the pending command in the named agent's pull", async () => {
+    const lines: string[] = [];
+    const log: Logger = (...args) => {
+      lines.push(JSON.stringify(args));
+    };
+    const app = mountApp({ log });
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    expect(res.status).toBe(202);
+    const accepted = await res.text();
+    expect(accepted).not.toContain(PIN);
+    expect(JSON.parse(accepted)).not.toHaveProperty("command.pin");
+
+    const refused = await command(app, agentId, "pair", { address: mac, pin: `${PIN} ` });
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).not.toContain(PIN);
+
+    const listed = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    const listing = await listed.text();
+    expect(listing).toContain(mac);
+    expect(listing).not.toContain(PIN);
+    expect(listing).not.toContain('"pin"');
+
+    const pulled = await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body: {} });
+    expect(await pulled.text()).toContain(PIN);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.join("\n")).not.toContain(PIN);
+  });
+
+  it("lists a paired device no scan reported, matched to its registered printer, and never claims its jobs", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+    });
+    expect(created.status).toBe(201);
+    const { id: printerId } = (await created.json()) as { id: string };
+    const jobId = await enqueue(printerId, esc().text("Mesa 5").cut().bytes());
+
+    const reply = await pull(app, token, {
+      visible: [],
+      scanned: [],
+      pairedBluetooth: [{ localKey: mac.toLowerCase(), name: "Bolsillo" }],
+    });
+    expect(reply.jobs.filter((job) => job.printerId === printerId)).toEqual([]);
+    expect((await jobRow(jobId)).status).toBe("queued");
+
+    const rows = (await discoveredRows(app)).filter((r) => r.agentId === agentId);
+    expect(rows.map((r) => ({ ...r, lastSeenAt: undefined }))).toEqual([
+      {
+        agentId,
+        agentName: "Cocina agent",
+        transport: "bluetooth",
+        localKey: mac,
+        name: "Bolsillo",
+        paired: true,
+        alreadyRegistered: true,
+        printerId,
+      },
+    ]);
+    expect(Date.parse(rows[0]!.lastSeenAt as string)).toBeGreaterThan(0);
+  });
+
+  it("keeps a scan's description when a later pairing report arrives, and drops the row once both are stale", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    await pull(app, token, {
+      scanned: [scannedMac(mac, { name: "Impresora", printerLike: true, make: "Epson" })],
+    });
+    vi.spyOn(Date, "now").mockReturnValue(start + 10_000);
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac, name: "Other name" }] });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 20_000);
+    expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
+      name: "Impresora",
+      make: "Epson",
+      printerLike: true,
+      paired: true,
+    });
+    vi.spyOn(Date, "now").mockReturnValue(start + 25_001);
+    expect((await discoveredRows(app)).filter((r) => r.localKey === mac)).toEqual([]);
+  });
+
+  it("marks paired only while the pairing report is fresh", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
+    vi.spyOn(Date, "now").mockReturnValue(start + 10_000);
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 15_001);
+    const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+    expect(row).toBeDefined();
+    expect(row).not.toHaveProperty("paired");
+  });
+
+  it("keeps printerLike only when the agent sent exactly true", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const like = randomMac();
+    const unlike = randomMac();
+    const host = "10.9.252.1";
+    await pull(app, token, {
+      scanned: [
+        scannedMac(like, { printerLike: true }),
+        scannedMac(unlike, { printerLike: "yes" }),
+        { transport: "network_tcp", host, port: 9100, printerLike: true },
+      ],
+    });
+    const rows = await discoveredRows(app);
+    expect(rows.find((r) => r.localKey === like)).toMatchObject({ printerLike: true });
+    expect(rows.find((r) => r.localKey === unlike)).not.toHaveProperty("printerLike");
+    // The mark describes Bluetooth devices only.
+    expect(rows.find((r) => r.host === host)).not.toHaveProperty("printerLike");
   });
 });

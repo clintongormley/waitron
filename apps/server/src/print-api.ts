@@ -1,6 +1,7 @@
 // Load server-owned error codes; imported printing verbs load the printing registry.
 import "./errors.js";
 import { createPrinterProbes } from "./printer-probes.js";
+import { createPrinterBluetoothCommands } from "./printer-bluetooth-commands.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
@@ -42,6 +43,11 @@ import {
   type UpdatePrinterInput,
 } from "@waitron/printing";
 import { authorizeManager, type Permission } from "@waitron/identity";
+import {
+  isBluetoothAddress,
+  isBluetoothPin,
+  type BluetoothCommandOutcome,
+} from "@waitron/print-agent";
 import { routableServers, type SignedMembershipDocument } from "@waitron/membership";
 import { createErrorBoundary } from "@waitron/server-kit";
 import {
@@ -94,6 +100,9 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "device.join_rate_limited": 429,
   "printer.not_found": 404,
   "printer.probe_busy": 429,
+  "printer.bluetooth_command_busy": 429,
+  "printer.bluetooth_not_discovered": 409,
+  "printer.bluetooth_not_paired": 409,
   "print_job.not_found": 404,
   "print_job.not_resendable": 409,
   "printer.invalid_config": 422,
@@ -198,6 +207,11 @@ interface DiscoveredDeviceWire {
   name?: string;
   /** True when the agent saw A4/letter media over IPP: an office printer, not a receipt printer. */
   pagePrinter?: true;
+  printerLike?: true;
+}
+interface PairedBluetoothWire {
+  localKey: string;
+  name?: string;
 }
 
 /** A malformed wire field is dropped, not refused, so a bad report cannot poison the in-memory store. */
@@ -242,9 +256,52 @@ function screenScanned(raw: unknown): DiscoveredDeviceWire[] {
       model: wireString(d.model),
       name: wireString(d.name),
       pagePrinter: d.pagePrinter === true ? true : undefined,
+      printerLike: d.printerLike === true ? true : undefined,
     });
   }
   return out;
+}
+
+/** Kept apart from `visible`, which feeds the claim: a paired device has no delivery path yet. */
+function screenPairedBluetooth(raw: unknown): PairedBluetoothWire[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PairedBluetoothWire[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const d = entry as Record<string, unknown>;
+    if (typeof d.localKey !== "string" || !isBluetoothAddress(d.localKey)) continue;
+    out.push({ localKey: d.localKey.toUpperCase(), name: wireString(d.name) });
+  }
+  return out;
+}
+
+// The agent's own bounds: it holds at most eight outcomes (packages/print-agent/src/agent.ts) and its
+// client cuts each reason to 500 characters (packages/print-agent/src/client.ts).
+const MAX_BLUETOOTH_OUTCOMES = 8;
+const MAX_OUTCOME_ERROR_LENGTH = 500;
+
+function screenBluetoothOutcomes(raw: unknown): BluetoothCommandOutcome[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BluetoothCommandOutcome[] = [];
+  for (const entry of raw.slice(0, MAX_BLUETOOTH_OUTCOMES)) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const { id, ok, error } = entry as Record<string, unknown>;
+    if (typeof id !== "string" || typeof ok !== "boolean") continue;
+    if (error !== undefined && typeof error !== "string") continue;
+    out.push(
+      error === undefined
+        ? { id, ok }
+        : { id, ok, error: error.slice(0, MAX_OUTCOME_ERROR_LENGTH) },
+    );
+  }
+  return out;
+}
+
+function requireBluetoothAddress(value: unknown): string {
+  if (typeof value !== "string" || !isBluetoothAddress(value)) {
+    throw new AppError("management.request_invalid", { field: "address" });
+  }
+  return value.toUpperCase();
 }
 
 export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void {
@@ -263,13 +320,40 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     model?: string;
     name?: string;
     pagePrinter?: true;
+    printerLike?: true;
+    /** The latest report of any kind; the entry is listed while it is fresh. */
     lastSeenAt: number;
+    /** Only a scan sets this, and only it authorizes Pair. */
+    scannedAt?: number;
+    /** Only a paired report sets this, and only it authorizes Forget. */
+    pairedAt?: number;
   }
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
+  // Looked up at each call rather than captured, so a replaced `Date.now` reaches the store as it
+  // reaches the freshness checks.
+  const bluetoothCommands = createPrinterBluetoothCommands({ now: () => Date.now() });
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const DISCOVERED_TTL_MS = 15_000;
+  const isFresh = (at: number | undefined, now: number): boolean =>
+    at !== undefined && now - at <= DISCOVERED_TTL_MS;
+  const reportedFresh = (
+    agentId: string,
+    address: string,
+    stamp: "scannedAt" | "pairedAt",
+  ): boolean => {
+    const now = Date.now();
+    for (const e of discovered.values())
+      if (
+        e.agentId === agentId &&
+        e.transport === "bluetooth" &&
+        e.localKey === address &&
+        isFresh(e[stamp], now)
+      )
+        return true;
+    return false;
+  };
 
   const gated = <T>(
     sessionId: string,
@@ -334,6 +418,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         host?: unknown;
         setupUrl?: unknown;
         setupPort?: unknown;
+        pairedBluetooth?: unknown;
+        bluetoothOutcomes?: unknown;
       }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
@@ -341,17 +427,37 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const setupPort = optionalAgentSetupPort(body.setupPort);
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
+      const pairedBluetooth = screenPairedBluetooth(body.pairedBluetooth);
+      // Settled before this reply's commands are read, so a command stops in the reply to the pull
+      // that carried its outcome.
+      bluetoothCommands.accept(agentId, screenBluetoothOutcomes(body.bluetoothOutcomes));
 
       const now = Date.now();
-      const remember = (d: DiscoveredEntry): void => {
-        const locator = d.localKey ?? `${d.host}:${d.port}`;
-        discovered.set(`${agentId}:${d.transport}:${locator}`, d);
+      const keyOf = (transport: string, locator: string): string =>
+        `${agentId}:${transport}:${locator}`;
+      // A visible or scanned report replaces the description, never another kind of report's stamp.
+      const remember = (d: DiscoveredDeviceWire, scannedAt: number | undefined): void => {
+        const key = keyOf(d.transport, d.localKey ?? `${d.host}:${d.port}`);
+        const prior = discovered.get(key);
+        discovered.set(key, {
+          agentId,
+          ...d,
+          lastSeenAt: now,
+          scannedAt: scannedAt ?? prior?.scannedAt,
+          pairedAt: prior?.pairedAt,
+        });
       };
-      for (const v of visible) {
-        remember({ agentId, ...v, lastSeenAt: now });
-      }
-      for (const s of scanned) {
-        remember({ agentId, ...s, lastSeenAt: now });
+      for (const v of visible) remember(v, undefined);
+      for (const s of scanned) remember(s, now);
+      for (const p of pairedBluetooth) {
+        const key = keyOf("bluetooth", p.localKey);
+        const prior = discovered.get(key);
+        discovered.set(
+          key,
+          prior === undefined
+            ? { agentId, transport: "bluetooth", ...p, lastSeenAt: now, pairedAt: now }
+            : { ...prior, name: prior.name ?? p.name, lastSeenAt: now, pairedAt: now },
+        );
       }
 
       const visibleKeys = visible
@@ -391,6 +497,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       // `servers` lets the agent follow the primary across a failover, as the till's pull does.
       const held = await deps.readMembership();
       const networkProbes = printerProbes.current();
+      const commands = bluetoothCommands.current(agentId);
       return c.json({
         nodeId: deps.cfg.nodeId,
         servers: routableServers(held),
@@ -405,6 +512,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         })),
         discoveryUntil: discoveryUntil > Date.now() ? discoveryUntil : null,
         ...(networkProbes.length ? { networkProbes } : {}),
+        ...(commands.length ? { bluetoothCommands: commands } : {}),
       });
     }),
   );
@@ -516,6 +624,45 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  // Fresh is the discovered list's own window, `DISCOVERED_TTL_MS`: a report too old to keep a row
+  // listed no longer authorizes a command. Pair needs this agent's Bluetooth scan; Forget needs this
+  // agent's pairing report.
+  app.post("/management-api/print-agents/:id/bluetooth/pair", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const agentId = requireUuidParam(c.req.param("id"), "PrintAgentId");
+      const body = await readJsonBody<{ address?: unknown; pin?: unknown }>(c);
+      const address = requireBluetoothAddress(body.address);
+      if (typeof body.pin !== "string" || !isBluetoothPin(body.pin)) {
+        throw new AppError("management.request_invalid", { field: "pin" });
+      }
+      const pin = body.pin;
+      const command = await gated(sessionId, async () => {
+        if (!reportedFresh(agentId, address, "scannedAt")) {
+          throw new AppError("printer.bluetooth_not_discovered", { address });
+        }
+        return bluetoothCommands.enqueue(agentId, "pair", address, pin);
+      });
+      return c.json({ command }, 202);
+    }),
+  );
+
+  app.post("/management-api/print-agents/:id/bluetooth/forget", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const agentId = requireUuidParam(c.req.param("id"), "PrintAgentId");
+      const body = await readJsonBody<{ address?: unknown }>(c);
+      const address = requireBluetoothAddress(body.address);
+      const command = await gated(sessionId, async () => {
+        if (!reportedFresh(agentId, address, "pairedAt")) {
+          throw new AppError("printer.bluetooth_not_paired", { address });
+        }
+        return bluetoothCommands.enqueue(agentId, "forget", address);
+      });
+      return c.json({ command }, 202);
+    }),
+  );
+
   app.post("/management-api/printer-discovery/start", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -572,6 +719,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       return c.json(
         [...discovered.values()].map((e) => {
           const printerId = printerIdOf(e);
+          const address = e.transport === "bluetooth" ? e.localKey : undefined;
           return {
             agentId: e.agentId,
             agentName: names.get(e.agentId) ?? null,
@@ -586,6 +734,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               e.host !== undefined && pagePrinterAddresses.has(`${e.host}:${e.port ?? 9100}`)
                 ? (true as const)
                 : undefined,
+            printerLike: address === undefined ? undefined : e.printerLike,
+            paired: address !== undefined && isFresh(e.pairedAt, now) ? (true as const) : undefined,
+            bluetoothCommand:
+              address === undefined ? undefined : bluetoothCommands.latest(e.agentId, address),
             alreadyRegistered: printerId !== null,
             printerId,
             lastSeenAt: new Date(e.lastSeenAt).toISOString(),
