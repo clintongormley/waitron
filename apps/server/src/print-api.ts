@@ -45,7 +45,6 @@ import {
 import { authorizeManager, type Permission } from "@waitron/identity";
 import {
   BLUETOOTH_COMMAND_LIMIT,
-  MAX_OUTCOME_ERROR_LENGTH,
   isBluetoothAddress,
   isBluetoothPin,
   type BluetoothCommandOutcome,
@@ -232,7 +231,10 @@ function screenVisible(raw: unknown): VisibleDeviceWire[] {
     }
     out.push({
       transport: d.transport,
-      localKey: d.localKey,
+      localKey:
+        d.transport === "bluetooth" && isBluetoothAddress(d.localKey)
+          ? d.localKey.toUpperCase()
+          : d.localKey,
       make: wireString(d.make),
       model: wireString(d.model),
       name: wireString(d.name),
@@ -288,13 +290,20 @@ function screenBluetoothOutcomes(raw: unknown): BluetoothCommandOutcome[] {
     const { id, ok, error } = entry as Record<string, unknown>;
     if (typeof id !== "string" || typeof ok !== "boolean") continue;
     if (error !== undefined && typeof error !== "string") continue;
-    out.push(
-      error === undefined
-        ? { id, ok }
-        : { id, ok, error: error.slice(0, MAX_OUTCOME_ERROR_LENGTH) },
-    );
+    // Unbounded here: the store withholds a reason that carries the PIN before bounding it.
+    out.push(error === undefined ? { id, ok } : { id, ok, error });
   }
   return out;
+}
+
+/**
+ * The claim matches `local_key` against the upper-cased keys `screenVisible` keeps, case-sensitively,
+ * so a registered Bluetooth address is stored upper-cased by the same rule.
+ */
+function storedLocalKey(transport: string, localKey: string): string {
+  return transport === "bluetooth" && isBluetoothAddress(localKey)
+    ? localKey.toUpperCase()
+    : localKey;
 }
 
 function requireBluetoothAddress(value: unknown): string {
@@ -330,29 +339,25 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   }
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
-  // Looked up at each call rather than captured, so a replaced `Date.now` reaches the store as it
-  // reaches the freshness checks.
-  const bluetoothCommands = createPrinterBluetoothCommands({ now: () => Date.now() });
+  const bluetoothCommands = createPrinterBluetoothCommands();
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const DISCOVERED_TTL_MS = 15_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     at !== undefined && now - at <= DISCOVERED_TTL_MS;
+  const keyOf = (agentId: string, transport: string, locator: string): string =>
+    `${agentId}:${transport}:${locator}`;
   const reportedFresh = (
     agentId: string,
     address: string,
     stamp: "scannedAt" | "pairedAt",
-  ): boolean => {
-    const now = Date.now();
-    for (const e of discovered.values())
-      if (
-        e.agentId === agentId &&
-        e.transport === "bluetooth" &&
-        e.localKey === address &&
-        isFresh(e[stamp], now)
-      )
-        return true;
-    return false;
+  ): boolean => isFresh(discovered.get(keyOf(agentId, "bluetooth", address))?.[stamp], Date.now());
+  const requireAgentRow = async (tx: Transaction, id: string): Promise<void> => {
+    const [row] = await tx
+      .select({ id: printAgents.id })
+      .from(printAgents)
+      .where(eq(printAgents.id, id));
+    if (row === undefined) throw new AppError("agent.not_found", { id });
   };
 
   const gated = <T>(
@@ -433,11 +438,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       bluetoothCommands.accept(agentId, screenBluetoothOutcomes(body.bluetoothOutcomes));
 
       const now = Date.now();
-      const keyOf = (transport: string, locator: string): string =>
-        `${agentId}:${transport}:${locator}`;
       // A visible or scanned report replaces the description, never another kind of report's stamp.
       const remember = (d: DiscoveredDeviceWire, scannedAt: number | undefined): void => {
-        const key = keyOf(d.transport, d.localKey ?? `${d.host}:${d.port}`);
+        const key = keyOf(agentId, d.transport, d.localKey ?? `${d.host}:${d.port}`);
         const prior = discovered.get(key);
         discovered.set(key, {
           agentId,
@@ -450,7 +453,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       for (const v of visible) remember(v, undefined);
       for (const s of scanned) remember(s, now);
       for (const p of pairedBluetooth) {
-        const key = keyOf("bluetooth", p.localKey);
+        const key = keyOf(agentId, "bluetooth", p.localKey);
         const prior = discovered.get(key);
         discovered.set(
           key,
@@ -637,7 +640,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         throw new AppError("management.request_invalid", { field: "pin" });
       }
       const pin = body.pin;
-      const command = await gated(sessionId, async () => {
+      const command = await gated(sessionId, async (tx) => {
+        await requireAgentRow(tx, agentId);
         if (!reportedFresh(agentId, address, "scannedAt")) {
           throw new AppError("printer.bluetooth_not_discovered", { address });
         }
@@ -653,7 +657,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const agentId = requireUuidParam(c.req.param("id"), "PrintAgentId");
       const body = await readJsonBody<{ address?: unknown }>(c);
       const address = requireBluetoothAddress(body.address);
-      const command = await gated(sessionId, async () => {
+      const command = await gated(sessionId, async (tx) => {
+        await requireAgentRow(tx, agentId);
         if (!reportedFresh(agentId, address, "pairedAt")) {
           throw new AppError("printer.bluetooth_not_paired", { address });
         }
@@ -685,8 +690,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const now = Date.now();
-      for (const [k, e] of discovered)
-        if (now - e.lastSeenAt > DISCOVERED_TTL_MS) discovered.delete(k);
+      for (const [k, e] of discovered) if (!isFresh(e.lastSeenAt, now)) discovered.delete(k);
       const { registered, agents } = await gated(sessionId, async (tx) => ({
         registered: await tx
           .select({
@@ -761,7 +765,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const port = nullableOptionalInt(body.port, "port");
       if (port !== undefined && port !== null) input.port = port;
       const localKey = optionalString(body.localKey, "localKey");
-      if (localKey !== undefined) input.localKey = localKey;
+      if (localKey !== undefined) input.localKey = storedLocalKey(input.transport, localKey);
       const pollId = optionalString(body.pollId, "pollId");
       if (pollId !== undefined) input.pollId = pollId;
       if (body.paperWidth !== undefined) {
@@ -871,7 +875,22 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       if (hasCashDrawer !== undefined) patch.hasCashDrawer = hasCashDrawer;
       const active = optionalBool(body.active, "active");
       if (active !== undefined) patch.active = active;
-      await gated(sessionId, (tx) => updatePrinter(tx, deps.cfg, id, patch));
+      await gated(sessionId, async (tx) => {
+        // Either field can make the stored key a Bluetooth address, so both need the other's value.
+        if (patch.transport !== undefined || typeof patch.localKey === "string") {
+          const [current] = await tx
+            .select({ transport: printers.transport, localKey: printers.localKey })
+            .from(printers)
+            .where(eq(printers.id, id));
+          const key = patch.localKey === undefined ? current?.localKey : patch.localKey;
+          const transport = patch.transport ?? current?.transport;
+          if (typeof key === "string" && transport !== undefined) {
+            const stored = storedLocalKey(transport, key);
+            if (stored !== key) patch.localKey = stored;
+          }
+        }
+        await updatePrinter(tx, deps.cfg, id, patch);
+      });
       return c.body(null, 204);
     }),
   );

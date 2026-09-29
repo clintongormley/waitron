@@ -1,4 +1,4 @@
-export { BLUETOOTH_COMMAND_LIMIT, POLL_INTERVAL_MS, createAgent } from "./agent.js";
+export { POLL_INTERVAL_MS, createAgent } from "./agent.js";
 export type { Agent, AgentOptions, AgentSetupSnapshot } from "./agent.js";
 export type {
   AgentConfig,
@@ -14,11 +14,14 @@ export type {
   VisibleDevice,
 } from "./host.js";
 export {
+  BLUETOOTH_COMMAND_LIMIT,
   DEFAULT_TIMEOUT_MS,
   MAX_OUTCOME_ERROR_LENGTH,
+  PIN_WITHHELD,
   createClient,
   isBluetoothAddress,
   isBluetoothPin,
+  withholdPin,
 } from "./client.js";
 export type {
   AgentClient,

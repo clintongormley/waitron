@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
-import type {
-  BluetoothCommand,
-  BluetoothCommandKind,
-  BluetoothCommandOutcome,
+import {
+  BLUETOOTH_COMMAND_LIMIT,
+  MAX_OUTCOME_ERROR_LENGTH,
+  withholdPin,
+  type BluetoothCommand,
+  type BluetoothCommandKind,
+  type BluetoothCommandOutcome,
 } from "@waitron/print-agent";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -12,6 +15,8 @@ export interface BluetoothCommandStatus {
   kind: BluetoothCommandKind;
   address: string;
   state: "pending" | "succeeded" | "failed";
+  /** On a pending command only: how long until the server drops it unanswered. */
+  expiresInMs?: number;
   error?: string;
 }
 
@@ -30,15 +35,23 @@ interface AgentCommands {
   results: Map<string, Result>;
 }
 
-const MAX_PENDING_PER_AGENT = 8;
-const MAX_RESULTS_PER_AGENT = 8;
-/** Outlasts the agent's slowest command: 10 s to register, a 75 s pair timeout and 5 s exit grace
- * (apps/print-agent/src/bluetooth-command.ts), then the pull that carries its outcome. */
+/** No more than the agent reads from one reply, so every pending command reaches it in each reply. */
+const MAX_PENDING_PER_AGENT = BLUETOOTH_COMMAND_LIMIT;
+/** As many as one full queue settles, so no outcome evicts another from the same pull. */
+const MAX_RESULTS_PER_AGENT = BLUETOOTH_COMMAND_LIMIT;
+/** Outlasts one command the agent starts at once: 10 s to register, a 75 s pair timeout and 5 s exit
+ * grace (apps/print-agent/src/bluetooth-command.ts), then the pull that carries its outcome. A
+ * command queued behind another can still expire. */
 const COMMAND_TTL_MS = 120_000;
 const RESULT_TTL_MS = 60_000;
+/** `enqueue`, `current`, `accept` and `latest` each prune the agent they name, and at most once per
+ * interval every agent, so an agent none of them names again still loses its expired entries at the
+ * first of those calls after the interval. */
+const SWEEP_INTERVAL_MS = 60_000;
 
-function statusOf({ id, kind, address }: BluetoothCommand): BluetoothCommandStatus {
-  return { id, kind, address, state: "pending" };
+function statusOf({ command, expiresAt }: Pending, instant: number): BluetoothCommandStatus {
+  const { id, kind, address } = command;
+  return { id, kind, address, state: "pending", expiresInMs: expiresAt - instant };
 }
 
 /** A pending pair holds the operator's PIN in memory only, so each pull can resend it until the
@@ -55,59 +68,62 @@ export function createPrinterBluetoothCommands(
   current(agentId: string): BluetoothCommand[];
   accept(agentId: string, outcomes: BluetoothCommandOutcome[]): void;
   latest(agentId: string, address: string): BluetoothCommandStatus | undefined;
+  /** How many agents hold entries. */
+  agentsHeld(): number;
 } {
-  const now = options.now ?? Date.now;
+  const now = options.now ?? (() => Date.now());
   const newId = options.id ?? randomUUID;
   const agents = new Map<string, AgentCommands>();
+  let nextSweepAt = 0;
 
-  function prune(): number {
-    const instant = now();
-    for (const [agentId, agent] of agents) {
-      for (const [address, entry] of agent.pending)
-        if (entry.expiresAt <= instant) agent.pending.delete(address);
-      for (const [address, entry] of agent.results)
-        if (entry.expiresAt <= instant) agent.results.delete(address);
-      if (agent.pending.size === 0 && agent.results.size === 0) agents.delete(agentId);
-    }
-    return instant;
+  function pruneAgent(agentId: string, agent: AgentCommands, instant: number): void {
+    for (const [address, entry] of agent.pending)
+      if (entry.expiresAt <= instant) agent.pending.delete(address);
+    for (const [address, entry] of agent.results)
+      if (entry.expiresAt <= instant) agent.results.delete(address);
+    if (agent.pending.size === 0 && agent.results.size === 0) agents.delete(agentId);
   }
 
-  function agentFor(agentId: string): AgentCommands {
-    let agent = agents.get(agentId);
-    if (!agent) {
-      agent = { pending: new Map(), results: new Map() };
-      agents.set(agentId, agent);
+  /** Prunes the named agent, or every agent when a sweep is due, and returns the instant used. */
+  function prune(agentId: string): { instant: number; agent: AgentCommands | undefined } {
+    const instant = now();
+    if (instant >= nextSweepAt) {
+      for (const [id, agent] of agents) pruneAgent(id, agent, instant);
+      nextSweepAt = instant + SWEEP_INTERVAL_MS;
+    } else {
+      const agent = agents.get(agentId);
+      if (agent) pruneAgent(agentId, agent, instant);
     }
-    return agent;
+    return { instant, agent: agents.get(agentId) };
   }
 
   return {
     enqueue(agentId, kind, address, pin) {
-      const instant = prune();
+      const { instant, agent: held } = prune(agentId);
       const heldPin = kind === "pair" ? pin : undefined;
-      const existing = agents.get(agentId)?.pending.get(address);
+      const existing = held?.pending.get(address);
       if (existing?.command.kind === kind && existing.command.pin === heldPin)
-        return statusOf(existing.command);
-      if (!existing && (agents.get(agentId)?.pending.size ?? 0) >= MAX_PENDING_PER_AGENT)
+        return statusOf(existing, instant);
+      if (!existing && (held?.pending.size ?? 0) >= MAX_PENDING_PER_AGENT)
         throw new AppError("printer.bluetooth_command_busy", {});
       // A changed kind or PIN takes a fresh id: the agent never reruns an id it has taken.
       const command: BluetoothCommand = { id: newId(), kind, address };
       if (heldPin !== undefined) command.pin = heldPin;
-      const agent = agentFor(agentId);
-      agent.pending.set(address, { command, expiresAt: instant + COMMAND_TTL_MS });
+      const agent = held ?? { pending: new Map(), results: new Map() };
+      agents.set(agentId, agent);
+      const entry = { command, expiresAt: instant + COMMAND_TTL_MS };
+      agent.pending.set(address, entry);
       agent.results.delete(address);
-      return statusOf(command);
+      return statusOf(entry, instant);
     },
 
     current(agentId) {
-      prune();
-      const pending = agents.get(agentId)?.pending.values() ?? [];
+      const pending = prune(agentId).agent?.pending.values() ?? [];
       return [...pending].map(({ command }) => ({ ...command }));
     },
 
     accept(agentId, outcomes) {
-      const instant = prune();
-      const agent = agents.get(agentId);
+      const { instant, agent } = prune(agentId);
       if (!agent) return;
       for (const outcome of outcomes) {
         for (const [address, { command }] of agent.pending) {
@@ -119,7 +135,12 @@ export function createPrinterBluetoothCommands(
             address,
             state: outcome.ok ? "succeeded" : "failed",
           };
-          if (!outcome.ok && outcome.error !== undefined) status.error = outcome.error;
+          if (!outcome.ok && outcome.error !== undefined) {
+            status.error = withholdPin(outcome.error, command.pin).slice(
+              0,
+              MAX_OUTCOME_ERROR_LENGTH,
+            );
+          }
           agent.results.set(address, { status, expiresAt: instant + RESULT_TTL_MS });
           if (agent.results.size > MAX_RESULTS_PER_AGENT)
             agent.results.delete(agent.results.keys().next().value!);
@@ -129,12 +150,15 @@ export function createPrinterBluetoothCommands(
     },
 
     latest(agentId, address) {
-      prune();
-      const agent = agents.get(agentId);
+      const { instant, agent } = prune(agentId);
       const pending = agent?.pending.get(address);
-      if (pending) return statusOf(pending.command);
+      if (pending) return statusOf(pending, instant);
       const result = agent?.results.get(address);
       return result ? { ...result.status } : undefined;
+    },
+
+    agentsHeld() {
+      return agents.size;
     },
   };
 }

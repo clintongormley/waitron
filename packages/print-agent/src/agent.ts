@@ -1,6 +1,8 @@
 import {
+  BLUETOOTH_COMMAND_LIMIT,
   createClient,
   describeRejection,
+  withholdPin,
   type AgentClient,
   type BluetoothCommand,
   type BluetoothCommandOutcome,
@@ -22,10 +24,6 @@ import { Router } from "./router.js";
  * cuts the sleep short so its outcome goes out at once. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
-/** How many Bluetooth commands the agent holds at once (queued, running, or with an unsent
- * outcome), so also the most outcomes one pull carries, and how many taken ids it remembers. */
-export const BLUETOOTH_COMMAND_LIMIT = 8;
-const PIN_WITHHELD = "pairing failed; the detail was withheld because it contained the PIN";
 
 export interface AgentOptions {
   host: Host;
@@ -225,10 +223,7 @@ export function createAgent(opts: AgentOptions): Agent {
     } catch (thrown) {
       error = describeRejection(thrown);
     }
-    // Withheld whole: masking only the PIN leaves it readable from what surrounds the gap.
-    if (error !== undefined && command.pin !== undefined && error.includes(command.pin)) {
-      error = PIN_WITHHELD;
-    }
+    if (error !== undefined) error = withholdPin(error, command.pin);
     return { id: command.id, ok, ...(error === undefined ? {} : { error }) };
   }
 

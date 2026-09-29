@@ -21,7 +21,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { enqueuePrintJob, esc } from "@waitron/printing";
-import type { BluetoothCommand, NetworkProbe } from "@waitron/print-agent";
+import { PIN_WITHHELD, type BluetoothCommand, type NetworkProbe } from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -2206,6 +2206,99 @@ describe("agent inventory screening and the discovered-printer list", () => {
     ]);
   });
 
+  function lowerMac(): string {
+    return Array.from(randomBytes(6), (b) => b.toString(16).padStart(2, "0")).join(":");
+  }
+
+  async function storedKey(app: Hono, printerId: string): Promise<string | null | undefined> {
+    const rows = (await (
+      await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
+    ).json()) as { id: string; localKey: string | null }[];
+    return rows.find((r) => r.id === printerId)?.localKey;
+  }
+
+  async function claimedFor(app: Hono, token: string, printerId: string, mac: string) {
+    const reply = await pull(app, token, {
+      visible: [{ transport: "bluetooth", localKey: mac }],
+      scanned: [],
+    });
+    return reply.jobs.filter((job) => job.printerId === printerId).map((job) => job.id);
+  }
+
+  it("stores a bluetooth printer created with a lower-case address in upper case, so its job is claimed", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = lowerMac();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+    });
+    expect(created.status).toBe(201);
+    const { id: printerId } = (await created.json()) as { id: string };
+    expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
+
+    const jobId = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+    expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
+  });
+
+  it("refuses a lower-case address that an upper-case bluetooth printer already holds", async () => {
+    const app = mountApp();
+    await joinAndAccept(app);
+    const mac = lowerMac();
+    const first = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "First", transport: "bluetooth", localKey: mac.toUpperCase() },
+    });
+    expect(first.status).toBe(201);
+    const dup = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Second", transport: "bluetooth", localKey: mac },
+    });
+    expect(dup.status).toBe(409);
+    expect(await dup.json()).toMatchObject({
+      error: { code: "printer.already_registered", params: { localKey: mac.toUpperCase() } },
+    });
+  });
+
+  it("stores a lower-case address given to an existing bluetooth printer in upper case, so its job is claimed", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: `BT-${randomUUID()}` },
+    });
+    expect(created.status).toBe(201);
+    const { id: printerId } = (await created.json()) as { id: string };
+    const mac = lowerMac();
+    const edited = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+      cookie: managerCookie,
+      body: { localKey: mac },
+    });
+    expect(edited.status).toBe(204);
+    expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
+
+    const jobId = await enqueue(printerId, esc().text("Mesa 4").cut().bytes());
+    expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
+  });
+
+  it("upper-cases an address-shaped key only once the printer's transport is bluetooth", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const mac = lowerMac();
+    const printerId = await createUsbPrinter(app, mac, "Was USB");
+    expect(await storedKey(app, printerId)).toBe(mac);
+
+    const edited = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+      cookie: managerCookie,
+      body: { transport: "bluetooth" },
+    });
+    expect(edited.status).toBe(204);
+    expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
+
+    const jobId = await enqueue(printerId, esc().text("Mesa 5").cut().bytes());
+    expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
+  });
+
   it("marks a port-less office-printer report as the same address as port 9100", async () => {
     const app = mountApp();
     const first = await joinAndAccept(app, "Kitchen agent");
@@ -2544,6 +2637,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       kind: "pair",
       address: mac,
       state: "pending",
+      expiresInMs: 120_000,
     });
 
     const expected = [{ id: queued.id, kind: "pair", address: mac, pin: PIN }];
@@ -2694,6 +2788,111 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(reply.bluetoothCommands).toBeUndefined();
     rows = await discoveredRows(app);
     expect(rows.find((r) => r.localKey === first)).not.toHaveProperty("bluetoothCommand");
+  });
+
+  it("answers agent.not_found for an agent id no row names, on Pair and on Forget", async () => {
+    const app = mountApp();
+    const unknown = randomUUID();
+    const mac = randomMac();
+    const attempts = [
+      ["pair", { address: mac, pin: PIN }],
+      ["forget", { address: mac }],
+    ] as const;
+    for (const [kind, body] of attempts) {
+      const res = await command(app, unknown, kind, body);
+      expect(res.status, kind).toBe(404);
+      expect(await res.json()).toEqual({
+        error: { code: "agent.not_found", params: { id: unknown } },
+      });
+    }
+  });
+
+  it("withholds a failed Pair's whole reason when the agent's outcome carries the PIN", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const plain = randomMac();
+    const straddled = randomMac();
+    const scanned = [scannedMac(plain), scannedMac(straddled)];
+    await pull(app, token, { scanned });
+    const ids: string[] = [];
+    for (const mac of [plain, straddled]) {
+      const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+      expect(res.status).toBe(202);
+      ids.push(((await res.json()) as { command: { id: string } }).command.id);
+    }
+
+    await pull(app, token, {
+      scanned,
+      bluetoothOutcomes: [
+        { id: ids[0], ok: false, error: `Pair failed for PIN ${PIN}` },
+        // Past the 500-character bound, so bounding before withholding would keep "Zq7".
+        { id: ids[1], ok: false, error: `${"x".repeat(497)}${PIN}` },
+      ],
+    });
+    const listed = await send(app, "GET", "/management-api/discovered-printers", {
+      cookie: managerCookie,
+    });
+    const listing = await listed.text();
+    expect(listing).not.toContain(PIN.slice(0, 3));
+    const rows = (JSON.parse(listing) as Record<string, unknown>[]).filter(
+      (r) => r.agentId === agentId,
+    );
+    for (const mac of [plain, straddled]) {
+      expect(rows.find((r) => r.localKey === mac)).toMatchObject({
+        bluetoothCommand: { state: "failed", error: PIN_WITHHELD },
+      });
+    }
+  });
+
+  it("tells the dashboard how long a pending command has left, in the 202 and on its row", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+    const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+    const { command: queued } = (await res.json()) as { command: Record<string, unknown> };
+    expect(queued).toMatchObject({ state: "pending", expiresInMs: 120_000 });
+
+    vi.spyOn(Date, "now").mockReturnValue(start + 10_000);
+    await pull(app, token, { scanned: [scannedMac(mac)] });
+    expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
+      bluetoothCommand: { id: queued.id, state: "pending", expiresInMs: 110_000 },
+    });
+
+    await pull(app, token, {
+      scanned: [scannedMac(mac)],
+      bluetoothOutcomes: [{ id: queued.id, ok: true }],
+    });
+    const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
+    expect(row).toMatchObject({ bluetoothCommand: { state: "succeeded" } });
+    expect(row).not.toHaveProperty("bluetoothCommand.expiresInMs");
+  });
+
+  it("reads a lower-case visible Bluetooth address as upper case: one row with its pairing, and it claims", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = randomMac();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+    });
+    const { id: printerId } = (await created.json()) as { id: string };
+    const jobId = await enqueue(printerId, esc().text("Mesa 7").cut().bytes());
+
+    const reply = await pull(app, token, {
+      visible: [{ transport: "bluetooth", localKey: mac.toLowerCase() }],
+      pairedBluetooth: [{ localKey: mac }],
+    });
+    expect(reply.jobs.filter((job) => job.printerId === printerId).map((job) => job.id)).toEqual([
+      jobId,
+    ]);
+    const rows = (await discoveredRows(app)).filter(
+      (r) => r.agentId === agentId && r.transport === "bluetooth",
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ localKey: mac, paired: true });
   });
 
   it("never returns or logs the PIN outside the pending command in the named agent's pull", async () => {
