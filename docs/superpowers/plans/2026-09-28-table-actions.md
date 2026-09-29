@@ -438,6 +438,8 @@ flagged for the owner in their PRs.**
   `tab.not_table_tab`, `tab.party_mismatch` and `table.occupied`.
   - `service_zone.mode_incompatible` stops being thrown on bill moves, but stays registered:
     `openTab` still throws it for a table in a non-table zone (`working-order.ts:1002-1010`).
+    _(2026-09-29, Task 5 review: the bill merge and transfer between two bills of one party throw
+    it too, for bills whose service modes differ; see the dated note in Task 5.)_
   - Every new code gets HTTP 409 in the `STATUS` map of `apps/server/src/till-api.ts`, and English
     and Spanish text in `apps/till/src/i18n/codes.ts`.
 - **P12. The bill choice after combining.** Every route that combines parties, or moves a bill into
@@ -2418,6 +2420,10 @@ until Task 10, so nothing the till does changes in this PR.
   `modesChecked: true` is sound here: both bills are open bills of one party, and every bill of a
   party carries the party's zone. Splits copy it (`VENUE_SERVICE.copyOrderContext`), and Task 7's moves retarget
   it. Say so in one line at the call.
+  _(2026-09-29, Task 5 review: the premise is false — the old `moveTab` retargets only the bill it
+  moves, so two bills of one party can carry different modes. The merge and the transfer below
+  both check modes, after the bills' state, and refuse `service_zone.mode_incompatible`; both
+  check the other bill before the path bill.)_
   **The order of checks is the point** (P27): the path bill's party, then its revision, then that
   the other bill is of the same party, then the bills' own state. Checking a bill's state first
   would answer the second of two tills with `tab.not_open` or `bill.other_party` in one order and

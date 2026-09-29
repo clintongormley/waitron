@@ -258,6 +258,9 @@ async function lockedWrites(billId: string, paymentId: string) {
     move: await send(venue.app, venue.cookie, "POST", `/api/tabs/${billId}/split`, {
       transfers: [{ lineNo: 3 }],
     }),
+    billSplit: await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
+      transfers: [{ lineNo: 3 }],
+    }),
     abandon: await send(venue.app, venue.cookie, "DELETE", `/api/working-orders/${billId}`),
     secondRefund: (await refund(billId, paymentId, { applied: "1.00" })).answer,
   };
