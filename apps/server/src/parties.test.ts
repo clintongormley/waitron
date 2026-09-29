@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -32,6 +32,7 @@ import {
 import { takeBillPayment } from "./bill-payments.js";
 import {
   OPERATOR,
+  activeTablesOf,
   commandFor,
   floorRow,
   inTx,
@@ -51,7 +52,7 @@ import {
 import {
   checkAndBumpParty,
   finishTable,
-  markCleared,
+  markTableCleared,
   readPartyBills,
   runServiceCommand,
   partyFamily,
@@ -430,95 +431,122 @@ describe("finish table", () => {
   });
 });
 
-describe("needs clearing", () => {
-  it("leaves every table of the party needing clearing until Mark cleared", async () => {
-    const venue = await setupPartyVenue(suite.db);
-    await inTx(suite, (tx) => writeClearingWorkflow(tx, true));
-    const mesa4 = await venue.table("Mesa 4");
-    const mesa5 = await venue.table("Mesa 5");
-    const { partyId, tabId } = await seat(venue, mesa4);
-    await join(venue.cfg, partyId, tabId, mesa5);
-    await giveStatus([mesa4, mesa5]);
-
-    const result = await inTx(suite, (tx) =>
-      finishTable(tx, { partyId, expectedPartyRevision: 1, operatorId: OPERATOR }),
+describe("a table needs cleaning, not its party (P8, P9)", () => {
+  let v: PartyVenue;
+  beforeEach(async () => {
+    v = await setupPartyVenue(suite.db);
+  });
+  // Every revision is read BEFORE the transaction opens: a read through `inTx` inside a running
+  // body asks for the write lock it holds, which the queue refuses.
+  async function finish(partyId: string) {
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    return inTx(v, (tx) =>
+      finishTable(tx, { partyId, expectedPartyRevision, operatorId: OPERATOR }),
     );
+  }
+  async function condition(tableId: string) {
+    return (await floorRow(v, tableId)).condition;
+  }
+  async function partyCount(): Promise<number> {
+    return (await inTx(v, (tx) => tx.select({ id: parties.id }).from(parties))).length;
+  }
 
-    expect(result).toEqual({ state: "needs_clearing" });
-    expect(await partyRow(suite, partyId)).toMatchObject({ state: "needs_clearing", revision: 2 });
+  it("closes the party at Finish and leaves each of its tables needing cleaning, with no party on them", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    const mesa4 = await v.table("Mesa 4c");
+    const mesa5 = await v.table("Mesa 5c");
+    const { partyId, tabId } = await seat(v, mesa4);
+    await join(v.cfg, partyId, tabId, mesa5);
+
+    expect(await finish(partyId)).toEqual({ state: "closed" });
+
+    expect(await partyRow(v, partyId)).toMatchObject({ state: "closed", closedBy: OPERATOR });
+    expect(await activeTablesOf(v, partyId)).toEqual([]);
     for (const table of [mesa4, mesa5]) {
-      expect((await tableRow(suite, table)).statusId).toBeNull();
-      expect(await inTx(suite, (tx) => partyForTable(tx, table))).toEqual({ partyId, revision: 2 });
-      expect(await captureError(() => seat(venue, table))).toMatchObject({
-        code: "tab.already_open",
-      });
-      const floor = await floorRow(venue, table);
-      expect(floor.state).toBe("open-tab");
-      expect(floor.party).toMatchObject({ id: partyId, state: "needs_clearing" });
-    }
-
-    await inTx(suite, (tx) => markCleared(tx, { partyId, expectedPartyRevision: 2 }));
-
-    expect(await partyRow(suite, partyId)).toMatchObject({ state: "closed", revision: 3 });
-    expect((await membershipsOf(partyId)).every((m) => m.leftAt !== null)).toBe(true);
-    for (const table of [mesa4, mesa5]) {
-      expect(await inTx(suite, (tx) => partyForTable(tx, table))).toBeNull();
-      const next = await seat(venue, table);
-      expect(next.partyId).not.toBe(partyId);
+      expect(await tableRow(v, table)).toMatchObject({ tabId: null, statusId: null });
+      expect((await tableRow(v, table)).needsCleaningSince).not.toBeNull();
+      expect(await condition(table)).toBe("needs_cleaning");
+      expect((await floorRow(v, table)).party).toBeNull();
     }
   });
 
-  it("refuses a tab opened straight onto a table that needs clearing, as the till's free-table route and a booking still do", async () => {
-    const venue = await setupPartyVenue(suite.db);
-    await inTx(suite, (tx) => writeClearingWorkflow(tx, true));
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId } = await seat(venue, mesa4);
-    await inTx(suite, (tx) =>
-      finishTable(tx, { partyId, expectedPartyRevision: 0, operatorId: OPERATOR }),
-    );
+  it("refuses seating a table that needs cleaning until it is cleared, one table at a time", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    const mesa6 = await v.table("Mesa 6c");
+    const mesa7 = await v.table("Mesa 7c");
+    const { partyId, tabId } = await seat(v, mesa6);
+    await join(v.cfg, partyId, tabId, mesa7);
+    await finish(partyId);
+    const partiesBefore = await partyCount();
 
-    expect(
-      await captureError(() => inTx(suite, (tx) => openTab(tx, venue.cfg, { tableId: mesa4 }))),
-    ).toMatchObject({ code: "tab.already_open", params: { tableId: mesa4 } });
+    const refused = await captureError(() => seat(v, mesa6));
+    expect(refused).toMatchObject({ code: "table.needs_cleaning", params: { tableId: mesa6 } });
+    expect(await partyCount()).toBe(partiesBefore);
+    expect(await condition(mesa6)).toBe("needs_cleaning");
+
+    await inTx(v, (tx) => markTableCleared(tx, mesa6));
+    expect(await condition(mesa6)).toBe("free");
+    expect((await tableRow(v, mesa6)).needsCleaningSince).toBeNull();
+    expect(await condition(mesa7)).toBe("needs_cleaning");
+    await seat(v, mesa6);
+    expect(await condition(mesa6)).toBe("held");
   });
 
-  it("frees the table at once when the venue does not use it", async () => {
-    const venue = await setupPartyVenue(suite.db);
-    const mesa4 = await venue.table("Mesa 4");
-    const { partyId } = await seat(venue, mesa4);
+  it("refuses a tab opened straight onto a table that needs cleaning, as the till's free-table route and a booking do", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    const mesa4 = await v.table("Mesa 4c");
+    const { partyId } = await seat(v, mesa4);
+    await finish(partyId);
+
     expect(
-      await inTx(suite, (tx) =>
-        finishTable(tx, { partyId, expectedPartyRevision: 0, operatorId: OPERATOR }),
-      ),
-    ).toEqual({ state: "closed" });
-    expect(await inTx(suite, (tx) => partyForTable(tx, mesa4))).toBeNull();
+      await captureError(() => inTx(v, (tx) => openTab(tx, v.cfg, { tableId: mesa4 }))),
+    ).toMatchObject({ code: "table.needs_cleaning", params: { tableId: mesa4 } });
+    expect(await tableRow(v, mesa4)).toMatchObject({ tabId: null });
+    expect(await condition(mesa4)).toBe("needs_cleaning");
   });
 
-  it("refuses Mark cleared on a party not needing clearing, and with a stale revision", async () => {
-    const venue = await setupPartyVenue(suite.db);
-    await inTx(suite, (tx) => writeClearingWorkflow(tx, true));
-    const { partyId } = await seat(venue, await venue.table("Mesa 4"));
+  it("frees the tables at once when the venue's clearing setting is off (P8)", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, false));
+    const mesa8 = await v.table("Mesa 8c");
+    const { partyId } = await seat(v, mesa8);
+    expect(await finish(partyId)).toEqual({ state: "closed" });
+    expect(await condition(mesa8)).toBe("free");
+    expect((await tableRow(v, mesa8)).needsCleaningSince).toBeNull();
+  });
 
-    expect(
-      await captureError(() =>
-        inTx(suite, (tx) => markCleared(tx, { partyId, expectedPartyRevision: 0 })),
-      ),
-    ).toMatchObject({ code: "party.not_open", params: { partyId } });
-    expect(
-      await captureError(() =>
-        inTx(suite, (tx) => markCleared(tx, { partyId, expectedPartyRevision: 5 })),
-      ),
-    ).toMatchObject({ code: "party.not_open", params: { partyId } });
+  it("frees the tables at once in a venue with no service settings row", async () => {
+    const mesa8 = await v.table("Mesa 8c");
+    const { partyId } = await seat(v, mesa8);
+    await finish(partyId);
+    expect(await condition(mesa8)).toBe("free");
+  });
 
-    await inTx(suite, (tx) =>
-      finishTable(tx, { partyId, expectedPartyRevision: 0, operatorId: OPERATOR }),
-    );
-    expect(
-      await captureError(() =>
-        inTx(suite, (tx) => markCleared(tx, { partyId, expectedPartyRevision: 0 })),
-      ),
-    ).toMatchObject({ code: "party.out_of_date", params: { partyId, revision: 1 } });
-    expect((await partyRow(suite, partyId)).state).toBe("needs_clearing");
+  it("clears a table that does not need cleaning without complaint, and changes nothing", async () => {
+    const mesa9 = await v.table("Mesa 9c");
+    const mesa11 = await v.table("Mesa 11c");
+    const { partyId, revision } = await seat(v, mesa9);
+    await inTx(v, (tx) => markTableCleared(tx, mesa9));
+    await inTx(v, (tx) => markTableCleared(tx, mesa11));
+    expect(await condition(mesa9)).toBe("held");
+    expect(await condition(mesa11)).toBe("free");
+    expect(await revisionOf(v, partyId)).toBe(revision);
+  });
+
+  it("refuses clearing a table that does not exist", async () => {
+    const unknown = randomUUID();
+    expect(await captureError(() => inTx(v, (tx) => markTableCleared(tx, unknown)))).toMatchObject({
+      code: "table.not_found",
+      params: { tableId: unknown },
+    });
+  });
+
+  it("clears the table's manual status at Finish, as today", async () => {
+    await inTx(v, (tx) => writeClearingWorkflow(tx, true));
+    const mesa10 = await v.table("Mesa 10c");
+    const { partyId } = await seat(v, mesa10);
+    await giveStatus([mesa10]);
+    await finish(partyId);
+    expect((await tableRow(v, mesa10)).statusId).toBeNull();
   });
 });
 
@@ -1202,29 +1230,35 @@ describe("occupied destinations", () => {
     return { venue, cleaning, joinedElsewhere, party };
   }
 
-  it("refuses joining a table that needs clearing or belongs to another party", async () => {
+  it("refuses joining a table that needs cleaning or belongs to another party", async () => {
     const { venue, cleaning, joinedElsewhere, party } = await busyTables();
-    for (const tableId of [cleaning, joinedElsewhere]) {
+    for (const [tableId, code] of [
+      [cleaning, "table.needs_cleaning"],
+      [joinedElsewhere, "table.occupied"],
+    ] as const) {
       const command = await commandFor(suite, party.partyId);
       expect(
         await captureError(() =>
           inTx(suite, (tx) => joinTable(tx, venue.cfg, party.tabId, tableId, command)),
         ),
-      ).toMatchObject({ code: "table.occupied", params: { tableId } });
+      ).toMatchObject({ code, params: { tableId } });
     }
     expect(await membershipsOf(party.partyId)).toHaveLength(1);
     expect(await revisionOf(suite, party.partyId)).toBe(0);
   });
 
-  it("refuses moving a party onto a table that needs clearing or belongs to another party", async () => {
+  it("refuses moving a party onto a table that needs cleaning or belongs to another party", async () => {
     const { venue, cleaning, joinedElsewhere, party } = await busyTables();
-    for (const tableId of [cleaning, joinedElsewhere]) {
+    for (const [tableId, code] of [
+      [cleaning, "table.needs_cleaning"],
+      [joinedElsewhere, "table.occupied"],
+    ] as const) {
       const command = await commandFor(suite, party.partyId);
       expect(
         await captureError(() =>
           inTx(suite, (tx) => moveTab(tx, venue.cfg, party.tabId, tableId, command)),
         ),
-      ).toMatchObject({ code: "table.occupied", params: { tableId } });
+      ).toMatchObject({ code, params: { tableId } });
     }
     expect((await membershipsOf(party.partyId)).map((m) => m.leftAt)).toEqual([null]);
   });

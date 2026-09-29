@@ -132,6 +132,7 @@ function table(
     zoneId: "z1",
     capacity: 4,
     state: tableParty === null ? "free" : "open-tab",
+    condition: tableParty === null ? "free" : "held",
     hasOpenTab: tableParty !== null,
     ...(tabId === undefined ? {} : { tabId }),
     pendingDeliveries: 0,

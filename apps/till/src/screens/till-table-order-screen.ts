@@ -3330,7 +3330,9 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #freeTables(): TableState[] {
-    return this.tables.filter((table) => table.state === "free");
+    return this.tables.filter(
+      (table) => table.state === "free" && table.condition !== "needs_cleaning",
+    );
   }
 
   /** Deduplicated BY TAB: a joined tab spans several table rows pointing at one `tabId`, and the picker

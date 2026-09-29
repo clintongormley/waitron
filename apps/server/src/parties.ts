@@ -294,7 +294,7 @@ export async function leaveTables(
     .where(and(inArray(partyTables.tableId, [...tableIds]), isNull(partyTables.leftAt)));
 }
 
-/** Whether a party holds the table, as a member of an open party or one still needing clearing. */
+/** Whether a party holds the table: an active membership row. */
 export async function tableHeld(tx: Transaction, tableId: string): Promise<boolean> {
   const [member] = await tx
     .select({ id: partyTables.id })
@@ -348,7 +348,7 @@ export async function checkAndBumpParty(
   tx: Transaction,
   partyId: string,
   expectedPartyRevision: number,
-  requiredState: "open" | "needs_clearing",
+  requiredState: "open",
 ): Promise<number> {
   const [party] = await tx
     .select({ state: parties.state, revision: parties.revision })
@@ -495,31 +495,32 @@ export async function readBillsOfParties(
 }
 
 /**
- * Take the tab pointer off every table the party holds, and with `leave` end its memberships too,
- * which frees the tables for the next party.
+ * The tables' parties have left them: their memberships end, their tab pointer and manual status go,
+ * and, where the venue's clearing setting is on, each needs cleaning from `at` until
+ * {@link markTableCleared}.
  */
-async function releaseTables(
+export async function leaveForCleaning(
   tx: Transaction,
-  partyId: string,
-  leave: { at: string } | null,
+  tableIds: readonly string[],
+  at: string,
 ): Promise<void> {
-  const members = await memberTables(tx, partyId);
-  await tx.update(diningTables).set({ tabId: null }).where(inArray(diningTables.id, members));
-  if (leave !== null) {
-    await leaveTables(tx, members, leave.at);
-  }
+  await leaveTables(tx, tableIds, at);
+  const clearing = await VENUE_SERVICE.readClearingWorkflow(tx);
+  await tx
+    .update(diningTables)
+    .set({ tabId: null, statusId: null, ...(clearing ? { needsCleaningSince: at } : {}) })
+    .where(inArray(diningTables.id, [...tableIds]));
 }
 
 /**
  * Finish the party's table: refused while any bill of the party's family is placed or open with
- * items on it; an empty open bill is abandoned. The party then closes and frees its tables, or,
- * where the venue uses the clearing workflow, keeps them as needing clearing until
- * {@link markCleared}.
+ * items on it; an empty open bill is abandoned. The party then closes and leaves its tables
+ * ({@link leaveForCleaning}).
  */
 export async function finishTable(
   tx: Transaction,
   args: { partyId: string; expectedPartyRevision: number; operatorId: string },
-): Promise<{ state: "closed" | "needs_clearing" }> {
+): Promise<{ state: "closed" }> {
   const { partyId } = args;
   await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
 
@@ -551,25 +552,24 @@ export async function finishTable(
 
   await discardPartyDrafts(tx, partyId, args.operatorId);
 
-  const state = (await VENUE_SERVICE.readClearingWorkflow(tx)) ? "needs_clearing" : "closed";
   const at = nowIso();
+  const tables = await memberTables(tx, partyId);
   await tx
     .update(parties)
-    .set({ state, closedAt: at, closedBy: args.operatorId })
+    .set({ state: "closed", closedAt: at, closedBy: args.operatorId })
     .where(eq(parties.id, partyId));
-  await releaseTables(tx, partyId, state === "closed" ? { at } : null);
-  return { state };
+  await leaveForCleaning(tx, tables, at);
+  return { state: "closed" };
 }
 
-/** A table that needed clearing is ready for the next party: the party closes and frees its tables. */
-export async function markCleared(
-  tx: Transaction,
-  args: { partyId: string; expectedPartyRevision: number },
-): Promise<void> {
-  const { partyId } = args;
-  await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "needs_clearing");
-  await tx.update(parties).set({ state: "closed" }).where(eq(parties.id, partyId));
-  await releaseTables(tx, partyId, { at: nowIso() });
+/** The table is ready for the next party. Clearing a table that does not need it is not refused. */
+export async function markTableCleared(tx: Transaction, tableId: string): Promise<void> {
+  const cleared = await tx
+    .update(diningTables)
+    .set({ needsCleaningSince: null })
+    .where(eq(diningTables.id, tableId))
+    .returning({ id: diningTables.id });
+  if (cleared.length === 0) throw new AppError("table.not_found", { tableId });
 }
 
 /** Keys a retry may change without being another command: the id itself and re-read revisions. */

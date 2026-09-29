@@ -21,10 +21,11 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
+import { writeClearingWorkflow } from "@waitron/venue-service";
 import type { ModuleRouteContext } from "@waitron/module";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { seatTable } from "./parties.js";
+import { finishTable, seatTable } from "./parties.js";
 import "./errors.js";
 
 // The `seatBooking ↔ seatTable` edge with the REAL `apps/server` `seatTable` — the one seam the
@@ -162,6 +163,56 @@ describe("bookings seat route → real seatTable", () => {
             join working_orders wo on wo.party_id = v.id where wo.id = ${tabId}`,
       );
       expect(party.rows).toEqual([{ opened_by: v.managerId, guest_count: 4, state: "open" }]);
+    });
+  });
+
+  it("refuses seating a booking at a table that needs cleaning with 409 table.needs_cleaning", async () => {
+    const v = await setupVenue();
+    const app = mountApp(v.ctx);
+    const tableId = await withTransaction(db, async (tx: Transaction) => {
+      await writeClearingWorkflow(tx, true);
+      const { id } = await createTable(tx, v.tillCfg, { label: "8" });
+      const seated = await seatTable(tx, v.tillCfg, {
+        tableId: id,
+        guestCount: 2,
+        operatorId: v.managerId,
+      });
+      await finishTable(tx, {
+        partyId: seated.partyId,
+        expectedPartyRevision: seated.revision,
+        operatorId: v.managerId,
+      });
+      return id;
+    });
+    const created = await post(app, "/management-api/bookings", v.managerCookie, {
+      bookingDate: "2026-08-20",
+      bookingTime: "21:00",
+      partySize: 2,
+      contactName: "López",
+      tableId,
+    });
+    expect(created.status).toBe(201);
+    const bookingId = ((await created.json()) as { id: string }).id;
+
+    const res = await post(app, `/management-api/bookings/${bookingId}/seat`, v.managerCookie);
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "table.needs_cleaning", params: { tableId } },
+    });
+    await withTransaction(db, async (tx) => {
+      const booking = await tx.execute<{ status: string; tab_id: string | null }>(
+        sql`select status, tab_id from bookings where id = ${bookingId}`,
+      );
+      expect(booking.rows[0]).toEqual({ status: "booked", tab_id: null });
+      const open = await tx.execute<{ n: number }>(
+        sql`select count(*) as n from parties where state = 'open'`,
+      );
+      expect(open.rows[0]!.n).toBe(0);
+      const table = await tx.execute<{ needs_cleaning_since: string | null }>(
+        sql`select needs_cleaning_since from dining_tables where id = ${tableId}`,
+      );
+      expect(table.rows[0]!.needs_cleaning_since).not.toBeNull();
     });
   });
 });

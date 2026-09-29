@@ -39,6 +39,7 @@ function table(over: Partial<TableState> = {}): TableState {
     zoneId: "z1",
     capacity: 4,
     state: "free",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,
@@ -74,6 +75,7 @@ function party(over: Partial<TableParty> = {}): TableParty {
 function seated(over: Partial<TableState> = {}, partyOver: Partial<TableParty> = {}): TableState {
   return table({
     state: "open-tab",
+    condition: "held",
     hasOpenTab: true,
     tabId: "wo-4",
     tabLineCount: 3,
@@ -211,7 +213,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .mockResolvedValue({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 }),
     getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
     finishTable: vi.fn().mockResolvedValue({ state: "closed" }),
-    markCleared: vi.fn().mockResolvedValue(undefined),
+    markTableCleared: vi.fn().mockResolvedValue(undefined),
     getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0, editSentLines: true }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
@@ -365,6 +367,21 @@ describe("till-app: seating a party", () => {
     emit(tableOrder(el)!, "join-table", { tableId: "t4" });
     await flush(el);
     expect(api.joinTable).toHaveBeenCalledWith("wo-new", "t4", { expectedPartyRevision: 0 });
+  });
+
+  it("says the table needs cleaning when seating it is refused for that, and re-reads the floor", async () => {
+    const { el } = await mountApp({
+      seatTable: vi.fn().mockRejectedValue({ code: "table.needs_cleaning", tableId: "t9" }),
+    });
+    const screen = await toFloor(el);
+    const reads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(screen, "open-table", { tableId: "t9", seated: false, guestCount: null });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("table.needs_cleaning"));
+    expect(tableOrder(el)).toBeNull();
+    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
 
   it("says why when another device seated the table first, and re-reads the floor", async () => {
@@ -1190,15 +1207,15 @@ describe("till-app: reads and refusals around the party", () => {
 
   it("says why Mark cleared was refused and re-reads the floor", async () => {
     const { el } = await mountApp({
-      markCleared: vi.fn().mockRejectedValue({ code: "party.not_open", partyId: "v1" }),
+      markTableCleared: vi.fn().mockRejectedValue({ code: "table.not_found", tableId: "t4" }),
     });
     const screen = await toFloor(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    emit(screen, "mark-cleared", { partyId: "v1", expectedPartyRevision: 6 });
+    emit(screen, "mark-cleared", { tableId: "t4" });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+    expect(banner(el)!.textContent).toContain(codeMessage("table.not_found"));
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
 
@@ -1234,16 +1251,16 @@ describe("till-app: reads and refusals around the party", () => {
   });
 });
 
-describe("till-app: a table needing clearing", () => {
-  it("marks it cleared at the revision it read and re-reads the floor", async () => {
+describe("till-app: a table needing cleaning", () => {
+  it("marks that one table cleared and re-reads the floor", async () => {
     const { el } = await mountApp();
     const screen = await toFloor(el);
     const reads = vi.mocked(api.getTablesState).mock.calls.length;
 
-    emit(screen, "mark-cleared", { partyId: "v1", expectedPartyRevision: 6 });
+    emit(screen, "mark-cleared", { tableId: "t4" });
     await flush(el);
 
-    expect(api.markCleared).toHaveBeenCalledWith("v1", 6);
+    expect(api.markTableCleared).toHaveBeenCalledExactlyOnceWith("t4");
     expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
   });
 });
@@ -1674,25 +1691,11 @@ describe("till-app: another device changed the table first", () => {
     expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "7"));
   });
 
-  it("reloads the floor and says so when Mark cleared was stale", async () => {
-    const { el } = await mountApp({
-      markCleared: vi
-        .fn()
-        .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 7 }),
-    });
-    const screen = await toFloor(el);
-    const reads = vi.mocked(api.getTablesState).mock.calls.length;
-
-    emit(screen, "mark-cleared", { partyId: "v1", expectedPartyRevision: 6 });
-    await flush(el);
-
-    expect(api.getTablesState).toHaveBeenCalledTimes(reads + 1);
-    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
-  });
-
   it.each([
     ["table.occupied", "move-tab", { toTableId: "t9" }, "moveTab"],
     ["table.occupied", "join-table", { tableId: "t9" }, "joinTable"],
+    ["table.needs_cleaning", "move-tab", { toTableId: "t9" }, "moveTab"],
+    ["table.needs_cleaning", "join-table", { tableId: "t9" }, "joinTable"],
     ["party.not_open", "split-lines", { transfers: [{ lineNo: 1 }] }, "splitTab"],
     [
       "group.held_leaves_party",

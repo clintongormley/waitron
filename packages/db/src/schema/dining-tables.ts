@@ -57,6 +57,7 @@ export const diningTables = table(
     posY: smallCount("pos_y"),
     shape: floorTableShape("shape"),
     rotation: smallCount("rotation"),
+    needsCleaningSince: tsString("needs_cleaning_since"),
   },
   (t) => [
     unique("dining_tables_location_label_key").on(t.locationId, t.label),

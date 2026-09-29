@@ -1226,6 +1226,9 @@ export interface TableState {
   capacity: number | null;
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
+  /** `held` while a party holds the table; `needs_cleaning` after Finish table with the clearing
+   * setting on, until Mark cleared. */
+  condition: "free" | "held" | "needs_cleaning";
   tabId?: string;
   tabLineCount?: number;
   tabTotal?: string;
@@ -1839,7 +1842,8 @@ export class TillApi {
   /**
    * Seat a party at a free table → `POST /api/tables/:tableId/seat`, which opens its tab. `guestCount`
    * is sent as an explicit null when none was given. A table a party already holds rejects
-   * `tab.already_open`; `table.not_found` and `table.inactive` surface as a rejected `{ code }`.
+   * `tab.already_open`; `table.not_found`, `table.inactive` and `table.needs_cleaning` surface as a
+   * rejected `{ code }`.
    */
   seatTable(tableId: string, guestCount: number | null): Promise<SeatResult> {
     return this.#request<SeatResult>(`/api/tables/${tableId}/seat`, "POST", { guestCount });
@@ -1850,17 +1854,14 @@ export class TillApi {
    * while a bill is unpaid, `party.not_open`, or `party.out_of_date` when the party changed since
    * `expectedPartyRevision` was read.
    */
-  finishTable(
-    partyId: string,
-    expectedPartyRevision: number,
-  ): Promise<{ state: "closed" | "needs_clearing" }> {
+  finishTable(partyId: string, expectedPartyRevision: number): Promise<{ state: "closed" }> {
     return this.#request(`/api/parties/${partyId}/finish`, "POST", { expectedPartyRevision });
   }
 
-  /** Free a finished party's tables → `POST /api/parties/:partyId/cleared`. Rejects `party.not_open`
-   * unless the party needs clearing, and `party.out_of_date`. */
-  async markCleared(partyId: string, expectedPartyRevision: number): Promise<void> {
-    await this.#request<void>(`/api/parties/${partyId}/cleared`, "POST", { expectedPartyRevision });
+  /** Free a table that needs cleaning → `POST /api/tables/:tableId/cleared`. A table that does not
+   * need it is left as it is; rejects `table.not_found`. */
+  async markTableCleared(tableId: string): Promise<void> {
+    await this.#request<void>(`/api/tables/${tableId}/cleared`, "POST");
   }
 
   /** Every bill of a party, merged parties' included → `GET /api/parties/:partyId/bills`. */
@@ -2134,7 +2135,8 @@ export class TillApi {
 
   /**
    * Relocate this tab's party to a FREE table → `POST /api/tabs/:tabId/move`. No line moves;
-   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`, `tab.not_open`, and
+   * PRE-FISCAL. Rejects `table.occupied`, `table.inactive`, `table.not_found`,
+   * `table.needs_cleaning`, `tab.not_open`, and
    * on a party's tab `party.not_open`, `party.out_of_date`, or `management.request_invalid` for a
    * missing revision.
    */

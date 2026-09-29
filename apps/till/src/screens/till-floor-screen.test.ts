@@ -16,6 +16,7 @@ function table(over: Partial<TableState> = {}): TableState {
     zoneId: "z1",
     capacity: 4,
     state: "free",
+    condition: "free",
     hasOpenTab: false,
     pendingDeliveries: 0,
     pendingToServe: 0,

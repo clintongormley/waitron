@@ -988,11 +988,11 @@ export async function parkOrder(
  * Open the running tab on a table. The link is the table's `tab_id` back-pointer; the order carries
  * no tab column.
  *
- * Refused while the table's `tab_id` points at an open order, and while a party still holds the
- * table (an active `party_tables` row, `left_at` null) whatever its `tab_id` points at. The
- * check-then-set below cannot interleave with a second `openTab`, because `withTransaction` IS the
- * venue file's write lock. A `tab_id` pointing at a settled or abandoned order on a table no party
- * holds is overwritten.
+ * Refused while the table needs cleaning, while its `tab_id` points at an open order, and while a
+ * party still holds the table (an active `party_tables` row, `left_at` null) whatever its `tab_id`
+ * points at. The check-then-set below cannot interleave with a second `openTab`, because
+ * `withTransaction` IS the venue file's write lock. A `tab_id` pointing at a settled or abandoned
+ * order on a table no party holds is overwritten.
  */
 export async function openTab(
   tx: Transaction,
@@ -1006,7 +1006,12 @@ export async function openTab(
   },
 ): Promise<{ tabId: string; orderNumber: number }> {
   const [table] = await tx
-    .select({ active: diningTables.active, tabId: diningTables.tabId, zoneId: diningTables.zoneId })
+    .select({
+      active: diningTables.active,
+      tabId: diningTables.tabId,
+      zoneId: diningTables.zoneId,
+      needsCleaningSince: diningTables.needsCleaningSince,
+    })
     .from(diningTables)
     .where(eq(diningTables.id, req.tableId));
   if (table === undefined) {
@@ -1014,6 +1019,9 @@ export async function openTab(
   }
   if (!table.active) {
     throw new AppError("table.inactive", { tableId: req.tableId });
+  }
+  if (table.needsCleaningSince !== null) {
+    throw new AppError("table.needs_cleaning", { tableId: req.tableId });
   }
 
   if (table.zoneId !== null) {
@@ -1036,7 +1044,7 @@ export async function openTab(
       throw new AppError("tab.already_open", { tableId: req.tableId });
     }
   }
-  // A party still holds the table after its tabs settle, until Finish table (or Mark cleared).
+  // A party still holds the table after its tabs settle, until Finish table.
   if (await tableHeld(tx, req.tableId)) {
     throw new AppError("tab.already_open", { tableId: req.tableId });
   }
@@ -2716,13 +2724,14 @@ export async function readOrderRevision(tx: Transaction, orderId: string): Promi
 }
 
 /**
- * Assert a move/join TARGET table exists, is `active`, and is FREE: its `tab_id` is null or points
- * at a settled or abandoned order, and no party holds it (an active `party_tables` row).
+ * Assert a move/join TARGET table exists, is `active`, and is FREE: it does not need cleaning, its
+ * `tab_id` is null or points at a settled or abandoned order, and no party holds it (an active
+ * `party_tables` row).
  */
 async function assertTableAvailable(
   tx: Transaction,
   cfg: TillConfig,
-  table: { tabId: string | null; active: boolean } | undefined,
+  table: { tabId: string | null; active: boolean; needsCleaningSince: string | null } | undefined,
   tableId: string,
 ): Promise<void> {
   void cfg;
@@ -2731,6 +2740,9 @@ async function assertTableAvailable(
   }
   if (!table.active) {
     throw new AppError("table.inactive", { tableId });
+  }
+  if (table.needsCleaningSince !== null) {
+    throw new AppError("table.needs_cleaning", { tableId });
   }
   if (table.tabId !== null) {
     const [pointed] = await tx
@@ -2780,6 +2792,7 @@ export async function moveTab(
       tabId: diningTables.tabId,
       active: diningTables.active,
       zoneId: diningTables.zoneId,
+      needsCleaningSince: diningTables.needsCleaningSince,
     })
     .from(diningTables)
     .where(or(eq(diningTables.id, toTableId), eq(diningTables.tabId, tabId)));
@@ -2913,6 +2926,7 @@ export async function joinTable(
       tabId: diningTables.tabId,
       active: diningTables.active,
       zoneId: diningTables.zoneId,
+      needsCleaningSince: diningTables.needsCleaningSince,
     })
     .from(diningTables)
     .where(eq(diningTables.id, tableId));
@@ -5841,6 +5855,18 @@ export interface TableParty {
   reminder: ReleaseReminder | null;
 }
 
+/** Whether a party holds the table, it waits to be cleaned, or it is free. */
+export type TableCondition = "free" | "held" | "needs_cleaning";
+
+/** Held while a party holds the table, whatever its cleaning state; else as its cleaning state says. */
+export function tableCondition(row: {
+  held: boolean;
+  needsCleaningSince: string | null;
+}): TableCondition {
+  if (row.held) return "held";
+  return row.needsCleaningSince === null ? "free" : "needs_cleaning";
+}
+
 /** One row of the occupancy read-model. */
 export interface TableState {
   id: string;
@@ -5850,6 +5876,7 @@ export interface TableState {
   /** `open-tab` while a party holds the table, whether or not its tab is still open. */
   state: "free" | "open-tab" | "delivery-pending";
   hasOpenTab: boolean;
+  condition: TableCondition;
   /** The open tab, or the settled or abandoned tab a seated party's table still points at. */
   tabId?: string;
   tabLineCount?: number;
@@ -5909,10 +5936,11 @@ export async function listTablesWithState(
     pos_y: number | null;
     shape: FloorTableShape | null;
     rotation: number | null;
+    needs_cleaning_since: string | null;
   }>(sql`
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
-      dt.pos_x, dt.pos_y, dt.shape, dt.rotation,
+      dt.pos_x, dt.pos_y, dt.shape, dt.rotation, dt.needs_cleaning_since,
       tab.id as tab_id,
       cast(coalesce(tab.line_count, 0) as int) as tab_line_count,
       tab.tab_total,
@@ -6026,6 +6054,10 @@ export async function listTablesWithState(
       capacity: r.capacity,
       state,
       hasOpenTab,
+      condition: tableCondition({
+        held: party !== undefined,
+        needsCleaningSince: r.needs_cleaning_since,
+      }),
       pendingToServe: Number(r.pending_to_serve),
       readyToServe: Number(r.ready_to_serve),
       enRoute: Number(r.en_route),

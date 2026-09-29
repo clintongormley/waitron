@@ -1,0 +1,1 @@
+ALTER TABLE `dining_tables` ADD `needs_cleaning_since` text;

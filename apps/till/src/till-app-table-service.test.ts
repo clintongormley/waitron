@@ -49,6 +49,7 @@ const openTable: TableState = {
   zoneId: "z1",
   capacity: 4,
   state: "open-tab",
+  condition: "free",
   hasOpenTab: true,
   tabId: "wo-7",
   tabLineCount: 2,
