@@ -327,8 +327,9 @@ declare module "@waitron/shared" {
     /**
      * A command carried a party revision another write has since moved past, so it was prepared
      * from a stale copy of the party; or it named a party it read at a table or on a bill where that
-     * party no longer is (`refuseMovedParty`). `revision` is the party's current one; the caller
-     * reloads and acts again. The sibling of `working_order.out_of_date`.
+     * party no longer is, or read a table free that this party now holds (`refuseMovedParty`).
+     * `revision` is the party's current one; the caller reloads and acts again. The sibling of
+     * `working_order.out_of_date`.
      */
     "party.out_of_date": { partyId: string; revision: number };
     /**

@@ -155,6 +155,23 @@ function partyOfBill(billId: string): string | null {
   )[0]!.party_id;
 }
 
+function holderOf(tableId: string): string | null {
+  return (
+    venue.db.all<{ party_id: string }>(
+      sql`select party_id from party_tables where table_id = ${tableId} and left_at is null`,
+    )[0]?.party_id ?? null
+  );
+}
+
+async function freeTable(): Promise<string> {
+  const table = await post("/api/tables", {
+    label: `Mesa ${randomUUID().slice(0, 8)}`,
+    zoneId: venue.zoneId,
+  });
+  expect(table.status).toBe(200);
+  return table.json.id as string;
+}
+
 /** An open counter order in the tables' zone, so its service mode matches a party's main bill. */
 async function counterOrder(...names: string[]): Promise<string> {
   const id = randomUUID();
@@ -789,6 +806,67 @@ describe("the move route", () => {
     });
     expect([revisionOf(ana.partyId), revisionOf(luis.partyId)]).toEqual(revisions);
     expect(partyOfBill(billId)).toBe(ana.partyId);
+  });
+
+  it("takes a move sent with the target read free (otherPartyId null) to a table still free, opening a new party there", async () => {
+    const { ana, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const to = await freeTable();
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: to },
+      expectedPartyRevision: revisionOf(ana.partyId),
+      partyId: ana.partyId,
+      otherPartyId: null,
+    });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ partyId: expect.any(String), billId, merged: false });
+    expect(answer.json.partyId).not.toBe(ana.partyId);
+    expect(partyOfBill(billId)).toBe(answer.json.partyId);
+    expect(holderOf(to)).toBe(answer.json.partyId);
+  });
+
+  it("answers a move sent with the target read free to its own party's table with 409 table.already_in_party, changing nothing", async () => {
+    const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const revisions = [revisionOf(ana.partyId), revisionOf(luis.partyId)];
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: ana.tableId },
+      expectedPartyRevision: revisions[0],
+      partyId: ana.partyId,
+      otherPartyId: null,
+    });
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({
+      code: "table.already_in_party",
+      params: { tableId: ana.tableId },
+    });
+    expect([revisionOf(ana.partyId), revisionOf(luis.partyId)]).toEqual(revisions);
+    expect(partyOfBill(billId)).toBe(ana.partyId);
+  });
+
+  it("answers a move sent with the target read free and another party's revision with 400, changing nothing", async () => {
+    const { ana, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+    const revision = revisionOf(ana.partyId);
+    const to = await freeTable();
+
+    const answer = await post(`/api/bills/${billId}/move`, {
+      to: { tableId: to },
+      expectedPartyRevision: revision,
+      partyId: ana.partyId,
+      otherPartyId: null,
+      expectedOtherPartyRevision: 3,
+    });
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "otherPartyId" },
+    });
+    expect(revisionOf(ana.partyId)).toBe(revision);
+    expect(partyOfBill(billId)).toBe(ana.partyId);
+    expect(holderOf(to)).toBeNull();
   });
 
   it("answers the other party's revision sent without its id with 400, changing nothing", async () => {

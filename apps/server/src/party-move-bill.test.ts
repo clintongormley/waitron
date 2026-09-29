@@ -647,6 +647,41 @@ describe("what a move refuses, changing nothing", () => {
     });
   });
 
+  it("refuses a table read free that a party now holds, as out of date for that party", async () => {
+    const p = await twoParties("Mesa leída libre");
+
+    const error = await refused(p, [p.second], () =>
+      move(
+        p.second,
+        { tableId: p.luisTable },
+        { otherPartyId: null, expectedOtherPartyRevision: undefined },
+      ),
+    );
+
+    expect(error).toMatchObject({
+      code: "party.out_of_date",
+      params: { partyId: p.luis.partyId, revision: await revisionOf(v, p.luis.partyId) },
+    });
+  });
+
+  it("refuses a table read free sent with another party's revision", async () => {
+    const p = await twoParties("Mesa libre con revisión");
+    const free = await v.table("Mesa libre con revisión X");
+
+    const error = await refused(
+      p,
+      [p.second],
+      () =>
+        move(p.second, { tableId: free }, { otherPartyId: null, expectedOtherPartyRevision: 3 }),
+      [free],
+    );
+
+    expect(error).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "otherPartyId" },
+    });
+  });
+
   it("refuses a bill holding a dish held for the kitchen", async () => {
     const anaTable = await v.table("Mesa retenida A");
     const ana = await seat(v, anaTable);
