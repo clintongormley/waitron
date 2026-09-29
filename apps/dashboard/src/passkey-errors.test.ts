@@ -1,6 +1,6 @@
 import { WebAuthnError } from "@simplewebauthn/browser";
 import { describe, expect, it } from "vitest";
-import { classifyPasskeyRegistrationError } from "./passkey-errors.js";
+import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "./passkey-errors.js";
 
 // Build a WebAuthnError the way @simplewebauthn/browser's identifyRegistrationError does: no explicit
 // `name`, so the constructor takes it from the wrapped DOMException's name.
@@ -62,5 +62,71 @@ describe("classifyPasskeyRegistrationError", () => {
     expect(
       classifyPasskeyRegistrationError(new Error("Registration was not completed")),
     ).toBeNull();
+  });
+
+  it("returns null, never cancelled, for a non-Error value, even one carrying a cancellation name", () => {
+    expect(
+      classifyPasskeyRegistrationError({
+        name: "NotAllowedError",
+        code: "passkey.challenge_expired",
+      }),
+    ).toBeNull();
+    expect(
+      classifyPasskeyRegistrationError({ name: "AbortError", code: "passkey.challenge_expired" }),
+    ).toBeNull();
+    expect(classifyPasskeyRegistrationError(null)).toBeNull();
+    expect(classifyPasskeyRegistrationError(undefined)).toBeNull();
+  });
+});
+
+describe("classifyPasskeySignInError", () => {
+  it("classifies a cancelled or aborted prompt as cancelled", () => {
+    expect(
+      classifyPasskeySignInError(
+        webAuthnError("NotAllowedError", "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY"),
+      ),
+    ).toBe("cancelled");
+    expect(classifyPasskeySignInError(webAuthnError("AbortError", "ERROR_CEREMONY_ABORTED"))).toBe(
+      "cancelled",
+    );
+    expect(classifyPasskeySignInError(new DOMException("x", "NotAllowedError"))).toBe("cancelled");
+    expect(classifyPasskeySignInError(new DOMException("x", "AbortError"))).toBe("cancelled");
+  });
+
+  it("classifies any other WebAuthn ceremony failure as failed", () => {
+    expect(
+      classifyPasskeySignInError(
+        webAuthnError("UnknownError", "ERROR_AUTHENTICATOR_GENERAL_ERROR"),
+      ),
+    ).toBe("failed");
+    expect(classifyPasskeySignInError(webAuthnError("SecurityError", "ERROR_INVALID_DOMAIN"))).toBe(
+      "failed",
+    );
+  });
+
+  it("classifies any other thrown Error as failed, even one carrying a string code", () => {
+    expect(classifyPasskeySignInError(new Error("WebAuthn is not supported in this browser"))).toBe(
+      "failed",
+    );
+    expect(classifyPasskeySignInError(new SyntaxError("Unexpected token '<'"))).toBe("failed");
+    expect(
+      classifyPasskeySignInError(Object.assign(new Error("x"), { code: "session.expired" })),
+    ).toBe("failed");
+  });
+
+  it("returns null for a plain object carrying a code so the caller reads it", () => {
+    expect(classifyPasskeySignInError({ code: "passkey.challenge_expired" })).toBeNull();
+    expect(classifyPasskeySignInError({ code: "connection.failed" })).toBeNull();
+  });
+
+  it("returns null, never cancelled, for a non-Error value, even one carrying a cancellation name", () => {
+    expect(
+      classifyPasskeySignInError({ name: "NotAllowedError", code: "passkey.challenge_expired" }),
+    ).toBeNull();
+    expect(
+      classifyPasskeySignInError({ name: "AbortError", code: "passkey.challenge_expired" }),
+    ).toBeNull();
+    expect(classifyPasskeySignInError(null)).toBeNull();
+    expect(classifyPasskeySignInError(undefined)).toBeNull();
   });
 });
