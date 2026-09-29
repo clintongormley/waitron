@@ -1089,9 +1089,9 @@ type FireableLine = {
 };
 
 /**
- * The order's dish lines the kitchen has not been given, in line order: never sent and holding no
- * ticket item. A held or recalled dish holds one, and a no-preparation dish is stamped sent when
- * it would have fired.
+ * The order's dish lines the kitchen has not been given, in line order: never stamped sent and
+ * holding no ticket item. A held or recalled dish that goes to a station holds one; a
+ * no-preparation dish is stamped sent when it fires, so one still held is returned.
  */
 export async function unsentDishLines(tx: Transaction, orderId: string): Promise<FireableLine[]> {
   return tx

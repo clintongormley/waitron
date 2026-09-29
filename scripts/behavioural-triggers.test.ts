@@ -634,7 +634,10 @@ describe("working_orders_enforce_transition", () => {
   });
 });
 
-/** The columns of `working_orders` the placed → placed exception does not hold unchanged. */
+/**
+ * The columns of `working_orders` the placed → placed exception's list does not name: `status`,
+ * which it requires to stay `placed`, and the three a move may change.
+ */
 const MOVABLE_ORDER_COLUMNS = new Set(["status", "party_id", "delivery_table_id", "revision"]);
 /** Every column of `working_orders` a presented bill's move must leave as it is. */
 const FROZEN_PLACED_ORDER_COLUMNS = connection
@@ -643,7 +646,7 @@ const FROZEN_PLACED_ORDER_COLUMNS = connection
   .map((row) => String(row.name))
   .filter((name) => !MOVABLE_ORDER_COLUMNS.has(name));
 
-describe("working_orders_enforce_transition's exception for a presented bill that moves whole", () => {
+describe("working_orders_enforce_transition's exception for a presented bill", () => {
   it("reads the table's columns, so the per-column cases below are not vacuous", () => {
     expect(FROZEN_PLACED_ORDER_COLUMNS).toEqual(
       expect.arrayContaining(["id", "label", "payment_attempt_at", "settled_at"]),

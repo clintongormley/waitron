@@ -114,8 +114,8 @@ export async function moveBill(
       main !== null &&
       (await isUntouched(tx, billId, moved)) &&
       (await isUntouched(tx, main)) &&
-      // A pay-first bill's unsent dishes go when it is paid, and a table bill sends none when it is
-      // paid.
+      // A table bill sends nothing when it is paid, so a pay-first or invoice-first bill's unsent
+      // dishes merged into it would never reach the kitchen.
       (await serviceModesMatch(tx, cfg, billId, main))
     ) {
       // `before` was read while the bill was still at its old tables, so the kitchen is told below.
