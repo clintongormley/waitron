@@ -3565,7 +3565,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       reach release reminders (`remind_at` and served times), the pass (`listExpoQueue`: the
       group's id, position, state and creation time) or the slow-orders list
       (`ticket_items.queued_at`). Tests: `apps/server/src/party-arriving-dishes.test.ts`. No
-      migration.
+      migration. (#882, main `5d2a93b24`.) Left by its review, not done: the earliest time is
+      picked by comparing the stored times as text, which is right only while every writer stores
+      the same `toISOString()` form (every writer found uses `nowIso()`; not proven for all); and a
+      dish recalled and fired again carries its new fire time but its old group's firer.
     - **For the owner:** an arriving held group prints no HOLD ticket in advance, though every
       other way of making a held group prints one; with "Print held groups in advance" on, it prints an
       ordinary ticket when fired, not a FIRE slip.
