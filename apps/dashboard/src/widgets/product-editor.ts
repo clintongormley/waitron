@@ -7,6 +7,7 @@ import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { VAT_CLASSES, localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
+import { PRODUCT_ORDERINGS } from "@waitron/catalogue/src/product-ordering.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
@@ -99,6 +100,7 @@ const SERVER_FIELDS: Record<string, string> = {
   primaryCategoryId: "primary",
   labelIds: "labels",
   active: "active",
+  ordering: "ordering",
   stationId: "product-station",
   courseId: "product-course",
 };
@@ -161,6 +163,7 @@ const DRAFT_ERROR_KEYS: Partial<Record<keyof ProductEditorDraft, string>> = {
   primaryCategoryId: "primary",
   labelIds: "labels",
   modifiers: "modifier",
+  ordering: "ordering",
   stationId: "product-station",
   courseId: "product-course",
 };
@@ -257,6 +260,40 @@ export class ProductEditor extends LitElement {
         display: flex;
         flex-direction: column;
         gap: var(--wt-space-2);
+      }
+      .choices {
+        min-inline-size: 0;
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+      .choices legend {
+        padding: 0;
+        margin-block-end: var(--wt-space-3);
+      }
+      /* Two columns, the radio's and the words', so the line of help sits under the choice's
+         name. */
+      .choice {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        column-gap: var(--wt-space-2);
+      }
+      /* The radio is far smaller than a finger, so the row holding it and its name is the tap
+         target (design-system.md, "Hit targets must not overflow their container"). */
+      .choice label {
+        display: grid;
+        grid-column: 1 / -1;
+        grid-template-columns: subgrid;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        cursor: pointer;
+      }
+      .choice input[type="radio"] {
+        margin: 0;
+        accent-color: var(--wt-color-primary);
+      }
+      .choice .hint {
+        grid-column: 2;
       }
       .row,
       .chips {
@@ -428,7 +465,10 @@ export class ProductEditor extends LitElement {
       await this.focusImage();
       return;
     }
-    const field = this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
+    // A radio group's field is its chosen radio, which is where the arrow keys move from.
+    const field =
+      this.shadowRoot?.querySelector<HTMLElement>(`input[name="${name}"]:checked`) ??
+      this.shadowRoot?.querySelector<HTMLElement>(`[name="${name}"]`);
     if (!field) {
       await this.focusVariantRow(name);
       return;
@@ -489,7 +529,7 @@ export class ProductEditor extends LitElement {
       ...this.locales.flatMap((locale) => [`customer-name-${locale}`, `description-${locale}`]),
     ];
     if (this.api) keys.push("image");
-    if (this.inherited === null) keys.push("labels", "modifier");
+    if (this.inherited === null) keys.push("labels", "ordering", "modifier");
     return new Set(keys);
   }
   private dismiss(...keys: string[]): void {
@@ -1029,6 +1069,38 @@ export class ProductEditor extends LitElement {
     </wt-disclosure>`;
   }
 
+  /** Who may order the product on its own. A variant is only ever ordered under its dish, so its
+   * page does not offer the choice. */
+  private renderOrdering() {
+    const error = this.error("ordering");
+    return html`<fieldset class="group choices" data-section="ordering">
+      <legend class="group-label">${t("product.ordering")}</legend>
+      ${PRODUCT_ORDERINGS.map(
+        (ordering) =>
+          html`<div class="choice">
+            <label
+              ><input
+                type="radio"
+                name="ordering"
+                value=${ordering}
+                .checked=${this.draft.ordering === ordering}
+                ?disabled=${this.suspended}
+                aria-invalid=${error ? "true" : "false"}
+                aria-describedby=${`ordering-${ordering}-hint ordering-error`}
+                @change=${(event: Event) => {
+                  event.stopPropagation();
+                  this.change("ordering", ordering);
+                }}
+              />${t(`product.ordering_${ordering}`)}</label
+            ><span class="hint" id=${`ordering-${ordering}-hint`}
+              >${t(`product.ordering_${ordering}_hint`)}</span
+            >
+          </div>`,
+      )}
+      <span class="error" id="ordering-error">${error}</span>
+    </fieldset>`;
+  }
+
   private renderTax() {
     const parent = this.inherited;
     const parentTax = parent && this.taxes.find((tax) => tax.id === parent.vatClass);
@@ -1413,6 +1485,7 @@ export class ProductEditor extends LitElement {
               (value) => this.change("available", value),
             )}
           </div>
+          ${this.inherited ? nothing : this.renderOrdering()}
           ${keyed(this.generation, this.renderKitchen())}
           ${keyed(this.generation, this.renderDescriptors())}
           ${keyed(this.generation, this.renderNutrition())} ${this.renderPrice()}

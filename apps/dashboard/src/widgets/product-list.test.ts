@@ -151,7 +151,7 @@ describe("product-list", () => {
       ["labels", true],
       ["price", true],
       ["modifiers", true],
-      ["sold-alone", true],
+      ["ordering", true],
       ["active", true],
       ["allergens", true],
     ]);
@@ -488,41 +488,97 @@ describe("product-list", () => {
     expect(text.match(new RegExp(t("editor.missing_choice"), "g"))).toHaveLength(3);
   });
 
-  it("shows a sold-on-its-own badge carrying text, not colour alone", async () => {
+  // Names differ from their ids and sort in the ids' order, so the rows read the same either way.
+  const orderings = () => [
+    product({ id: "a-dish", name: "A dish", ordering: "public" }),
+    product({ id: "b-staff", name: "B staff", ordering: "staff_only" }),
+    product({ id: "c-topping", name: "C topping", ordering: "not_sold_separately" }),
+  ];
+
+  it("shows who may order each product on its own as a badge carrying text, not colour alone", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({ id: "dish", ordering: "public" }),
-        product({ id: "topping", ordering: "not_sold_separately" }),
-      ],
+      products: orderings(),
     });
     const root = await tableRoot(el);
     const headers = [...root.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
-    expect(headers.some((header) => header.startsWith(t("product.sold_alone")))).toBe(true);
-    const badges = root.querySelectorAll<HTMLElement>("[data-test=sold-alone-badge]");
-    expect(badges.length).toBe(2);
-    expect(badges[0]!.getAttribute("data-sold-alone")).toBe("true");
-    expect(badges[1]!.getAttribute("data-sold-alone")).toBe("false");
-    expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
-    expect(badges[1]!.textContent!.trim().length).toBeGreaterThan(0);
-    expect(badges[0]!.textContent).not.toBe(badges[1]!.textContent);
+    expect(headers.some((header) => header.startsWith(t("product.ordering")))).toBe(true);
+    const badges = [...root.querySelectorAll<HTMLElement>("[data-test=ordering-badge]")];
+    expect(badges.map((badge) => [badge.dataset.ordering, badge.textContent!.trim()])).toEqual([
+      ["public", t("product.ordering_public")],
+      ["staff_only", t("product.ordering_staff_only")],
+      ["not_sold_separately", t("product.ordering_not_sold_separately")],
+    ]);
   });
 
-  it("narrows the list to the products that are, or are not, sold on their own", async () => {
+  it("names the three orderings in English and in Spanish", async () => {
+    setLocale("en-GB");
+    try {
+      const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: orderings(),
+      });
+      const root = await tableRoot(el);
+      expect(
+        [...root.querySelectorAll("[data-test=ordering-badge]")].map((b) => b.textContent!.trim()),
+      ).toEqual(["Public", "Staff only", "Not sold separately"]);
+      cleanupWidgets();
+      setLocale("es-ES");
+      const { el: spanish } = await mountWidget<ProductList>("dashboard-product-list", {
+        products: orderings(),
+      });
+      const spanishRoot = await tableRoot(spanish);
+      expect(
+        [...spanishRoot.querySelectorAll("[data-test=ordering-badge]")].map((b) =>
+          b.textContent!.trim(),
+        ),
+      ).toEqual(["Público", "Solo personal", "No se vende por separado"]);
+      expect(
+        [...spanishRoot.querySelectorAll("thead th")].some((cell) =>
+          cell.textContent!.trim().startsWith("Pedido por separado"),
+        ),
+      ).toBe(true);
+    } finally {
+      setLocale("es-ES");
+    }
+  });
+
+  // Sorted by the words, either language would put Not sold separately (No se vende) first.
+  it("sorts by ordering from the widest to the narrowest, not by the words", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
-        product({ id: "dish", ordering: "public" }),
-        product({ id: "topping", ordering: "not_sold_separately" }),
+        product({ id: "not-sold", name: "A", ordering: "not_sold_separately" }),
+        product({ id: "staff", name: "B", ordering: "staff_only" }),
+        product({ id: "public", name: "C", ordering: "public" }),
       ],
     });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    const select = root.querySelector<HTMLSelectElement>('select[data-filter="sold-alone"]')!;
-    expect([...select.options].map((option) => option.value)).toEqual(["", "true", "false"]);
-    await choose(el, "sold-alone", "false");
-    expect(rowKeys(root)).toEqual(["topping"]);
-    await choose(el, "sold-alone", "true");
-    expect(rowKeys(root)).toEqual(["dish"]);
-    await choose(el, "sold-alone", "");
-    expect(rowKeys(root)).toEqual(["dish", "topping"]);
+    root.querySelector<HTMLElement>('button[data-sort="ordering"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["public", "staff", "not-sold"]);
+  });
+
+  it("narrows the list to the products of one ordering", async () => {
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+      products: orderings(),
+    });
+    const root = await tableRoot(el);
+    const select = root.querySelector<HTMLSelectElement>('select[data-filter="ordering"]')!;
+    expect([...select.options].map((option) => [option.value, option.textContent!.trim()])).toEqual(
+      [
+        ["", t("product.filter_ordering_all")],
+        ["public", t("product.ordering_public")],
+        ["staff_only", t("product.ordering_staff_only")],
+        ["not_sold_separately", t("product.ordering_not_sold_separately")],
+      ],
+    );
+    await choose(el, "ordering", "not_sold_separately");
+    expect(rowKeys(root)).toEqual(["c-topping"]);
+    await choose(el, "ordering", "staff_only");
+    expect(rowKeys(root)).toEqual(["b-staff"]);
+    await choose(el, "ordering", "public");
+    expect(rowKeys(root)).toEqual(["a-dish"]);
+    await choose(el, "ordering", "");
+    expect(rowKeys(root)).toEqual(["a-dish", "b-staff", "c-topping"]);
   });
 
   it("keeps a product and its variants together on both sides of the filter", async () => {
@@ -534,16 +590,16 @@ describe("product-list", () => {
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
     const root = await tableRoot(el);
-    await choose(el, "sold-alone", "false");
+    await choose(el, "ordering", "not_sold_separately");
     expect(rowKeys(root)).toEqual(["bun"]);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun", "bun:small"]);
-    await choose(el, "sold-alone", "true");
+    await choose(el, "ordering", "public");
     expect(rowKeys(root)).toEqual(["dish"]);
   });
 
-  it("leaves a variant row's sold-on-its-own cell muted and out of the search", async () => {
+  it("leaves a variant row's ordering cell muted and out of the search", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "dish", ordering: "public" }),
@@ -554,11 +610,11 @@ describe("product-list", () => {
     const root = await tableRoot(el);
     root.querySelector<HTMLElement>(".tree-toggle")!.click();
     await table.updateComplete;
-    const cell = cellUnder(root, "bun:small", t("product.sold_alone"));
-    expect(cell.querySelector("[data-test=sold-alone-badge]")).toBeNull();
+    const cell = cellUnder(root, "bun:small", t("product.ordering"));
+    expect(cell.querySelector("[data-test=ordering-badge]")).toBeNull();
     expect(cell.textContent!.trim()).toBe("—");
     const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = t("product.not_sold_alone_badge");
+    search.value = t("product.ordering_not_sold_separately");
     search.dispatchEvent(new Event("input", { bubbles: true }));
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["bun"]);
@@ -1040,12 +1096,7 @@ describe("product-list", () => {
     expect(parseFloat(frame.width)).toBeGreaterThan(0);
     expect(frame.width).toBe(frame.height);
     expect(parseFloat(frame.borderTopWidth)).toBeGreaterThan(0);
-    for (const test of [
-      "active-badge",
-      "unavailable-badge",
-      "sold-alone-badge",
-      "allergen-state",
-    ]) {
+    for (const test of ["active-badge", "unavailable-badge", "ordering-badge", "allergen-state"]) {
       const badge = getComputedStyle(root.querySelector<HTMLElement>(`[data-test=${test}]`)!);
       expect(badge.display, test).toBe("inline-flex");
       expect(parseFloat(badge.borderTopWidth), test).toBeGreaterThan(0);

@@ -321,6 +321,7 @@ it("renders the sections in the designed order, with the VAT rate above the pric
     "name",
     "categories",
     "available",
+    "ordering",
     "kitchen",
     "descriptors",
     "nutrition",
@@ -1392,6 +1393,171 @@ it("sends the Available switch as available and leaves active as it was", async 
   expect(el.shadowRoot!.querySelector("[data-test=restore]")).toBeNull();
 });
 
+function orderingChoices(el: ProductEditor): HTMLInputElement[] {
+  return [
+    ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"][name="ordering"]'),
+  ];
+}
+/** Each choice's visible name and the line of help that describes it. */
+function orderingTexts(el: ProductEditor): [string, string][] {
+  return orderingChoices(el).map((radio) => [
+    radio.closest("label")!.textContent!.trim(),
+    el
+      .shadowRoot!.getElementById(radio.getAttribute("aria-describedby")!.split(" ")[0]!)!
+      .textContent!.trim(),
+  ]);
+}
+async function pickOrdering(el: ProductEditor, value: string): Promise<void> {
+  orderingChoices(el)
+    .find((radio) => radio.value === value)!
+    .click();
+  await el.updateComplete;
+}
+
+it("offers who may order the product on its own as three choices, the saved one chosen, and saves the one picked", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, id: "p1", ordering: "not_sold_separately" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const group = section(el, "ordering");
+  expect(group.tagName).toBe("FIELDSET");
+  expect(group.querySelector("legend")!.textContent!.trim()).toBe(t("product.ordering"));
+  expect(orderingChoices(el).map((radio) => [radio.value, radio.checked])).toEqual([
+    ["public", false],
+    ["staff_only", false],
+    ["not_sold_separately", true],
+  ]);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await pickOrdering(el, "staff_only");
+  expect(orderingChoices(el).map((radio) => radio.checked)).toEqual([false, true, false]);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("staff_only");
+});
+
+it("gives each ordering choice a finger-sized row, with its help under the name, clear of the radio", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: product,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  const tapMin = parseFloat(getComputedStyle(el).getPropertyValue("--wt-tap-min"));
+  expect(tapMin).toBeGreaterThan(0);
+  for (const radio of orderingChoices(el)) {
+    const row = radio.closest("label")!.getBoundingClientRect();
+    const help = el.shadowRoot!.getElementById(`ordering-${radio.value}-hint`)!;
+    const words = document.createRange();
+    words.selectNodeContents(radio.closest("label")!);
+    words.setStartAfter(radio);
+    expect(row.height, radio.value).toBeGreaterThanOrEqual(tapMin);
+    expect(help.getBoundingClientRect().left, radio.value).toBeCloseTo(
+      words.getBoundingClientRect().left,
+      0,
+    );
+    expect(help.getBoundingClientRect().left, radio.value).toBeGreaterThan(
+      radio.getBoundingClientRect().right,
+    );
+  }
+});
+
+it("starts a new product Public", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [unit],
+    taxChoices: [{ id: "general", rate: "21.00", label: "General" }],
+  });
+  expect(orderingChoices(el).find((radio) => radio.checked)?.value).toBe("public");
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  await input(el, "name", "Water");
+  await input(el, "unit-price", "1.00");
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("public");
+});
+
+it("says what each ordering choice means, Staff only working like Public until guests can order, in English and in Spanish", async () => {
+  const mount = () =>
+    mountWidget<ProductEditor>("dashboard-product-editor", {
+      open: true,
+      value: product,
+      locales: ["en"],
+      units: [unit],
+      taxChoices: reduced,
+    });
+  setLocale("en-GB");
+  try {
+    const { el } = await mount();
+    expect(section(el, "ordering").querySelector("legend")!.textContent!.trim()).toBe(
+      "Standalone ordering",
+    );
+    expect(orderingTexts(el)).toEqual([
+      ["Public", "Can be ordered on its own."],
+      [
+        "Staff only",
+        "Only staff can order it on its own. Until guests can order for themselves, this works like Public.",
+      ],
+      ["Not sold separately", "Only as an extra on another dish."],
+    ]);
+    cleanupWidgets();
+    setLocale("es-ES");
+    const { el: spanish } = await mount();
+    expect(section(spanish, "ordering").querySelector("legend")!.textContent!.trim()).toBe(
+      "Pedido por separado",
+    );
+    expect(orderingTexts(spanish)).toEqual([
+      ["Público", "Se puede pedir por sí solo."],
+      [
+        "Solo personal",
+        "Solo el personal puede pedirlo por sí solo. Mientras los clientes no puedan pedir por su cuenta, funciona igual que Público.",
+      ],
+      ["No se vende por separado", "Solo como extra de otro plato."],
+    ]);
+  } finally {
+    setLocale("es-ES");
+  }
+});
+
+it("puts a refusal of the ordering under its choices, focusing the chosen one, until another is picked", async () => {
+  expect(productEditorField("ordering", "es")).toBe("ordering");
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    value: { ...product, ordering: "staff_only" },
+    locales: ["en"],
+    units: [unit],
+    taxChoices: reduced,
+  });
+  el.fieldErrors = { ordering: t("editor.field_rejected") };
+  await el.updateComplete;
+  const radios = orderingChoices(el);
+  expect(radios.map((radio) => radio.getAttribute("aria-invalid"))).toEqual([
+    "true",
+    "true",
+    "true",
+  ]);
+  const describedBy = radios[0]!.getAttribute("aria-describedby")!.split(" ");
+  expect(el.shadowRoot!.getElementById(describedBy.at(-1)!)!.textContent!.trim()).toBe(
+    t("editor.field_rejected"),
+  );
+  await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("ordering");
+  expect((el.shadowRoot!.activeElement as HTMLInputElement).value).toBe("staff_only");
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+
+  await pickOrdering(el, "not_sold_separately");
+  expect(radios.map((radio) => radio.getAttribute("aria-invalid"))).toEqual([
+    "false",
+    "false",
+    "false",
+  ]);
+  expect(el.shadowRoot!.getElementById("ordering-error")!.textContent!.trim()).toBe("");
+  expect(await bottomOf(el)).toBe("");
+});
+
 it("creates a new product Active", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
@@ -2080,6 +2246,17 @@ it("titles a variant's page as a variant, with no Modifiers and no Variants sect
   expect(section(el, "modifiers")).toBeNull();
   expect(el.shadowRoot!.querySelector("[data-test=add-variant]")).toBeNull();
   expect(variantTable(el)).toBeNull();
+});
+
+// Who may order a dish on its own is read from the dish; a variant is only ever ordered under it.
+it("shows no standalone ordering choice on a variant's page, and keeps the variant's own value", async () => {
+  const el = await mountVariant({ ...glass, ordering: "public" });
+  expect(section(el, "ordering")).toBeNull();
+  expect(orderingChoices(el)).toEqual([]);
+  const submit = vi.fn();
+  el.addEventListener("wt-submit", submit);
+  save(el);
+  expect(submit.mock.calls[0]![0].detail.value.ordering).toBe("public");
 });
 
 it("shows a variant's inherited price and description empty, with the parent's value as the hint", async () => {
