@@ -301,10 +301,10 @@ describe("waitron.sh install and the print agent's AppArmor profile", () => {
     const r = run(sb, ["install", "my-branch"]);
     expect(r.status).toBe(0);
     const log = calls(sb);
-    const fetched = log.findIndex((c) =>
-      c.includes(
-        "https://raw.githubusercontent.com/clintongormley/waitron/my-branch/deploy/apparmor/waitron-print-agent",
-      ),
+    const profileUrl =
+      "https://raw.githubusercontent.com/clintongormley/waitron/my-branch/deploy/apparmor/waitron-print-agent";
+    const fetched = log.findIndex(
+      (c) => c.startsWith("curl ") && c.split(" ").includes(profileUrl),
     );
     const installed = log.findIndex(
       (c) => c.startsWith("install -m 0644 ") && c.endsWith(` ${PROFILE}`),
