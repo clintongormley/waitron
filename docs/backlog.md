@@ -4340,7 +4340,7 @@ approved.
 ### B6. The print-agent process
 
 - **The print agent runs under its own AppArmor profile, and says when it cannot reach BlueZ — BUILT
-  (A129).** On the owner's box (2026-09-29) Docker's default profile refused the agent's system-bus
+  (A129, #862).** On the owner's box (2026-09-29) Docker's default profile refused the agent's system-bus
   `Hello`, so `bluetoothctl` aborted and the agent silently listed no Bluetooth printers.
   `deploy/apparmor/waitron-print-agent` is Moby's `docker-default` template (moby/profiles at
   `f0494f1fbb1bbaf2e1b02ee20aab206f32456a63`) plus the bus rules `bluetoothctl
@@ -4373,6 +4373,14 @@ approved.
     folder Ubuntu 24.04's `apparmor.service` loads from before `sysinit.target`; no box has been
     restarted with it. If a restart does not reload it, `.env` still names it and Docker will refuse
     to start the print agent.
+  - **A failed Bluetooth scan throws away the USB and network printers found in the same scan**
+    (found by #862's Codex review, which saw `main` do the same; not changed there).
+    `createLinuxDevices`'s `scan()` (`apps/print-agent/src/linux-devices.ts`) awaits the Bluetooth
+    scan last with no catch, and the loop's `scan failed` catch in
+    `packages/print-agent/src/agent.ts` then reports nothing for that pass. Under the shipped
+    profile a box whose BlueZ has no controller now reaches that throw. **Next action:** catch the
+    Bluetooth part inside `scan()`, keep the other results, and test it with a throwing Bluetooth
+    fake beside a USB fixture.
   - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
     the agent has joined and is not out of touch, `/status.json` answers only loopback callers
     (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
