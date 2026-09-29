@@ -6058,12 +6058,14 @@ approved.
   created without complaint and fails only when it first fires. The guard pins media's
   `menu_publications` body edge and has a negative control for each statement shape. It remains a
   text scanner, not a SQL parser; its syntax limits are stated in `CLAUDE.md`.
-- **A top-level migration write can name another module's table without a declared dependency — OPEN (A90 review).**
-  `scripts/module-graph-honesty.test.ts` scans foreign keys, trigger targets and five table
-  reference shapes inside trigger bodies; its negative controls leave top-level `INSERT INTO`,
-  `UPDATE` and `DELETE FROM` outside that scan. The A90 review found no cross-module top-level
-  write in current migrations. **Next action:** add a red-first cross-module migration fixture and
-  detect top-level write targets without treating a trigger's header or comments as writes.
+- **Detect plain top-level migration writes across modules — DONE (A127).**
+  `scripts/module-graph-honesty.test.ts` combines the existing foreign-key/trigger detector with
+  a top-level write detector for plain `INSERT INTO`, `UPDATE` and `DELETE FROM`. The original
+  detector's assertions stay intact; the combined scan has cross-module write fixtures and
+  controls for comments, literals, trigger headers/bodies, reads and same-module writes.
+  The text scanner still misses WITH-prefixed writes, REPLACE and INSERT/UPDATE OR variants,
+  bracket-quoted identifiers and the SQL-stripping cases already listed above. No migration
+  or descriptor changes accompany this guard change.
 - **The topic files still carry PostgreSQL history — OPEN, owner's call (2026-09-23, from #496).**
   #496 took it out of `CLAUDE.md` and fixed every topic-file passage that contradicted the new
   `CLAUDE.md`, but did not sweep `docs/developers/conventions-data.md` or `testing-guide.md`, which
