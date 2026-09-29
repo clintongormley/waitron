@@ -574,6 +574,20 @@ test("labels a token's unsent-order mark from its default copy, or the consumer'
   expect(mark()).toBe("Sin enviar: Alex");
 });
 
+test("labels a token's fire-due chip from its default copy, or the consumer's word", async () => {
+  const el = await mountCanvas([oneTable("t1", { state: "open-tab", fireDue: true })]);
+  const token = () =>
+    tokenEl(el, "t1").querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "wt-table-token",
+    )!;
+  const chip = () => token().shadowRoot!.querySelector("[data-fire-due]")!.textContent!.trim();
+  expect(chip()).toBe("Time to fire");
+  el.copy = { fireDue: "Fire now" };
+  await el.updateComplete;
+  await token().updateComplete;
+  expect(chip()).toBe("Fire now");
+});
+
 test("the palette offers the three shapes in order, each under its own name", async () => {
   const el = await mountCanvas([oneTable("t1")], { editable: true });
   tokenEl(el, "t1").click();

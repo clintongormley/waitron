@@ -43,6 +43,8 @@ export interface FloorTable {
   unsentDrafts?: readonly string[];
   /** The name of the party seated there, shown under the table's label. */
   partyName?: string;
+  /** The seated party's release reminder has fallen due. */
+  fireDue?: boolean;
 }
 
 /** A table's spatial placement — the mutable subset an edit-mode gesture produces. */
@@ -150,6 +152,7 @@ export interface FloorOccupancyInput {
   timingBand?: TimingBand;
   unsentDrafts?: readonly string[];
   partyName?: string;
+  fireDue?: boolean;
 }
 
 export function toFloorTable(
@@ -173,5 +176,6 @@ export function toFloorTable(
     reservedTime: occupancy.reservedTime ?? null,
     unsentDrafts: occupancy.unsentDrafts,
     partyName: occupancy.partyName,
+    fireDue: occupancy.fireDue,
   };
 }

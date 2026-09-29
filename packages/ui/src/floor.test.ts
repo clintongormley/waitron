@@ -243,6 +243,23 @@ test("toFloorTable carries the party's name through the occupancy half", () => {
   expect(free.partyName).toBeUndefined();
 });
 
+test("toFloorTable carries whether a party's release reminder is due through the occupancy half", () => {
+  const placement = {
+    id: "t1",
+    label: "4",
+    capacity: 4,
+    posX: 200,
+    posY: 300,
+    shape: "rect" as const,
+    rotation: 0,
+    zoneId: "z1",
+  };
+  const occupancy = { state: "open-tab" as const, pendingToServe: 0, status: null };
+  expect(toFloorTable(placement, { ...occupancy, fireDue: true }).fireDue).toBe(true);
+  expect(toFloorTable(placement, { ...occupancy, fireDue: false }).fireDue).toBe(false);
+  expect(toFloorTable(placement, occupancy).fireDue).toBeUndefined();
+});
+
 test("toFloorTable defaults null coordinates to 0 and a missing tab total to null", () => {
   const table = toFloorTable(
     {

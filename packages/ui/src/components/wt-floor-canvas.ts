@@ -24,6 +24,7 @@ export interface FloorCanvasCopy {
   reserved: string;
   /** The unsent-order mark's text; its accessible name adds the names: "Unsent: Alex". */
   unsent: string;
+  fireDue: string;
   zone: string;
   rotate: string;
   remove: string;
@@ -40,6 +41,7 @@ const DEFAULT_COPY: FloorCanvasCopy = {
   toServe: "to serve",
   reserved: "Reserved",
   unsent: "Unsent",
+  fireDue: "Time to fire",
   zone: "Zone",
   rotate: "Rotate",
   remove: "Remove from plan",
@@ -293,6 +295,7 @@ export class WtFloorCanvas extends LitElement {
             toServe: copy.toServe,
             reserved: copy.reserved,
             unsent: copy.unsent,
+            fireDue: copy.fireDue,
           }}
         ></wt-table-token>
       </button>

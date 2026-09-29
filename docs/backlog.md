@@ -3107,8 +3107,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         finish-branch run-it review called it with and without a due reminder and got identical
         data. The table screen's Current orders shows it on the waiting group once it has a time:
         the time it falls due, then Snooze and, where waiters fire held groups, Fire; while it is
-        snoozed, also Clear snooze (A120). **Next action:** a mark on the table's token when a
-        party's reminder is due.
+        snoozed, also Clear snooze (A120). **DONE (campaign item A117):** once a party's reminder
+        falls due, the floor shows a "Time to fire" chip (`floor.fire_due`) on the table's list
+        card and on its map and tray token, and nothing before then; the floor redraws itself at
+        the moment the next reminder falls due, without waiting for a new floor read.
       - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
         group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
         (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
