@@ -776,7 +776,7 @@ services screen now follows design-system.md's "Typography roles" table, as
 bold. A computed-style case in `cloud-services-screen.test.ts` checks every label and value on a
 screen showing a completed replacement.
 
-**Fixed (C76): the Cloud services and Backups screens, and the Backups screen's bucket-copy
+**Fixed (C76, #879): the Cloud services and Backups screens, and the Backups screen's bucket-copy
 panel, write their dates in the dashboard's language, not the browser's.** Found by C75: with
 Spanish chosen in the dashboard, a browser set to US English showed "9/29/2026, 1:43:33 PM". Each
 date now passes `currentLocale()` to `toLocaleString`, as `formatAlertTime`
