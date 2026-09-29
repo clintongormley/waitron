@@ -3876,7 +3876,7 @@ ongoing overhaul listed at the top of Track A.
   at the bottom: `purchase.duplicate` (supplier tax id and invoice number), a purchase line's rate,
   base, tax or type, a variant price on the menu price window, `hours.N` on venue operations,
   `provisioning.duplicate_series_code` and `territory_country_mismatch` on the setup venue screen;
-  (4) **DONE (C63, 2026-09-29):** the backup screen's retention boxes are checked by the form on
+  (4) **DONE (C63, #860, 2026-09-29):** the backup screen's retention boxes are checked by the form on
   Apply and on Save. A box is valid when `Number()` reads its text as a whole number of at least 1
   and no larger than JavaScript's safe-integer limit, so `7.0` and `1e2` are accepted and sent as 7
   and 100. A blank, zero, negative or fractional box sends nothing and says "Enter a whole number of
@@ -3897,7 +3897,10 @@ ongoing overhaul listed at the top of Track A.
   from the two retention boxes and the configuration-export passphrases, the form's inputs (the
   destination folder, the pasted key, the saved-it tick, and the day and time choices) carry no
   `name`; and the screen does not submit on Enter (`submitOnEnter`, which design-system.md → "Submit
-  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); (5) the setup connect screen comes back EMPTY after a
+  ordinary forms with Enter" asks for and `stream-settings-panel.ts` uses); the two retention boxes
+  are hand-built `<input type="number">`s rather than the shared `wt-input` that Forms prefers, left
+  so because switching changes how an older test fills them in; and no test covers only the second
+  box being invalid, or where focus lands after a failed check on the Save form (#860's review); (5) the setup connect screen comes back EMPTY after a
   refusal — the shell rebuilds it — so the refused field is marked on an empty input (seen with a
   throwaway test during C54, `apps/setup/src/setup-app.ts` `#renderScreen` "connect"); (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
