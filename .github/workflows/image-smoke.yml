@@ -261,14 +261,16 @@ jobs:
           grep -q 'connection != NULL' "$RUNNER_TEMP/bt-control.txt"
           if grep -q "CI Printer" "$RUNNER_TEMP/bt-control.txt"; then exit 1; fi
 
-      # What the agent's Pair and Forget run, under the shipped profile: interactive bluetoothctl over
-      # pipes answers the stand-in's PIN request, and `remove` forgets the printer again. A D-Bus
+      # What an operator's interactive `scan off` and the agent's Pair and Forget run, under the shipped
+      # profile: interactive bluetoothctl over pipes stops a scan it started and answers the stand-in's
+      # PIN request, the stand-in follows the pairing with its `Disconnected` signals, and `remove`
+      # forgets the printer again. A D-Bus
       # refusal reaches the kernel log through the kernel's printk rate limit, which drops lines: in
       # probe run 36585218089, under the previous rules in complain mode, one pairing and two removes
       # logged one AppArmor line with the limit on and nine with it off. So it is switched off first. `trust`, which the profile does
       # not allow, is the control: it must never reach the stand-in, its refusal must reach the log,
       # and it must be the only refusal logged since the count was taken.
-      - name: The print agent pairs a PIN printer and forgets it under its profile, and is still refused what the profile does not list
+      - name: The print agent stops a scan, pairs a PIN printer and forgets it under its profile, and is still refused what the profile does not list
         run: |
           set -euo pipefail
           agent=$(docker compose ps -q print-agent)
@@ -276,10 +278,18 @@ jobs:
           refusals() { sudo dmesg | grep 'apparmor="DENIED"' | grep 'label="waitron-print-agent"' || true; }
           before=$(refusals | wc -l)
 
+          stops() { grep -c "fake bluez: StopDiscovery /org/bluez/hci0" "$RUNNER_TEMP/fake-bluez.log" || true; }
+          stopped=$(stops)
+          { sleep 2; echo "scan on"; sleep 2; echo "scan off"; sleep 2; echo quit; } \
+            | docker exec -i "$agent" bluetoothctl > "$RUNNER_TEMP/bt-scan-off.txt" 2>&1
+          cat "$RUNNER_TEMP/bt-scan-off.txt"
+          [ "$(stops)" -gt "$stopped" ]
+
           docker cp scripts/bluetoothctl-pair.mjs "$agent:/tmp/bluetoothctl-pair.mjs"
           docker exec "$agent" node /tmp/bluetoothctl-pair.mjs 86:67:7A:00:00:01 1234 | tee "$RUNNER_TEMP/bt-pair.txt"
           grep -q "Pairing successful" "$RUNNER_TEMP/bt-pair.txt"
           grep -q "fake bluez: RequestPinCode reply '1234'" "$RUNNER_TEMP/fake-bluez.log"
+          grep -q "fake bluez: Disconnected /org/bluez/hci0/dev_86_67_7A_00_00_01" "$RUNNER_TEMP/fake-bluez.log"
 
           docker exec "$agent" bluetoothctl remove 86:67:7A:00:00:01 | tee "$RUNNER_TEMP/bt-forget.txt"
           grep -q "Device has been removed" "$RUNNER_TEMP/bt-forget.txt"

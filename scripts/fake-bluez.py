@@ -12,11 +12,15 @@
 # Every failure it chooses to report — a wrong PIN, no agent, an agent's error reply, and no reply
 # within FAKE_BLUEZ_AGENT_TIMEOUT_MS (default 60000), after which it sends `Agent1.Cancel` — is
 # `AuthenticationFailed`. That is its own choice, not what bluetoothd was measured to return.
-# `RemoveDevice`, `Properties.Set` and each agent exchange print a `fake bluez:` line, so a check can
-# tell whether a call reached it.
+# A pairing that succeeds is followed by `Disconnected` signals on the device's `org.bluez.Device1`
+# and `org.bluez.Bearer.BREDR1`, as on the owner's box after a real pairing (2026-09-29, BlueZ newer
+# than the image's bluetoothctl 5.82); their arguments are the stand-in's own.
+# `StopDiscovery`, `RemoveDevice`, `Properties.Set` and each agent exchange print a `fake bluez:`
+# line, so a check can tell whether a call reached it.
 import os
 
 import dbus
+import dbus.lowlevel
 import dbus.mainloop.glib
 import dbus.service
 from gi.repository import GLib
@@ -102,7 +106,7 @@ class Adapter(dbus.service.Object):
 
     @dbus.service.method("org.bluez.Adapter1")
     def StopDiscovery(self):
-        pass
+        log("StopDiscovery " + ADAPTER)
 
     @dbus.service.method("org.bluez.Adapter1", in_signature="a{sv}")
     def SetDiscoveryFilter(self, f):
@@ -187,6 +191,12 @@ class Device(dbus.service.Object):
         self.PropertiesChanged("org.bluez.Device1", {"Bonded": True, "Paired": True},
                                dbus.Array([], signature="s"))
         log("Pair %s -> success" % self.path)
+        # Before the reply, so the bluetoothctl that asked is still on the bus to receive them.
+        for iface in ("org.bluez.Bearer.BREDR1", "org.bluez.Device1"):
+            signal = dbus.lowlevel.SignalMessage(self.path, iface, "Disconnected")
+            signal.append("fake-reason", "fake bluez", signature="ss")
+            bus.send_message(signal)
+        log("Disconnected %s" % self.path)
         ok()
 
     @dbus.service.method("org.bluez.Device1", sender_keyword="sender",
