@@ -1382,12 +1382,15 @@ export async function recordGroupEvent(
  * A bill that has just arrived in the party gets groups for its dishes that have none, so the pass
  * can mark them and the waiter can release what is unsent: its released dishes ({@link isReleased})
  * go in one new fired group, and the rest in one new held group per course, because firing a course
- * releases whole every held group holding one of its dishes on that bill. The groups follow the
- * party's last one in firing order: fired, then held with no course (which fires earliest), then by
- * course. An extras line takes its dish's group. The fired group takes its earliest-fired dish's
- * firing — its kitchen item's, else its sent time — and, as its firer, who `firers` says fired that
- * dish's group in the party it left (by line id), else the operator. The caller has moved the
- * party's revision on.
+ * releases whole every held group holding one of its dishes on that bill. A dish with no course
+ * goes in the held group of the earliest ACTIVE course among the waiting dishes, as the till's
+ * order screen files it (`draftSections`, `apps/till/src/state/draft-groups.ts`), which is given
+ * active courses only; with none active, the earliest course's, where the till instead makes one
+ * section with no course; and in a held group of its own only when no waiting dish has a course.
+ * The groups follow the party's last one in firing order: fired, then held by course. An extras
+ * line takes its dish's group. The fired group takes its earliest-fired dish's firing — its kitchen
+ * item's, else its sent time — and, as its firer, who `firers` says fired that dish's group in the
+ * party it left (by line id), else the operator. The caller has moved the party's revision on.
  */
 export async function groupArrivingDishes(
   tx: Transaction,
@@ -1400,6 +1403,7 @@ export async function groupArrivingDishes(
     .select({
       id: workingOrderLines.id,
       courseId: workingOrderLines.courseId,
+      courseActive: kitchenCourses.active,
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
@@ -1428,6 +1432,13 @@ export async function groupArrivingDishes(
       if (course === undefined) heldByCourse.set(line.courseId, [line]);
       else course.push(line);
     }
+  }
+  const loose = heldByCourse.get(null);
+  const courses = [...heldByCourse.values()].filter((lines) => lines[0]!.courseId !== null);
+  const earliest = courses.find((lines) => lines[0]!.courseActive === true) ?? courses[0];
+  if (loose !== undefined && earliest !== undefined) {
+    earliest.push(...loose);
+    heldByCourse.delete(null);
   }
   const fired = await groupArrived(tx, partyId, billId, released, "fire", operatorId, firers);
   const held: string[] = [];

@@ -3649,7 +3649,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     released to the kitchen in ONE new fired group, and dishes not yet released in one new held
     group PER COURSE, because firing a course releases whole every held group holding one of its
     dishes on that bill; the waiter releases them as any held group. The new groups go fired first, then held
-    with no course, then by course. "Released" is what Current orders and serving already use
+    by course (a dish with no course: see C80 below). "Released" is what Current orders and serving already use
     (`isReleased`, `apps/server/src/working-order.ts`): a kitchen item decides, fired or not; with no kitchen item, the line's `sent_at`. Nothing is sent or held by it, an extras line
     takes its dish's group, and each group made records a `lines_moved` event with
     `{ workingOrderId, arrived: true }`. A presented bill's lines change group only (migration
@@ -3684,6 +3684,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       whose HOLD ticket was queued already fires with a FIRE slip. With the setting off, the
       dishes in those held groups print nothing at the move: no HOLD ticket. Tests:
       `apps/server/src/party-arriving-dishes.test.ts`. No migration. (#883, main `ff66222fc`.)
+    - **DONE (C80, 2026-09-29): a waiting dish with no course joins the earliest ACTIVE course's
+      held group**, as the till's order screen files a dish with no course under the earliest
+      course among the draft's lines that the till lists (it lists active courses only;
+      `draftSections`, `apps/till/src/state/draft-groups.ts`), so firing that course sends it and
+      firing a later one does not. An earlier inactive course among the waiting dishes is passed
+      over. When none of the waiting dishes' courses is active, a dish with no course joins the
+      earliest of them; only when no waiting dish on the bill has a course do the ones with none
+      keep a held group of their own. "Earliest" is the course order `groupArrivingDishes` already
+      reads: display order, then name. Tests: `apps/server/src/party-arriving-dishes.test.ts`,
+      including a case with an earlier inactive course and a later active one, where firing the
+      active course sends the dish with no course, and a case where the only waiting course is
+      inactive; one Task 9 case there expected the old separate group and now expects the one
+      group (the owner's decision, 2026-09-29). No migration. Still different, read from
+      `draftSections` and `groupArrivingDishes` and not compared with a running till: the till
+      also files a dish whose course it does not list (an inactive course) under the earliest
+      course it lists among the draft's lines, while here such a dish keeps its own held group;
+      and when the till lists none of the draft's courses it makes one section with no course,
+      while here each inactive course keeps its own held group and a dish with no course joins the
+      earliest of them.
     - **Which dishes arrive unsent changed with Task 7.** An open counter order moved into table
       service has its dishes sent at the move (Task 7), so it arrives in a FIRED group, not the
       held group the plan's Task 9 expected; a later course's dish, held for its course, arrives

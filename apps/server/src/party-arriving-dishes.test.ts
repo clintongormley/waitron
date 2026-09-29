@@ -16,7 +16,7 @@ import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { writePrintHeldWork } from "@waitron/venue-service";
 import { splitBill } from "./bill-actions.js";
-import { createCourse } from "./kitchen.js";
+import { createCourse, deactivateCourse } from "./kitchen.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
 import {
   bumpGroupReady,
@@ -391,6 +391,166 @@ describe("dishes arriving in a party (A96, P16)", () => {
     );
   });
 
+  it("files a moved bill's waiting dish with no course in its earliest waiting course's held group", async () => {
+    const ana = await seat(v, await v.table("Sin curso 1"));
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, ana.tabId, [
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+        { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+        { menuItemId: v.item("Burger"), quantity: "1", hold: true },
+        { menuItemId: v.item("Tarta"), quantity: "1", courseId: principales },
+      ]),
+    );
+    const mesa = await v.table("Sin curso 2");
+    const luis = await seat(v, mesa);
+    const [burger, flan, loose, tarta] = await lineRows(ana.tabId);
+    expect([loose!.courseId, loose!.sentAt]).toEqual([null, null]);
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    const groups = await groupsOf(luis.partyId);
+    expect(groups.map((g) => [g.state, g.position])).toEqual([
+      ["fired", 1],
+      ["held", 2],
+      ["held", 3],
+    ]);
+    const [fired, heldPrincipales, heldPostres] = groups;
+    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+      [burger!.id, fired!.id],
+      [flan!.id, heldPostres!.id],
+      [loose!.id, heldPrincipales!.id],
+      [tarta!.id, heldPrincipales!.id],
+    ]);
+
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, OPERATOR));
+
+    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, flan!.id].sort(),
+    );
+
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, principales, OPERATOR));
+
+    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, flan!.id, loose!.id, tarta!.id].sort(),
+    );
+  });
+
+  it("keeps a moved bill's waiting dishes with no course in one held group when no waiting dish has a course", async () => {
+    const ana = await seat(v, await v.table("Sin curso 3"));
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, ana.tabId, [
+        { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+        { menuItemId: v.item("Burger"), quantity: "1", hold: true },
+        { menuItemId: v.item("Flan"), quantity: "1", hold: true },
+      ]),
+    );
+    const mesa = await v.table("Sin curso 4");
+    const luis = await seat(v, mesa);
+    const [burger, loose, flan] = await lineRows(ana.tabId);
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    const groups = await groupsOf(luis.partyId);
+    expect(groups.map((g) => [g.state, g.position])).toEqual([
+      ["fired", 1],
+      ["held", 2],
+    ]);
+    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+      [burger!.id, groups[0]!.id],
+      [loose!.id, groups[1]!.id],
+      [flan!.id, groups[1]!.id],
+    ]);
+  });
+
+  it("files a moved bill's waiting dish with no course under the earliest ACTIVE waiting course, passing over an earlier inactive one", async () => {
+    const retired = await inTx(
+      v,
+      async (tx) => (await createCourse(tx, v.cfg, { name: "Segundos", displayOrder: 2 })).id,
+    );
+    const ana = await seat(v, await v.table("Sin curso 5"));
+    try {
+      await inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, ana.tabId, [
+          { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+          { menuItemId: v.item("Tarta"), quantity: "1", courseId: retired },
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+          { menuItemId: v.item("Burger"), quantity: "1", hold: true },
+        ]),
+      );
+    } finally {
+      // The venue is shared by the whole file.
+      await inTx(v, (tx) => deactivateCourse(tx, v.cfg, retired));
+    }
+    const mesa = await v.table("Sin curso 6");
+    const luis = await seat(v, mesa);
+    const [burger, tarta, flan, loose] = await lineRows(ana.tabId);
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    const groups = await groupsOf(luis.partyId);
+    expect(groups.map((g) => [g.state, g.position])).toEqual([
+      ["fired", 1],
+      ["held", 2],
+      ["held", 3],
+    ]);
+    const [fired, heldRetired, heldPostres] = groups;
+    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+      [burger!.id, fired!.id],
+      [tarta!.id, heldRetired!.id],
+      [flan!.id, heldPostres!.id],
+      [loose!.id, heldPostres!.id],
+    ]);
+
+    await inTx(v, (tx) => fireCourse(tx, v.cfg, ana.tabId, postres, OPERATOR));
+
+    expect((await firedTicketsOf(ana.tabId)).map((t) => t.lineId).sort()).toEqual(
+      [burger!.id, flan!.id, loose!.id].sort(),
+    );
+  });
+
+  it("files a moved bill's waiting dish with no course under the earliest of its waiting courses when none of them is active, leaving the later one its own held group", async () => {
+    const [terceros, cuartos] = await inTx(v, async (tx) => [
+      (await createCourse(tx, v.cfg, { name: "Terceros", displayOrder: 2 })).id,
+      (await createCourse(tx, v.cfg, { name: "Cuartos", displayOrder: 4 })).id,
+    ]);
+    const ana = await seat(v, await v.table("Sin curso 7"));
+    try {
+      await inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, ana.tabId, [
+          { menuItemId: v.item("Burger"), quantity: "1", courseId: entrantes },
+          { menuItemId: v.item("Tarta"), quantity: "1", courseId: terceros },
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: cuartos },
+          { menuItemId: v.item("Burger"), quantity: "1", hold: true },
+        ]),
+      );
+    } finally {
+      // The venue is shared by the whole file.
+      await inTx(v, async (tx) => {
+        await deactivateCourse(tx, v.cfg, terceros);
+        await deactivateCourse(tx, v.cfg, cuartos);
+      });
+    }
+    const mesa = await v.table("Sin curso 8");
+    const luis = await seat(v, mesa);
+    const [burger, tarta, flan, loose] = await lineRows(ana.tabId);
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    const groups = await groupsOf(luis.partyId);
+    expect(groups.map((g) => [g.state, g.position])).toEqual([
+      ["fired", 1],
+      ["held", 2],
+      ["held", 3],
+    ]);
+    const [fired, heldTerceros, heldCuartos] = groups;
+    expect((await lineRows(ana.tabId)).map((l) => [l.id, l.groupId])).toEqual([
+      [burger!.id, fired!.id],
+      [tarta!.id, heldTerceros!.id],
+      [flan!.id, heldCuartos!.id],
+      [loose!.id, heldTerceros!.id],
+    ]);
+  });
+
   it("puts an open counter order's dishes, sent to the kitchen at the move, in one new fired group", async () => {
     const mesa = await v.table("Mostrador 1");
     const ana = await seat(v, mesa);
@@ -534,13 +694,12 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(groups.map((g) => [g.id, g.state])).toEqual([
       [made.fired, "fired"],
       [made.held[0], "held"],
-      [made.held[1], "held"],
     ]);
     expect((await lineRows(ana.tabId)).map((l) => [l.lineNo, l.groupId])).toEqual([
       [1, made.held[0]],
       [2, made.fired],
       [3, made.held[0]],
-      [4, made.held[1]],
+      [4, made.held[0]],
     ]);
   });
 

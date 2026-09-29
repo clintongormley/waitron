@@ -513,6 +513,9 @@ flagged for the owner in their PRs.**
     can release the unsent ones.
     - (2026-09-29: Task 7 changed which arriving dishes are sent; see the dated note before Task
       9's Step 1.)
+    - (2026-09-29, C80: unsent dishes go in one held group per course, and a dish with no course in
+      the held group of the earliest active course among them, else the earliest course's; see
+      docs/backlog.md.)
 - **P17. MOVED notices.** Before a table action, read the sent work of every bill of every party
   whose tables will change. Afterwards, call today's `enqueueMovedSlips` for each of those bills, and
   for the moved bill after a bill move. The per-bill label comparison stays, so only dishes whose
@@ -3509,6 +3512,9 @@ group, so the pass renders no Ready or Away lever for them (`till-expo-screen.ts
      - (2026-09-29, C78: the fired group now takes its earliest-fired dish's fire time and firer;
        see docs/backlog.md.)
   3. If any are unsent, `startGroup(tx, partyId, "hold", operatorId)`.
+     - (2026-09-29, C80: unsent dishes go in one held group per course, and a dish with no course
+       in the held group of the earliest active course among them, else the earliest course's;
+       see docs/backlog.md.)
   4. Set `group_id` on each line and on its extras children (`parent_line_id`), as `clearGroups`
      clears them.
   5. Record one `lines_moved` group event per group made, with the detail
