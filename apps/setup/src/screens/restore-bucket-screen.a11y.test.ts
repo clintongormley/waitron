@@ -6,12 +6,12 @@ import type { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
 afterEach(cleanupWidgets);
 
 /** The message beside the primary action, which `wt-form-actions` draws in its own shadow root. */
-async function bottomMessage(el: HTMLElement): Promise<string | undefined> {
+async function bottomOf(el: HTMLElement): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;
   };
   await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim();
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
 describe.each(["light", "dark"] as const)(
@@ -37,7 +37,7 @@ describe.each(["light", "dark"] as const)(
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
       await el.updateComplete;
-      expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+      expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
       await expectNoA11yViolations(host);
     });
 
@@ -68,7 +68,7 @@ describe.each(["light", "dark"] as const)(
         },
         theme,
       );
-      expect(await bottomMessage(el)).toContain("could not be downloaded");
+      expect(await bottomOf(el)).toContain("could not be downloaded");
       await expectNoA11yViolations(host);
     });
   },

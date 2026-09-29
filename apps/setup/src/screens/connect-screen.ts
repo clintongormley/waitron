@@ -92,7 +92,6 @@ export class SetupConnectScreen extends LitElement {
     if (changed.has("errorMessage")) this.refusalDismissed = false;
   }
 
-  /** Each blank required field, once Connect has been pressed. */
   #errors(): Set<ConnectField> {
     if (!this.attempted) return new Set();
     return new Set(REQUIRED_FIELDS.filter((key) => this.values[key].trim() === ""));

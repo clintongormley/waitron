@@ -97,7 +97,6 @@ export class SetupResetScreen extends LitElement {
     return this.credentialsRejected && !this.rejectionDismissed;
   }
 
-  /** Each blank field, once the reset has been pressed. */
   #missing(): Set<ResetField> {
     if (!this.attempted) return new Set();
     return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));

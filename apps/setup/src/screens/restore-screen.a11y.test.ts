@@ -6,12 +6,12 @@ import type { SetupRestoreScreen } from "./restore-screen.js";
 afterEach(cleanupWidgets);
 
 /** The message beside the primary action, which `wt-form-actions` draws in its own shadow root. */
-async function bottomMessage(el: HTMLElement): Promise<string | undefined> {
+async function bottomOf(el: HTMLElement): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;
   };
   await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim();
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
 describe.each(["light", "dark"] as const)("setup-restore-screen a11y (%s theme)", (theme) => {
@@ -24,7 +24,7 @@ describe.each(["light", "dark"] as const)("setup-restore-screen a11y (%s theme)"
     const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {}, theme);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=restore]")!.click();
     await el.updateComplete;
-    expect(await bottomMessage(el)).toBe("Correct the highlighted fields to continue.");
+    expect(await bottomOf(el)).toBe("Correct the highlighted fields to continue.");
     await expectNoA11yViolations(host);
   });
 
@@ -54,7 +54,7 @@ describe.each(["light", "dark"] as const)("setup-restore-screen a11y (%s theme)"
       { errorMessage: "Couldn't stage the backup." },
       theme,
     );
-    expect(await bottomMessage(el)).toBe("Couldn't stage the backup.");
+    expect(await bottomOf(el)).toBe("Couldn't stage the backup.");
     await expectNoA11yViolations(host);
   });
 });

@@ -483,10 +483,10 @@ export class SetupApp extends LitElement {
   }
 
   /**
-   * Clears each screen's `*Error` banner, so a stale refusal or failure does not reappear when the
+   * Clears each screen's `*Error` message, so a stale refusal or failure does not reappear when the
    * operator later steps back onto its screen; outcomes that are not errors, such as the
    * provisioning message the reset screen's Back returns to, are kept. The refusal routing assigns
-   * `this.screen` directly, not through `setup-goto`, so a banner is not cleared on its way in.
+   * `this.screen` directly, not through `setup-goto`, so a refusal is not cleared on its way in.
    */
   #onGoto(event: CustomEvent<{ screen: Screen }>): void {
     event.stopPropagation();

@@ -139,7 +139,6 @@ export class SetupAdminScreen extends LitElement {
     this.values = values;
   }
 
-  /** Each blank field, once Next has been pressed. */
   #errors(): Set<AdminField> {
     if (!this.attempted) return new Set();
     return new Set(FIELDS.filter((key) => this.values[key].trim() === ""));
