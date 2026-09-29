@@ -408,15 +408,15 @@ describe("reordering", () => {
 
 describe("the editor", () => {
   it.each([
-    ["en", ["Admin", "Manager", "Staff", "Supervisor"]],
-    ["es", ["Administrador", "Empleado", "Encargado", "Supervisor"]],
-  ] as const)("lists both role choices by their displayed name in %s", async (locale, names) => {
+    ["en", ["admin", "manager", "staff", "supervisor"]],
+    ["es", ["admin", "staff", "manager", "supervisor"]],
+  ] as const)("lists both role choices by their displayed name in %s", async (locale, roles) => {
     setLocale(locale);
     const el = await mount(fakeApi());
     await press(el, "edit-c");
     for (const name of ["applyRole", "approverRole"]) {
       const select = field(el, name) as unknown as HTMLSelectElement;
-      expect([...select.options].map((option) => option.textContent!.trim())).toEqual(names);
+      expect([...select.options].map((option) => option.value)).toEqual(roles);
     }
     expect(field(el, "applyRole").value).toBe("supervisor");
     expect(field(el, "approverRole").value).toBe("manager");
