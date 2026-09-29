@@ -2119,7 +2119,7 @@ now stands, which asserts that a response body was read, failed under
 `pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts` with
 `expected [] to not have a length of +0`.
 
-**A country pack's `name` is gone — DONE (C72, 2026-09-29).** C41 (#835) left `CountryPack.name`
+**A country pack's `name` is gone — DONE (C72, #871, 2026-09-29).** C41 (#835) left `CountryPack.name`
 read only by `packages/country-packs/src/registry.test.ts`, because the wizard names countries
 through the browser in its own language. The field is deleted from the type and from both packs;
 the registry test now looks packs up by `countryCode` and checks that no installed pack carries a
