@@ -112,9 +112,11 @@ const IMAGE_REFERENCE_TRIGGERS = [
  * than one event is split and the suffix names the event), the `products_*` names of
  * `0004_variant_one_level.sql`, `parties_clear_table_status` of
  * `0036_party_rename.sql`, the `working_orders_release_main_bill*` names of
- * `0038_main_bill_release.sql`, and the `bill_payment*` names of
- * `0024_bill_payment_triggers.sql`. The `products_*` ones live on `products`, so a later
- * migration that RECREATES that table drops them silently — this list is what notices.
+ * `0038_main_bill_release.sql` (those three re-created by
+ * `0045_recreate_triggers_after_rebuild.sql`), and the `bill_payment*` names of
+ * `0024_bill_payment_triggers.sql`. A later migration that RECREATES a table drops its triggers
+ * silently — the `products_*` ones on `products`, `parties_clear_table_status` on `parties` — and
+ * this list is what notices.
  */
 const EXPECTED_TRIGGERS = [
   "bill_payment_refunds_guard_update",

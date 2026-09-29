@@ -501,7 +501,8 @@ function hasExactly(value: unknown, keys: string[]): value is Record<string, unk
 
 /**
  * A move's target: exactly one of a table's id, or the counter with its zone id or null. A
- * malformed table id is refused as the seat and tab routes refuse one, a zone id as the sale route.
+ * malformed table id is refused as the seat, Move guests and Join tables routes refuse one, a zone
+ * id as the sale route.
  */
 function requireMoveTarget(value: unknown): MoveTarget {
   if (hasExactly(value, ["tableId"])) {

@@ -1135,7 +1135,7 @@ declare module "@waitron/shared" {
       expected: string;
       actual: string;
     };
-    /** A joined tab has one ordering context, so every covered table must belong to that zone. */
+    /** Join tables refuses a table whose service zone differs from the party's. */
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
   }
 }

@@ -1334,7 +1334,9 @@ What B4 leaves open:
   hand, then `fireLines`), which keep it covered. A transfer from a zoned tab onto an empty tab on
   a table in no zone is refused `service_zone.mode_incompatible` for part of a line as for a whole
   one (`transferLines`, pinned by "refuses a transfer onto an empty tab on a table in no zone" in
-  `apps/server/src/transfer-lines.test.ts`). So
+  `apps/server/src/transfer-lines.test.ts`). _(2026-09-30, Task 13: `transferLines` is deleted; the
+  refusal is now `transferItems`'s (`apps/server/src/bill-actions.ts`), pinned by "refuses a
+  transfer onto an empty bill of the party with no service zone" in the same test file.)_ So
   three dashboard settings no longer route anything sold today: the product editor's station
   (saved through `setProductStation`, `apps/server/src/catalogue-api.ts`), a category's station
   (`PUT /management-api/categories/:id/station`, `apps/server/src/management-api.ts`; the
@@ -1385,7 +1387,9 @@ What B4 leaves open:
   and the till's retrieve (`#onRetrieveOrder`, `apps/till/src/till-app.ts`, the `liveByProduct`
   lookup) finds it among today's offers by product id or drops it with `held.product_gone`. Every
   line priced since B4 records its offer (`lineContexts`, `priceOrderLines`), and a partial transfer
-  copies it to the new line (`copyLineContext`, `transferLines`).
+  copies it to the new line (`copyLineContext`, `transferLines`). _(2026-09-30, Task 13:
+  `transferLines` is deleted; the copy is in `carveOffLines`, which `splitBill` and
+  `transferItems` (`apps/server/src/bill-actions.ts`) call.)_
   **Next action:** delete both branches, since no backwards-compatibility code is owed before
   production (CLAUDE.md §3), or say what keeps them.
 - **`sale.unknown_product` was retired by A77.** A line naming an item the zone does not offer is
@@ -3060,7 +3064,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       - **Decided (owner, 2026-09-29):** merging one party into another does not clear a moved
         group's snooze (owner: "not automatically"); staff are to be able to clear it by hand
         (owner: "They should be able to clear it by hand"). `moveGroupsToParty`
-        (`apps/server/src/order-groups.ts`, reached from `mergeTabs`) moves each absorbed group
+        (`apps/server/src/order-groups.ts`, reached from `mergeTabs`; _2026-09-30, Task 13: now from
+        `combineParties`, `apps/server/src/table-actions.ts`_) moves each absorbed group
         without touching its `remind_at`, so a snoozed waiting group of the absorbed party lands
         behind the other party's held groups with its snooze intact. Measured 2026-09-29 with a
         throwaway test on the A116 branch, reminder at 10 minutes: once the group ahead was fired
@@ -3269,15 +3274,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       are "keeps both tables seated after payment, and a dessert round lands on the same party for
       both", "joins Mesa 5, and the next round opens the party's next tab on both tables",
       "refuses moving or joining with a settled tab the party has moved on from", and "points only
-      Mesa 4 at the next tab when a round follows the paid tab".
+      Mesa 4 at the next tab when a round follows the paid tab". _(2026-09-30, Task 13: the last
+      two are deleted.)_
     - `apps/server/src/order-groups.test.ts` "refuses a submission when the party's tables point
       at no tab" is retired. "puts a submission on the party's main bill even when its tables
-      point at no tab" replaces it (spec decision 15, P4).
+      point at no tab" replaces it (spec decision 15, P4). _(2026-09-30, Task 13: deleted, with the
+      table's pointer to its bill.)_
     - The cases the plan expected to retire as pinning a split bill as second-class (spec §3, P5)
       still pass and are unchanged, one of them renamed. "refuses a DETACHED CHECK as the split
       origin", now "refuses a check of no party as the split origin (tab.not_open)", uses a check
       that belongs to no party, and "refuses a round sent to the check, and opens no next tab"
-      uses a check that is paid.
+      uses a check that is paid. _(2026-09-30, Task 13: both are deleted.)_
   - **Task 6 DONE (#818, 2026-09-28):** collecting a presented bill
     settles the sale already recorded for it, and issues one only when there is none; it no longer
     reads the zone's service mode (`collectOrder`, `apps/server/src/till-sale.ts`). A bill placed in
@@ -3482,7 +3489,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       tickets. The new split also refuses a line whose group is held. The old tab split is left as
       it is; the plan's Task 13 deletes it. _(Task 13: deleted.)_
     - Two bills of one party can carry different service modes today: the old tab move retargets
-      only the bill it moves. A throwaway test while building it, and the review's reproduction,
+      only the bill it moves. _(2026-09-30, Task 13: `moveTab` is deleted.)_ A throwaway test while building it, and the review's reproduction,
       each put a party's main bill at a counter-zone table with `moveTab`: that bill's mode read
       `prepay` and the party's other bill's `table_tab`. The merge and the transfer refuse two bills whose service modes differ, with
       `service_zone.mode_incompatible`, before changing either bill, as the old tab transfer does.
@@ -3558,7 +3565,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`service_zone.mode_incompatible`). A table no party holds that still shows an open order is
       `table.occupied`, as a tab move refuses it: the old tab move can put a counter order there.
       At the route a malformed table id is `table.not_found` and a malformed counter zone id
-      `shared.invalid_id`, as the seat, tab and sale routes answer them.
+      `shared.invalid_id`, as the seat, tab and sale routes answer them. _(2026-09-30, Task 13: the
+      tab routes and the tab move are deleted, and `dining_tables.tab_id` with them, so this
+      `table.occupied` check and the code are gone.)_
     - Held dishes cannot leave a party (`group.held_leaves_party`); sent dishes leave their kitchen
       group and keep their ticket and served state. The kitchen gets a MOVED notice for each sent
       dish whose table changes, and always for a move to or from the counter, even when the label
@@ -3644,7 +3653,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       lines and payments do not change.
       Run in `apps/server/src/party-table-actions.test.ts`: the paid bill's sent dish gets a MOVED
       notice naming the new tables after its guests move to a held table, after its table is joined
-      to another party, after the old merge (`mergeTabs`) combines its party, and after the party
+      to another party, after the old merge (`mergeTabs`) combines its party _(2026-09-30, Task 13:
+      that case is deleted with `mergeTabs`)_, and after the party
       that took the guests later moves, joins a table and splits it off, including through two
       merges; the notice names the new tables when the bill was paid under another table's name; and
       after a move to a held table the pass names the new table. A one-off probe (not kept as a
@@ -3938,9 +3948,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     is live (`CLAUDE.md` §3).
     - Deleted: `POST /api/tabs/:id/move|join|merge|transfer|split|unjoin` (each now answers 404),
       the functions behind them (`moveTab`, `joinTable`, `mergeTabs`, `transferLines`,
-      `splitOffCheck`, `unjoinTable` and their helpers) and the five codes only they raised
+      `splitOffCheck`, `unjoinTable` and their helpers), the four codes only they raised
       (`tab.merge_leaves_no_table`, `tab.party_has_other_open_bill`, `tab.not_table_tab`,
-      `tab.party_mismatch`, `table.occupied`). The floor works out a table's open bill, its line
+      `tab.party_mismatch`), and `table.occupied`, which `refuseUnseatable`
+      (`apps/server/src/move-bill.ts`) also raised for Move a bill, Move guests and Join tables by
+      reading the table's pointer to its bill, and which went with that pointer. The floor works out a table's open bill, its line
       count, its total and its dishes still to serve from the bills of the party holding it.
     - Schema, core migrations `0043`–`0045`: `0043` drops the three triggers that name or sit on a
       rebuilt table (`parties_clear_table_status`, `working_orders_release_main_bill` and
@@ -4873,7 +4885,9 @@ ongoing overhaul listed at the top of Track A.
   specced with the owner, never landed unattended.
 - **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
   status (`moveTabLines` deletes and reinserts the line, so its `ticket_items` row cascade-drops; the
-  ticket must travel with the line, not re-fire — no test covers it today); hold-on-send
+  ticket must travel with the line, not re-fire — no test covers it today) _(2026-09-30, Task 13:
+  `moveTabLines` is deleted; whether this still holds for the paths that move lines now is not
+  checked here)_; hold-on-send
   without courses plus a venue disable setting; FP-1's empty-named child-modifier row; device-scoped
   fire/collect routes. Then the low-priority KDS list under *Detail → KDS*.
 - **Order-timing and modifier follow-ons**: delivery-order floor flash, idle-floor escalation,
@@ -5823,7 +5837,8 @@ approved.
     transaction. `apps/server/README.md` sends readers to "the `drain.complete` log line, the
     `incidents` table" for rejected fiscal records, a path only someone with a terminal can take.
     `working-order.ts`'s `splitOffCheck`
-    points at "line ~221". Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
+    points at "line ~221". _(2026-09-30, Task 13: `splitOffCheck` is deleted, which closes this
+    one.)_ Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
     `receipt-order.ts` takes a `cfg` it never uses; `me-api.ts`'s profile save logs
     `account_email.send_failed` with the caught error's message. The lock-ordering and deadlock
     cases for transfers, merges and split bills went with PostgreSQL and nothing replaced them (one

@@ -253,15 +253,6 @@ describe("parties, party_tables and service_commands", () => {
     expect(rows).toEqual([{ scopeKind: "party" }]);
   });
 
-  it("gives a dining table no pointer to a bill", () => {
-    const columns = suite.db.all<{ name: string }>(
-      sql`select name from pragma_table_info('dining_tables')`,
-    );
-    expect(columns.map((column) => column.name)).not.toContain("tab_id");
-    // Control: the read sees the table's columns at all.
-    expect(columns.map((column) => column.name)).toContain("needs_clearing_since");
-  });
-
   it("names visit in no object of the migrated database", () => {
     const named = suite.db.all<{ type: string; name: string }>(sql`
       select type, name from sqlite_master

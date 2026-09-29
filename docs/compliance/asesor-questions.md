@@ -901,7 +901,7 @@ imponible y de cuota repercutida a cada uno de ellos»* and the word *«duplicad
 Two readings, and we need to know which is right before building:
 
 - **(A) Each guest's consumption is its own operation** → N independent facturas simplificadas, one per
-  guest. This is what the software already does (`splitOffCheck`), and it needs no duplicados at all.
+  guest. This is what the software already does (`splitBill`), and it needs no duplicados at all.
 - **(B) The table is one operation with several *destinatarios*** → one original plus *duplicados*
   under art. 14.2.a). Note the friction: a factura simplificada is not otherwise required to show the
   **cuota** (art. 7.1.f), yet 14.2.a) demands a per-person base **and cuota** split — so this route

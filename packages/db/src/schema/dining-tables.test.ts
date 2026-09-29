@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { CORE_MIGRATIONS } from "../migrations.js";
@@ -56,5 +56,14 @@ describe("dining_tables placement columns", () => {
     );
     const [row] = await inTx((tx) => tx.select().from(diningTables).where(eq(diningTables.id, id)));
     expect(row).toMatchObject({ posX: 500, posY: 250, shape: "square", rotation: 15 });
+  });
+
+  it("gives a dining table no pointer to a bill", () => {
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('dining_tables')`,
+    );
+    expect(columns.map((column) => column.name)).not.toContain("tab_id");
+    // Control: the read sees the table's columns at all.
+    expect(columns.map((column) => column.name)).toContain("needs_clearing_since");
   });
 });
