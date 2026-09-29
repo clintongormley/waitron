@@ -1,0 +1,17 @@
+import { tmpdir } from "node:os";
+import { describe, expect, it } from "vitest";
+import { scratchParent } from "./scratch-dir.mjs";
+
+describe("scratchParent", () => {
+  it("chooses /dev/shm when it is a directory", () => {
+    expect(scratchParent({ isDirectory: (path) => path === "/dev/shm" })).toBe("/dev/shm");
+  });
+
+  it("falls back to the system temporary directory without /dev/shm", () => {
+    expect(scratchParent({ isDirectory: () => false })).toBe(tmpdir());
+  });
+
+  it("reads the real filesystem when nothing is injected", () => {
+    expect(["/dev/shm", tmpdir()]).toContain(scratchParent());
+  });
+});
