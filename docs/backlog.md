@@ -3479,7 +3479,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Tests: `apps/server/src/party-arriving-dishes.test.ts`. Seven cases in
     `party-move-bill.test.ts` and `party-table-actions.test.ts` that pinned an arriving bill's
     lines outside any group now expect the new group, every other value unchanged. No migration.
-  - **Task 10 DONE (2026-09-29, branch `feat/party-till-bills`): the till lists a party's bills
+  - **Task 10 DONE (#875, 2026-09-29, main `caacaed6e`): the till lists a party's bills
     by name and splits, merges and transfers between them through Task 5's routes.** What changes
     for a person using the till:
     - The table screen names each bill after the party: "Ana · Bill 1", or "Mesa 4, 5 · Bill 2"
