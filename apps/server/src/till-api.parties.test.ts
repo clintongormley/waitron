@@ -35,7 +35,6 @@ import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { createOpenOrder, openTab } from "./working-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -549,217 +548,57 @@ describe("GET /api/parties/:id/bills", () => {
   });
 });
 
-describe("the tab routes carry the party's revision", () => {
-  async function current(partyId: string): Promise<number> {
-    return (await partyRow(partyId)).revision;
-  }
-
-  /** Each route, sent to party `a`'s tab (party `b` is the other end of a merge or transfer). */
+describe("the tab routes are gone", () => {
+  /** Each old tab route, sent to party `a`'s bill with a body it once took. */
   const ROUTES: {
     name: string;
     path: (a: Seated) => string;
-    body: (a: Seated, b: Seated, free: string, revisions: Record<string, unknown>) => unknown;
+    body: (a: Seated, b: Seated, free: string) => unknown;
   }[] = [
     {
       name: "move",
       path: (a) => `/api/tabs/${a.tabId}/move`,
-      body: (_a, _b, free, r) => ({ toTableId: free, ...r }),
+      body: (_a, _b, free) => ({ toTableId: free, expectedPartyRevision: 0 }),
     },
     {
       name: "join",
       path: (a) => `/api/tabs/${a.tabId}/join`,
-      body: (_a, _b, free, r) => ({ tableId: free, ...r }),
+      body: (_a, _b, free) => ({ tableId: free, expectedPartyRevision: 0 }),
     },
     {
       name: "merge",
       path: (a) => `/api/tabs/${a.tabId}/merge`,
-      body: (_a, b, _free, r) => ({ fromTabId: b.tabId, freeSourceTable: true, ...r }),
+      body: (_a, b) => ({ fromTabId: b.tabId, expectedPartyRevision: 0 }),
     },
     {
       name: "transfer",
       path: (a) => `/api/tabs/${a.tabId}/transfer`,
-      body: (_a, b, _free, r) => ({ toTabId: b.tabId, transfers: [{ lineNo: 1 }], ...r }),
+      body: (_a, b) => ({ toTabId: b.tabId, transfers: [{ lineNo: 1 }], expectedPartyRevision: 0 }),
     },
     {
       name: "split",
       path: (a) => `/api/tabs/${a.tabId}/split`,
-      body: (_a, _b, _free, r) => ({ transfers: [{ lineNo: 1 }], ...r }),
+      body: () => ({ transfers: [{ lineNo: 1 }], expectedPartyRevision: 0 }),
     },
     {
       name: "unjoin",
       path: (a) => `/api/tabs/${a.tabId}/unjoin`,
-      body: (a, _b, _free, r) => ({ tableId: a.tableId, ...r }),
+      body: (a) => ({ tableId: a.tableId, expectedPartyRevision: 0 }),
     },
   ];
 
   type Seated = Awaited<ReturnType<typeof seat>>;
 
-  it.each(ROUTES)("$name answers 409 party.out_of_date for a stale revision", async (route) => {
+  // An unrouted path's plain 404, not a domain refusal that also answers 404.
+  it.each(ROUTES)("$name answers 404 as an unknown path, changing neither party", async (route) => {
     const a = await seat();
     const b = await seat();
-    const res = await post(
-      route.path(a),
-      route.body(a, b, await table(), {
-        expectedPartyRevision: 7,
-        expectedSourcePartyRevision: 7,
-      }),
-    );
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "party.out_of_date" } });
-  });
 
-  it.each(ROUTES)("$name refuses a malformed revision as a bad field", async (route) => {
-    const a = await seat();
-    const b = await seat();
-    const crossesParties = route.name === "merge" || route.name === "transfer";
-    const fields = crossesParties
-      ? ["expectedPartyRevision", "expectedSourcePartyRevision"]
-      : ["expectedPartyRevision"];
-    for (const field of fields) {
-      const res = await post(route.path(a), route.body(a, b, await table(), { [field]: "0" }));
-      expect(res.status).toBe(400);
-      expect(await res.json()).toMatchObject({
-        error: { code: "management.request_invalid", params: { field } },
-      });
-    }
-  });
+    const res = await post(route.path(a), route.body(a, b, await table()));
 
-  it("move takes the party's revision and records nothing without it", async () => {
-    const a = await seat();
-    const to = await table();
-    const missing = await post(`/api/tabs/${a.tabId}/move`, { toTableId: to });
-    expect(missing.status).toBe(400);
-    expect(await missing.json()).toMatchObject({
-      error: { code: "management.request_invalid", params: { field: "expectedPartyRevision" } },
-    });
-
-    const moved = await post(`/api/tabs/${a.tabId}/move`, {
-      toTableId: to,
-      expectedPartyRevision: 0,
-    });
-    expect(moved.status).toBe(200);
-    expect(await current(a.partyId)).toBe(1);
-  });
-
-  it("merge closes the absorbed party for the signed-in operator, and needs both revisions", async () => {
-    const a = await seat();
-    const b = await seat();
-    const missing = await post(`/api/tabs/${a.tabId}/merge`, {
-      fromTabId: b.tabId,
-      freeSourceTable: true,
-      expectedPartyRevision: 0,
-    });
-    expect(missing.status).toBe(400);
-    expect(await missing.json()).toMatchObject({
-      error: {
-        code: "management.request_invalid",
-        params: { field: "expectedSourcePartyRevision" },
-      },
-    });
-
-    const merged = await post(`/api/tabs/${a.tabId}/merge`, {
-      fromTabId: b.tabId,
-      freeSourceTable: true,
-      expectedPartyRevision: 0,
-      expectedSourcePartyRevision: 0,
-    });
-    expect(merged.status).toBe(200);
-    expect(await partyRow(b.partyId)).toMatchObject({
-      state: "closed",
-      mergedIntoPartyId: a.partyId,
-      closedBy: ana.id,
-    });
-  });
-
-  it("join then unjoin: the unjoined table leaves the party", async () => {
-    const a = await seat();
-    const other = await table();
-    const joined = await post(`/api/tabs/${a.tabId}/join`, {
-      tableId: other,
-      expectedPartyRevision: 0,
-    });
-    expect(joined.status).toBe(200);
-    const unjoined = await post(`/api/tabs/${a.tabId}/unjoin`, {
-      tableId: other,
-      expectedPartyRevision: 1,
-    });
-    expect(unjoined.status).toBe(200);
-    expect(await unjoined.json()).toEqual({});
-    expect(await current(a.partyId)).toBe(2);
-  });
-});
-
-describe("join and merge refuse bills that would leave a table, a bill and a party disagreeing", () => {
-  it("409 tab.not_table_tab joining a table to a counter order", async () => {
-    const counterOrderId = randomUUID();
-    await withTransaction(suite.db, (tx) => createOpenOrder(tx, cfg, counterOrderId, [], null));
-    const free = await table();
-
-    const res = await post(`/api/tabs/${counterOrderId}/join`, { tableId: free });
-
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.not_table_tab", params: { tabId: counterOrderId } },
-    });
-  });
-
-  it("409 tab.party_mismatch merging a party's tab into a table's bill of no party", async () => {
-    const a = await seat();
-    const tableId = await table();
-    const noPartyTabId = await withTransaction(
-      suite.db,
-      async (tx) => (await openTab(tx, cfg, { tableId })).tabId,
-    );
-
-    const res = await post(`/api/tabs/${noPartyTabId}/merge`, {
-      fromTabId: a.tabId,
-      freeSourceTable: true,
-      expectedSourcePartyRevision: 0,
-    });
-
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.party_mismatch", params: { tabId: noPartyTabId } },
-    });
-  });
-
-  it("409 tab.merge_leaves_no_table freeing the party's only table by merging its tab into its check", async () => {
-    const a = await seat();
-    const checkId = randomUUID();
-    await withTransaction(suite.db, (tx) =>
-      createOpenOrder(tx, cfg, checkId, [], null, { partyId: a.partyId }),
-    );
-
-    const res = await post(`/api/tabs/${checkId}/merge`, {
-      fromTabId: a.tabId,
-      freeSourceTable: true,
-      expectedPartyRevision: 0,
-    });
-
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.merge_leaves_no_table", params: { tabId: a.tabId } },
-    });
-  });
-
-  it("409 tab.party_has_other_open_bill merging another party's separate bill while its tab is open", async () => {
-    const a = await seat();
-    const b = await seat();
-    const checkId = randomUUID();
-    await withTransaction(suite.db, (tx) =>
-      createOpenOrder(tx, cfg, checkId, [], null, { partyId: b.partyId }),
-    );
-
-    const res = await post(`/api/tabs/${a.tabId}/merge`, {
-      fromTabId: checkId,
-      freeSourceTable: false,
-      expectedPartyRevision: 0,
-      expectedSourcePartyRevision: 0,
-    });
-
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({
-      error: { code: "tab.party_has_other_open_bill", params: { tabId: checkId } },
-    });
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("404 Not Found");
+    expect(await partyRow(a.partyId)).toMatchObject({ state: "open", revision: 0 });
+    expect(await partyRow(b.partyId)).toMatchObject({ state: "open", revision: 0 });
   });
 });

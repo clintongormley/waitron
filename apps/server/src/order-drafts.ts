@@ -179,13 +179,13 @@ export async function takeOverDraft(
  * A merge's drafts (D2): each open draft on `fromPartyId` moves to `intoPartyId`, unless its owner
  * already has an open draft there; then its lines are added to that draft, as a takeover into the
  * taker's own draft adds them, and it is discarded. Every draft this touches has its revision moved
- * on. A merge naming no operator records the owner as the one who discarded.
+ * on.
  */
 export async function moveDraftsToParty(
   tx: Transaction,
   fromPartyId: string,
   intoPartyId: string,
-  operatorId: string | undefined,
+  operatorId: string,
 ): Promise<void> {
   const moving = await openDraftsOn(tx, fromPartyId);
   if (moving.length === 0) return;
@@ -214,7 +214,7 @@ export async function moveDraftsToParty(
     absorbed.map((draft) => draft.id),
   );
   for (const draft of absorbed) {
-    const actorId = operatorId ?? draft.ownerId;
+    const actorId = operatorId;
     await addDiscardedDraft(tx, draft.id, held.get(draft.ownerId)!, draft.ownerId, actorId);
   }
 }

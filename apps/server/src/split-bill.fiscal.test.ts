@@ -29,10 +29,10 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { openTab, splitOffCheck } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 
 // Each case provisions its own venue, so a readback count is that case's alone.
 const LOCALE = "es-ES";
@@ -195,7 +195,7 @@ async function splitIntoThreeChecks(
 ): Promise<ThreeChecks> {
   const { cfg, aguaId, jamonId, tableId, offers } = seeded;
   const { tabId } = await asApp(cfg, (tx) =>
-    openTab(tx, cfg, {
+    openPartyTab(tx, cfg, {
       tableId,
       lines: offers.toOfferLines([
         { productId: aguaId, quantity: "3" },
@@ -203,13 +203,13 @@ async function splitIntoThreeChecks(
       ]),
     }),
   );
-  const { checkId: a } = await asApp(cfg, (tx) =>
-    splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }]),
+  const { billId: a } = await asApp(cfg, (tx) =>
+    splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }]),
   );
-  const { checkId: b } = await asApp(cfg, (tx) =>
-    splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+  const { billId: b } = await asApp(cfg, (tx) =>
+    splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
   );
-  const { checkId: c } = await asApp(cfg, (tx) => splitOffCheck(tx, cfg, tabId, [{ lineNo: 1 }]));
+  const { billId: c } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
 
   // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
   const rA = await payWorkingOrder(deps, cfg, {
@@ -360,13 +360,13 @@ describe("split-bill: pay each check files its own registro", () => {
     const deps = { db: suite.db, backend, clock };
     // Open a 2× agua tab and carve ONE agua onto a detached check — the working order under proof.
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, {
+      openPartyTab(tx, cfg, {
         tableId,
         lines: offers.toOfferLines([{ productId: aguaId, quantity: "2" }]),
       }),
     );
-    const { checkId } = await asApp(cfg, (tx) =>
-      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    const { billId: checkId } = await asApp(cfg, (tx) =>
+      splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
 
     // Pay the SAME check twice, sequentially (a lost-response retry): the second pay sees `settled`

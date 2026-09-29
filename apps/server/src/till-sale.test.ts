@@ -52,18 +52,13 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
-import {
-  addTabRound,
-  createOpenOrder,
-  openTab,
-  updateHeldOrder,
-  voidTabLine,
-} from "./working-order.js";
+import { addTabRound, createOpenOrder, updateHeldOrder, voidTabLine } from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu, republishMenus } from "./testing/publish-menu.js";
 import type { ZoneOffers } from "./testing/zone-offers.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // Exercise the sale path and the chained fiscal write end to end: provision a venue, seed a
 // catalogue, sell, and read the filed record back.
@@ -1705,7 +1700,7 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     const tabId = await withTransaction(suite.db, async (tx) => {
-      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
           menuItemId: v.offerFor(v.burgerId),
@@ -1758,7 +1753,7 @@ describe("ordering extras and options — parent + child lines", () => {
         label: "Mesa 1",
         active: true,
       });
-      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]);
       return tabId;
     });
@@ -1792,7 +1787,7 @@ describe("ordering extras and options — parent + child lines", () => {
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
     // Then VOID the bacon child (line_no 2), leaving {1,3,4} — non-contiguous.
     const tabId = await withTransaction(suite.db, async (tx) => {
-      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
         {
           menuItemId: v.offerFor(v.burgerId),
@@ -2182,7 +2177,7 @@ describe("ordering extras and options — parent + child lines", () => {
         label: "Mesa V",
         active: true,
       });
-      const { tabId } = await openTab(tx, v.cfg, { tableId });
+      const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.offerFor(v.burgerId), quantity: "1" }]);
       return tabId;
     });

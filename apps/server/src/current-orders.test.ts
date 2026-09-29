@@ -57,11 +57,11 @@ import {
   listTablesWithState,
   markGroupServed,
   markServed,
-  mergeTabs,
   recallLines,
-  splitOffCheck,
 } from "./working-order.js";
 import "./errors.js";
+import { splitBill } from "./bill-actions.js";
+import { joinTables } from "./table-actions.js";
 
 // The release reminder (spec §4 "Remind staff to release the next group"; plan D11), its snooze,
 // and the Current orders read a waiter serves from (spec §4; D8, D18, D19).
@@ -575,13 +575,13 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
     await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
     const command = {
+      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
-      expectedSourcePartyRevision: await revisionOf(b.partyId),
+      otherPartyId: b.partyId,
+      expectedOtherPartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
-    await inTx((tx) =>
-      mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
-    );
+    await inTx((tx) => joinTables(tx, v.cfg, a.partyId, b.tableId, command));
     expect(await remindAtOf(bHeld.id)).toBe(T(20));
     expect(await floorReminder(v, a.tableId)).toEqual({ groupId: aHeld.id, dueAt: T(10) });
 
@@ -932,13 +932,13 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
     const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
     await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
     const command = {
+      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
-      expectedSourcePartyRevision: await revisionOf(b.partyId),
+      otherPartyId: b.partyId,
+      expectedOtherPartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
-    await inTx((tx) =>
-      mergeTabs(tx, v.cfg, a.tabId, b.tabId, { freeSourceTable: false, ...command }),
-    );
+    await inTx((tx) => joinTables(tx, v.cfg, a.partyId, b.tableId, command));
     expect(await remindAtOf(bHeld.id)).toBe(T(20));
 
     await expectRefusedWithNothingWritten(a.partyId, () => unsnooze(v, a.partyId, bHeld.id), {
@@ -1001,8 +1001,8 @@ describe("readCurrentOrders (spec §4)", () => {
       line(v, "water"),
     ]);
     const [croqLine] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
-    const { checkId } = await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croqLine!.lineNo, quantity: "1" }], {
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croqLine!.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),
@@ -1178,14 +1178,15 @@ describe("a party another was merged into", () => {
     });
     const drinks = await group(v, b.partyId, "fire", [line(v, "water")]);
     const bNext = (await linesByName(b.partyId)).find((l) => l.name === "water")!.workingOrderId;
+    expect(bNext).not.toBe(b.tabId);
     const command = {
+      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
-      expectedSourcePartyRevision: await revisionOf(b.partyId),
+      otherPartyId: b.partyId,
+      expectedOtherPartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
-    await inTx((tx) =>
-      mergeTabs(tx, v.cfg, a.tabId, bNext, { freeSourceTable: false, ...command }),
-    );
+    await inTx((tx) => joinTables(tx, v.cfg, a.partyId, b.tableId, command));
 
     const read = await currentOrders(a.partyId);
 
@@ -1208,8 +1209,8 @@ describe("an abandoned bill", () => {
     const starters = await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
     const desserts = await group(v, s.partyId, "hold", [line(v, "flan")]);
     const [croq] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
-    const { checkId } = await inTx(async (tx) =>
-      splitOffCheck(tx, v.cfg, s.tabId, [{ lineNo: croq!.lineNo, quantity: "1" }], {
+    const { billId: checkId } = await inTx(async (tx) =>
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croq!.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),

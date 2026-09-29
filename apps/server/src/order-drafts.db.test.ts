@@ -47,12 +47,14 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { finishTable, seatTable } from "./parties.js";
-import { listTablesWithState, mergeTabs, splitOffCheck } from "./working-order.js";
+import { listTablesWithState } from "./working-order.js";
 import { submitGroups } from "./order-groups.js";
 import type { GroupRelease } from "./order-groups.js";
 import { readDrafts, saveDraft, submitDraft, takeOverDraft } from "./order-drafts.js";
 import type { Draft, DraftLine } from "./order-drafts.js";
 import "./errors.js";
+import { splitBill } from "./bill-actions.js";
+import { joinTables } from "./table-actions.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -1582,8 +1584,8 @@ describe("submitting a draft: takeover and credit (D5, spec §2)", () => {
     const [beer] = await tabLines(partyId);
     const command = { expectedPartyRevision: await partyRevision(partyId), operatorId: ALEX };
 
-    const { checkId } = await inTx((tx) =>
-      splitOffCheck(tx, v.cfg, tabId, [{ lineNo: beer!.lineNo, quantity: "1" }], command),
+    const { billId: checkId } = await inTx((tx) =>
+      splitBill(tx, v.cfg, tabId, [{ lineNo: beer!.lineNo, quantity: "1" }], command),
     );
 
     expect(
@@ -2205,16 +2207,16 @@ describe("pricing (D9)", () => {
   });
 });
 
-/** Merge `from`'s bill into `into`'s, its table joining `into`'s party, as the till's route does. */
-async function merge(v: Venue, into: Seated, from: Seated, operatorId?: string): Promise<void> {
+/** `into` joins `from`'s table, combining the parties and merging their bills, as the till does. */
+async function merge(v: Venue, into: Seated, from: Seated, operatorId: string): Promise<void> {
   const command = {
+    bills: "merge" as const,
     expectedPartyRevision: await partyRevision(into.partyId),
-    expectedSourcePartyRevision: await partyRevision(from.partyId),
-    ...(operatorId === undefined ? {} : { operatorId }),
+    otherPartyId: from.partyId,
+    expectedOtherPartyRevision: await partyRevision(from.partyId),
+    operatorId,
   };
-  await inTx((tx) =>
-    mergeTabs(tx, v.cfg, into.tabId, from.tabId, { freeSourceTable: false, ...command }),
-  );
+  await inTx((tx) => joinTables(tx, v.cfg, into.partyId, from.tableId, command));
 }
 
 async function openOwnersOn(partyId: string): Promise<string[]> {
@@ -2287,24 +2289,6 @@ describe("merging parties (D2)", () => {
       { ownerName: "Alex", lineCount: 3 },
       { ownerName: "Sam", lineCount: 1 },
     ]);
-  });
-
-  it("names the draft's owner as the one who discarded it when the merge names no operator", async () => {
-    const v = await setupVenue();
-    const mesa4 = await seated(v);
-    const mesa5 = await seated(v, "Mesa 5");
-    const alexOn4 = await save(v, mesa4.partyId, ALEX, null, 0, [item(v, "beer")]);
-    const alexOn5 = await save(v, mesa5.partyId, ALEX, null, 0, [item(v, "fish")]);
-
-    await merge(v, mesa4, mesa5);
-
-    expect((await eventsOf(alexOn5.id)).at(-1)).toEqual({
-      kind: "discarded",
-      fromPerson: ALEX,
-      toPerson: ALEX,
-      actorId: ALEX,
-      detail: { intoDraftId: alexOn4.id },
-    });
   });
 
   it("refuses a save prepared before the merge, on the closed party or the one the draft moved to", async () => {

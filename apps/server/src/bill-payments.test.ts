@@ -10,7 +10,6 @@ import {
   billPayments,
   BILL_PAYMENT_CHANGE_REFUSAL,
   captureError,
-  diningTables,
   printJobs,
   sales,
   tenders,
@@ -57,17 +56,9 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrder, readBillTenderLines } from "./till-sale.js";
-import {
-  abandonHeldOrder,
-  joinTable,
-  moveTabLines,
-  openTab,
-  transferLines,
-  unjoinTable,
-  updateHeldOrder,
-  voidTabLine,
-} from "./working-order.js";
+import { abandonHeldOrder, updateHeldOrder, voidTabLine, moveOrderLines } from "./working-order.js";
 import "./errors.js";
+import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 
 // The bill payment guards at the level of the functions each route calls: the writers with no
 // route of their own, the orderings a route cannot show, and the payment slip of a bill paid by
@@ -223,7 +214,7 @@ async function freshTableIn(tx: Transaction): Promise<string> {
 async function tabWith(...names: string[]): Promise<string> {
   const tableId = await freshTable();
   return inTx(async (tx) => {
-    const { tabId } = await openTab(tx, venue.cfg, {
+    const { tabId } = await openPartyTab(tx, venue.cfg, {
       tableId,
       lines: names.map((name) => ({ menuItemId: offer(name), quantity: "1" })),
     });
@@ -289,23 +280,22 @@ async function insertPayment(
 }
 
 describe("the writers with no route of their own", () => {
-  it("refuses moving a paid line between tabs", async () => {
+  it("refuses moving a paid line between bills", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     await take(billId, cash("25.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }] }));
     const other = await tabWith("Caña");
 
-    const code = await codeOf(inTx((tx) => moveTabLines(tx, venue.cfg, billId, other, [1])));
+    const code = await codeOf(inTx((tx) => moveOrderLines(tx, venue.cfg, billId, other, [1])));
 
     expect(code).toBe("bill.line_paid");
   });
 
-  it("refuses a move of unpaid lines that would leave the bill owing less than it received", async () => {
+  it("refuses a split of unpaid lines that would leave the bill owing less than it received", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     await take(billId, cash("30.00"));
-    const other = await tabWith("Caña");
 
     const error = await captureError(() =>
-      inTx((tx) => moveTabLines(tx, venue.cfg, billId, other, [1])),
+      inTx((tx) => splitPartyBill(tx, venue.cfg, billId, [{ lineNo: 1 }])),
     );
 
     expect(error).toMatchObject({
@@ -372,45 +362,20 @@ describe("the writers with no route of their own", () => {
     expect(saved).toBe(order!.revision + 1);
   });
 
-  it("refuses taking a paid line off a joined table", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
-    const second = await freshTable();
-    await inTx((tx) => joinTable(tx, venue.cfg, billId, second));
-    await take(billId, cash("25.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }] }));
-
-    const code = await codeOf(
-      inTx((tx) => unjoinTable(tx, venue.cfg, billId, second, [{ lineNo: 1 }])),
-    );
-
-    expect(code).toBe("bill.line_paid");
-    const [table] = await inTx((tx) =>
-      tx
-        .select({ tabId: diningTables.tabId })
-        .from(diningTables)
-        .where(eq(diningTables.id, second)),
-    );
-    expect(table!.tabId).toBe(billId);
-  });
-
-  it("refuses transferring more of a line than is unpaid", async () => {
+  it("refuses splitting off more of a line than is unpaid", async () => {
     const billId = await inTx(async (tx) => {
-      const { tabId } = await openTab(tx, venue.cfg, {
+      const { tabId } = await openPartyTab(tx, venue.cfg, {
         tableId: await freshTableIn(tx),
         lines: [{ menuItemId: offer("Caña"), quantity: "3" }],
       });
       return tabId;
     });
-    const other = await tabWith("Tarta");
     await take(
       billId,
       cash("6.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1, quantity: "2" }] }),
     );
     const transfer = (quantity: string) =>
-      inTx((tx) =>
-        transferLines(tx, venue.cfg, billId, other, [{ lineNo: 1, quantity }], {
-          operatorId: OPERATOR,
-        }),
-      );
+      inTx((tx) => splitPartyBill(tx, venue.cfg, billId, [{ lineNo: 1, quantity }]));
 
     expect(await codeOf(transfer("2"))).toBe("bill.line_paid");
     await transfer("1");
@@ -421,23 +386,6 @@ describe("the writers with no route of their own", () => {
         .where(eq(workingOrderLines.workingOrderId, billId)),
     );
     expect(line!.quantity).toBe(2000);
-  });
-
-  it("refuses a transfer of unpaid lines that would leave the bill owing less than it received", async () => {
-    const billId = await tabWith("Chuletón", "Tarta");
-    await take(billId, cash("30.00"));
-    const other = await tabWith("Caña");
-
-    const error = await captureError(() =>
-      inTx((tx) =>
-        transferLines(tx, venue.cfg, billId, other, [{ lineNo: 1 }], { operatorId: OPERATOR }),
-      ),
-    );
-
-    expect(error).toMatchObject({
-      code: "bill.received_exceeds_total",
-      params: { workingOrderId: billId, excess: "12.00" },
-    });
   });
 });
 

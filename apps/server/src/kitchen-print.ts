@@ -259,8 +259,8 @@ interface LabelledOrder {
  * The table each order's kitchen work belongs to. A party bill names the active tables of its party,
  * or of the party it was merged into at the end of the chain of merges, together
  * ({@link partyTablesName}); or its own label once that party holds none, or when the chain has
- * no end. Any other order names the table seated at it (the lowest id when several are), else the
- * table it is delivered to, else its own label; null for an unlabelled walk-up.
+ * no end. Any other order names the table it is delivered to, else its own label; null for an
+ * unlabelled walk-up.
  */
 export async function orderTableLabels(
   tx: Transaction,
@@ -269,31 +269,21 @@ export async function orderTableLabels(
 ): Promise<Map<string, string | null>> {
   const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
   const byParty = await billPartyTableLabels(tx, partyIds);
-  const others = orders.filter((order) => order.partyId === null);
-  const seatedAt = others.map((order) => order.id);
-  const deliveredTo = others.flatMap((order) => order.deliveryTableId ?? []);
+  const deliveredTo = [
+    ...new Set(
+      orders.flatMap((order) => (order.partyId === null ? (order.deliveryTableId ?? []) : [])),
+    ),
+  ];
   const tables =
-    others.length === 0
+    deliveredTo.length === 0
       ? []
       : await tx
-          .select({ id: diningTables.id, label: diningTables.label, tabId: diningTables.tabId })
+          .select({ id: diningTables.id, label: diningTables.label })
           .from(diningTables)
           .where(
-            and(
-              eq(diningTables.locationId, locationId),
-              or(
-                inArray(diningTables.tabId, seatedAt),
-                deliveredTo.length === 0 ? undefined : inArray(diningTables.id, deliveredTo),
-              ),
-            ),
-          )
-          .orderBy(diningTables.id);
-  const seatedTable = new Map<string, (typeof tables)[number]>();
-  const tableById = new Map<string, (typeof tables)[number]>();
-  for (const table of tables) {
-    if (table.tabId !== null && !seatedTable.has(table.tabId)) seatedTable.set(table.tabId, table);
-    tableById.set(table.id, table);
-  }
+            and(eq(diningTables.locationId, locationId), inArray(diningTables.id, deliveredTo)),
+          );
+  const tableById = new Map(tables.map((table) => [table.id, table]));
   const labels = new Map<string, string | null>();
   for (const order of orders) {
     if (order.partyId !== null) {
@@ -301,9 +291,7 @@ export async function orderTableLabels(
       labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
       continue;
     }
-    const table =
-      seatedTable.get(order.id) ??
-      (order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId));
+    const table = order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId);
     labels.set(order.id, table?.label ?? order.label);
   }
   return labels;
@@ -870,21 +858,16 @@ async function notifyMoved(
 
 /**
  * The sent work of every open, placed or settled bill of `partyIds` and of every party merged into
- * them ({@link partyFamilies}), and of each of `orderIds` whatever its party, keyed by bill; a bill
- * with nothing fired is left out. Read before a table action changes which tables those bills
- * belong to.
+ * them ({@link partyFamilies}), keyed by bill; a bill with nothing fired is left out. Read before a
+ * table action changes which tables those bills belong to.
  */
 export async function readPartiesSentWork(
   tx: Transaction,
   cfg: TillConfig,
-  partyIds: readonly (string | null)[],
-  orderIds: readonly string[] = [],
+  partyIds: readonly string[],
 ): Promise<Map<string, SentWork>> {
-  const named = partyIds.filter((partyId): partyId is string => partyId !== null);
   const work = new Map<string, SentWork>();
-  if (named.length === 0 && orderIds.length === 0) return work;
-  const ofParties =
-    named.length === 0 ? [] : [...new Set([...(await partyFamilies(tx, named)).values()].flat())];
+  const ofParties = [...new Set([...(await partyFamilies(tx, partyIds)).values()].flat())];
   const rows = await tx
     .select({
       id: workingOrders.id,
@@ -902,10 +885,7 @@ export async function readPartiesSentWork(
     .where(
       and(
         inArray(workingOrders.status, ["open", "placed", "settled"]),
-        or(
-          ofParties.length === 0 ? undefined : inArray(workingOrders.partyId, ofParties),
-          orderIds.length === 0 ? undefined : inArray(workingOrders.id, [...orderIds]),
-        ),
+        inArray(workingOrders.partyId, ofParties),
       ),
     );
   const sent = new Map<

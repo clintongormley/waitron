@@ -2191,11 +2191,7 @@ describe("till-app: every table move sends the party revision it last read", () 
   });
 
   it("leaves an unpaid split-off bill listed when the waiter leaves it and comes back, and merges nothing (decision 8)", async () => {
-    // The old methods are stubbed back in: were anything still to split through `splitTab` and put
-    // the bill back through `mergeTabs`, this case would see it.
     const { el } = await mountApp({
-      splitTab: vi.fn().mockResolvedValue({ checkId: "wo-check" }),
-      mergeTabs: vi.fn().mockResolvedValue(undefined),
       getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill]),
     });
     const order = await openMesa(el);
@@ -2216,9 +2212,6 @@ describe("till-app: every table move sends the party revision it last read", () 
     );
     expect(listed).toContain(checkBill.workingOrderId);
     expect(api.mergeBills).not.toHaveBeenCalled();
-    expect(
-      (api as unknown as { mergeTabs: ReturnType<typeof vi.fn> }).mergeTabs,
-    ).not.toHaveBeenCalled();
     expect(api.transferItems).not.toHaveBeenCalled();
   });
 

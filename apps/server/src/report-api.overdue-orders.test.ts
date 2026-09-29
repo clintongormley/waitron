@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
@@ -90,7 +91,14 @@ async function seedFiredOrder(
     firedAt: firedAt.toISOString(),
   });
   if (opts.tableLabel !== undefined) {
-    await db.insert(diningTables).values({ locationId, label: opts.tableLabel, tabId: orderId });
+    const [table] = await db
+      .insert(diningTables)
+      .values({ locationId, label: opts.tableLabel })
+      .returning({ id: diningTables.id });
+    await db
+      .update(workingOrders)
+      .set({ deliveryTableId: table!.id })
+      .where(eq(workingOrders.id, orderId));
   }
   return orderId;
 }

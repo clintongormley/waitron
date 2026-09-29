@@ -25,7 +25,6 @@ import {
   createOpenOrder,
   listHeldOrders,
   markServed,
-  moveTab,
   parkOrder,
   placeOrder,
 } from "./working-order.js";
@@ -473,22 +472,6 @@ describe("what a move refuses, changing nothing", () => {
     expect(absent).toMatchObject({ code: "table.not_found", params: { tableId: missing } });
   });
 
-  it("refuses a table no party holds that shows an open order, as a tab move refuses it", async () => {
-    const p = await twoParties("Mesa ocupada");
-    const taken = await v.table("Mesa ocupada C");
-    const counter = await counterOrder(v, "Tarta");
-    await inTx(v, (tx) => moveTab(tx, v.cfg, counter, taken));
-    expect((await tableRow(v, taken)).tabId).toBe(counter);
-    expect(await partyAt(v, taken)).toBeNull();
-
-    const error = await refused(p, [p.second, counter], () => move(p.second, { tableId: taken }), [
-      taken,
-    ]);
-
-    expect(error).toMatchObject({ code: "table.occupied", params: { tableId: taken } });
-    expect(await partyAt(v, taken)).toBeNull();
-  });
-
   it("refuses a free table in a zone that seats no one, as seating does", async () => {
     const p = await twoParties("Mesa barra");
     const barra = await v.table("Barra 9", v.counter.zoneId);
@@ -714,7 +697,6 @@ describe("the main bill", () => {
 
     expect(result).toEqual({ partyId: null, billId: ana.tabId, merged: false });
     expect((await partyRow(v, ana.partyId)).mainBillId).toBeNull();
-    expect((await tableRow(v, mesa)).tabId).toBeNull();
     expect(await activeTablesOf(v, ana.partyId)).toEqual([mesa]);
     const { tabId } = await orderForParty(v, ana.partyId, ["Flan"]);
     expect(tabId).not.toBe(ana.tabId);
@@ -782,12 +764,10 @@ describe("move a bill to a free table (A81, from a party)", () => {
     });
     expect(await activeTablesOf(v, result.partyId!)).toEqual([terraza]);
     expect(await partyAt(v, terraza)).toBe(result.partyId);
-    expect((await tableRow(v, terraza)).tabId).toBe(second);
     expect((await billRow(v, second)).partyId).toBe(result.partyId);
     expect(await zoneOf(v, second)).toBe(terrazaZone);
     expect(await activeTablesOf(v, ana.partyId)).toEqual([mesa]);
     expect((await partyRow(v, ana.partyId)).mainBillId).toBe(ana.tabId);
-    expect((await tableRow(v, mesa)).tabId).toBe(ana.tabId);
   });
 });
 
@@ -900,7 +880,6 @@ describe("move a counter order into a party", () => {
     expect(result.merged).toBe(false);
     expect(await partyAt(v, mesa)).toBe(result.partyId);
     expect((await partyRow(v, result.partyId!)).mainBillId).toBe(orderId);
-    expect((await tableRow(v, mesa)).tabId).toBe(orderId);
     expect((await billRow(v, orderId)).partyId).toBe(result.partyId);
     expect(await zoneOf(v, orderId)).toBe(v.tables.zoneId);
   });

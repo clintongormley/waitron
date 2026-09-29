@@ -57,22 +57,20 @@ import {
   listStationQueue,
   listTablesWithState,
   markServed,
-  mergeTabs,
-  moveTabLines,
-  openTab,
   readTabLines,
   recallLines,
   sendLines,
   setLineCourse,
-  splitOffCheck,
-  transferLines,
   unmarkServed,
   updateHeldOrder,
   updateOrderLine,
   voidTabLine,
 } from "./working-order.js";
-import { finishTable, seatTable } from "./parties.js";
+import { finishTable, seatTable, partyRevisionOfOrder } from "./parties.js";
 import "./errors.js";
+import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { fireGroup } from "./order-groups.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
@@ -254,23 +252,15 @@ async function seedFiredDelivery(
   return id;
 }
 
-async function tabIdOf(tableId: string): Promise<string | null> {
-  const { rows } = await db.execute<{ tab_id: string | null }>(
-    sql`select tab_id from dining_tables where id = ${tableId}`,
-  );
-  return rows[0]!.tab_id;
-}
-
 describe("openTab", () => {
-  it("opens a tab, points the table's tab_id at it, with an initial round", async () => {
+  it("opens a tab on the party, with an initial round", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId, orderNumber } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+    const { tabId, orderNumber, partyId } = await asApp(cfg, (tx) =>
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     expect(orderNumber).toBe(1);
     const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, tabId));
-    expect(wo).toMatchObject({ status: "open", deliveryTableId: null });
-    expect(await tabIdOf(tableId)).toBe(tabId);
+    expect(wo).toMatchObject({ status: "open", deliveryTableId: null, partyId });
     const lines = await db
       .select()
       .from(workingOrderLines)
@@ -280,8 +270,9 @@ describe("openTab", () => {
 
   it("opens a tab with NO initial round (empty tab)", async () => {
     const { cfg, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-    expect(await tabIdOf(tableId)).toBe(tabId);
+    const { tabId, partyId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+    const [wo] = await db.select().from(workingOrders).where(eq(workingOrders.id, tabId));
+    expect(wo).toMatchObject({ status: "open", partyId });
     const lines = await db
       .select()
       .from(workingOrderLines)
@@ -292,39 +283,25 @@ describe("openTab", () => {
   it("refuses a second tab on a table that already has an OPEN one (tab.already_open)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
-    await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId }))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "tab.already_open",
       params: { tableId },
     });
   });
 
-  it("treats a STALE tab_id (pointing at a settled order) on a table no party holds as free and overwrites it", async () => {
-    const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId: firstTab } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
-    );
-    // `tab_id` is left pointing at a settled order.
-    await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${firstTab}`,
-    );
-    const { tabId: secondTab } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
-    );
-    expect(secondTab).not.toBe(firstTab);
-    expect(await tabIdOf(tableId)).toBe(secondTab);
-  });
-
   it("refuses an unknown table (table.not_found) and a deactivated one (table.inactive)", async () => {
     const { cfg, tableId } = await setupVenue();
     const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId: missing }))).rejects.toMatchObject({
+    await expect(
+      asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId: missing })),
+    ).rejects.toMatchObject({
       code: "table.not_found",
       params: { tableId: missing },
     });
     await db.execute(sql`update dining_tables set active = false where id = ${tableId}`);
-    await expect(asApp(cfg, (tx) => openTab(tx, cfg, { tableId }))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }))).rejects.toMatchObject({
       code: "table.inactive",
       params: { tableId },
     });
@@ -343,7 +320,7 @@ describe("addTabRound (append-only, no re-price)", () => {
   it("appends a round with the NEXT line_no, without deleting or re-pricing existing lines", async () => {
     const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
@@ -375,7 +352,7 @@ describe("addTabRound (append-only, no re-price)", () => {
     // Two different products, so an assertion about which one a row carries can fail.
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -413,7 +390,7 @@ describe("addTabRound (append-only, no re-price)", () => {
   it("refuses a round on a settled tab, a walk-up (not a tab), and an absent id (tab.not_open)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
@@ -437,7 +414,7 @@ describe("addTabRound (append-only, no re-price)", () => {
   it("refuses an empty round (sale.empty_basket)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await expect(asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, []))).rejects.toMatchObject({
       code: "sale.empty_basket",
@@ -448,7 +425,7 @@ describe("addTabRound (append-only, no re-price)", () => {
 describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   it("persists a TRIMMED note on the working_order_lines row AND snapshots it onto ticket_items at fire", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", note: "  sin sal  " }]),
     );
@@ -468,7 +445,7 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
 
   it("stores NULL for an absent note and for a whitespace-only note", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1", note: "   " },
@@ -485,7 +462,7 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
 
   it("rejects a note longer than 200 chars (working_order.note_too_long)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     const note = "x".repeat(201);
     await expect(
       asApp(cfg, (tx) =>
@@ -500,7 +477,7 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   it("rejects a non-string note with a clean 400 screen (management.request_invalid), not a 500", async () => {
     // The wire type says string, but a crafted body can send anything.
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await expect(
       asApp(cfg, (tx) =>
         addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", note: 123 as never }]),
@@ -513,7 +490,7 @@ describe("voidTabLine", () => {
   it("deletes one line from an open tab and leaves the rest", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
@@ -531,7 +508,7 @@ describe("voidTabLine", () => {
   it("throws tab.line_not_found for a line_no that matches nothing", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 99))).rejects.toMatchObject({
       code: "tab.line_not_found",
@@ -542,7 +519,7 @@ describe("voidTabLine", () => {
   it("throws tab.not_open for a settled order", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
@@ -628,13 +605,13 @@ describe("markServed / unmarkServed", () => {
 
   it("refuses a line on a bill of no party, carrying a real line — the party is the sole gate (group.not_found)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
-    );
+    const tabId = randomUUID();
     const other = await asApp(cfg, async (tx) => {
       const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
-      const { id } = await createTable(tx, cfg, { label: "T-party", zoneId });
-      return seatTable(tx, cfg, { tableId: id, guestCount: null, operatorId: OPERATOR });
+      await createOpenOrder(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }], null, {
+        zoneId,
+      });
+      return seatTable(tx, cfg, { tableId, guestCount: null, operatorId: OPERATOR });
     });
     const [line] = await db
       .select({ id: workingOrderLines.id })
@@ -695,7 +672,7 @@ describe("readTabLines", () => {
     );
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, cafeId, entrantes.id));
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, aguaId, postres.id));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1" },
@@ -721,7 +698,7 @@ describe("readTabLines", () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -747,7 +724,7 @@ describe("readTabLines", () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -770,7 +747,7 @@ describe("readTabLines", () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
 
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -802,7 +779,7 @@ describe("readTabLines", () => {
   it("names each line, a child extras line too, by its stored row id", async () => {
     const { cfg, cafeId, aguaId, tableId, cafeOffer } = await setupVenue();
     const extraListId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -827,7 +804,7 @@ describe("readTabLines", () => {
   it("reads a note-less line's note as null", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     const [line] = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
     expect(line!.note).toBeNull();
@@ -835,7 +812,7 @@ describe("readTabLines", () => {
 
   it("stamps sentAt on a line that was sent, which a recall keeps while firedAt clears; a held line never sent reads null", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1" },
@@ -860,7 +837,7 @@ describe("readTabLines", () => {
   it("reads a no-preparation line that was released as sent, with no ticket state", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
     );
@@ -872,7 +849,7 @@ describe("readTabLines", () => {
   it("returns the STORED locked gross price, never a re-price after the catalogue changes", async () => {
     const { cfg, cafeId, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) =>
       tx.execute(sql`update products set unit_price = 999 where id = ${cafeId}`),
@@ -883,14 +860,14 @@ describe("readTabLines", () => {
 
   it("returns [] for an open tab with no lines", async () => {
     const { cfg, tableId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     expect(await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId))).toEqual([]);
   });
 
   it("refuses a settled tab and an absent id (tab.not_open — assertTabOpen, an UNLOCKED read)", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
@@ -932,7 +909,7 @@ describe("listTablesWithState (occupancy)", () => {
     expect(busy[0]).toMatchObject({
       state: "open-tab",
       hasOpenTab: true,
-      tabId,
+      party: expect.objectContaining({ mainBillId: tabId }),
       tabLineCount: 1,
       tabTotal: "3.00",
       pendingDeliveries: 0,
@@ -1042,7 +1019,7 @@ describe("listTablesWithState (occupancy)", () => {
   it("open-tab dominates delivery-pending in the rolled-up state", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await seedFiredDelivery(cfg, cafeOffer, tableId);
     const rows = await asApp(cfg, (tx) => listTablesWithState(tx, cfg));
@@ -1078,7 +1055,7 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
   it("resolves a line's course: override > product default > null", async () => {
     // Bread's `courseId: null` is the same as no override: it is null because it has no default.
     const { cfg, cafeId: steak, aguaId: bread, tableId, offerFor } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     const c = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
     );
@@ -1095,7 +1072,7 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
 
   it("a non-null line override WINS over the product's default course", async () => {
     const { cfg, cafeId: prod, tableId, offerFor } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     const def = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }),
     );
@@ -1111,7 +1088,7 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
 
   it("resolves null when the line has no override AND the product no default course", async () => {
     const { cfg, cafeId: prod, tableId, offerFor } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     const o = await asApp(cfg, (tx) => addTabRoundWith(tx, cfg, tabId, [line(offerFor(prod))]));
     expect(lineCourse(o, prod)).toBeNull();
   });
@@ -1120,7 +1097,7 @@ describe("addTabRound ring-time course resolution (override ?? product default ?
 it("returns a tab line's stored staff names and options answers", async () => {
   const { cfg, tableId, cafeOffer } = await setupVenue();
   await asApp(cfg, async (tx) => {
-    const { tabId } = await openTab(tx, cfg, {
+    const { tabId } = await openPartyTab(tx, cfg, {
       tableId,
       lines: [{ menuItemId: cafeOffer, quantity: "1" }],
     });
@@ -1203,7 +1180,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
   it("stamps a routed line and a no-preparation line sent in one round; only the routed one has a ticket, at the quantity fired", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "2" },
@@ -1226,7 +1203,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
@@ -1248,7 +1225,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
@@ -1267,7 +1244,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: aguaOffer, quantity: "1", courseId: course.id, hold: true },
@@ -1287,7 +1264,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1", courseId: course.id, hold: true },
@@ -1314,7 +1291,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
   it("stamps a no-route line with no course at the round even when the round holds another line", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1", hold: true },
@@ -1329,7 +1306,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
     // `openTab`'s initial lines are stored without being fired, so this one has no ticket item.
     const { tabId } = await asApp(cfg, (tx) =>
-      openTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
+      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
     );
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1", hold: true }]),
@@ -1345,7 +1322,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sends nothing, and counts no write, for a line number the tab does not hold", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
     );
@@ -1358,7 +1335,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sends nothing and stamps nothing when no line is held", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1371,7 +1348,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("keeps a recalled line's sent_at", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1387,7 +1364,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("reports the ticket's fired quantity on the station and expo queues, and the line's for an older ticket with none", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
     );
@@ -1401,7 +1378,8 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const queued = async () =>
       asApp(cfg, async (tx) => ({
         station: (await listStationQueue(tx, stationId!))[0]!.items[0]!.quantity,
-        expo: (await listExpoQueue(tx, cfg))[0]!.courses[0]!.items[0]!.qty,
+        // A party's round is in no group, so the pass shows it in the no-group section.
+        expo: (await listExpoQueue(tx, cfg))[0]!.groups[0]!.items[0]!.qty,
       }));
 
     expect(await queued()).toEqual({ station: "2.000", expo: "2.000" });
@@ -1463,7 +1441,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       set kitchen_name = 'Café de cocina', customer_name = ${JSON.stringify({ es: "Café del cliente" })}
       where id = ${cafeId}`);
     await withTransaction(db, republishMenus);
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1483,7 +1461,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
   it("voiding a held line records no notice: the kitchen was never asked for it", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
     );
@@ -1497,7 +1475,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
   it("a partial void removes that quantity only, from the line, its extras and its ticket, and says so", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -1526,7 +1504,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
   it("voids the whole line when the quantity given is the line's own", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
     );
@@ -1544,7 +1522,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     "refuses to void a quantity of %j from a line of two, changing nothing",
     async (quantity) => {
       const { cfg, tableId, cafeOffer } = await setupVenue();
-      const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+      const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
       await asApp(cfg, (tx) =>
         addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
       );
@@ -1563,7 +1541,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
   it("refuses to void a fraction of a line counted in whole units, changing nothing", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "2" }]),
     );
@@ -1581,7 +1559,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
   it("refuses to void part of an extras line, whose quantity follows its dish", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -1601,7 +1579,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
 
   it("a recall records a RECALLED notice for the fired line only", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "2" },
@@ -1622,7 +1600,7 @@ describe("with changes to sent items switched off", () => {
   it("refuses to recall a line that was sent to a station, and changes nothing", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) => writeEditSentLines(tx, false));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1640,7 +1618,7 @@ describe("with changes to sent items switched off", () => {
   it("still recalls a held line that was never sent", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) => writeEditSentLines(tx, false));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
     );
@@ -1651,7 +1629,7 @@ describe("with changes to sent items switched off", () => {
   it("still voids a sent line: the notice is recorded and the line leaves the bill", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) => writeEditSentLines(tx, false));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1668,7 +1646,7 @@ describe("with changes to sent items switched off", () => {
   it("recalls a sent line once the setting is back on", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     await asApp(cfg, (tx) => writeEditSentLines(tx, false));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1684,7 +1662,7 @@ describe("with changes to sent items switched off", () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
     await asApp(cfg, (tx) => writeEditSentLines(tx, false));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
     );
@@ -1702,7 +1680,7 @@ describe("with changes to sent items switched off", () => {
 describe("a line with no fired ticket whose product sold out cannot be sent", () => {
   it("refuses to send a recalled line again once its product is unavailable, changing nothing", async () => {
     const { cfg, tableId, cafeId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1" }]),
     );
@@ -1723,7 +1701,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -1748,7 +1726,7 @@ describe("a line with no fired ticket whose product sold out cannot be sent", ()
 
   it("sends a held line whose product is still available", async () => {
     const { cfg, tableId, cafeOffer, aguaId } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
     );
@@ -1790,7 +1768,7 @@ async function ticketRow(tabId: string, lineNo: number) {
 async function tabWithFiredCafe(quantity = "1") {
   const venue = await setupVenue();
   const { cfg, tableId, cafeOffer } = venue;
-  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
   await asApp(cfg, (tx) => addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity }]));
   const ticket = await ticketOfLine(tabId, 1);
   const [line] = await db
@@ -1806,7 +1784,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const before = await linesOf(tabId);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId), OPERATOR),
     );
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
@@ -1823,6 +1801,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket, lineId, cafeOffer } = await tabWithFiredCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [
         { workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "1", note: "no onions" },
@@ -1843,7 +1822,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
     );
 
     // The first café at the 1.50 it was sold at; the second at today's 1.75.
@@ -1862,7 +1841,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket } = await tabWithFiredCafe("2");
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "1" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "1" }, await revisionOf(tabId), OPERATOR),
     );
 
     expect(await linesOf(tabId)).toEqual([
@@ -1878,6 +1857,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket, aguaOffer } = await tabWithFiredCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [{ menuItemId: aguaOffer, quantity: "1" }],
     });
@@ -1898,7 +1878,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     for (const patch of [{ note: "no onions" }, { quantity: "2" }]) {
       await expect(
         asApp(cfg, async (tx) =>
-          updateOrderLine(tx, cfg, tabId, 1, patch, await revisionOf(tabId)),
+          updateOrderLine(tx, cfg, tabId, 1, patch, await revisionOf(tabId), OPERATOR),
         ),
       ).rejects.toMatchObject({
         code: "ticket.already_started",
@@ -1907,6 +1887,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     }
     await expect(
       updateHeldOrder({ db }, cfg, tabId, {
+        operatorId: OPERATOR,
         revision: await revisionOf(tabId),
         lines: [{ menuItemId: aguaOffer, quantity: "1" }],
       }),
@@ -1924,11 +1905,20 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId)),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { note: "no onions" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "ticket.already_fired", params: { workingOrderId: tabId } });
     await expect(
       updateHeldOrder({ db }, cfg, tabId, {
+        operatorId: OPERATOR,
         revision: await revisionOf(tabId),
         lines: [{ workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "2" }],
       }),
@@ -1952,6 +1942,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         1,
         { note: "no onions", quantity: "3" },
         await revisionOf(tabId),
+        OPERATOR,
       ),
     );
 
@@ -1970,7 +1961,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("edits a held-course line and a no-route line freely, with no notice", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     await routeToNoPreparation(aguaId);
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: cafeOffer, quantity: "1", hold: true },
@@ -1980,10 +1971,10 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const held = await ticketOfLine(tabId, 1);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "later" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 1, { note: "later" }, await revisionOf(tabId), OPERATOR),
     );
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 2, { quantity: "2" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 2, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
     );
 
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: held.id, firedAt: null, note: "later" });
@@ -1997,12 +1988,12 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const copy = await revisionOf(tabId);
 
     await asApp(cfg, (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "3", note: "a" }, copy),
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "3", note: "a" }, copy, OPERATOR),
     );
     const landed = await linesOf(tabId);
 
     await expect(
-      asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, copy)),
+      asApp(cfg, (tx) => updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, copy, OPERATOR)),
     ).rejects.toMatchObject({
       code: "working_order.out_of_date",
       params: { workingOrderId: tabId },
@@ -2016,7 +2007,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 1, { note: "no onions" }, await revisionOf(tabId)),
+        updateOrderLine(
+          tx,
+          cfg,
+          tabId,
+          1,
+          { note: "no onions" },
+          await revisionOf(tabId),
+          OPERATOR,
+        ),
       ),
     ).rejects.toMatchObject({ code: "product.unavailable", params: { productId: cafeId } });
     expect(await ticketRow(tabId, 1)).toMatchObject({ id: ticket.id, note: null });
@@ -2033,7 +2032,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     ]) {
       await expect(
         asApp(cfg, async (tx) =>
-          updateOrderLine(tx, cfg, tabId, 1, { quantity }, await revisionOf(tabId)),
+          updateOrderLine(tx, cfg, tabId, 1, { quantity }, await revisionOf(tabId), OPERATOR),
         ),
       ).rejects.toMatchObject({ code: "quantity.invalid", params: { reason } });
     }
@@ -2043,7 +2042,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("an extra added to a sent line is priced now, and the line moves after the highest number with its extras", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -2066,6 +2065,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
         1,
         { extras: [{ listId, picks: [{ productId: aguaId, quantity: 2 }] }] },
         await revisionOf(tabId),
+        OPERATOR,
       ),
     );
 
@@ -2085,6 +2085,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket, lineId, aguaOffer } = await tabWithFiredCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
       revision: await revisionOf(tabId),
       lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
     });
@@ -2100,7 +2101,15 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tabId, ticket } = await tabWithFiredCafe();
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "tibio", quantity: "2" }, await revisionOf(tabId)),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        1,
+        { note: "tibio", quantity: "2" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
@@ -2121,7 +2130,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("a sent line's extras follow it: kept through a change, and copied onto a rise's new line at today's price", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -2135,7 +2144,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await withTransaction(db, republishMenus);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { note: "solo" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 1, { note: "solo" }, await revisionOf(tabId), OPERATOR),
     );
     expect(await linesOf(tabId)).toEqual([
       expect.objectContaining({ lineNo: 1, quantity: 1000, lineTotal: 150 }),
@@ -2143,7 +2152,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     ]);
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId)),
+      updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
     );
     // The stored café and its extra as sold; the second café new, its extra at today's 0.80.
     expect(await linesOf(tabId)).toEqual([
@@ -2158,7 +2167,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("refuses to copy an extra that records no list onto a rise's new line", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -2176,7 +2185,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId)),
+        updateOrderLine(tx, cfg, tabId, 1, { quantity: "2" }, await revisionOf(tabId), OPERATOR),
       ),
     ).rejects.toMatchObject({ code: "extras.invalid", params: { field: "listId" } });
     expect(await linesOf(tabId)).toEqual(before);
@@ -2186,7 +2195,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
     const withWater = [{ listId, picks: [{ productId: aguaId, quantity: 1 }] }];
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     // Dishes at lines 1 (held), 3 (two, fired) and 5 (fired, then recalled), each followed by its
     // extra.
     await asApp(cfg, (tx) =>
@@ -2200,7 +2209,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
     await db.execute(sql`update products set available = 0 where id = ${aguaId}`);
     const edit = (lineNo: number, patch: { note?: string; quantity?: string }) =>
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, lineNo, patch, await revisionOf(tabId)),
+        updateOrderLine(tx, cfg, tabId, lineNo, patch, await revisionOf(tabId), OPERATOR),
       );
 
     await edit(1, { note: "later" });
@@ -2237,7 +2246,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
   it("refuses an unknown line, and an extras line, which follows its dish", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         {
@@ -2250,12 +2259,12 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 9, { note: "x" }, await revisionOf(tabId)),
+        updateOrderLine(tx, cfg, tabId, 9, { note: "x" }, await revisionOf(tabId), OPERATOR),
       ),
     ).rejects.toMatchObject({ code: "tab.line_not_found", params: { tabId, lineNo: 9 } });
     await expect(
       asApp(cfg, async (tx) =>
-        updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId)),
+        updateOrderLine(tx, cfg, tabId, 2, { note: "x" }, await revisionOf(tabId), OPERATOR),
       ),
     ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineNo" } });
   });
@@ -2282,7 +2291,7 @@ async function tabWithFiredMains() {
   );
   await asApp(cfg, (tx) => setProductCourse(tx, cfg, aguaId, starters.id));
   await asApp(cfg, (tx) => setProductCourse(tx, cfg, cafeId, mains.id));
-  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, tabId, [
       { menuItemId: aguaOffer, quantity: "1" },
@@ -2306,7 +2315,7 @@ async function tabWithFiredMains() {
 async function tabWithHeldCafe() {
   const venue = await setupVenue();
   const { cfg, tableId, cafeOffer } = venue;
-  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+  const { tabId, partyId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, tabId, [{ menuItemId: cafeOffer, quantity: "1", hold: true }]),
   );
@@ -2314,7 +2323,29 @@ async function tabWithHeldCafe() {
     .select({ id: workingOrderLines.id })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId));
-  return { ...venue, tabId, lineId: line!.id };
+  return { ...venue, tabId, partyId, lineId: line!.id };
+}
+
+/**
+ * On a party's bill, what an edit adds for the kitchen goes in a held group of its own, which is
+ * released by firing that group rather than by Send.
+ */
+async function fireGroupOfLine(cfg: TillConfig, partyId: string, tabId: string, lineNo: number) {
+  const [line] = await db
+    .select({ groupId: workingOrderLines.groupId })
+    .from(workingOrderLines)
+    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
+  const [party] = await db
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  await asApp(cfg, (tx) =>
+    fireGroup(tx, cfg, partyId, line!.groupId!, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: party!.revision,
+      operatorId: OPERATOR,
+    }),
+  );
 }
 
 describe("new work an edit adds reaches the kitchen as a round's would (plan D10)", () => {
@@ -2322,7 +2353,15 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
     const { cfg, tabId } = await tabWithFiredMains();
 
     await asApp(cfg, async (tx) =>
-      updateOrderLine(tx, cfg, tabId, 2, { note: "tibio", quantity: "2" }, await revisionOf(tabId)),
+      updateOrderLine(
+        tx,
+        cfg,
+        tabId,
+        2,
+        { note: "tibio", quantity: "2" },
+        await revisionOf(tabId),
+        OPERATOR,
+      ),
     );
 
     expect(await firedByLine(tabId)).toEqual([
@@ -2336,6 +2375,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
     const { cfg, tabId, waterLineId, cafeLineId, cafeOffer, aguaOffer } = await tabWithFiredMains();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
       lines: [
         { workingOrderLineId: waterLineId, menuItemId: aguaOffer, quantity: "1" },
         { workingOrderLineId: cafeLineId, menuItemId: cafeOffer, quantity: "1", note: "tibio" },
@@ -2351,10 +2391,11 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
     ]);
   });
 
-  it("a line a whole-order save adds to a tab whose every line is held is held too, and Send releases it", async () => {
-    const { cfg, tabId, lineId, cafeOffer, aguaOffer } = await tabWithHeldCafe();
+  it("a line a whole-order save adds to a tab whose every line is held is held too, and Send and its group's fire release them", async () => {
+    const { cfg, tabId, partyId, lineId, cafeOffer, aguaOffer } = await tabWithHeldCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
       lines: [
         { workingOrderLineId: lineId, menuItemId: cafeOffer, quantity: "1" },
         { menuItemId: aguaOffer, quantity: "1" },
@@ -2367,22 +2408,24 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
     ]);
 
     await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+    await fireGroupOfLine(cfg, partyId, tabId, 2);
     expect(await firedByLine(tabId)).toEqual([
       [1, true],
       [2, true],
     ]);
   });
 
-  it("replacing the dish of a held line on a tab whose every line is held keeps the new dish held for Send", async () => {
-    const { cfg, tabId, lineId, aguaId, aguaOffer } = await tabWithHeldCafe();
+  it("replacing the dish of a held line on a tab whose every line is held keeps the new dish held until its group fires", async () => {
+    const { cfg, tabId, partyId, lineId, aguaId, aguaOffer } = await tabWithHeldCafe();
 
     await updateHeldOrder({ db }, cfg, tabId, {
+      operatorId: OPERATOR,
       lines: [{ workingOrderLineId: lineId, menuItemId: aguaOffer, quantity: "1" }],
       revision: await revisionOf(tabId),
     });
     expect(await firedByLine(tabId)).toEqual([[2, false]]);
 
-    await asApp(cfg, (tx) => sendLines(tx, cfg, tabId, []));
+    await fireGroupOfLine(cfg, partyId, tabId, 2);
     expect(await sentState(tabId)).toEqual([
       expect.objectContaining({
         lineNo: 2,
@@ -2393,7 +2436,7 @@ describe("new work an edit adds reaches the kitchen as a round's would (plan D10
   });
 });
 
-/** Two open tabs at their own tables: `tabId` with a café line of 3 and a held one in a course,
+/** Two open bills of one party: `tabId` with a café line of 3 and a held one in a course,
  * `otherId` with one café line. */
 async function twoTabs() {
   const venue = await setupVenue();
@@ -2401,12 +2444,12 @@ async function twoTabs() {
   const course = await asApp(cfg, (tx) =>
     createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
   );
-  const otherTable = await asApp(cfg, async (tx) => {
-    const { zoneId } = await offerProducts(tx, cfg, { zone: "tables" });
-    return (await createTable(tx, cfg, { label: "T2", zoneId })).id;
+  const { tabId, partyId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
+  const otherId: string = randomUUID();
+  await asApp(cfg, async (tx) => {
+    await createOpenOrder(tx, cfg, otherId, [], null, { partyId });
+    await VENUE_SERVICE.copyOrderContext(tx, cfg, tabId, otherId);
   });
-  const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
-  const { tabId: otherId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId: otherTable }));
   await asApp(cfg, (tx) =>
     addTabRound(tx, cfg, tabId, [
       { menuItemId: cafeOffer, quantity: "3" },
@@ -2419,6 +2462,12 @@ async function twoTabs() {
   return { ...venue, tabId, otherId, courseId: course.id };
 }
 type Tabs = Awaited<ReturnType<typeof twoTabs>>;
+
+/** A bill action's command on the bill's party, at its revision as read in this transaction. */
+async function sentOn(tx: Transaction, billId: string) {
+  const party = await partyRevisionOfOrder(tx, billId);
+  return { expectedPartyRevision: party!.revision, operatorId: OPERATOR };
+}
 
 /** A party's tab at a table of its own, with a café line of 3 fired. */
 async function partyTab() {
@@ -2445,18 +2494,26 @@ describe("every write to an open order's lines counts on its revision, a served 
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     [
       "a transfer",
-      (tx, t) => transferLines(tx, t.cfg, t.tabId, t.otherId, [{ lineNo: 1, quantity: "1" }]),
+      async (tx, t) =>
+        transferItems(
+          tx,
+          t.cfg,
+          t.tabId,
+          t.otherId,
+          [{ lineNo: 1, quantity: "1" }],
+          await sentOn(tx, t.tabId),
+        ),
       ["tab", "other"],
     ],
     [
       "a split",
-      (tx, t) => splitOffCheck(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }]),
+      async (tx, t) =>
+        splitBill(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }], await sentOn(tx, t.tabId)),
       ["tab"],
     ],
-    ["a move of lines", (tx, t) => moveTabLines(tx, t.cfg, t.otherId, t.tabId), ["tab", "other"]],
     [
       "a merge",
-      (tx, t) => mergeTabs(tx, t.cfg, t.tabId, t.otherId, { freeSourceTable: true }),
+      async (tx, t) => mergeBills(tx, t.cfg, t.tabId, t.otherId, await sentOn(tx, t.tabId)),
       ["tab"],
     ],
     [
@@ -2477,8 +2534,8 @@ describe("every write to an open order's lines counts on its revision, a served 
     }
   });
 
-  // Serving is a command on a party, and `twoTabs`' tabs have none. It moves the party's revision
-  // (`served.test.ts`), not the bill's.
+  // Serving is a command on a party. It moves the party's revision (`served.test.ts`), not the
+  // bill's.
   it("except a served mark, and a served mark cleared", async () => {
     const { cfg, tabId } = await partyTab();
     const before = await revisionOf(tabId);
@@ -2600,18 +2657,26 @@ describe("a line write on an order whose card payment is in flight is refused, a
     ["a course change", (tx, t) => setLineCourse(tx, t.cfg, t.tabId, 2, null), ["tab"]],
     [
       "a transfer",
-      (tx, t) => transferLines(tx, t.cfg, t.tabId, t.otherId, [{ lineNo: 1, quantity: "1" }]),
+      async (tx, t) =>
+        transferItems(
+          tx,
+          t.cfg,
+          t.tabId,
+          t.otherId,
+          [{ lineNo: 1, quantity: "1" }],
+          await sentOn(tx, t.tabId),
+        ),
       ["tab", "other"],
     ],
     [
       "a split",
-      (tx, t) => splitOffCheck(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }]),
+      async (tx, t) =>
+        splitBill(tx, t.cfg, t.tabId, [{ lineNo: 1, quantity: "1" }], await sentOn(tx, t.tabId)),
       ["tab"],
     ],
-    ["a move of lines", (tx, t) => moveTabLines(tx, t.cfg, t.otherId, t.tabId), ["tab", "other"]],
     [
       "a merge",
-      (tx, t) => mergeTabs(tx, t.cfg, t.tabId, t.otherId, { freeSourceTable: true }),
+      async (tx, t) => mergeBills(tx, t.cfg, t.tabId, t.otherId, await sentOn(tx, t.tabId)),
       ["tab", "other"],
     ],
     [
@@ -2744,7 +2809,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
         (row) => [row.name, row.id],
       ),
     );
-    const { tabId } = await asApp(cfg, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
         { menuItemId: offerFor(productIds.get("Croqueta")!), quantity: "2" },

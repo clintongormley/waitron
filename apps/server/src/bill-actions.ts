@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { diningTables, orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
+import { orderGroups, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
@@ -12,7 +12,7 @@ import {
 } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
-  guardParties,
+  guardParty,
   readMainBill,
   refuseMovedParty,
   requireBillOfParty,
@@ -98,7 +98,7 @@ export async function guardPathParty(
   if (command.partyId !== undefined && command.partyId !== bill.partyId) {
     await refuseMovedParty(tx, command.partyId ?? bill.partyId!);
   }
-  if (bill.partyId !== null) await guardParties(tx, bill.partyId, null, command);
+  if (bill.partyId !== null) await guardParty(tx, bill.partyId, command);
   return bill;
 }
 
@@ -178,7 +178,6 @@ export async function splitBill(
   await VENUE_SERVICE.copyOrderContext(tx, cfg, billId, newBillId);
   await carveOffLines(tx, cfg, billId, newBillId, transfers, {
     refuseHeld: true,
-    leavesParty: false,
   });
   await bumpRevision(tx, [billId, newBillId]);
   await assertBillInvariant(tx, [billId]);
@@ -220,19 +219,13 @@ export async function mergeCheckedBills(
   const mainBillId =
     known.mainBillId !== undefined ? known.mainBillId : await readMainBill(tx, partyId);
   const before = known.kitchenTold === true ? null : await readSentWork(tx, cfg, fromBillId);
-  await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined, { modesChecked: true });
+  await moveOrderLines(tx, cfg, fromBillId, intoBillId, undefined);
   await moveKitchenPrintLinks(tx, fromBillId, intoBillId);
   await bumpRevision(tx, [fromBillId, intoBillId]);
   await tx
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, fromBillId));
-  // While tables still point at bills, a table of the party showing the abandoned bill shows the
-  // surviving one; its membership is unchanged.
-  await tx
-    .update(diningTables)
-    .set({ tabId: intoBillId })
-    .where(eq(diningTables.tabId, fromBillId));
   if (mainBillId === fromBillId) await setMainBill(tx, partyId, intoBillId);
   if (before !== null) await enqueueMovedSlips(tx, cfg, before, intoBillId);
 }
@@ -259,7 +252,6 @@ export async function transferItems(
   const before = await readSentWork(tx, cfg, fromBillId);
   const { splitFrom } = await carveOffLines(tx, cfg, fromBillId, toBillId, transfers, {
     refuseHeld: false,
-    leavesParty: false,
   });
   await bumpRevision(tx, [fromBillId, toBillId]);
   await assertBillInvariant(tx, [fromBillId]);

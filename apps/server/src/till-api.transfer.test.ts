@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { locations, tills, withTransaction } from "@waitron/db";
+import { locations, parties, tills, withTransaction, workingOrders } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
@@ -29,11 +29,13 @@ import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { openTab } from "./working-order.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { createOpenOrder } from "./working-order.js";
+import { VENUE_SERVICE } from "./modules.js";
 
-// The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toTabId` screens and
-// the STATUS mapping for the transfer codes. `transferLines`' write behaviour is pinned in
+// The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toBillId` screens
+// and the STATUS mapping for the transfer codes. The transfer's write behaviour is pinned in
 // `transfer-lines.test.ts` and `transfer-lines.filing.test.ts`.
 let cfg: TillConfig;
 let ana: { id: string };
@@ -150,9 +152,9 @@ async function openSession(db: Database): Promise<string> {
   return session.token;
 }
 
-/** Seeds two open tabs (tab A carries one café line at quantity `aQty`, tab B is empty unless
- * `bLines` is given) plus a mounted app and a logged-in cookie, for the tests below to drive
- * `POST /api/tabs/:id/transfer` against. */
+/** Seeds two open bills of one party (tab A carries one café line at quantity `aQty`, tab B is
+ * empty) plus a mounted app and a logged-in cookie, for the tests below to drive
+ * `POST /api/bills/:id/transfer` against. */
 async function setupTabsApp(
   aQty = "2",
 ): Promise<{ app: Hono; d: TillApiDeps; tabA: string; tabB: string; cookie: string }> {
@@ -162,24 +164,38 @@ async function setupTabsApp(
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     const a = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const b = await createTable(tx, d.cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const tabAResult = await openTab(tx, d.cfg, {
+    const tabAResult = await openPartyTab(tx, d.cfg, {
       tableId: a.id,
       lines: [{ menuItemId: cafeOffer, quantity: aQty }],
     });
-    const tabBResult = await openTab(tx, d.cfg, { tableId: b.id });
-    return { tabA: tabAResult.tabId, tabB: tabBResult.tabId };
+    const tabB = randomUUID();
+    await createOpenOrder(tx, d.cfg, tabB, [], null, { partyId: tabAResult.partyId });
+    await VENUE_SERVICE.copyOrderContext(tx, d.cfg, tabAResult.tabId, tabB);
+    return { tabA: tabAResult.tabId, tabB };
   });
   return { app, d, tabA, tabB, cookie };
 }
 
-describe("POST /api/tabs/:id/transfer", () => {
+/** A transfer's body, sent with the party's revision as it stands. */
+async function transferBody(
+  from: string,
+  body: { toBillId: string; transfers: { lineNo: number; quantity?: string }[] },
+): Promise<string> {
+  const [row] = await suite.db
+    .select({ revision: parties.revision })
+    .from(workingOrders)
+    .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+    .where(eq(workingOrders.id, from));
+  return JSON.stringify({ ...body, expectedPartyRevision: row?.revision ?? 0 });
+}
+
+describe("POST /api/bills/:id/transfer", () => {
   it("401s without a session (session.required)", async () => {
     const { app, tabA, tabB } = await setupTabsApp();
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ toTabId: tabB, transfers: [{ lineNo: 1 }] }),
+      body: await transferBody(tabA, { toBillId: tabB, transfers: [{ lineNo: 1 }] }),
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
@@ -187,10 +203,10 @@ describe("POST /api/tabs/:id/transfer", () => {
 
   it("rejects a malformed :id with 4xx tab.not_open, not an opaque 500", async () => {
     const { app, tabB, cookie } = await setupTabsApp();
-    const res = await app.request("/api/tabs/not-a-uuid/transfer", {
+    const res = await app.request("/api/bills/not-a-uuid/transfer", {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: tabB, transfers: [{ lineNo: 1 }] }),
+      body: await transferBody(randomUUID(), { toBillId: tabB, transfers: [{ lineNo: 1 }] }),
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
@@ -200,10 +216,10 @@ describe("POST /api/tabs/:id/transfer", () => {
 
   it("rejects a malformed toTabId with 4xx tab.not_open, not an opaque 500", async () => {
     const { app, tabA, cookie } = await setupTabsApp();
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: "nope", transfers: [{ lineNo: 1 }] }),
+      body: await transferBody(tabA, { toBillId: "nope", transfers: [{ lineNo: 1 }] }),
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({
@@ -211,14 +227,14 @@ describe("POST /api/tabs/:id/transfer", () => {
     });
   });
 
-  it("moves a whole line (200) and re-points it onto the destination tab", async () => {
+  it("moves a whole line (204) and re-points it onto the destination bill", async () => {
     const { app, tabA, tabB, cookie } = await setupTabsApp();
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: tabB, transfers: [{ lineNo: 1 }] }),
+      body: await transferBody(tabA, { toBillId: tabB, transfers: [{ lineNo: 1 }] }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
 
     // Source lost the line entirely, destination gained it with the locked price kept.
@@ -241,14 +257,14 @@ describe("POST /api/tabs/:id/transfer", () => {
     ]);
   });
 
-  it("splits part of a line (200), leaving a reduced source line and a new destination line", async () => {
+  it("splits part of a line (204), leaving a reduced source line and a new destination line", async () => {
     const { app, tabA, tabB, cookie } = await setupTabsApp("3");
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: tabB, transfers: [{ lineNo: 1, quantity: "1" }] }),
+      body: await transferBody(tabA, { toBillId: tabB, transfers: [{ lineNo: 1, quantity: "1" }] }),
     });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
 
     const a = await suite.db.execute<{ quantity: string }>(
@@ -264,10 +280,10 @@ describe("POST /api/tabs/:id/transfer", () => {
 
   it("400 tab.transfer_self when transferring a tab to itself", async () => {
     const { app, tabA, cookie } = await setupTabsApp();
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: tabA, transfers: [{ lineNo: 1 }] }),
+      body: await transferBody(tabA, { toBillId: tabA, transfers: [{ lineNo: 1 }] }),
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -277,10 +293,10 @@ describe("POST /api/tabs/:id/transfer", () => {
 
   it("400 tab.transfer_quantity_invalid for an over-quantity transfer", async () => {
     const { app, tabA, tabB, cookie } = await setupTabsApp("2");
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: tabB, transfers: [{ lineNo: 1, quantity: "5" }] }),
+      body: await transferBody(tabA, { toBillId: tabB, transfers: [{ lineNo: 1, quantity: "5" }] }),
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
@@ -293,10 +309,10 @@ describe("POST /api/tabs/:id/transfer", () => {
 
   it("404 tab.line_not_found for a line_no not on the source tab", async () => {
     const { app, tabA, tabB, cookie } = await setupTabsApp();
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({ toTabId: tabB, transfers: [{ lineNo: 99 }] }),
+      body: await transferBody(tabA, { toBillId: tabB, transfers: [{ lineNo: 99 }] }),
     });
     expect(res.status).toBe(404);
     expect(await res.json()).toMatchObject({
@@ -306,11 +322,11 @@ describe("POST /api/tabs/:id/transfer", () => {
 
   it("400 tab.transfer_duplicate_line when the batch names a line_no twice", async () => {
     const { app, tabA, tabB, cookie } = await setupTabsApp("3");
-    const res = await app.request(`/api/tabs/${tabA}/transfer`, {
+    const res = await app.request(`/api/bills/${tabA}/transfer`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie },
-      body: JSON.stringify({
-        toTabId: tabB,
+      body: await transferBody(tabA, {
+        toBillId: tabB,
         transfers: [
           { lineNo: 1, quantity: "1" },
           { lineNo: 1, quantity: "1" },

@@ -6,10 +6,10 @@ import { loginWithPin } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createTable } from "./tables.js";
-import { splitOffCheck } from "./working-order.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
+import { splitBill } from "./bill-actions.js";
 
 // The HTTP layer of the draft routes: body parsing, the operator taken from the session, the draft
 // scoped to the party in the path, and the status each refusal maps to. What the commands do is
@@ -321,8 +321,8 @@ describe("POST /api/parties/:id/drafts/:did/submit naming a bill", () => {
       expectedPartyRevision: await revisionOf(party.partyId),
       operatorId: venue.operatorId,
     };
-    const { checkId } = await inTx(venue, (tx) =>
-      splitOffCheck(tx, venue.cfg, party.tabId, [{ lineNo: 1 }], command),
+    const { billId: checkId } = await inTx(venue, (tx) =>
+      splitBill(tx, venue.cfg, party.tabId, [{ lineNo: 1 }], command),
     );
     const body = {
       ...(await submitBody(party.partyId, left)),

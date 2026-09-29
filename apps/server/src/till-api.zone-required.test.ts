@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
-  diningTables,
+  workingOrders,
   locations,
   tills,
   withTransaction,
@@ -34,7 +34,7 @@ import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
-import { addTabRound, createOpenOrder, openTab, parkOrder } from "./working-order.js";
+import { addTabRound, createOpenOrder, parkOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -42,6 +42,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // Every line sold is priced from a service zone's menu offer. A venue with no zone, and an order
 // with no service context, sell nothing; an order with no lines still opens. The fiscal seat is an
@@ -261,7 +262,7 @@ describe("an order with no service context takes no lines", () => {
     const venue = await seedVenue(suite.db);
     await expect(
       withTransaction(suite.db, (tx) =>
-        openTab(tx, venue.cfg, {
+        openPartyTab(tx, venue.cfg, {
           tableId: venue.tableId,
           lines: [productLine(venue.water)],
         }),
@@ -272,21 +273,21 @@ describe("an order with no service context takes no lines", () => {
 
   it("openTab with no lines on a table in no zone opens an empty tab", async () => {
     const venue = await seedVenue(suite.db);
-    const { tabId } = await withTransaction(suite.db, (tx) =>
-      openTab(tx, venue.cfg, { tableId: venue.tableId }),
+    const { tabId, partyId } = await withTransaction(suite.db, (tx) =>
+      openPartyTab(tx, venue.cfg, { tableId: venue.tableId }),
     );
-    const [table] = await suite.db
-      .select({ tabId: diningTables.tabId })
-      .from(diningTables)
-      .where(eq(diningTables.id, venue.tableId));
-    expect(table!.tabId).toBe(tabId);
+    const [bill] = await suite.db
+      .select({ partyId: workingOrders.partyId, status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId));
+    expect(bill).toEqual({ partyId, status: "open" });
     expect(await orderLines(tabId)).toEqual([]);
   });
 
   it("addTabRound on that empty tab refuses order.service_context_missing", async () => {
     const venue = await seedVenue(suite.db);
     const { tabId } = await withTransaction(suite.db, (tx) =>
-      openTab(tx, venue.cfg, { tableId: venue.tableId }),
+      openPartyTab(tx, venue.cfg, { tableId: venue.tableId }),
     );
     await expect(
       withTransaction(suite.db, (tx) =>

@@ -29,17 +29,12 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import {
-  addTabRound,
-  listStationQueue,
-  openTab,
-  splitOffCheck,
-  voidTabLine,
-} from "./working-order.js";
+import { addTabRound, listStationQueue, voidTabLine } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 
 /**
  * Tabs end to end through a real `VerifactuBackend`: what paying a tab files, and that a refusal
@@ -243,7 +238,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      return openTab(tx, cfg, {
+      return openPartyTab(tx, cfg, {
         tableId,
         lines: [{ menuItemId: tables.offerFor(cafe.id), quantity: "1" }],
       });
@@ -266,8 +261,8 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
 
     const { rows } = await suite.db.execute<{ n: string }>(sql`
       select cast(count(*) as text) as n
-      from dining_tables dt join working_orders wo on wo.id = dt.tab_id
-      where dt.id = ${tableId} and wo.status = 'open'`);
+      from party_tables pt join working_orders wo on wo.party_id = pt.party_id
+      where pt.table_id = ${tableId} and pt.left_at is null and wo.status = 'open'`);
     expect(Number(rows[0]!.n)).toBe(0);
   });
 
@@ -277,7 +272,7 @@ describe("pay closes the tab (reuses payWorkingOrder → recordSale UNCHANGED)",
     const deps = { db: suite.db, backend, clock };
 
     const { tabId } = await withTransaction(suite.db, async (tx) => {
-      return openTab(tx, cfg, { tableId });
+      return openPartyTab(tx, cfg, { tableId });
     });
 
     await expect(
@@ -364,7 +359,7 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
     const { cfg: cfgB, cafe: cafeB, tables: tablesB } = await secondVenueSharingNif(nifA);
     const tableId = await seedTable(cfgB, "H2-tab", suiteB.db, tablesB.zoneId);
     const { tabId } = await withTransaction(suiteB.db, async (tx) => {
-      return openTab(tx, cfgB, {
+      return openPartyTab(tx, cfgB, {
         tableId,
         lines: [{ menuItemId: tablesB.offerFor(cafeB.id), quantity: "1" }],
       });
@@ -375,18 +370,19 @@ describe("H2: the huella is independent of whether the order was a tab", () => {
       tender: { method: "cash", amount: "5.00" },
     });
 
-    // Without this, an `openTab` that stopped setting `tab_id` would make the equality below vacuous.
-    const tabPointers = await suiteB.db.execute<{ n: string }>(
-      sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${tabId}`,
-    );
-    const walkUpPointers = await suite.db.execute<{ n: string }>(
-      sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${walkUpId}`,
-    );
-    expect(Number(tabPointers.rows[0]!.n)).toBe(1);
-    expect(Number(walkUpPointers.rows[0]!.n)).toBe(0);
+    // Without this, a tab that stopped belonging to the party seated at its table would make the
+    // equality below vacuous.
+    const seatedAt = (db: Database, orderId: string) =>
+      db.execute<{ n: string }>(
+        sql`select cast(count(*) as text) as n from party_tables pt
+            join working_orders wo on wo.party_id = pt.party_id
+            where wo.id = ${orderId} and pt.left_at is null`,
+      );
+    expect(Number((await seatedAt(suiteB.db, tabId)).rows[0]!.n)).toBe(1);
+    expect(Number((await seatedAt(suite.db, walkUpId)).rows[0]!.n)).toBe(0);
 
-    // Both orders carry a null `delivery_table_id`, so this covers only the `tab_id` back-pointer;
-    // the column has its own case below.
+    // Both orders carry a null `delivery_table_id`, so this covers only the party's link to its
+    // table; the column has its own case below.
     expect(await filedHuella(tabId, suiteB.db)).toBe(await filedHuella(walkUpId, suite.db));
   });
 });
@@ -419,7 +415,8 @@ describe("counter delivery (deliveryTableId on a walk-up sale)", () => {
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
     expect(await deliveryTableOf(id)).toBe(tableId);
     const { rows } = await suite.db.execute<{ n: string }>(
-      sql`select cast(count(*) as text) as n from dining_tables where tab_id = ${id}`,
+      sql`select cast(count(*) as text) as n from working_orders
+          where id = ${id} and party_id is not null`,
     );
     expect(Number(rows[0]!.n)).toBe(0);
   });
@@ -529,7 +526,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
     });
     expect(offers.zoneId).toBe(tables.zoneId);
     const tableId = await seedTable(cfg, "Focus-6", suite.db, tables.zoneId);
-    const { tabId } = await withTransaction(suite.db, (tx) => openTab(tx, cfg, { tableId }));
+    const { tabId } = await withTransaction(suite.db, (tx) => openPartyTab(tx, cfg, { tableId }));
     await withTransaction(suite.db, async (tx) => {
       // Line 1: two Burgers, fired. Line 2: a bottle with no preparation, sent with the round.
       await addTabRound(tx, cfg, tabId, [
@@ -547,8 +544,8 @@ describe("a sent line is payable whatever its availability; an unsent one is not
       update products set available = 0 where id in (${burgerId}, ${beerId})`);
 
     // One of the two fired Burgers goes to a check of its own, which pays.
-    const { checkId } = await withTransaction(suite.db, (tx) =>
-      splitOffCheck(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
+    const { billId: checkId } = await withTransaction(suite.db, (tx) =>
+      splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
     );
     const check = await payWorkingOrder(deps, cfg, {
       id: checkId,

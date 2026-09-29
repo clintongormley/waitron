@@ -287,16 +287,6 @@ declare module "@waitron/shared" {
     /** A dining table exists but is deactivated, so no tab may be opened on it. */
     "table.inactive": { tableId: string };
     /**
-     * A move/join TARGET table already has an OPEN tab, or, for the tab routes, a party still holds
-     * it (an active `party_tables` row) whatever its `tab_id` points at; `mergeTabs` combines two
-     * bills instead. Moving guests and joining tables combine with the party holding the table,
-     * and moving a bill joins that party; all three refuse only a table no party holds that still
-     * shows an open order (`refuseUnseatable` in `move-bill.ts`). The partial unique index `party_tables_active_table_uq`
-     * allows one active membership per table; the check runs first so the index never refuses with
-     * an engine error.
-     */
-    "table.occupied": { tableId: string };
-    /**
      * The table still needs clearing (`dining_tables.needs_clearing_since` is set), so
      * no party may be seated at it, moved to it or joined to it until Mark cleared.
      */
@@ -307,26 +297,17 @@ declare module "@waitron/shared" {
      */
     "table.already_in_party": { tableId: string };
     /**
-     * A table this caller tried to UN-JOIN is not part of the named tab — it points at another tab,
-     * at a closed one, at none, or the id names no table; or Split a table named a table the party
-     * does not hold. One code for all, so the answer does not confirm another tab's table exists.
+     * Split a table named a table the party does not hold, or the id names no table. One code for
+     * both, so the answer does not confirm another party's table exists.
      */
-    "table.not_joined": { tableId: string; tabId: string } | { tableId: string; partyId: string };
-    /**
-     * An un-join named the SOLE table anchoring the tab, so there is no join to carve it out of; or
-     * an un-join with no items, or Split a table, named the party's only member table. Refused
-     * because it would otherwise leave the tab, or the party, with no table.
-     */
-    "table.not_shared": { tableId: string; tabId: string } | { tableId: string; partyId: string };
-    /**
-     * A table's `tab_id` already points at an OPEN working order, or a party still holds the table
-     * (an active `party_tables` row) whatever its `tab_id` points at, so a second tab may not be
-     * opened (`openTab` in `working-order.ts`).
-     */
+    "table.not_joined": { tableId: string; partyId: string };
+    /** Split a table named the party's only table, which would leave the party with none. */
+    "table.not_shared": { tableId: string; partyId: string };
+    /** A party still holds the table, so no party may be seated at it (`openTab`). */
     "tab.already_open": { tableId: string };
     /**
-     * A party verb found the party is not open — Finish, a new service command, or a tab path acting
-     * on a party's bill (`guardParties`) — or the id names no party, or a party id in a route is not
+     * A party verb found the party is not open — Finish, a new service command, or a bill action on
+     * a party's bill (`guardParty`) — or the id names no party, or a party id in a route is not
      * a UUID. One code for all, as `tab.not_open` is.
      */
     "party.not_open": { partyId: string };
@@ -538,37 +519,14 @@ declare module "@waitron/shared" {
     // The four `booking.*` codes are declared in @waitron/bookings/src/errors.ts.
     /**
      * A tab verb found the order it was asked to modify is not open, or is absent; or, for a verb
-     * on a party's bills, is an open order of no party that no table points at: a counter order, or
-     * a check split from a table's bill of no party. `moveTab` and `joinTable` also
-     * accept the settled or abandoned tab a seated party's tables still point at.
+     * on a party's bills, is an open order of no party: a counter order.
      */
     "tab.not_open": { tabId: string };
-    /**
-     * `joinTable` or `mergeTabs` named an order no table points at and no seated party holds, as a
-     * bill a table would join, as a merge target, or as a merge source for a party's bill.
-     */
-    "tab.not_table_tab": { tabId: string };
-    /**
-     * `mergeTabs` named one bill that belongs to a seated party and one table's bill that belongs
-     * to none; `tabId` is the one with no party.
-     */
-    "tab.party_mismatch": { tabId: string };
-    /**
-     * `mergeTabs` named, as its source, a bill of another party that no table points at while that
-     * party still has another open bill.
-     */
-    "tab.party_has_other_open_bill": { tabId: string };
-    /**
-     * `mergeTabs`, asked to free the source bill's tables within one party, would free every table
-     * the party holds; `tabId` is the source bill.
-     */
-    "tab.merge_leaves_no_table": { tabId: string };
     /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */
     "tab.line_not_found": { tabId: string; lineNo: number };
     /**
-     * A tab named as BOTH source and destination of a line-move (`mergeTabs`, or `moveOrderLines`
-     * behind `moveTabLines`). Refused first: moving a tab's lines onto itself would abandon it or
-     * empty it.
+     * A bill named as BOTH source and destination of a merge (`mergeBills`, or `moveOrderLines`).
+     * Refused first: moving a bill's lines onto itself would abandon it or empty it.
      */
     "tab.merge_self": { tabId: string };
     /** A transfer named the SAME tab as source and destination. */
@@ -604,7 +562,7 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * A split onto a new check named a line whose kitchen ticket is still held (not fired). `lineNo`
+     * A split onto a new bill named a line whose kitchen ticket is still held (not fired). `lineNo`
      * is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };

@@ -222,7 +222,6 @@ const PERMANENT_SALE_REFUSALS = new Set([
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
   "order.payment_in_flight",
-  "table.occupied",
   "table.not_shared",
   "table.not_joined",
   "table.already_in_party",
@@ -234,9 +233,6 @@ const TABLE_REFUSALS = new Set([
   "table.needs_clearing",
   "table.not_found",
   "tab.already_open",
-  "tab.not_table_tab",
-  "tab.party_mismatch",
-  "tab.party_has_other_open_bill",
   "party.not_open",
   "party.bill_outstanding",
   "bill.presented",

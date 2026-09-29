@@ -168,10 +168,12 @@ async function countOpenTables(
   nodeId: NodeId,
 ): Promise<{ open: number; total: number }> {
   // `cast(x as text)`: this engine has no `::` operator, and text keeps both counts one type for
-  // `Number()`.
+  // `Number()`. A table is open while a party holds it (an active membership).
   const { rows } = await tx.execute<{ total: string; open: string }>(sql`
     select cast(count(*) as text) as total,
-           cast(count(*) filter (where dt.tab_id is not null) as text) as open
+           cast(count(*) filter (where exists (
+             select 1 from party_tables pt where pt.table_id = dt.id and pt.left_at is null
+           )) as text) as open
     from dining_tables dt
     join nodes n on n.location_id = dt.location_id
     where n.id = ${nodeId} and dt.active = true

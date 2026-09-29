@@ -38,13 +38,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable, createZone, listTables, setTablePlacement } from "./tables.js";
-import {
-  addTabRound,
-  advanceTicketItem,
-  fireLines,
-  openTab,
-  type TicketState,
-} from "./working-order.js";
+import { addTabRound, advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -440,7 +434,7 @@ describe("table placement is not part of the huella", () => {
 async function openKitchenLifecycleAndPay(shop: Shop): Promise<{ tabId: string; huella: string }> {
   const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   const { tabId } = await withTransaction(db, async (tx) => {
-    return openTab(tx, cfg, {
+    return openPartyTab(tx, cfg, {
       tableId,
       lines: [
         { menuItemId: aguaMenuItemId, quantity: "1" },
@@ -615,7 +609,7 @@ async function openWithExtraAndPay(
   const { db, backend, cfg, aguaMenuItemId, cafeMenuItemId, tableId } = shop;
   // `openTab` takes only plain lines; `addTabRound` is the path that accepts `extras`.
   const { tabId } = await withTransaction(db, async (tx) => {
-    return openTab(tx, cfg, { tableId });
+    return openPartyTab(tx, cfg, { tableId });
   });
   await withTransaction(db, async (tx) => {
     await addTabRound(tx, cfg, tabId, [

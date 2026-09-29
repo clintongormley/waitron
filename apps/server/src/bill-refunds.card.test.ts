@@ -34,6 +34,7 @@ import {
   tendersOfBill,
   type Answer,
   type BillVenue,
+  partyRevisionOf,
 } from "./testing/bill-venue.js";
 import { systemClock } from "./till-backend.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -255,11 +256,9 @@ async function lockedWrites(billId: string, paymentId: string) {
       "DELETE",
       `/api/working-orders/${billId}/lines/2`,
     ),
-    move: await send(venue.app, venue.cookie, "POST", `/api/tabs/${billId}/split`, {
-      transfers: [{ lineNo: 3 }],
-    }),
     billSplit: await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
       transfers: [{ lineNo: 3 }],
+      expectedPartyRevision: await partyRevisionOf(venue, billId),
     }),
     abandon: await send(venue.app, venue.cookie, "DELETE", `/api/working-orders/${billId}`),
     secondRefund: (await refund(billId, paymentId, { applied: "1.00" })).answer,
@@ -565,10 +564,11 @@ describe("design §8 test 18: a new id while a refund is pending", () => {
 
   it("leaves another bill of the same party alone", async () => {
     const billId = await bill("Pulpo", "Croquetas", "Croquetas", "Caña");
-    const split = await send(venue.app, venue.cookie, "POST", `/api/tabs/${billId}/split`, {
+    const split = await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
       transfers: [{ lineNo: 4 }],
+      expectedPartyRevision: await partyRevisionOf(venue, billId),
     });
-    const otherBill = split.json.checkId as string;
+    const otherBill = split.json.billId as string;
     const card = await pay(billId, "card", "20.00");
     venue.card.scriptNextRefund({ made: false, answer: LOST });
     await refund(billId, card.id, { applied: "5.00" });

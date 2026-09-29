@@ -29,9 +29,10 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrderIntegrated, recordTillSale } from "./till-sale.js";
-import { addTabRound, openTab, parkOrder, placeOrder } from "./working-order.js";
+import { addTabRound, parkOrder, placeOrder } from "./working-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 // A release that ships a reduced rate of 11% from 1 January 2027, the shipped table otherwise.
 vi.mock("@waitron/catalogue/src/vat-rates.js", async (importOriginal) => {
@@ -237,7 +238,7 @@ async function openTableTab(
       label: `Mesa ${tableId.slice(0, 4)}`,
       active: true,
     });
-    const { tabId } = await openTab(tx, v.cfg, { tableId });
+    const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
     await addTabRound(tx, v.cfg, tabId, lines);
     return tabId;
   });

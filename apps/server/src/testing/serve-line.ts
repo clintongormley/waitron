@@ -3,7 +3,8 @@ import { and, eq } from "drizzle-orm";
 import { partyTables, parties, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
-import { setMainBill } from "../parties.js";
+import { splitBill } from "../bill-actions.js";
+import { partyRevisionOfOrder, setMainBill } from "../parties.js";
 import type { TillConfig } from "../till-config.js";
 import {
   fireLines,
@@ -17,12 +18,17 @@ const OPERATOR = "cccccccc-0000-4000-8000-0000000000f1";
 
 /**
  * `openTab` with its lines, for a party of its own seated at the table, the rows `seatTable` writes:
- * a suite whose lines must be marked served needs a party, since serving is a command on one.
+ * a table's bill always belongs to a party, and seating takes no lines.
  */
 export async function openPartyTab(
   tx: Transaction,
   cfg: TillConfig,
-  req: { tableId: string; lines?: { menuItemId: string; quantity: string }[] },
+  req: {
+    tableId: string;
+    lines?: { menuItemId: string; quantity: string }[];
+    /** Credited with `lines`. */
+    operatorId?: string;
+  },
 ): Promise<{ tabId: string; orderNumber: number; partyId: string }> {
   const [party] = await tx
     .insert(parties)
@@ -32,6 +38,23 @@ export async function openPartyTab(
   await tx.insert(partyTables).values({ partyId: party!.id, tableId: req.tableId });
   await setMainBill(tx, party!.id, opened.tabId);
   return { ...opened, partyId: party!.id };
+}
+
+/**
+ * `splitBill` on a party's bill, sent with the party's revision as it stands: the chosen items go on
+ * a new bill of the party.
+ */
+export async function splitPartyBill(
+  tx: Transaction,
+  cfg: TillConfig,
+  billId: string,
+  transfers: { lineNo: number; quantity?: string }[],
+): Promise<{ billId: string }> {
+  const party = await partyRevisionOfOrder(tx, billId);
+  return splitBill(tx, cfg, billId, transfers, {
+    expectedPartyRevision: party!.revision,
+    operatorId: OPERATOR,
+  });
 }
 
 /** Fire every line of the bill, as `tables.test.ts` fires `openTab`'s lines: only released work can be

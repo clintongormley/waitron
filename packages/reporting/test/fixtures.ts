@@ -485,13 +485,23 @@ export async function seedFiredOrder(
     /** Marks the ORDER collected (drops the whole order off the clock). Defaults to not collected. */
     collected?: boolean;
     status?: "open" | "placed" | "settled" | "abandoned";
-    /** Seeds a dining table whose `tab_id` back-points at this order, for the `tableLabel` projection. */
+    /** Seeds a dining table the order is delivered to, for the `tableLabel` projection. */
     tableLabel?: string;
   },
 ): Promise<{ orderId: string }> {
   // Created `open` and fired before any terminal status: the
   // `working_order_lines_require_open_parent_*` triggers refuse a line on a non-open parent.
   const { orderId } = await seedOpenOrder(db, seed, opts.orderNumber);
+  if (opts.tableLabel !== undefined) {
+    const [table] = await db
+      .insert(diningTables)
+      .values({ locationId: seed.locationId, label: opts.tableLabel })
+      .returning({ id: diningTables.id });
+    await db
+      .update(workingOrders)
+      .set({ deliveryTableId: table!.id })
+      .where(eq(workingOrders.id, orderId));
+  }
   await seedFiredLine(
     db,
     { nodeId: seed.nodeId, stationId: seed.stationId },
@@ -509,13 +519,6 @@ export async function seedFiredOrder(
         collectedAt: opts.collected ? terminalAt : null,
       })
       .where(eq(workingOrders.id, orderId));
-  }
-  if (opts.tableLabel !== undefined) {
-    await db.insert(diningTables).values({
-      locationId: seed.locationId,
-      label: opts.tableLabel,
-      tabId: orderId,
-    });
   }
   return { orderId };
 }

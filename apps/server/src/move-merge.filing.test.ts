@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -27,10 +28,12 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { joinTable, mergeTabs, openTab } from "./working-order.js";
 import { payWorkingOrder } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { joinTables, moveGuests } from "./table-actions.js";
+import { partyRevisionOfOrder } from "./parties.js";
 
 /**
  * Joining and merging tabs, through to what gets FILED: every case here pays through a real
@@ -186,18 +189,39 @@ async function openTabOn(
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    return openTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then(
+    return openPartyTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then(
       (r) => r.tabId,
     );
   });
 }
 
-/** The dining table's current tab_id. */
-async function tabIdOf(tableId: string): Promise<string | null> {
-  const { rows } = await suite.db.execute<{ tab_id: string | null }>(
-    sql`select tab_id from dining_tables where id = ${tableId}`,
+/** The party holding the table now, or null. */
+async function partyAtTable(tableId: string): Promise<string | null> {
+  const { rows } = await suite.db.execute<{ party_id: string }>(
+    sql`select party_id from party_tables where table_id = ${tableId} and left_at is null`,
   );
-  return rows[0]!.tab_id;
+  return rows[0]?.party_id ?? null;
+}
+
+/** The party the bill belongs to, and its revision. */
+async function partyOfBill(billId: string): Promise<{ id: string; revision: number }> {
+  return withTransaction(suite.db, async (tx) => (await partyRevisionOfOrder(tx, billId))!);
+}
+
+/** What a table action is sent: the acting party's revision, and the party read at the target. */
+async function tableAction(billId: string, otherBillId?: string) {
+  const party = await partyOfBill(billId);
+  const other = otherBillId === undefined ? null : await partyOfBill(otherBillId);
+  return {
+    partyId: party.id,
+    options: {
+      bills: "merge" as const,
+      expectedPartyRevision: party.revision,
+      otherPartyId: other?.id ?? null,
+      ...(other === null ? {} : { expectedOtherPartyRevision: other.revision }),
+      operatorId: randomUUID(),
+    },
+  };
 }
 
 /** How many `sales` rows reference this working order. */
@@ -252,16 +276,17 @@ beforeAll(() => {
   });
 });
 
-describe("joinTable → one bill", () => {
+describe("joinTables → one bill", () => {
   it("a joined tab files ONE sale covering both tables on pay", async () => {
     const { cfg, cafe } = await setupVenue();
     const t1 = await seedTable(cfg, "JP1");
     const t2 = await seedTable(cfg, "JP2");
     const tabId = await openTabOn(cfg, t1, [{ productId: cafe.id, quantity: "1" }]);
+    const join = await tableAction(tabId);
     await withTransaction(suite.db, async (tx) => {
-      await joinTable(tx, cfg, tabId, t2);
+      await joinTables(tx, cfg, join.partyId, t2, join.options);
     });
-    expect(await tabIdOf(t2)).toBe(tabId); // the join linked t2 to the one tab
+    expect(await partyAtTable(t2)).toBe(join.partyId); // the join put t2 in the one tab's party
 
     // Pay the one tab (a retrieved open order files from its stored locked lines).
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
@@ -275,7 +300,7 @@ describe("joinTable → one bill", () => {
   });
 });
 
-describe("mergeTabs → one registro (H2)", () => {
+describe("parties combined, bills merged → one registro (H2)", () => {
   it("a merged-then-paid tab yields exactly ONE registros_facturacion row; the source tab files nothing", async () => {
     const { cfg, cafe, agua } = await setupVenue();
     const tInto = await seedTable(cfg, "MR-into");
@@ -283,8 +308,10 @@ describe("mergeTabs → one registro (H2)", () => {
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
+    // fromTab's guests move to intoTab's table: their party combines and the two bills merge.
+    const move = await tableAction(fromTab, intoTab);
     await withTransaction(suite.db, async (tx) => {
-      await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true });
+      await moveGuests(tx, cfg, move.partyId, tInto, move.options);
     });
 
     // fromTab is abandoned and files nothing — never reaches settled, so no double-file.
@@ -306,18 +333,20 @@ describe("mergeTabs → one registro (H2)", () => {
   });
 });
 
-describe("mergeTabs join → one bill covering both tables", () => {
-  it("a join-merged tab files ONE sale covering the combined lines; both tables still point at intoTab", async () => {
+describe("tables joined across parties, bills merged → one bill covering both tables", () => {
+  it("a join-merged tab files ONE sale covering the combined lines; both tables stay in intoTab's party", async () => {
     const { cfg, cafe, agua } = await setupVenue();
     const tInto = await seedTable(cfg, "JMP-into");
     const tFrom = await seedTable(cfg, "JMP-from");
     const intoTab = await openTabOn(cfg, tInto, [{ productId: cafe.id, quantity: "1" }]);
     const fromTab = await openTabOn(cfg, tFrom, [{ productId: agua.id, quantity: "1" }]);
 
+    const join = await tableAction(intoTab, fromTab);
     await withTransaction(suite.db, async (tx) => {
-      await mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false });
+      await joinTables(tx, cfg, join.partyId, tFrom, join.options);
     });
-    expect(await tabIdOf(tFrom)).toBe(intoTab);
+    expect(await partyAtTable(tFrom)).toBe(join.partyId);
+    expect(await partyAtTable(tInto)).toBe(join.partyId);
 
     await payWorkingOrder({ db: suite.db, backend, clock }, cfg, {
       id: intoTab,

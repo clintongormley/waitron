@@ -30,22 +30,18 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
+import { splitBill } from "../bill-actions.js";
 import { takeBillPayment } from "../bill-payments.js";
 import { deploymentEnvironment } from "../config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { placeGroups } from "../order-groups.js";
 import { memberTables, seatTable, setPartyName } from "../parties.js";
+import { joinTables } from "../table-actions.js";
 import { createTable } from "../tables.js";
 import type { TillConfig } from "../till-config.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "../till-sale.js";
-import {
-  addTabRound,
-  joinTable,
-  listTablesWithState,
-  parkOrder,
-  splitOffCheck,
-} from "../working-order.js";
+import { addTabRound, listTablesWithState, parkOrder } from "../working-order.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";
 
@@ -247,7 +243,7 @@ export async function commandFor(
   return { expectedPartyRevision: await revisionOf(v, partyId), operatorId: OPERATOR };
 }
 
-/** Splits the named lines off the bill into a new check of the party, as the till's split does. */
+/** Splits the named lines off the bill onto a new bill of the party, as the till's split does. */
 export async function split(
   v: PartyVenue,
   partyId: string,
@@ -255,8 +251,8 @@ export async function split(
   lineNos: number[],
 ): Promise<string> {
   const sent = await commandFor(v, partyId);
-  const { checkId } = await inTx(v, (tx) =>
-    splitOffCheck(
+  const split = await inTx(v, (tx) =>
+    splitBill(
       tx,
       v.cfg,
       billId,
@@ -264,7 +260,7 @@ export async function split(
       sent,
     ),
   );
-  return checkId;
+  return split.billId;
 }
 
 /**
@@ -277,16 +273,13 @@ export async function nextMillisecond(): Promise<void> {
   while (Date.now() <= start) await new Promise((resolve) => setTimeout(resolve, 1));
 }
 
-/** Joins the table to the party's bill, as the till's join does, a millisecond after the last. */
-export async function join(
-  v: PartyVenue,
-  partyId: string,
-  billId: string,
-  tableId: string,
-): Promise<void> {
+/** Joins a free table to the party, as the till's join does, a millisecond after the last. */
+export async function join(v: PartyVenue, partyId: string, tableId: string): Promise<void> {
   await nextMillisecond();
   const sent = await commandFor(v, partyId);
-  await inTx(v, (tx) => joinTable(tx, v.cfg, billId, tableId, sent));
+  await inTx(v, (tx) =>
+    joinTables(tx, v.cfg, partyId, tableId, { ...sent, bills: "merge", otherPartyId: null }),
+  );
 }
 
 /** Names the party, as the till's rename does. */
@@ -312,7 +305,7 @@ export async function pay(v: PartyVenue, billId: string, amount: string): Promis
 
 /**
  * A bill that is placed but unpaid. By direct write: no product path places a bill that belongs to a
- * table's party — a split check takes the tab's `table_tab` mode, which files nothing at placing.
+ * table's party — a split bill takes its source's `table_tab` mode, which files nothing at placing.
  */
 export async function placeByHand(v: HasDb, billId: string): Promise<void> {
   await inTx(v, (tx) =>

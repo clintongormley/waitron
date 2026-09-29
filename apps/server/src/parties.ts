@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { and, eq, inArray, isNull, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   diningTables,
   nowIso,
@@ -41,14 +41,9 @@ export interface PartyBill {
 export type CommandScope =
   { kind: "visit"; partyId: string } | { kind: "bill"; workingOrderId: string };
 
-/**
- * What a tab path that moves lines or tables is sent (D19): the revision of each party it changes, as
- * the caller last read it, and who acts. `expectedSourcePartyRevision` is the other party's, on a
- * merge or transfer between two parties.
- */
+/** What a bill action is sent (D19): the party's revision as the caller last read it, and who acts. */
 export interface PartyCommand {
   expectedPartyRevision?: number;
-  expectedSourcePartyRevision?: number;
   operatorId: string;
 }
 
@@ -121,9 +116,7 @@ export async function partyMainBill(
 /**
  * Name the party's main bill. This is the only writer of `parties.main_bill_id` in apps/server. The
  * database checks only that it names an existing order; nothing checks that the bill is open or the
- * party's, and the triggers in `0038_main_bill_release.sql` only clear it. While tables still point
- * at bills, each table of the party that points at no open bill is pointed at this one, so the old tab paths and the till
- * read the bill the party orders on; a table showing another open bill of the party keeps it.
+ * party's, and the triggers in `0038_main_bill_release.sql` only clear it.
  */
 export async function setMainBill(
   tx: Transaction,
@@ -131,27 +124,6 @@ export async function setMainBill(
   billId: string | null,
 ): Promise<void> {
   await tx.update(parties).set({ mainBillId: billId }).where(eq(parties.id, partyId));
-  if (billId === null) return;
-  await tx
-    .update(diningTables)
-    .set({ tabId: billId })
-    .where(
-      and(
-        inArray(
-          diningTables.id,
-          tx
-            .select({ id: partyTables.tableId })
-            .from(partyTables)
-            .where(and(eq(partyTables.partyId, partyId), isNull(partyTables.leftAt))),
-        ),
-        notExists(
-          tx
-            .select({ id: workingOrders.id })
-            .from(workingOrders)
-            .where(and(eq(workingOrders.id, diningTables.tabId), eq(workingOrders.status, "open"))),
-        ),
-      ),
-    );
 }
 
 /** The party's main bill as recorded, or null. */
@@ -289,40 +261,20 @@ export async function tableHeld(tx: Transaction, tableId: string): Promise<boole
   return member !== undefined;
 }
 
-async function bumpOpenParty(
+/**
+ * Check and move on the revision of the party a bill action changes, against
+ * `expectedPartyRevision`, which it must carry. A party that is not open is refused before its
+ * revision moves.
+ */
+export async function guardParty(
   tx: Transaction,
   partyId: string,
-  expected: number | undefined,
-  field: "expectedPartyRevision" | "expectedSourcePartyRevision",
+  command: Omit<PartyCommand, "operatorId">,
 ): Promise<void> {
-  if (expected === undefined) {
-    throw new AppError("management.request_invalid", { field });
+  if (command.expectedPartyRevision === undefined) {
+    throw new AppError("management.request_invalid", { field: "expectedPartyRevision" });
   }
-  await checkAndBumpParty(tx, partyId, expected, "open");
-}
-
-/**
- * Check and move on the revision of each party a tab path changes: the destination's against
- * `expectedPartyRevision`, and a different source's against `expectedSourcePartyRevision`. A party
- * that is not open is refused before its revision moves. A bill on no party needs no revision.
- */
-export async function guardParties(
-  tx: Transaction,
-  destination: string | null,
-  source: string | null,
-  command: Omit<PartyCommand, "operatorId"> | undefined,
-): Promise<void> {
-  if (destination !== null) {
-    await bumpOpenParty(tx, destination, command?.expectedPartyRevision, "expectedPartyRevision");
-  }
-  if (source !== null && source !== destination) {
-    await bumpOpenParty(
-      tx,
-      source,
-      command?.expectedSourcePartyRevision,
-      "expectedSourcePartyRevision",
-    );
-  }
+  await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
 }
 
 /**
@@ -492,7 +444,7 @@ export async function readBillsOfParties(
 }
 
 /**
- * The tables' parties have left them: their memberships end, their tab pointer and manual status go,
+ * The tables' parties have left them: their memberships end, their manual status goes,
  * and, where the venue's clearing setting is on, each needs clearing from `at` until
  * {@link markTableCleared}.
  */
@@ -505,7 +457,7 @@ export async function leaveForClearing(
   const clearing = await VENUE_SERVICE.readClearingWorkflow(tx);
   await tx
     .update(diningTables)
-    .set({ tabId: null, statusId: null, ...(clearing ? { needsClearingSince: at } : {}) })
+    .set({ statusId: null, ...(clearing ? { needsClearingSince: at } : {}) })
     .where(inArray(diningTables.id, [...tableIds]));
 }
 

@@ -4,26 +4,21 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   kitchenStations,
   locations,
-  nowIso,
   printJobs,
   tills,
   withTransaction,
   workingOrderLines,
-  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
-  createExtraList,
   createProduct,
   units,
-  updateProduct,
-  writeProductModifiers,
 } from "@waitron/catalogue";
 import {
   centsToDecimal,
@@ -34,15 +29,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import {
-  addTabRound,
-  joinTable,
-  mergeTabs,
-  moveTab,
-  moveTabLines,
-  openTab,
-  unjoinTable,
-} from "./working-order.js";
+import { addTabRound, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -61,8 +48,9 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { republishMenus } from "./testing/publish-menu.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { joinTables, moveGuests, splitTable } from "./table-actions.js";
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -168,13 +156,6 @@ function offersOf(cfg: TillConfig): ZoneOffers {
   return offersByCfg.get(cfg)!;
 }
 
-/** Offer the venue's products in `zoneId` too, as a table_tab zone. */
-async function offerIn(cfg: TillConfig, zoneId: string): Promise<void> {
-  await withTransaction(db, (tx) =>
-    offerProducts(tx, cfg, { zone: { zoneId }, serviceMode: "table_tab" }),
-  );
-}
-
 function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
@@ -195,80 +176,10 @@ async function openTabOn(
   lines: { productId: string; quantity: string }[],
 ): Promise<string> {
   return asApp(cfg, (tx) =>
-    openTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then((r) => r.tabId),
+    openPartyTab(tx, cfg, { tableId, lines: offersOf(cfg).toOfferLines(lines) }).then(
+      (r) => r.tabId,
+    ),
   );
-}
-
-/** The dining table's current tab_id — owner read. */
-async function tabIdOf(tableId: string): Promise<string | null> {
-  const { rows } = await db.execute<{ tab_id: string | null }>(
-    sql`select tab_id from dining_tables where id = ${tableId}`,
-  );
-  return rows[0]!.tab_id;
-}
-
-/** The dining table's current status_id — owner read. */
-async function statusIdOf(tableId: string): Promise<string | null> {
-  const { rows } = await db.execute<{ status_id: string | null }>(
-    sql`select status_id from dining_tables where id = ${tableId}`,
-  );
-  return rows[0]!.status_id;
-}
-
-async function serviceContextOf(tabId: string): Promise<{
-  zoneId: string;
-  departmentId: string;
-  serviceMode: string;
-} | null> {
-  const { rows } = await db.execute<{
-    zone_id: string;
-    department_id: string;
-    service_mode: string;
-  }>(sql`
-    select zone_id, department_id, service_mode
-    from order_service_contexts
-    where working_order_id = ${tabId}`);
-  const row = rows[0];
-  return row === undefined
-    ? null
-    : { zoneId: row.zone_id, departmentId: row.department_id, serviceMode: row.service_mode };
-}
-
-async function configureTableZone(
-  cfg: TillConfig,
-  tableId: string,
-  name: string,
-  serviceMode: "table_tab" | "prepay",
-): Promise<{ zoneId: string; departmentId: string }> {
-  const departmentId = randomUUID();
-  const zoneId = randomUUID();
-  // `created_at` is a `$defaultFn` generator on both tables, which a raw insert never reaches.
-  const createdAt = nowIso();
-  await db.execute(sql`
-    insert into departments
-      (id, location_id, name, trading_name, default_service_mode, created_at)
-    values
-      (${departmentId}, ${cfg.locationId}, ${name}, ${name}, ${serviceMode}, ${createdAt})`);
-  await db.execute(sql`
-    insert into floor_zones (id, location_id, name, created_at)
-    values (${zoneId}, ${cfg.locationId}, ${name}, ${createdAt})`);
-  await db.execute(sql`
-    insert into zone_service_policies
-      (location_id, zone_id, department_id, service_mode)
-    values
-      (${cfg.locationId}, ${zoneId}, ${departmentId}, ${serviceMode})`);
-  await db.execute(sql`update dining_tables set zone_id = ${zoneId} where id = ${tableId}`);
-  return { zoneId, departmentId };
-}
-
-/** Seed one active table_service_statuses row as the owner; returns its id. */
-async function seedStatus(label: string): Promise<string> {
-  // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches.
-  const statusId = randomUUID();
-  await db.execute(sql`
-    insert into table_service_statuses (id, label, color, created_at)
-    values (${statusId}, ${label}, '#ff0000', ${nowIso()})`);
-  return statusId;
 }
 
 /** A tab's lines as { lineNo, productId, unitPriceGross }, in line_no order — owner read. */
@@ -289,7 +200,7 @@ async function linesOf(
   return rows.map((row) => ({ ...row, gross: centsToDecimal(row.gross) }));
 }
 
-describe("moveTabLines", () => {
+describe("moveOrderLines", () => {
   it("moves ALL lines from one open tab to another, appended at the next line_no, source emptied", async () => {
     const { cfg, cafeId, aguaId } = await setupVenue();
     const t1 = await seedTable(cfg, "M1");
@@ -298,7 +209,7 @@ describe("moveTabLines", () => {
     const to = await openTabOn(cfg, t2, [{ productId: aguaId, quantity: "1" }]);
     const sourceLineId = (await linesOf(from))[0]!.id;
 
-    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
+    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined));
 
     // Destination now carries both lines; the café keeps its own locked gross; source is empty.
     const dest = await linesOf(to);
@@ -319,7 +230,7 @@ describe("moveTabLines", () => {
     ]);
     const to = await openTabOn(cfg, t2, []);
 
-    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to, [2])); // move only line 2 (agua)
+    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, [2])); // move only line 2 (agua)
 
     expect(await linesOf(to)).toHaveLength(1);
     expect((await linesOf(to))[0]!.productId).toBe(aguaId);
@@ -335,49 +246,8 @@ describe("moveTabLines", () => {
     const from = await openTabOn(cfg, t1, []); // empty tab
     const to = await openTabOn(cfg, t2, [{ productId: aguaId, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to));
+    await asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined));
     expect(await linesOf(to)).toHaveLength(1); // unchanged
-  });
-
-  it("refuses to combine orders whose frozen service modes differ", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t1 = await seedTable(cfg, "FLOW-1");
-    const t2 = await seedTable(cfg, "FLOW-2");
-    const from = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
-    const to = await openTabOn(cfg, t2, []);
-    // `id` and `created_at` are `$defaultFn` generators a raw insert never reaches, so both are
-    // written here.
-    const departmentId = randomUUID();
-    const prepayZoneId = randomUUID();
-    const tabZoneId = randomUUID();
-    const createdAt = nowIso();
-    await db.execute(sql`
-      insert into departments
-        (id, location_id, name, trading_name, default_service_mode, created_at)
-      values (${departmentId}, ${cfg.locationId}, 'Flow test', 'Flow test', 'prepay', ${createdAt})`);
-    await db.execute(sql`
-      insert into floor_zones (id, location_id, name, created_at)
-      values
-        (${prepayZoneId}, ${cfg.locationId}, 'Flow prepay', ${createdAt}),
-        (${tabZoneId}, ${cfg.locationId}, 'Flow tab', ${createdAt})`);
-    // Both tabs opened with a context in the tables zone; this replaces each.
-    await db.execute(sql`
-      insert into order_service_contexts
-        (working_order_id, location_id, zone_id, department_id, service_mode)
-      values
-        (${from}, ${cfg.locationId}, ${prepayZoneId}, ${departmentId}, 'prepay'),
-        (${to}, ${cfg.locationId}, ${tabZoneId}, ${departmentId}, 'table_tab')
-      on conflict (working_order_id) do update set
-        zone_id = excluded.zone_id,
-        department_id = excluded.department_id,
-        service_mode = excluded.service_mode`);
-
-    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
-      code: "service_zone.mode_incompatible",
-      params: { expected: "prepay", actual: "table_tab" },
-    });
-    expect(await linesOf(from)).toHaveLength(1);
-    expect(await linesOf(to)).toHaveLength(0);
   });
 
   it("refuses a non-open source or destination (tab.not_open)", async () => {
@@ -388,10 +258,19 @@ describe("moveTabLines", () => {
     const to = await openTabOn(cfg, t2, []);
     // Abandon the destination (owner write, fixture setup).
     await db.execute(sql`update working_orders set status = 'abandoned' where id = ${to}`);
-    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, from, to))).rejects.toMatchObject({
+    await expect(
+      asApp(cfg, (tx) => moveOrderLines(tx, cfg, from, to, undefined)),
+    ).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId: to },
     });
+    await expect(
+      asApp(cfg, (tx) => moveOrderLines(tx, cfg, to, from, undefined)),
+    ).rejects.toMatchObject({
+      code: "tab.not_open",
+      params: { tabId: to },
+    });
+    expect(await linesOf(from)).toHaveLength(1);
   });
 
   it("refuses a self-transfer (fromTabId === toTabId) with tab.merge_self and leaves the lines intact", async () => {
@@ -401,425 +280,16 @@ describe("moveTabLines", () => {
       { productId: cafeId, quantity: "1" },
       { productId: aguaId, quantity: "1" },
     ]);
-    // mergeTabs guards this at its own top, but moveTabLines is exported and must self-guard: a
-    // "move all" onto itself would wipe the tab.
-    await expect(asApp(cfg, (tx) => moveTabLines(tx, cfg, tab, tab))).rejects.toMatchObject({
+    // `mergeBills` guards this at its own top, but `moveOrderLines` is exported and must self-guard:
+    // a "move all" onto itself would wipe the tab.
+    await expect(
+      asApp(cfg, (tx) => moveOrderLines(tx, cfg, tab, tab, undefined)),
+    ).rejects.toMatchObject({
       code: "tab.merge_self",
       params: { tabId: tab },
     });
     // The guard fires BEFORE any read/write, so the tab still holds both original lines.
     expect(await linesOf(tab)).toHaveLength(2);
-  });
-});
-
-describe("moveTab", () => {
-  it("adopts the destination table's zone policy while keeping the existing lines", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const src = await seedTable(cfg, "Zone-src");
-    const dst = await seedTable(cfg, "Zone-dst");
-    const source = await configureTableZone(cfg, src, "Downstairs", "table_tab");
-    const destination = await configureTableZone(cfg, dst, "Upstairs", "prepay");
-    await offerIn(cfg, source.zoneId);
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    expect(await serviceContextOf(tabId)).toEqual({ ...source, serviceMode: "table_tab" });
-
-    const before = await linesOf(tabId);
-    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
-
-    expect(await serviceContextOf(tabId)).toEqual({
-      zoneId: destination.zoneId,
-      departmentId: destination.departmentId,
-      serviceMode: "prepay",
-    });
-    expect(await linesOf(tabId)).toEqual(before);
-  });
-
-  it("relocates a tab to a free table: source freed + its status cleared, target points at the tab", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const src = await seedTable(cfg, "Src");
-    const dst = await seedTable(cfg, "Dst");
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    // A manual "bill requested" status on the source must NOT linger onto the next party.
-    const status = await seedStatus("Bill requested");
-    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${src}`);
-
-    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
-
-    expect(await tabIdOf(src)).toBeNull();
-    expect(await statusIdOf(src)).toBeNull(); // freed → status cleared
-    expect(await tabIdOf(dst)).toBe(tabId);
-    // No line-move, no fiscal effect: the tab still carries its one line and stays open.
-    expect(await linesOf(tabId)).toHaveLength(1);
-  });
-
-  it("clears a manual status on the TARGET table: the moved-in party turns it over", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const src = await seedTable(cfg, "T-src");
-    const dst = await seedTable(cfg, "T-dst");
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    // A stale manual status left on the free DESTINATION — from its previous party —
-    // must NOT linger onto the moved-in party; the move turns the target over, exactly as openTab does.
-    const status = await seedStatus("Needs cleaning");
-    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${dst}`);
-
-    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
-
-    expect(await tabIdOf(dst)).toBe(tabId);
-    expect(await statusIdOf(dst)).toBeNull(); // target turned over → status cleared
-  });
-
-  it("refuses a target that already has an OPEN tab (table.occupied)", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const src = await seedTable(cfg, "O-src");
-    const dst = await seedTable(cfg, "O-dst");
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]); // dst now occupied
-    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst))).rejects.toMatchObject({
-      code: "table.occupied",
-      params: { tableId: dst },
-    });
-  });
-
-  it("treats a target with a STALE tab_id (settled order) on a table no party holds as free and moves onto it", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const src = await seedTable(cfg, "St-src");
-    const dst = await seedTable(cfg, "St-dst");
-    const oldTab = await openTabOn(cfg, dst, [{ productId: cafeId, quantity: "1" }]);
-    // Settle dst's tab (owner write) — tab_id STILL points at it, and no party holds dst, so it is
-    // free.
-    await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
-    );
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-
-    await asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst));
-    expect(await tabIdOf(dst)).toBe(tabId); // stale pointer overwritten
-    expect(await tabIdOf(src)).toBeNull();
-  });
-
-  it("refuses an unknown/inactive target and a non-open tab", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const src = await seedTable(cfg, "G-src");
-    const dst = await seedTable(cfg, "G-dst");
-    const tabId = await openTabOn(cfg, src, [{ productId: cafeId, quantity: "1" }]);
-    const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, missing))).rejects.toMatchObject({
-      code: "table.not_found",
-      params: { tableId: missing },
-    });
-    await db.execute(sql`update dining_tables set active = false where id = ${dst}`);
-    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst))).rejects.toMatchObject({
-      code: "table.inactive",
-      params: { tableId: dst },
-    });
-    // A settled tab cannot be moved.
-    await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
-    );
-    const dst2 = await seedTable(cfg, "G-dst2");
-    await expect(asApp(cfg, (tx) => moveTab(tx, cfg, tabId, dst2))).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId },
-    });
-  });
-});
-
-describe("joinTable", () => {
-  it("refuses to join a detached open order to a table", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const original = await seedTable(cfg, "Detached source");
-    const destination = await seedTable(cfg, "Join destination");
-    const orderId = await openTabOn(cfg, original, [{ productId: cafeId, quantity: "1" }]);
-    await db.execute(sql`update dining_tables set tab_id = null where id = ${original}`);
-
-    await expect(
-      asApp(cfg, (tx) => joinTable(tx, cfg, orderId, destination)),
-    ).rejects.toMatchObject({
-      code: "tab.not_table_tab",
-      params: { tabId: orderId },
-    });
-    expect(await tabIdOf(destination)).toBeNull();
-  });
-
-  it("refuses to join a table from a different service zone", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t1 = await seedTable(cfg, "Join-downstairs");
-    const t2 = await seedTable(cfg, "Join-upstairs");
-    const source = await configureTableZone(cfg, t1, "Join downstairs", "table_tab");
-    const destination = await configureTableZone(cfg, t2, "Join upstairs", "table_tab");
-    await offerIn(cfg, source.zoneId);
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
-
-    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
-      code: "service_zone.join_mismatch",
-      params: { orderZoneId: source.zoneId, tableZoneId: destination.zoneId },
-    });
-  });
-
-  it("extends a tab's coverage to a free table: BOTH tables point at the one tab, no line-move", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t1 = await seedTable(cfg, "J1");
-    const t2 = await seedTable(cfg, "J2");
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
-
-    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2));
-
-    expect(await tabIdOf(t1)).toBe(tabId);
-    expect(await tabIdOf(t2)).toBe(tabId); // both point at the one tab — a join
-    expect(await linesOf(tabId)).toHaveLength(1); // the free table added no lines
-  });
-
-  it("refuses a target that already has an OPEN tab (table.occupied)", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t1 = await seedTable(cfg, "JO1");
-    const t2 = await seedTable(cfg, "JO2");
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
-    await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
-    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
-      code: "table.occupied",
-      params: { tableId: t2 },
-    });
-  });
-
-  it("treats a target with a STALE tab_id (settled order) on a table no party holds as free and joins onto it", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t1 = await seedTable(cfg, "JS1");
-    const t2 = await seedTable(cfg, "JS2");
-    const oldTab = await openTabOn(cfg, t2, [{ productId: cafeId, quantity: "1" }]);
-    // Settle t2's tab (owner write) — tab_id STILL points at it, and no party holds t2, so it is
-    // free.
-    await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${oldTab}`,
-    );
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
-
-    await asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2));
-    expect(await tabIdOf(t2)).toBe(tabId); // stale pointer overwritten by the join
-    expect(await tabIdOf(t1)).toBe(tabId); // t1 still covered — a join adds, it does not free
-  });
-
-  it("refuses an unknown/inactive target and a non-open tab", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t1 = await seedTable(cfg, "JG1");
-    const t2 = await seedTable(cfg, "JG2");
-    const tabId = await openTabOn(cfg, t1, [{ productId: cafeId, quantity: "1" }]);
-    const missing = randomUUID();
-    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, missing))).rejects.toMatchObject({
-      code: "table.not_found",
-      params: { tableId: missing },
-    });
-    await db.execute(sql`update dining_tables set active = false where id = ${t2}`);
-    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t2))).rejects.toMatchObject({
-      code: "table.inactive",
-      params: { tableId: t2 },
-    });
-    await db.execute(
-      sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
-    );
-    const t3 = await seedTable(cfg, "JG3");
-    await expect(asApp(cfg, (tx) => joinTable(tx, cfg, tabId, t3))).rejects.toMatchObject({
-      code: "tab.not_open",
-      params: { tabId },
-    });
-  });
-});
-
-describe("mergeTabs consolidate (freeSourceTable: true)", () => {
-  it("combines fromTab's lines onto intoTab with LOCKED prices preserved, abandons+empties fromTab, frees the source", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const tInto = await seedTable(cfg, "C-into");
-    const tFrom = await seedTable(cfg, "C-from");
-    // intoTab: café at 1.50. Then raise the catalogue price and open fromTab: café at 9.99. A re-price
-    // would make both 9.99; the move must keep each line's OWN locked gross.
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    await asApp(cfg, async (tx) => {
-      await updateProduct(tx, cafeId, { unitPrice: "9.99" });
-      await republishMenus(tx);
-    });
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
-    // A manual status on the source must clear when it is freed.
-    const status = await seedStatus("Needs cleaning");
-    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
-
-    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
-
-    // intoTab holds both café lines, EACH at its own locked gross (1.50 and 9.99).
-    const dest = await linesOf(intoTab);
-    expect(dest.map((l) => l.gross).sort()).toEqual(["1.50", "9.99"]);
-    // fromTab is abandoned and empty; the source table is freed and its status cleared.
-    const [{ status: fromStatus }] = await db
-      .select({ status: workingOrders.status })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, fromTab));
-    expect(fromStatus).toBe("abandoned");
-    expect(await linesOf(fromTab)).toHaveLength(0);
-    expect(await tabIdOf(tFrom)).toBeNull();
-    expect(await statusIdOf(tFrom)).toBeNull();
-    expect(await tabIdOf(tInto)).toBe(intoTab); // intoTab's own table unchanged
-  });
-
-  it("preserves a moved extra child line's parent linkage on merge (child points at the moved parent, not NULL)", async () => {
-    const { cfg, cafeId, baconId } = await setupVenue();
-    // addTabRound fires the round (→ fireLines), which needs a default kitchen station to route to.
-    await seedKitchenStation(db, { locationId: cfg.locationId });
-    const tInto = await seedTable(cfg, "MOD-into");
-    const tFrom = await seedTable(cfg, "MOD-from");
-
-    // Offer the Bacon as an extra of the café so the source tab can carry a parent dish line + a
-    // child line (parent_line_id set). `minPicks: 0` keeps the
-    // list optional, so the plain café ordered on intoTab below still passes.
-    const extraListId = await asApp(cfg, async (tx) => {
-      const list = await createExtraList(
-        tx,
-        {
-          name: "Extras",
-          customerName: null,
-          kitchenName: null,
-          minPicks: 0,
-          maxPicks: 2,
-          active: true,
-          items: [{ productId: baconId, maxQuantity: 2, preselected: false, price: "0.50" }],
-        },
-        LOCALE,
-      );
-      await writeProductModifiers(tx, cafeId, [{ kind: "extras", id: list.id }]);
-      return list.id;
-    });
-    // Re-offer now the café carries the list and a default station exists, so the offer publishes
-    // the list and the round has a route to fire through.
-    const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));
-
-    // intoTab: a plain café. fromTab: a café WITH the Bacon extra (added via a round, the path that
-    // takes `extras`) → a parent dish line + a child line pointing at it.
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, []);
-    await asApp(cfg, (tx) =>
-      addTabRound(
-        tx,
-        cfg,
-        fromTab,
-        offers.toOfferLines([
-          {
-            productId: cafeId,
-            quantity: "1",
-            extras: [{ listId: extraListId, picks: [{ productId: baconId, quantity: 1 }] }],
-          },
-        ]),
-      ),
-    );
-    const ticketBefore = await db.execute<{
-      id: string;
-      working_order_line_id: string;
-    }>(sql`
-      select id, working_order_line_id from ticket_items
-      where working_order_id = ${fromTab}`);
-
-    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true }));
-
-    // The moved child line keeps pointing at the same stable parent id. The child is the row carrying
-    // the PICKED extra product, the café dish the row carrying the dish's own.
-    const dest = await db
-      .select({
-        id: workingOrderLines.id,
-        productId: workingOrderLines.productId,
-        parentLineId: workingOrderLines.parentLineId,
-      })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, intoTab))
-      .orderBy(workingOrderLines.lineNo);
-    const child = dest.find((l) => l.productId === baconId);
-    expect(child).toBeDefined();
-    expect(child!.parentLineId).not.toBeNull();
-    // Its parent is another MOVED line on the destination: a top-level café dish (product set,
-    // parent_line_id null).
-    const parent = dest.find((l) => l.id === child!.parentLineId);
-    expect(parent).toBeDefined();
-    expect(parent!.productId).toBe(cafeId);
-    expect(parent!.parentLineId).toBeNull();
-    const ticketAfter = await db.execute<{
-      id: string;
-      working_order_line_id: string;
-      working_order_id: string;
-    }>(sql`
-      select id, working_order_line_id, working_order_id from ticket_items
-      where working_order_id = ${intoTab}`);
-    expect(ticketAfter.rows).toEqual([
-      {
-        ...ticketBefore.rows[0]!,
-        working_order_id: intoTab,
-      },
-    ]);
-  });
-
-  it("the join branch (freeSourceTable: false) re-points the source table at intoTab (covered for branch)", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const tInto = await seedTable(cfg, "CB-into");
-    const tFrom = await seedTable(cfg, "CB-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
-
-    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false }));
-
-    expect(await tabIdOf(tFrom)).toBe(intoTab); // source table now covered by intoTab (a join)
-    expect(await tabIdOf(tInto)).toBe(intoTab);
-  });
-});
-
-describe("mergeTabs join (freeSourceTable: false)", () => {
-  it("keeps BOTH tables pointing at intoTab and PRESERVES a manual status on the joined table", async () => {
-    const { cfg, cafeId, aguaId } = await setupVenue();
-    const tInto = await seedTable(cfg, "JN-into");
-    const tFrom = await seedTable(cfg, "JN-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: aguaId, quantity: "1" }]);
-    // A status on the source table: a JOINED table keeps its status.
-    const status = await seedStatus("VIP");
-    await db.execute(sql`update dining_tables set status_id = ${status} where id = ${tFrom}`);
-
-    await asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: false }));
-
-    expect(await tabIdOf(tInto)).toBe(intoTab);
-    expect(await tabIdOf(tFrom)).toBe(intoTab); // both covered by the one bill
-    expect(await statusIdOf(tFrom)).toBe(status); // joined table KEEPS its status
-    expect(await linesOf(intoTab)).toHaveLength(2); // café + agua combined onto intoTab
-  });
-});
-
-describe("mergeTabs guards", () => {
-  it("refuses a detached open order as the merge target", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const targetTable = await seedTable(cfg, "Detached target");
-    const sourceTable = await seedTable(cfg, "Anchored source");
-    const target = await openTabOn(cfg, targetTable, [{ productId: cafeId, quantity: "1" }]);
-    const source = await openTabOn(cfg, sourceTable, [{ productId: cafeId, quantity: "1" }]);
-    await db.execute(sql`update dining_tables set tab_id = null where id = ${targetTable}`);
-
-    await expect(
-      asApp(cfg, (tx) => mergeTabs(tx, cfg, target, source, { freeSourceTable: false })),
-    ).rejects.toMatchObject({ code: "tab.not_table_tab", params: { tabId: target } });
-    expect(await tabIdOf(sourceTable)).toBe(source);
-  });
-
-  it("refuses merging a tab into itself (tab.merge_self)", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const t = await seedTable(cfg, "MS");
-    const tab = await openTabOn(cfg, t, [{ productId: cafeId, quantity: "1" }]);
-    await expect(
-      asApp(cfg, (tx) => mergeTabs(tx, cfg, tab, tab, { freeSourceTable: true })),
-    ).rejects.toMatchObject({ code: "tab.merge_self", params: { tabId: tab } });
-  });
-
-  it("refuses when either tab is not open (tab.not_open)", async () => {
-    const { cfg, cafeId } = await setupVenue();
-    const tInto = await seedTable(cfg, "NO-into");
-    const tFrom = await seedTable(cfg, "NO-from");
-    const intoTab = await openTabOn(cfg, tInto, [{ productId: cafeId, quantity: "1" }]);
-    const fromTab = await openTabOn(cfg, tFrom, [{ productId: cafeId, quantity: "1" }]);
-    // Abandon fromTab (owner write) → merge is refused, naming fromTab.
-    await db.execute(sql`update working_orders set status = 'abandoned' where id = ${fromTab}`);
-    await expect(
-      asApp(cfg, (tx) => mergeTabs(tx, cfg, intoTab, fromTab, { freeSourceTable: true })),
-    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: fromTab } });
   });
 });
 
@@ -894,7 +364,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     await holdOne(v, tabId, "Agua");
     const before = await noticesOf([tabId, checkId]);
 
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
 
     const added = (await noticesOf([tabId, checkId])).slice(before.length);
     expect(added).toHaveLength(2);
@@ -910,16 +380,15 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
     await orderForParty(v, partyId, ["Burger", "Vino", "Flan"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
+    const newTabId = await split(v, partyId, tabId, [1]);
     const command = await commandFor(v, partyId);
 
-    const { tabId: newTabId } = await inTx(v, (tx) =>
-      unjoinTable(tx, v.cfg, tabId, mesa5, [{ lineNo: 1 }], command),
-    );
+    await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, mesa5, newTabId, command));
 
-    const notices = await noticesOf([tabId, checkId, newTabId!]);
+    const notices = await noticesOf([tabId, checkId, newTabId]);
     expect(byDish(notices)).toEqual([
       ["BURG", newTabId, "Mesa 5"],
       ["FLAN", tabId, "Mesa 4"],
@@ -936,11 +405,11 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
     await orderForParty(v, partyId, ["Burger"], tabId);
     const command = await commandFor(v, partyId);
 
-    await inTx(v, (tx) => unjoinTable(tx, v.cfg, tabId, mesa5, undefined, command));
+    await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, mesa5, null, command));
 
     expect(await noticesOf([tabId])).toEqual([
       { workingOrderId: tabId, kind: "moved", lineName: "BURG", movedTo: "Mesa 4" },
@@ -953,12 +422,14 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const mesa5 = await v.table("Mesa 5");
     const mesa9 = await v.table("Mesa 9");
     const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     const command = await commandFor(v, partyId);
 
-    await inTx(v, (tx) => moveTab(tx, v.cfg, tabId, mesa9, command));
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, partyId, mesa9, { ...command, bills: "merge", otherPartyId: null }),
+    );
 
     const notices = await noticesOf([tabId, checkId]);
     expect(byDish(notices)).toEqual([
@@ -978,14 +449,15 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const other = await seat(v, mesa7);
     await orderForParty(v, other.partyId, ["Flan"], other.tabId);
     const expectedPartyRevision = await revisionOf(v, ana.partyId);
-    const expectedSourcePartyRevision = await revisionOf(v, other.partyId);
+    const expectedOtherPartyRevision = await revisionOf(v, other.partyId);
     await nextMillisecond();
 
     await inTx(v, (tx) =>
-      mergeTabs(tx, v.cfg, ana.tabId, other.tabId, {
-        freeSourceTable: false,
+      joinTables(tx, v.cfg, ana.partyId, mesa7, {
+        bills: "merge",
         expectedPartyRevision,
-        expectedSourcePartyRevision,
+        otherPartyId: other.partyId,
+        expectedOtherPartyRevision,
         operatorId: OPERATOR,
       }),
     );
@@ -1008,14 +480,15 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     await orderForParty(v, other.partyId, ["Flan", "Tarta"], other.tabId);
     const otherCheckId = await split(v, other.partyId, other.tabId, [2]);
     const expectedPartyRevision = await revisionOf(v, ana.partyId);
-    const expectedSourcePartyRevision = await revisionOf(v, other.partyId);
+    const expectedOtherPartyRevision = await revisionOf(v, other.partyId);
     await nextMillisecond();
 
     await inTx(v, (tx) =>
-      mergeTabs(tx, v.cfg, ana.tabId, other.tabId, {
-        freeSourceTable: false,
+      joinTables(tx, v.cfg, ana.partyId, mesa7, {
+        bills: "merge",
         expectedPartyRevision,
-        expectedSourcePartyRevision,
+        otherPartyId: other.partyId,
+        expectedOtherPartyRevision,
         operatorId: OPERATOR,
       }),
     );

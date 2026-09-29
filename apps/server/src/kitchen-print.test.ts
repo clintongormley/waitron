@@ -46,7 +46,6 @@ import {
   createOpenOrder,
   fireCourse,
   fireLines,
-  openTab,
   voidTabLine,
 } from "./working-order.js";
 import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
@@ -72,6 +71,7 @@ import {
   tableAt,
 } from "./testing/party-venue.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
@@ -512,7 +512,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireCourse
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "Mesa 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
-      const { tabId } = await openTab(tx, cfg, { tableId: table!.id });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
       await addTabRound(tx, foreignCfg, tabId, offers.toOfferLines([line(drink)]));
       return { printerId, jobs: await printJobsFor(tx) };
     });
@@ -825,7 +825,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
         .insert(diningTables)
         .values({ locationId: cfg.locationId, label: "T1", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
-      const { tabId } = await openTab(tx, cfg, { tableId: table!.id });
+      const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
       await addTabRound(tx, cfg, tabId, [{ menuItemId: offers.offerFor(steak), quantity: "3" }]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
       await voidTabLine(tx, cfg, tabId, 1, "2");
@@ -1418,7 +1418,7 @@ describe("the table a slip names (spec decision 9)", () => {
     const mesa4 = await tableAt(v, `00000000-${randomUUID().slice(9)}`, "Mesa 4");
     const mesa5 = await tableAt(v, `ffffffff-${randomUUID().slice(9)}`, "Mesa 5");
     const { partyId, tabId } = await seat(v, mesa5);
-    await join(v, partyId, tabId, mesa4);
+    await join(v, partyId, mesa4);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
     expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, tabId))).toBe("Mesa 5, 4");
@@ -1431,7 +1431,7 @@ describe("the table a slip names (spec decision 9)", () => {
     const { partyId, tabId } = await seat(v, mesa4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
 
     expect((await billRow(v, checkId)).label).toBe("Mesa 4");
     expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Mesa 4, 5");
@@ -1442,7 +1442,7 @@ describe("the table a slip names (spec decision 9)", () => {
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, mesa4);
-    await join(v, partyId, tabId, mesa5);
+    await join(v, partyId, mesa5);
     await nameParty(v, partyId, "Ana");
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
 

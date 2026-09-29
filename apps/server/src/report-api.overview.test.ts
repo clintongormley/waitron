@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   diningTables,
+  parties,
+  partyTables,
   invoiceSeries,
   locations,
   nodes,
@@ -12,7 +15,6 @@ import {
   tenders,
   tills,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -100,28 +102,25 @@ async function seedTodaySale(db: Database): Promise<void> {
 }
 
 /**
- * One ACTIVE + OPEN table, one ACTIVE + FREE, and one INACTIVE that also carries an open tab: the
- * route's openTables must be {open:1, total:2}, because an inactive table counts in neither. The
- * open tables need real working_orders rows because `dining_tables.tab_id` is a foreign key.
+ * One ACTIVE table a party holds, one ACTIVE + FREE, and one INACTIVE that a party also holds: the
+ * route's openTables must be {open:1, total:2}, because an inactive table counts in neither.
  */
 async function seedDiningTables(db: Database): Promise<void> {
-  const [wo] = await db
-    .insert(workingOrders)
-    .values({ tillId, nodeId, orderNumber: 1, status: "open" })
-    .returning({ id: workingOrders.id });
-  const tabId = wo!.id;
-  await db.insert(diningTables).values([
-    { locationId, label: "Mesa 1", tabId },
-    { locationId, label: "Mesa 2", tabId: null },
-  ]);
-  // An INACTIVE table with an open tab — must be excluded from openTables.total AND .open.
-  const [inactiveWo] = await db
-    .insert(workingOrders)
-    .values({ tillId, nodeId, orderNumber: 2, status: "open" })
-    .returning({ id: workingOrders.id });
-  await db
+  const [held, , inactive] = await db
     .insert(diningTables)
-    .values({ locationId, label: "Mesa 3 (baja)", tabId: inactiveWo!.id, active: false });
+    .values([
+      { locationId, label: "Mesa 1" },
+      { locationId, label: "Mesa 2" },
+      { locationId, label: "Mesa 3 (baja)", active: false },
+    ])
+    .returning({ id: diningTables.id });
+  for (const table of [held!, inactive!]) {
+    const [party] = await db
+      .insert(parties)
+      .values({ openedBy: randomUUID() })
+      .returning({ id: parties.id });
+    await db.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
+  }
 }
 
 const suite = useVenueDb({
@@ -238,7 +237,7 @@ describe("mountReportApi — /reports/overview", () => {
     // One non-correcting, non-voided sale on today.
     expect(body.counts).toEqual({ sales: 1, corrections: 0, voids: 0 });
 
-    // Two ACTIVE tables, one with an open tab; the inactive third counts in neither.
+    // Two ACTIVE tables, one held by a party; the inactive third counts in neither.
     expect(body.openTables).toEqual({ open: 1, total: 2 });
 
     // The single seeded line, keyed on its frozen STAFF name — never the customer-facing text.

@@ -3,6 +3,8 @@ import {
   kitchenStations,
   locations,
   nowIso,
+  parties,
+  partyTables,
   ticketItems,
   tills,
   withTransaction,
@@ -57,9 +59,13 @@ beforeAll(async () => {
     .returning({ id: kitchenStations.id });
 
   const orderId = randomUUID();
+  const [party] = await db
+    .insert(parties)
+    .values({ openedBy: randomUUID() })
+    .returning({ id: parties.id });
   await db
     .insert(workingOrders)
-    .values({ id: orderId, tillId, nodeId, orderNumber: 1, status: "open" });
+    .values({ id: orderId, tillId, nodeId, orderNumber: 1, status: "open", partyId: party!.id });
   const lineId = randomUUID();
   await db.insert(workingOrderLines).values({
     id: lineId,
@@ -83,9 +89,8 @@ beforeAll(async () => {
     firedAt: nowIso(),
   });
   tableId = randomUUID();
-  await db
-    .insert(diningTables)
-    .values({ id: tableId, locationId, label: "Mesa 1", capacity: 4, tabId: orderId });
+  await db.insert(diningTables).values({ id: tableId, locationId, label: "Mesa 1", capacity: 4 });
+  await db.insert(partyTables).values({ partyId: party!.id, tableId });
 
   cfg = {
     tillId: brandTillId(tillId),

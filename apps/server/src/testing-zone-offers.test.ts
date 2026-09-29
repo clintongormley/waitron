@@ -28,13 +28,14 @@ import {
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
-import { addTabRound, openTab, parkOrder } from "./working-order.js";
+import { addTabRound, parkOrder } from "./working-order.js";
 import { createStation, setCategoryStation, setProductStation } from "./kitchen.js";
 import { createTable } from "./tables.js";
 import type { TillConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { openPartyTab } from "./testing/serve-line.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -223,7 +224,7 @@ describe("offerProducts", () => {
     const tabId = await withTransaction(suite.db, async (tx) => {
       const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
       const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
-      const { tabId } = await openTab(tx, venue.cfg, { tableId: table.id });
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
       await addTabRound(
         tx,
         venue.cfg,
@@ -256,7 +257,7 @@ describe("offerProducts", () => {
       withTransaction(suite.db, async (tx) => {
         const offers = await offerProducts(tx, venue.cfg, { zone: "tables", routes: "none" });
         const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
-        const { tabId } = await openTab(tx, venue.cfg, { tableId: table.id });
+        const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
         await addTabRound(
           tx,
           venue.cfg,
