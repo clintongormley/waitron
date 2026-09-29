@@ -2797,7 +2797,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Since campaign item A118 (#824, main `b4e74fa5a`; owner, 2026-09-28: "a payment could happen while food is still
       being served, so yes you should be able to mark it served"), a served mark no longer moves
       any bill's revision, so it is taken while a card payment runs on the bill; the party's
-      revision still counts it. Since campaign item A121 (owner, 2026-09-29, on A118's question:
+      revision still counts it. Since campaign item A121 (#851, main `7c409d488`; owner, 2026-09-29, on A118's question:
       "do it"), a pending card refund of an open bill no longer refuses a served mark either; every
       other write `bill.refund_in_progress` refused still refuses.
     - The server works out when the party's next held group should be fired: once every dish of
