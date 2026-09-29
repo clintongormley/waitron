@@ -3478,7 +3478,7 @@ ongoing overhaul listed at the top of Track A.
   rename until a venue is live.
 
 - **A search box at the top of the dashboard sidebar finds a page by its name or its group's name
-  (C46, owner request 2026-09-28).** It lists only the pages the person may open (the same checks
+  (C46, #836, owner request 2026-09-28).** It lists only the pages the person may open (the same checks
   the sidebar already applies), ignores case and accents, opens a group with a match without
   changing which groups are folded, says "No pages match." when nothing does, and opens the first
   match on Enter; opening a page empties the box. `docs/developers/design-system.md` → "Dashboard
