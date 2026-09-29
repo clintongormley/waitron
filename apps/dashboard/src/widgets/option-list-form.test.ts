@@ -94,10 +94,16 @@ async function click(el: OptionListForm | OptionLabelForm, testId: string): Prom
   await el.updateComplete;
 }
 
-function summary(el: OptionListForm | OptionLabelForm): string[] {
-  const box = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-  return [...box.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
+async function bottomOf(el: OptionListForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+    "wt-modal wt-form-actions",
+  )!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+
+const saveOf = (el: OptionListForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>('wt-modal [data-test="save"]')!;
 
 function editor(el: OptionListForm): OptionLabelForm {
   return el.shadowRoot!.querySelector<OptionLabelForm>("dashboard-option-label-form")!;
@@ -239,7 +245,7 @@ it("submits an edit under the ids it was given, keeping the names it did not tou
   ]);
 });
 
-it("refuses an active list with no available option itself, beside the options and in the summary", async () => {
+it("refuses an active list with no available option itself, beside the options and in the bottom message", async () => {
   const { el, host } = await mount({ value: cooked });
   const submitted = record(host);
 
@@ -252,7 +258,8 @@ it("refuses an active list with no available option itself, beside the options a
   expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')!.textContent).toContain(
     message,
   );
-  expect(summary(el)).toContain(message);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
   await toggle(el, "active", false);
   await click(el, "save");
@@ -260,7 +267,7 @@ it("refuses an active list with no available option itself, beside the options a
   expect(submitted[0]!.active).toBe(false);
 });
 
-it("refuses a list with no staff name, beside the name field and in the summary", async () => {
+it("refuses a list with no staff name, beside the name field and in the bottom message", async () => {
   const { el, host } = await mount();
   const submitted = record(host);
 
@@ -269,7 +276,8 @@ it("refuses a list with no staff name, beside the name field and in the summary"
 
   expect(submitted).toEqual([]);
   expect(field(el, "name").error).toBe(t("options.name_required"));
-  expect(summary(el)).toEqual([t("options.name_required")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 });
 
 it("shows each option as text with a Default radio, an Unavailable lozenge only when it is off, and a menu of actions", async () => {
@@ -474,7 +482,7 @@ it("moves the default to the first available option when the option editor switc
   await click(el, "save");
 
   expect(submitted[0]!.defaultLabelId).toBe(RARE);
-  expect(summary(el)).toEqual([]);
+  expect(await bottomOf(el)).toBe("");
 });
 
 it("keeps the chosen default when another option is switched off", async () => {
@@ -521,14 +529,14 @@ it("opens a list whose default is unavailable on the first available option, not
   expect(radio(el, 1).checked).toBe(false);
   expect(radio(el, 1).disabled).toBe(true);
   expect(radio(el, 0).checked).toBe(true);
-  expect(summary(el)).toEqual([]);
+  expect(await bottomOf(el)).toBe("");
   expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
 
   await click(el, "save");
   expect(submitted[0]!.defaultLabelId).toBe(RARE);
 });
 
-it("shows a refusal naming an option's field under its row and in the summary, and beside the field in its editor", async () => {
+it("shows a refusal naming an option's field under its row, and beside the field in its editor", async () => {
   const { el } = await mount({
     value: cooked,
     fieldErrors: { kitchenName: "Too long for the kitchen.", "labels.1.name": "Already used." },
@@ -537,7 +545,8 @@ it("shows a refusal naming an option's field under its row and in the summary, a
   expect(field(el, "kitchen-name").error).toBe("Too long for the kitchen.");
   expect(rowErrors(el, 1)).toEqual(["Already used."]);
   expect(rowErrors(el, 0)).toEqual([]);
-  expect(summary(el).sort()).toEqual(["Already used.", "Too long for the kitchen."]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
   const form = await openEditor(el, 1);
   expect(form.errors).toEqual({ "label-name": "Already used." });
@@ -549,6 +558,8 @@ it("shows a refusal naming an option's field under its row and in the summary, a
 
 it("keeps a rejected option's message on that option after it is moved", async () => {
   const { el } = await mount({ value: cooked, fieldErrors: { "labels.1.name": "Already used." } });
+  // A refusal takes focus when it arrives; let it land before the handle is focused.
+  await new Promise((resolve) => setTimeout(resolve));
 
   const handle = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${MEDIUM}"]`)!;
   handle.focus();
@@ -651,7 +662,7 @@ it("hands the preselect radio the brand colour to draw its checked dot with", as
   expect(getComputedStyle(radio(el, 0)).accentColor).toBe("rgb(1, 2, 3)");
 });
 
-it("puts a customer-name refusal beside the first language, and an active one in the summary", async () => {
+it("puts a customer-name refusal beside the first language, and an active one in the bottom message", async () => {
   const { el } = await mount({
     value: cooked,
     fieldErrors: {
@@ -665,11 +676,7 @@ it("puts a customer-name refusal beside the first language, and an active one in
   expect(field(el, "customer-name-es").error).toBe("");
   expect(rowErrors(el, 0)).toEqual(["The option needs one too."]);
   expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
-  expect(summary(el).sort()).toEqual([
-    "Cannot be switched off.",
-    "Needs a customer-facing name.",
-    "The option needs one too.",
-  ]);
+  expect(await bottomOf(el)).toBe(`Cannot be switched off. ${t("form.fix_fields")}`);
 
   const form = await openEditor(el, 0);
   expect(form.errors).toEqual({ "label-customer-name-en": "The option needs one too." });
@@ -684,7 +691,8 @@ it.each([
   const { el } = await mount({ value: cooked, fieldErrors: { [path]: "Something is wrong." } });
 
   expect(text(el, "labels-error")).toBe("Something is wrong.");
-  expect(summary(el)).toEqual(["Something is wrong."]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
 it("moves a rejected option's message under the options table once that option is removed", async () => {
@@ -694,7 +702,9 @@ it("moves a rejected option's message under the options table once that option i
   await click(el, "remove-label-1");
 
   expect(text(el, "labels-error")).toBe("Already used.");
-  expect(summary(el)).toEqual(["Already used."]);
+  // Removing the option was the change to the field the refusal named, so nothing is left to fix.
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
 it("reads an option with no kitchen name as blank and submits blank kitchen names as null", async () => {
@@ -750,7 +760,8 @@ it("ignores a drag whose row was removed mid-gesture, leaving the save's message
   await click(el, "remove-label-0");
   await type(el, "name", "");
   await click(el, "save");
-  expect(summary(el)).toEqual([t("options.name_required")]);
+  expect(field(el, "name").error).toBe(t("options.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   const firstRow = el.shadowRoot!.querySelector("tbody tr")!.getBoundingClientRect();
   document.dispatchEvent(
@@ -763,7 +774,8 @@ it("ignores a drag whose row was removed mid-gesture, leaving the save's message
   document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
   await el.updateComplete;
 
-  expect(summary(el)).toEqual([t("options.name_required")]);
+  expect(field(el, "name").error).toBe(t("options.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   await type(el, "name", "Cooked");
   await click(el, "save");
   expect(submitted[0]!.labels.map((label) => label.id)).toEqual([MEDIUM, WELL]);
@@ -940,7 +952,7 @@ it("clears a refusal held for an option once that option is saved in its editor,
   await editOption(el, 1, (form) => type(form, "label-name", "Medium rare"));
 
   expect(rowErrors(el, 1)).toEqual([]);
-  expect(summary(el)).toEqual(["Too long."]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect((await openEditor(el, 1)).errors).toEqual({});
   await click(editor(el), "cancel");
   expect(rowErrors(el, 0)).toEqual(["Too long."]);
@@ -956,5 +968,147 @@ it("keeps a refusal held for an option when its editor is cancelled", async () =
   await el.updateComplete;
 
   expect(rowErrors(el, 1)).toEqual(["Already used."]);
-  expect(summary(el)).toEqual(["Already used."]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+});
+
+// ---------------------------------------------------------------------------
+// When it speaks about errors
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const { el } = await mount({ value: cooked });
+  await type(el, "name", "");
+  await editOption(el, 0, (form) => toggle(form, "label-available", false));
+  await editOption(el, 1, (form) => toggle(form, "label-available", false));
+
+  expect(field(el, "name").error).toBe("");
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the name, keeps what was typed and disables Save", async () => {
+  const { el } = await mount({ value: cooked });
+  await type(el, "kitchen-name", "CK");
+  await type(el, "name", " ");
+  await click(el, "save");
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(field(el, "name").shadowRoot!.activeElement).toBe(
+    field(el, "name").shadowRoot!.querySelector("input"),
+  );
+  expect(field(el, "kitchen-name").value).toBe("CK");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("focuses the options table when the options are all that is wrong", async () => {
+  const { el } = await mount();
+  await type(el, "name", "Cooked");
+  await click(el, "save");
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector(".table-wrap"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+  const { el } = await mount();
+  await click(el, "save");
+  expect(text(el, "labels-error")).toBe(t("options.labels_required"));
+
+  await type(el, "name", "Cooked");
+  expect(field(el, "name").error).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "name", " ");
+  expect(field(el, "name").error).toBe(t("options.name_required"));
+
+  await type(el, "name", "Cooked");
+  await addOption(el, "Rare");
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a field's refusal when that field changes, and Save works again", async () => {
+  const { el } = await mount({ value: cooked, fieldErrors: { kitchenName: "Too long." } });
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "name", "Cooking");
+  expect(field(el, "kitchen-name").error).toBe("Too long.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "kitchen-name", "CK");
+  expect(field(el, "kitchen-name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a translated name's refusal only when that language's value changes", async () => {
+  const { el } = await mount({
+    value: cooked,
+    fieldErrors: { customerName: "Rejected English." },
+  });
+
+  await type(el, "customer-name-es", "¿Cómo lo quiere?");
+  expect(field(el, "customer-name-en").error).toBe("Rejected English.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "customer-name-en", "How do you like it?");
+  expect(field(el, "customer-name-en").error).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a refusal about the options as a whole once the options change", async () => {
+  const { el } = await mount({ value: cooked, fieldErrors: { labels: "Something is wrong." } });
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await click(el, "label-0-default");
+
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
+  const { el } = await mount({ value: cooked });
+  el.fieldErrors = { kitchenName: "Too long." };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+      '[data-test="names-section"]',
+    )!.open,
+  ).toBe(true);
+  expect(field(el, "kitchen-name").shadowRoot!.activeElement).toBe(
+    field(el, "kitchen-name").shadowRoot!.querySelector("input"),
+  );
+});
+
+it("keeps a refusal naming no field in the bottom message alone, leaving Save working until it is submitted again", async () => {
+  const { el, host } = await mount({ value: cooked, fieldErrors: { _form: "Not found." } });
+  const submitted = record(host);
+
+  expect(await bottomOf(el)).toBe("Not found.");
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const { el } = await mount();
+  await click(el, "save");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(field(el, "name").error).toBe("");
+  expect(el.shadowRoot!.querySelector('[data-test="labels-error"]')).toBeNull();
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });

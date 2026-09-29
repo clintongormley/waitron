@@ -1,14 +1,15 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-switch.js";
 import "./allergen-picker.js";
 import "./dietary-origin-picker.js";
 import { t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import type {
   AllergenDeclaration,
   DietaryOrigin,
@@ -29,6 +30,18 @@ export interface UpdateIngredientDetail {
   patch: IngredientPatch;
 }
 
+/** `name` marks the name field; `_form` is shown in the bottom message alone. */
+export type IngredientFormErrors = Partial<Record<"name" | "_form", string>>;
+
+/** A refused ingredient write, keyed by this form's fields. */
+export function ingredientRefusalErrors(error: unknown): IngredientFormErrors {
+  const code = codeOf(error);
+  const params = (error as { params?: { field?: unknown } }).params ?? {};
+  if (code === "management.request_invalid" && params.field === "name")
+    return { name: codeMessage(code) };
+  return { _form: codeMessage(code) };
+}
+
 /**
  * The form does NOT call the API and does NOT close itself on confirm — the screen closes it on a
  * successful create/update, so a rejected write leaves the entered values in place. On PATCH
@@ -47,10 +60,6 @@ export class IngredientForm extends LitElement {
         display: block;
         margin-bottom: var(--wt-space-4);
       }
-      .error {
-        color: var(--wt-color-danger);
-        margin-top: var(--wt-space-3);
-      }
     `,
   ];
 
@@ -60,6 +69,8 @@ export class IngredientForm extends LitElement {
 
   @property({ type: Boolean }) busy = false;
 
+  @property({ attribute: false }) fieldErrors: IngredientFormErrors = {};
+
   @state() private name = "";
   @state() private active = true;
   // Kept SEPARATE from the picker's `declaration` seed (`seedAllergens`) so a user edit — which
@@ -68,13 +79,17 @@ export class IngredientForm extends LitElement {
   @state() private seedAllergens: AllergenDeclaration = null;
   @state() private dietaryOrigin: DietaryOrigin | null = null;
   @state() private seedOrigin: DietaryOrigin | null = null;
-  @state() private validationError: string | null = null;
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
 
   /** Allergens are seeded into BOTH the live value (`allergens`, what a save emits) and the picker's
    * `declaration` seed (`seedAllergens`); the picker does not emit on seed, so the form must seed its
    * own live copy too, or an untouched edit would re-save the wrong value. */
   override willUpdate(changed: PropertyValues): void {
-    if (!changed.has("ingredient") && !(changed.has("open") && this.open)) return;
+    const reopened = changed.has("ingredient") || (changed.has("open") && this.open);
+    if (changed.has("fieldErrors") || reopened) this.dismissed = new Set();
+    if (!reopened) return;
     const ing = this.ingredient;
     this.name = ing?.name ?? "";
     this.active = ing?.active ?? true;
@@ -82,13 +97,18 @@ export class IngredientForm extends LitElement {
     this.seedAllergens = ing?.allergens ?? null;
     this.dietaryOrigin = ing?.dietaryOrigin ?? null;
     this.seedOrigin = ing?.dietaryOrigin ?? null;
-    this.validationError = null;
+    this.attempted = false;
+  }
+
+  protected override updated(changed: PropertyValues): void {
+    if (changed.has("fieldErrors") && this.fieldErrors.name)
+      void focusFirstInvalid(this.shadowRoot!);
   }
 
   #onNameChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.name = event.detail.value;
-    if (this.validationError) this.validationError = null;
+    this.dismissed = new Set([...this.dismissed, "name"]);
   }
 
   #onActiveChange(event: CustomEvent<{ checked: boolean }>): void {
@@ -106,14 +126,23 @@ export class IngredientForm extends LitElement {
     this.dietaryOrigin = event.detail.origin;
   }
 
+  #nameError(): string {
+    return this.name.trim() === "" ? codeMessage("ingredient.name_required") : "";
+  }
+
+  #refused(key: keyof IngredientFormErrors): string {
+    return this.dismissed.has(key) ? "" : (this.fieldErrors[key] ?? "");
+  }
+
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    if (this.name.trim() === "") {
-      this.validationError = "ingredient.name_required";
+    this.attempted = true;
+    this.dismissed = new Set([...this.dismissed, ...Object.keys(this.fieldErrors)]);
+    if (this.#nameError() !== "") {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.validationError = null;
 
     if (this.ingredient) {
       const patch: IngredientPatch = {
@@ -151,6 +180,10 @@ export class IngredientForm extends LitElement {
   }
 
   override render() {
+    const nameError = (this.attempted ? this.#nameError() : "") || this.#refused("name");
+    const bottom = [this.#refused("_form"), nameError === "" ? "" : t("form.fix_fields")]
+      .filter((message) => message !== "")
+      .join(" ");
     return html`
       <wt-dialog
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
@@ -161,7 +194,10 @@ export class IngredientForm extends LitElement {
         <wt-input
           class="field"
           data-test="name"
+          name="name"
           label=${t("ingredient.name")}
+          required
+          error=${nameError}
           .value=${this.name}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onNameChange(e)}
         ></wt-input>
@@ -190,21 +226,15 @@ export class IngredientForm extends LitElement {
           @wt-allergens-change=${(e: CustomEvent<{ value: AllergenDeclaration }>) =>
             this.#onAllergensChanged(e)}
         ></dashboard-allergen-picker>
-        ${
-          this.validationError
-            ? html`<p class="error" role="alert" data-test="error">
-                ${codeMessage(this.validationError)}
-              </p>`
-            : nothing
-        }
-        <wt-button
-          slot="footer"
-          variant="primary"
-          data-test="confirm"
-          ?disabled=${this.busy}
-          @click=${(e: Event) => this.#confirm(e)}
-          >${this.ingredient ? t("action.save") : t("action.create")}</wt-button
-        >
+        <wt-form-actions slot="footer" .error=${bottom}>
+          <wt-button
+            variant="primary"
+            data-test="confirm"
+            ?disabled=${this.busy || nameError !== ""}
+            @click=${(e: Event) => this.#confirm(e)}
+            >${this.ingredient ? t("action.save") : t("action.create")}</wt-button
+          >
+        </wt-form-actions>
       </wt-dialog>
     `;
   }

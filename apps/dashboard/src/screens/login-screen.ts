@@ -8,10 +8,9 @@ import {
   WebAuthnAbortService,
 } from "@simplewebauthn/browser";
 import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
-import { submitOnEnter, baseStyles } from "@waitron/ui";
+import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -160,7 +159,6 @@ export class LoginScreen extends LitElement {
   private offerAfterLogin = false;
   private completedLogin: CompletedLogin | null = null;
   @state() private passkeyName = "";
-  @state() private passkeyNameError = "";
   @state() private passkeyFactorRequired = false;
   @state() private rememberEmail = this.rememberedLogin?.persistent ?? false;
   @state() private passwordVisible = false;
@@ -175,10 +173,9 @@ export class LoginScreen extends LitElement {
   private resetTimer?: ReturnType<typeof setInterval>;
   private passkeyAttempt = 0;
   @state() private errorKey: string | null = null;
-  @state() private emailError = "";
-  @state() private passwordError = "";
-  @state() private secondFactorError = "";
-  @state() private pinError = "";
+  /** The shown field `errorKey`'s refusal names, if any; the refusal shows under that field. */
+  @state() private refusalField: string | null = null;
+  @state() private attempted = false;
   @state() private googleConfigured = false;
   @state() private privacyNoticeUrl = "";
 
@@ -219,6 +216,35 @@ export class LoginScreen extends LitElement {
     });
   }
 
+  protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("step") || changed.has("token") || changed.has("actionValidated")) {
+      this.attempted = false;
+      if (this.refusalField !== null) this.errorKey = null;
+      this.refusalField = null;
+    }
+  }
+
+  #focusFirstInvalid(): void {
+    void this.updateComplete.then(() => {
+      if (this.isConnected) void focusFirstInvalid(this.shadowRoot!);
+    });
+  }
+
+  /** Records a refusal, under `field` when this form shows it, otherwise beside the action. */
+  #refuse(code: string, field: string): void {
+    this.errorKey = code;
+    if (this.#shownFields().has(field)) {
+      this.refusalField = field;
+      this.#focusFirstInvalid();
+    }
+  }
+
+  #dismissRefusal(field: string): void {
+    if (this.refusalField !== field) return;
+    this.refusalField = null;
+    this.errorKey = null;
+  }
+
   #cancelPasskeyCeremony(): void {
     this.passkeyAttempt += 1;
     this.busy = false;
@@ -230,45 +256,119 @@ export class LoginScreen extends LitElement {
     this.resetSeconds = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
   }
 
-  private get formErrors(): string[] {
-    return [
-      ...new Set(
-        [
-          this.emailError,
-          this.passwordError,
-          this.secondFactorError,
-          this.pinError,
-          this.passkeyNameError,
-          this.errorKey === null ? "" : codeMessage(this.errorKey),
-        ].filter(Boolean),
-      ),
-    ];
+  #shownFields(): Set<string> {
+    if (this.token !== null) {
+      if (!this.actionValidated) return new Set();
+      return new Set(
+        this.actionPurpose === "invitation" ? ["new-password", "new-pin"] : ["new-password"],
+      );
+    }
+    switch (this.step) {
+      case "email":
+        return new Set(["email"]);
+      case "password":
+        return new Set(["password"]);
+      case "factor":
+        return new Set(["one-time-code"]);
+      case "setup-passkey":
+        return new Set(
+          this.passkeyFactorRequired ? ["passkey-name", "one-time-code"] : ["passkey-name"],
+        );
+      default:
+        return new Set();
+    }
+  }
+
+  /** What is wrong with the current form's values, keyed by field name. */
+  #validate(): Record<string, string> {
+    const errors: Record<string, string> = {};
+    if (this.token !== null) {
+      if (!this.actionValidated) return errors;
+      if (this.password === "") errors["new-password"] = t("form.password_required");
+      else if (this.password.length < 8) errors["new-password"] = codeMessage("password.too_short");
+      if (this.actionPurpose === "invitation") {
+        if (this.pin === "") errors["new-pin"] = t("form.pin_required");
+        else if (this.pin.length < 4) errors["new-pin"] = codeMessage("pin.too_short");
+      }
+      return errors;
+    }
+    if (this.step === "email") {
+      const email = this.email.trim();
+      if (email === "") errors.email = t("form.email_required");
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+        errors.email = codeMessage("person.email_invalid");
+    } else if (this.step === "password" || this.step === "factor") {
+      if (this.step === "factor" && this.secondFactor === "")
+        errors["one-time-code"] = t("form.factor_required");
+      // On the code step the password is not shown, so this reaches the message beside the action.
+      if (this.password === "") errors.password = t("form.password_required");
+    } else if (this.step === "setup-passkey") {
+      if (this.passkeyName.trim().length > 80)
+        errors["passkey-name"] = t("profile.passkey_name_too_long");
+      if (this.passkeyFactorRequired && this.secondFactor === "")
+        errors["one-time-code"] = t("form.factor_required");
+    }
+    return errors;
+  }
+
+  /** Marks the form submitted; returns false, focusing the first invalid field, when it is not valid. */
+  #check(): boolean {
+    this.attempted = true;
+    if (Object.keys(this.#validate()).length === 0) return true;
+    this.#focusFirstInvalid();
+    return false;
+  }
+
+  #errors(): Record<string, string> {
+    const refused =
+      this.refusalField !== null && this.errorKey !== null
+        ? { [this.refusalField]: codeMessage(this.errorKey) }
+        : {};
+    return { ...(this.attempted ? this.#validate() : {}), ...refused };
+  }
+
+  /** Each shown field's message, the one message beside the action, and whether the action waits
+   * for a field to be corrected. */
+  #formState(): { fields: Record<string, string>; bottom: string; blocked: boolean } {
+    const errors = this.#errors();
+    const shown = this.#shownFields();
+    const fields: Record<string, string> = {};
+    const messages: string[] = [];
+    for (const [key, message] of Object.entries(errors)) {
+      if (shown.has(key)) fields[key] = message;
+      else messages.push(message);
+    }
+    if (this.errorKey !== null && this.refusalField === null)
+      messages.unshift(codeMessage(this.errorKey));
+    const blocked = Object.keys(fields).length > 0;
+    return {
+      fields,
+      bottom: [...new Set(messages), ...(blocked ? [t("form.fix_fields")] : [])].join(" "),
+      blocked,
+    };
   }
 
   /** `wt-change` is composed, so without `stopPropagation` it would reach the app shell too. */
   #onEmailChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.email = event.detail.value;
-    this.emailError = "";
   }
 
   #onPasswordChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.password = event.detail.value;
-    this.passwordError = "";
+    this.#dismissRefusal(this.token === null ? "password" : "new-password");
   }
 
   #onSecondFactorChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.secondFactor = event.detail.value.trim();
-    this.secondFactorError = "";
-    this.errorKey = null;
+    this.#dismissRefusal("one-time-code");
   }
 
   #onPinChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.pin = event.detail.value;
-    this.pinError = "";
   }
 
   #clearSecrets(): void {
@@ -279,12 +379,10 @@ export class LoginScreen extends LitElement {
     this.passwordVisible = false;
     this.newPasswordVisible = false;
     this.pinVisible = false;
-    this.passwordError = "";
-    this.secondFactorError = "";
-    this.pinError = "";
     this.passkeyName = "";
-    this.passkeyNameError = "";
     this.passkeyFactorRequired = false;
+    this.attempted = false;
+    this.refusalField = null;
   }
 
   #submitAccountOnEnter(event: KeyboardEvent): void {
@@ -295,13 +393,8 @@ export class LoginScreen extends LitElement {
   }
 
   #continue(): void {
-    const email = this.email.trim();
-    if (email === "") this.emailError = t("form.email_required");
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      this.emailError = codeMessage("person.email_invalid");
-    }
-    if (this.emailError !== "") return;
-    this.email = email;
+    if (!this.#check()) return;
+    this.email = this.email.trim();
     this.errorKey = null;
     this.passwordVisible = false;
     // Public method selection never depends on server-side account enrolment.
@@ -329,7 +422,6 @@ export class LoginScreen extends LitElement {
     this.completedLogin = null;
     this.#clearSecrets();
     this.errorKey = null;
-    this.emailError = "";
     this.rememberEmail = false;
     this.step = "email";
     this.#focusField("email");
@@ -382,17 +474,11 @@ export class LoginScreen extends LitElement {
 
   async #submit(): Promise<void> {
     if (this.busy) return;
-    if (this.step === "factor" && this.secondFactor === "") {
-      this.secondFactorError = t("form.factor_required");
-      return;
-    }
-    if (this.password === "") {
-      this.passwordError = t("form.password_required");
-      return;
-    }
+    this.errorKey = null;
+    this.refusalField = null;
+    if (!this.#check()) return;
     this.#cancelPasskeyCeremony();
     this.busy = true;
-    this.errorKey = null;
     try {
       const { personId, offerPasskey } = await this.api.login({
         email: this.email,
@@ -416,15 +502,13 @@ export class LoginScreen extends LitElement {
       if (this.offerAfterLogin || offerPasskey) this.#offerPasskey(detail);
       else this.#announceLogin(detail);
     } catch (error) {
-      this.errorKey = codeOf(error);
-      if (this.errorKey === "password.invalid") this.passwordError = codeMessage(this.errorKey);
-      if (this.errorKey === "totp.required") {
-        this.errorKey = null;
+      const code = codeOf(error);
+      if (code === "totp.required") {
         this.step = "factor";
         this.#focusField("one-time-code");
-      } else if (this.errorKey === "totp.invalid") {
-        this.secondFactorError = codeMessage(this.errorKey);
-      }
+      } else if (code === "password.invalid") this.#refuse(code, "password");
+      else if (code === "totp.invalid") this.#refuse(code, "one-time-code");
+      else this.errorKey = code;
     } finally {
       this.busy = false;
     }
@@ -459,23 +543,10 @@ export class LoginScreen extends LitElement {
       this.errorKey = "account_action.invalid";
       return;
     }
-    this.passwordError =
-      this.password === ""
-        ? t("form.password_required")
-        : this.password.length < 8
-          ? codeMessage("password.too_short")
-          : "";
-    if (this.actionPurpose === "invitation") {
-      this.pinError =
-        this.pin === ""
-          ? t("form.pin_required")
-          : this.pin.length < 4
-            ? codeMessage("pin.too_short")
-            : "";
-    }
-    if (this.passwordError !== "" || this.pinError !== "") return;
-    this.busy = true;
     this.errorKey = null;
+    this.refusalField = null;
+    if (!this.#check()) return;
+    this.busy = true;
     try {
       const out =
         this.actionPurpose === "invitation"
@@ -506,8 +577,9 @@ export class LoginScreen extends LitElement {
         this.#focusField("email");
       }
     } catch (error) {
-      this.errorKey = codeOf(error);
-      if (this.errorKey === "password.too_short") this.passwordError = codeMessage(this.errorKey);
+      const code = codeOf(error);
+      if (code === "password.too_short") this.#refuse(code, "new-password");
+      else this.errorKey = code;
     } finally {
       this.busy = false;
     }
@@ -530,7 +602,6 @@ export class LoginScreen extends LitElement {
     this.passkeyFactorRequired = this.factorMode === "recovery";
     if (this.passkeyFactorRequired) this.secondFactor = "";
     this.passkeyName = "";
-    this.passkeyNameError = "";
   }
 
   /**
@@ -552,13 +623,10 @@ export class LoginScreen extends LitElement {
 
   async #setupPasskey(): Promise<void> {
     if (this.busy || this.completedLogin === null) return;
-    this.passkeyNameError =
-      this.passkeyName.trim().length > 80 ? t("profile.passkey_name_too_long") : "";
-    this.secondFactorError =
-      this.passkeyFactorRequired && this.secondFactor === "" ? t("form.factor_required") : "";
-    if (this.passkeyNameError || this.secondFactorError) return;
-    this.busy = true;
     this.errorKey = null;
+    this.refusalField = null;
+    if (!this.#check()) return;
+    this.busy = true;
     const attempt = ++this.passkeyAttempt;
     try {
       const { challengeHandle, options } = await this.api.passkeyRegisterOptions({
@@ -591,12 +659,12 @@ export class LoginScreen extends LitElement {
         this.errorKey = "passkey.verification_failed";
         return;
       }
-      this.errorKey = codeOf(error, "passkey.verification_failed");
-      if (this.errorKey === "totp.invalid") {
+      const code = codeOf(error, "passkey.verification_failed");
+      if (code === "totp.invalid") {
         this.passkeyFactorRequired = true;
         this.secondFactor = "";
-        this.secondFactorError = codeMessage(this.errorKey);
-      }
+        this.#refuse(code, "one-time-code");
+      } else this.errorKey = code;
     } finally {
       if (attempt === this.passkeyAttempt) this.busy = false;
     }
@@ -799,6 +867,8 @@ export class LoginScreen extends LitElement {
   }
 
   override render() {
+    const form = this.#formState();
+    const fieldError = (name: string) => form.fields[name] ?? "";
     if (this.token !== null) {
       return html`
         <div class="screen">
@@ -820,16 +890,12 @@ export class LoginScreen extends LitElement {
             aria-hidden="true"
             readonly
           />
-          <wt-form-error-summary
-            heading=${t("form.error_heading")}
-            .errors=${this.formErrors}
-          ></wt-form-error-summary>
           ${
             !this.actionValidated
               ? html`
                   <p role="status">${t("account.validating_link")}</p>
                   ${this.actionResent ? html`<p role="status">${t("account.link_resent")}</p>` : nothing}
-                  <wt-form-actions>
+                  <wt-form-actions .error=${form.bottom}>
                     <wt-button
                       slot="cancel"
                       variant="secondary"
@@ -859,7 +925,7 @@ export class LoginScreen extends LitElement {
                     required
                     label=${t("account.new_password")}
                     type=${this.newPasswordVisible ? "text" : "password"}
-                    error=${this.passwordError}
+                    error=${fieldError("new-password")}
                     .value=${this.password}
                     @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
@@ -885,7 +951,7 @@ export class LoginScreen extends LitElement {
                             required
                             label=${t("account.new_pin")}
                             type=${this.pinVisible ? "text" : "password"}
-                            error=${this.pinError}
+                            error=${fieldError("new-pin")}
                             .value=${this.pin}
                             @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
                             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
@@ -904,7 +970,7 @@ export class LoginScreen extends LitElement {
                         `
                       : nothing
                   }
-                  <wt-form-actions>
+                  <wt-form-actions .error=${form.bottom}>
                     <wt-button
                       slot="cancel"
                       variant="secondary"
@@ -916,7 +982,7 @@ export class LoginScreen extends LitElement {
                     <wt-button
                       variant="primary"
                       data-test="complete-account"
-                      ?disabled=${this.busy}
+                      ?disabled=${this.busy || form.blocked}
                       @click=${() => void this.#completeAccount()}
                       >${t("action.set_password")}</wt-button
                     >
@@ -935,10 +1001,6 @@ export class LoginScreen extends LitElement {
           .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
         ></dashboard-language-chooser>
         ${this.noticeCode && this.noticeCode !== "management_session.required" ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${this.formErrors}
-        ></wt-form-error-summary>
         ${
           this.step === "setup-passkey"
             ? html`
@@ -951,11 +1013,10 @@ export class LoginScreen extends LitElement {
                   autocomplete="off"
                   label=${t("profile.passkey_name")}
                   .value=${this.passkeyName}
-                  error=${this.passkeyNameError}
+                  error=${fieldError("passkey-name")}
                   @wt-change=${(event: CustomEvent<{ value: string }>) => {
                     event.stopPropagation();
                     this.passkeyName = event.detail.value;
-                    this.passkeyNameError = "";
                   }}
                   @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
                 ></wt-input>
@@ -968,13 +1029,13 @@ export class LoginScreen extends LitElement {
                         required
                         label=${t("login.authenticator_code")}
                         .value=${this.secondFactor}
-                        error=${this.secondFactorError}
+                        error=${fieldError("one-time-code")}
                         @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(event)}
                         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
                       ></wt-input>`
                     : nothing
                 }
-                <wt-form-actions>
+                <wt-form-actions .error=${form.bottom}>
                   <wt-button
                     slot="cancel"
                     variant="secondary"
@@ -989,7 +1050,7 @@ export class LoginScreen extends LitElement {
                   <wt-button
                     variant="primary"
                     data-test="setup-passkey"
-                    ?disabled=${this.busy}
+                    ?disabled=${this.busy || form.blocked}
                     @click=${() => void this.#setupPasskey()}
                     >${t("staff.add_passkey")}</wt-button
                   >
@@ -1006,15 +1067,16 @@ export class LoginScreen extends LitElement {
                     required
                     label=${t("login.email")}
                     type="email"
-                    error=${this.emailError}
+                    error=${fieldError("email")}
                     .value=${this.email}
                     @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
                   ></wt-input>
                   ${this.#rememberChoice()}
-                  <wt-form-actions>
+                  <wt-form-actions .error=${form.bottom}>
                     <wt-button
                       variant="primary"
                       data-test="continue"
+                      ?disabled=${form.blocked}
                       @click=${() => this.#continue()}
                       >${t("action.continue")}</wt-button
                     >
@@ -1025,7 +1087,7 @@ export class LoginScreen extends LitElement {
                     <h1>${t("login.google_heading")}</h1>
                     ${this.#renderLoginContext()}
                     <p class="alternative-hint">${t("login.google_hint")}</p>
-                    <wt-form-actions
+                    <wt-form-actions .error=${form.bottom}
                       ><wt-button
                         variant="primary"
                         data-test="google-login"
@@ -1041,7 +1103,7 @@ export class LoginScreen extends LitElement {
                       <h1>${t("login.use_passkey_heading")}</h1>
                       ${this.#renderLoginContext()}
                       <p class="alternative-hint">${t("login.passkey_hint")}</p>
-                      <wt-form-actions>
+                      <wt-form-actions .error=${form.bottom}>
                         <wt-button
                           variant="primary"
                           data-test="passkey-login"
@@ -1075,7 +1137,7 @@ export class LoginScreen extends LitElement {
                           required
                           label=${t("login.password")}
                           type=${this.passwordVisible ? "text" : "password"}
-                          error=${this.passwordError}
+                          error=${fieldError("password")}
                           .value=${this.password}
                           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
                         >
@@ -1095,11 +1157,11 @@ export class LoginScreen extends LitElement {
                           >
                         </wt-input>
                         ${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}
-                        <wt-form-actions>
+                        <wt-form-actions .error=${form.bottom}>
                           <wt-button
                             variant="primary"
                             data-test="submit"
-                            ?disabled=${this.busy}
+                            ?disabled=${this.busy || form.blocked}
                             @click=${() => void this.#submit()}
                             >${t("action.login")}</wt-button
                           >
@@ -1131,12 +1193,12 @@ export class LoginScreen extends LitElement {
                                 ? t("login.authenticator_code")
                                 : t("login.recovery_code")
                             }
-                            error=${this.secondFactorError}
+                            error=${fieldError("one-time-code")}
                             .value=${this.secondFactor}
                             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
                             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
                           ></wt-input>
-                          <wt-form-actions>
+                          <wt-form-actions .error=${form.bottom}>
                             <wt-button
                               slot="cancel"
                               variant="secondary"
@@ -1144,7 +1206,6 @@ export class LoginScreen extends LitElement {
                               ?disabled=${this.busy}
                               @click=${() => {
                                 this.secondFactor = "";
-                                this.secondFactorError = "";
                                 this.step = "password";
                               }}
                               >${t("action.back")}</wt-button
@@ -1152,7 +1213,7 @@ export class LoginScreen extends LitElement {
                             <wt-button
                               variant="primary"
                               data-test="submit-factor"
-                              ?disabled=${this.busy}
+                              ?disabled=${this.busy || form.blocked}
                               @click=${() => void this.#submit()}
                               >${t("action.login")}</wt-button
                             >
@@ -1168,7 +1229,8 @@ export class LoginScreen extends LitElement {
                                   this.factorMode =
                                     this.factorMode === "totp" ? "recovery" : "totp";
                                   this.secondFactor = "";
-                                  this.secondFactorError = "";
+                                  this.attempted = false;
+                                  this.#dismissRefusal("one-time-code");
                                 },
                               )}
                             </li>
@@ -1182,7 +1244,7 @@ export class LoginScreen extends LitElement {
                               ${t("login.reset_sent").replace("{email}", this.email)}
                             </p>
                             <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
-                            <wt-form-actions>
+                            <wt-form-actions .error=${form.bottom}>
                               <wt-button
                                 variant="primary"
                                 data-test="resend-reset"

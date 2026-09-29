@@ -7,7 +7,11 @@ import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/purchase-list.js";
 import "../widgets/purchase-form.js";
-import type { UpdatePurchaseDetail } from "../widgets/purchase-form.js";
+import {
+  purchaseRefusalErrors,
+  type PurchaseFormErrors,
+  type UpdatePurchaseDetail,
+} from "../widgets/purchase-form.js";
 import type { DashboardApi, PurchaseInvoice, PurchaseInvoiceInput } from "../api/client.js";
 
 @customElement("dashboard-purchases-screen")
@@ -53,6 +57,7 @@ export class PurchasesScreen extends LitElement {
   @state() private formOpen = false;
   @state() private editingInvoice: PurchaseInvoice | null = null;
   @state() private errorKey: string | null = null;
+  @state() private formErrors: PurchaseFormErrors = {};
   // Set synchronously on entry, so a double-fired event files at most one mutation.
   @state() private busy = false;
 
@@ -80,6 +85,7 @@ export class PurchasesScreen extends LitElement {
 
   #openForm(): void {
     this.errorKey = null;
+    this.formErrors = {};
     this.editingInvoice = null;
     this.formOpen = true;
   }
@@ -89,6 +95,7 @@ export class PurchasesScreen extends LitElement {
     const invoice = this.invoices.find((i) => i.id === event.detail.id);
     if (invoice === undefined) return;
     this.errorKey = null;
+    this.formErrors = {};
     this.editingInvoice = invoice;
     this.formOpen = true;
   }
@@ -97,15 +104,29 @@ export class PurchasesScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
+    this.formErrors = {};
+    try {
+      try {
+        await this.api.createPurchaseInvoice(event.detail);
+      } catch (error) {
+        this.formErrors = purchaseRefusalErrors(error);
+        return;
+      }
+      await this.#afterWrite();
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** The write succeeded, so the form closes whatever the refresh does; a failed refresh is a load
+   * failure. */
+  async #afterWrite(): Promise<void> {
+    this.formOpen = false;
     this.errorKey = null;
     try {
-      await this.api.createPurchaseInvoice(event.detail);
-      this.formOpen = false;
       await this.#reload();
     } catch (error) {
       this.errorKey = codeOf(error);
-    } finally {
-      this.busy = false;
     }
   }
 
@@ -113,13 +134,15 @@ export class PurchasesScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.formErrors = {};
     try {
-      await this.api.updatePurchaseInvoice(event.detail.id, event.detail.patch);
-      this.formOpen = false;
-      await this.#reload();
-    } catch (error) {
-      this.errorKey = codeOf(error);
+      try {
+        await this.api.updatePurchaseInvoice(event.detail.id, event.detail.patch);
+      } catch (error) {
+        this.formErrors = purchaseRefusalErrors(error);
+        return;
+      }
+      await this.#afterWrite();
     } finally {
       this.busy = false;
     }
@@ -165,6 +188,7 @@ export class PurchasesScreen extends LitElement {
         .open=${this.formOpen}
         .invoice=${this.editingInvoice}
         .busy=${this.busy}
+        .fieldErrors=${this.formErrors}
         @create-purchase=${(e: CustomEvent<PurchaseInvoiceInput>) => void this.#onCreate(e)}
         @update-purchase=${(e: CustomEvent<UpdatePurchaseDetail>) => void this.#onUpdate(e)}
         @wt-close=${() => (this.formOpen = false)}

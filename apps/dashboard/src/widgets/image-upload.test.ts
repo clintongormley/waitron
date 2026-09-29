@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { ImageUpload, type ImageUploader } from "./image-upload.js";
-import { setContentLanguages } from "@waitron/ui";
+import { focusFirstInvalid, setContentLanguages } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -177,5 +177,35 @@ describe("image-upload", () => {
     expect(el.shadowRoot!.querySelector("[data-test=preview]")!.getAttribute("src")).toBe(
       "/media/own.png",
     );
+  });
+
+  it("marks Choose image invalid in the danger colour, where focusFirstInvalid finds it", async () => {
+    const { el, host } = await mountWidget<ImageUpload>("dashboard-image-upload", {
+      api: stubApi(),
+      invalid: true,
+    });
+    const choose = el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!;
+    await (choose as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const danger = document.createElement("div");
+    danger.style.borderTop = "1px solid var(--wt-color-danger)";
+    host.appendChild(danger);
+
+    expect(choose.getAttribute("aria-invalid")).toBe("true");
+    expect(choose.shadowRoot!.querySelector("button")!.getAttribute("aria-invalid")).toBe("true");
+    expect(getComputedStyle(choose.shadowRoot!.querySelector("button")!).borderTopColor).toBe(
+      getComputedStyle(danger).borderTopColor,
+    );
+    expect(await focusFirstInvalid(el.shadowRoot!)).toBe(choose);
+    expect(el.shadowRoot!.activeElement).toBe(choose);
+  });
+
+  it("leaves Choose image unmarked while valid", async () => {
+    const { el } = await mountWidget<ImageUpload>("dashboard-image-upload", { api: stubApi() });
+    const choose = el.shadowRoot!.querySelector<HTMLElement>("[data-test=choose-image]")!;
+    await (choose as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+
+    expect(choose.hasAttribute("aria-invalid")).toBe(false);
+    expect(choose.shadowRoot!.querySelector("button")!.hasAttribute("aria-invalid")).toBe(false);
+    expect(await focusFirstInvalid(el.shadowRoot!)).toBeNull();
   });
 });

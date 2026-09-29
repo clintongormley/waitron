@@ -1,12 +1,13 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { submitOnEnter, baseStyles, selectStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, selectStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, codeOf } from "../i18n/codes.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import type {
   PurchaseInvoice,
@@ -34,6 +35,48 @@ interface LineDraft {
 
 function blankLine(): LineDraft {
   return { rate: "", base: "", tax: "", kind: "ordinary" };
+}
+
+type HeaderField =
+  | "supplierTaxId"
+  | "supplierName"
+  | "supplierInvoiceNumber"
+  | "issuedOn"
+  | "receivedOn"
+  | "total"
+  | "deductibleProportion"
+  | "note";
+
+/** Each header field's key in this form's errors: the `data-test` of the field that shows it. */
+const HEADER_KEYS: Record<HeaderField, string> = {
+  supplierTaxId: "supplier-tax-id",
+  supplierName: "supplier-name",
+  supplierInvoiceNumber: "supplier-invoice-number",
+  issuedOn: "issued-on",
+  receivedOn: "received-on",
+  total: "total",
+  deductibleProportion: "deductible-proportion",
+  note: "note",
+};
+
+/** Keyed like the form's own errors — a field's `data-test`, or `lines` for the VAT breakdown —
+ * plus `_form`, which is shown in the bottom message alone. */
+export type PurchaseFormErrors = Record<string, string>;
+
+/** A refused purchase write, keyed by this form's fields. A line's refusal names no line, so it
+ * goes to the form. */
+export function purchaseRefusalErrors(error: unknown): PurchaseFormErrors {
+  const code = codeOf(error);
+  const message = codeMessage(code);
+  const params = (error as { params?: { field?: unknown; reason?: unknown } }).params ?? {};
+  if (code === "management.request_invalid" && typeof params.field === "string") {
+    const key = (HEADER_KEYS as Record<string, string>)[params.field];
+    if (key !== undefined) return { [key]: message };
+  }
+  if (code === "purchase.invalid" && params.reason === "proportion_out_of_range")
+    return { "deductible-proportion": message };
+  if (code === "purchase.invalid" && params.reason === "no_lines") return { lines: message };
+  return { _form: message };
 }
 
 /**
@@ -99,7 +142,8 @@ export class PurchaseForm extends LitElement {
       }
       .error {
         color: var(--wt-color-danger);
-        margin-top: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+        margin: 0 0 var(--wt-space-3);
       }
     `,
   ];
@@ -109,6 +153,8 @@ export class PurchaseForm extends LitElement {
   @property({ attribute: false }) invoice: PurchaseInvoice | null = null;
 
   @property({ type: Boolean }) busy = false;
+
+  @property({ attribute: false }) fieldErrors: PurchaseFormErrors = {};
 
   @state() private supplierTaxId = "";
   @state() private supplierName = "";
@@ -120,10 +166,14 @@ export class PurchaseForm extends LitElement {
   @state() private deductibleProportion = "100.00";
   @state() private note = "";
   @state() private lines: LineDraft[] = [blankLine()];
-  @state() private validationError: string | null = null;
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
 
   override willUpdate(changed: PropertyValues): void {
-    if (!changed.has("invoice") && !(changed.has("open") && this.open)) return;
+    const reopened = changed.has("invoice") || (changed.has("open") && this.open);
+    if (changed.has("fieldErrors") || reopened) this.dismissed = new Set();
+    if (!reopened) return;
     const inv = this.invoice;
     this.supplierTaxId = inv?.supplierTaxId ?? "";
     this.supplierName = inv?.supplierName ?? "";
@@ -137,24 +187,22 @@ export class PurchaseForm extends LitElement {
     this.lines = inv
       ? inv.lines.map((l) => ({ rate: l.rate, base: l.base, tax: l.tax, kind: l.kind }))
       : [blankLine()];
-    this.validationError = null;
+    this.attempted = false;
   }
 
-  #onFieldChange(
-    event: CustomEvent<{ value: string }>,
-    field:
-      | "supplierTaxId"
-      | "supplierName"
-      | "supplierInvoiceNumber"
-      | "issuedOn"
-      | "receivedOn"
-      | "total"
-      | "deductibleProportion"
-      | "note",
-  ): void {
+  protected override updated(changed: PropertyValues): void {
+    if (changed.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
+      void focusFirstInvalid(this.shadowRoot!);
+  }
+
+  #dismiss(...keys: string[]): void {
+    this.dismissed = new Set([...this.dismissed, ...keys]);
+  }
+
+  #onFieldChange(event: CustomEvent<{ value: string }>, field: HeaderField): void {
     event.stopPropagation();
     this[field] = event.detail.value;
-    if (this.validationError) this.validationError = null;
+    this.#dismiss(HEADER_KEYS[field]);
   }
 
   #onRegimeChange(event: Event): void {
@@ -171,7 +219,6 @@ export class PurchaseForm extends LitElement {
     this.lines = this.lines.map((line, i) =>
       i === index ? { ...line, [field]: event.detail.value } : line,
     );
-    if (this.validationError) this.validationError = null;
   }
 
   #onLineKindChange(event: Event, index: number): void {
@@ -182,42 +229,63 @@ export class PurchaseForm extends LitElement {
 
   #addLine(): void {
     this.lines = [...this.lines, blankLine()];
+    this.#dismiss("lines");
   }
 
   #removeLine(index: number): void {
     this.lines = this.lines.filter((_, i) => i !== index);
   }
 
-  #validate(): string | null {
+  /** Every invalid field's message, keyed by the field's `data-test`; `lines` is the breakdown. */
+  #validate(): Record<string, string> {
+    const errors: Record<string, string> = {};
     const required = [
-      this.supplierTaxId,
-      this.supplierName,
-      this.supplierInvoiceNumber,
-      this.issuedOn,
-      this.receivedOn,
-      this.total,
-    ];
-    if (required.some((v) => v.trim() === "")) return "purchase.fields_required";
-    if (this.lines.length === 0) return "purchase.lines_required";
-    for (const line of this.lines) {
-      if (!inRange(line.base, 0, Infinity)) return "purchase.amounts_invalid";
-      if (!inRange(line.tax, 0, Infinity)) return "purchase.amounts_invalid";
-      if (!inRange(line.rate, 0, 100)) return "purchase.amounts_invalid";
-    }
-    if (!inRange(this.total, 0, Infinity)) return "purchase.amounts_invalid";
-    if (!inRange(this.deductibleProportion, 0, 100)) return "purchase.amounts_invalid";
-    return null;
+      ["supplier-tax-id", this.supplierTaxId, "purchase.supplier_tax_id_required"],
+      ["supplier-name", this.supplierName, "purchase.supplier_name_required"],
+      [
+        "supplier-invoice-number",
+        this.supplierInvoiceNumber,
+        "purchase.supplier_invoice_number_required",
+      ],
+      ["issued-on", this.issuedOn, "purchase.issued_on_required"],
+      ["received-on", this.receivedOn, "purchase.received_on_required"],
+    ] as const;
+    for (const [field, value, message] of required)
+      if (value.trim() === "") errors[field] = t(message);
+    const amount = t("purchase.amount_invalid");
+    const percentage = t("purchase.percentage_invalid");
+    if (!inRange(this.total, 0, Infinity)) errors.total = amount;
+    if (!inRange(this.deductibleProportion, 0, 100)) errors["deductible-proportion"] = percentage;
+    if (this.lines.length === 0) errors.lines = codeMessage("purchase.lines_required");
+    this.lines.forEach((line, index) => {
+      if (!inRange(line.rate, 0, 100)) errors[`line-rate-${index}`] = percentage;
+      if (!inRange(line.base, 0, Infinity)) errors[`line-base-${index}`] = amount;
+      if (!inRange(line.tax, 0, Infinity)) errors[`line-tax-${index}`] = amount;
+    });
+    return errors;
+  }
+
+  /** The keys of `errors` held by a field; every other key belongs to the bottom message. */
+  #fieldKeys(errors: PurchaseFormErrors): string[] {
+    return Object.keys(errors).filter((key) => key !== "_form" && errors[key]);
+  }
+
+  #errors(): PurchaseFormErrors {
+    const refused = Object.fromEntries(
+      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
+    );
+    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
   }
 
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    const error = this.#validate();
-    if (error !== null) {
-      this.validationError = error;
+    this.attempted = true;
+    this.#dismiss(...Object.keys(this.fieldErrors));
+    if (Object.keys(this.#validate()).length > 0) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.validationError = null;
 
     const header = {
       supplierTaxId: this.supplierTaxId,
@@ -262,13 +330,15 @@ export class PurchaseForm extends LitElement {
     this.open = false;
   }
 
-  #renderLine(line: LineDraft, index: number) {
+  #renderLine(line: LineDraft, index: number, errors: Record<string, string>) {
     return html`<div class="line" data-test=${`line-${index}`}>
       <wt-input
         class="line-field"
         name=${`line-${index}-rate`}
         data-test=${`line-rate-${index}`}
         label=${t("purchase.line_rate")}
+        required
+        error=${errors[`line-rate-${index}`] ?? ""}
         .value=${line.rate}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "rate")}
       ></wt-input>
@@ -279,6 +349,8 @@ export class PurchaseForm extends LitElement {
         name=${`line-${index}-base`}
         data-test=${`line-base-${index}`}
         label=${t("purchase.line_base")}
+        required
+        error=${errors[`line-base-${index}`] ?? ""}
         .value=${line.base}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "base")}
       ></wt-price-input>
@@ -289,6 +361,8 @@ export class PurchaseForm extends LitElement {
         name=${`line-${index}-tax`}
         data-test=${`line-tax-${index}`}
         label=${t("purchase.line_tax")}
+        required
+        error=${errors[`line-tax-${index}`] ?? ""}
         .value=${line.tax}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onLineFieldChange(e, index, "tax")}
       ></wt-price-input>
@@ -316,6 +390,11 @@ export class PurchaseForm extends LitElement {
   }
 
   override render() {
+    const errors = this.#errors();
+    const invalid = this.#fieldKeys(errors).length > 0;
+    const bottom = [errors._form ?? "", invalid ? t("form.fix_fields") : ""]
+      .filter((message) => message !== "")
+      .join(" ");
     return html`
       <wt-dialog
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]"))}
@@ -327,6 +406,8 @@ export class PurchaseForm extends LitElement {
           class="field"
           name="supplier-tax-id"
           data-test="supplier-tax-id"
+          required
+          error=${errors["supplier-tax-id"] ?? ""}
           label=${t("purchase.supplier_tax_id")}
           .value=${this.supplierTaxId}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -336,6 +417,8 @@ export class PurchaseForm extends LitElement {
           class="field"
           name="supplier-name"
           data-test="supplier-name"
+          required
+          error=${errors["supplier-name"] ?? ""}
           label=${t("purchase.supplier_name")}
           .value=${this.supplierName}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "supplierName")}
@@ -344,6 +427,8 @@ export class PurchaseForm extends LitElement {
           class="field"
           name="supplier-invoice-number"
           data-test="supplier-invoice-number"
+          required
+          error=${errors["supplier-invoice-number"] ?? ""}
           label=${t("purchase.supplier_invoice_number")}
           .value=${this.supplierInvoiceNumber}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -354,6 +439,8 @@ export class PurchaseForm extends LitElement {
           type="date"
           name="issued-on"
           data-test="issued-on"
+          required
+          error=${errors["issued-on"] ?? ""}
           label=${t("purchase.issued_on")}
           .value=${this.issuedOn}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "issuedOn")}
@@ -363,6 +450,8 @@ export class PurchaseForm extends LitElement {
           type="date"
           name="received-on"
           data-test="received-on"
+          required
+          error=${errors["received-on"] ?? ""}
           label=${t("purchase.received_on")}
           .value=${this.receivedOn}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "receivedOn")}
@@ -373,6 +462,8 @@ export class PurchaseForm extends LitElement {
           locale=${currentLocale()}
           name="total"
           data-test="total"
+          required
+          error=${errors["total"] ?? ""}
           label=${t("purchase.total")}
           .value=${this.total}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "total")}
@@ -390,6 +481,8 @@ export class PurchaseForm extends LitElement {
           class="field"
           name="deductible-proportion"
           data-test="deductible-proportion"
+          required
+          error=${errors["deductible-proportion"] ?? ""}
           label=${t("purchase.deductible_proportion")}
           .value=${this.deductibleProportion}
           @wt-change=${(e: CustomEvent<{ value: string }>) =>
@@ -399,13 +492,19 @@ export class PurchaseForm extends LitElement {
           class="field"
           name="note"
           data-test="note"
+          error=${errors["note"] ?? ""}
           label=${t("purchase.note")}
           .value=${this.note}
           @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onFieldChange(e, "note")}
         ></wt-input>
 
         <h3 class="lines-title">${t("purchase.lines")}</h3>
-        ${this.lines.map((line, i) => this.#renderLine(line, i))}
+        ${
+          errors.lines
+            ? html`<p class="error" data-test="lines-error">${errors.lines}</p>`
+            : nothing
+        }
+        ${this.lines.map((line, i) => this.#renderLine(line, i, errors))}
         <wt-button
           size="sm"
           variant="secondary"
@@ -414,21 +513,15 @@ export class PurchaseForm extends LitElement {
           >${t("purchase.add_line")}</wt-button
         >
 
-        ${
-          this.validationError
-            ? html`<p class="error" role="alert" data-test="error">
-                ${codeMessage(this.validationError)}
-              </p>`
-            : nothing
-        }
-        <wt-button
-          slot="footer"
-          variant="primary"
-          data-test="confirm"
-          ?disabled=${this.busy}
-          @click=${(e: Event) => this.#confirm(e)}
-          >${this.invoice ? t("action.save") : t("action.create")}</wt-button
-        >
+        <wt-form-actions slot="footer" .error=${bottom}>
+          <wt-button
+            variant="primary"
+            data-test="confirm"
+            ?disabled=${this.busy || invalid}
+            @click=${(e: Event) => this.#confirm(e)}
+            >${this.invoice ? t("action.save") : t("action.create")}</wt-button
+          >
+        </wt-form-actions>
       </wt-dialog>
     `;
   }

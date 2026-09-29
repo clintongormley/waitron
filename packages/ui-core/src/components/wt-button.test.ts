@@ -114,6 +114,28 @@ test("puts no aria-haspopup or aria-expanded on the inner button when the host h
   expect(inner.hasAttribute("aria-expanded")).toBe(false);
 });
 
+test("forwards aria-invalid to the inner button, keeps it on the host, and follows its changes", async () => {
+  const el = (await mount('<wt-button aria-invalid="true">Choose</wt-button>')) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  const inner = el.shadowRoot!.querySelector("button")!;
+  expect(inner.getAttribute("aria-invalid")).toBe("true");
+  expect(el.getAttribute("aria-invalid")).toBe("true");
+
+  el.setAttribute("aria-invalid", "false");
+  await el.updateComplete;
+  expect(inner.getAttribute("aria-invalid")).toBe("false");
+
+  el.removeAttribute("aria-invalid");
+  await el.updateComplete;
+  expect(inner.hasAttribute("aria-invalid")).toBe(false);
+});
+
+test("puts no aria-invalid on the inner button when the host has none", async () => {
+  const el = await mount("<wt-button>x</wt-button>");
+  expect(el.shadowRoot!.querySelector("button")!.hasAttribute("aria-invalid")).toBe(false);
+});
+
 test("focusing the host delegates focus to the inner button", async () => {
   const el = await mount("<wt-button>x</wt-button>");
   el.focus();

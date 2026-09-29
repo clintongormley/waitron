@@ -9,7 +9,12 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import "../widgets/ingredient-list.js";
 import "../widgets/ingredient-form.js";
 import "../widgets/recipe-editor.js";
-import type { CreateIngredientDetail, UpdateIngredientDetail } from "../widgets/ingredient-form.js";
+import {
+  ingredientRefusalErrors,
+  type CreateIngredientDetail,
+  type IngredientFormErrors,
+  type UpdateIngredientDetail,
+} from "../widgets/ingredient-form.js";
 import type { SaveRecipeDetail } from "../widgets/recipe-editor.js";
 import type {
   CatalogueSummary,
@@ -91,6 +96,7 @@ export class RecipeScreen extends LitElement {
   @state() private formOpen = false;
   @state() private editingIngredient: Ingredient | null = null;
   @state() private errorKey: string | null = null;
+  @state() private formErrors: IngredientFormErrors = {};
   // Set synchronously on entry, so a double-fired event files at most one mutation.
   @state() private busy = false;
   // While the recipe loads it reads as empty, so a Save then would wipe the product's recipe.
@@ -123,6 +129,7 @@ export class RecipeScreen extends LitElement {
 
   #openForm(): void {
     this.errorKey = null;
+    this.formErrors = {};
     this.editingIngredient = null;
     this.formOpen = true;
   }
@@ -132,6 +139,7 @@ export class RecipeScreen extends LitElement {
     const ingredient = this.ingredients.find((i) => i.id === event.detail.id);
     if (ingredient === undefined) return;
     this.errorKey = null;
+    this.formErrors = {};
     this.editingIngredient = ingredient;
     this.formOpen = true;
   }
@@ -140,15 +148,29 @@ export class RecipeScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
+    this.formErrors = {};
+    try {
+      try {
+        await this.api.createIngredient(event.detail);
+      } catch (error) {
+        this.formErrors = ingredientRefusalErrors(error);
+        return;
+      }
+      await this.#afterWrite();
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  /** The write succeeded, so the form closes whatever the refresh does; a failed refresh is a load
+   * failure. */
+  async #afterWrite(): Promise<void> {
+    this.formOpen = false;
     this.errorKey = null;
     try {
-      await this.api.createIngredient(event.detail);
-      this.formOpen = false;
       await this.#reloadIngredients();
     } catch (error) {
       this.errorKey = codeOf(error);
-    } finally {
-      this.busy = false;
     }
   }
 
@@ -156,13 +178,15 @@ export class RecipeScreen extends LitElement {
     event.stopPropagation();
     if (this.busy) return;
     this.busy = true;
-    this.errorKey = null;
+    this.formErrors = {};
     try {
-      await this.api.updateIngredient(event.detail.id, event.detail.patch);
-      this.formOpen = false;
-      await this.#reloadIngredients();
-    } catch (error) {
-      this.errorKey = codeOf(error);
+      try {
+        await this.api.updateIngredient(event.detail.id, event.detail.patch);
+      } catch (error) {
+        this.formErrors = ingredientRefusalErrors(error);
+        return;
+      }
+      await this.#afterWrite();
     } finally {
       this.busy = false;
     }
@@ -325,6 +349,7 @@ export class RecipeScreen extends LitElement {
         .open=${this.formOpen}
         .ingredient=${this.editingIngredient}
         .busy=${this.busy}
+        .fieldErrors=${this.formErrors}
         @create-ingredient=${(e: CustomEvent<CreateIngredientDetail>) =>
           void this.#onCreateIngredient(e)}
         @update-ingredient=${(e: CustomEvent<UpdateIngredientDetail>) =>

@@ -70,12 +70,15 @@ function form(el: StaffScreen): PersonForm {
   return el.shadowRoot!.querySelector("dashboard-person-form")!;
 }
 
-function formErrorText(el: StaffScreen): string | undefined {
+function bottomOf(dialog: HTMLElement): string | undefined {
   return (
-    form(el)
-      .shadowRoot!.querySelector("wt-form-error-summary")
-      ?.shadowRoot!.querySelector("[role=alert]")?.textContent ?? undefined
+    dialog.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.querySelector("[data-error]")
+      ?.textContent ?? undefined
   );
+}
+
+function formErrorText(el: StaffScreen): string | undefined {
+  return bottomOf(form(el));
 }
 
 function editForm(el: StaffScreen): PersonEdit {
@@ -630,10 +633,8 @@ describe("staff-screen — row edit", () => {
     await flush(el);
 
     expect(editForm(el).error).toBe("authorization.not_permitted");
-    const summary = editForm(el).shadowRoot!.querySelector("wt-form-error-summary") as unknown as {
-      errors: string[];
-    };
-    expect(summary.errors).toContain(codeMessage("authorization.not_permitted", "es-ES"));
+    await editForm(el).shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
+    expect(bottomOf(editForm(el))).toBe(codeMessage("authorization.not_permitted", "es-ES"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 

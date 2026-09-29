@@ -29,6 +29,26 @@ const child: CategorySummary = {
   color: null,
 };
 
+async function bottomOf(el: CategoryForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+const nameOf = (el: CategoryForm, locale: string) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `wt-input[name="category-name-${locale}"]`,
+  )!;
+
+const saveOf = (el: CategoryForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+
+function typeName(el: CategoryForm, locale: string, value: string): void {
+  nameOf(el, locale).dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+}
+
 async function savedColor(el: CategoryForm): Promise<string | null> {
   const saved = new Promise<CustomEvent>((resolve) =>
     el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
@@ -583,11 +603,8 @@ it("refuses to save with the name-required message when no content language is c
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
   await el.updateComplete;
   expect(submit).not.toHaveBeenCalled();
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
-      "wt-form-error-summary",
-    )!.errors,
-  ).toEqual([t("categories.name_required")]);
+  expect(await bottomOf(el)).toBe(t("categories.name_required"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 });
 
 const refusal = (code: string, params?: Record<string, unknown>) => ({ code, params, status: 400 });
@@ -615,7 +632,7 @@ it("puts a refused category write beside the form field it concerns", () => {
     });
 });
 
-it("keeps a refused category write that names no field of the form for the summary alone", () => {
+it("keeps a refused category write that names no field of the form for the bottom message alone", () => {
   for (const error of [
     refusal("content.translation_invalid", {}),
     refusal("content.translation_required", {}),
@@ -625,4 +642,194 @@ it("keeps a refused category write that names no field of the form for the summa
     refusal("server.internal"),
   ])
     expect(categoryRefusalErrors(error, "es")).toEqual({ _form: codeMessage(error.code) });
+});
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
+  });
+  typeName(el, "en", "");
+  await el.updateComplete;
+
+  expect(nameOf(el, "en").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission shows the field and bottom messages, focuses the name and disables Save", async () => {
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
+  });
+  const submit = vi.fn();
+  host.addEventListener("wt-submit", submit);
+  typeName(el, "fr", "Cuisine");
+  await el.updateComplete;
+  saveOf(el).click();
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(submit).not.toHaveBeenCalled();
+  expect(nameOf(el, "en").error).toBe(t("categories.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(nameOf(el, "en").shadowRoot!.activeElement).toBe(
+    nameOf(el, "en").shadowRoot!.querySelector("input"),
+  );
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  expect(nameOf(el, "fr").value).toBe("Cuisine");
+});
+
+it("re-checks every change after a failed submission, and Save works again once fixed", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+  });
+  saveOf(el).click();
+  await el.updateComplete;
+
+  typeName(el, "en", "Breakfast");
+  await el.updateComplete;
+  expect(nameOf(el, "en").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  typeName(el, "en", " ");
+  await el.updateComplete;
+  expect(nameOf(el, "en").error).toBe(t("categories.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("clears a field's refusal when that field changes, and Save works again", async () => {
+  const message = codeMessage("category.parent_cycle");
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: child,
+    categories: [food, child],
+    fieldErrors: { parent: message },
+  });
+  const parent = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    'wt-combobox[name="category-parent"]',
+  )!;
+  expect(parent.error).toBe(message);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  typeName(el, "en", "Toasties");
+  await el.updateComplete;
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  parent.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(parent.error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a refused colour or image when that field changes", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+    fieldErrors: {
+      color: codeMessage("category.color_invalid"),
+      image: codeMessage("category.image_not_found"),
+    },
+  });
+  const said = (id: string) => el.shadowRoot!.getElementById(id)!.textContent!.trim();
+  expect(said("category-color-error")).toBe(codeMessage("category.color_invalid"));
+  expect(said("category-image-error")).toBe(codeMessage("category.image_not_found"));
+
+  el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.click();
+  await el.updateComplete;
+  expect(said("category-color-error")).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  el.shadowRoot!.querySelector("dashboard-image-upload")!.dispatchEvent(
+    new CustomEvent("image-changed", { detail: { image: null }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(said("category-image-error")).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("focuses the field a refusal names when the refusal arrives", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
+    value: food,
+  });
+  el.fieldErrors = { "name-fr": codeMessage("content.translation_required") };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(nameOf(el, "fr").shadowRoot!.activeElement).toBe(
+    nameOf(el, "fr").shadowRoot!.querySelector("input"),
+  );
+});
+
+it("focuses Choose image when a refusal names the image", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+  });
+  el.fieldErrors = { image: codeMessage("category.image_not_found") };
+  await el.updateComplete;
+  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
+  const choose = upload.shadowRoot!.querySelector("[data-test=choose-image]")!;
+
+  await vi.waitFor(() => expect(upload.shadowRoot!.activeElement).toBe(choose));
+  expect(choose.getAttribute("aria-invalid")).toBe("true");
+});
+
+it("leaves Save working on a refusal that names no field, and drops it on the next submission", async () => {
+  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    value: food,
+    fieldErrors: { _form: codeMessage("server.internal") },
+  });
+  const submit = vi.fn();
+  host.addEventListener("wt-submit", submit);
+  expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  saveOf(el).click();
+  await el.updateComplete;
+  expect(submit).toHaveBeenCalledOnce();
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("shows the refusal and the generic sentence together when both apply", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+    fieldErrors: {
+      _form: codeMessage("server.internal"),
+      parent: codeMessage("category.parent_cycle"),
+    },
+  });
+  expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    languages: { defaultLanguage: "en", languages: ["en"] },
+  });
+  saveOf(el).click();
+  await el.updateComplete;
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(nameOf(el, "en").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });

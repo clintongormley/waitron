@@ -31,6 +31,7 @@ import type { MemberListEditor } from "../widgets/member-list-editor.js";
 import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
 import { setLocale, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
 
@@ -544,14 +545,15 @@ function inModal<T extends Element = HTMLElement>(
   return modal(el, testId).querySelector<T>(selector)!;
 }
 
-async function summary(el: MenusScreen, testId: string): Promise<string[]> {
-  const found = inModal<HTMLElementTagNameMap["wt-form-error-summary"]>(
-    el,
-    testId,
-    "wt-form-error-summary",
-  );
-  await found.updateComplete;
-  return [...found.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
+/** The one message beside the primary action of `root`'s form. */
+async function bottomIn(root: Element): Promise<string> {
+  const actions = root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
+function bottom(el: MenusScreen, testId: string): Promise<string> {
+  return bottomIn(modal(el, testId));
 }
 
 function type(target: Element, value: string): void {
@@ -690,7 +692,7 @@ it("replaces an address naming an unknown menu or tab rather than adding a histo
   expect(history.length).toBe(before);
 });
 
-it("creating a menu needs a name: an empty one is explained beside the field and in the summary", async () => {
+it("creating a menu needs a name: an empty one is explained beside the field and beside Save", async () => {
   const client = api();
   const el = await mount(client);
   await click(el, "add-menu");
@@ -700,7 +702,7 @@ it("creating a menu needs a name: an empty one is explained beside the field and
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await el.updateComplete;
   expect(name.error).toBe(t("menus.name_required"));
-  expect(await summary(el, "menu-form")).toEqual([t("menus.name_required")]);
+  expect(await bottom(el, "menu-form")).toBe(t("form.fix_fields"));
   expect(client.createCatalogue).not.toHaveBeenCalled();
 
   type(name, "  Brunch  ");
@@ -745,7 +747,7 @@ it("keeps the form and the name when the server refuses a new menu, and says why
   await el.updateComplete;
   inModal(el, "menu-form", '[data-test="menu-save"]').click();
   await vi.waitFor(async () =>
-    expect(await summary(el, "menu-form")).toEqual([codeMessage("management.request_invalid")]),
+    expect(await bottom(el, "menu-form")).toBe(codeMessage("management.request_invalid")),
   );
   expect(modal(el, "menu-form").open).toBe(true);
   expect(name.value).toBe("Brunch");
@@ -956,13 +958,11 @@ it("puts a refused copy's reason beside the name only when the refusal names tha
   );
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await vi.waitFor(() => expect(name.error).toBe(codeMessage("menu_section.invalid")));
-  expect(await summary(el, "duplicate")).toEqual([codeMessage("menu_section.invalid")]);
-  // A language's name is not on this form, so its refusal is in the summary alone.
+  expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
+  // A language's name is not on this form, so its refusal is beside Save alone.
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await vi.waitFor(async () =>
-    expect(await summary(el, "duplicate")).toEqual([
-      codeMessage("menu_section.translation_required"),
-    ]),
+    expect(await bottom(el, "duplicate")).toBe(codeMessage("menu_section.translation_required")),
   );
   expect(name.error).toBe("");
   expect(modal(el, "duplicate").open).toBe(true);
@@ -979,7 +979,7 @@ it("keeps the new-section form open and explains a refused section", async () =>
   await el.updateComplete;
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await vi.waitFor(async () =>
-    expect(await summary(el, "new-section")).toEqual([codeMessage("management.request_invalid")]),
+    expect(await bottom(el, "new-section")).toBe(codeMessage("management.request_invalid")),
   );
   expect(modal(el, "new-section").open).toBe(true);
   expect(client.addSectionMember).not.toHaveBeenCalled();
@@ -1000,7 +1000,7 @@ it("refuses a copy with no name beside the field, sending nothing", async () => 
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await el.updateComplete;
   expect(name.error).toBe(t("sections.internal_name_required"));
-  expect(await summary(el, "duplicate")).toEqual([t("sections.internal_name_required")]);
+  expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
   expect(writeCalls(client)).toEqual([]);
 });
 
@@ -1019,7 +1019,7 @@ it("creates a section without leaving the editor and adds it to the list being e
   inModal(el, "new-section", '[data-test="new-section-save"]').click();
   await el.updateComplete;
   expect(name.error).toBe(t("sections.internal_name_required"));
-  expect(await summary(el, "new-section")).toEqual([t("sections.internal_name_required")]);
+  expect(await bottom(el, "new-section")).toBe(t("form.fix_fields"));
   expect(writeCalls(client)).toEqual([]);
 
   type(name, "Ciders");
@@ -1088,7 +1088,7 @@ it("keeps the new-section form open while its section is being created and its l
   );
   creating.reject({ code: "management.request_invalid" });
   await vi.waitFor(async () =>
-    expect(await summary(el, "new-section")).toEqual([codeMessage("management.request_invalid")]),
+    expect(await bottom(el, "new-section")).toBe(codeMessage("management.request_invalid")),
   );
   expect(modal(el, "new-section").open).toBe(true);
   expect(q(el, '[data-test="member-error"]')).toBeNull();
@@ -2720,12 +2720,7 @@ it("says the menu price was saved and the variants were not when only the varian
   expect(client.setMenuVariants).toHaveBeenCalledOnce();
   expect(pricesModal(el).open).toBe(true);
   expect(offerField(el, "grossPrice").value).toBe("2.80");
-  const summary =
-    pricesModal(el).querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
-      "wt-form-error-summary",
-    )!;
-  await summary.updateComplete;
-  expect(text(summary.shadowRoot!.querySelector("li"))).toBe(expected);
+  expect(await bottomIn(pricesModal(el))).toBe(expected);
   // The menu price was saved, so the list is read again behind the window.
   await vi.waitFor(() => expect(client.getMenuPrices.mock.calls.length).toBeGreaterThan(reads));
 });
@@ -2776,12 +2771,7 @@ it("says only why when the variants alone were changed and are refused, as nothi
   expect(client.updateMenuItem).not.toHaveBeenCalled();
   expect(pricesModal(el).open).toBe(true);
   expect(offerField(el, "variants.0.price").value).toBe("1.90");
-  const summary =
-    pricesModal(el).querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
-      "wt-form-error-summary",
-    )!;
-  await summary.updateComplete;
-  expect(text(summary.shadowRoot!.querySelector("li"))).toBe(expected);
+  expect(await bottomIn(pricesModal(el))).toBe(expected);
   await new Promise((resolve) => setTimeout(resolve, 50));
   expect(client.getMenuPrices.mock.calls.length).toBe(reads);
 });
@@ -3779,7 +3769,7 @@ describe("home page", () => {
     inModal(el, "layout-form", '[data-test="layout-save"]').click();
     await el.updateComplete;
     expect(field.error).toBe(t("home.name_required"));
-    expect(await summary(el, "layout-form")).toEqual([t("home.name_required")]);
+    expect(await bottom(el, "layout-form")).toBe(t("form.fix_fields"));
     expect(client.createHomeLayout).not.toHaveBeenCalled();
     const created = [
       ...homeLayouts(),
@@ -4051,5 +4041,182 @@ describe("home page", () => {
     lunchRead.resolve(homeLayouts());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(homeEditor(el).layouts).toEqual([]);
+  });
+});
+
+describe("the name forms", () => {
+  interface NameForm {
+    form: string;
+    save: string;
+    field: string;
+    required: StringKey;
+    write: keyof DashboardApi;
+    path: string;
+    open: (el: MenusScreen) => Promise<void>;
+  }
+  const forms: NameForm[] = [
+    {
+      form: "menu-form",
+      save: "menu-save",
+      field: "name",
+      required: "menus.name_required",
+      write: "createCatalogue",
+      path: "/manage/menus",
+      open: (el) => click(el, "add-menu"),
+    },
+    {
+      form: "new-section",
+      save: "new-section-save",
+      field: "internalName",
+      required: "sections.internal_name_required",
+      write: "createSection",
+      path: LUNCH_PATH,
+      open: async (el) => {
+        if (breadcrumb(el) !== "Lunch Menu › Drinks") await editDrinks(el);
+        await click(el, "new-section");
+      },
+    },
+    {
+      form: "duplicate",
+      save: "duplicate-save",
+      field: "internalName",
+      required: "sections.internal_name_required",
+      write: "duplicateSection",
+      path: LUNCH_PATH,
+      open: async (el) => {
+        if (breadcrumb(el) !== "Lunch Menu › Drinks") await editDrinks(el);
+        await click(el, "duplicate-here");
+      },
+    },
+    {
+      form: "layout-form",
+      save: "layout-save",
+      field: "name",
+      required: "home.name_required",
+      write: "createHomeLayout",
+      path: HOME_PATH,
+      open: async (el) => {
+        emit(q(el, "dashboard-home-layout-editor")!, "wt-layout-add", {});
+        await el.updateComplete;
+      },
+    },
+  ];
+
+  async function opened(form: NameForm, client: Api = api()) {
+    const el = await mount(client, form.path);
+    if (form.path === LUNCH_PATH) await vi.waitFor(() => expect(tree(el)).not.toBeNull());
+    if (form.path === HOME_PATH)
+      await vi.waitFor(() => expect(q(el, "dashboard-home-layout-editor")).not.toBeNull());
+    await form.open(el);
+    await vi.waitFor(() => expect(modal(el, form.form).open).toBe(true));
+    return {
+      el,
+      name: () =>
+        inModal<HTMLElementTagNameMap["wt-input"]>(el, form.form, `wt-input[name="${form.field}"]`),
+      save: () =>
+        inModal<HTMLElementTagNameMap["wt-button"]>(el, form.form, `[data-test="${form.save}"]`),
+    };
+  }
+
+  async function rename(el: MenusScreen, input: Element, value: string): Promise<void> {
+    type(input, value);
+    await el.updateComplete;
+  }
+
+  const focusedIn = (input: HTMLElementTagNameMap["wt-input"]) =>
+    input.shadowRoot!.activeElement === input.shadowRoot!.querySelector("input");
+
+  it.each(forms)("$form says nothing about errors before the first Save", async (form) => {
+    const { el, name, save } = await opened(form);
+    await rename(el, name(), " ");
+    expect(name().error).toBe("");
+    expect(await bottom(el, form.form)).toBe("");
+    expect(save().disabled).toBe(false);
+  });
+
+  it.each(forms)(
+    "$form focuses the name on an invalid Save, holds Save until it is fixed, and re-checks every change",
+    async (form) => {
+      const client = api();
+      const { el, name, save } = await opened(form, client);
+      await rename(el, name(), "");
+      save().click();
+      await el.updateComplete;
+      await vi.waitFor(() => expect(focusedIn(name())).toBe(true));
+      expect(name().error).toBe(t(form.required));
+      expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+      expect(save().disabled).toBe(true);
+
+      await rename(el, name(), "Terrace");
+      expect(name().error).toBe("");
+      expect(await bottom(el, form.form)).toBe("");
+      expect(save().disabled).toBe(false);
+
+      await rename(el, name(), "  ");
+      expect(name().error).toBe(t(form.required));
+      expect(save().disabled).toBe(true);
+      expect(client[form.write]).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(forms)(
+    "$form focuses a refused name and holds Save until the name changes",
+    async (form) => {
+      const client = api({
+        [form.write]: vi
+          .fn()
+          .mockRejectedValue({ code: "management.request_invalid", params: { field: form.field } }),
+      });
+      const { el, name, save } = await opened(form, client);
+      await rename(el, name(), "Terrace");
+      save().click();
+      await vi.waitFor(() => expect(name().error).toBe(codeMessage("management.request_invalid")));
+      await vi.waitFor(() => expect(focusedIn(name())).toBe(true));
+      expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+      expect(save().disabled).toBe(true);
+
+      await rename(el, name(), "Terrace two");
+      expect(name().error).toBe("");
+      expect(await bottom(el, form.form)).toBe("");
+      expect(save().disabled).toBe(false);
+    },
+  );
+
+  it.each(forms)(
+    "$form leaves Save working after a refusal naming no field, and drops it on the next Save",
+    async (form) => {
+      const client = api({ [form.write]: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+      const { el, name, save } = await opened(form, client);
+      await rename(el, name(), "Terrace");
+      save().click();
+      await vi.waitFor(async () =>
+        expect(await bottom(el, form.form)).toBe(codeMessage("server.internal")),
+      );
+      expect(save().disabled).toBe(false);
+
+      // Re-checked since the first Save: the refusal and the generic sentence show together.
+      await rename(el, name(), "");
+      expect(await bottom(el, form.form)).toBe(
+        `${codeMessage("server.internal")} ${t("form.fix_fields")}`,
+      );
+      save().click();
+      await el.updateComplete;
+      expect(await bottom(el, form.form)).toBe(t("form.fix_fields"));
+    },
+  );
+
+  it.each(forms)("$form starts again when it is reopened", async (form) => {
+    const { el, name, save } = await opened(form);
+    await rename(el, name(), "");
+    save().click();
+    await el.updateComplete;
+    inModal(el, form.form, `[data-test="${form.form}-cancel"]`).click();
+    await el.updateComplete;
+    expect(modal(el, form.form).open).toBe(false);
+    await form.open(el);
+    await vi.waitFor(() => expect(modal(el, form.form).open).toBe(true));
+    expect(name().error).toBe("");
+    expect(await bottom(el, form.form)).toBe("");
+    expect(save().disabled).toBe(false);
   });
 });

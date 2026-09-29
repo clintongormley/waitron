@@ -146,10 +146,17 @@ function text(el: ExtraListForm, testId: string): string {
   return el.shadowRoot!.querySelector(`[data-test="${testId}"]`)!.textContent!.trim();
 }
 
-function summary(el: ExtraListForm): string[] {
-  const box = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-  return [...box.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent!.trim());
+async function bottomOf(el: ExtraListForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+
+const saveOf = (el: ExtraListForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!;
+
+const errorOf = (el: ExtraListForm, name: string): string =>
+  field<HTMLElementTagNameMap["wt-input"]>(el, name).error;
 
 /** Counts submissions as well as capturing the last one: a composed event re-emitted without
  * stopping the original arrives twice, and a single-shot listener cannot see that. */
@@ -263,7 +270,7 @@ it("submits a typed price as a string, even when it is the product's own price",
   expect(submitted[0]!.items[0]!.price).toBe("0.80");
 });
 
-it("refuses a list with no staff name, beside the name field and in the summary", async () => {
+it("refuses a list with no staff name, beside the name field and in the bottom message", async () => {
   const { el, host } = await mount();
   const submitted = record(host);
 
@@ -274,7 +281,8 @@ it("refuses a list with no staff name, beside the name field and in the summary"
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "name").error).toBe(
     t("extras.name_required"),
   );
-  expect(summary(el)).toEqual([t("extras.name_required")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 });
 
 it("refuses a maximum below the minimum on the MAXIMUM field, as the contract names it", async () => {
@@ -289,7 +297,7 @@ it("refuses a maximum below the minimum on the MAXIMUM field, as the contract na
     t("extras.max_picks_too_low"),
   );
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "min-picks").error).toBe("");
-  expect(summary(el)).toEqual([t("extras.max_picks_too_low")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
 it("refuses a pick bound that is not a whole number within the allowed limit", async () => {
@@ -304,7 +312,7 @@ it("refuses a pick bound that is not a whole number within the allowed limit", a
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "min-picks").error).toBe(
     t("extras.picks_invalid"),
   );
-  expect(summary(el)).toEqual([t("extras.picks_invalid")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   await type(el, "min-picks", "1");
   await type(el, "max-picks", "one");
@@ -324,7 +332,8 @@ it("refuses an active list with no products, and saves the same list once it is 
 
   expect(submitted).toEqual([]);
   expect(text(el, "items-error")).toContain(t("extras.items_required"));
-  expect(summary(el)).toContain(t("extras.items_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 
   await toggle(el, "active", false);
   await click(el, "save");
@@ -332,7 +341,7 @@ it("refuses an active list with no products, and saves the same list once it is 
   expect(submitted[0]!.items).toEqual([]);
 });
 
-it("refuses the same product offered twice, beside the second row and in the summary", async () => {
+it("refuses the same product offered twice, beside the second row and in the bottom message", async () => {
   const { el, host } = await mount();
   const submitted = record(host);
 
@@ -344,7 +353,7 @@ it("refuses the same product offered twice, beside the second row and in the sum
   expect(submitted).toEqual([]);
   expect(text(el, "item-1-product-error")).toBe(t("extras.duplicate_product"));
   expect(el.shadowRoot!.querySelector('[data-test="item-0-product-error"]')).toBeNull();
-  expect(summary(el)).toEqual([t("extras.duplicate_product")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   await click(el, "remove-item-1");
   await click(el, "save");
@@ -363,7 +372,7 @@ it("refuses a maximum quantity that is not a whole number of at least 1", async 
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-max-quantity").error).toBe(
     t("extras.quantity_invalid"),
   );
-  expect(summary(el)).toEqual([t("extras.quantity_invalid")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
 it("refuses a price the product-price rule does not accept", async () => {
@@ -378,7 +387,7 @@ it("refuses a price the product-price rule does not accept", async () => {
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").error).toBe(
     t("extras.price_invalid"),
   );
-  expect(summary(el)).toEqual([t("extras.price_invalid")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   await type(el, "item-0-price", "1.505");
   await click(el, "save");
@@ -389,7 +398,7 @@ it("refuses a price the product-price rule does not accept", async () => {
   expect(submitted[0]!.items[0]!.price).toBe("1.50");
 });
 
-it("puts a rejected field's message beside the input the server named and in the summary", async () => {
+it("puts a rejected field's message beside the input the server named, and holds Save back", async () => {
   const { el } = await mount({
     value: addons,
     fieldErrors: {
@@ -406,11 +415,8 @@ it("puts a rejected field's message beside the input the server named and in the
     "Too many of those.",
   );
   expect(text(el, "item-0-product-error")).toBe("That product was deleted.");
-  expect(summary(el).sort()).toEqual([
-    "That product was deleted.",
-    "Too long for the kitchen.",
-    "Too many of those.",
-  ]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
 it("keeps a rejected item's message on that item after it is moved", async () => {
@@ -418,6 +424,8 @@ it("keeps a rejected item's message on that item after it is moved", async () =>
     value: addons,
     fieldErrors: { "items.1.maxQuantity": "Too many of those." },
   });
+  // A refusal takes focus when it arrives; let it land before the handle is focused.
+  await new Promise((resolve) => setTimeout(resolve));
 
   const handle = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="drag-${EGG_ITEM}"]`)!;
   handle.focus();
@@ -539,7 +547,7 @@ it("shows a whole price, not a truncated one, at phone width", async () => {
   }
 });
 
-it("puts each list-level refusal beside the input it names, and a switch's in the summary", async () => {
+it("puts each list-level refusal beside the input it names, and a switch's in the bottom message", async () => {
   const { el } = await mount({
     value: addons,
     fieldErrors: {
@@ -558,15 +566,10 @@ it("puts each list-level refusal beside the input it names, and a switch's in th
     "Too many required.",
   );
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "max-picks").error).toBe("Too many allowed.");
-  expect(summary(el).sort()).toEqual([
-    "Cannot be switched off.",
-    "Needs a customer-facing name.",
-    "Too many allowed.",
-    "Too many required.",
-  ]);
+  expect(await bottomOf(el)).toBe(`Cannot be switched off. ${t("form.fix_fields")}`);
 });
 
-it("puts an item's price refusal beside that item's price, and its preselection's in the summary", async () => {
+it("puts an item's price refusal beside that item's price, and its preselection's in the bottom message", async () => {
   const { el } = await mount({
     value: addons,
     fieldErrors: { "items.1.price": "Too cheap.", "items.0.preselected": "Not allowed here." },
@@ -575,7 +578,7 @@ it("puts an item's price refusal beside that item's price, and its preselection'
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-1-price").error).toBe("Too cheap.");
   expect(field<HTMLElementTagNameMap["wt-input"]>(el, "item-0-price").error).toBe("");
   expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
-  expect(summary(el).sort()).toEqual(["Not allowed here.", "Too cheap."]);
+  expect(await bottomOf(el)).toBe(`Not allowed here. ${t("form.fix_fields")}`);
 });
 
 it.each([
@@ -587,7 +590,8 @@ it.each([
   const { el } = await mount({ value: addons, fieldErrors: { [path]: "Something is wrong." } });
 
   expect(text(el, "items-error")).toBe("Something is wrong.");
-  expect(summary(el)).toEqual(["Something is wrong."]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
 
 it("moves a rejected item's message under the items table once that item is removed", async () => {
@@ -597,7 +601,9 @@ it("moves a rejected item's message under the items table once that item is remo
   await click(el, "remove-item-1");
 
   expect(text(el, "items-error")).toBe("Too cheap.");
-  expect(summary(el)).toEqual(["Too cheap."]);
+  // Removing the item was the change to the field the refusal named, so nothing is left to fix.
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
 it("submits a blank minimum as 0, the contract's own default", async () => {
@@ -646,7 +652,8 @@ it("ignores a drag whose row was removed mid-gesture, leaving the save's message
   await click(el, "remove-item-0");
   await type(el, "name", "");
   await click(el, "save");
-  expect(summary(el)).toEqual([t("extras.name_required")]);
+  expect(errorOf(el, "name")).toBe(t("extras.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
   const firstRow = el.shadowRoot!.querySelector("tbody tr")!.getBoundingClientRect();
   document.dispatchEvent(
@@ -659,7 +666,8 @@ it("ignores a drag whose row was removed mid-gesture, leaving the save's message
   document.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 1 }));
   await el.updateComplete;
 
-  expect(summary(el)).toEqual([t("extras.name_required")]);
+  expect(errorOf(el, "name")).toBe(t("extras.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   await type(el, "name", "Add-ons");
   await click(el, "save");
   expect(submitted[0]!.items.map((item) => item.id)).toEqual([EGG_ITEM, third.id]);
@@ -1183,4 +1191,140 @@ it("keeps a price's baseline on its amount when the unit sits under it on a phon
   } finally {
     await page.viewport(width, height);
   }
+});
+
+// ---------------------------------------------------------------------------
+// When it speaks about errors
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const { el } = await mount({ value: addons });
+  await type(el, "name", "");
+  await type(el, "item-0-price", "007");
+
+  expect(errorOf(el, "name")).toBe("");
+  expect(errorOf(el, "item-0-price")).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the first invalid field, keeps what was typed and disables Save", async () => {
+  const { el } = await mount({ value: addons });
+  await type(el, "kitchen-name", "ADDS");
+  await type(el, "item-1-price", "007");
+  await click(el, "save");
+  await new Promise((resolve) => setTimeout(resolve));
+
+  const price = field<HTMLElement>(el, "item-1-price");
+  expect(price.shadowRoot!.activeElement).toBe(price.shadowRoot!.querySelector("input"));
+  expect(field<HTMLElementTagNameMap["wt-input"]>(el, "kitchen-name").value).toBe("ADDS");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("focuses the items table when the items are all that is wrong", async () => {
+  const { el } = await mount();
+  await type(el, "name", "Add-ons");
+  await click(el, "save");
+  await new Promise((resolve) => setTimeout(resolve));
+
+  expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector(".table-wrap"));
+});
+
+it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+  const { el } = await mount({ value: addons });
+  await type(el, "name", " ");
+  await type(el, "item-0-price", "007");
+  await click(el, "save");
+
+  await type(el, "name", "Add-ons");
+  expect(errorOf(el, "name")).toBe("");
+  expect(errorOf(el, "item-0-price")).toBe(t("extras.price_invalid"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "name", "");
+  expect(errorOf(el, "name")).toBe(t("extras.name_required"));
+
+  await type(el, "name", "Add-ons");
+  await type(el, "item-0-price", "0.70");
+  expect(errorOf(el, "item-0-price")).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a field's refusal when that field changes, and Save works again", async () => {
+  const { el } = await mount({ value: addons, fieldErrors: { "items.1.price": "Too cheap." } });
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "item-0-price", "0.90");
+  expect(errorOf(el, "item-1-price")).toBe("Too cheap.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "item-1-price", "1.20");
+  expect(errorOf(el, "item-1-price")).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a translated name's refusal only when that language's value changes", async () => {
+  const { el } = await mount({
+    value: addons,
+    fieldErrors: { customerName: "Rejected English." },
+  });
+
+  await type(el, "customer-name-es", "Ponle algo");
+  expect(errorOf(el, "customer-name-en")).toBe("Rejected English.");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "customer-name-en", "Add something");
+  expect(errorOf(el, "customer-name-en")).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a refusal about the items as a whole once the items change", async () => {
+  const { el } = await mount({ value: addons, fieldErrors: { items: "Something is wrong." } });
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await toggle(el, "item-0-preselected", true);
+
+  expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("focuses the field a refusal names when the refusal arrives, opening its folded section", async () => {
+  const { el } = await mount({ value: addons });
+  el.fieldErrors = { kitchenName: "Too long." };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+
+  const kitchen = field<HTMLElement>(el, "kitchen-name");
+  expect(disclosure(el).open).toBe(true);
+  expect(kitchen.shadowRoot!.activeElement).toBe(kitchen.shadowRoot!.querySelector("input"));
+});
+
+it("keeps a refusal naming no field in the bottom message alone, leaving Save working until it is submitted again", async () => {
+  const { el, host } = await mount({ value: addons, fieldErrors: { _form: "Not found." } });
+  const submitted = record(host);
+
+  expect(await bottomOf(el)).toBe("Not found.");
+  expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  await click(el, "save");
+  expect(submitted).toHaveLength(1);
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const { el } = await mount();
+  await click(el, "save");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(errorOf(el, "name")).toBe("");
+  expect(el.shadowRoot!.querySelector('[data-test="items-error"]')).toBeNull();
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });

@@ -2,7 +2,7 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
 import type {
   DashboardApi,
@@ -322,6 +322,25 @@ function typeField(el: PrintersScreen, sel: string, value: string): void {
   );
 }
 
+async function bottomOf(el: PrintersScreen, actions: string): Promise<string> {
+  const row = q(el, actions) as HTMLElement & { updateComplete: Promise<unknown> };
+  await row.updateComplete;
+  return row.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+/** A dialog's own action row, in its footer; the address check keeps a second row in the body. */
+const footerOf = (modal: string): string => `[data-test=${modal}] > wt-form-actions[slot=footer]`;
+/** A refusal paragraph at the top of a dialog. */
+const topAlertOf = (el: PrintersScreen, modal: string) =>
+  q(el, `[data-test=${modal}] p[role=alert]`);
+const errorOf = (el: PrintersScreen, sel: string): string =>
+  (q(el, sel) as unknown as { error: string }).error;
+const isDisabled = (el: PrintersScreen, sel: string): boolean =>
+  q(el, sel)!.hasAttribute("disabled");
+const inputFocused = (el: PrintersScreen, sel: string): boolean => {
+  const field = q(el, sel)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
+};
+
 function toggleSwitch(el: PrintersScreen, sel: string, checked: boolean): void {
   const input = q(el, sel)!.shadowRoot!.querySelector("input")!;
   input.checked = checked;
@@ -481,9 +500,10 @@ describe("guided printer calibration", () => {
     );
     q(el, "[data-test=test-printer-drawer]")!.click();
     await flush(el);
-    expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
       codeMessage("printer.not_found"),
     );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
     expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
     toggleSwitch(el, '[name="printer-cash-drawer"]', false);
     await flush(el);
@@ -518,6 +538,7 @@ describe("guided printer calibration", () => {
       await flush(el);
       expect(q(el, '[name="printer-drawer-result"]')).toBeNull();
       expect(q(el, "[data-test=edit-printer-modal] [role=alert]")).toBeNull();
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe("");
     },
   );
 
@@ -1119,6 +1140,10 @@ describe("printers-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("device.join_mismatch", "es-ES"));
     expect(banner).not.toContain("device.join_mismatch");
+    expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
+      codeMessage("device.join_mismatch", "es-ES"),
+    );
+    expect(topAlertOf(el, "new-agent-modal")).toBeNull();
   });
 
   it("keeps the dialog open on a recoverable accept fault", async () => {
@@ -1435,7 +1460,7 @@ describe("printers-screen", () => {
     expect(q(el, "[data-test='register-192.168.20.56:9100']")).toBeNull();
   });
 
-  it("explains invalid address and port fields instead of disabling Check address", async () => {
+  it("explains invalid address and port fields once Check address is pressed, not by disabling it beforehand", async () => {
     const probePrinterAddress = vi.fn();
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
       api: stubApi({ probePrinterAddress }),
@@ -1456,10 +1481,8 @@ describe("printers-screen", () => {
     expect((q(el, "[data-test=probe-port]") as unknown as { error: string }).error).toBe(
       t("printers.port_invalid"),
     );
-    expect((q(el, "[data-test=probe-errors]") as unknown as { errors: string[] }).errors).toEqual([
-      t("printers.probe_host_invalid"),
-      t("printers.port_invalid"),
-    ]);
+    expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
   });
 
   it("ignores old inventory, times out, and accepts a fresh report on retry through passive polling", async () => {
@@ -1531,9 +1554,7 @@ describe("printers-screen", () => {
     expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe(
       t("printers.probe_host_invalid"),
     );
-    expect((q(el, "[data-test=probe-errors]") as unknown as { errors: string[] }).errors).toEqual([
-      t("printers.probe_host_invalid"),
-    ]);
+    expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
     let reject!: (error: unknown) => void;
     probe.mockImplementationOnce(
       () =>
@@ -2067,6 +2088,12 @@ describe("printers-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("printer.already_registered", "es-ES"));
     expect(banner).not.toContain("printer.already_registered");
+    expect(await bottomOf(el, footerOf("name-printer-modal"))).toBe(
+      codeMessage("printer.already_registered", "es-ES"),
+    );
+    expect(topAlertOf(el, "name-printer-modal")).toBeNull();
+    expect(topAlertOf(el, "new-printer-modal")).toBeNull();
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
 
   it("shows an error banner when reading the discovered list is rejected", async () => {
@@ -2080,6 +2107,10 @@ describe("printers-screen", () => {
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("server.internal", "es-ES"));
     expect(banner).not.toContain("server.internal");
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe(
+      codeMessage("server.internal", "es-ES"),
+    );
+    expect(topAlertOf(el, "new-printer-modal")).toBeNull();
   });
 
   it("shows an error banner when Scan (opening the discovery window) is rejected", async () => {
@@ -2269,6 +2300,10 @@ describe("printers-screen", () => {
 
     const banner = q(el, "[role=alert]")?.textContent;
     expect(banner).toContain(codeMessage("printer.not_found", "es-ES"));
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
+      codeMessage("printer.not_found", "es-ES"),
+    );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
   });
 
   it("deactivates a printer immediately, reloads, and disables inactive deletion", async () => {
@@ -2559,6 +2594,10 @@ it("shows a failed agent rename and lets Cancel discard the draft", async () => 
   q(el, "[data-test=save-agent]")!.click();
   await flush(el);
   expect(text(el, "[role=alert]")).toContain(codeMessage("agent.not_found", "es-ES"));
+  expect(await bottomOf(el, footerOf("edit-agent-modal"))).toBe(
+    codeMessage("agent.not_found", "es-ES"),
+  );
+  expect(topAlertOf(el, "edit-agent-modal")).toBeNull();
   q(el, "[data-test=cancel-edit-agent]")!.click();
   await flush(el);
   q(el, "[data-test=edit-agent-a1]")!.click();
@@ -2849,6 +2888,8 @@ it("keeps a disabled printer available when adding it again fails", async () => 
   expect(api.createPrinter).not.toHaveBeenCalled();
   expect(q(el, "[data-test=register-SN-2]")).not.toBeNull();
   expect(text(el, "[role=alert]")).toContain(codeMessage("printer.not_found"));
+  expect(await bottomOf(el, footerOf("name-printer-modal"))).toBe(codeMessage("printer.not_found"));
+  expect(topAlertOf(el, "name-printer-modal")).toBeNull();
 });
 
 it.each(["printer-row-p1", "job-printer-j1"])(
@@ -3316,6 +3357,7 @@ it("ignores a previous opening's pairing failure while the reopened dialog scans
   rejectOld({ code: "printer.not_found" });
   await flush(el);
   expect(q(el, "[role=alert]")).toBeNull();
+  expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
   expect(q(el, "[data-test=scan-agents]")!.shadowRoot!.querySelector("button")!.disabled).toBe(
     true,
   );
@@ -3695,11 +3737,12 @@ describe("printers-screen agent joining edges", () => {
     await el.updateComplete;
     q(el, "[data-test=join-deny-j1]")!.click();
 
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=new-agent-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
         codeMessage("join_request.not_found"),
       ),
     );
+    expect(topAlertOf(el, "new-agent-modal")).toBeNull();
     expect(q(el, "[data-test=join-row-j1]")).not.toBeNull();
     expect(api.joinRequests).toHaveBeenCalledTimes(calls);
   });
@@ -3731,11 +3774,12 @@ describe("printers-screen agent joining edges", () => {
     q(el, '[data-choice="12"]')!.click();
 
     await vi.waitFor(() => expect(q(el, "[data-test=join-dialog]")).toBeNull());
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=new-agent-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe(
         codeMessage("connection.failed"),
       ),
     );
+    expect(topAlertOf(el, "new-agent-modal")).toBeNull();
   });
 
   it("opens pairing once when Add agent is pressed twice", async () => {
@@ -4139,10 +4183,9 @@ describe("printers-screen discovery and add edges", () => {
       ),
     );
     expect((q(el, "[data-test=probe-host]") as unknown as { error: string }).error).toBe("");
-    expect((q(el, "[data-test=probe-errors]") as unknown as { errors: string[] }).errors).toEqual([
-      t("printers.port_invalid"),
-    ]);
+    expect(await bottomOf(el, "[data-test=probe-actions]")).toBe(t("form.fix_fields"));
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
   });
 
   it("ignores a listen re-read that fails after Add printer was closed", async () => {
@@ -4296,6 +4339,7 @@ describe("printers-screen discovery and add edges", () => {
     await flush(el);
     expect(q(el, "[data-test=calibration-step-1]")?.checkVisibility()).toBe(true);
     expect(q(el, "[data-test=new-printer-modal] [role=alert]")).toBeNull();
+    expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe("");
   });
 });
 
@@ -4311,13 +4355,6 @@ describe("printers-screen printer editor edges", () => {
     await openPrinter(el, id);
     return { el, api };
   }
-
-  const summaryErrors = (el: PrintersScreen): string[] =>
-    (
-      q(el, "[data-test=edit-printer-modal] wt-form-error-summary") as unknown as {
-        errors: string[];
-      }
-    ).errors;
 
   it("keeps a late change from a closed editor out of the next printer's draft", async () => {
     const { el, api } = await mountEditing("p1");
@@ -4382,7 +4419,8 @@ describe("printers-screen printer editor edges", () => {
       await flush(el);
 
       expect(api.updatePrinter).not.toHaveBeenCalled();
-      expect(summaryErrors(el)).toEqual([t(message)]);
+      expect(await bottomOf(el, "[data-test=edit-printer-modal] wt-form-actions")).toBe(t(message));
+      expect(isDisabled(el, `[data-test=save-printer-${row.id}]`)).toBe(false);
     },
   );
 
@@ -4426,11 +4464,12 @@ describe("printers-screen printer editor edges", () => {
 
     q(el, "[data-test=print-sample-receipt-p1]")!.click();
 
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
         codeMessage("printer.not_found"),
       ),
     );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
   });
 
   it("prints one character-table page when the button is pressed twice", async () => {
@@ -4459,11 +4498,12 @@ describe("printers-screen printer editor edges", () => {
 
     q(el, "[data-test=print-character-tables-p1]")!.click();
 
-    await vi.waitFor(() =>
-      expect(text(el, "[data-test=edit-printer-modal] [role=alert]")).toBe(
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el, footerOf("edit-printer-modal"))).toBe(
         codeMessage("printer.not_found"),
       ),
     );
+    expect(topAlertOf(el, "edit-printer-modal")).toBeNull();
     expect(q(el, '[data-test="finder-expected-W"]')).not.toBeNull();
   });
 
@@ -4580,6 +4620,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
 
       expect(api.renewPairingMode).toHaveBeenCalled();
       expect(q(el, "[data-test=new-agent-modal] [role=alert]")).toBeNull();
+      expect(await bottomOf(el, footerOf("new-agent-modal"))).toBe("");
     } finally {
       el.remove();
       vi.useRealTimers();
@@ -4616,5 +4657,318 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
     await flush(el);
 
     expect(api.listDiscoveredPrinters).toHaveBeenCalledTimes(reads);
+  });
+});
+
+describe("printers-screen forms say what is wrong beside the field and the action", () => {
+  async function mounted(overrides: Partial<DashboardApi> = {}) {
+    const api = stubApi(overrides);
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    return { el, api };
+  }
+  const agentActions = "[data-test=edit-agent-modal] wt-form-actions";
+  const printerActions = "[data-test=edit-printer-modal] wt-form-actions";
+  const nameActions = "[data-test=name-printer-modal] wt-form-actions";
+  const probeActions = "[data-test=probe-actions]";
+
+  it("says nothing about an agent name before the first Save, and Save works", async () => {
+    const { el } = await mounted();
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", " ");
+    await flush(el);
+    expect(errorOf(el, "[data-test=edit-agent-name]")).toBe("");
+    expect(await bottomOf(el, agentActions)).toBe("");
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(false);
+  });
+
+  it("on an invalid agent Save focuses the name, disables Save and re-checks every change", async () => {
+    const { el, api } = await mounted();
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "");
+    q(el, "[data-test=save-agent]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, "[data-test=edit-agent-name]")).toBe(true));
+    expect(errorOf(el, "[data-test=edit-agent-name]")).toBe(t("form.name_required"));
+    expect(await bottomOf(el, agentActions)).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(true);
+
+    typeField(el, "[data-test=edit-agent-name]", "Kitchen box");
+    await flush(el);
+    expect(errorOf(el, "[data-test=edit-agent-name]")).toBe("");
+    expect(await bottomOf(el, agentActions)).toBe("");
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(false);
+
+    typeField(el, "[data-test=edit-agent-name]", " ");
+    await flush(el);
+    expect(errorOf(el, "[data-test=edit-agent-name]")).toBe(t("form.name_required"));
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(true);
+    expect(api.updateAgent).not.toHaveBeenCalled();
+  });
+
+  it("leaves the agent's Save working after a refusal that names no field", async () => {
+    const { el, api } = await mounted({
+      updateAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
+    });
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    q(el, "[data-test=save-agent]")!.click();
+    await flush(el);
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(false);
+    q(el, "[data-test=save-agent]")!.click();
+    await flush(el);
+    expect(api.updateAgent).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an agent refusal and the fields sentence one after the other when both apply", async () => {
+    const { el } = await mounted({
+      updateAgent: vi.fn().mockRejectedValue({ code: "agent.not_found" }),
+    });
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    q(el, "[data-test=save-agent]")!.click();
+    await flush(el);
+    expect(await bottomOf(el, agentActions)).toBe(codeMessage("agent.not_found"));
+    typeField(el, "[data-test=edit-agent-name]", " ");
+    await flush(el);
+    expect(await bottomOf(el, agentActions)).toBe(
+      `${codeMessage("agent.not_found")} ${t("form.fix_fields")}`,
+    );
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(true);
+  });
+
+  it("starts the agent form again when it is reopened", async () => {
+    const { el } = await mounted();
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "");
+    q(el, "[data-test=save-agent]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-edit-agent]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-agent-modal]")).toBeNull());
+    q(el, "[data-test=edit-agent-a1]")!.click();
+    await flush(el);
+    typeField(el, "[data-test=edit-agent-name]", "");
+    await flush(el);
+    expect(errorOf(el, "[data-test=edit-agent-name]")).toBe("");
+    expect(await bottomOf(el, agentActions)).toBe("");
+    expect(isDisabled(el, "[data-test=save-agent]")).toBe(false);
+  });
+
+  it("says nothing about a printer's fields before the first Save, and Save works", async () => {
+    const { el } = await mounted();
+    await openPrinter(el, "p1");
+    typeField(el, "[data-test=printer-name-p1]", "");
+    typeField(el, "[data-test=printer-port-p1]", "70000");
+    await flush(el);
+    expect(errorOf(el, "[data-test=printer-name-p1]")).toBe("");
+    expect(errorOf(el, "[data-test=printer-port-p1]")).toBe("");
+    expect(await bottomOf(el, printerActions)).toBe("");
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
+  });
+
+  it("on an invalid printer Save focuses the first invalid field, disables Save and re-checks every change", async () => {
+    const { el, api } = await mounted();
+    await openPrinter(el, "p1");
+    typeField(el, "[data-test=printer-host-p1]", "");
+    typeField(el, "[data-test=printer-port-p1]", "70000");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, "[data-test=printer-host-p1]")).toBe(true));
+    expect(errorOf(el, "[data-test=printer-host-p1]")).toBe(t("printers.host_required"));
+    expect(await bottomOf(el, printerActions)).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
+
+    typeField(el, "[data-test=printer-host-p1]", "10.0.0.9");
+    await flush(el);
+    expect(errorOf(el, "[data-test=printer-host-p1]")).toBe("");
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
+
+    typeField(el, "[data-test=printer-port-p1]", "9100");
+    await flush(el);
+    expect(await bottomOf(el, printerActions)).toBe("");
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
+
+    typeField(el, "[data-test=printer-name-p1]", " ");
+    await flush(el);
+    expect(errorOf(el, "[data-test=printer-name-p1]")).toBe(t("form.name_required"));
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(true);
+    expect(api.updatePrinter).not.toHaveBeenCalled();
+  });
+
+  it("leaves a printer's Save working after a refusal that names no field", async () => {
+    const { el, api } = await mounted({
+      updatePrinter: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+    });
+    await openPrinter(el, "p1");
+    typeField(el, "[data-test=printer-name-p1]", "Cocina 2");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    expect(api.updatePrinter).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts the printer form again when it is reopened", async () => {
+    const { el } = await mounted();
+    await openPrinter(el, "p1");
+    typeField(el, "[data-test=printer-name-p1]", "");
+    q(el, "[data-test=save-printer-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-edit-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=edit-printer-modal]")).toBeNull());
+    await openPrinter(el, "p1");
+    typeField(el, "[data-test=printer-name-p1]", "");
+    await flush(el);
+    expect(errorOf(el, "[data-test=printer-name-p1]")).toBe("");
+    expect(await bottomOf(el, printerActions)).toBe("");
+    expect(isDisabled(el, "[data-test=save-printer-p1]")).toBe(false);
+  });
+
+  it("names a discovered printer: nothing before Add, then a focused message that each change re-checks", async () => {
+    const { el } = await mounted({
+      listDiscoveredPrinters: vi.fn().mockResolvedValue(discovered),
+    });
+    await openDiscovery(el);
+    q(el, '[data-test="register-SN-1"]')!.click();
+    await flush(el);
+    const name = '[data-test="discovered-name-SN-1"]';
+    typeField(el, name, "");
+    await flush(el);
+    expect(errorOf(el, name)).toBe("");
+    expect(await bottomOf(el, nameActions)).toBe("");
+    expect(isDisabled(el, '[data-test="confirm-add-printer"]')).toBe(false);
+
+    q(el, '[data-test="confirm-add-printer"]')!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, name)).toBe(true));
+    expect(errorOf(el, name)).toBe(t("form.name_required"));
+    expect(await bottomOf(el, nameActions)).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, '[data-test="confirm-add-printer"]')).toBe(true);
+
+    typeField(el, name, "Kitchen");
+    await flush(el);
+    expect(errorOf(el, name)).toBe("");
+    expect(await bottomOf(el, nameActions)).toBe("");
+    expect(isDisabled(el, '[data-test="confirm-add-printer"]')).toBe(false);
+  });
+
+  it("says nothing about the address check before it is pressed, and Check address works", async () => {
+    const { el } = await mounted();
+    await openDiscovery(el);
+    typeField(el, "[data-test=probe-port]", "70000");
+    await flush(el);
+    expect(errorOf(el, "[data-test=probe-port]")).toBe("");
+    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
+  });
+
+  it("focuses the first invalid address field and re-checks every change until Check address works again", async () => {
+    const { el } = await mounted();
+    await openDiscovery(el);
+    q(el, "[data-test=probe-panel] summary")!.click();
+    typeField(el, "[data-test=probe-port]", "70000");
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, "[data-test=probe-host]")).toBe(true));
+
+    typeField(el, "[data-test=probe-host]", "10.0.0.50");
+    await flush(el);
+    expect(errorOf(el, "[data-test=probe-host]")).toBe("");
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
+
+    typeField(el, "[data-test=probe-port]", "9100");
+    await flush(el);
+    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
+
+    typeField(el, "[data-test=probe-host]", " ");
+    await flush(el);
+    expect(errorOf(el, "[data-test=probe-host]")).toBe(t("printers.probe_host_invalid"));
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
+  });
+
+  it("clears a refused address when that field changes, focusing it when the refusal arrives", async () => {
+    const { el } = await mounted({
+      probePrinterAddress: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", params: { field: "host" } }),
+    });
+    await openDiscovery(el);
+    q(el, "[data-test=probe-panel] summary")!.click();
+    typeField(el, "[data-test=probe-host]", "printer.local");
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, "[data-test=probe-host]")).toBe(true));
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
+
+    typeField(el, "[data-test=probe-port]", "9101");
+    await flush(el);
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(true);
+
+    typeField(el, "[data-test=probe-host]", "10.0.0.50");
+    await flush(el);
+    expect(errorOf(el, "[data-test=probe-host]")).toBe("");
+    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
+  });
+
+  it("leaves Check address working after a refusal that names no field", async () => {
+    const probe = vi.fn().mockRejectedValue({ code: "printer.probe_busy" });
+    const { el } = await mounted({ probePrinterAddress: probe });
+    await openDiscovery(el);
+    typeField(el, "[data-test=probe-host]", "10.0.0.50");
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(errorOf(el, "[data-test=probe-host]")).toBe("");
+    expect(await bottomOf(el, probeActions)).toBe(codeMessage("printer.probe_busy"));
+    expect(await bottomOf(el, footerOf("new-printer-modal"))).toBe("");
+    expect(topAlertOf(el, "new-printer-modal")).toBeNull();
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    expect(probe).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the address check's refusal and button at the right when they wrap under the fields", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    await page.viewport(1280, 900);
+    try {
+      const { el } = await mounted({
+        probePrinterAddress: vi.fn().mockRejectedValue({ code: "printer.probe_busy" }),
+      });
+      await openDiscovery(el);
+      (q(el, "[data-test=probe-panel]") as HTMLDetailsElement).open = true;
+      typeField(el, "[data-test=probe-host]", "10.0.0.50");
+      q(el, "[data-test=probe-printer]")!.click();
+      await flush(el);
+      expect(await bottomOf(el, probeActions)).toBe(codeMessage("printer.probe_busy"));
+      const host = q(el, "[data-test=probe-host]")!.getBoundingClientRect();
+      const actions = q(el, probeActions)!.getBoundingClientRect();
+      const row = q(el, probeActions)!.parentElement!.getBoundingClientRect();
+      expect(actions.top).toBeGreaterThanOrEqual(host.bottom);
+      expect(actions.right).toBeCloseTo(row.right, 0);
+    } finally {
+      setLocale(before);
+    }
+  });
+
+  it("starts the address check again when Add printer is reopened", async () => {
+    const { el } = await mounted();
+    await openDiscovery(el);
+    q(el, "[data-test=probe-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-new-printer]")!.click();
+    await vi.waitFor(() => expect(q(el, "[data-test=new-printer-modal]")).toBeNull());
+    await openDiscovery(el);
+    typeField(el, "[data-test=probe-host]", " ");
+    await flush(el);
+    expect(errorOf(el, "[data-test=probe-host]")).toBe("");
+    expect(await bottomOf(el, probeActions)).toBe("");
+    expect(isDisabled(el, "[data-test=probe-printer]")).toBe(false);
   });
 });

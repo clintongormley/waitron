@@ -107,6 +107,12 @@ async function editDetails(el: ProfileScreen) {
   el.editDetails();
   await flush(el);
 }
+/** The one message beside the modal's action; "" when there is none. */
+async function bottomOf(el: ProfileScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
 function input(el: ProfileScreen, name: string, value: string) {
   el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
     `wt-input[name=${name}]`,
@@ -234,9 +240,7 @@ describe("your profile", () => {
     expect(
       el.shadowRoot!.querySelector("wt-input[name=passkeyName]")!.getAttribute("error"),
     ).toContain("80");
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toEqual([
-      t("profile.passkey_name_too_long"),
-    ]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
   it("starts Google linking when the installation is configured", async () => {
     const { el, api } = await mount();
@@ -519,9 +523,7 @@ describe("your profile", () => {
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toContain(
-      codeMessage("passkey.already_registered"),
-    );
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
@@ -536,9 +538,9 @@ describe("your profile", () => {
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
-    const errors = el.shadowRoot!.querySelector("wt-form-error-summary")!.errors;
-    expect(errors).toContain(codeMessage("passkey.verification_failed"));
-    expect(errors).not.toContain(codeMessage("__unmapped__"));
+    const bottom = await bottomOf(el);
+    expect(bottom).toContain(codeMessage("passkey.verification_failed"));
+    expect(bottom).not.toContain(codeMessage("__unmapped__"));
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
@@ -550,7 +552,7 @@ describe("your profile", () => {
     await click(el, "add-passkey");
     input(el, "currentPassword", "current");
     await click(el, "save");
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
@@ -561,9 +563,7 @@ describe("your profile", () => {
     await click(el, "add-passkey");
     input(el, "currentPassword", "current");
     await click(el, "save");
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toContain(
-      codeMessage("passkey.challenge_expired"),
-    );
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.challenge_expired"));
   });
 });
 
@@ -891,7 +891,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(field(el, "currentPassword").error).toBe("");
   });
 
-  it("puts a taken display name beside its field and once in the summary, and clears the field when it is edited", async () => {
+  it("puts a taken display name beside its field, the generic sentence beside Save, and clears the field when it is edited", async () => {
     const saveProfile = vi.fn().mockRejectedValue({ code: "person.display_name_taken" });
     const { el } = await mount({ saveProfile });
     await editDetails(el);
@@ -902,7 +902,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
     const message = codeMessage("person.display_name_taken");
     expect(field(el, "displayName").error).toBe(message);
     expect(field(el, "email").error).toBe("");
-    expect(el.shadowRoot!.querySelector("wt-form-error-summary")!.errors).toEqual([message]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
     input(el, "displayName", "Alex Rivera");
     await flush(el);
@@ -944,11 +944,153 @@ describe("your profile — validation, refusals and the remaining actions", () =
     const { el } = await mount();
     await editDetails(el);
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
-    el.shadowRoot!.querySelector("wt-form-error-summary")!.dispatchEvent(
+    el.shadowRoot!.querySelector("wt-form-actions")!.dispatchEvent(
       new CustomEvent("wt-close", { bubbles: true, composed: true }),
     );
     await flush(el);
     expect(modal.open).toBe(true);
     expect(field(el, "displayName")).not.toBeNull();
+  });
+});
+
+describe("your profile — errors beside Save, not above the form", () => {
+  function field(el: ProfileScreen, name: string) {
+    return el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(`wt-input[name=${name}]`)!;
+  }
+  const save = (el: ProfileScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-test=save]")!;
+  const focused = (el: ProfileScreen, name: string) =>
+    field(el, name).shadowRoot!.activeElement ===
+    field(el, name).shadowRoot!.querySelector("input");
+
+  it("says nothing until Save, then marks each field, focuses the first and waits for them", async () => {
+    const { el, api } = await mount();
+    await click(el, "change-pin");
+    expect(field(el, "currentPassword").error).toBe("");
+    expect(field(el, "pin").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
+
+    input(el, "pin", "12");
+    await click(el, "save");
+    expect(api.changePin).not.toHaveBeenCalled();
+    expect(field(el, "currentPassword").error).toBe(t("form.password_required"));
+    expect(field(el, "pin").error).toBe(codeMessage("pin.too_short"));
+    expect(field(el, "pin").value).toBe("12");
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(save(el).disabled).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "currentPassword")).toBe(true));
+
+    input(el, "currentPassword", "current");
+    input(el, "pin", "4321");
+    input(el, "confirmPin", "4321");
+    await flush(el);
+    expect(field(el, "pin").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
+
+    input(el, "confirmPin", "4322");
+    await flush(el);
+    expect(field(el, "confirmPin").error).toBe(t("account.pin_mismatch"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(save(el).disabled).toBe(true);
+  });
+
+  it("focuses the field a refusal names and waits until that field changes", async () => {
+    const changePassword = vi.fn().mockRejectedValue({ code: "password.invalid" });
+    const { el } = await mount({ changePassword });
+    await click(el, "change-password");
+    input(el, "currentPassword", "wrong");
+    input(el, "password", "replacement password");
+    input(el, "confirmPassword", "replacement password");
+    await click(el, "save");
+    expect(changePassword).toHaveBeenCalledTimes(1);
+    expect(field(el, "currentPassword").error).toBe(codeMessage("password.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(save(el).disabled).toBe(true);
+    await vi.waitFor(() => expect(focused(el, "currentPassword")).toBe(true));
+
+    input(el, "currentPassword", "current");
+    await flush(el);
+    expect(field(el, "currentPassword").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
+  });
+
+  it("re-checks a refused field once it changes", async () => {
+    const { el } = await mount({
+      saveProfile: vi.fn().mockRejectedValue({ code: "person.display_name_taken" }),
+    });
+    await editDetails(el);
+    input(el, "displayName", "Alex R");
+    await click(el, "save");
+    expect(field(el, "displayName").error).toBe(codeMessage("person.display_name_taken"));
+    input(el, "displayName", "");
+    await flush(el);
+    expect(field(el, "displayName").error).toBe(t("form.display_name_required"));
+    expect(save(el).disabled).toBe(true);
+  });
+
+  it("leaves Save working after a refusal that names no field, and drops it on the next Save", async () => {
+    let finish!: () => void;
+    const changePin = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "server.internal" })
+      .mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+    const { el } = await mount({ changePin });
+    await click(el, "change-pin");
+    input(el, "currentPassword", "current");
+    input(el, "pin", "4321");
+    input(el, "confirmPin", "4321");
+    await click(el, "save");
+    expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+    expect(save(el).disabled).toBe(false);
+    for (const name of ["currentPassword", "pin", "confirmPin"])
+      expect(field(el, name).error).toBe("");
+
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe("");
+    finish();
+    await flush(el);
+  });
+
+  it("shows a refusal and the generic sentence together when a field breaks after it", async () => {
+    const { el } = await mount({
+      changePin: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    await click(el, "change-pin");
+    input(el, "currentPassword", "current");
+    input(el, "pin", "4321");
+    input(el, "confirmPin", "4321");
+    await click(el, "save");
+    input(el, "pin", "");
+    await flush(el);
+    expect(field(el, "pin").error).toBe(t("form.pin_required"));
+    expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
+    expect(save(el).disabled).toBe(true);
+  });
+
+  it("starts again when the form is reopened", async () => {
+    const { el } = await mount();
+    await click(el, "change-pin");
+    await click(el, "save");
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    await click(el, "cancel");
+    await click(el, "change-pin");
+    expect(field(el, "currentPassword").error).toBe("");
+    expect(field(el, "pin").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
+  });
+
+  it("asks nothing of the authenticator code until the code step's own Save", async () => {
+    const { el } = await mount();
+    await click(el, "setup-authenticator");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    expect(field(el, "setupCode").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(save(el).disabled).toBe(false);
   });
 });

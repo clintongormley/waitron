@@ -68,11 +68,14 @@ function field(el: VariantForm, name: string) {
   };
 }
 
-async function summaryEntries(el: VariantForm) {
-  const summary = el.shadowRoot!.querySelector("wt-form-error-summary")!;
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent);
+async function bottomOf(el: VariantForm): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
+
+const saveOf = (el: VariantForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="variant-save"]')!;
 
 it("opens with every field of the variant it was given", async () => {
   const el = await mountForm({ value: halfPortion });
@@ -137,7 +140,7 @@ it("falls back to the plain price label when the product has no unit yet", async
   expect(field(el, "unitPrice").label).toBe(t("editor.price"));
 });
 
-it("refuses a blank name, explains it beside the field and in the summary, and keeps the draft", async () => {
+it("refuses a blank name, explains it beside the field and beside Save, and keeps the draft", async () => {
   const el = await mountForm({ value: halfPortion });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
@@ -147,7 +150,8 @@ it("refuses a blank name, explains it beside the field and in the summary, and k
   expect(submit).not.toHaveBeenCalled();
   expect(field(el, "name").invalid).toBe(true);
   expect(field(el, "name").error).toBe(t("editor.variant_name_required"));
-  expect(await summaryEntries(el)).toEqual([t("editor.variant_name_required")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   // The window stays as the person left it, so they correct one field rather than retyping the rest.
   expect(field(el, "unitPrice").value).toBe("7.25");
   await change(el, "name", "Entera");
@@ -176,7 +180,7 @@ it("refuses a price that is not a plain amount", async () => {
   await click(el, "variant-save");
   expect(submit).not.toHaveBeenCalled();
   expect(field(el, "unitPrice").error).toBe(t("editor.price_invalid"));
-  expect(await summaryEntries(el)).toEqual([t("editor.price_invalid")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
 it("emits the edited variant, keeping its id and folding blank optional text to nothing", async () => {
@@ -401,4 +405,61 @@ it("hints the main product's photo while the variant has none of its own", async
 it("shows no price hint while the product has no base price yet", async () => {
   const el = await mountForm({ basePrice: "" });
   expect((field(el, "unitPrice") as unknown as { placeholder: string }).placeholder).toBe("");
+});
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const el = await mountForm({ value: halfPortion });
+  await change(el, "name", "");
+  await change(el, "unitPrice", "6,5x");
+
+  expect(field(el, "name").error).toBe("");
+  expect(field(el, "unitPrice").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the first invalid field and disables Save", async () => {
+  const el = await mountForm({ value: halfPortion });
+  await change(el, "unitPrice", "6,5x");
+  await click(el, "variant-save");
+
+  expect(field(el, "name").error).toBe("");
+  expect(field(el, "unitPrice").error).toBe(t("editor.price_invalid"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  await expect.poll(() => el.shadowRoot!.activeElement?.getAttribute("name")).toBe("unitPrice");
+});
+
+it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+  const el = await mountForm({ value: halfPortion });
+  await change(el, "name", " ");
+  await change(el, "unitPrice", "6,5x");
+  await click(el, "variant-save");
+
+  await change(el, "name", "Entera");
+  expect(field(el, "name").error).toBe("");
+  expect(field(el, "unitPrice").error).toBe(t("editor.price_invalid"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await change(el, "name", "");
+  expect(field(el, "name").error).toBe(t("editor.variant_name_required"));
+
+  await change(el, "name", "Entera");
+  await change(el, "unitPrice", "");
+  expect(field(el, "unitPrice").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const el = await mountForm({ value: null });
+  await click(el, "variant-save");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+  el.open = false;
+  await el.updateComplete;
+  el.open = true;
+  await el.updateComplete;
+
+  expect(field(el, "name").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });

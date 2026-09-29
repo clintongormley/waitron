@@ -224,14 +224,14 @@ async function click(el: MenuPricesTable, testId: string): Promise<void> {
   await el.updateComplete;
 }
 
-async function summary(el: MenuPricesTable): Promise<string[]> {
-  const found =
-    modal(el).querySelector<HTMLElementTagNameMap["wt-form-error-summary"]>(
-      "wt-form-error-summary",
-    )!;
-  await found.updateComplete;
-  return [...found.shadowRoot!.querySelectorAll("li")].map((item) => text(item));
+async function bottomOf(el: MenuPricesTable): Promise<string> {
+  const actions = modal(el).querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return text(actions.shadowRoot!.querySelector("[data-error]"));
 }
+
+const saveOf = (el: MenuPricesTable): HTMLElement =>
+  modal(el).querySelector<HTMLElement>('[data-test="offer-save"]')!;
 
 function saves(el: MenuPricesTable) {
   const heard = vi.fn<(detail: OfferSave) => void>();
@@ -701,7 +701,7 @@ it("'Use product price' empties the menu price, so saving clears it", async () =
 });
 
 it.each(["-1", "2.555", "abc", "007"])(
-  "refuses the menu price %s beside the field and in the summary, sending nothing",
+  "refuses the menu price %s beside the field and in the bottom message, sending nothing",
   async (price) => {
     const el = await mount({ editing: "mi-lemonade" });
     await type(el, "grossPrice", price);
@@ -711,7 +711,7 @@ it.each(["-1", "2.555", "abc", "007"])(
     await click(el, "offer-save");
     expect(heard).not.toHaveBeenCalled();
     expect(field(el, "grossPrice").error).toBe(t("editor.price_invalid"));
-    expect(await summary(el)).toEqual([t("editor.price_invalid")]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
     expect(field(el, "grossPrice").value).toBe(price);
     await type(el, "grossPrice", "2.00");
     expect(field(el, "grossPrice").error).toBe("");
@@ -726,24 +726,26 @@ it("refuses a variant's malformed price beside that variant's field", async () =
   expect(heard).not.toHaveBeenCalled();
   expect(field(el, "variants.1.price").error).toBe(t("editor.price_invalid"));
   expect(field(el, "variants.0.price").error).toBe("");
-  expect(await summary(el)).toEqual([t("editor.price_invalid")]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
-it("shows a refusal naming the menu price beside it and in the summary", async () => {
+it("shows a refusal naming the menu price beside it, with the generic sentence beside Save", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   el.refusal = { field: "grossPrice", message: "Refused here" };
   await el.updateComplete;
-  expect(await summary(el)).toEqual(["Refused here"]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
   expect(field(el, "grossPrice").error).toBe("Refused here");
 });
 
 it.each(["_form", "active", "variants", "variants.1", "price", "variantId"])(
-  "shows a refusal naming %s in the summary alone",
+  "shows a refusal naming %s in the bottom message alone, leaving Save working",
   async (refused) => {
     const el = await mount({ editing: "mi-lemonade" });
     el.refusal = { field: refused, message: "Refused" };
     await el.updateComplete;
-    expect(await summary(el)).toEqual(["Refused"]);
+    expect(await bottomOf(el)).toBe("Refused");
+    expect(saveOf(el).hasAttribute("disabled")).toBe(false);
     const errors = [
       ...modal(el).querySelectorAll<HTMLElementTagNameMap["wt-price-input"]>("wt-price-input"),
     ]
@@ -752,6 +754,92 @@ it.each(["_form", "active", "variants", "variants.1", "price", "variantId"])(
     expect(errors).toEqual([]);
   },
 );
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  await type(el, "grossPrice", "abc");
+  expect(field(el, "grossPrice").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the first invalid field and disables Save", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  await type(el, "variants.1.price", "-3");
+  await click(el, "offer-save");
+  await new Promise((resolve) => setTimeout(resolve));
+  const price = field(el, "variants.1.price");
+  expect(price.shadowRoot!.activeElement).toBe(price.shadowRoot!.querySelector("input"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+});
+
+it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  await type(el, "grossPrice", "-1");
+  await click(el, "offer-save");
+
+  await type(el, "grossPrice", "2.00");
+  expect(field(el, "grossPrice").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+
+  await type(el, "variants.0.price", "x");
+  expect(field(el, "variants.0.price").error).toBe(t("editor.price_invalid"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "variants.0.price", "");
+  expect(field(el, "variants.0.price").error).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("clears a refusal naming the menu price when that field changes, and Save works again", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  el.refusal = { field: "grossPrice", message: "Refused here" };
+  await el.updateComplete;
+  await flip(el, "active", false);
+  expect(field(el, "grossPrice").error).toBe("Refused here");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "grossPrice", "2.70");
+  expect(field(el, "grossPrice").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("focuses the menu price when a refusal naming it arrives", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  el.refusal = { field: "grossPrice", message: "Refused here" };
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+  const price = field(el, "grossPrice");
+  expect(price.shadowRoot!.activeElement).toBe(price.shadowRoot!.querySelector("input"));
+});
+
+it("drops a refusal that names no field when Save is pressed again", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  el.refusal = { field: "_form", message: "Refused" };
+  await el.updateComplete;
+  await type(el, "grossPrice", "2.70");
+  expect(await bottomOf(el)).toBe("Refused");
+  const heard = saves(el);
+  await click(el, "offer-save");
+  expect(heard).toHaveBeenCalledOnce();
+  expect(await bottomOf(el)).toBe("");
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const el = await mount({ editing: "mi-lemonade" });
+  await type(el, "grossPrice", "-1");
+  await click(el, "offer-save");
+  el.editing = null;
+  await el.updateComplete;
+  el.editing = "mi-lemonade";
+  await el.updateComplete;
+  expect(field(el, "grossPrice").error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
+});
 
 it("keeps what was typed when the rows are read again while the settings are open", async () => {
   const el = await mount({ editing: "mi-lemonade" });

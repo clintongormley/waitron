@@ -638,17 +638,9 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That amount is too large",
     es: "Ese importe es demasiado grande",
   },
-  "purchase.fields_required": {
-    en: "Fill in the supplier, dates and total",
-    es: "Rellena el proveedor, las fechas y el total",
-  },
   "purchase.lines_required": {
     en: "Add at least one VAT line",
     es: "Añade al menos una línea de IVA",
-  },
-  "purchase.amounts_invalid": {
-    en: "Check the amounts: rates 0–100, no negatives",
-    es: "Revisa los importes: tipos 0–100, sin negativos",
   },
   "backup.managed_by_environment": {
     en: "Backups on this box are managed by its environment — there is nothing to change here",

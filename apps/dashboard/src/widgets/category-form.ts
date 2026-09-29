@@ -1,13 +1,12 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "./image-upload.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
@@ -77,7 +76,7 @@ const FIELD_BY_REQUEST_FIELD = new Map([
   ["color", "color"],
 ]);
 
-/** A refused category write, keyed by the form's fields; `_form` is shown in the summary alone. */
+/** A refused category write, keyed by the form's fields; `_form` is shown in the bottom message alone. */
 export function categoryRefusalErrors(
   error: unknown,
   defaultLanguage: string,
@@ -135,7 +134,9 @@ export class CategoryForm extends LitElement {
   @state() private parentId: string | null = null;
   @state() private image: string | null = null;
   @state() private color: string | null = null;
-  @state() private validation: Record<string, string> = {};
+  @state() private attempted = false;
+  /** Refusal keys the operator has since changed the field of, or submitted past. */
+  @state() private dismissed = new Set<string>();
   @state() private pickerOpen = false;
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (
@@ -148,8 +149,41 @@ export class CategoryForm extends LitElement {
       this.parentId = this.value?.parentId ?? null;
       this.image = this.value?.image ?? null;
       this.color = this.value?.color ?? null;
-      this.validation = {};
+      this.attempted = false;
+      this.dismissed = new Set();
     }
+    if (changes.has("fieldErrors")) this.dismissed = new Set();
+  }
+  protected override updated(changes: PropertyValues<this>): void {
+    if (changes.has("fieldErrors") && this.#fieldKeys(this.fieldErrors).length > 0)
+      void focusFirstInvalid(this.shadowRoot!);
+  }
+  #dismiss(...keys: string[]): void {
+    this.dismissed = new Set([...this.dismissed, ...keys]);
+  }
+  #validate(): Record<string, string> {
+    const language = this.languages.languages[0];
+    return !language || !this.names[language]?.trim()
+      ? { [`name-${language ?? ""}`]: t("categories.name_required") }
+      : {};
+  }
+  /** The keys of `errors` that a field this form shows displays. */
+  #fieldKeys(errors: Record<string, string>): string[] {
+    const shown = new Set([
+      "parent",
+      "color",
+      "image",
+      ...this.languages.languages.map((locale) => `name-${locale}`),
+    ]);
+    return Object.entries(errors)
+      .filter(([key, message]) => Boolean(message) && shown.has(key))
+      .map(([key]) => key);
+  }
+  #errors(): Record<string, string> {
+    const refused = Object.fromEntries(
+      Object.entries(this.fieldErrors).filter(([key]) => !this.dismissed.has(key)),
+    );
+    return { ...refused, ...(this.attempted ? this.#validate() : {}) };
   }
   #emit(
     event: Event,
@@ -162,12 +196,13 @@ export class CategoryForm extends LitElement {
   #submit(event: Event): void {
     event.stopPropagation();
     if (this.busy || this.pickerOpen) return;
-    const language = this.languages.languages[0];
-    if (!language || !this.names[language]?.trim()) {
-      this.validation = { [`name-${language ?? ""}`]: t("categories.name_required") };
+    this.attempted = true;
+    const shown = new Set(this.#fieldKeys(this.fieldErrors));
+    this.#dismiss(...Object.keys(this.fieldErrors).filter((key) => !shown.has(key)));
+    if (Object.keys(this.#validate()).length > 0) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.validation = {};
     this.#emit(event, "wt-submit", {
       value: {
         name: { ...this.names },
@@ -183,7 +218,14 @@ export class CategoryForm extends LitElement {
     return this.categories.filter((category) => !excluded.has(category.id));
   }
   override render() {
-    const errors = { ...this.fieldErrors, ...this.validation };
+    const errors = this.#errors();
+    const fieldKeys = new Set(this.#fieldKeys(errors));
+    const formMessages = Object.entries(errors)
+      .filter(([key, message]) => Boolean(message) && !fieldKeys.has(key))
+      .map(([, message]) => message);
+    const bottom = [...formMessages, ...(fieldKeys.size > 0 ? [t("form.fix_fields")] : [])].join(
+      " ",
+    );
     return html`<wt-modal
       .open=${this.open}
       heading=${t(this.value ? "categories.edit" : "categories.create")}
@@ -200,10 +242,6 @@ export class CategoryForm extends LitElement {
         class="fields"
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${Object.values(errors)}
-        ></wt-form-error-summary>
         ${this.languages.languages.map(
           (locale) =>
             html`<wt-input
@@ -216,7 +254,7 @@ export class CategoryForm extends LitElement {
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
                 event.stopPropagation();
                 this.names = { ...this.names, [locale]: event.detail.value };
-                this.validation = {};
+                this.#dismiss(`name-${locale}`);
               }}
             ></wt-input>`,
         )}
@@ -240,6 +278,7 @@ export class CategoryForm extends LitElement {
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.parentId = event.detail.value || null;
+            this.#dismiss("parent");
           }}
         ></wt-combobox>
         ${colorField({
@@ -250,11 +289,13 @@ export class CategoryForm extends LitElement {
           errorId: "category-color-error",
           change: (color) => {
             this.color = color;
+            this.#dismiss("color");
           },
         })}
         <dashboard-image-upload
           aria-describedby="category-image-error"
           .api=${this.api}
+          .invalid=${Boolean(errors.image)}
           .image=${this.image}
           @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
             event.stopPropagation();
@@ -263,11 +304,12 @@ export class CategoryForm extends LitElement {
           @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
             event.stopPropagation();
             this.image = event.detail.image;
+            this.#dismiss("image");
           }}
         ></dashboard-image-upload>
         <span class="field-error" id="category-image-error">${errors.image ?? nothing}</span>
       </div>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -278,7 +320,7 @@ export class CategoryForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy || this.pickerOpen}
+          .disabled=${this.busy || this.pickerOpen || fieldKeys.size > 0}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

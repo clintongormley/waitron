@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { ref } from "lit/directives/ref.js";
 import {
   baseStyles,
+  focusFirstInvalid,
   setContentLanguages,
   submitOnEnter,
   UrlStateController,
@@ -15,7 +16,6 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import {
   memberName,
   sectionParents,
@@ -97,6 +97,22 @@ function publishedStatus(number: number, hash: string, before: MenuStatus | null
 function refusal(error: unknown): Record<string, string> {
   return { [fieldOf(error)]: codeMessage(codeOf(error)) };
 }
+
+/** Where a form's messages show: `invalid` when one is under a field `shown` names, which holds the
+ * primary action; every other one, then the generic sentence, in the message beside it. */
+function placeErrors(
+  errors: Record<string, string>,
+  shown: ReadonlySet<string>,
+): { invalid: boolean; bottom: string } {
+  const invalid = Object.entries(errors).some(([key, message]) => message && shown.has(key));
+  const others = Object.entries(errors)
+    .filter(([key, message]) => message && !shown.has(key))
+    .map(([, message]) => message);
+  return { invalid, bottom: [...others, ...(invalid ? [t("form.fix_fields")] : [])].join(" ") };
+}
+
+const without = (errors: Record<string, string>, keys: readonly string[]) =>
+  Object.fromEntries(Object.entries(errors).filter(([key]) => !keys.includes(key)));
 
 /** Every product and library section the structure holds, at any depth. */
 function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
@@ -376,7 +392,10 @@ export class MenusScreen extends LitElement {
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
   @state() private menuFormName = "";
+  /** Each name form's last refusal, less its name once the operator changes it. */
   @state() private menuFormErrors: Record<string, string> = {};
+  /** The name forms, by `data-test`, whose Save has been pressed since they opened. */
+  @state() private attempted: ReadonlySet<string> = new Set();
 
   @state() private duplicating: {
     sourceId: string;
@@ -922,24 +941,55 @@ export class MenusScreen extends LitElement {
     this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
     this.menuFormName = menu?.name ?? "";
     this.menuFormErrors = {};
+    this.#restart("menu-form");
+  }
+
+  #restart(form: string): void {
+    this.attempted = new Set([...this.attempted].filter((open) => open !== form));
+  }
+
+  #attempt(form: string): void {
+    this.attempted = new Set([...this.attempted, form]);
+  }
+
+  /** Moves focus to the first invalid field of the modal `form`, once it has rendered. */
+  async #focusInvalid(form: string): Promise<void> {
+    await this.updateComplete;
+    const modal = this.shadowRoot!.querySelector(`wt-modal[data-test="${form}"]`);
+    if (modal) await focusFirstInvalid(modal);
+  }
+
+  /** A name form's messages: its refusal, and once Save has been pressed, `required` while the
+   * name is blank. */
+  #nameFormErrors(
+    form: string,
+    refused: Record<string, string>,
+    field: string,
+    value: string,
+    required: string,
+  ): Record<string, string> {
+    const blank = this.attempted.has(form) && value.trim() === "";
+    return { ...refused, ...(blank ? { [field]: required } : {}) };
   }
 
   async #saveMenu(): Promise<void> {
     const form = this.menuForm;
     if (form === null || this.busy) return;
+    this.#attempt("menu-form");
+    this.menuFormErrors = {};
     const name = this.menuFormName.trim();
     if (name === "") {
-      this.menuFormErrors = { name: t("menus.name_required") };
+      void this.#focusInvalid("menu-form");
       return;
     }
     this.busy = true;
-    this.menuFormErrors = {};
     try {
       if (form.id === null) await this.api.createCatalogue(name);
       else await this.api.renameCatalogue(form.id, name);
     } catch (error) {
       this.menuFormErrors = refusal(error);
       this.busy = false;
+      void this.#focusInvalid("menu-form");
       return;
     }
     this.busy = false;
@@ -1090,18 +1140,20 @@ export class MenusScreen extends LitElement {
     };
     this.duplicateName = t("sections.copy_name").replace("{name}", sourceName);
     this.duplicateErrors = {};
+    this.#restart("duplicate");
   }
 
   #duplicate(): void {
     const duplicating = this.duplicating;
     if (duplicating === null || this.busy) return;
+    this.#attempt("duplicate");
+    this.duplicateErrors = {};
     const internalName = this.duplicateName.trim();
     if (internalName === "") {
-      this.duplicateErrors = { internalName: t("sections.internal_name_required") };
+      void this.#focusInvalid("duplicate");
       return;
     }
     this.busy = true;
-    this.duplicateErrors = {};
     this.#writes.run(duplicating.listId, async () => {
       try {
         await this.api.duplicateSection(duplicating.sourceId, {
@@ -1112,6 +1164,7 @@ export class MenusScreen extends LitElement {
       } catch (error) {
         this.duplicateErrors = refusal(error);
         this.busy = false;
+        void this.#focusInvalid("duplicate");
         return;
       }
       this.duplicating = null;
@@ -1124,28 +1177,33 @@ export class MenusScreen extends LitElement {
     this.creatingSection = this.#here();
     this.newSectionName = "";
     this.newSectionErrors = {};
+    this.#restart("new-section");
   }
 
   /** Two requests: the section, then its place in the list. A section left out of the list by a
    * refused second request is still in the library, and offered by the list's own picker. */
   #createSection(): void {
     if (this.creatingSection === null || this.busy || this.#closeLostList()) return;
+    this.#attempt("new-section");
+    this.newSectionErrors = {};
     const internalName = this.newSectionName.trim();
     if (internalName === "") {
-      this.newSectionErrors = { internalName: t("sections.internal_name_required") };
+      void this.#focusInvalid("new-section");
       return;
     }
     const target = this.creatingSection;
     const listId = target.listId;
     this.busy = true;
-    this.newSectionErrors = {};
     this.memberError = null;
     this.#writes.run(listId, async () => {
       let created: LibrarySection;
       try {
         created = await this.api.createSection({ internalName });
       } catch (error) {
-        if (!this.#closeRefusedElsewhere(target, error)) this.newSectionErrors = refusal(error);
+        if (!this.#closeRefusedElsewhere(target, error)) {
+          this.newSectionErrors = refusal(error);
+          void this.#focusInvalid("new-section");
+        }
         this.busy = false;
         return;
       }
@@ -1277,20 +1335,22 @@ export class MenusScreen extends LitElement {
           ? name
           : "";
     this.layoutFormErrors = {};
+    this.#restart("layout-form");
   }
 
   /** A new layout or a copy is the one edited next. */
   async #saveLayout(): Promise<void> {
     const form = this.layoutForm;
     if (form === null || this.busy) return;
+    this.#attempt("layout-form");
+    this.layoutFormErrors = {};
     const name = this.layoutFormName.trim();
     if (name === "") {
-      this.layoutFormErrors = { name: t("home.name_required") };
+      void this.#focusInvalid("layout-form");
       return;
     }
     const menuId = this.menuId!;
     this.busy = true;
-    this.layoutFormErrors = {};
     let made: string | null = null;
     try {
       if (form.kind === "create") made = (await this.api.createHomeLayout(menuId, name)).id;
@@ -1300,6 +1360,7 @@ export class MenusScreen extends LitElement {
     } catch (error) {
       this.layoutFormErrors = refusal(error);
       this.busy = false;
+      void this.#focusInvalid("layout-form");
       return;
     }
     this.busy = false;
@@ -1471,13 +1532,6 @@ export class MenusScreen extends LitElement {
     ];
   }
 
-  #summary(errors: Record<string, string>) {
-    return html`<wt-form-error-summary
-      heading=${t("form.error_heading")}
-      .errors=${Object.values(errors)}
-    ></wt-form-error-summary>`;
-  }
-
   #guardEscape = (event: KeyboardEvent): void => {
     if (this.busy && event.key === "Escape") event.preventDefault();
   };
@@ -1514,6 +1568,8 @@ export class MenusScreen extends LitElement {
     save: string;
     saveLabel: string;
     saveVariant?: "primary" | "danger";
+    /** The message beside Save, and whether a field message holds it. */
+    errors?: { invalid: boolean; bottom: string };
     close: () => void;
     submit: () => void;
   }) {
@@ -1528,7 +1584,7 @@ export class MenusScreen extends LitElement {
       }}
     >
       ${options.open ? options.body : nothing}
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${options.errors?.bottom ?? ""}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -1541,7 +1597,7 @@ export class MenusScreen extends LitElement {
         ><wt-button
           variant=${options.saveVariant ?? "primary"}
           data-test=${options.save}
-          .disabled=${this.busy}
+          .disabled=${this.busy || options.errors?.invalid === true}
           @click=${options.submit}
           >${options.saveLabel}</wt-button
         ></wt-form-actions
@@ -1551,7 +1607,13 @@ export class MenusScreen extends LitElement {
 
   #renderMenuForm() {
     const form = this.menuForm;
-    const errors = this.menuFormErrors;
+    const errors = this.#nameFormErrors(
+      "menu-form",
+      this.menuFormErrors,
+      "name",
+      this.menuFormName,
+      t("menus.name_required"),
+    );
     return this.#formModal({
       test: "menu-form",
       open: form !== null,
@@ -1560,7 +1622,6 @@ export class MenusScreen extends LitElement {
           ? t("menus.create")
           : t("menus.rename_heading").replace("{name}", form.name),
       body: html`<div class="fields">
-        ${this.#summary(errors)}
         ${this.#nameInput({
           name: "name",
           label: t("menus.name"),
@@ -1569,12 +1630,13 @@ export class MenusScreen extends LitElement {
           save: "menu-save",
           change: (value) => {
             this.menuFormName = value;
-            this.menuFormErrors = {};
+            this.menuFormErrors = without(this.menuFormErrors, ["name"]);
           },
         })}
       </div>`,
       save: "menu-save",
       saveLabel: t("action.save"),
+      errors: placeErrors(errors, new Set(["name"])),
       close: () => {
         this.menuForm = null;
       },
@@ -1957,7 +2019,13 @@ export class MenusScreen extends LitElement {
 
   #renderLayoutForm() {
     const form = this.layoutForm;
-    const errors = this.layoutFormErrors;
+    const errors = this.#nameFormErrors(
+      "layout-form",
+      this.layoutFormErrors,
+      "name",
+      this.layoutFormName,
+      t("home.name_required"),
+    );
     const heading =
       form === null
         ? ""
@@ -1972,7 +2040,6 @@ export class MenusScreen extends LitElement {
       open: form !== null,
       heading,
       body: html`<div class="fields">
-        ${this.#summary(errors)}
         ${this.#nameInput({
           name: "name",
           label: t("home.name"),
@@ -1981,7 +2048,7 @@ export class MenusScreen extends LitElement {
           save: "layout-save",
           change: (value) => {
             this.layoutFormName = value;
-            this.layoutFormErrors = {};
+            this.layoutFormErrors = without(this.layoutFormErrors, ["name"]);
           },
         })}
         ${
@@ -1992,6 +2059,7 @@ export class MenusScreen extends LitElement {
       </div>`,
       save: "layout-save",
       saveLabel: form?.kind === "duplicate" ? t("home.duplicate_save") : t("action.save"),
+      errors: placeErrors(errors, new Set(["name"])),
       close: () => {
         this.layoutForm = null;
       },
@@ -2034,13 +2102,18 @@ export class MenusScreen extends LitElement {
 
   #renderDuplicate() {
     const duplicating = this.duplicating;
-    const errors = this.duplicateErrors;
+    const errors = this.#nameFormErrors(
+      "duplicate",
+      this.duplicateErrors,
+      "internalName",
+      this.duplicateName,
+      t("sections.internal_name_required"),
+    );
     return this.#formModal({
       test: "duplicate",
       open: duplicating !== null,
       heading: t("menus.duplicate_heading").replace("{name}", duplicating?.sourceName ?? ""),
       body: html`<div class="fields">
-        ${this.#summary(errors)}
         ${this.#nameInput({
           name: "internalName",
           label: t("sections.internal_name"),
@@ -2049,7 +2122,7 @@ export class MenusScreen extends LitElement {
           save: "duplicate-save",
           change: (value) => {
             this.duplicateName = value;
-            this.duplicateErrors = {};
+            this.duplicateErrors = without(this.duplicateErrors, ["internalName"]);
           },
         })}
         <p class="help">
@@ -2060,6 +2133,7 @@ export class MenusScreen extends LitElement {
       </div>`,
       save: "duplicate-save",
       saveLabel: t("menus.duplicate_save"),
+      errors: placeErrors(errors, new Set(["internalName"])),
       close: () => {
         this.duplicating = null;
       },
@@ -2068,13 +2142,18 @@ export class MenusScreen extends LitElement {
   }
 
   #renderNewSection() {
-    const errors = this.newSectionErrors;
+    const errors = this.#nameFormErrors(
+      "new-section",
+      this.newSectionErrors,
+      "internalName",
+      this.newSectionName,
+      t("sections.internal_name_required"),
+    );
     return this.#formModal({
       test: "new-section",
       open: this.creatingSection !== null,
       heading: t("menus.new_section_heading").replace("{list}", this.creatingSection?.name ?? ""),
       body: html`<div class="fields">
-        ${this.#summary(errors)}
         ${this.#nameInput({
           name: "internalName",
           label: t("sections.internal_name"),
@@ -2083,13 +2162,14 @@ export class MenusScreen extends LitElement {
           save: "new-section-save",
           change: (value) => {
             this.newSectionName = value;
-            this.newSectionErrors = {};
+            this.newSectionErrors = without(this.newSectionErrors, ["internalName"]);
           },
         })}
         <p class="help">${t("sections.internal_name_help")}</p>
       </div>`,
       save: "new-section-save",
       saveLabel: t("action.save"),
+      errors: placeErrors(errors, new Set(["internalName"])),
       close: () => {
         this.creatingSection = null;
       },

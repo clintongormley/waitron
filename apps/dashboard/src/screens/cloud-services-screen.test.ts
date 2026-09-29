@@ -156,8 +156,9 @@ it("shows a saved replacement diagnostic without offering ordinary pairing", asy
     "dark",
   );
   await expect
-    .poll(() => el.shadowRoot!.querySelector("wt-form-error-summary")!.errors)
-    .toContain(codeMessage("cloud.replacement_state_invalid"));
+    .poll(() => el.shadowRoot!.querySelector("[data-test=cloud-error]")?.textContent?.trim())
+    .toBe(codeMessage("cloud.replacement_state_invalid"));
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
   expect(el.shadowRoot!.querySelector("#request-reconnection")).toBeNull();
   await expectNoA11yViolations(host);
@@ -271,6 +272,20 @@ it("shows Spanish refusal and permits an explicit retry without automatic writes
   expect(calls).toBe(2);
   expect(el.shadowRoot!.querySelector("#connect")).toBeNull();
   await expectNoA11yViolations(host);
+});
+it("shows a failed request's refusal as one alert, with no form summary, and moves focus to it", async () => {
+  setLocale("en");
+  const api = new DashboardApi("", async () =>
+    Response.json({ error: { code: "cloud.unavailable", params: {} } }, { status: 503 }),
+  );
+  const { el } = await mountWidget<CloudServicesScreen>("dashboard-cloud-services-screen", { api });
+  await expect.poll(() => el.shadowRoot!.querySelector("[data-test=cloud-error]")).not.toBeNull();
+  await flush(el);
+  const alert = el.shadowRoot!.querySelector<HTMLElement>("[data-test=cloud-error]")!;
+  expect(alert.getAttribute("role")).toBe("alert");
+  expect(alert.textContent!.trim()).toBe(codeMessage("cloud.unavailable"));
+  expect(el.shadowRoot!.activeElement).toBe(alert);
+  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
 });
 it("ignores a delayed reply after removal and reloads when the screen is reconnected", async () => {
   setLocale("en");

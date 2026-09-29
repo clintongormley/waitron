@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
-import { PurchaseForm } from "./purchase-form.js";
+import { PurchaseForm, purchaseRefusalErrors } from "./purchase-form.js";
 import type { PurchaseInvoice } from "../api/client.js";
 
 afterEach(cleanupWidgets);
@@ -35,6 +35,28 @@ async function setSelect(el: PurchaseForm, testId: string, value: string): Promi
 async function click(el: PurchaseForm, testId: string): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test=${testId}]`)!.click();
   await el.updateComplete;
+}
+
+async function bottomOf(el: PurchaseForm): Promise<Element | null> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]");
+}
+
+const errorOf = (el: PurchaseForm, testId: string): string | null =>
+  el.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error");
+
+const confirmOf = (el: PurchaseForm): HTMLElement =>
+  el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!;
+
+/** The message a field of this kind shows when its value is refused. */
+const messageFor = (field: string): string =>
+  /rate|proportion/.test(field) ? t("purchase.percentage_invalid") : t("purchase.amount_invalid");
+
+async function expectRefused(el: PurchaseForm, field: string, message: string): Promise<void> {
+  expect(errorOf(el, field), field).toBe(message);
+  expect((await bottomOf(el))?.textContent).toBe(t("form.fix_fields"));
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 }
 
 function nextEvent<T>(el: PurchaseForm, type: string): Promise<CustomEvent<T>> {
@@ -176,18 +198,28 @@ describe("purchase-form", () => {
     ]);
   });
 
-  it("blocks confirm and shows a localised error when required header fields are empty", async () => {
+  it("blocks confirm and shows each empty required header field's own error under it", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     let fired = false;
     el.addEventListener("create-purchase", () => (fired = true));
     await click(el, "confirm");
     expect(fired).toBe(false);
-    const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent).toContain(codeMessage("purchase.fields_required", "es-ES"));
-    expect(alert.textContent).not.toContain("purchase.fields_required");
+    for (const [field, key] of [
+      ["supplier-tax-id", "purchase.supplier_tax_id_required"],
+      ["supplier-name", "purchase.supplier_name_required"],
+      ["supplier-invoice-number", "purchase.supplier_invoice_number_required"],
+      ["issued-on", "purchase.issued_on_required"],
+      ["received-on", "purchase.received_on_required"],
+    ] as const)
+      expect(errorOf(el, field), field).toBe(t(key));
+    expect(errorOf(el, "total")).toBe(t("purchase.amount_invalid"));
+    expect(errorOf(el, "note")).toBe("");
+    expect((await bottomOf(el))!.getAttribute("role")).toBe("alert");
+    expect((await bottomOf(el))!.textContent).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
-  it("blocks confirm with lines_required when every line is removed", async () => {
+  it("blocks confirm with lines_required under the VAT breakdown when every line is removed", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await setInput(el, "supplier-tax-id", "B1");
     await setInput(el, "supplier-name", "X");
@@ -200,9 +232,14 @@ describe("purchase-form", () => {
     el.addEventListener("create-purchase", () => (fired = true));
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
+    expect(el.shadowRoot!.querySelector("[data-test=lines-error]")!.textContent).toContain(
       codeMessage("purchase.lines_required", "es-ES"),
     );
+    expect((await bottomOf(el))!.textContent).toBe(t("form.fix_fields"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    await click(el, "add-line");
+    expect(el.shadowRoot!.querySelector("[data-test=lines-error]")).toBeNull();
   });
 
   it.each([
@@ -210,7 +247,7 @@ describe("purchase-form", () => {
     ["negative tax", { field: "line-tax-0", value: "-1.00" }],
     ["rate above 100", { field: "line-rate-0", value: "150.00" }],
     ["non-numeric base", { field: "line-base-0", value: "abc" }],
-  ])("blocks confirm with amounts_invalid on %s", async (_label, { field, value }) => {
+  ])("blocks confirm with the amount's error under it on %s", async (_label, { field, value }) => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     await setInput(el, field, value);
@@ -218,12 +255,10 @@ describe("purchase-form", () => {
     el.addEventListener("create-purchase", () => (fired = true));
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("purchase.amounts_invalid", "es-ES"),
-    );
+    await expectRefused(el, field, messageFor(field));
   });
 
-  it("blocks confirm with amounts_invalid when the deductible proportion is out of range", async () => {
+  it("blocks confirm with the proportion's error under it when it is out of range", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     await setInput(el, "deductible-proportion", "150");
@@ -231,23 +266,20 @@ describe("purchase-form", () => {
     el.addEventListener("create-purchase", () => (fired = true));
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("purchase.amounts_invalid", "es-ES"),
-    );
+    await expectRefused(el, "deductible-proportion", t("purchase.percentage_invalid"));
   });
 
   // ── Empty / non-decimal amounts, caught client-side so the operator is told which one is wrong ──
 
-  it("blocks confirm on the default single BLANK VAT line (amounts_invalid, before any round trip)", async () => {
+  it("blocks confirm on the default single BLANK VAT line, marking each of its amounts, before any round trip", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillHeaderOnly(el); // header valid; the auto-present first line is left blank
     let fired = false;
     el.addEventListener("create-purchase", () => (fired = true));
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("purchase.amounts_invalid", "es-ES"),
-    );
+    for (const field of ["line-rate-0", "line-base-0", "line-tax-0"])
+      await expectRefused(el, field, messageFor(field));
   });
 
   it.each([
@@ -257,7 +289,7 @@ describe("purchase-form", () => {
     ["comma-decimal total", { field: "total", value: "121,00" }],
     ["comma-decimal proportion", { field: "deductible-proportion", value: "50,5" }],
   ])(
-    "blocks confirm with amounts_invalid on a %s, before any round trip",
+    "blocks confirm with the field's error under it on a %s, before any round trip",
     async (_label, { field, value }) => {
       const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
       await fillValid(el);
@@ -266,9 +298,7 @@ describe("purchase-form", () => {
       el.addEventListener("create-purchase", () => (fired = true));
       await click(el, "confirm");
       expect(fired).toBe(false);
-      expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-        codeMessage("purchase.amounts_invalid", "es-ES"),
-      );
+      await expectRefused(el, field, messageFor(field));
     },
   );
 
@@ -280,7 +310,7 @@ describe("purchase-form", () => {
     ["leading-dot line base", { field: "line-base-0", value: ".5" }],
     ["leading-zero line base", { field: "line-base-0", value: "01.00" }],
   ])(
-    "blocks confirm with amounts_invalid on a %s, which the server would refuse",
+    "blocks confirm with the field's error under it on a %s, which the server would refuse",
     async (_label, { field, value }) => {
       const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
       await fillValid(el);
@@ -289,15 +319,11 @@ describe("purchase-form", () => {
       el.addEventListener("create-purchase", () => (fired = true));
       await click(el, "confirm");
       expect(fired).toBe(false);
-      expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-        codeMessage("purchase.amounts_invalid", "es-ES"),
-      );
+      await expectRefused(el, field, messageFor(field));
     },
   );
 
-  // A blank/whitespace TOTAL is a missing REQUIRED field, so the required-field check (which runs
-  // first) wins.
-  it("blocks a whitespace total as fields_required, never reaching the server", async () => {
+  it("blocks a whitespace total with the total's error under it, never reaching the server", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     await setInput(el, "total", "  ");
@@ -305,9 +331,7 @@ describe("purchase-form", () => {
     el.addEventListener("create-purchase", () => (fired = true));
     await click(el, "confirm");
     expect(fired).toBe(false);
-    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("purchase.fields_required", "es-ES"),
-    );
+    await expectRefused(el, "total", t("purchase.amount_invalid"));
   });
 
   it.each(["0.5", "21.00", "0", "100"])(
@@ -323,17 +347,78 @@ describe("purchase-form", () => {
     },
   );
 
-  it("clears the validation error once a header or line field is edited after a failed confirm", async () => {
+  it("clears a header or line field's error once that field is fixed after a failed confirm", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await click(el, "confirm");
-    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(errorOf(el, "supplier-name")).not.toBe("");
     await setInput(el, "supplier-name", "Proveedor");
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(errorOf(el, "supplier-name")).toBe("");
+    expect(errorOf(el, "supplier-tax-id")).not.toBe("");
 
-    await click(el, "confirm");
-    expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
+    expect(errorOf(el, "line-rate-0")).not.toBe("");
     await setInput(el, "line-rate-0", "21.00");
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+    expect(errorOf(el, "line-rate-0")).toBe("");
+  });
+
+  it("says nothing about errors before the first submission, and Create works", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await setInput(el, "total", "abc");
+    expect(errorOf(el, "total")).toBe("");
+    expect(await bottomOf(el)).toBeNull();
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("marks every field the invoice needs as required", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    const required = [...el.shadowRoot!.querySelectorAll("[required]")].map((field) =>
+      field.getAttribute("data-test"),
+    );
+    expect(required).toEqual([
+      "supplier-tax-id",
+      "supplier-name",
+      "supplier-invoice-number",
+      "issued-on",
+      "received-on",
+      "total",
+      "deductible-proportion",
+      "line-rate-0",
+      "line-base-0",
+      "line-tax-0",
+    ]);
+  });
+
+  it("on an invalid submission focuses the first invalid field and keeps Create disabled until every field is fixed", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await setInput(el, "supplier-tax-id", "B12345678");
+    await click(el, "confirm");
+    await new Promise((resolve) => setTimeout(resolve));
+    const name = el.shadowRoot!.querySelector("[data-test=supplier-name]")!;
+    expect(name.shadowRoot!.activeElement).toBe(name.shadowRoot!.querySelector("input"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    await fillValid(el);
+    await setInput(el, "total", "abc");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    expect((await bottomOf(el))!.textContent).toBe(t("form.fix_fields"));
+
+    await setInput(el, "total", "121.00");
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+    expect(await bottomOf(el)).toBeNull();
+    const created = nextEvent(el, "create-purchase");
+    await click(el, "confirm");
+    expect((await created).type).toBe("create-purchase");
+  });
+
+  it("starts again when reopened: no messages and Create working", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await click(el, "confirm");
+    el.open = false;
+    await el.updateComplete;
+    el.open = true;
+    await el.updateComplete;
+    expect(errorOf(el, "supplier-name")).toBe("");
+    expect(await bottomOf(el)).toBeNull();
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
   });
 
   it("changes the kind of one line without touching the others (multi-line desglose)", async () => {
@@ -604,4 +689,123 @@ describe("purchase-form — money fields", () => {
       }
     },
   );
+});
+
+describe("purchase-form — a server refusal", () => {
+  const invalidRequest = codeMessage("management.request_invalid");
+  it.each([
+    [{ field: "supplierTaxId" }, "supplier-tax-id"],
+    [{ field: "supplierName" }, "supplier-name"],
+    [{ field: "supplierInvoiceNumber" }, "supplier-invoice-number"],
+    [{ field: "issuedOn" }, "issued-on"],
+    [{ field: "receivedOn" }, "received-on"],
+    [{ field: "total" }, "total"],
+    [{ field: "deductibleProportion" }, "deductible-proportion"],
+    [{ field: "note" }, "note"],
+  ])("keys an invalid request naming %o under %s", (params, key) => {
+    expect(purchaseRefusalErrors({ code: "management.request_invalid", params })).toEqual({
+      [key]: invalidRequest,
+    });
+  });
+
+  it("keys a range refusal by the field it concerns, and anything naming no shown field to the form", () => {
+    const invalid = codeMessage("purchase.invalid");
+    expect(
+      purchaseRefusalErrors({
+        code: "purchase.invalid",
+        params: { reason: "proportion_out_of_range" },
+      }),
+    ).toEqual({ "deductible-proportion": invalid });
+    expect(
+      purchaseRefusalErrors({ code: "purchase.invalid", params: { reason: "no_lines" } }),
+    ).toEqual({ lines: invalid });
+    // A line's refusal carries no line number, so no field can hold it.
+    expect(
+      purchaseRefusalErrors({ code: "purchase.invalid", params: { reason: "negative_base" } }),
+    ).toEqual({ _form: invalid });
+    expect(
+      purchaseRefusalErrors({ code: "management.request_invalid", params: { field: "rate" } }),
+    ).toEqual({ _form: invalidRequest });
+    expect(
+      purchaseRefusalErrors({
+        code: "purchase.duplicate",
+        params: { supplierTaxId: "B1", supplierInvoiceNumber: "N-1" },
+      }),
+    ).toEqual({ _form: codeMessage("purchase.duplicate") });
+    expect(purchaseRefusalErrors({})).toEqual({ _form: codeMessage("server.internal") });
+  });
+
+  it("shows a refused field's message under it, focuses it, and disables Create until it changes", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    el.fieldErrors = { "deductible-proportion": "Refused proportion" };
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    expect(errorOf(el, "deductible-proportion")).toBe("Refused proportion");
+    expect((await bottomOf(el))?.textContent).toBe(t("form.fix_fields"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+    const field = el.shadowRoot!.querySelector("[data-test=deductible-proportion]")!;
+    expect(field.shadowRoot!.activeElement).toBe(field.shadowRoot!.querySelector("input"));
+
+    // Another field changing leaves it standing.
+    await setInput(el, "supplier-name", "Otro proveedor");
+    expect(errorOf(el, "deductible-proportion")).toBe("Refused proportion");
+
+    await setInput(el, "deductible-proportion", "50.00");
+    expect(errorOf(el, "deductible-proportion")).toBe("");
+    expect(await bottomOf(el)).toBeNull();
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("clears a refused note's invalid state and message once the note is edited", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    el.fieldErrors = { note: "Refused note" };
+    await el.updateComplete;
+    const note = el.shadowRoot!.querySelector<HTMLElement & { updateComplete: Promise<unknown> }>(
+      "[data-test=note]",
+    )!;
+    await note.updateComplete;
+    const input = note.shadowRoot!.querySelector("input")!;
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(note.shadowRoot!.querySelector("[data-error]")?.textContent).toBe("Refused note");
+
+    await setInput(el, "note", "Otra nota");
+    await note.updateComplete;
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(note.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+  });
+
+  it("drops a refusal of the lines when a line is added", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    el.fieldErrors = { lines: "Refused lines" };
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=lines-error]")?.textContent).toBe(
+      "Refused lines",
+    );
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
+
+    await click(el, "add-line");
+    expect(el.shadowRoot!.querySelector("[data-test=lines-error]")).toBeNull();
+  });
+
+  it("says a refusal naming no field beside Create, leaves Create working, and drops it on the next submit", async () => {
+    const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
+    await fillValid(el);
+    el.fieldErrors = { _form: codeMessage("purchase.duplicate") };
+    await el.updateComplete;
+
+    const bottom = await bottomOf(el);
+    expect(bottom?.getAttribute("role")).toBe("alert");
+    expect(bottom?.textContent).toBe(codeMessage("purchase.duplicate"));
+    expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
+
+    const created = nextEvent(el, "create-purchase");
+    await click(el, "confirm");
+    expect((await created).type).toBe("create-purchase");
+    expect(await bottomOf(el)).toBeNull();
+  });
 });

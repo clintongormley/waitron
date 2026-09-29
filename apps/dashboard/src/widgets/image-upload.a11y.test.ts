@@ -22,6 +22,18 @@ describe.each(["light", "dark"] as const)("image-upload a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  it("renders accessibly while marked invalid", async () => {
+    const { el, host } = await mountWidget<ImageUpload>(
+      "dashboard-image-upload",
+      { api: stubApi(), invalid: true },
+      theme,
+    );
+    expect(
+      el.shadowRoot!.querySelector("[data-test=choose-image]")!.getAttribute("aria-invalid"),
+    ).toBe("true");
+    await expectNoA11yViolations(host);
+  });
+
   it("renders accessibly with the main product's photo as a hint", async () => {
     const { el, host } = await mountWidget<ImageUpload>(
       "dashboard-image-upload",

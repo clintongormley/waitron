@@ -1,10 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -51,7 +50,9 @@ export class LabelsPanel extends LitElement {
   @state() private loadError = false;
   @state() private editing: { label: LabelSummary | null } | null = null;
   @state() private name = "";
-  @state() private nameError = "";
+  @state() private attempted = false;
+  /** A refusal about the name, shown until the name changes. */
+  @state() private nameRefusal = "";
   @state() private deleting: LabelSummary | null = null;
   @state() private saveError = "";
   @state() private busy = false;
@@ -84,8 +85,21 @@ export class LabelsPanel extends LitElement {
   #edit(label: LabelSummary | null): void {
     this.editing = { label };
     this.name = label?.name ?? "";
-    this.nameError = "";
+    this.attempted = false;
+    this.nameRefusal = "";
     this.saveError = "";
+  }
+
+  #nameError(): string {
+    if (this.nameRefusal) return this.nameRefusal;
+    return this.attempted && !this.name.trim() ? t("labels.name_required") : "";
+  }
+
+  #focusFirstInvalid(): void {
+    void this.updateComplete.then(() => {
+      const form = this.shadowRoot!.querySelector("[data-test=label-form]");
+      if (form) void focusFirstInvalid(form);
+    });
   }
 
   async #save(): Promise<void> {
@@ -93,16 +107,21 @@ export class LabelsPanel extends LitElement {
     if (!editing || this.busy) return;
     const name = this.name.trim();
     this.saveError = "";
-    this.nameError = name ? "" : t("labels.name_required");
-    if (!name) return;
+    this.attempted = true;
+    if (!name) {
+      this.#focusFirstInvalid();
+      return;
+    }
     this.busy = true;
     try {
       if (editing.label) await this.api.renameLabel(editing.label.id, name);
       else await this.api.createLabel(name);
     } catch (error) {
       const code = codeOf(error);
-      if (NAME_CODES.has(code)) this.nameError = codeMessage(code);
-      else this.saveError = codeMessage(code);
+      if (NAME_CODES.has(code)) {
+        this.nameRefusal = codeMessage(code);
+        this.#focusFirstInvalid();
+      } else this.saveError = codeMessage(code);
       return;
     } finally {
       this.busy = false;
@@ -184,6 +203,10 @@ export class LabelsPanel extends LitElement {
 
   override render() {
     const deleting = this.deleting;
+    const nameError = this.#nameError();
+    const bottom = [this.saveError, nameError ? t("form.fix_fields") : ""]
+      .filter(Boolean)
+      .join(" ");
     return html`<div class="tab-actions">
         <wt-button data-test="add-label" variant="primary" @click=${() => this.#edit(null)}
           >${t("labels.add")}</wt-button
@@ -229,25 +252,21 @@ export class LabelsPanel extends LitElement {
           if (!this.busy) this.editing = null;
         }}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${this.nameError ? [this.nameError] : []}
-        ></wt-form-error-summary>
-        ${this.saveError ? html`<p class="error" role="alert">${this.saveError}</p>` : nothing}
         <wt-input
           name="label-name"
           label=${t("labels.name")}
           required
           .value=${this.name}
-          .error=${this.nameError}
-          .invalid=${!!this.nameError}
+          .error=${nameError}
+          .invalid=${!!nameError}
           .disabled=${this.busy}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.name = event.detail.value;
+            this.nameRefusal = "";
           }}
         ></wt-input>
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -260,7 +279,7 @@ export class LabelsPanel extends LitElement {
             data-test="save-label"
             variant="primary"
             .loading=${this.busy}
-            .disabled=${this.busy}
+            .disabled=${this.busy || !!nameError}
             @click=${() => void this.#save()}
             >${t("action.save")}</wt-button
           ></wt-form-actions

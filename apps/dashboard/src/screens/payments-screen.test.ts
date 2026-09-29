@@ -363,6 +363,25 @@ async function openAdd(el: PaymentsScreen) {
   q(el, "[data-test=add-reader-acme]")!.click();
   await flush(el);
 }
+async function bottomOf(el: PaymentsScreen, dialog: string): Promise<string> {
+  const actions = q(el, `[data-test=${dialog}] wt-form-actions`) as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+const errorOf = (el: PaymentsScreen, testId: string): string =>
+  (q(el, `[data-test=${testId}]`) as HTMLElement & { error: string }).error;
+const isDisabled = (el: PaymentsScreen, testId: string): boolean =>
+  q(el, `[data-test=${testId}]`)!.hasAttribute("disabled");
+const inputFocused = (el: PaymentsScreen, testId: string): boolean => {
+  const field = q(el, `[data-test=${testId}]`)!;
+  return field.shadowRoot!.activeElement === field.shadowRoot!.querySelector("input");
+};
+async function openRename(el: PaymentsScreen) {
+  qCell(el, "[data-test=edit-r-1]")!.click();
+  await flush(el);
+}
 
 describe("reader discovery and status", () => {
   it("offers editable names, Add again and already added rows", async () => {
@@ -390,7 +409,7 @@ describe("reader discovery and status", () => {
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
   });
 
-  it("shows an empty-name field error and summary before adoption", async () => {
+  it("shows an empty-name field error and the bottom message before adoption", async () => {
     const { el, api } = await mount(
       stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
@@ -400,9 +419,83 @@ describe("reader discovery and status", () => {
     await flush(el);
     expect(api.adoptReader).not.toHaveBeenCalled();
     expect(q(el, "[data-test=name-v-1]")!.shadowRoot!.textContent).toContain("Enter a reader name");
-    expect(q(el, "wt-form-error-summary")!.shadowRoot!.textContent).toContain(
-      "There is a problem with this form",
+    expect(await bottomOf(el, "reader-discovery")).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "adopt-v-1")).toBe(true);
+    expect(q(el, "wt-form-error-summary")).toBeNull();
+  });
+
+  it("says nothing about a reader name before its first Add, and Add works", async () => {
+    const { el } = await mount(
+      stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
     );
+    await openAdd(el);
+    changeName(el, "[data-test=name-v-1]", " ");
+    await flush(el);
+    expect(errorOf(el, "name-v-1")).toBe("");
+    expect(await bottomOf(el, "reader-discovery")).toBe("");
+    expect(isDisabled(el, "adopt-v-1")).toBe(false);
+  });
+
+  it("focuses an empty reader name on Add and re-checks it on every change", async () => {
+    const { el, api } = await mount(
+      stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
+    );
+    await openAdd(el);
+    changeName(el, "[data-test=name-v-1]", "");
+    q(el, "[data-test=adopt-v-1]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, "name-v-1")).toBe(true));
+    expect(isDisabled(el, "adopt-v-1")).toBe(true);
+    expect(isDisabled(el, "adopt-v-2")).toBe(false);
+
+    changeName(el, "[data-test=name-v-1]", "Garden");
+    await flush(el);
+    expect(errorOf(el, "name-v-1")).toBe("");
+    expect(await bottomOf(el, "reader-discovery")).toBe("");
+    expect(isDisabled(el, "adopt-v-1")).toBe(false);
+
+    changeName(el, "[data-test=name-v-1]", " ");
+    await flush(el);
+    expect(errorOf(el, "name-v-1")).toBe(t("payments.name_required"));
+    expect(isDisabled(el, "adopt-v-1")).toBe(true);
+    expect(api.adoptReader).not.toHaveBeenCalled();
+  });
+
+  it("shows a refused adoption beside the dialog's actions and leaves Add working", async () => {
+    const { el, api } = await mount(
+      stubApi({
+        availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS),
+        adoptReader: vi.fn().mockRejectedValue({ code: "reader.not_listed" }),
+      }),
+    );
+    await openAdd(el);
+    q(el, "[data-test=adopt-v-1]")!.click();
+    await flush(el);
+    expect(await bottomOf(el, "reader-discovery")).toBe(codeMessage("reader.not_listed"));
+    expect(q(el, "[data-test=reader-discovery] [role=alert]")).toBeNull();
+    expect(errorOf(el, "name-v-1")).toBe("");
+    expect(isDisabled(el, "adopt-v-1")).toBe(false);
+    q(el, "[data-test=adopt-v-1]")!.click();
+    await flush(el);
+    expect(api.adoptReader).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts the discovery form again when it is reopened", async () => {
+    const { el } = await mount(
+      stubApi({ availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS) }),
+    );
+    await openAdd(el);
+    changeName(el, "[data-test=name-v-1]", "");
+    q(el, "[data-test=adopt-v-1]")!.click();
+    await flush(el);
+    q(el, "[data-test=cancel-discovery]")!.click();
+    await flush(el);
+    await openAdd(el);
+    changeName(el, "[data-test=name-v-1]", "");
+    await flush(el);
+    expect(errorOf(el, "name-v-1")).toBe("");
+    expect(await bottomOf(el, "reader-discovery")).toBe("");
+    expect(isDisabled(el, "adopt-v-1")).toBe(false);
   });
 
   it("keeps pairing reachable when listing fails", async () => {
@@ -557,6 +650,71 @@ describe("reader discovery and status", () => {
     expect(q(el, "[data-test=reader-editor]")).toBeNull();
   });
 
+  it("says nothing about a renamed reader's name before the first Save, and Save works", async () => {
+    const { el } = await mount();
+    await openRename(el);
+    changeName(el, "[data-test=edit-reader-name]", "");
+    await flush(el);
+    expect(errorOf(el, "edit-reader-name")).toBe("");
+    expect(await bottomOf(el, "reader-editor")).toBe("");
+    expect(isDisabled(el, "save-reader")).toBe(false);
+  });
+
+  it("on an invalid rename shows both messages, focuses the name, disables Save and re-checks every change", async () => {
+    const { el } = await mount();
+    await openRename(el);
+    changeName(el, "[data-test=edit-reader-name]", "");
+    q(el, "[data-test=save-reader]")!.click();
+    await flush(el);
+    await vi.waitFor(() => expect(inputFocused(el, "edit-reader-name")).toBe(true));
+    expect(errorOf(el, "edit-reader-name")).toBe(t("payments.name_required"));
+    expect(await bottomOf(el, "reader-editor")).toBe(t("form.fix_fields"));
+    expect(isDisabled(el, "save-reader")).toBe(true);
+
+    changeName(el, "[data-test=edit-reader-name]", "Garden");
+    await flush(el);
+    expect(errorOf(el, "edit-reader-name")).toBe("");
+    expect(await bottomOf(el, "reader-editor")).toBe("");
+    expect(isDisabled(el, "save-reader")).toBe(false);
+
+    changeName(el, "[data-test=edit-reader-name]", " ");
+    await flush(el);
+    expect(errorOf(el, "edit-reader-name")).toBe(t("payments.name_required"));
+    expect(isDisabled(el, "save-reader")).toBe(true);
+  });
+
+  it("shows a refused rename beside Save and leaves Save working", async () => {
+    const { el, api } = await mount(
+      stubApi({ renameReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
+    );
+    await openRename(el);
+    changeName(el, "[data-test=edit-reader-name]", "Garden");
+    q(el, "[data-test=save-reader]")!.click();
+    await flush(el);
+    expect(await bottomOf(el, "reader-editor")).toBe(codeMessage("server.internal"));
+    expect(q(el, "[data-test=reader-editor] [role=alert]")).toBeNull();
+    expect(isDisabled(el, "save-reader")).toBe(false);
+    q(el, "[data-test=save-reader]")!.click();
+    await flush(el);
+    expect(api.renameReader).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts the rename form again when it is reopened", async () => {
+    const { el } = await mount();
+    await openRename(el);
+    changeName(el, "[data-test=edit-reader-name]", "");
+    q(el, "[data-test=save-reader]")!.click();
+    await flush(el);
+    q(el, "[data-test=close-reader-editor]")!.click();
+    await flush(el);
+    await openRename(el);
+    changeName(el, "[data-test=edit-reader-name]", "");
+    await flush(el);
+    expect(errorOf(el, "edit-reader-name")).toBe("");
+    expect(await bottomOf(el, "reader-editor")).toBe("");
+    expect(isDisabled(el, "save-reader")).toBe(false);
+  });
+
   it("confirms unpair separately and hides it for providers without support", async () => {
     const { el, api } = await mount();
     qCell(el, "[data-test=unpair-r-1]")!.click();
@@ -621,7 +779,7 @@ describe("reader dialog request lifetime", () => {
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
   });
 
-  it("keeps an unpair failure in the confirmation dialog and permits retry", async () => {
+  it("shows an unpair failure beside the confirmation's action, not above it, and permits retry", async () => {
     const { el, api } = await mount(
       stubApi({
         unpairReader: vi
@@ -634,7 +792,9 @@ describe("reader dialog request lifetime", () => {
     await flush(el);
     q(el, "[data-test=confirm-unpair]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=reader-editor] [role=alert]")).not.toBeNull();
+    expect(await bottomOf(el, "reader-editor")).toBe(codeMessage("server.internal"));
+    expect(q(el, "[data-test=reader-editor] [role=alert]")).toBeNull();
+    expect(isDisabled(el, "confirm-unpair")).toBe(false);
     q(el, "[data-test=confirm-unpair]")!.click();
     await flush(el);
     expect(api.unpairReader).toHaveBeenCalledTimes(2);

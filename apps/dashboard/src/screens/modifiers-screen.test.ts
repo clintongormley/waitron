@@ -219,12 +219,12 @@ function confirmDelete(el: ModifiersScreen) {
   )!;
 }
 
-async function summaryEntries(form: OptionListForm | ExtraListForm) {
+/** The message a list form shows beside its Save. */
+async function bottomOf(form: OptionListForm | ExtraListForm) {
   await form.updateComplete;
-  const summary = form.shadowRoot!.querySelector("wt-form-error-summary");
-  if (summary === null) return [];
-  await summary.updateComplete;
-  return [...summary.shadowRoot!.querySelectorAll("li")].map((item) => item.textContent);
+  const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
 }
 
 // ---------------------------------------------------------------------------
@@ -819,7 +819,7 @@ it("keeps a refused save in the form and puts the refusal beside the field it na
   const message = codeMessage("extras.invalid");
   await vi.waitFor(() => expect(form.fieldErrors.name).toBe(message));
   expect(form.open).toBe(true);
-  await vi.waitFor(async () => expect(await summaryEntries(form)).toEqual([message]));
+  await vi.waitFor(async () => expect(await bottomOf(form)).toBe(t("form.fix_fields")));
   expect(
     (form.shadowRoot!.querySelector('[name="name"]') as unknown as { error: string }).error,
   ).toBe(message);
@@ -859,7 +859,7 @@ it("puts a refusal to offer a product with Active variants beside that item's pr
   expect(form.open).toBe(true);
 });
 
-it("shows a field-less refusal in the options form's summary and keeps it open", async () => {
+it("shows a field-less refusal in the options form's bottom message and keeps it open", async () => {
   const client = api({
     createOptionList: vi.fn().mockRejectedValue({ code: "options.not_found" }),
   });
@@ -875,9 +875,7 @@ it("shows a field-less refusal in the options form's summary and keeps it open",
       composed: true,
     }),
   );
-  await vi.waitFor(async () =>
-    expect(await summaryEntries(form)).toEqual([codeMessage("options.not_found")]),
-  );
+  await vi.waitFor(async () => expect(await bottomOf(form)).toBe(codeMessage("options.not_found")));
   expect(form.open).toBe(true);
 });
 

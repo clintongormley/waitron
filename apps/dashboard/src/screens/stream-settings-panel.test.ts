@@ -109,8 +109,13 @@ const q = (el: StreamSettingsPanel, sel: string) => el.shadowRoot!.querySelector
 const field = (el: StreamSettingsPanel, name: string) =>
   q(el, `wt-input[name=${name}]`) as HTMLElement & { error: string; value: string; type: string };
 const text = (el: StreamSettingsPanel, sel: string) => q(el, sel)?.textContent?.trim();
-const summaryErrors = (el: StreamSettingsPanel) =>
-  (q(el, "wt-form-error-summary") as HTMLElement & { errors: string[] }).errors;
+async function bottomOf(el: StreamSettingsPanel): Promise<string> {
+  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+const disabled = (el: StreamSettingsPanel, button: string) =>
+  q(el, `[data-test=${button}]`)!.hasAttribute("disabled");
 const focusedName = (el: StreamSettingsPanel) =>
   el.shadowRoot!.activeElement?.getAttribute("name") ?? null;
 
@@ -155,17 +160,24 @@ describe("stream-settings-panel: the bucket form", () => {
     ]);
   });
 
-  it("explains every missing field beside it and in one summary, focuses the first, and sends nothing", async () => {
+  it("explains every missing field beside it and once beside Save, focuses the first, and sends nothing", async () => {
     const api = stubApi();
     const { el } = await mount(api);
     await press(el, "save");
     expect(api.saveStreamSettings).not.toHaveBeenCalled();
-    expect(summaryErrors(el)).toEqual([
+    expect(
+      ["bucket-region", "bucket-name", "bucket-access-key-id", "bucket-secret-access-key"].map(
+        (name) => field(el, name).error,
+      ),
+    ).toEqual([
       t("stream.form.region_required"),
       t("stream.form.bucket_required"),
       t("stream.form.access_key_id_required"),
       t("stream.form.secret_access_key_required"),
     ]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(disabled(el, "save")).toBe(true);
+    expect(q(el, "wt-form-error-summary")).toBeNull();
     expect(field(el, "bucket-region").error).toBe(t("stream.form.region_required"));
     expect(field(el, "bucket-endpoint").error).toBe("");
     expect(focusedName(el)).toBe("bucket-region");
@@ -204,7 +216,12 @@ describe("stream-settings-panel: the bucket form", () => {
     const { el } = await mount(api);
     await press(el, "test");
     expect(api.testStreamBucket).not.toHaveBeenCalled();
-    expect(summaryErrors(el)).toHaveLength(4);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-input")].filter(
+        (input) => input.error !== "",
+      ),
+    ).toHaveLength(4);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("a failed Test shows the localised refusal and the failed check in words", async () => {
@@ -238,7 +255,7 @@ describe("stream-settings-panel: the bucket form", () => {
     expect(text(el, "[role=alert]")).toBe(codeMessage("backup.stream_test_failed"));
   });
 
-  it("puts a refused bucket name beside the bucket field, in the summary, and focuses it", async () => {
+  it("puts a refused bucket name beside the bucket field, with the bottom message, and focuses it", async () => {
     const api = stubApi({
       saveStreamSettings: vi.fn().mockRejectedValue({
         code: "backup.stream_config_unsafe",
@@ -249,7 +266,8 @@ describe("stream-settings-panel: the bucket form", () => {
     fillRequired(el);
     await press(el, "save");
     expect(field(el, "bucket-name").error).toBe(t("stream.field.bucket_characters"));
-    expect(summaryErrors(el)).toEqual([t("stream.field.bucket_characters")]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(disabled(el, "save")).toBe(true);
     expect(focusedName(el)).toBe("bucket-name");
     expect(q(el, "p[role=alert]")).toBeNull();
     // What was typed stays, so the owner can correct it.
@@ -295,7 +313,8 @@ describe("stream-settings-panel: the bucket form", () => {
     fillRequired(el);
     await press(el, "save");
     expect(text(el, "[role=alert]")).toBe(codeMessage("backup.stream_config_unsafe"));
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
+    expect(disabled(el, "save")).toBe(false);
     expect(field(el, "bucket-name").error).toBe("");
   });
 
@@ -379,6 +398,93 @@ describe("stream-settings-panel: the bucket form", () => {
       expect(q(el, "[data-test=test-passed]") !== null).toBe(passed);
     },
   );
+
+  it("says nothing about errors before the first submission, and Save works", async () => {
+    const { el } = await mount(stubApi());
+    type(el, "bucket-region", "eu-west-1");
+    type(el, "bucket-region", "");
+    type(el, "bucket-endpoint", "s3.example.net");
+    await flush(el);
+    expect(field(el, "bucket-region").error).toBe("");
+    expect(field(el, "bucket-endpoint").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(disabled(el, "save")).toBe(false);
+    expect(disabled(el, "test")).toBe(false);
+  });
+
+  it("re-checks every change after a failed submission, and Save works again once all are fixed", async () => {
+    const { el } = await mount(stubApi());
+    await press(el, "save");
+    type(el, "bucket-region", "eu-west-1");
+    await flush(el);
+    expect(field(el, "bucket-region").error).toBe("");
+    expect(field(el, "bucket-name").error).toBe(t("stream.form.bucket_required"));
+    expect(disabled(el, "save")).toBe(true);
+    expect(disabled(el, "test")).toBe(true);
+
+    type(el, "bucket-region", " ");
+    await flush(el);
+    expect(field(el, "bucket-region").error).toBe(t("stream.form.region_required"));
+
+    fillRequired(el);
+    await flush(el);
+    expect(field(el, "bucket-region").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(disabled(el, "save")).toBe(false);
+    expect(disabled(el, "test")).toBe(false);
+  });
+
+  it("clears a refused field's message when that field changes, and Save works again", async () => {
+    const api = stubApi({
+      saveStreamSettings: vi.fn().mockRejectedValue({
+        code: "backup.stream_config_unsafe",
+        params: { field: "bucket" },
+      }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(disabled(el, "save")).toBe(true);
+
+    type(el, "bucket-region", "eu-west-2");
+    await flush(el);
+    expect(field(el, "bucket-name").error).toBe(t("stream.field.bucket_characters"));
+    expect(disabled(el, "save")).toBe(true);
+
+    type(el, "bucket-name", "venue.copy");
+    await flush(el);
+    expect(field(el, "bucket-name").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(disabled(el, "save")).toBe(false);
+  });
+
+  it("leaves Save working after a refusal that names no field", async () => {
+    const api = stubApi({
+      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.managed_by_environment" }),
+    });
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(disabled(el, "save")).toBe(false);
+    await press(el, "save");
+    expect(api.saveStreamSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("starts again when the form is cancelled and reopened: no messages and Save working", async () => {
+    const { el } = await mount(stubApi(), {});
+    await refresh(el, el.api, ON);
+    await press(el, "change");
+    type(el, "bucket-region", "");
+    await press(el, "save");
+    expect(field(el, "bucket-region").error).toBe(t("stream.form.region_required"));
+    await press(el, "cancel");
+    await press(el, "change");
+    type(el, "bucket-region", "");
+    await flush(el);
+    expect(field(el, "bucket-region").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(disabled(el, "save")).toBe(false);
+  });
 
   it("asks a password manager for a new secret, never a saved one", async () => {
     const { el } = await mount(stubApi());

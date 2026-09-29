@@ -109,6 +109,19 @@ const alertText = (el: BackupScreen) => q(el, "[role=alert]:not([data-test])")?.
 const errorKey = (el: BackupScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
+async function configurationBottom(el: BackupScreen): Promise<string | null> {
+  const actions = q(el, "[data-test=configuration-actions]") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[role=alert]")?.textContent ?? null;
+}
+
+const configurationErrors = (el: BackupScreen): (string | null)[] =>
+  ["configuration-passphrase", "configuration-confirm"].map((id) =>
+    q(el, `[data-test=${id}]`)!.getAttribute("error"),
+  );
+
 function setInput(el: BackupScreen, sel: string, value: string): void {
   q(el, sel)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -344,10 +357,66 @@ describe("backup-screen", () => {
     setInput(el, "[data-test=configuration-confirm]", "a different passphrase");
     (q(el, "[data-test=configuration-export]") as HTMLElement).click();
     await el.updateComplete;
-    expect(q(el, "[data-test=configuration-error]")?.textContent?.trim()).not.toBe("");
-    const fields = el.shadowRoot!.querySelectorAll("[data-test=configuration-field-error]");
-    expect(fields).toHaveLength(2);
-    expect(fields[0]?.textContent).toBe(fields[1]?.textContent);
+    expect(await configurationBottom(el)).toBe(t("form.fix_fields"));
+    expect(q(el, "[data-test=configuration-error]")).toBeNull();
+    const fields = configurationErrors(el);
+    expect(fields).toEqual([
+      t("backup.configuration.match_error"),
+      t("backup.configuration.match_error"),
+    ]);
+  });
+
+  it("says nothing about the configuration export before it is first pressed, and it works", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api: stubApi() });
+    await flush(el);
+    setInput(el, "[data-test=configuration-passphrase]", "short");
+    await el.updateComplete;
+    expect(configurationErrors(el)).toEqual(["", ""]);
+    expect(await configurationBottom(el)).toBeNull();
+    expect(q(el, "[data-test=configuration-export]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("focuses the passphrase after a refused configuration export and holds the export until both fields are fixed", async () => {
+    const api = stubApi({
+      exportConfiguration: vi
+        .fn()
+        .mockResolvedValue(new Blob(["artifact"], { type: "application/octet-stream" })),
+    });
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:configuration");
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
+    await flush(el);
+    q(el, "[data-test=configuration-export]")!.click();
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+    const passphrase = q(el, "[data-test=configuration-passphrase]")!;
+    expect(passphrase.shadowRoot!.activeElement).toBe(
+      passphrase.shadowRoot!.querySelector("input"),
+    );
+    const exportButton = q(el, "[data-test=configuration-export]")!;
+    expect(exportButton.hasAttribute("disabled")).toBe(true);
+
+    setInput(el, "[data-test=configuration-passphrase]", "a strong passphrase");
+    await el.updateComplete;
+    expect(configurationErrors(el)).toEqual([
+      t("backup.configuration.match_error"),
+      t("backup.configuration.match_error"),
+    ]);
+    expect(exportButton.hasAttribute("disabled")).toBe(true);
+
+    setInput(el, "[data-test=configuration-confirm]", "a strong passphrase");
+    await el.updateComplete;
+    expect(configurationErrors(el)).toEqual(["", ""]);
+    expect(await configurationBottom(el)).toBeNull();
+    expect(exportButton.hasAttribute("disabled")).toBe(false);
+
+    exportButton.click();
+    await flush(el);
+    expect(api.exportConfiguration).toHaveBeenCalledWith("a strong passphrase");
+    expect(configurationErrors(el)).toEqual(["", ""]);
+    expect(exportButton.hasAttribute("disabled")).toBe(false);
+    createObjectURL.mockRestore();
+    click.mockRestore();
   });
 
   it("lets the operator reveal both configuration export passphrases", async () => {
@@ -1280,12 +1349,10 @@ describe("backup-screen failures and edit-mode prefill", () => {
     await el.updateComplete;
 
     expect(api.exportConfiguration).not.toHaveBeenCalled();
-    expect(q(el, "[data-test=configuration-error]")!.textContent!.trim()).toBe(
-      t("backup.configuration.form_error"),
-    );
-    const fieldErrors = el.shadowRoot!.querySelectorAll("[data-test=configuration-field-error]");
+    expect(await configurationBottom(el)).toBe(t("form.fix_fields"));
+    const fieldErrors = configurationErrors(el);
     expect(fieldErrors).toHaveLength(2);
-    expect(fieldErrors[0]!.textContent).toBe(t("backup.configuration.passphrase_error"));
+    expect(fieldErrors[0]).toBe(t("backup.configuration.passphrase_error"));
   });
 
   it("explains a failed configuration export without blaming the fields, and keeps the passphrase", async () => {
@@ -1296,16 +1363,35 @@ describe("backup-screen failures and edit-mode prefill", () => {
 
     q(el, "[data-test=configuration-export]")!.click();
 
-    await vi.waitFor(() =>
-      expect(q(el, "[data-test=configuration-error]")?.textContent?.trim()).toBe(
-        t("backup.configuration.request_error"),
-      ),
+    await vi.waitFor(async () =>
+      expect(await configurationBottom(el)).toBe(t("backup.configuration.request_error")),
     );
-    expect(q(el, "[data-test=configuration-field-error]")).toBeNull();
+    expect(configurationErrors(el)).toEqual(["", ""]);
     expect(
       (q(el, "[data-test=configuration-passphrase]") as HTMLElement & { value: string }).value,
     ).toBe("a strong passphrase");
     expect(q(el, "[data-test=configuration-export]")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("drops a failed configuration export's message when the export is pressed again", async () => {
+    const api = stubApi({
+      exportConfiguration: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockReturnValueOnce(new Promise(() => {})),
+    });
+    const el = await mountLoaded(api);
+    setInput(el, "[data-test=configuration-passphrase]", "a strong passphrase");
+    setInput(el, "[data-test=configuration-confirm]", "a strong passphrase");
+    q(el, "[data-test=configuration-export]")!.click();
+    await vi.waitFor(async () =>
+      expect(await configurationBottom(el)).toBe(t("backup.configuration.request_error")),
+    );
+
+    q(el, "[data-test=configuration-export]")!.click();
+    await el.updateComplete;
+    expect(await configurationBottom(el)).toBeNull();
+    expect(api.exportConfiguration).toHaveBeenCalledTimes(2);
   });
 });
 

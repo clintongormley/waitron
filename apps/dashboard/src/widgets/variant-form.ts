@@ -4,7 +4,6 @@ import { baseStyles, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { ProductEditorVariant } from "../api/client.js";
@@ -49,7 +48,8 @@ export class VariantForm extends LitElement {
   /** The product's photo, which a variant with no photo of its own shows. */
   @property({ attribute: false }) inheritedImage: string | null = null;
   @property({ attribute: false }) api?: ImageUploader;
-  @state() private errors: Record<string, string> = {};
+  /** Set by the first press of Save; from then on the window re-checks itself on every change. */
+  @state() private attempted = false;
   @state() private name = "";
   @state() private unitPrice = "";
   @state() private available = true;
@@ -82,15 +82,24 @@ export class VariantForm extends LitElement {
     this.kitchenName = value?.kitchenName ?? "";
     this.customerName = { ...value?.customerName };
     this.image = value?.image ?? null;
-    this.errors = {};
+    this.attempted = false;
     this.#focusField = null;
   }
 
-  #fields(): FieldContext {
+  /** Keyed in render order, so the first key is the field focus lands in. */
+  #validate(): Record<string, string> {
+    const errors: Record<string, string> = {};
+    if (!this.name.trim()) errors.name = t("editor.variant_name_required");
+    if (this.unitPrice.trim() !== "" && !isProductPrice(this.unitPrice))
+      errors.unitPrice = t("editor.price_invalid");
+    return errors;
+  }
+
+  #fields(errors: Record<string, string>): FieldContext {
     return {
       busy: this.busy,
       locales: this.locales,
-      error: (key) => this.errors[key] ?? "",
+      error: (key) => errors[key] ?? "",
     };
   }
 
@@ -103,12 +112,9 @@ export class VariantForm extends LitElement {
   #save(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
-    const errors: Record<string, string> = {};
-    if (!this.name.trim()) errors.name = t("editor.variant_name_required");
+    this.attempted = true;
+    const errors = this.#validate();
     const unitPrice = this.unitPrice.trim() === "" ? null : this.unitPrice;
-    if (unitPrice !== null && !isProductPrice(unitPrice))
-      errors.unitPrice = t("editor.price_invalid");
-    this.errors = errors;
     // A refused submit leaves every field as it was, so one bad value is corrected on its own rather
     // than retyped with the rest — and focus MOVES to the first one reported, in render order,
     // because a refusal that leaves the keyboard on Save says nothing a keyboard user can act on.
@@ -152,7 +158,9 @@ export class VariantForm extends LitElement {
   }
 
   override render() {
-    const fields = this.#fields();
+    const errors = this.attempted ? this.#validate() : {};
+    const invalid = Object.keys(errors).length > 0;
+    const fields = this.#fields(errors);
     return html`<wt-modal
       .open=${this.open}
       heading=${this.value ? t("editor.edit_variant") : t("editor.add_variant")}
@@ -165,10 +173,6 @@ export class VariantForm extends LitElement {
         );
       }}
     >
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${Object.values(this.errors)}
-      ></wt-form-error-summary>
       <div class="fields">
         ${textField(
           fields,
@@ -208,7 +212,7 @@ export class VariantForm extends LitElement {
         )}
         ${this.#imageField()}
       </div>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${invalid ? t("form.fix_fields") : ""}
         ><wt-button
           data-test="variant-cancel"
           slot="cancel"
@@ -219,7 +223,7 @@ export class VariantForm extends LitElement {
         ><wt-button
           data-test="variant-save"
           variant="primary"
-          .disabled=${this.busy}
+          .disabled=${this.busy || invalid}
           @click=${(event: Event) => this.#save(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

@@ -6,13 +6,12 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
 } from "@simplewebauthn/browser";
 import { toDataURL } from "qrcode";
-import { baseStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import { deriveDisplayName, isValidTelephone } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -215,8 +214,13 @@ export class ProfileScreen extends LitElement {
   @state() private activeTab: "details" | "security" = "details";
   @state() private mode: Mode = "view";
   @state() private fields = emptyFields();
-  @state() private errors: Partial<Record<Field, string>> = {};
+  @state() private attempted = false;
+  /** Field messages that stand until the operator changes that field: a server refusal naming it,
+   * or a required field an incomplete profile is opened to complete. */
+  @state() private refused: Partial<Record<Field, string>> = {};
+  /** The message beside the action that names no field this form shows. */
   @state() private error = "";
+  #fieldErrors: Partial<Record<Field, string>> = {};
   @state() private saved = false;
   @state() private busy = false;
   @state() private visible = new Set<Field>();
@@ -281,7 +285,7 @@ export class ProfileScreen extends LitElement {
           ].some((value) => !value?.trim())
         ) {
           this.#edit("details");
-          this.errors = this.#detailsErrors();
+          this.refused = this.#detailsErrors();
         }
       }
     } catch (error) {
@@ -291,7 +295,8 @@ export class ProfileScreen extends LitElement {
   #edit(mode: Mode, id = ""): void {
     this.mode = mode;
     this.removingId = id;
-    this.errors = {};
+    this.attempted = false;
+    this.refused = {};
     this.error = "";
     this.saved = false;
     this.visible = new Set();
@@ -348,14 +353,17 @@ export class ProfileScreen extends LitElement {
       type=${type === "password" && revealed ? "text" : type}
       autocomplete=${autocomplete}
       .value=${this.fields[field]}
-      error=${this.errors[field] ?? ""}
+      error=${this.#fieldErrors[field] ?? ""}
       @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=save]"))}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         const prev = this.fields;
         const value = event.detail.value;
         this.fields = { ...this.fields, [field]: value };
-        this.errors = { ...this.errors, [field]: "" };
+        if (field in this.refused)
+          this.refused = Object.fromEntries(
+            Object.entries(this.refused).filter(([key]) => key !== field),
+          );
         // deriveDisplayName leaves a customised display name alone, judged from the previous values.
         if (field === "firstNames" || field === "lastNames") {
           const nextFirst = field === "firstNames" ? value : prev.firstNames;
@@ -410,8 +418,22 @@ export class ProfileScreen extends LitElement {
     return errors;
   }
 
-  async #save(): Promise<void> {
-    if (this.busy) return;
+  #shownFields(): Set<Field> {
+    const shown = new Set<Field>();
+    const add = (...fields: Field[]) => fields.forEach((field) => shown.add(field));
+    if (this.mode === "details")
+      add("firstNames", "lastNames", "displayName", "email", "telephone");
+    if (this.needsCredentials)
+      add("currentPassword", ...(this.profile?.hasTotp ? ["totp" as const] : []));
+    if (this.mode === "passkey") add("passkeyName");
+    if (this.mode === "password") add("password", "confirmPassword");
+    if (this.mode === "pin") add("pin", "confirmPin");
+    if (this.mode === "email" || (this.mode === "totp" && this.totpSetup !== null))
+      add("setupCode");
+    return shown;
+  }
+
+  #validate(): Partial<Record<Field, string>> {
     const f = this.fields;
     const errors: Partial<Record<Field, string>> = {};
     if (this.mode === "details") Object.assign(errors, this.#detailsErrors());
@@ -441,9 +463,46 @@ export class ProfileScreen extends LitElement {
     ) {
       errors.setupCode = t("profile.code_required");
     }
-    this.errors = errors;
+    return errors;
+  }
+
+  /** Each shown field's message, the one message beside the action, and whether the action waits
+   * for a field to be corrected. */
+  #formState(): { fields: Partial<Record<Field, string>>; bottom: string; blocked: boolean } {
+    const errors = { ...(this.attempted ? this.#validate() : {}), ...this.refused };
+    const shown = this.#shownFields();
+    const fields: Partial<Record<Field, string>> = {};
+    const messages = this.error === "" ? [] : [this.error];
+    for (const [key, message] of Object.entries(errors) as Array<[Field, string]>) {
+      if (!message) continue;
+      if (shown.has(key)) fields[key] = message;
+      else messages.push(message);
+    }
+    const blocked = Object.keys(fields).length > 0;
+    return {
+      fields,
+      bottom: [...new Set(messages), ...(blocked ? [t("form.fix_fields")] : [])].join(" "),
+      blocked,
+    };
+  }
+
+  #focusFirstInvalid(): void {
+    void this.updateComplete.then(() => {
+      const dialog = this.isConnected ? this.shadowRoot!.querySelector("wt-modal") : null;
+      if (dialog) void focusFirstInvalid(dialog);
+    });
+  }
+
+  async #save(): Promise<void> {
+    if (this.busy) return;
+    const f = this.fields;
+    this.attempted = true;
+    this.refused = {};
     this.error = "";
-    if (Object.keys(errors).length) return;
+    if (Object.keys(this.#validate()).length) {
+      this.#focusFirstInvalid();
+      return;
+    }
     this.busy = true;
     const credentials = this.needsCredentials
       ? { currentPassword: f.currentPassword, ...(this.profile!.hasTotp ? { totp: f.totp } : {}) }
@@ -472,6 +531,7 @@ export class ProfileScreen extends LitElement {
         });
         this.totpSetup = setup;
         this.fields = { ...this.fields, currentPassword: "", totp: "" };
+        this.attempted = false;
         return;
       } else if (this.mode === "totp") {
         const result = await this.api.finishTotp(this.totpSetup!.enrollmentId, f.setupCode);
@@ -522,7 +582,7 @@ export class ProfileScreen extends LitElement {
       }
       const code =
         this.mode === "passkey" ? codeOf(error, "passkey.verification_failed") : codeOf(error);
-      this.error = codeMessage(code);
+      const message = codeMessage(code);
       const field =
         code === "password.invalid"
           ? "currentPassword"
@@ -537,7 +597,10 @@ export class ProfileScreen extends LitElement {
                   : code === "pin.too_short"
                     ? "pin"
                     : undefined;
-      if (field) this.errors = { [field]: this.error };
+      if (field !== undefined && this.#shownFields().has(field)) {
+        this.refused = { [field]: message };
+        this.#focusFirstInvalid();
+      } else this.error = message;
     } finally {
       this.busy = false;
     }
@@ -866,6 +929,8 @@ export class ProfileScreen extends LitElement {
     `;
   }
   #renderModal(p: OwnProfile) {
+    const form = this.#formState();
+    this.#fieldErrors = form.fields;
     return html`
       <wt-modal
         heading=${this.#modalHeading()}
@@ -880,14 +945,10 @@ export class ProfileScreen extends LitElement {
           this.#edit("view");
         }}
       >
-        <wt-form-error-summary
-          heading=${t("form.error_heading")}
-          .errors=${[...new Set([...Object.values(this.errors), this.error].filter(Boolean))]}
-        ></wt-form-error-summary>
         <div class="fields">
           ${this.mode === "codes" ? this.#renderCodesBody() : this.mode === "view" ? nothing : this.#renderEditBody(p)}
         </div>
-        <wt-form-actions slot="footer">
+        <wt-form-actions slot="footer" .error=${form.bottom}>
           <wt-button
             slot="cancel"
             data-test="cancel"
@@ -906,7 +967,7 @@ export class ProfileScreen extends LitElement {
               : html`<wt-button
                   variant="primary"
                   data-test="save"
-                  ?disabled=${this.busy}
+                  ?disabled=${this.busy || form.blocked}
                   @click=${() => void this.#save()}
                   >${t(this.mode === "remove" ? "action.remove" : "action.save")}</wt-button
                 >`
@@ -922,9 +983,8 @@ export class ProfileScreen extends LitElement {
       ${
         p === null
           ? html`
-              <!-- The error summary lives inside #renderModal below, which never renders while
-                   profile is still null — an initial load failure needs its own visible text, or
-                   the caught error (#load()'s catch sets it) has nowhere to show. -->
+              <!-- The modal below, whose action row shows errors, never renders while profile is
+                   still null, so an initial load failure needs its own visible text. -->
               ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
               <wt-button @click=${() => void this.#load()}>${t("profile.reload")}</wt-button>
             `

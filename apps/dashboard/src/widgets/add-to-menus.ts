@@ -1,9 +1,8 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import type {
   CatalogueSummary,
@@ -165,7 +164,8 @@ export class AddToMenus extends LitElement {
   @property({ attribute: false }) loadError: string | null = null;
   @property({ attribute: false }) failures: PlacementFailure[] = [];
   @state() private selected: ReadonlySet<string> = new Set();
-  @state() private noneChosen = false;
+  /** Set by the first press of Add; from then on an empty choice is marked as it happens. */
+  @state() private attempted = false;
   /** Every place in the order shown, each section once. */
   #placeIds: string[] = [];
   #places = new Map<string, { name: string; topLevel: boolean }>();
@@ -175,7 +175,7 @@ export class AddToMenus extends LitElement {
     if (changed.has("menus")) this.#flatten();
     if (changed.has("open") && this.open) {
       this.selected = new Set();
-      this.noneChosen = false;
+      this.attempted = false;
     }
     if (changed.has("failures") && this.failures.length)
       this.selected = new Set(this.failures.map(({ sectionId }) => sectionId));
@@ -203,6 +203,10 @@ export class AddToMenus extends LitElement {
     this.#hasShared = hasShared;
   }
 
+  get #noneChosen(): boolean {
+    return this.attempted && this.selected.size === 0;
+  }
+
   #placeName(sectionId: string): string {
     const place = this.#places.get(sectionId);
     if (!place) return t("members.missing");
@@ -216,15 +220,15 @@ export class AddToMenus extends LitElement {
     const selected = new Set(this.selected);
     if (!selected.delete(sectionId)) selected.add(sectionId);
     this.selected = selected;
-    this.noneChosen = false;
   }
 
   #confirm(event: Event): void {
     event.stopPropagation();
     if (this.busy) return;
+    this.attempted = true;
     const sectionIds = this.#placeIds.filter((id) => this.selected.has(id));
     if (!sectionIds.length) {
-      this.noneChosen = true;
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
     this.dispatchEvent(
@@ -246,6 +250,7 @@ export class AddToMenus extends LitElement {
         value=${sectionId}
         .checked=${this.selected.has(sectionId)}
         .disabled=${this.busy}
+        aria-invalid=${this.#noneChosen ? "true" : "false"}
         @change=${(event: Event) => this.#toggle(event, sectionId)}
       />
       <span class="name">${name}</span>
@@ -292,19 +297,14 @@ export class AddToMenus extends LitElement {
       return html`<p class="notice" role="status" data-test="loading">
         ${t("add_to_menus.loading")}
       </p>`;
-    const errors = this.noneChosen ? [t("add_to_menus.none_chosen")] : [];
-    return html`<wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${errors}
-      ></wt-form-error-summary>
-      ${this.#failures()}
+    return html`${this.#failures()}
       <p>${t("add_to_menus.intro").replace("{name}", this.productName)}</p>
       ${this.#hasShared ? html`<p class="notice">${t("add_to_menus.shared_note")}</p>` : nothing}
       ${this.menus.map(
         (menu) =>
           html`<fieldset
             data-menu=${menu.id}
-            aria-describedby=${this.noneChosen ? "none-chosen" : nothing}
+            aria-describedby=${this.#noneChosen ? "none-chosen" : nothing}
           >
             <legend>${menu.name}</legend>
             ${this.#pick(menu.rootSectionId, t("add_to_menus.top_level"))}
@@ -312,7 +312,7 @@ export class AddToMenus extends LitElement {
           </fieldset>`,
       )}
       ${
-        this.noneChosen
+        this.#noneChosen
           ? html`<p class="error" id="none-chosen" data-test="none-chosen">
               ${t("add_to_menus.none_chosen")}
             </p>`
@@ -322,7 +322,7 @@ export class AddToMenus extends LitElement {
 
   override render() {
     const choosing = this.menus !== null && this.loadError === null;
-    const attempted = this.failures.length > 0 || this.loadError !== null;
+    const failed = this.failures.length > 0 || this.loadError !== null;
     return html`<wt-modal
       .open=${this.open}
       heading=${t("add_to_menus.heading").replace("{name}", this.productName)}
@@ -334,21 +334,23 @@ export class AddToMenus extends LitElement {
       }}
     >
       ${this.open ? this.#body() : nothing}
-      <wt-form-actions slot="footer"
+      <wt-form-actions
+        slot="footer"
+        .error=${choosing && this.#noneChosen ? t("form.fix_fields") : ""}
         ><wt-button
           slot="cancel"
           variant="secondary"
           data-test="skip"
           .disabled=${this.busy}
           @click=${(event: Event) => this.#cancel(event)}
-          >${attempted ? t("action.close") : t("add_to_menus.skip")}</wt-button
+          >${failed ? t("action.close") : t("add_to_menus.skip")}</wt-button
         >${
           choosing
             ? html`<wt-button
                 variant="primary"
                 data-test="add-to-menus"
                 .loading=${this.busy}
-                .disabled=${this.busy}
+                .disabled=${this.busy || this.#noneChosen}
                 @click=${(event: Event) => this.#confirm(event)}
                 >${t("add_to_menus.confirm")}</wt-button
               >`

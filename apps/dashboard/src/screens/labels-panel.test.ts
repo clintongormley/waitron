@@ -67,6 +67,18 @@ async function rowAction(el: LabelsPanel, id: string, test: string): Promise<voi
 function save(el: LabelsPanel) {
   modal(el, "label-form").querySelector<HTMLElement>('[data-test="save-label"]')!.click();
 }
+function saveButton(el: LabelsPanel): HTMLElement {
+  return modal(el, "label-form").querySelector<HTMLElement>('[data-test="save-label"]')!;
+}
+async function bottomOf(el: LabelsPanel): Promise<string> {
+  const actions = modal(el, "label-form").querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+async function openAdd(el: LabelsPanel): Promise<void> {
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-label"]')!.click();
+  await el.updateComplete;
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((settle) => (resolve = settle));
@@ -118,7 +130,7 @@ it("creates a label from the Add label form, then refreshes the list", async () 
   await vi.waitFor(() => expect(api.listLabels.mock.calls.length).toBe(loads + 1));
 });
 
-it("explains a blank name beside the field and in the summary, and sends nothing", async () => {
+it("explains a blank name beside the field and beside a disabled Save, and sends nothing", async () => {
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-label"]')!.click();
   await el.updateComplete;
@@ -126,9 +138,9 @@ it("explains a blank name beside the field and in the summary, and sends nothing
   save(el);
   await el.updateComplete;
   expect(nameInput(el).error).toBe(t("labels.name_required"));
-  expect(modal(el, "label-form").querySelector("wt-form-error-summary")!.errors).toEqual([
-    t("labels.name_required"),
-  ]);
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  expect(modal(el, "label-form").querySelector("wt-form-error-summary")).toBeNull();
   expect(api.createLabel).not.toHaveBeenCalled();
 });
 
@@ -147,17 +159,14 @@ it.each(["label.name_taken", "label.invalid"])(
   },
 );
 
-it("says why a rename of a label that no longer exists was refused", async () => {
+it("says why a rename of a label that no longer exists was refused, beside a Save that still works", async () => {
   const { el, api } = await mount();
   api.renameLabel.mockRejectedValueOnce({ code: "label.not_found" });
   await rowAction(el, "l-alc", "rename-label");
   save(el);
-  await vi.waitFor(() =>
-    expect(modal(el, "label-form").querySelector('p[role="alert"]')?.textContent).toBe(
-      codeMessage("label.not_found"),
-    ),
-  );
+  await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("label.not_found")));
   expect(nameInput(el).error).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
 });
 
 it("renames a label from its row, starting from its current name", async () => {
@@ -336,4 +345,87 @@ it("finds a label by its name", async () => {
       row.getAttribute("data-row-key"),
     ),
   ).toEqual(["l-happy"]);
+});
+
+it("says nothing about errors before the first submission, and Save works", async () => {
+  const { el } = await mount();
+  await openAdd(el);
+  await type(el, "");
+
+  expect(nameInput(el).error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("on an invalid submission focuses the name, then re-checks every change", async () => {
+  const { el, api } = await mount();
+  await openAdd(el);
+  save(el);
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(nameInput(el).shadowRoot!.activeElement).toBe(
+    nameInput(el).shadowRoot!.querySelector("input"),
+  );
+
+  await type(el, "Vegan");
+  expect(nameInput(el).error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+
+  await type(el, " ");
+  expect(nameInput(el).error).toBe(t("labels.name_required"));
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+  expect(api.createLabel).not.toHaveBeenCalled();
+});
+
+it("focuses the name when a refusal naming it arrives, and clears it when the name changes", async () => {
+  const { el, api } = await mount();
+  api.createLabel.mockRejectedValueOnce({ code: "label.name_taken" });
+  await openAdd(el);
+  await type(el, "Alcoholic");
+  save(el);
+  await vi.waitFor(() => expect(nameInput(el).error).toBe(codeMessage("label.name_taken")));
+  await el.updateComplete;
+  await new Promise((resolve) => setTimeout(resolve));
+  expect(nameInput(el).shadowRoot!.activeElement).toBe(
+    nameInput(el).shadowRoot!.querySelector("input"),
+  );
+  expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+  expect(saveButton(el).hasAttribute("disabled")).toBe(true);
+
+  await type(el, "Alcoholic drinks");
+  expect(nameInput(el).error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+it("drops a refusal that names no field when the form is submitted again", async () => {
+  const { el, api } = await mount();
+  const renaming = deferred<{ id: string; name: string }>();
+  api.renameLabel
+    .mockRejectedValueOnce({ code: "label.not_found" })
+    .mockReturnValueOnce(renaming.promise);
+  await rowAction(el, "l-alc", "rename-label");
+  save(el);
+  await vi.waitFor(async () => expect(await bottomOf(el)).toBe(codeMessage("label.not_found")));
+
+  save(el);
+  await el.updateComplete;
+  expect(await bottomOf(el)).toBe("");
+  renaming.resolve({ id: "l-alc", name: "Alcoholic" });
+});
+
+it("starts again when reopened: no messages and Save working", async () => {
+  const { el } = await mount();
+  await openAdd(el);
+  save(el);
+  await el.updateComplete;
+  modal(el, "label-form").querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
+  await el.updateComplete;
+  await openAdd(el);
+
+  expect(nameInput(el).error).toBe("");
+  expect(await bottomOf(el)).toBe("");
+  expect(saveButton(el).hasAttribute("disabled")).toBe(false);
 });

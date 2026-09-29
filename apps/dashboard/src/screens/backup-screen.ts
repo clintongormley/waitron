@@ -1,8 +1,9 @@
 import { DashboardQueries } from "../api/query-controller.js";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
+import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
@@ -186,7 +187,8 @@ export class BackupScreen extends LitElement {
   @state() private configurationConfirm = "";
   @state() private configurationPassphraseVisible = false;
   @state() private configurationConfirmVisible = false;
-  @state() private configurationError: "required" | "mismatch" | "request" | null = null;
+  @state() private configurationAttempted = false;
+  @state() private configurationRequestFailed = false;
   @state() private exportingConfiguration = false;
 
   @state() private oldKey: string | null = null;
@@ -492,14 +494,20 @@ export class BackupScreen extends LitElement {
     this.pastedKey = event.detail.value;
   }
 
+  #configurationFieldError(): string | null {
+    if (this.configurationPassphrase.length < MIN_KEY_LENGTH)
+      return t("backup.configuration.passphrase_error");
+    if (this.configurationPassphrase !== this.configurationConfirm)
+      return t("backup.configuration.match_error");
+    return null;
+  }
+
   async #exportConfiguration(): Promise<void> {
-    this.configurationError = null;
-    if (this.configurationPassphrase.length < MIN_KEY_LENGTH) {
-      this.configurationError = "required";
-      return;
-    }
-    if (this.configurationPassphrase !== this.configurationConfirm) {
-      this.configurationError = "mismatch";
+    if (this.exportingConfiguration) return;
+    this.configurationRequestFailed = false;
+    this.configurationAttempted = true;
+    if (this.#configurationFieldError() !== null) {
+      void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
     this.exportingConfiguration = true;
@@ -513,8 +521,9 @@ export class BackupScreen extends LitElement {
       URL.revokeObjectURL(url);
       this.configurationPassphrase = "";
       this.configurationConfirm = "";
+      this.configurationAttempted = false;
     } catch {
-      this.configurationError = "request";
+      this.configurationRequestFailed = true;
     } finally {
       this.exportingConfiguration = false;
     }
@@ -543,34 +552,22 @@ export class BackupScreen extends LitElement {
   }
 
   #renderConfigurationExport(): TemplateResult {
-    const fieldMessage =
-      this.configurationError === "required"
-        ? t("backup.configuration.passphrase_error")
-        : this.configurationError === "mismatch"
-          ? t("backup.configuration.match_error")
-          : null;
+    const fieldMessage = this.configurationAttempted ? this.#configurationFieldError() : null;
+    const bottom = [
+      ...(this.configurationRequestFailed ? [t("backup.configuration.request_error")] : []),
+      ...(fieldMessage === null ? [] : [t("form.fix_fields")]),
+    ].join(" ");
     return html`
       <section class="card" aria-labelledby="configuration-export-title">
         <h2 id="configuration-export-title">${t("backup.configuration.title")}</h2>
         <p class="hint">${t("backup.configuration.explanation")}</p>
-        ${
-          this.configurationError
-            ? html`<p class="error" role="alert" data-test="configuration-error">
-                ${
-                  this.configurationError === "request"
-                    ? t("backup.configuration.request_error")
-                    : t("backup.configuration.form_error")
-                }
-              </p>`
-            : nothing
-        }
         <wt-input
           data-test="configuration-passphrase"
           name="configuration-passphrase"
           type=${this.configurationPassphraseVisible ? "text" : "password"}
           autocomplete="new-password"
           required
-          ?invalid=${fieldMessage !== null}
+          error=${fieldMessage ?? ""}
           label=${t("backup.configuration.passphrase")}
           .value=${this.configurationPassphrase}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -588,18 +585,13 @@ export class BackupScreen extends LitElement {
             >${this.configurationPassphraseVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
           >
         </wt-input>
-        ${
-          fieldMessage
-            ? html`<p class="error" data-test="configuration-field-error">${fieldMessage}</p>`
-            : nothing
-        }
         <wt-input
           data-test="configuration-confirm"
           name="configuration-passphrase-confirmation"
           type=${this.configurationConfirmVisible ? "text" : "password"}
           autocomplete="new-password"
           required
-          ?invalid=${fieldMessage !== null}
+          error=${fieldMessage ?? ""}
           label=${t("backup.configuration.confirm")}
           .value=${this.configurationConfirm}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -616,18 +608,15 @@ export class BackupScreen extends LitElement {
             >${this.configurationConfirmVisible ? t("login.hide_password") : t("login.show_password")}</wt-button
           >
         </wt-input>
-        ${
-          fieldMessage
-            ? html`<p class="error" data-test="configuration-field-error">${fieldMessage}</p>`
-            : nothing
-        }
-        <wt-button
-          variant="primary"
-          data-test="configuration-export"
-          ?disabled=${this.exportingConfiguration}
-          @click=${() => void this.#exportConfiguration()}
-          >${t("backup.configuration.download")}</wt-button
-        >
+        <wt-form-actions data-test="configuration-actions" .error=${bottom}>
+          <wt-button
+            variant="primary"
+            data-test="configuration-export"
+            ?disabled=${this.exportingConfiguration || fieldMessage !== null}
+            @click=${() => void this.#exportConfiguration()}
+            >${t("backup.configuration.download")}</wt-button
+          >
+        </wt-form-actions>
       </section>
     `;
   }

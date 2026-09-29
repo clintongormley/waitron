@@ -37,3 +37,30 @@ export function dispatchWtChange<T>(host: HTMLElement, event: Event, detail: T):
   event.stopPropagation();
   host.dispatchEvent(new CustomEvent<T>("wt-change", { detail, bubbles: true, composed: true }));
 }
+
+type MaybeUpdating = Element & { isUpdatePending?: boolean; updateComplete?: Promise<unknown> };
+
+/** A focus-delegating host counts as holding focus when its inner control took it. */
+function holdsFocus(el: HTMLElement): boolean {
+  return (el.getRootNode() as Document | ShadowRoot).activeElement === el;
+}
+
+/** Focuses the first control marked `aria-invalid="true"` under `root` that takes focus, looking
+ * inside open shadow roots in document order and waiting for each Lit element's pending render as
+ * the walk reaches it — so a field whose `error` was set in the same turn is found. Returns the
+ * focused control, or null. */
+export async function focusFirstInvalid(root: ParentNode): Promise<HTMLElement | null> {
+  for (const child of Array.from(root.children) as MaybeUpdating[]) {
+    // Awaited before descending: a render marks the children it passes values to as pending.
+    if (child.isUpdatePending === true) await child.updateComplete;
+    if (child instanceof HTMLElement && child.getAttribute("aria-invalid") === "true") {
+      child.focus();
+      if (holdsFocus(child)) return child;
+    }
+    const found =
+      (child.shadowRoot && (await focusFirstInvalid(child.shadowRoot))) ??
+      (await focusFirstInvalid(child));
+    if (found) return found;
+  }
+  return null;
+}

@@ -104,6 +104,13 @@ function input(el: LoginScreen, name: string, value: string): void {
   );
 }
 
+/** The one message beside the current form's action; "" when there is none. */
+async function bottomOf(el: LoginScreen): Promise<string> {
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+}
+
 async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
   history.replaceState(null, "", "/manage/account?token=setup&purpose=invitation");
   const api = stubApi(overrides);
@@ -227,11 +234,7 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("wt-input[name=password]")).not.toBeNull();
-    expect(
-      el
-        .shadowRoot!.querySelector("wt-form-error-summary")
-        ?.shadowRoot?.querySelector("[role=alert]"),
-    ).toBeNull();
+    expect(await bottomOf(el)).toBe("");
   });
 
   it("restores a remembered Google method without redirecting until clicked", async () => {
@@ -282,9 +285,7 @@ describe("login-screen", () => {
     expect(el.shadowRoot!.querySelector("wt-input[name=passkey-name]")?.getAttribute("error")).toBe(
       t("profile.passkey_name_too_long"),
     );
-    expect(
-      el.shadowRoot!.querySelector("wt-form-error-summary")?.shadowRoot?.textContent,
-    ).toContain(t("profile.passkey_name_too_long"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it.each([
@@ -323,9 +324,7 @@ describe("login-screen", () => {
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe(
       "passkey.already_registered",
     );
-    expect(
-      el.shadowRoot!.querySelector("wt-form-error-summary")?.shadowRoot?.textContent,
-    ).toContain(codeMessage("passkey.already_registered"));
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
     expect(el.shadowRoot!.querySelector("[data-test=skip-passkey]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
   });
@@ -607,9 +606,7 @@ describe("login-screen", () => {
       "wt-input[name=one-time-code]",
     )!;
     expect(factor.error).toBe(t("form.factor_required"));
-    expect(
-      el.shadowRoot!.querySelector("wt-form-error-summary")!.shadowRoot!.textContent,
-    ).toContain(t("form.factor_required"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("starts conditional passkey autofill on the first email screen", async () => {
@@ -921,7 +918,7 @@ describe("login-screen", () => {
     });
   });
 
-  it("explains a missing or malformed email under the field and in the form summary", async () => {
+  it("explains a missing or malformed email under the field and beside the action", async () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     const field = el.shadowRoot!.querySelector("wt-input") as HTMLElement & { error: string };
     const go = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
@@ -931,11 +928,7 @@ describe("login-screen", () => {
     go.click();
     await el.updateComplete;
     expect(field.error).toBe(t("form.email_required"));
-    expect(
-      el
-        .shadowRoot!.querySelector("wt-form-error-summary")!
-        .shadowRoot!.querySelector("[data-heading]")?.textContent,
-    ).toBe(t("form.error_heading"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 
     field.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "not-an-email" } }));
     go.click();
@@ -1066,10 +1059,7 @@ describe("login-screen", () => {
       el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=new-pin]")!.error,
     ).toBe(t("form.pin_required"));
     expect(el.shadowRoot!.querySelector("wt-input[name=confirm-pin]")).toBeNull();
-    const summary = el
-      .shadowRoot!.querySelector("wt-form-error-summary")!
-      .shadowRoot!.querySelector<HTMLElement>("[role=alert]")!.textContent;
-    expect(summary).toContain(t("form.pin_required"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("does not fetch the roster on connect", async () => {
@@ -1088,11 +1078,11 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("password.invalid");
-    const banner = el
-      .shadowRoot!.querySelector("wt-form-error-summary")!
-      .shadowRoot!.querySelector("[role=alert]")?.textContent;
-    expect(banner).toContain(codeMessage("password.invalid", "es-ES"));
-    expect(banner).not.toContain("password.invalid");
+    const message =
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=password]")!.error;
+    expect(message).toContain(codeMessage("password.invalid", "es-ES"));
+    expect(message).not.toContain("password.invalid");
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("reads the email first, then the password chosen as another way", async () => {
@@ -1128,19 +1118,16 @@ describe("login-screen", () => {
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
       await flush(el);
-      const errors = () =>
-        el
-          .shadowRoot!.querySelector("wt-form-error-summary")!
-          .shadowRoot!.querySelector('[role="alert"]');
-      expect(errors()).not.toBeNull();
+      const errors = () => bottomOf(el);
+      expect(await errors()).not.toBe("");
 
       el.shadowRoot!.querySelector<HTMLElement>("[data-test=change-account]")!.click();
       await el.updateComplete;
-      expect(errors()).toBeNull();
+      expect(await errors()).toBe("");
       expect(el.shadowRoot!.querySelector("wt-input")!.name).toBe("email");
       expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("");
       await openPassword(el);
-      expect(errors()).toBeNull();
+      expect(await errors()).toBe("");
       expect(el.shadowRoot!.querySelector("wt-input")!.error).toBe("");
       expect(el.shadowRoot!.querySelector("wt-input")!.value).toBe("");
     },
@@ -1530,12 +1517,6 @@ function field(el: LoginScreen, name: string): WtInput {
   return el.shadowRoot!.querySelector<WtInput>(`wt-input[name=${name}]`)!;
 }
 
-function summaryErrors(el: LoginScreen): readonly string[] {
-  return el.shadowRoot!.querySelector<HTMLElement & { errors: readonly string[] }>(
-    "wt-form-error-summary",
-  )!.errors;
-}
-
 /** Presses Enter in a field's native input, the way a keyboard does (the event starts inside the
  * field's own shadow root). */
 function pressEnter(el: LoginScreen, name: string): void {
@@ -1599,7 +1580,7 @@ describe("login-screen: Google configuration", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(field(el, "password")).not.toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=google-login]")).toBeNull();
-      expect(summaryErrors(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
       window.removeEventListener("unhandledrejection", unhandled);
@@ -1666,7 +1647,7 @@ describe("login-screen: Google configuration", () => {
     click(el, "google-login");
     await flush(el);
     expect(navigate).not.toHaveBeenCalled();
-    expect(summaryErrors(el)).toEqual([codeMessage("google.invalid")]);
+    expect(await bottomOf(el)).toBe(codeMessage("google.invalid"));
     expect(field(el, "password")).not.toBeNull();
   });
 });
@@ -1790,7 +1771,7 @@ describe("login-screen: emailed account links", () => {
     });
     click(el, "resend-account-link");
     await flush(el);
-    expect(summaryErrors(el)).toEqual([codeMessage("account_action.rate_limited")]);
+    expect(await bottomOf(el)).toBe(codeMessage("account_action.rate_limited"));
     expect(el.shadowRoot!.textContent).not.toContain(t("account.link_resent"));
   });
 
@@ -1811,10 +1792,7 @@ describe("login-screen: emailed account links", () => {
     expect(api.completeAccountAction).not.toHaveBeenCalled();
     expect(field(el, "new-password").error).toBe(codeMessage("password.too_short"));
     expect(field(el, "new-pin").error).toBe(codeMessage("pin.too_short"));
-    expect(summaryErrors(el)).toEqual([
-      codeMessage("password.too_short"),
-      codeMessage("pin.too_short"),
-    ]);
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   });
 
   it("completes an account once when Set password is pressed twice", async () => {
@@ -1850,9 +1828,14 @@ describe("login-screen: emailed account links", () => {
   });
 
   it.each([
-    ["beside the new password", "password.too_short", codeMessage("password.too_short")],
-    ["only in the summary", "account_action.invalid", ""],
-  ])("shows a refused completion %s", async (_where, code, fieldError) => {
+    [
+      "beside the new password",
+      "password.too_short",
+      codeMessage("password.too_short"),
+      t("form.fix_fields"),
+    ],
+    ["only beside the action", "account_action.invalid", "", codeMessage("account_action.invalid")],
+  ])("shows a refused completion %s", async (_where, code, fieldError, bottom) => {
     const { el } = await mountValidatedInvitation({
       completeAccountAction: vi.fn().mockRejectedValue({ code }),
     });
@@ -1861,7 +1844,7 @@ describe("login-screen: emailed account links", () => {
     click(el, "complete-account");
     await flush(el);
     expect(field(el, "new-password").error).toBe(fieldError);
-    expect(summaryErrors(el)).toContain(codeMessage(code));
+    expect(await bottomOf(el)).toBe(bottom);
   });
 });
 
@@ -2024,7 +2007,7 @@ describe("login-screen: password reset by email", () => {
     await openPassword(el);
     click(el, "reset-by-email");
     await flush(el);
-    expect(summaryErrors(el)).toEqual([codeMessage("account_action.rate_limited")]);
+    expect(await bottomOf(el)).toBe(codeMessage("account_action.rate_limited"));
     expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")).toBeNull();
     expect(field(el, "password")).not.toBeNull();
   });
@@ -2055,8 +2038,8 @@ describe("login-screen: the passkey offer after sign-in", () => {
       new DOMException("Authenticator failed", "UnknownError"),
     );
     click(el, "setup-passkey");
-    await vi.waitFor(() =>
-      expect(summaryErrors(el)).toEqual([codeMessage("passkey.verification_failed")]),
+    await vi.waitFor(async () =>
+      expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed")),
     );
     expect(el.shadowRoot!.querySelector("[data-test=setup-passkey]")).not.toBeNull();
   });
@@ -2126,7 +2109,7 @@ describe("login-screen: the passkey offer after sign-in", () => {
     await whileDetached(el, () =>
       created.reject(new DOMException("Authenticator failed", "UnknownError")),
     );
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
   });
 });
 
@@ -2192,7 +2175,7 @@ describe("login-screen: signing in with a passkey", () => {
     click(el, "passkey-login");
     await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
     await whileDetached(el, () => verified.reject({ code: "connection.failed" }));
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
   });
 
   it("returns to the password without an error when the passkey prompt is aborted", async () => {
@@ -2204,7 +2187,7 @@ describe("login-screen: signing in with a passkey", () => {
     click(el, "passkey-login");
     await flush(el);
     expect(field(el, "password")).not.toBeNull();
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
   });
 });
 
@@ -2239,7 +2222,7 @@ describe("login-screen: passkey autofill on the email step", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(conditionalMediationAvailable).toHaveBeenCalled();
       expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
-      expect(summaryErrors(el)).toEqual([]);
+      expect(await bottomOf(el)).toBe("");
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
       window.removeEventListener("unhandledrejection", unhandled);
@@ -2295,7 +2278,7 @@ describe("login-screen: passkey autofill on the email step", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
     await flush(el);
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
     expect(field(el, "email")).not.toBeNull();
   });
 
@@ -2312,6 +2295,303 @@ describe("login-screen: passkey autofill on the email step", () => {
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
     await vi.waitFor(() => expect(api.passkeyAuthVerify).toHaveBeenCalled());
     await whileDetached(el, () => verified.reject({ code: "connection.failed" }));
-    expect(summaryErrors(el)).toEqual([]);
+    expect(await bottomOf(el)).toBe("");
+  });
+});
+
+describe("login-screen: errors beside the action, not above the form", () => {
+  type Form = {
+    name: string;
+    open: () => Promise<LoginScreen>;
+    field: string;
+    action: string;
+    bad: string;
+    good: string;
+    message: string;
+  };
+  const forms: Form[] = [
+    {
+      name: "email",
+      open: async () =>
+        (await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() })).el,
+      field: "email",
+      action: "continue",
+      bad: "",
+      good: "owner@x.com",
+      message: t("form.email_required"),
+    },
+    {
+      name: "password",
+      open: async () => {
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+          api: stubApi(),
+        });
+        await openPassword(el);
+        return el;
+      },
+      field: "password",
+      action: "submit",
+      bad: "",
+      good: "correct horse",
+      message: t("form.password_required"),
+    },
+    {
+      name: "authenticator code",
+      open: async () =>
+        (
+          await signInWithPassword({
+            login: vi
+              .fn()
+              .mockRejectedValueOnce({ code: "totp.required" })
+              .mockImplementation(never),
+          })
+        ).el,
+      field: "one-time-code",
+      action: "submit-factor",
+      bad: "",
+      good: "123456",
+      message: t("form.factor_required"),
+    },
+    {
+      name: "passkey offer",
+      open: async () => (await mountPasskeyOffer({ passkeyRegisterOptions: vi.fn(never) })).el,
+      field: "passkey-name",
+      action: "setup-passkey",
+      bad: "x".repeat(81),
+      good: "Laptop",
+      message: t("profile.passkey_name_too_long"),
+    },
+    {
+      name: "account setup",
+      open: async () => {
+        history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+          api: stubApi({ completeAccountAction: vi.fn(never) }),
+        });
+        await flush(el);
+        input(el, "new-pin", "4321");
+        return el;
+      },
+      field: "new-password",
+      action: "complete-account",
+      bad: "short",
+      good: "new password",
+      message: codeMessage("password.too_short"),
+    },
+  ];
+  const action = (el: LoginScreen, test: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
+
+  it.each(forms)(
+    "$name: says nothing until submitted, then marks the field, focuses it and waits for it",
+    async (form) => {
+      const el = await form.open();
+      input(el, form.field, form.bad);
+      await el.updateComplete;
+      expect(field(el, form.field).error).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(action(el, form.action).disabled).toBe(false);
+
+      click(el, form.action);
+      await flush(el);
+      expect(field(el, form.field).error).toBe(form.message);
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(action(el, form.action).disabled).toBe(true);
+      expect(field(el, form.field).value).toBe(form.bad);
+      await vi.waitFor(() =>
+        expect(field(el, form.field).shadowRoot!.activeElement).toBe(
+          field(el, form.field).shadowRoot!.querySelector("input"),
+        ),
+      );
+
+      input(el, form.field, form.good);
+      await el.updateComplete;
+      expect(field(el, form.field).error).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(action(el, form.action).disabled).toBe(false);
+
+      input(el, form.field, form.bad);
+      await el.updateComplete;
+      expect(field(el, form.field).error).toBe(form.message);
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(action(el, form.action).disabled).toBe(true);
+    },
+  );
+
+  const refusals = [
+    {
+      name: "a wrong password",
+      open: async () =>
+        (
+          await signInWithPassword({
+            login: vi.fn().mockRejectedValue({ code: "password.invalid" }),
+          })
+        ).el,
+      field: "password",
+      action: "submit",
+      code: "password.invalid",
+    },
+    {
+      name: "a wrong authenticator code",
+      open: async () => {
+        const { el } = await signInWithPassword({
+          login: vi
+            .fn()
+            .mockRejectedValueOnce({ code: "totp.required" })
+            .mockRejectedValue({ code: "totp.invalid" }),
+        });
+        input(el, "one-time-code", "000000");
+        click(el, "submit-factor");
+        await flush(el);
+        return el;
+      },
+      field: "one-time-code",
+      action: "submit-factor",
+      code: "totp.invalid",
+    },
+    {
+      name: "a short new password",
+      open: async () => {
+        history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+          api: stubApi({
+            completeAccountAction: vi.fn().mockRejectedValue({ code: "password.too_short" }),
+          }),
+        });
+        await flush(el);
+        input(el, "new-password", "new password");
+        input(el, "new-pin", "4321");
+        click(el, "complete-account");
+        await flush(el);
+        return el;
+      },
+      field: "new-password",
+      action: "complete-account",
+      code: "password.too_short",
+    },
+  ];
+
+  it.each(refusals)(
+    "$name: shows the refusal under its field, focuses it, and waits until that field changes",
+    async (refusal) => {
+      const el = await refusal.open();
+      expect(field(el, refusal.field).error).toBe(codeMessage(refusal.code));
+      expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+      expect(action(el, refusal.action).disabled).toBe(true);
+      await vi.waitFor(() =>
+        expect(field(el, refusal.field).shadowRoot!.activeElement).toBe(
+          field(el, refusal.field).shadowRoot!.querySelector("input"),
+        ),
+      );
+
+      input(el, refusal.field, "another value");
+      await el.updateComplete;
+      expect(field(el, refusal.field).error).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(action(el, refusal.action).disabled).toBe(false);
+    },
+  );
+
+  it("shows a refused authenticator code during the passkey offer under the code field", async () => {
+    const { el } = await mountPasskeyOffer({
+      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
+    });
+    click(el, "setup-passkey");
+    await flush(el);
+    expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
+    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(action(el, "setup-passkey").disabled).toBe(true);
+    input(el, "one-time-code", "654321");
+    await el.updateComplete;
+    expect(field(el, "one-time-code").error).toBe("");
+    expect(action(el, "setup-passkey").disabled).toBe(false);
+  });
+
+  it.each([
+    ["the password step", "submit", undefined],
+    ["the authenticator code step", "submit-factor", "123456"],
+  ])(
+    "on %s, a refusal naming no field leaves the action working and goes on the next submission",
+    async (_where, test, code) => {
+      const answer = deferred<{ personId: string }>();
+      const login = vi.fn();
+      if (code !== undefined) login.mockRejectedValueOnce({ code: "totp.required" });
+      login.mockRejectedValueOnce({ code: "server.internal" }).mockReturnValue(answer.promise);
+      const { el } = await signInWithPassword({ login });
+      if (code !== undefined) {
+        input(el, "one-time-code", code);
+        click(el, test);
+        await flush(el);
+      }
+      expect(await bottomOf(el)).toBe(codeMessage("server.internal"));
+      expect(action(el, test).disabled).toBe(false);
+      expect([...el.shadowRoot!.querySelectorAll("wt-input")].map((f) => f.error)).toEqual([""]);
+
+      click(el, test);
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe("");
+      answer.resolve({ personId: "p1" });
+      await flush(el);
+    },
+  );
+
+  it("leaves Set password working after a refusal that names no field", async () => {
+    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({
+        completeAccountAction: vi.fn().mockRejectedValue({ code: "account_action.invalid" }),
+      }),
+    });
+    await flush(el);
+    input(el, "new-password", "new password");
+    input(el, "new-pin", "4321");
+    click(el, "complete-account");
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("account_action.invalid"));
+    expect(action(el, "complete-account").disabled).toBe(false);
+  });
+
+  it("leaves Add passkey working after a refusal that names no field", async () => {
+    const { el } = await mountPasskeyOffer({
+      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "passkey.verification_failed" }),
+    });
+    click(el, "setup-passkey");
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("passkey.verification_failed"));
+    expect(action(el, "setup-passkey").disabled).toBe(false);
+  });
+
+  it("shows a refusal and the generic sentence together when a field breaks after it", async () => {
+    const { el } = await signInWithPassword({
+      login: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    });
+    input(el, "password", "");
+    await el.updateComplete;
+    expect(field(el, "password").error).toBe(t("form.password_required"));
+    expect(await bottomOf(el)).toBe(`${codeMessage("server.internal")} ${t("form.fix_fields")}`);
+    expect(action(el, "submit").disabled).toBe(true);
+  });
+
+  it("starts the code step again when going back to the password and on", async () => {
+    const { el } = await signInWithPassword({
+      login: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "totp.required" })
+        .mockRejectedValueOnce({ code: "totp.invalid" })
+        .mockRejectedValueOnce({ code: "totp.required" })
+        .mockImplementation(never),
+    });
+    input(el, "one-time-code", "000000");
+    click(el, "submit-factor");
+    await flush(el);
+    expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
+    click(el, "back-to-password");
+    await el.updateComplete;
+    expect(await bottomOf(el)).toBe("");
+    click(el, "submit");
+    await flush(el);
+    expect(field(el, "one-time-code").error).toBe("");
+    expect(await bottomOf(el)).toBe("");
+    expect(action(el, "submit-factor").disabled).toBe(false);
   });
 });

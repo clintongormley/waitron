@@ -1,12 +1,11 @@
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, submitOnEnter, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-form-error-summary.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { CARD_PROVIDER_PANELS } from "@waitron/dashboard-modules";
 import { centsToDecimal, formatMoney, stringToCents } from "@waitron/shared";
@@ -237,6 +236,9 @@ export class PaymentsScreen extends LitElement {
         color: var(--wt-color-text);
         font: inherit;
       }
+      .bill-outcome select[aria-invalid="true"] {
+        border-color: var(--wt-color-danger);
+      }
     `,
   ];
 
@@ -259,11 +261,12 @@ export class PaymentsScreen extends LitElement {
   @state() private available?: AvailableReader[];
   @state() private listingFailed = false;
   @state() private drafts: Record<string, string> = {};
-  @state() private invalidNames = new Set<string>();
+  /** Discovered readers whose Add has been pressed; their names are checked from then on. */
+  @state() private attemptedNames = new Set<string>();
   @state() private readerFilter = "active";
   @state() private editor: { reader: ReaderRow; mode: "edit" | "details" | "unpair" } | null = null;
   @state() private editName = "";
-  @state() private nameInvalid = false;
+  @state() private editAttempted = false;
   @state() private dialogError: string | null = null;
   @state() private busy = false;
   @state() private refreshing = false;
@@ -287,7 +290,7 @@ export class PaymentsScreen extends LitElement {
   @state() private billOutcome = "";
   @state() private billNote = "";
   @state() private billPin = "";
-  @state() private billInvalid = false;
+  @state() private billAttempted = false;
   @state() private billFormError: string | null = null;
   @state() private billFormErrorText: string | null = null;
   readonly #queries = new DashboardQueries(
@@ -424,7 +427,7 @@ export class PaymentsScreen extends LitElement {
     this.connectingId = null;
     this.available = undefined;
     this.listingFailed = false;
-    this.invalidNames = new Set();
+    this.attemptedNames = new Set();
     this.dialogError = null;
     const version = ++this.#discoveryVersion;
     try {
@@ -450,15 +453,20 @@ export class PaymentsScreen extends LitElement {
     this.addingId = id;
   }
 
+  #nameInvalid(providerRef: string): boolean {
+    return this.attemptedNames.has(providerRef) && !(this.drafts[providerRef] ?? "").trim();
+  }
+
   async #adopt(reader: AvailableReader): Promise<void> {
     if (this.busy) return;
     const name = (this.drafts[reader.providerRef] ?? "").trim();
+    this.attemptedNames = new Set(this.attemptedNames).add(reader.providerRef);
+    this.dialogError = null;
     if (!name) {
-      this.invalidNames = new Set(this.invalidNames).add(reader.providerRef);
+      this.#focusFirstInvalid("[data-test=reader-discovery]");
       return;
     }
     this.busy = true;
-    this.dialogError = null;
     try {
       await this.api.adoptReader({
         providerId: this.discoveringId!,
@@ -479,7 +487,7 @@ export class PaymentsScreen extends LitElement {
     this.#opener = menu.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
     this.editor = { reader, mode };
     this.editName = reader.name;
-    this.nameInvalid = false;
+    this.editAttempted = false;
     this.dialogError = null;
   }
 
@@ -493,12 +501,13 @@ export class PaymentsScreen extends LitElement {
     if (this.busy || this.editor === null) return;
     const { reader, mode } = this.editor;
     const name = this.editName.trim();
+    this.dialogError = null;
+    if (mode === "edit") this.editAttempted = true;
     if (mode === "edit" && !name) {
-      this.nameInvalid = true;
+      this.#focusFirstInvalid("[data-test=reader-editor]");
       return;
     }
     this.busy = true;
-    this.dialogError = null;
     try {
       if (mode === "edit") await this.api.renameReader(reader.id, name);
       else await this.api.unpairReader(reader.id);
@@ -543,7 +552,7 @@ export class PaymentsScreen extends LitElement {
     this.billOutcome = "";
     this.billNote = "";
     this.billPin = "";
-    this.billInvalid = false;
+    this.billAttempted = false;
     this.billFormError = null;
     this.billFormErrorText = null;
   }
@@ -599,13 +608,14 @@ export class PaymentsScreen extends LitElement {
     const outcome = this.billOutcome;
     const note = this.billNote.trim();
     const pin = this.billPin;
+    this.billAttempted = true;
+    this.billFormError = null;
+    this.billFormErrorText = null;
     if (!outcome || !note || !pin) {
-      this.billInvalid = true;
+      this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
       return;
     }
     this.billBusy = true;
-    this.billFormError = null;
-    this.billFormErrorText = null;
     try {
       const target = action.target;
       const answer =
@@ -648,6 +658,30 @@ export class PaymentsScreen extends LitElement {
     } finally {
       this.billBusy = false;
     }
+    if (this.#billPinRefused()) this.#focusFirstInvalid("[data-test=bill-attest-dialog]");
+  }
+
+  #billPinRefused(): boolean {
+    return this.billFormError === "pin.invalid" || this.billFormError === "pin.throttled";
+  }
+
+  /** The attestation's field messages: its own checks once submitted, and a refused PIN. */
+  #billFieldErrors(): Partial<Record<"outcome" | "note" | "pin", string>> {
+    const errors: Partial<Record<"outcome" | "note" | "pin", string>> = {};
+    if (this.billAttempted && !this.billOutcome)
+      errors.outcome = t("payments.bill.outcome_required");
+    if (this.billAttempted && !this.billNote.trim()) errors.note = t("payments.bill.note_required");
+    if (this.#billPinRefused()) errors.pin = codeMessage(this.billFormError!);
+    else if (this.billAttempted && !this.billPin) errors.pin = t("payments.bill.pin_required");
+    return errors;
+  }
+
+  /** Once the dialog has rendered its field messages, focuses the first invalid field in it. */
+  #focusFirstInvalid(dialog: string): void {
+    void this.updateComplete.then(() => {
+      const root = this.shadowRoot!.querySelector(dialog);
+      if (root) void focusFirstInvalid(root);
+    });
   }
 
   #billProviderState(state: string | null): string {
@@ -803,11 +837,12 @@ export class PaymentsScreen extends LitElement {
         </wt-form-actions>
       </wt-dialog>`;
     const payment = action.target.kind === "payment";
-    const outcomeMissing = this.billInvalid && !this.billOutcome;
-    const noteMissing = this.billInvalid && !this.billNote.trim();
-    const pinMissing = this.billInvalid && !this.billPin;
-    const pinRefused =
-      this.billFormError === "pin.invalid" || this.billFormError === "pin.throttled";
+    const errors = this.#billFieldErrors();
+    const invalid = Object.keys(errors).length > 0;
+    const bottom = [
+      ...(this.billFormError && !this.#billPinRefused() ? [this.billFormErrorText] : []),
+      ...(invalid ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-dialog
       data-test="bill-attest-dialog"
       .open=${true}
@@ -820,21 +855,14 @@ export class PaymentsScreen extends LitElement {
       <p>
         ${t("payments.bill.attest_body").replace("{order}", this.#billOrder(action.target.row))}
       </p>
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${[
-          ...(outcomeMissing ? [t("payments.bill.outcome_required")] : []),
-          ...(noteMissing ? [t("payments.bill.note_required")] : []),
-          ...(pinMissing ? [t("payments.bill.pin_required")] : []),
-        ]}
-      ></wt-form-error-summary>
-      ${this.billFormError && !pinRefused ? html`<p role="alert" class="error">${this.billFormErrorText}</p>` : nothing}
       <label class="bill-outcome"
         >${t("payments.bill.outcome")} *
         <select
           name="outcome"
           required
           data-test="bill-attest-outcome"
+          aria-invalid=${errors.outcome ? "true" : "false"}
+          aria-describedby=${errors.outcome ? "bill-outcome-error" : nothing}
           .value=${this.billOutcome}
           ?disabled=${this.billBusy}
           @change=${(event: Event) => {
@@ -850,14 +878,14 @@ export class PaymentsScreen extends LitElement {
           </option>
         </select>
       </label>
-      ${outcomeMissing ? html`<p class="error" role="alert" data-test="bill-outcome-error">${t("payments.bill.outcome_required")}</p>` : nothing}
+      ${errors.outcome ? html`<p class="error" id="bill-outcome-error" data-test="bill-outcome-error">${errors.outcome}</p>` : nothing}
       <wt-input
         name="note"
         required
         data-test="bill-attest-note"
         label=${t("payments.bill.note")}
         .value=${this.billNote}
-        .error=${noteMissing ? t("payments.bill.note_required") : ""}
+        .error=${errors.note ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           this.billNote = event.detail.value;
@@ -871,15 +899,17 @@ export class PaymentsScreen extends LitElement {
         data-test="bill-attest-pin"
         label=${t("payments.bill.pin")}
         .value=${this.billPin}
-        .error=${pinRefused ? codeMessage(this.billFormError!) : pinMissing ? t("payments.bill.pin_required") : ""}
+        .error=${errors.pin ?? ""}
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           this.billPin = event.detail.value;
-          this.billFormError = null;
-          this.billFormErrorText = null;
+          if (this.#billPinRefused()) {
+            this.billFormError = null;
+            this.billFormErrorText = null;
+          }
         }}
       ></wt-input>
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
           slot="cancel"
           variant="secondary"
@@ -892,6 +922,7 @@ export class PaymentsScreen extends LitElement {
         <wt-button
           data-test="confirm-bill-attest"
           ?loading=${this.billBusy}
+          ?disabled=${invalid}
           @click=${() => void this.#attestBill()}
           >${t("payments.bill.attest")}</wt-button
         >
@@ -1222,6 +1253,13 @@ export class PaymentsScreen extends LitElement {
 
   #renderDiscovery(): TemplateResult | typeof nothing {
     if (this.discoveringId === null) return nothing;
+    const invalid = (this.available ?? []).some(
+      (reader) => reader.status !== "added" && this.#nameInvalid(reader.providerRef),
+    );
+    const bottom = [
+      ...(this.dialogError ? [codeMessage(this.dialogError)] : []),
+      ...(invalid ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-dialog
       data-test="reader-discovery"
       .open=${true}
@@ -1231,11 +1269,6 @@ export class PaymentsScreen extends LitElement {
       <p>
         ${t("payments.discovery_intro").replace("{provider}", this.#providerName(this.discoveringId))}
       </p>
-      ${this.dialogError ? html`<p class="error" role="alert">${codeMessage(this.dialogError)}</p>` : nothing}
-      <wt-form-error-summary
-        heading=${t("form.error_heading")}
-        .errors=${this.invalidNames.size ? [t("payments.name_required")] : []}
-      ></wt-form-error-summary>
       ${
         this.listingFailed
           ? html`<p role="status">${t("payments.discovery_failed")}</p>`
@@ -1256,7 +1289,7 @@ export class PaymentsScreen extends LitElement {
                                 label=${t("payments.reader_col_name")}
                                 data-test=${`name-${reader.providerRef}`}
                                 .value=${this.drafts[reader.providerRef] ?? reader.name}
-                                .error=${this.invalidNames.has(reader.providerRef) ? t("payments.name_required") : ""}
+                                .error=${this.#nameInvalid(reader.providerRef) ? t("payments.name_required") : ""}
                                 ?disabled=${this.busy}
                                 @keydown=${(event: KeyboardEvent) => submitOnEnter(event, (event.currentTarget as HTMLElement).closest(".discovery-row")!.querySelector("wt-button"))}
                                 @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -1264,9 +1297,6 @@ export class PaymentsScreen extends LitElement {
                                     ...this.drafts,
                                     [reader.providerRef]: event.detail.value,
                                   };
-                                  const errors = new Set(this.invalidNames);
-                                  errors.delete(reader.providerRef);
-                                  this.invalidNames = errors;
                                 }}
                               ></wt-input>`
                         }
@@ -1279,7 +1309,7 @@ export class PaymentsScreen extends LitElement {
                           ? nothing
                           : html`<wt-button
                               data-test=${`adopt-${reader.providerRef}`}
-                              ?disabled=${this.busy}
+                              ?disabled=${this.busy || this.#nameInvalid(reader.providerRef)}
                               @click=${() => void this.#adopt(reader)}
                               >${t(reader.status === "disabled" ? "payments.add_again" : "action.add")}</wt-button
                             >`
@@ -1288,7 +1318,7 @@ export class PaymentsScreen extends LitElement {
                 )
       }
       <p>${t("payments.pair_hint")}</p>
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
           slot="cancel"
           variant="secondary"
@@ -1328,33 +1358,32 @@ export class PaymentsScreen extends LitElement {
             [t("payments.serial"), status.serial],
           ].filter(([, value]) => value !== undefined)
         : [];
+    const invalid = mode === "edit" && this.editAttempted && !this.editName.trim();
+    const bottom = [
+      ...(this.dialogError ? [codeMessage(this.dialogError)] : []),
+      ...(invalid ? [t("form.fix_fields")] : []),
+    ].join(" ");
     return html`<wt-dialog
       data-test="reader-editor"
       .open=${true}
       heading=${`${heading}: ${reader.name}`}
       @wt-close=${() => void this.#closeEditor()}
     >
-      ${this.dialogError ? html`<p class="error" role="alert">${codeMessage(this.dialogError)}</p>` : nothing}
       ${
         mode === "edit"
-          ? html` <wt-form-error-summary
-                heading=${t("form.error_heading")}
-                .errors=${this.nameInvalid ? [t("payments.name_required")] : []}
-              ></wt-form-error-summary>
-              <wt-input
-                name="reader-name"
-                required
-                data-test="edit-reader-name"
-                label=${t("payments.reader_col_name")}
-                .value=${this.editName}
-                .error=${this.nameInvalid ? t("payments.name_required") : ""}
-                ?disabled=${this.busy}
-                @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=save-reader]"))}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  this.editName = event.detail.value;
-                  this.nameInvalid = false;
-                }}
-              ></wt-input>`
+          ? html`<wt-input
+              name="reader-name"
+              required
+              data-test="edit-reader-name"
+              label=${t("payments.reader_col_name")}
+              .value=${this.editName}
+              .error=${invalid ? t("payments.name_required") : ""}
+              ?disabled=${this.busy}
+              @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.renderRoot.querySelector("[data-test=save-reader]"))}
+              @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                this.editName = event.detail.value;
+              }}
+            ></wt-input>`
           : mode === "unpair"
             ? html`<p>${t("payments.unpair_warning")}</p>`
             : html`<p>${this.#statusText(reader)}</p>
@@ -1370,7 +1399,7 @@ export class PaymentsScreen extends LitElement {
                     : html`<p>${t("payments.details_empty")}</p>`
                 }`
       }
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
           slot="cancel"
           variant="secondary"
@@ -1383,7 +1412,7 @@ export class PaymentsScreen extends LitElement {
             ? nothing
             : html`<wt-button
                 data-test=${mode === "edit" ? "save-reader" : "confirm-unpair"}
-                ?disabled=${this.busy}
+                ?disabled=${this.busy || invalid}
                 @click=${() => void this.#saveEditor()}
                 >${mode === "edit" ? t("action.save") : unpair}</wt-button
               >`

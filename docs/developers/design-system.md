@@ -244,7 +244,7 @@ this floor — removing the `min-width` regresses that guard.
 
 | Element | Properties | Events |
 | --- | --- | --- |
-| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded` (these three forwarded to the inner `<button>`) | native `click` |
+| `wt-button` | `variant` (`primary`\|`secondary`\|`danger`\|`ghost`), `size` (`sm`\|`md`\|`lg`), `shape` (`default`\|`round`), `disabled`, `loading`, `aria-label`, `aria-haspopup`, `aria-expanded`, `aria-invalid` (these four forwarded to the inner `<button>`) | native `click` |
 | `wt-icon` | `name`, `size` (`sm`\|`md`\|`lg`) | — |
 | `wt-spinner` | `size` (`sm`\|`md`\|`lg`), `label` (the status region's accessible name), `decorative` | — |
 | `wt-card` | `raised`; default slot (body), `header` slot | — |
@@ -258,8 +258,8 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-switch` | `checked`, `disabled`, `label`, `name`, `hide-label` (hides the drawn text while keeping `label` as the native switch's default accessible name), `accessible-name` (overrides the native switch's accessible name, for a row-specific name in a table whose column heading supplies the action). The drawn label is the `label` part, so a host can hide the text in one case only (the extras list form does on a phone) while the switch keeps its name. Its baseline is its label's text, so a row aligned by baseline lines the label up | `wt-change` — `detail: { checked: boolean }` |
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
-| `wt-form-error-summary` | `heading`, `errors` | — |
-| `wt-form-actions` | `cancel`, `secondary`, and default slots | — |
+| `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); it stays until the forms not yet moved to the bottom message are — listed in `docs/backlog.md` | — |
+| `wt-form-actions` | `error` (the form's one message about a failed submission: shown beside the primary action, announced as an alert, painted `--wt-color-danger`; on a narrow row it wraps onto its own line above the actions); `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
@@ -576,15 +576,32 @@ worse than no property at all. Full form association via `ElementInternals`
 if a screen needs form-like behaviour, wire it up in JS: listen for `wt-change` on each field and
 call your own submit handler on the triggering `wt-button`'s `click` event.
 
-Do not disable the primary action merely because a required field is empty. The operator needs to
-be able to press it and learn what is wrong. On an invalid submission:
+A form says nothing about errors until the operator first presses its primary action (owner rule,
+2026-09-28). There is no error summary at the top of a form: it makes the page jump when it clears.
 
 - mark every required field with `required`; `wt-input` renders the visible asterisk and forwards
   the native constraint;
-- pass a plain-language sentence to each invalid field's `error` property;
-- pass the same sentences to `wt-form-error-summary`, with a localized heading equivalent to
-  “There is a problem with this form”;
-- keep the entered values so the operator can correct them.
+- the primary action works until the first submission. If that submission is invalid, pass a
+  plain-language sentence to each invalid field's `error` property, pass ONE localized sentence to
+  `wt-form-actions`'s `error` property (it shows beside the primary action and is announced), move
+  focus to the first invalid field with `focusFirstInvalid(form)`, passing the shadow root when it
+  holds only the form, and the form or dialog element when the shadow root holds more (a table,
+  other panels), so focus cannot land on a marked control elsewhere on the page, and keep the
+  entered values;
+- from then on the form re-checks itself on every change: a fixed field loses its message, a field
+  broken again gets it back, and the primary action stays disabled while any field still has one.
+  When the last one is fixed, the action works again and the bottom message goes;
+- a refusal from the server that names a field shows under that field and counts as that field's
+  error until the operator changes the field. A refusal that names no field the form shows (a
+  network failure, a conflict, a field in a language the form does not show) goes in the bottom
+  message and does NOT disable the action — nothing in the form can fix it, so the operator must be
+  able to try again. It goes when the operator submits again;
+- the bottom message is the refusal's own sentence when there is one; otherwise the form's generic
+  sentence, equivalent to "Correct the highlighted fields to continue." Both show, one after the
+  other, when a refusal and field errors meet;
+- a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission, so the
+  focus lands on the field;
+- reopening or resetting a form starts it again: no messages, the action enabled.
 
 Give every field an explicit semantic `name`. Use the standard autocomplete purposes where they
 exist: `username` for a login email, `current-password` for a login password, and `new-password`
@@ -603,10 +620,6 @@ it stays on the bottom left. A secondary action that belongs beside the primary 
 
 ```ts
 html`
-  <wt-form-error-summary
-    heading=${t("form.error_heading")}
-    .errors=${errors}
-  ></wt-form-error-summary>
   <wt-input
     name="email"
     autocomplete="username"
@@ -614,9 +627,11 @@ html`
     label=${t("login.email")}
     error=${emailError}
   ></wt-input>
-  <wt-form-actions>
+  <wt-form-actions .error=${bottomMessage}>
     <wt-button slot="cancel" variant="secondary">${t("action.cancel")}</wt-button>
-    <wt-button variant="primary">${t("action.continue")}</wt-button>
+    <wt-button variant="primary" ?disabled=${attempted && hasFieldErrors}>
+      ${t("action.continue")}
+    </wt-button>
   </wt-form-actions>
 `;
 ```
@@ -706,8 +721,8 @@ When it opens, one rounded border encloses the body and the heading sits across 
 legend, so the fields and their title read as one section.
 
 The body is a plain default slot, so the section's content is ordinary form markup and every rule
-under "Forms" above still applies inside it — including the error summary, which stays at the top of
-the whole form and lists problems from folded sections too.
+under "Forms" above still applies inside it — including opening a folded section that holds an
+invalid field when a submission fails.
 
 Two notes on the primitives this pattern uses, both in the table above:
 
