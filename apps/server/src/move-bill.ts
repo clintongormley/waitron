@@ -330,8 +330,9 @@ async function adoptZone(
   } else {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, billId, zoneId);
   }
-  // Within table service a later course's dishes wait for their course, which `fireLines`, judging
-  // the earliest course from this bill alone, would send.
+  // Within table service a later course's dishes wait for their course. `fireLines` judges the
+  // earliest course from this bill's ticket items and the lines it is given, and a no-preparation
+  // dish leaves no ticket item, so it would send one waiting for a later course.
   if ((previous?.serviceMode ?? cfg.orderFlow) === "table_tab") return;
   if ((await VENUE_SERVICE.findOrderContext(tx, cfg, billId))!.serviceMode !== "table_tab") return;
   const unsent = await unsentDishLines(tx, billId);

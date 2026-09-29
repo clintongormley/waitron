@@ -1228,7 +1228,7 @@ async function finalizeRecovery(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
-    // A placed order was fired when it was placed; an open one's unsent dishes go now.
+    // A placed order was fired when it was placed; an open pay-first one's unsent dishes go now.
     if (locked?.status === "open") {
       await firePrepayOrder(tx, cfg, req.id);
     }

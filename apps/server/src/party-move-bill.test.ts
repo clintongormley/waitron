@@ -318,7 +318,7 @@ describe("move a bill to another party (after Split a table, or guests joining)"
   });
 
   // Two service modes send a dish at different times, so a move merges only bills of one service
-  // mode, and never refuses.
+  // mode, and never refuses because two bills' modes differ.
   it("keeps both bills when the receiving main bill is in another service mode, though both are untouched", async () => {
     const mesa = await v.table("Mesa modos 2");
     const ana = await seat(v, await v.table("Mesa modos 1"));
@@ -985,7 +985,6 @@ describe("the dishes of an open bill moved between service modes", () => {
     await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
 
     expect((await lineRows(ana.tabId))[1]!.sentAt).toBeNull();
-    expect(await ticketsOf(ana.tabId)).toEqual([]);
   });
 });
 

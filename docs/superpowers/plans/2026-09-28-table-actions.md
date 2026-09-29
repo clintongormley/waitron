@@ -511,6 +511,8 @@ flagged for the owner in their PRs.**
     form ONE new fired group, and its unsent dishes with no group form ONE new held group. Both are
     appended after the party's last group, so the pass can mark them Ready and Away and the waiter
     can release the unsent ones.
+    - (2026-09-29: Task 7 changed which arriving dishes are sent; see the dated note before Task
+      9's Step 1.)
 - **P17. MOVED notices.** Before a table action, read the sent work of every bill of every party
   whose tables will change. Afterwards, call today's `enqueueMovedSlips` for each of those bills, and
   for the moved bill after a bill move. The per-bill label comparison stays, so only dishes whose
@@ -3400,6 +3402,13 @@ group, so the pass renders no Ready or Away lever for them (`till-expo-screen.ts
   - Decide from what you read: a dish is SENT when it has a ticket item whose `fired_at` is set;
     otherwise it is unsent. If the code marks sent differently on the `main` you start from (for
     example, `sent_at` alone), use that, and record it in the ledger.
+
+- (2026-09-29, Task 7: an open counter order moved into a table-service party from another service
+  mode has its unsent dishes given to the kitchen at the move, as a round is, so it arrives sent
+  apart from a later course's dish, which is held for its course; and a table bill leaving a party
+  can carry a dish waiting for a later course, unsent — held for its course, or, for a
+  no-preparation dish, with no ticket item at all. Re-derive this list before writing Task 9's
+  tests.)
 
 - [ ] **Step 1: Write the failing tests.**
   ```ts
