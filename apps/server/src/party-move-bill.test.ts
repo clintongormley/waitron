@@ -172,6 +172,14 @@ async function snapshot(partyIds: string[], billIds: string[], tableIds: string[
   return { parties: read, bills, tables };
 }
 
+/** The id of the party's last group: where a bill of sent dishes arriving in it lands (Task 9). */
+function lastGroupOf(partyId: string): string {
+  const [row] = v.db.all<{ id: string }>(
+    sql`select id from order_groups where party_id = ${partyId} order by position desc limit 1`,
+  );
+  return row!.id;
+}
+
 function noticesOn(billIds: string[]) {
   return v.db.all<{ working_order_id: string; kind: string; line_name: string; moved_to: string }>(
     sql`
@@ -239,7 +247,9 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     const row = await billRow(v, checkId);
     expect(row.partyId).toBe(luis.partyId);
     expect(row.status).toBe("open");
-    expect(await linesOf(v, checkId)).toEqual(linesBefore);
+    expect(await linesOf(v, checkId)).toEqual(
+      linesBefore.map((l) => ({ ...l, groupId: lastGroupOf(luis.partyId) })),
+    );
     expect(linesBefore.map((l) => [l.name, l.unitPriceGross, l.vatClass])).toEqual([
       ["Vino", 3000, "general"],
     ]);
@@ -680,7 +690,7 @@ describe("the main bill", () => {
 });
 
 describe("kitchen groups when a bill leaves its party", () => {
-  it("takes sent dishes out of their group, keeping their preparation and service state", async () => {
+  it("takes sent dishes out of their group into one of the receiving party's, keeping their preparation and service state", async () => {
     const ana = await seat(v, await v.table("Mesa grupo A"));
     const luisTable = await v.table("Mesa grupo L");
     await seat(v, luisTable);
@@ -710,7 +720,8 @@ describe("kitchen groups when a bill leaves its party", () => {
 
     await move(second, { tableId: luisTable }, { bills: "separate" });
 
-    expect(await lineRows(second)).toEqual(linesBefore.map((line) => ({ ...line, groupId: null })));
+    const groupId = lastGroupOf((await partyAt(v, luisTable))!);
+    expect(await lineRows(second)).toEqual(linesBefore.map((line) => ({ ...line, groupId })));
     expect(await ticketsOf(second)).toEqual(ticketsBefore);
   });
 });
@@ -916,10 +927,14 @@ describe("the service area of a moved bill", () => {
       status: "placed",
     });
     expect(await zoneOf(v, placed)).toBe(invoiceFirstZone);
-    expect(await lineRows(placed)).toEqual(linesBefore);
+    expect(await lineRows(placed)).toEqual(
+      linesBefore.map((line) => ({ ...line, groupId: lastGroupOf(ana.partyId) })),
+    );
     const error = await captureError(() => orderForParty(v, ana.partyId, ["Flan"], placed));
     expect(error).toMatchObject({ code: "bill.presented", params: { workingOrderId: placed } });
-    expect(await lineRows(placed)).toEqual(linesBefore);
+    expect(await lineRows(placed)).toEqual(
+      linesBefore.map((line) => ({ ...line, groupId: lastGroupOf(ana.partyId) })),
+    );
     expect((await partyRow(v, ana.partyId)).mainBillId).toBe(ana.tabId);
   });
 });
@@ -1078,7 +1093,7 @@ describe("a presented party bill leaves its party", () => {
     return { ana, second, lines, tickets: await ticketsOf(second) };
   }
 
-  it("keeps it presented, with every line's contents and its zone, outside any group, at another party", async () => {
+  it("keeps it presented, with every line's contents and its zone, at another party", async () => {
     const { second, lines, tickets } = await presentedSplit("Mesa presentada 2");
     const luisTable = await v.table("Terraza presentada 2", terrazaZone);
     const luis = await seat(v, luisTable);
@@ -1087,7 +1102,8 @@ describe("a presented party bill leaves its party", () => {
 
     expect(result).toEqual({ partyId: luis.partyId, billId: second, merged: false });
     expect((await billRow(v, second)).status).toBe("placed");
-    expect(await lineRows(second)).toEqual(lines.map((line) => ({ ...line, groupId: null })));
+    const groupId = lastGroupOf(luis.partyId);
+    expect(await lineRows(second)).toEqual(lines.map((line) => ({ ...line, groupId })));
     expect(await ticketsOf(second)).toEqual(tickets);
     expect(await zoneOf(v, second)).toBe(v.tables.zoneId);
     expect((await partyRow(v, luis.partyId)).mainBillId).toBe(luis.tabId);
@@ -1103,7 +1119,8 @@ describe("a presented party bill leaves its party", () => {
     expect(await partyAt(v, libre)).toBe(result.partyId);
     expect((await partyRow(v, result.partyId!)).mainBillId).toBeNull();
     expect((await billRow(v, second)).status).toBe("placed");
-    expect(await lineRows(second)).toEqual(lines.map((line) => ({ ...line, groupId: null })));
+    const groupId = lastGroupOf(result.partyId!);
+    expect(await lineRows(second)).toEqual(lines.map((line) => ({ ...line, groupId })));
     const { tabId } = await orderForParty(v, result.partyId!, ["Flan"]);
     expect(tabId).not.toBe(second);
     expect((await partyRow(v, result.partyId!)).mainBillId).toBe(tabId);

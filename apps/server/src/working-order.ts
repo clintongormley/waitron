@@ -5612,8 +5612,7 @@ export interface ExpoCourse {
 }
 
 /** One group of a seated party's bill on the expo board; the section of lines with no group (moved
- *  in from another party's bill or from a bill with no party) has every group
- *  field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
+ *  in by a tab transfer or an unjoined table) has every group field `null` and sorts first. `fired` and `away` roll up as {@link ExpoCourse}'s do. */
 export interface ExpoGroup {
   groupId: string | null;
   position: number | null;

@@ -2,6 +2,7 @@ import { and, asc, eq, inArray, isNotNull, isNull, ne, notExists, or, sql } from
 import type { SQL } from "drizzle-orm";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
+  kitchenCourses,
   nowIso,
   orderGroupEvents,
   orderGroups,
@@ -1374,4 +1375,84 @@ export async function recordGroupEvent(
   values: typeof orderGroupEvents.$inferInsert,
 ): Promise<void> {
   await tx.insert(orderGroupEvents).values(values);
+}
+
+/**
+ * A bill that has just arrived in the party gets groups for its dishes that have none, so the pass
+ * can mark them and the waiter can release what is unsent: its released dishes ({@link isReleased})
+ * go in one new fired group, and the rest in one new held group per course, because firing a course
+ * releases whole every held group holding one of its dishes on that bill. The groups follow the
+ * party's last one in firing order: fired, then held with no course (which fires earliest), then by
+ * course. An extras line takes its dish's group. The caller has moved the party's revision on.
+ */
+export async function groupArrivingDishes(
+  tx: Transaction,
+  partyId: string,
+  billId: string,
+  operatorId: string,
+): Promise<{ fired: string | null; held: string[] }> {
+  const dishes = await tx
+    .select({
+      id: workingOrderLines.id,
+      courseId: workingOrderLines.courseId,
+      sentAt: workingOrderLines.sentAt,
+      ticketItemId: ticketItems.id,
+      ticketFiredAt: ticketItems.firedAt,
+    })
+    .from(workingOrderLines)
+    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, billId),
+        isNull(workingOrderLines.parentLineId),
+        isNull(workingOrderLines.groupId),
+      ),
+    )
+    .orderBy(
+      sql`${kitchenCourses.displayOrder} asc nulls first`,
+      asc(kitchenCourses.name),
+      asc(workingOrderLines.lineNo),
+    );
+  const released: typeof dishes = [];
+  const heldByCourse = new Map<string | null, typeof dishes>();
+  for (const line of dishes) {
+    if (isReleased({ ...line, groupState: null })) released.push(line);
+    else {
+      const course = heldByCourse.get(line.courseId);
+      if (course === undefined) heldByCourse.set(line.courseId, [line]);
+      else course.push(line);
+    }
+  }
+  const fired = await groupArrived(tx, partyId, billId, released, "fire", operatorId);
+  const held: string[] = [];
+  for (const lines of heldByCourse.values()) {
+    held.push((await groupArrived(tx, partyId, billId, lines, "hold", operatorId))!);
+  }
+  return { fired, held };
+}
+
+async function groupArrived(
+  tx: Transaction,
+  partyId: string,
+  billId: string,
+  lines: readonly { id: string }[],
+  release: GroupRelease,
+  operatorId: string,
+): Promise<string | null> {
+  if (lines.length === 0) return null;
+  const groupId = await startGroup(tx, partyId, release, operatorId);
+  const ids = lines.map((line) => line.id);
+  await tx
+    .update(workingOrderLines)
+    .set({ groupId })
+    .where(or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)));
+  await recordGroupEvent(tx, {
+    partyId,
+    groupId,
+    kind: "lines_moved",
+    actorId: operatorId,
+    detail: { workingOrderId: billId, arrived: true },
+  });
+  return groupId;
 }
