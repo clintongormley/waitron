@@ -3365,7 +3365,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Open points: the move moves the bill's revision on, open or presented, without
     `bumpRevision`'s refusal of money in flight, since a move changes no amount (plan P19). Dishes
     arriving in a party join no group until Task 9.
-  - **Task 8 (branch `feat/party-table-actions`, 2026-09-29): move guests, join tables and split a
+  - **Task 8 DONE (#869, 2026-09-29): move guests, join tables and split a
     table, on the server.** Three new routes, `POST /api/parties/:id/move` (`{ toTableId }`),
     `POST /api/parties/:id/join` (`{ tableId }`) and `POST /api/parties/:id/split-table`
     (`{ tableId, billId }`, the bill null for none), in `apps/server/src/table-actions.ts`. The till
