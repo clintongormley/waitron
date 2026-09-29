@@ -240,14 +240,14 @@ describe("createLinuxDevices — scan()", () => {
 });
 
 describe("createLinuxDevices — pair()", () => {
-  it("delegates to the Bluetooth host", async () => {
+  it("delegates to the Bluetooth host, with the operator's PIN", async () => {
     const pair = vi.fn(async () => ({ ok: true, localKey: "AA:BB:CC:DD:EE:FF" }));
     const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth({ pair }) });
-    expect(await devices.pair("AA:BB:CC:DD:EE:FF")).toEqual({
+    expect(await devices.pair("AA:BB:CC:DD:EE:FF", "1234")).toEqual({
       ok: true,
       localKey: "AA:BB:CC:DD:EE:FF",
     });
-    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF");
+    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
   });
 });
 

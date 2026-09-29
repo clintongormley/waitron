@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createClient } from "./client.js";
+import { createClient, isBluetoothAddress, isBluetoothPin } from "./client.js";
 
 function reply(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -678,5 +678,23 @@ describe("createClient — report", () => {
       ok: false,
       failure: { kind: "unreachable" },
     });
+  });
+});
+
+// The app validates a pair or forget command with these before it spawns bluetoothctl, so the rule
+// the wire decoder applies is the one the child process sees.
+describe("isBluetoothAddress / isBluetoothPin", () => {
+  it("accepts a full address in either case, and nothing shorter, longer or wildcarded", () => {
+    expect(isBluetoothAddress("5A:4A:45:D4:FB:BB")).toBe(true);
+    expect(isBluetoothAddress("5a:4a:45:d4:fb:bb")).toBe(true);
+    for (const bad of ["*", "", "5A:4A:45:D4:FB", "5A:4A:45:D4:FB:BB:CC", "5A-4A-45-D4-FB-BB"])
+      expect(isBluetoothAddress(bad)).toBe(false);
+  });
+
+  it("accepts 1 to 16 printable ASCII characters and refuses a space, a newline or 17", () => {
+    expect(isBluetoothPin("0")).toBe(true);
+    expect(isBluetoothPin("~".repeat(16))).toBe(true);
+    for (const bad of ["", "1".repeat(17), "12 34", "1234\n", "12\x7f"])
+      expect(isBluetoothPin(bad)).toBe(false);
   });
 });

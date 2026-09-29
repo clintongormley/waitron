@@ -13,7 +13,7 @@ export type {
   PairedBluetoothDevice,
   VisibleDevice,
 } from "./host.js";
-export { DEFAULT_TIMEOUT_MS, createClient } from "./client.js";
+export { DEFAULT_TIMEOUT_MS, createClient, isBluetoothAddress, isBluetoothPin } from "./client.js";
 export type {
   AgentClient,
   AgentInventory,

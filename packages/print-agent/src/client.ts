@@ -278,6 +278,14 @@ const MAC_PATTERN = /^[0-9A-F]{2}(?::[0-9A-F]{2}){5}$/i;
 // line-oriented child's stdin.
 const PIN_PATTERN = /^[\x21-\x7e]{1,16}$/;
 
+export function isBluetoothAddress(value: string): boolean {
+  return MAC_PATTERN.test(value);
+}
+
+export function isBluetoothPin(value: string): boolean {
+  return PIN_PATTERN.test(value);
+}
+
 /** A malformed command is dropped alone, never failing the reply, so a server newer or older than
  * this agent cannot stop printing. */
 function decodeBluetoothCommands(raw: unknown): BluetoothCommand[] {
@@ -291,12 +299,12 @@ function decodeBluetoothCommands(raw: unknown): BluetoothCommand[] {
       id.length > MAX_COMMAND_ID_LENGTH ||
       (kind !== "pair" && kind !== "forget") ||
       typeof address !== "string" ||
-      !MAC_PATTERN.test(address)
+      !isBluetoothAddress(address)
     )
       continue;
     const command: BluetoothCommand = { id, kind, address: address.toUpperCase() };
     if (kind === "pair" && pin !== undefined) {
-      if (typeof pin !== "string" || !PIN_PATTERN.test(pin)) continue;
+      if (typeof pin !== "string" || !isBluetoothPin(pin)) continue;
       command.pin = pin;
     }
     commands.push(command);

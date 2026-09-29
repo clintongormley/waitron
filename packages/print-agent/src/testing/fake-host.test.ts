@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WireJob } from "../client.js";
 import { FakeSink } from "../transport.js";
 import { fakeHost } from "./fake-host.js";
@@ -98,5 +98,18 @@ describe("fakeHost", () => {
     });
     expect(await told.pairedBluetooth()).toStrictEqual([{ localKey: "AA:BB:CC:DD:EE:FF" }]);
     expect(await told.forgetBluetooth("AA:BB:CC:DD:EE:FF")).toStrictEqual({ ok: true });
+  });
+
+  it("hands an overriding pair the operator's PIN", async () => {
+    const pair = vi.fn(async (mac: string, pin?: string) => ({
+      ok: pin === "1234",
+      localKey: mac,
+    }));
+    const host = fakeHost({ pair });
+    expect(await host.pair("AA:BB:CC:DD:EE:FF", "1234")).toStrictEqual({
+      ok: true,
+      localKey: "AA:BB:CC:DD:EE:FF",
+    });
+    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
   });
 });

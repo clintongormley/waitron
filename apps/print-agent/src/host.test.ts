@@ -227,10 +227,11 @@ describe("createContainerHost — the rest of the seam", () => {
       { transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
     ]);
     expect(devices.scan).toHaveBeenCalledWith(["bluetooth"]);
-    expect(await host.pair("AA:BB:CC:DD:EE:FF")).toEqual({
+    expect(await host.pair("AA:BB:CC:DD:EE:FF", "1234")).toEqual({
       ok: true,
       localKey: "AA:BB:CC:DD:EE:FF",
     });
+    expect(devices.pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
     expect(await host.pairedBluetooth()).toStrictEqual([
       { localKey: "AA:BB:CC:DD:EE:FF", name: "Star" },
     ]);

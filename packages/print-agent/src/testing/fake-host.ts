@@ -26,7 +26,7 @@ export function fakeHost(
     probeNetwork: (targets: NetworkProbe[]) => Promise<DiscoveredDevice[]>;
     markPagePrinters: (devices: DiscoveredDevice[]) => Promise<DiscoveredDevice[]>;
     resolve: (job: WireJob) => Promise<PrinterTarget>;
-    pair: (mac: string) => Promise<PairResult>;
+    pair: (mac: string, pin?: string) => Promise<PairResult>;
     pairedBluetooth: () => Promise<PairedBluetoothDevice[]>;
     forgetBluetooth: (mac: string) => Promise<BluetoothCommandResult>;
     now: () => number;

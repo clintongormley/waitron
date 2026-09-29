@@ -164,8 +164,8 @@ export function createLinuxDevices(
       return found;
     },
 
-    pair(mac): Promise<PairResult> {
-      return bluetooth.pair(mac);
+    pair(mac, pin): Promise<PairResult> {
+      return bluetooth.pair(mac, pin);
     },
 
     async pairedBluetooth(): Promise<PairedBluetoothDevice[]> {

@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,10 +7,9 @@ import {
   createBluetoothctlHost,
   parseBluetoothctlDevices,
   parseBluetoothctlInfo,
-  parsePairResult,
   parseRemoveResult,
 } from "./bluetooth.js";
-import { runBluetoothctl } from "./bluetooth-command.js";
+import { pairWithBluetoothctl, runBluetoothctl } from "./bluetooth-command.js";
 
 // Synthesised in the tool's documented format (ANSI colour codes and \r included), NOT a real
 // capture.
@@ -41,31 +40,6 @@ describe("parseBluetoothctlDevices", () => {
   });
 });
 
-describe("parsePairResult", () => {
-  it("reports success on 'Pairing successful'", () => {
-    const text = "Attempting to pair with AA:BB:CC:DD:EE:FF\r\nPairing successful\r\n";
-    expect(parsePairResult(text, "AA:BB:CC:DD:EE:FF")).toEqual({
-      ok: true,
-      localKey: "AA:BB:CC:DD:EE:FF",
-    });
-  });
-
-  it("reports the failure reason on 'Failed to pair'", () => {
-    const text =
-      "Attempting to pair with AA:BB:CC:DD:EE:FF\r\nFailed to pair: org.bluez.Error.AuthenticationFailed\r\n";
-    expect(parsePairResult(text, "AA:BB:CC:DD:EE:FF")).toEqual({
-      ok: false,
-      error: "org.bluez.Error.AuthenticationFailed",
-    });
-  });
-
-  it("reports a generic failure when neither marker is present", () => {
-    expect(
-      parsePairResult("Device AA:BB:CC:DD:EE:FF not available\r\n", "AA:BB:CC:DD:EE:FF"),
-    ).toEqual({ ok: false, error: "pairing did not complete" });
-  });
-});
-
 describe("createBluetoothctlHost", () => {
   it.each([
     "No default controller available",
@@ -91,14 +65,16 @@ describe("createBluetoothctlHost", () => {
     ]);
   });
 
-  it("pair() bonds via bluetoothctl and decodes the result", async () => {
-    const run = vi.fn<(args: string[]) => Promise<string>>(async () => "Pairing successful\r\n");
-    const host = createBluetoothctlHost({ run });
-    expect(await host.pair("AA:BB:CC:DD:EE:FF")).toEqual({
+  it("pair() hands the address and the PIN to the interactive pairing, never to a one-shot command", async () => {
+    const run = vi.fn<(args: string[]) => Promise<string>>(async () => "");
+    const pair = vi.fn(async (mac: string) => ({ ok: true, localKey: mac }));
+    const host = createBluetoothctlHost({ run, pair });
+    expect(await host.pair("AA:BB:CC:DD:EE:FF", "1234")).toStrictEqual({
       ok: true,
       localKey: "AA:BB:CC:DD:EE:FF",
     });
-    expect(run).toHaveBeenCalledWith(["pair", "AA:BB:CC:DD:EE:FF"]);
+    expect(pair).toHaveBeenCalledWith("AA:BB:CC:DD:EE:FF", "1234");
+    expect(run).not.toHaveBeenCalled();
   });
 
   // bluez 5.82 client/main.c `cmd_devices`: with no controller it prints this line and exits 0.
@@ -379,6 +355,33 @@ describe("createBluetoothctlHost — forget()", () => {
     });
   });
 
+  // bluetoothctl 5.82 `remove *` removes every device BlueZ knows, and `remove ""` prints a
+  // "not available" line this decoder would read as success (READ, client/main.c cmd_remove).
+  it.each(["*", "", "5A:4A:45:D4:FB", "5A-4A-45-D4-FB-BB"])(
+    "refuses the address %j without running bluetoothctl",
+    async (address) => {
+      const run = vi.fn<Run>(async () => "Device has been removed\n");
+      expect(await createBluetoothctlHost({ run }).forget(address)).toStrictEqual({
+        ok: false,
+        error: "not a Bluetooth address",
+      });
+      expect(run).not.toHaveBeenCalled();
+    },
+  );
+
+  // bluez 5.82 client/main.c cmd_remove: with no controller it prints this and exits 1. READ.
+  it("reports a box with no Bluetooth controller by name, not as a failed command", async () => {
+    const run = vi.fn<Run>(async () => {
+      throw Object.assign(new Error(`Command failed: bluetoothctl remove ${MAC}`), {
+        stdout: "No default controller available\n",
+      });
+    });
+    expect(await createBluetoothctlHost({ run }).forget(MAC)).toStrictEqual({
+      ok: false,
+      error: "No default controller available",
+    });
+  });
+
   it("reports the command's own error when it printed nothing, as a kill or a missing binary does", async () => {
     const run = vi.fn<Run>(async () => {
       throw Object.assign(new Error("spawn bluetoothctl ENOENT"), { stdout: "" });
@@ -438,6 +441,73 @@ describe("forget() through the real runBluetoothctl", () => {
     expect(await createBluetoothctlHost({ run: runBluetoothctl }).forget(MAC)).toStrictEqual({
       ok: false,
       error: "org.freedesktop.DBus.Error.AccessDenied",
+    });
+  });
+});
+
+// A stand-in `bluetoothctl` on PATH speaking the measured interactive protocol (research-pin-report.md,
+// "Q2"): prompts with no newline, the PIN echoed back, `quit` read last. It records what it was sent,
+// so the pipes are proven against a real child process and the real `spawn`.
+describe("pair() through the real spawn", () => {
+  const MAC = "86:67:7A:00:00:01";
+  let dir: string;
+  let savedPath: string | undefined;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "print-agent-bt-pair-"));
+    savedPath = process.env.PATH;
+    process.env.PATH = `${dir}${delimiter}${savedPath ?? ""}`;
+    const pad = `\\r%79s\\r`;
+    const prompt = `\\033[0;94m[bluetoothctl]> \\033[0m`;
+    await writeFile(
+      join(dir, "bluetoothctl"),
+      [
+        "#!/bin/sh",
+        `log="${join(dir, "stdin.log")}"`,
+        // Given a command, the real one runs one-shot and registers no agent (research-pin-report Q1a).
+        `if [ "$#" -ne 0 ]; then echo "one-shot $*" > "$log"; exit 1; fi`,
+        `printf 'Waiting to connect to bluetoothd...'`,
+        `printf '${pad}Agent registered\\n${prompt}' ''`,
+        `read -r cmd; echo "$cmd" >> "$log"; echo "$cmd"`,
+        `printf 'Attempting to pair with %s\\n${prompt}' "\${cmd#pair }"`,
+        `printf '${pad}Request PIN code\\n${prompt}\\r\\033[1;39m[agent] Enter PIN code: \\033[0m' ''`,
+        `read -r pin; echo "$pin" >> "$log"; echo "$pin"`,
+        `if [ "$pin" = 1234 ]; then`,
+        `  printf '${pad}Pairing successful\\n${prompt}' ''`,
+        `else`,
+        `  printf '${pad}Failed to pair: org.bluez.Error.AuthenticationFailed\\n${prompt}' ''`,
+        `fi`,
+        `read -r last; echo "$last" >> "$log"`,
+        `exit 0`,
+      ].join("\n"),
+    );
+    await chmod(join(dir, "bluetoothctl"), 0o755);
+  });
+  afterEach(async () => {
+    process.env.PATH = savedPath;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const sent = (): Promise<string> => readFile(join(dir, "stdin.log"), "utf8");
+
+  it("pairs with the right PIN, sending pair, the PIN and quit in that order", async () => {
+    const host = createBluetoothctlHost({ run: runBluetoothctl, pair: pairWithBluetoothctl });
+    expect(await host.pair(MAC, "1234")).toStrictEqual({ ok: true, localKey: MAC });
+    expect(await sent()).toBe(`pair ${MAC}\n1234\nquit\n`);
+  });
+
+  it("reports a wrong PIN, without the PIN in the result", async () => {
+    const outcome = await pairWithBluetoothctl(MAC, "9999");
+    expect(outcome).toStrictEqual({ ok: false, error: "wrong PIN" });
+    expect(await sent()).toBe(`pair ${MAC}\n9999\nquit\n`);
+  });
+
+  it("reports a bluetoothctl that is not installed", async () => {
+    process.env.PATH = dir;
+    await rm(join(dir, "bluetoothctl"));
+    expect(await pairWithBluetoothctl(MAC, "1234")).toStrictEqual({
+      ok: false,
+      error: "spawn bluetoothctl ENOENT",
     });
   });
 });

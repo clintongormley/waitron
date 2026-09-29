@@ -124,8 +124,10 @@ export interface Host {
    * for a local job, mapping its `localKey` to the box's current device path. Throws when the device
    * is gone, so the loop marks the job failed rather than sending nowhere. */
   resolve(job: WireJob): Promise<PrinterTarget>;
-  /** Attempts to pair a Bluetooth printer by MAC, returning its `localKey` on success. */
-  pair(mac: string): Promise<PairResult>;
+  /** Attempts to pair a Bluetooth printer by MAC, returning its `localKey` on success. The PIN is
+   * the operator's, handed over only if the printer asks for one; it never goes into a log line, an
+   * error or the result. */
+  pair(mac: string, pin?: string): Promise<PairResult>;
   /** Every bonded Bluetooth device. Throws when the Bluetooth side cannot be listed. Unlike
    * {@link visibleDevices}, it includes devices no job can be delivered to yet. */
   pairedBluetooth(): Promise<PairedBluetoothDevice[]>;

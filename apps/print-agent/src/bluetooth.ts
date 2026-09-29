@@ -1,10 +1,21 @@
-import type { BluetoothCommandResult, DiscoveredDevice, PairResult } from "@waitron/print-agent";
-import type { BluetoothctlRunOptions } from "./bluetooth-command.js";
+import {
+  type BluetoothCommandResult,
+  type DiscoveredDevice,
+  type PairResult,
+  isBluetoothAddress,
+} from "@waitron/print-agent";
+import {
+  ANSI,
+  type BluetoothctlRunOptions,
+  NOT_AN_ADDRESS,
+  NO_CONTROLLER,
+  pairWithBluetoothctl,
+} from "./bluetooth-command.js";
 
 /**
- * The `devices` and `pair` decoders are tested against fixtures synthesised in `bluetoothctl`'s
- * documented output shape. The `info` and `remove` ones are tested against output recorded on the
- * owner's box (BlueZ 5.82, 2026-09-29), with the synthesised parts marked beside each fixture.
+ * The `devices` decoder is tested against fixtures synthesised in `bluetoothctl`'s documented output
+ * shape. The `info` and `remove` fixtures include values recorded on the owner's box (BlueZ 5.82,
+ * 2026-09-29); the rest of each is synthesised, and marked so beside it.
  */
 
 export interface BluetoothDevice {
@@ -14,7 +25,7 @@ export interface BluetoothDevice {
 
 export interface BluetoothHost {
   scan(): Promise<DiscoveredDevice[]>;
-  pair(mac: string): Promise<PairResult>;
+  pair(mac: string, pin?: string): Promise<PairResult>;
   paired(): Promise<BluetoothDevice[]>;
   forget(mac: string): Promise<BluetoothCommandResult>;
 }
@@ -24,8 +35,6 @@ export interface BluetoothHost {
 export const MAX_BLUETOOTH_INFO_DEVICES = 8;
 
 const DEVICE_LINE = /Device\s+([0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5})(?:\s+(.*))?$/;
-// eslint-disable-next-line no-control-regex -- bluetoothctl colours its output; strip CSI SGR codes.
-const ANSI = /\[[0-9;]*m/g;
 
 /** Assumed, not confirmed against real tool output: with no name known, bluetoothctl prints the MAC
  * in dashes. */
@@ -51,14 +60,6 @@ export function parseBluetoothctlDevices(text: string): BluetoothDevice[] {
     byMac.set(mac, name !== undefined ? { mac, name } : { mac });
   }
   return order.map((mac) => byMac.get(mac)!);
-}
-
-export function parsePairResult(text: string, mac: string): PairResult {
-  const clean = text.replace(ANSI, "");
-  if (/Pairing successful/.test(clean)) return { ok: true, localKey: mac.toUpperCase() };
-  const failed = /Failed to pair:\s*(.+)/.exec(clean);
-  if (failed !== null) return { ok: false, error: failed[1]!.trim() };
-  return { ok: false, error: "pairing did not complete" };
 }
 
 const SERIAL_PORT_UUID = "00001101-0000-1000-8000-00805f9b34fb";
@@ -105,13 +106,12 @@ export function parseRemoveResult(text: string, mac: string): BluetoothCommandRe
   const gone = `DEVICE ${mac.toUpperCase()} NOT AVAILABLE`;
   for (const line of cleanLines(text)) {
     if (line === "Device has been removed" || line.toUpperCase() === gone) return { ok: true };
+    if (line === NO_CONTROLLER) return { ok: false, error: NO_CONTROLLER };
     const failed = /^Failed to remove device:\s*(.+)$/.exec(line);
     if (failed !== null) return { ok: false, error: failed[1]! };
   }
   return { ok: false, error: REMOVAL_INCOMPLETE };
 }
-
-const NO_CONTROLLER = "No default controller available";
 
 /** `scanSeconds` bounds the inquiry, so airtime noise never runs continuously. `listTimeoutMs`
  * kills the paired listing: with the system bus up and no BlueZ on it, bluetoothctl 5.82 was still
@@ -120,10 +120,12 @@ const NO_CONTROLLER = "No default controller available";
  * bluetooth-availability.test.ts). */
 export function createBluetoothctlHost(opts: {
   run: (args: string[], runOpts?: BluetoothctlRunOptions) => Promise<string>;
+  pair?: (mac: string, pin?: string) => Promise<PairResult>;
   scanSeconds?: number;
   listTimeoutMs?: number;
 }): BluetoothHost {
   const scanSeconds = opts.scanSeconds ?? 6;
+  const pair = opts.pair ?? pairWithBluetoothctl;
   const listOpts = opts.listTimeoutMs === undefined ? undefined : { timeoutMs: opts.listTimeoutMs };
   return {
     async scan(): Promise<DiscoveredDevice[]> {
@@ -148,10 +150,11 @@ export function createBluetoothctlHost(opts: {
         };
       });
     },
-    async pair(mac: string): Promise<PairResult> {
-      return parsePairResult(await opts.run(["pair", mac]), mac);
+    pair(mac: string, pin?: string): Promise<PairResult> {
+      return pair(mac, pin);
     },
     async forget(mac: string): Promise<BluetoothCommandResult> {
+      if (!isBluetoothAddress(mac)) return { ok: false, error: NOT_AN_ADDRESS };
       try {
         return parseRemoveResult(await opts.run(["remove", mac]), mac);
       } catch (error) {
