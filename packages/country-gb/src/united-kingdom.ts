@@ -6,7 +6,6 @@ import type { CountryPack } from "@waitron/country";
  */
 export const UNITED_KINGDOM: CountryPack = {
   countryCode: "GB",
-  name: "United Kingdom",
   defaultLocale: "en-GB",
   defaultTimeZone: "Europe/London",
   invoiceLocales: ["en-GB"],

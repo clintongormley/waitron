@@ -15,11 +15,15 @@ describe("installed country packs", () => {
     expect(new Set(COUNTRY_PACKS.map(({ countryCode }) => countryCode)).size).toBe(
       COUNTRY_PACKS.length,
     );
-    expect(getCountryPack(" es ")?.name).toBe("España");
+    expect(getCountryPack(" es ")?.countryCode).toBe("ES");
     expect(getCountryPack("XX")).toBeUndefined();
     expect(VENUE_SETUP_COUNTRY_PACKS.map(({ countryCode }) => countryCode)).toEqual(["ES"]);
-    expect(getVenueSetupCountryPack(" es ")?.name).toBe("España");
+    expect(getVenueSetupCountryPack(" es ")?.countryCode).toBe("ES");
     expect(getVenueSetupCountryPack("GB")).toBeUndefined();
+  });
+
+  it("carries no display name", () => {
+    for (const pack of COUNTRY_PACKS) expect(Object.keys(pack)).not.toContain("name");
   });
 
   it("exposes only supported fiscal territories with complete module selections", () => {

@@ -1004,7 +1004,6 @@ it("refuses a draft country that has no venue-setup pack and derives nothing fro
 
 const SPARSE_PACK: CountryPack = {
   countryCode: "ZZ",
-  name: "Zedland",
   defaultLocale: "zz-ZZ",
   defaultTimeZone: "Etc/GMT-3",
   invoiceLocales: ["zz-ZZ"],
