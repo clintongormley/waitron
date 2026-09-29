@@ -259,6 +259,15 @@ describe("pairWithBluetoothctl — outcomes", () => {
     });
   });
 
+  it("names a D-Bus refusal of the pair call, such as one from the AppArmor profile", async () => {
+    const { child, result } = registered("1234");
+    child.say(event("Failed to pair: org.freedesktop.DBus.Error.AccessDenied"));
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "pairing failed: org.freedesktop.DBus.Error.AccessDenied",
+    });
+  });
+
   // rec0-unknown: bluetoothctl checks its own device list and makes no D-Bus call.
   it("reads an address bluetoothctl does not list as not found, and says to scan", async () => {
     const child = new FakeBluetoothctl();
@@ -398,13 +407,14 @@ describe("pairWithBluetoothctl — outcomes", () => {
 });
 
 // bluetoothctl echoes the PIN on a line of its own (every piped run measured). Of the lines printed
-// after the PIN was written, only a name shaped `org.bluez.Error.<letters>` from a `Failed to pair:`
-// line is quoted, and nothing quoted is altered: a masked copy of a line the reader can reconstruct
-// (the address) would give the PIN away by its gaps.
+// after the PIN was written, only a D-Bus error name (`org.bluez.Error.` or
+// `org.freedesktop.DBus.Error.` followed by letters) from a `Failed to pair:` line is quoted, and
+// nothing quoted is altered: a masked copy of a line the reader can reconstruct (the address) would
+// give the PIN away by its gaps.
 describe("pairWithBluetoothctl — the PIN never leaves the runner", () => {
   const PIN = "Zq7~";
 
-  it("never quotes a line printed after the PIN was written, so the echo cannot reach an error", async () => {
+  it("never quotes a line printed after the PIN was written when pairing ends without an outcome", async () => {
     const { child, result } = registered(PIN);
     child.say(PIN_PROMPT, `${PIN}\n`);
     child.emit("close", 0, null);
@@ -436,8 +446,21 @@ describe("pairWithBluetoothctl — the PIN never leaves the runner", () => {
     });
   });
 
+  it("quotes a D-Bus error name printed after the PIN", async () => {
+    const { child, result } = registered(PIN);
+    child.say(
+      PIN_PROMPT,
+      `${PIN}\n`,
+      event("Failed to pair: org.freedesktop.DBus.Error.AccessDenied"),
+    );
+    await expect(result).resolves.toStrictEqual({
+      ok: false,
+      error: "pairing failed: org.freedesktop.DBus.Error.AccessDenied",
+    });
+  });
+
   it.each([PIN, "x 1234", "org.bluez.Error.In Progress", "org.bluez.Error."])(
-    "quotes nothing from a failure whose name is not shaped like BlueZ's: %j",
+    "quotes nothing from a failure whose name is not shaped like a D-Bus error name: %j",
     async (name) => {
       const { child, result } = registered(PIN);
       child.say(PIN_PROMPT, `${PIN}\n`, event(`Failed to pair: ${name}`));

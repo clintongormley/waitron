@@ -40,8 +40,8 @@ const UNAVAILABLE = "bluetooth unavailable";
 const INCOMPLETE = "pairing did not complete";
 const REGISTER_TIMEOUT_MS = 10_000;
 /** bluetoothd waits 60 s for an agent's answer, plus paging the printer, plus the 3 s before
- * bluetoothd retries a bonding after a refused automatic PIN (READ, bluez 5.82 src/agent.c and
- * src/adapter.c). */
+ * bluetoothd retries a bonding after a refused automatic PIN (READ, bluez 5.82: `REQUEST_TIMEOUT`
+ * in src/agent.c, `device_bonding_attempt_retry` in src/device.c). */
 const PAIR_TIMEOUT_MS = 75_000;
 const EXIT_GRACE_MS = 5_000;
 // READ, bluez 5.82 client/agent.c (the PIN prompt also measured): every agent question is
@@ -49,7 +49,7 @@ const EXIT_GRACE_MS = 5_000;
 const AGENT_PROMPT = /^\[agent\] .*:$/;
 const PIN_PROMPT = "[agent] Enter PIN code:";
 const SHELL_PROMPT = "[bluetoothctl]>";
-const BLUEZ_ERROR_NAME = /^org\.bluez\.Error\.[A-Za-z]+$/;
+const DBUS_ERROR_NAME = /^org\.(?:bluez|freedesktop\.DBus)\.Error\.[A-Za-z]+$/;
 
 export interface BluetoothctlPairOptions {
   spawn?: () => ChildProcessWithoutNullStreams;
@@ -66,9 +66,9 @@ function spawnBluetoothctl(): ChildProcessWithoutNullStreams {
  * agent, no controller, the non-PIN prompts) come from the bluez 5.82 source and were not run. The
  * exit status is ignored: it was 0 whatever the outcome once `quit` was written. bluetoothctl echoes
  * the PIN to stdout on a line of its own, so of the lines printed after the PIN was written an error
- * quotes only a name shaped `org.bluez.Error.<letters>`, which is longer than `isBluetoothPin` lets
- * a PIN be; nothing quoted is masked either, because gaps in a line the reader can rebuild (the
- * address) would spell the PIN out.
+ * quotes only a D-Bus error name (`org.bluez.Error.` or `org.freedesktop.DBus.Error.` followed by
+ * letters), which is longer than `isBluetoothPin` lets a PIN be; nothing quoted is masked either,
+ * because gaps in a line the reader can rebuild (the address) would spell the PIN out.
  */
 export function pairWithBluetoothctl(
   mac: string,
@@ -150,7 +150,7 @@ export function pairWithBluetoothctl(
         finish(fail("wrong PIN"), "quit");
       else if (name === "org.bluez.Error.ConnectionAttemptFailed")
         finish(fail("printer is off or out of range"), "quit");
-      else if (BLUEZ_ERROR_NAME.test(name)) finish(fail(`pairing failed: ${name}`), "quit");
+      else if (DBUS_ERROR_NAME.test(name)) finish(fail(`pairing failed: ${name}`), "quit");
       else finish(fail("pairing failed"), "quit");
     };
 
