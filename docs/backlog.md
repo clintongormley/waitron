@@ -3360,8 +3360,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       naming that party, because a party seated there since can carry the same revision number and
       the move would otherwise land with strangers. A revision sent without the id is
       `management.request_invalid` `{ field: "otherPartyId" }`.)_ _(2026-09-29, Task 11:
-      `otherPartyId: null` now says the till read the table free; a party seated there since is
-      `party.out_of_date` naming that party, where it was 400.)_
+      `otherPartyId: null` now says the till read the table free; a party other than the bill's
+      own seated there since is `party.out_of_date` naming that party, where it was 400.)_
     - `partyId` is the party the till read the bill under, and `partyId: null` means it read the
       bill with no party. A bill that has a party by then is refused `party.out_of_date`, naming
       that party, before any revision is asked for; a `partyId` naming a party the bill has since
@@ -3479,8 +3479,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       join land on a table now free. A revision sent without the id is
       `management.request_invalid` `{ field: "otherPartyId" }`. The plan's Tasks 11 and 12 have the till send both.
       _(2026-09-29, Task 11: the till sends both, and `otherPartyId: null` for a table it read
-      free, which the server now refuses as `party.out_of_date` once a party is seated there; see
-      Task 11's entry.)_
+      free, which the server now refuses as `party.out_of_date` once another party is seated
+      there; see Task 11's entry.)_
     - The kitchen gets a MOVED notice for each sent dish whose tables change, including a dish on
       a main bill merged away when parties combine (it is told once, on the bill it merged into).
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
@@ -3623,7 +3623,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - After a move into another party the till follows the guests to the table they moved to,
       opening the party's main bill, or with none its first unpaid bill, else its latest. When
       Merge was chosen and the answer says `merged: false`, the till says "The bills were kept
-      separate: one has already been paid towards or presented".
+      separate: they are merged only when both parties have a main bill, neither has been
+      presented, is being paid or has a payment on it, and both are served the same way".
     - Split a table picks one of the party's tables, then the bill that goes with it: the party's
       open or presented bills other than its main one, or "No bill, start an empty one". The till
       stays with the party, at another of its tables when the open one left, and on its main bill
@@ -3632,6 +3633,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       native input): trimmed, and empty clears the name. A value over 40 characters is refused
       beside the field without a request; the server's own refusal (`management.request_invalid`
       `{ field: "name" }`) reopens the dialog with the name sent and the refusal under the field.
+      A refusal of the name that arrives after the waiter has left that party's order, or opened a
+      table since, is dropped.
     - The floor's card and map token show the party's display name when it says more than the
       table's label: a name staff gave, or a joined party's tables ("Mesa 4, 5").
     - Opening a seated table opens its party's main bill, else its first unpaid bill, else its
@@ -3642,10 +3645,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       free" (`readTargetTable`, `apps/server/src/move-bill.ts`, shared by move, join and move a
       bill): a party seated there since is `party.out_of_date` naming that party, with nothing
       written, where it was 400 `management.request_invalid` (Task 8's open point 2). The till
-      reloads and says the table changed.
+      reloads and says the table changed. Null naming the moving party's own table gets the
+      ordinary own-table rules instead (a join is `table.already_in_party`). Null sent together
+      with `expectedOtherPartyRevision` is 400 `management.request_invalid`
+      `{ field: "otherPartyId" }`.
     - `table.already_in_party`, `table.not_joined`, `table.inactive`, `party.main_bill_stays`,
       `service_zone.join_mismatch` and `service_zone.mode_incompatible` show in their own words;
-      the last two gained English and Spanish wording.
+      the last two gained English and Spanish wording. A merge of bills or a transfer of items
+      refused with `service_zone.mode_incompatible` shows `table.bills_served_differently`
+      instead ("These bills are served in different ways, so items cannot move between them").
     - Shared UI: `wt-input` (`packages/ui-core`) gained `maxlength`; `FloorTable` and
       `wt-table-token` (`packages/ui`) gained `partyName`.
     Tests: `apps/till/src/till-app-parties.test.ts`, `till-app.test.ts`,
@@ -3653,12 +3661,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `till-app.a11y.test.ts`, `screens/till-table-order-screen.test.ts` and `.a11y.test.ts`,
     `screens/till-floor-screen*.test.ts`, `widgets/bill-choice-dialog.test.ts` and `.a11y.test.ts`,
     `widgets/party-name-dialog.test.ts` and `.a11y.test.ts`, `api/client.test.ts`,
-    `i18n/codes.test.ts`; server `till-api.table-actions.test.ts` and `till-api.move-bill.test.ts`;
-    `packages/ui-core/src/components/wt-input.test.ts`, `packages/ui/src/floor.test.ts` and
-    `wt-table-token.test.ts`. No migration.
+    `i18n/codes.test.ts`; server `till-api.table-actions.test.ts`, `till-api.move-bill.test.ts`,
+    `party-move-bill.test.ts` and `party-table-actions.test.ts`;
+    `packages/ui-core/src/components/wt-input.test.ts`, `packages/ui/src/floor.test.ts`,
+    `wt-table-token.test.ts` and `wt-table-token.a11y.test.ts`. No migration.
     Open points: the till also sends `otherPartyId: null` when its floor does not list the target
-    table at all (a failed floor read empties the list); a held table is then refused as out of
-    date, never combined. A table the server lists with no party opens no bill any more. On a
+    table at all (a failed floor read empties the list); a table another party holds is then
+    refused as out of date, never combined, and the party's own table gets the ordinary own-table
+    rules. `tab.not_table_tab` stays in the till's table refusals (`TABLE_REFUSALS`) although only
+    the old tab join and merge raise it, which the till no longer calls; it goes with Task 13. A table the server lists with no party opens no bill any more. On a
     390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines), and on the
     floor map a joined party's tables can break inside a word on a narrow table token.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
