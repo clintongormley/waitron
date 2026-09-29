@@ -48,14 +48,18 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("reaches the server on a configuration export made with the browser's own fetch", async () => {
-    // The page's own origin answers; whatever it answers, the request has left the browser.
-    const api = new DashboardApi("", fetch);
-    const outcome = await api.exportConfiguration("a strong passphrase").then(
-      () => "answered",
-      (error: unknown) => (error instanceof Error ? error.message : "answered"),
-    );
-    expect(outcome).toBe("answered");
+  it("reads the server's answer to a configuration export made with the browser's own fetch", async () => {
+    // exportConfiguration reads a body only from the Response fetch returned, so a read means the
+    // server answered.
+    const readers = [vi.spyOn(Response.prototype, "json"), vi.spyOn(Response.prototype, "blob")];
+    try {
+      await new DashboardApi("", fetch)
+        .exportConfiguration("a strong passphrase")
+        .catch(() => undefined);
+      expect(readers.flatMap((reader) => reader.mock.calls)).not.toHaveLength(0);
+    } finally {
+      for (const reader of readers) reader.mockRestore();
+    }
   });
 
   it("rejects a failed configuration export with the envelope's code and the HTTP status", async () => {

@@ -2100,8 +2100,14 @@ and `stageConfiguration` in `apps/setup/src/api/client.ts` now copy `fetch` into
 
 **The dashboard's configuration export has the same fault, masked — FIXED (C7, 2026-09-29).**
 `exportConfiguration` in `apps/dashboard/src/api/client.ts` copies `fetch` into a local first, as
-the setup client does; a browser test builds the client with the browser's own `fetch` and was
-red with `Illegal invocation` before the change.
+the setup client does. It had worked only because `apps/dashboard/src/main.ts` hands the client
+`createInstrumentedFetch`'s wrapper (`packages/diagnostics/src/instrument-fetch.ts`), which calls
+`fetch` as a plain function. With `exportConfiguration` calling `this.#fetch(...)` again, the
+browser refused the request with `Failed to execute 'fetch' on 'Window': Illegal invocation` (seen
+by the first version of the new case in `apps/dashboard/src/api/client.test.ts`); the case as it
+now stands, which asserts that a response body was read, failed under
+`pnpm --filter @waitron/dashboard exec vitest run src/api/client.test.ts` with
+`expected [] to not have a length of +0`.
 
 **A country pack's `name` is no longer read by the product — OPEN (left by C41, #835, 2026-09-29).** The
 wizard now names countries through the browser in its own language, so `CountryPack.name`
@@ -5611,8 +5617,12 @@ through. Found by reading.
 
 **Dashboard leftovers from the coverage branch — OPEN (found 2026-09-23, PR #538).** Each from
 reading unless marked run:
-- Two dashboard client methods nothing calls, `connectPaymentProvider` and `addReader` — REMOVED
-  (C7, 2026-09-29), with the `AddReaderInput` type only `addReader` used.
+- Two dashboard client methods nothing called, `connectPaymentProvider` and `addReader` — DONE
+  (C7, 2026-09-29): removed, with the `AddReaderInput` type only `addReader` used. Run before
+  removing: `grep -rn --include='*.ts' -E '\b(connectPaymentProvider|addReader)\b' apps packages`
+  found no call to either dashboard method; the remaining `addReader` hits are a local helper in
+  `apps/server/src/payments-api.test.ts` and the payment providers' own client methods and panel
+  calls.
 - `wt-dialog` re-sends the native dialog's `close` event as `wt-close`
   (`packages/ui/src/components/wt-dialog.ts`), and the native event arrives a task after the dialog
   closes — the same mechanism the catalogue screen's nested forms guard against (#741). So a dialog

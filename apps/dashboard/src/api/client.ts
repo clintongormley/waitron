@@ -1266,6 +1266,10 @@ export class DashboardApi {
   }
   readonly #request: DashboardRequest;
   readonly #baseUrl: string;
+  /**
+   * Read into a local before calling, so it is called as a free function: called as a method of
+   * `this`, the browser's native `fetch` throws "Illegal invocation".
+   */
   readonly #fetch: FetchLike;
   #localesPromise?: Promise<{
     locales: Array<{ code: string; label: string }>;
