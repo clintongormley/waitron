@@ -3561,7 +3561,7 @@ ongoing overhaul listed at the top of Track A.
   review, fiscal test, connection and provisioning — keep their refusal paragraph, as the cloud
   services screen does, and in Demo the venue screen's "Demo invoice settings have not loaded yet."
   alert (`data-test=defaults-error`, with its retry button) stays above the form, as a load failure
-  rather than a refusal. Since C47 part 2 the dashboard module screens follow the rule too: the
+  rather than a refusal. Since C47 part 2 (#841) the dashboard module screens follow the rule too: the
   adjustment reasons editor, the Stripe and SumUp connect forms and add-reader dialogs, and the venue
   operations editors. A refused card-provider key (`payment.provider_credential_rejected`) is said
   beside Connect and leaves it working, because the code carries only the provider's id: each
