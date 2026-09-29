@@ -323,13 +323,17 @@ ignored the option.
 
 So a change that makes the agent run a new `bluetoothctl` command, or an old one that sends a message
 it did not before, is refused at the bus until the profile gains a rule for it. Nothing outside
-image-smoke runs the agent under the profile, and on a pull request image-smoke runs only when a
-path under `deploy/` changed (`isImageInputPath`, `scripts/changed-scope.mjs`; the `image` job's
-`if:` in `.github/workflows/ci.yml`); on a push to `main` it runs whenever code changed. Its
-Bluetooth step runs the `bluetoothctl` commands written into the step, not the agent's own code, so
-a new call is checked only once the step runs it too. `scripts/deploy-image-env.test.ts` reads the
-profile as text and checks that every bus rule names its members; it does not notice a member list
-that has grown. Built in A129; the receipts are in the profile's header.
+image-smoke runs the agent under the profile, and on a pull request image-smoke runs only when an
+image input changed — a path under `deploy/`, or a file only image-smoke runs, such as
+`scripts/fake-bluez.py` (`isImageInputPath`, `scripts/changed-scope.mjs`; the `image` job's `if:` in
+`.github/workflows/ci.yml`); on a push to `main` it also runs whenever code changed. Of the agent's
+own `bluetoothctl` calls, image-smoke runs only the paired listing, by waiting for
+`bluetooth.available` in the agent's `/status.json`; every other command it checks is written into
+its Bluetooth step, so a new call is checked only once that step runs it too.
+`scripts/deploy-image-env.test.ts` reads the profile as text and checks that every rule allowing bus
+messages names its interface and members literally — no `*`, `?` or `[…]`, though a `{a,b}` list is
+accepted — while paths may keep their globs; it does not notice a literal list that has grown. Built
+in A129; the receipts are in the profile's header.
 
 **The recovery page**
 

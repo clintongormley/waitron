@@ -6496,8 +6496,9 @@ bundles and compare what they produce. Five things it leaves open:
 - **A pull request that changes only front-end code gets no SPA bundle built anywhere in CI.**
   `bundle-smoke` builds `@waitron/credentials` and `@waitron/server`, which are esbuild bundles. The
   only thing that runs `vite build` is `deploy/Dockerfile`, which the `image` job runs — and on a
-  pull request `image` is gated on `deploy/` having changed (`.github/workflows/ci.yml`, the `image`
-  job's `if`). So `image` DOES build the SPAs on a pull request that touches `deploy/`, and on every
+  pull request `image` is gated on an image input having changed — `deploy/`, or a file only
+  image-smoke runs (`.github/workflows/ci.yml`, the `image` job's `if`). So `image` DOES build the
+  SPAs on a pull request that touches `deploy/`, and on every
   main push; what it never does is OPEN one, so a bundle that builds and renders nothing passes
   there too. The plan behind #146 (its item R6) recorded
   this gap when `apps/setup` was written and called a cross-front-end build-smoke "a separate later

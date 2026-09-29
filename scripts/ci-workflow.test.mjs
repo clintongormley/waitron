@@ -629,8 +629,8 @@ describe("the scope gates", () => {
 });
 
 describe("the image smoke's scoping", () => {
-  // A pull request runs the image smoke only when `deploy/` changed; a push to `main` still smokes
-  // on `code` alone, because `publish` ships the image off this smoke passing.
+  // A pull request runs the image smoke only when an image input changed; a push to `main` still
+  // smokes on `code` alone, because `publish` ships the image off this smoke passing.
   it("declares a `deploy` output on the `changes` job", () => {
     expect(outputsOf(job("changes").body)).toContain("deploy");
   });
@@ -668,13 +668,24 @@ describe("the image smoke's scoping", () => {
 
   const cases = [
     {
-      name: "a PR that does not touch deploy/ skips",
+      name: "a PR that changes no image input skips",
       ctx: { event_name: "pull_request", code: "true", deploy: "false" },
       run: false,
     },
     {
-      name: "a PR that touches deploy/ runs",
+      name: "a PR that changes an image input runs",
       ctx: { event_name: "pull_request", code: "true", deploy: "true" },
+      run: true,
+    },
+    // scripts/fake-bluez.py alone: root scope, so `code=false`, and still an image input.
+    {
+      name: "a PR that changes only a root-scope image input runs",
+      ctx: { event_name: "pull_request", code: "false", deploy: "true" },
+      run: true,
+    },
+    {
+      name: "a push that changes only a root-scope image input runs",
+      ctx: { event_name: "push", code: "false", deploy: "true" },
       run: true,
     },
     {
@@ -683,7 +694,7 @@ describe("the image smoke's scoping", () => {
       run: false,
     },
     {
-      name: "a code push to main runs even without deploy/",
+      name: "a code push to main runs even without an image input",
       ctx: { event_name: "push", code: "true", deploy: "false" },
       run: true,
     },
@@ -704,9 +715,12 @@ describe("the image smoke's scoping", () => {
   });
 
   // The negative control: otherwise the truth table above could measure nothing.
-  it("would catch the inner || being flipped to &&", () => {
+  it.each([
+    ["||", "&&"],
+    ["&&", "||"],
+  ])("would catch the %s being flipped to %s", (from, to) => {
     const real = imageIf();
-    const mutated = real.replace("||", "&&");
+    const mutated = real.replace(from, to);
     expect(mutated).not.toBe(real);
     const differs = cases.some(({ ctx }) => runsWhen(real, ctx) !== runsWhen(mutated, ctx));
     expect(differs).toBe(true);

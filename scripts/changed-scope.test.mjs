@@ -129,12 +129,18 @@ describe("isImageInputPath", () => {
     expect(isImageInputPath("deploy/README.md")).toBe(true);
   });
 
+  // Image-smoke's stand-in BlueZ lives outside deploy/, and nothing but image-smoke runs it.
+  it("treats the stand-in BlueZ image-smoke runs as an image input", () => {
+    expect(isImageInputPath("scripts/fake-bluez.py")).toBe(true);
+  });
+
   it.each([
     "packages/db/src/index.ts",
     "apps/server/src/index.ts",
     "docs/backlog.md",
     ".github/workflows/ci.yml",
     "deployment/x.ts",
+    "scripts/changed-scope.mjs",
   ])("treats %s as NOT an image input", (path) => {
     expect(isImageInputPath(path)).toBe(false);
   });

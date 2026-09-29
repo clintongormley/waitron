@@ -390,7 +390,7 @@ describe("createContainerHost — the rest of the seam", () => {
 });
 
 describe("createContainerHost — its own devices", () => {
-  it("logs the Bluetooth side's availability through the host's log", async () => {
+  it("logs the default device source's Bluetooth availability through the host's log", async () => {
     const lines: string[] = [];
     const sink = {
       info: (line: string) => lines.push(line),

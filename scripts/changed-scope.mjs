@@ -66,14 +66,18 @@ export function isRootScopePath(path) {
   return ROOT_SCOPE_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+/** Files outside `deploy/` that only image-smoke runs, so a change to one is checked nowhere else. */
+const IMAGE_SMOKE_FILES = ["scripts/fake-bluez.py"];
+
 /**
- * True for everything under `deploy/`, the box image's build and runtime inputs, whose change is what
- * re-runs ci.yml's `image` smoke on a pull request. The WHOLE directory on purpose: matching too
- * broadly only re-runs the smoke on a `deploy/README.md` edit, while a named-file list would silently
- * SKIP it on a new input file nobody remembered to add. The trailing slash keeps out `deployment/`.
+ * True for everything under `deploy/`, the box image's build and runtime inputs, and for the files
+ * `IMAGE_SMOKE_FILES` names: a change to either is what re-runs ci.yml's `image` smoke on a pull
+ * request. The WHOLE directory on purpose: matching too broadly only re-runs the smoke on a
+ * `deploy/README.md` edit, while a named-file list would silently SKIP it on a new input file nobody
+ * remembered to add. The trailing slash keeps out `deployment/`.
  */
 export function isImageInputPath(path) {
-  return path.startsWith("deploy/");
+  return path.startsWith("deploy/") || IMAGE_SMOKE_FILES.includes(path);
 }
 
 /** True when a change to `path` cannot affect any test, build or type-check result. */

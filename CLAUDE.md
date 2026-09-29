@@ -175,11 +175,12 @@ hook, or how tests are scheduled:
   [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace.
-- **No front-end bundle is built by a pull request that did not touch `deploy/`.** In CI the SPAs
+- **No front-end bundle is built by a pull request that changed no image input.** In CI the SPAs
   are `vite build`-ed only inside `deploy/Dockerfile`, which on a pull request runs only when
-  `deploy/` changed — and wherever it does run it builds them without opening one, so a bundle that
-  renders nothing passes anyway. Cost: the vite 6 → 8 bundler replacement had to take its build
-  evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
+  `deploy/` or a file only image-smoke runs (`scripts/fake-bluez.py`) changed
+  (`isImageInputPath`, `scripts/changed-scope.mjs`) — and wherever it does run it builds them
+  without opening one, so a bundle that renders nothing passes anyway. Cost: the vite 6 → 8 bundler
+  replacement had to take its build evidence locally. See [ci-and-gates.md](docs/developers/ci-and-gates.md).
 - **esbuild bundles sharp without complaint, and the bundle it builds cannot be loaded.** Every
   Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out of all of them, and the
   box image copies sharp into `/app/node_modules`. Guards: `scripts/deploy-image-env.test.ts`,
@@ -357,12 +358,14 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **The print agent runs under `deploy/apparmor/waitron-print-agent`, named through
   `WAITRON_PRINT_AGENT_APPARMOR` only after `waitron.sh` has loaded it** — Docker refuses to start a
   container naming an unloaded profile (measured on Docker 28.0.4, Ubuntu 24.04). A new
-  `bluetoothctl` call needs a new bus rule, and on a pull request image-smoke runs only when
-  `deploy/` changed, so a change to `apps/print-agent` alone is not checked against the profile.
-  Guards, weaker than their names: image-smoke's Bluetooth step runs only the `bluetoothctl`
-  commands written into it, not the agent's own calls; the bus-rule case in
-  `scripts/deploy-image-env.test.ts` reads the profile as TEXT and checks only that each rule names
-  a member. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  `bluetoothctl` call needs a new bus rule, and on a pull request image-smoke runs only when an
+  image input changed (`deploy/`, or `scripts/fake-bluez.py`), so a change to `apps/print-agent`
+  alone is not checked against the profile. Guards, weaker than their names: of the agent's own
+  `bluetoothctl` calls, image-smoke runs only its paired listing (it waits for `bluetooth.available` in
+  `/status.json`); every other command it checks is one written into its Bluetooth step; the
+  bus-rule cases in `scripts/deploy-image-env.test.ts` read the profile as TEXT and check only that
+  each allowing rule names its interface and members literally, with no glob — not that a literal
+  list has not grown. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail shows the failed start's own lines — the error, its cause chain (up to five
   levels in all), the stack and an `AppError`'s params — through `redactSecrets` and

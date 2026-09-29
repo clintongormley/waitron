@@ -443,6 +443,13 @@ describe("scopeForPaths", () => {
     });
   });
 
+  // Root scope answers `code=false`, so ci.yml's `image` job runs on `deploy` alone for this file.
+  it("flags the stand-in BlueZ, which only image-smoke runs, as root scope with deploy=true", () => {
+    expect(formatScope(scopeForPaths(["scripts/fake-bluez.py"], workspace()))).toBe(
+      "code=false\nscope=root\npackages=\nroot=true\ndeploy=true",
+    );
+  });
+
   it("does not flag deploy for an ordinary package change", () => {
     expect(scopeForPaths(["packages/db/src/index.ts"], workspace()).deploy).toBe(false);
   });
@@ -534,7 +541,7 @@ describe("formatScope", () => {
   });
 
   // The fifth line, which ci.yml's `changes` job reads into its `deploy` output so the `image` job
-  // can scope its smoke to deploy changes on a pull request.
+  // can scope its smoke to image-input changes on a pull request.
   it("emits deploy=true as its own line when the box image's inputs changed", () => {
     expect(formatScope(scopeForPaths(["deploy/Dockerfile"], workspace()))).toBe(
       "code=true\nscope=global\npackages=\nroot=false\ndeploy=true",

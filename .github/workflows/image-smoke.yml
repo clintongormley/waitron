@@ -2,7 +2,7 @@ name: image-smoke
 
 # The box image a restaurant actually runs: built, brought up on blank volumes, and smoke-tested.
 # A REUSABLE workflow (`workflow_call`) with no trigger of its own, called from two places so its
-# steps exist once: ci.yml's `image` job (scoped to deploy changes on a pull request, and gating
+# steps exist once: ci.yml's `image` job (scoped to image-input changes on a pull request, and gating
 # `publish` on every main push) and image-nightly.yml (the scheduled + on-request safety net).
 #
 # It earns its place by proving two things no developer's machine can. First, the print agent
@@ -210,6 +210,27 @@ jobs:
           cat status.json; echo
           [ "$code" = "200" ]
           [ "$(jq -r .serverUrl status.json)" = "https://127.0.0.1" ]
+
+      # The agent here is never approved, so its job poll, which lists Bluetooth only once approved,
+      # has not run: `bluetooth` in status.json can be set only by bin.ts's check at start-up or by
+      # its timer. `available: true` proves one of the two ran in the agent's own process, under the
+      # profile, and reached the stand-in BlueZ started before the stack; it does not say which of
+      # the two. The 40 seconds cover one 30-second back-off after a failed first check, the timer's
+      # 5-second tick and the listing's 3-second kill.
+      - name: The print agent reports Bluetooth available before it has joined
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          for _ in $(seq 1 40); do
+            if curl -s -o status.json http://127.0.0.1:9110/status.json \
+              && jq -e '.bluetooth.available == true' status.json > /dev/null; then
+              cat status.json; echo
+              exit 0
+            fi
+            sleep 1
+          done
+          cat status.json; echo
+          exit 1
 
       # The owner's box, 2026-09-29: under Docker's default profile the bus refused the agent's
       # `Hello` and bluetoothctl aborted, so no Bluetooth printer could ever appear. The agent here

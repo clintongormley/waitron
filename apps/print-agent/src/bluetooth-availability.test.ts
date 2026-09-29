@@ -82,15 +82,18 @@ async function calls(): Promise<string[]> {
   }
 }
 
-/** A short kill deadline, so a BlueZ that never answers costs the suite a fraction of a second. */
-const LIST_DEADLINE_MS = 300;
+/** Only the case where BlueZ never answers waits this out. Under load a fake can be killed at it
+ * before it has logged its call, so no case using it counts calls. */
+const SILENT_DEADLINE_MS = 300;
+/** Long enough that a fake bluetoothctl slow to start under load is not killed before it answers. */
+const ANSWERING_DEADLINE_MS = 10_000;
 
-function devices() {
+function devices(listDeadlineMs = ANSWERING_DEADLINE_MS) {
   return createLinuxDevices({
     sysfsRoot: sysfs,
     devRoot: "/dev",
     btDevicePath: () => "/dev/rfcomm0",
-    bluetoothListTimeoutMs: LIST_DEADLINE_MS,
+    bluetoothListTimeoutMs: listDeadlineMs,
     log,
     now: () => clock,
   });
@@ -149,17 +152,20 @@ describe("the Bluetooth side's availability", () => {
   it("returns a healthy listing at once, without bluetoothctl's own timeout", async () => {
     mode("ok");
     const started = performance.now();
-    await devices().visibleDevices();
+    expect(await devices().visibleDevices()).toEqual([
+      USB,
+      { transport: "bluetooth", localKey: "66:55:44:33:22:11", model: "CI Printer" },
+    ]);
     expect(performance.now() - started).toBeLessThan(1_500);
     expect(await calls()).toEqual(["devices Paired"]);
   });
 
   it("kills a BlueZ that never answers at the deadline, and tells it apart from a refused bus", async () => {
     mode("silent");
-    const d = devices();
+    const d = devices(SILENT_DEADLINE_MS);
     const started = performance.now();
     expect(await d.visibleDevices()).toEqual([USB]);
-    expect(performance.now() - started).toBeLessThan(LIST_DEADLINE_MS + 1_500);
+    expect(performance.now() - started).toBeLessThan(SILENT_DEADLINE_MS + 1_500);
     expect(d.bluetoothAvailability()).toMatchObject({
       available: false,
       reason: "bluez_not_answering",
@@ -190,7 +196,7 @@ describe("the Bluetooth side's availability", () => {
   });
 
   it("asks an unavailable BlueZ again only after 30 seconds, and reports its recovery once", async () => {
-    mode("silent");
+    mode("refused");
     const d = devices();
     await d.visibleDevices();
     clock += 29_999;
@@ -213,13 +219,13 @@ describe("the Bluetooth side's availability", () => {
   });
 
   it("reports a change of reason as a new line", async () => {
-    mode("silent");
+    mode("refused");
     const d = devices();
     await d.visibleDevices();
     mode("nocontroller");
     clock += 30_000;
     await d.visibleDevices();
-    expect(lines.map((l) => l.fields?.reason)).toEqual(["bluez_not_answering", "no_controller"]);
+    expect(lines.map((l) => l.fields?.reason)).toEqual(["dbus_unreachable", "no_controller"]);
   });
 });
 
@@ -252,7 +258,7 @@ describe("the Bluetooth side, checked apart from the job poll", () => {
   });
 
   it("lets the job poll skip an unavailable side the check has just asked", async () => {
-    mode("silent");
+    mode("nocontroller");
     const d = devices();
     await d.checkBluetooth();
     clock += 10_000;
