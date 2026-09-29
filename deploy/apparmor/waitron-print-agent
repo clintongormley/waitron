@@ -107,7 +107,7 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
        bus=system
        path=/org/bluez/hci*
        interface=org.bluez.Adapter1
-       member={SetDiscoveryFilter,StartDiscovery}
+       member={SetDiscoveryFilter,StartDiscovery,StopDiscovery}
        peer=(name=org.bluez),
 
   dbus receive
@@ -159,6 +159,15 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
        interface=org.bluez.Adapter1
        member=RemoveDevice
        peer=(name=org.bluez),
+
+  # A device dropping its connection, as it does after a pairing: on the owner's box (2026-09-29) the
+  # previous rules refused both signals to an interactive bluetoothctl that had just paired.
+  dbus receive
+       bus=system
+       path=/org/bluez/hci*/dev_*
+       interface={org.bluez.Device1,org.bluez.Bearer.BREDR1}
+       member=Disconnected
+       peer=(label=unconfined),
 
   dbus receive
        bus=system
