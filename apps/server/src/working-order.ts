@@ -1378,7 +1378,7 @@ async function heldNoRouteLines(
  * ticket item — never fired, held, or recalled — so a sold-out dish is never sent to the kitchen
  * again, whether or not the line was stamped sent before.
  */
-async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
+export async function assertSendable(tx: Transaction, lineIds: readonly string[]): Promise<void> {
   if (lineIds.length === 0) return;
   const [refused] = await tx
     .select({ productId: workingOrderLines.productId })

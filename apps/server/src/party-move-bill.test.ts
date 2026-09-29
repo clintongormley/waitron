@@ -15,10 +15,12 @@ import { writeClearingWorkflow } from "@waitron/venue-service";
 import { mergeBills, splitBill } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill, type MoveBillOptions, type MoveTarget } from "./move-bill.js";
+import { createCourse } from "./kitchen.js";
 import { bumpGroupReady, markGroupAway, placeGroups } from "./order-groups.js";
 import { finishTable } from "./parties.js";
 import { createTable, deactivateTable } from "./tables.js";
 import {
+  addTabRound,
   createOpenOrder,
   listHeldOrders,
   markServed,
@@ -938,6 +940,52 @@ describe("the dishes of an open bill moved between service modes", () => {
     expect((await billRow(v, ana.tabId)).status).toBe("settled");
     expect(registroCount(ana.tabId)).toBe(1);
     expect(await ticketsOf(ana.tabId)).toEqual(sent);
+  });
+
+  it("refuses product.unavailable, changing nothing, when a pay-first counter order's dish has sold out before it joins a table-service party", async () => {
+    const mesa = await v.table("Mesa agotado 1");
+    const ana = await seat(v, mesa);
+    await order(v, ana.tabId, "Burger");
+    const orderId = await counterOrder(v, "Tarta", "Paella");
+    const paella = v.productId("Paella");
+    v.db.run(sql`update products set available = 0 where id = ${paella}`);
+    try {
+      const before = await snapshot([ana.partyId], [orderId, ana.tabId], [mesa]);
+
+      await expect(move(orderId, { tableId: mesa }, { bills: "separate" })).rejects.toMatchObject({
+        code: "product.unavailable",
+        params: { productId: paella },
+      });
+
+      expect(await snapshot([ana.partyId], [orderId, ana.tabId], [mesa])).toEqual(before);
+      expect(await ticketsOf(orderId)).toEqual([]);
+    } finally {
+      v.db.run(sql`update products set available = 1 where id = ${paella}`);
+    }
+  });
+
+  it("leaves a table bill's no-preparation dish waiting in a later course unsent when it moves to another table-service party", async () => {
+    const [entrantes, postres] = await inTx(v, async (tx) => [
+      (await createCourse(tx, v.cfg, { name: "Entrantes envío", displayOrder: 1 })).id,
+      (await createCourse(tx, v.cfg, { name: "Postres envío", displayOrder: 2 })).id,
+    ]);
+    const ana = await seat(v, await v.table("Mesa curso 1"));
+    const mesa = await v.table("Mesa curso 2");
+    await seat(v, mesa);
+    await inTx(v, (tx) =>
+      addTabRound(tx, v.cfg, ana.tabId, [
+        { menuItemId: v.item("Agua"), quantity: "1", courseId: entrantes },
+        { menuItemId: v.item("Agua"), quantity: "1", courseId: postres },
+      ]),
+    );
+    const [first, waiting] = await lineRows(ana.tabId);
+    expect(first!.sentAt).not.toBeNull();
+    expect(waiting!.sentAt).toBeNull();
+
+    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+
+    expect((await lineRows(ana.tabId))[1]!.sentAt).toBeNull();
+    expect(await ticketsOf(ana.tabId)).toEqual([]);
   });
 });
 

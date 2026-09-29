@@ -15,6 +15,7 @@ import {
 } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import {
+  assertSendable,
   clearGroups,
   fireLines,
   isOpenOrder,
@@ -312,9 +313,10 @@ export async function leaveParty(tx: Transaction, billId: string): Promise<void>
 }
 
 /**
- * The open bill takes `zoneId`'s service context. In table service its unsent dishes, which a
- * pay-first or invoice-first bill sends when it is paid or placed, are sent now as a round is: table
- * service sends a dish when it is ordered, and none when the bill is paid.
+ * The open bill takes `zoneId`'s service context. A bill entering table service from another mode
+ * has its unsent dishes, which a pay-first or invoice-first bill sends when it is paid or placed,
+ * sent now as a round is: table service sends a dish when it is ordered, and none when the bill is
+ * paid. As placing does, the move is refused `product.unavailable` when one cannot be sold now.
  */
 async function adoptZone(
   tx: Transaction,
@@ -322,15 +324,22 @@ async function adoptZone(
   billId: string,
   zoneId: string,
 ): Promise<void> {
-  if ((await VENUE_SERVICE.findOrderContext(tx, cfg, billId)) === null) {
+  const previous = await VENUE_SERVICE.findOrderContext(tx, cfg, billId);
+  if (previous === null) {
     await VENUE_SERVICE.recordOrderContext(tx, cfg, billId, zoneId);
   } else {
     await VENUE_SERVICE.retargetOrderContext(tx, cfg, billId, zoneId);
   }
-  const context = await VENUE_SERVICE.findOrderContext(tx, cfg, billId);
-  if (context!.serviceMode === "table_tab") {
-    await fireLines(tx, cfg, billId, await unsentDishLines(tx, billId));
-  }
+  // Within table service a later course's dishes wait for their course, which `fireLines`, judging
+  // the earliest course from this bill alone, would send.
+  if ((previous?.serviceMode ?? cfg.orderFlow) === "table_tab") return;
+  if ((await VENUE_SERVICE.findOrderContext(tx, cfg, billId))!.serviceMode !== "table_tab") return;
+  const unsent = await unsentDishLines(tx, billId);
+  await assertSendable(
+    tx,
+    unsent.map((line) => line.id),
+  );
+  await fireLines(tx, cfg, billId, unsent);
 }
 
 /**

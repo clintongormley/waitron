@@ -3309,9 +3309,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       whose dishes were sent can be moved to such a counter and still be paid (by cash, or by a
       card already at the reader when it moved) or placed, getting its one invoice. Before this
       fix the payment was refused `ticket.already_fired` after the card had been charged. An open
-      bill that takes a table-service zone has its unsent dishes sent at the move, as a round is
-      sent, because table service sends nothing when the bill is paid. Before this fix a pay-first
-      counter order moved to a table and paid by card had no dish sent to the kitchen.
+      bill that enters table service from another mode has its unsent dishes sent at the move, as
+      a round is sent, because table service sends nothing when the bill is paid. Before this fix
+      a pay-first counter order moved to a table and paid by card had no dish sent to the kitchen.
+      Such a move is refused `product.unavailable`, changing nothing, when one of those unsent
+      dishes cannot be sold now, as placing an order refuses it. A bill already in table service
+      sends nothing when it moves, so a no-preparation dish waiting for a later course keeps
+      waiting.
     - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
       otherwise), and the party's next order then starts a new one. A table the bill's own party
       holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is
