@@ -61,14 +61,15 @@ reached the Bluetooth service.
 
 On a box whose Bluetooth service runs under systemd (`bluetooth.service`), `install` also writes
 `/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf`. It runs the unit's own Bluetooth
-daemon command with `--noplugin=autopair` added. BlueZ's `autopair` plugin answers a printer's
-first PIN request with `0000` by itself, so a printer whose PIN is anything else never reaches the
-print agent, which holds the PIN the operator typed. On the owner's box (BlueZ 5.82, 2026-09-29) a
-printer with PIN 1234 failed to pair with the plugin on and paired with it off. The operator
-therefore types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
+daemon command with `--noplugin=autopair` added. On the owner's box (BlueZ 5.82, 2026-09-29),
+BlueZ's `autopair` plugin answered a printer's PIN request with `0000` by itself, before the PIN
+the operator typed could be asked for. BlueZ's retry then went over Low Energy, which that printer
+refuses, so the printer, whose PIN is 1234, never paired. With the plugin off it paired. The
+operator therefore types the PIN for every printer, `0000` included. `install` restarts Bluetooth only when
 the file changed, so installing again does not interrupt it. A box with no `bluetooth.service`
 gets one line saying so. If the file cannot be written or Bluetooth will not restart, `install`
-says so and carries on. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
+says so, removes the file again and restarts Bluetooth without it, and carries on; the next
+`install` tries again. It leaves alone a unit that already passes `--noplugin` or `-P`, and says
 so. To undo it, delete the file, then run `systemctl daemon-reload` and
 `systemctl restart bluetooth`.
 

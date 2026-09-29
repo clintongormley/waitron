@@ -44,7 +44,8 @@ afterEach(() => {
 // `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
 // which is where each case points the Bluetooth drop-in. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
-// does; WT_BT_RESTART_FAIL makes `systemctl restart bluetooth` fail.
+// does; WT_BT_RESTART_FAIL makes `systemctl restart bluetooth` fail. `mktemp` fails when its
+// arguments contain WT_MKTEMP_FAIL, and otherwise runs the real one.
 const STUB_BIN = mkdtempSync(join(tmpdir(), "waitron-sh-bin-"));
 afterAll(() => rmSync(STUB_BIN, { recursive: true, force: true }));
 
@@ -138,6 +139,13 @@ out=""; while [ $# -gt 0 ]; do case "$1" in -o) out="$2"; shift 2;; *) shift;; e
 exit 0
 `,
 );
+const REAL_MKTEMP = spawnSync("bash", ["-c", "command -v mktemp"], {
+  encoding: "utf8",
+}).stdout.trim();
+stub(
+  "mktemp",
+  `case "$*" in *"\${WT_MKTEMP_FAIL:-__never__}"*) exit 1 ;; esac\nexec "${REAL_MKTEMP}" "$@"`,
+);
 stub("qrencode", "exit 0");
 stub("aa-enabled", `[ "\${WT_AA_ENABLED}" = "1" ]`);
 stub("apparmor_parser", `[ "\${WT_AA_PARSE_FAIL}" = "1" ] && exit 1; exit 0`);
@@ -179,6 +187,7 @@ function sandbox({
   apparmorParseFail = false,
   bluetoothExecStart = null,
   bluetoothRestartFail = false,
+  mktempFail = "",
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "waitron-sh-"));
   dirs.push(root);
@@ -203,6 +212,7 @@ function sandbox({
       WT_SANDBOX: root,
       WT_BT_UNIT: unit,
       WT_BT_RESTART_FAIL: bluetoothRestartFail ? "1" : "0",
+      WT_MKTEMP_FAIL: mktempFail,
       WAITRON_BLUETOOTH_DROPIN: dropIn,
       WT_LOG: log,
       WT_TRADING_ENV: tradingEnv,
@@ -477,6 +487,41 @@ describe("waitron.sh install and bluetoothd's autopair plugin", () => {
     const r = run(sb, ["install"]);
     expect(r.status).toBe(0);
     expect(r.stderr).toContain("could not switch off bluetoothd's autopair plugin");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
+  });
+
+  it("removes a drop-in Bluetooth would not restart with, so the next install tries again", () => {
+    const failed = sandbox({
+      bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
+      bluetoothRestartFail: true,
+    });
+    expect(run(failed, ["install"]).status).toBe(0);
+    expect(existsSync(failed.dropIn)).toBe(false);
+    // Put back the unit as it was: the removal is followed by another reload.
+    const log = calls(failed);
+    expect(log.lastIndexOf("systemctl daemon-reload")).toBeGreaterThan(
+      log.indexOf("systemctl restart bluetooth"),
+    );
+
+    const retried = sandbox({ bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd" });
+    writeFileSync(retried.log, "");
+    // The same directory the failed run left: nothing there, so this install writes and restarts.
+    retried.env.WAITRON_BLUETOOTH_DROPIN = failed.dropIn;
+    retried.env.WT_SANDBOX = failed.root;
+    expect(run(retried, ["install"]).status).toBe(0);
+    expect(existsSync(failed.dropIn)).toBe(true);
+    expect(calls(retried)).toContain("systemctl restart bluetooth");
+  });
+
+  it("carries on with the install when it cannot make a temporary file, and says so", () => {
+    const sb = sandbox({
+      bluetoothExecStart: "/usr/libexec/bluetooth/bluetoothd",
+      mktempFail: "waitron-noautopair",
+    });
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("could not switch off bluetoothd's autopair plugin");
+    expect(existsSync(sb.dropIn)).toBe(false);
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d --remove-orphans\b/));
   });
 });

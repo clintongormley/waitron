@@ -139,8 +139,8 @@ services:
     volumes:
       - print_agent:/var/lib/waitron-print-agent
       - /dev:/dev:ro
-      # BlueZ's system DBus socket for `bluetoothctl` (pairing is not yet allowed by
-      # deploy/apparmor/waitron-print-agent). Long syntax with create_host_path: false so a host
+      # BlueZ's system DBus socket for `bluetoothctl` (listing, scanning, pairing with a PIN and
+      # `remove`, which deploy/apparmor/waitron-print-agent allows; receipts in its header). Long syntax with create_host_path: false so a host
       # without DBus fails the mount loudly rather than having Docker create a directory where the
       # socket should be.
       - type: bind

@@ -137,10 +137,10 @@ load_print_agent_apparmor() {
   rm -f "$tmp"
 }
 
-# 2c. bluetoothd's autopair plugin answers a printer's first PIN request with 0000 itself, so a
-#     printer whose PIN is anything else never reaches the agent that holds the operator's PIN
-#     (measured on the owner's box, BlueZ 5.82, 2026-09-29: with the plugin off, the agent was asked
-#     and a PIN-1234 printer bonded). This drop-in re-runs the unit's own ExecStart with the plugin
+# 2c. On the owner's box (BlueZ 5.82, 2026-09-29) bluetoothd's autopair plugin answered a PIN-1234
+#     printer's PIN request with 0000 before any agent was asked; bluetoothd's retry then went over
+#     Low Energy, which that printer refuses, so it never paired. With the plugin off the agent was
+#     asked and the printer bonded. This drop-in re-runs the unit's own ExecStart with the plugin
 #     off. Bluetooth is restarted only when the drop-in changed, and a failure never stops the install.
 BLUETOOTH_DROPIN="${WAITRON_BLUETOOTH_DROPIN:-/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf}"
 disable_bluetooth_autopair() {
@@ -160,10 +160,13 @@ disable_bluetooth_autopair() {
       echo "waitron.sh: could not switch off bluetoothd's autopair plugin — bluetooth.service already chooses its plugins ($exec_start); left as it is" >&2
       return 0 ;;
   esac
-  tmp="$(mktemp "$WAITRON_DIR/waitron-noautopair.XXXXXX")" || die "could not create a temp file in $WAITRON_DIR"
+  if ! tmp="$(mktemp "$WAITRON_DIR/waitron-noautopair.XXXXXX")"; then
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — could not create a temp file in $WAITRON_DIR" >&2
+    return 0
+  fi
   printf '%s\n' \
-    "# Written by waitron.sh install: bluetoothd's autopair plugin answers a printer's PIN request" \
-    "# with 0000 itself, before the print agent can give it the printer's own PIN." \
+    "# Written by waitron.sh install: with bluetoothd's autopair plugin on, a printer's first PIN" \
+    "# request is answered with 0000 before the print agent is asked for the printer's own PIN." \
     "[Service]" \
     "ExecStart=" \
     "ExecStart=$exec_start --noplugin=autopair" > "$tmp"
@@ -177,7 +180,12 @@ disable_bluetooth_autopair() {
     && as_root systemctl restart bluetooth; then
     echo "waitron.sh: switched off bluetoothd's autopair plugin, so a Bluetooth printer's PIN comes from the operator"
   else
-    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — a Bluetooth printer whose PIN is not 0000 may not pair" >&2
+    # Removed, and the unit reloaded and restarted without it, so Bluetooth runs as it did before
+    # and the next install finds no drop-in and tries again.
+    as_root rm -f "$BLUETOOTH_DROPIN" || true
+    as_root systemctl daemon-reload || true
+    as_root systemctl restart bluetooth || true
+    echo "waitron.sh: could not switch off bluetoothd's autopair plugin — a Bluetooth printer whose PIN is not 0000 may not pair; the next install tries again" >&2
   fi
   rm -f "$tmp"
 }

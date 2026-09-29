@@ -143,6 +143,8 @@ profile waitron-print-agent flags=(attach_disconnected,mediate_deleted) {
        peer=(name=org.bluez),
 
   # Pair: BlueZ asks the agent for the PIN, and cancels the question when nobody answers in time.
+  # CI checks RequestPinCode (image-smoke pairs with a PIN) but not Cancel: only probe run
+  # 36585218089, which left a PIN request unanswered, measured that Cancel needs this rule.
   dbus receive
        bus=system
        path=/org/bluez/agent

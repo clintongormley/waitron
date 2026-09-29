@@ -218,7 +218,7 @@ jobs:
           code=$(printf '%s\n' "$out" | sed -n 's/^code=//p')
           scope=$(printf '%s\n' "$out" | sed -n 's/^scope=//p')
           packages=$(printf '%s\n' "$out" | sed -n 's/^packages=//p')
-          # Whether the box image's inputs (deploy/, and the files only image-smoke runs) changed.
+          # Whether the box image's inputs (deploy/, and the files image-smoke runs that IMAGE_SMOKE_FILES names) changed.
           # The `image` job runs on it; a main push also runs it on `code` alone.
           deploy=$(printf '%s\n' "$out" | sed -n 's/^deploy=//p')
 
@@ -564,8 +564,8 @@ jobs:
   # them.
   #
   # WHEN IT RUNS. Whenever an image input changed (`needs.changes.outputs.deploy`, fed by
-  # `isImageInputPath` in scripts/changed-scope.mjs: `deploy/`, plus the files only image-smoke runs,
-  # such as scripts/fake-bluez.py) — on its own, because a change to such a file under `scripts/` is
+  # `isImageInputPath` in scripts/changed-scope.mjs: `deploy/`, plus the files image-smoke runs that
+  # `IMAGE_SMOKE_FILES` names, such as scripts/fake-bluez.py) — on its own, because a change to such a file under `scripts/` is
   # root scope, which answers `code=false`. Otherwise, most PRs skip it. On a PUSH to `main` or a
   # `v*` tag it also runs on `code` alone, because `publish` ships the image off this smoke
   # passing, so every published image was booted first. Drift on quiet days, and an edit to the image

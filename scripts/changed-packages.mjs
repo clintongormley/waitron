@@ -115,7 +115,7 @@ function owningPackage(path, packages) {
  * `root` and `deploy` are orthogonal to `kind`. `root` is true whenever ANY changed path is root
  * scope, so a push of `scripts/x.mjs` beside `packages/db/src/y.ts` is `kind: "packages"` with
  * `root: true`. `deploy` is true whenever a changed path is an image input (`isImageInputPath`:
- * `deploy/`, plus the files only image-smoke runs), so a root-scope push can carry `deploy: true`.
+ * `deploy/`, plus the files `IMAGE_SMOKE_FILES` names), so a root-scope push can carry `deploy: true`.
  *
  * `loadPackages` is a THUNK, not a value: the hook's thunk shells out to `pnpm ls -r`, and the
  * documentation, undetermined and root outcomes return without calling it.
