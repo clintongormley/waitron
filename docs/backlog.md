@@ -787,7 +787,7 @@ date now passes `currentLocale()` to `toLocaleString`, as `formatAlertTime`
 still shows the day, month, year and the time with seconds. One case each for the Backups screen
 and the bucket-copy panel, and two for Cloud services (one per state that shows a date), set the
 dashboard to Spanish in the English-language test browser and check the Spanish form. **Also fixed
-(C85):** the Profile screen's passkey creation date (`apps/dashboard/src/screens/profile-screen.ts`),
+(C85, #896):** the Profile screen's passkey creation date (`apps/dashboard/src/screens/profile-screen.ts`),
 left out of C76, now passes `currentLocale()` to `toLocaleDateString`; one case in
 `profile-screen.test.ts` checks the Spanish form the same way.
 
