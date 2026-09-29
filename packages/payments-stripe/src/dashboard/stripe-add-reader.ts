@@ -44,6 +44,13 @@ export class StripeAddReader extends LitElement {
   /** A refusal that names no field, shown beside Add until the next press. */
   @state() private refusal = "";
   @state() private busy = false;
+  #closed = false;
+
+  #close(): void {
+    if (this.#closed) return;
+    this.#closed = true;
+    this.onClose();
+  }
 
   #onField(event: CustomEvent<{ value: string }>, field: "name" | "reference"): void {
     event.stopPropagation();
@@ -75,8 +82,10 @@ export class StripeAddReader extends LitElement {
         name: this.name,
         reference: this.reference,
       });
+      // The reader exists whether or not the dialog is still open, so the host refreshes its list;
+      // a cancelled or removed dialog does not close again.
       this.onAdded();
-      this.onClose();
+      if (this.isConnected) this.#close();
     } catch (error) {
       this.refusal =
         codeOf(error) === "reader.not_found" || codeOf(error) === "server.internal"
@@ -94,7 +103,7 @@ export class StripeAddReader extends LitElement {
       <wt-dialog
         heading=${t("payments.stripe.add_reader_heading")}
         .open=${true}
-        @wt-close=${() => this.onClose()}
+        @wt-close=${() => this.#close()}
       >
         <wt-input
           class="field"
@@ -128,7 +137,7 @@ export class StripeAddReader extends LitElement {
             .filter(Boolean)
             .join(" ")}
         >
-          <wt-button slot="cancel" data-test="cancel" @click=${() => this.onClose()}
+          <wt-button slot="cancel" data-test="cancel" @click=${() => this.#close()}
             >${t("payments.stripe.cancel")}</wt-button
           >
           <wt-button

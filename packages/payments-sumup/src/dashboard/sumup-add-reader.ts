@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { DashboardRequest } from "@waitron/dashboard-kit";
+import { codeMessage, codeOf, type DashboardRequest } from "@waitron/dashboard-kit";
 import { t } from "./strings.js";
 import { SumUpPaymentsClient } from "./client.js";
 
@@ -14,15 +14,18 @@ export const PAIRING_LIFETIME_MS = 5 * 60 * 1000;
 /** How often the dialog re-reads the reader's status while a pairing is in flight. */
 export const PAIRING_POLL_MS = 2_000;
 
-/** The dialog's stage. `form` collects the name + code; `pairing` polls with the countdown showing;
- * `expired`/`failed` are the two end states that offer _try again_. */
+/** The dialog's stage. `form` collects the name + code; `pairing` posts the code and then polls with
+ * the countdown showing; `expired`/`failed` are the two end states of a pairing the server accepted,
+ * each offering _try again_. */
 type Phase = "form" | "pairing" | "expired" | "failed";
 
 /**
  * The SumUp ADD-READER DIALOG (`readerAdd.kind === "pairing-poll"`). Pressing _Pair_ POSTs the code;
  * the dialog then polls the reader's status until it pairs, the code's lifetime runs out, or a read
- * fails. On an expiry or failure the `processing` reader row this attempt created is unpaired, so no
- * un-paired orphan lingers to be picked as a device default.
+ * fails. The `processing` reader row an accepted attempt created is unpaired when the attempt expires,
+ * fails, or the dialog is closed or removed before it pairs, so no un-paired orphan lingers to be picked
+ * as a device default. A pair request that answers `paired` after the dialog closed is still reported
+ * through `onAdded`.
  */
 @customElement("sumup-add-reader")
 export class SumUpAddReader extends LitElement {
@@ -53,6 +56,8 @@ export class SumUpAddReader extends LitElement {
   @state() private name = "";
   @state() private code = "";
   @state() private attempted = false;
+  /** A refusal of the pair request, which names no field; shown beside Pair until the next press. */
+  @state() private refusal = "";
   @state() private phase: Phase = "form";
   @state() private remaining = PAIRING_LIFETIME_MS / 1000;
 
@@ -62,10 +67,13 @@ export class SumUpAddReader extends LitElement {
   #pairTimer?: ReturnType<typeof setInterval>;
   #pairUntil = 0;
   #pairInFlight = false;
+  /** The `processing` row this attempt created, until it pairs or is unpaired; empty otherwise. */
   #readerId = "";
+  #closed = false;
 
   override disconnectedCallback(): void {
     this.#endPoll();
+    void this.#unpairOrphan();
     super.disconnectedCallback();
   }
 
@@ -95,6 +103,7 @@ export class SumUpAddReader extends LitElement {
     event.stopPropagation();
     if (this.phase === "pairing") return; // one pairing at a time
     this.attempted = true;
+    this.refusal = "";
     if (this.#blocked()) {
       await this.updateComplete;
       await focusFirstInvalid(this.shadowRoot!);
@@ -102,20 +111,26 @@ export class SumUpAddReader extends LitElement {
     }
     this.phase = "pairing";
     this.remaining = PAIRING_LIFETIME_MS / 1000;
-    this.#readerId = ""; // clear any id from a previous attempt so a failed POST leaves no stale ref
     let result;
     try {
       result = await this.#client().addReader({ name: this.name, code: this.code });
-    } catch {
-      // The POST failed before a row was created (the server inserts only after the seat pairs), so
-      // there is no orphan to unpair here — just show the failure.
-      this.phase = "failed";
+    } catch (error) {
+      // The server inserts the row only after the seat pairs, so a refused POST leaves no orphan.
+      this.refusal =
+        codeOf(error) === "payment.pairing_refused"
+          ? t("payments.sumup.pairing_failed")
+          : codeMessage(codeOf(error));
+      this.phase = "form";
       return;
     }
-    if (!this.isConnected) return; // detached mid-flight — never start a timer
-    this.#readerId = result.id;
     if (result.status === "paired") {
-      this.#finish();
+      if (!this.isConnected || this.#closed) this.onAdded();
+      else this.#finish();
+      return;
+    }
+    this.#readerId = result.id;
+    if (!this.isConnected || this.#closed) {
+      void this.#unpairOrphan();
       return;
     }
     this.#pairUntil = Date.now() + PAIRING_LIFETIME_MS;
@@ -134,7 +149,7 @@ export class SumUpAddReader extends LitElement {
     } finally {
       this.#pairInFlight = false;
     }
-    if (!this.isConnected) return;
+    if (!this.isConnected || this.#closed) return;
     // Gate on PAIRING status, not device connectivity: a reader that has paired may go briefly offline
     // within the code's window, and `online` would wrongly time it out.
     if (status.pairingStatus === "paired") {
@@ -148,8 +163,16 @@ export class SumUpAddReader extends LitElement {
   }
 
   #finish(): void {
-    this.#endPoll();
+    this.#readerId = "";
     this.onAdded();
+    this.#close();
+  }
+
+  #close(): void {
+    this.#endPoll();
+    void this.#unpairOrphan();
+    if (this.#closed) return;
+    this.#closed = true;
     this.onClose();
   }
 
@@ -161,12 +184,15 @@ export class SumUpAddReader extends LitElement {
     void this.#unpairOrphan();
   }
 
-  /** Best-effort unpair of the row the successful POST created. A failed unpair must not hang the
-   * dialog — the orphan can still be unpaired from the readers list — so its rejection is swallowed. */
+  /** Best-effort unpair of the row the successful POST created, at most once. A failed unpair must not
+   * hang the dialog — the orphan can still be unpaired from the readers list — so its rejection is
+   * swallowed. */
   async #unpairOrphan(): Promise<void> {
-    if (this.#readerId === "") return;
+    const id = this.#readerId;
+    if (id === "") return;
+    this.#readerId = "";
     try {
-      await this.#client().unpairReader(this.#readerId);
+      await this.#client().unpairReader(id);
     } catch {
       // swallow — cleanup is best-effort; never block the try-again flow on it
     }
@@ -199,7 +225,7 @@ export class SumUpAddReader extends LitElement {
       <wt-dialog
         heading=${t("payments.sumup.add_reader_heading")}
         .open=${true}
-        @wt-close=${() => this.onClose()}
+        @wt-close=${() => this.#close()}
       >
         ${this.#renderBody()} ${this.#renderFooter()}
       </wt-dialog>
@@ -264,8 +290,13 @@ export class SumUpAddReader extends LitElement {
     }
     const blocked = this.#blocked();
     return html`
-      <wt-form-actions slot="footer" .error=${blocked ? t("payments.sumup.fix_fields") : ""}>
-        <wt-button slot="cancel" data-test="cancel" @click=${() => this.onClose()}
+      <wt-form-actions
+        slot="footer"
+        .error=${[this.refusal, blocked ? t("payments.sumup.fix_fields") : ""]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <wt-button slot="cancel" data-test="cancel" @click=${() => this.#close()}
           >${t("payments.sumup.cancel")}</wt-button
         >
         <wt-button

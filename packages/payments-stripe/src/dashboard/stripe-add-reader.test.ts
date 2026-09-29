@@ -205,6 +205,51 @@ describe("stripe-add-reader", () => {
     expect((q(el, "[data-test=add]") as unknown as { loading: boolean }).loading).toBe(false);
   });
 
+  it("calls onClose once when Cancel is pressed while Add is pending, and still reports the added reader", async () => {
+    const pending = deferred<{ id: string; status: string }>();
+    const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
+    const onAdded = vi.fn();
+    const onClose = vi.fn();
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", {
+      request,
+      onAdded,
+      onClose,
+    });
+
+    await setInput(el, "reader-name", "Bar terminal");
+    await setInput(el, "reader-id", "tmr_ABC123");
+    q(el, "[data-test=add]")!.click();
+    await el.updateComplete;
+    q(el, "[data-test=cancel]")!.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    pending.resolve({ id: "row-1", status: "paired" });
+    await vi.waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call onClose when the dialog was detached while Add was pending", async () => {
+    const pending = deferred<{ id: string; status: string }>();
+    const request = vi.fn(() => pending.promise) as unknown as DashboardRequest;
+    const onAdded = vi.fn();
+    const onClose = vi.fn();
+    const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", {
+      request,
+      onAdded,
+      onClose,
+    });
+
+    await setInput(el, "reader-name", "Bar terminal");
+    await setInput(el, "reader-id", "tmr_ABC123");
+    q(el, "[data-test=add]")!.click();
+    await el.updateComplete;
+    el.remove();
+
+    pending.resolve({ id: "row-1", status: "paired" });
+    await vi.waitFor(() => expect(onAdded).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("shows the not-accepted copy when the server fails internally", async () => {
     const request = vi.fn(async () => {
       throw { code: "server.internal" };
