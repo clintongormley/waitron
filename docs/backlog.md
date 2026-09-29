@@ -547,6 +547,12 @@ only an F2, as an R5), but no route calls it: its only callers under `apps/` are
 (`vatBreakdown` in `apps/till/src/state/working-order.ts`) that no screen shows; it uses the rate
 the menu froze for a dish and a variant (`vatRate`, filled in `apps/till/src/api/client.ts`),
 prices a retrieved held line by its class, and leaves out extras picks. Asesor Q26 is still open.
+**The owner's points for when this is designed (2026-09-29):** (1) the amount staff enter for a
+correction is what the customer gets back, VAT included — a €2.00 correction at 10% is €1.82 base
+plus €0.18 VAT, not €2.00 base; (2) the owner asks whether a correction should instead cancel the
+original and issue a new invoice (a corrective invoice by substitution, `TipoRectificativa` "S",
+where today's correction path files one by differences, "I", in
+`packages/fiscal-verifactu/src/backend.ts`) — an open question for the asesor, not decided.
 _2026-09-27, A68 (landed as #726, main `27b54f877`) narrows M7v on the owner's instruction: the
 published version freezes the VAT CLASS only; `working_order_lines.vat_class` replaces `vat_rate`
 (and the net `unit_price` goes); each class's percentage is a dated table in code (`VAT_RATE_TABLE`,
@@ -2008,7 +2014,10 @@ first is still open:
   setup screen now sits in a column centred on the page, at most 704px wide, with the Waitron logo
   at the top. The logo is the brand lockup drawn inline, so its word follows the theme; the
   dashboard banner still loads it as an image and stays unreadable in the dark theme (the entry
-  under "The Waitron wordmark is invisible on the dashboard banner").
+  under "The Waitron wordmark is invisible on the dashboard banner"). The column borrows the
+  pop-up's side spacing (`--wt-modal-inline-margin` and `--wt-modal-inline-padding`, in
+  `apps/setup/src/setup-app.ts`), so a later change to the pop-up's spacing moves the wizard too.
+  **DECIDED (owner, 2026-09-29): leave it** — the wizard gets no spacing values of its own.
 
 **Still open after #334**, each one something the branch consciously did not take:
 
@@ -2962,8 +2971,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Task 10 offers it. With `billId` a held round can now be sent straight to a party's split
       check (the groups route accepts `release: "hold"` naming one,
       `apps/server/src/till-api.groups.test.ts`), which the owner's 2026-09-26 ruling
-      (`tab.split_held_line`) covered only for splitting. **Open question for the owner:** should
-      that be refused too?
+      (`tab.split_held_line`) covered only for splitting. **DECIDED (owner, 2026-09-29):** a held
+      round sent to a split check is allowed, as landed.
     - The server now accepts line changes on a party's split bill. The seven call sites of
       `assertAnchoredTabOpen` in `apps/server/src/working-order.ts` (send, recall, a round, void, a
       line's course, moving lines between bills, and splitting) call `assertPartyBillOpen` instead.
@@ -3058,8 +3067,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         (`apps/server/src/receipt-ticket.ts:270`, `apps/till/src/screens/till-ticket-view.ts:105`;
         the screen's line read, not run), so it overstates what was handed over. The review's Codex
         probe of 2026-09-29, run on the earlier fixture (15.80 due, 20.00 handed over), had
-        `formatReceipt` print `TOTAL 18,00`, `Efectivo 22,20` and `Cambio 4,20`. **Next action:** a
-        test, then decide what the ticket should show (an owner call).
+        `formatReceipt` print `TOTAL 18,00`, `Efectivo 22,20` and `Cambio 4,20`. **PARKED (owner,
+        2026-09-29)** until the product can issue a corrective invoice; the owner's points for that
+        design are on the corrective-invoice entry (R5, above).
       - **A bill corrected to zero cannot be collected, and one corrected below zero probably cannot
         either.** Measured 2026-09-29 with a temporary test that corrected the 18.00 bill by -18.00
         and collected it in cash: with C50's change it fails with
@@ -3070,8 +3080,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         (`packages/core/src/record-correction.ts`) nor the Verifactu backend's correction path
         checks a correction's size against the invoice, and with a negative amount due
         `settlementFor` settles at that amount and the payment insert meets the same
-        `tenders_amount_ck`. **Next action:** decide what collecting a bill with nothing left to pay
-        should do (an owner call), then a test.
+        `tenders_amount_ck`. **DECIDED (owner, 2026-09-29): just close the bill** — collecting a
+        bill that owes nothing is queued as C59.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
@@ -3130,7 +3140,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `packages/reporting/src/overdue-orders.ts`). Not yet checked: the payment API's
       `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
       `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which
-      read the same column. Decide whether those should read the tables alone.
+      read the same column. **DECIDED (owner, 2026-09-29): leave it** — after payment the
+      station queue card, later kitchen notices and the till's list of a party's bills keep
+      showing the receipt label with the party's name, rather than reading the tables alone.
   - **Task 3 DONE (#844, 2026-09-29, main `6736159a2`): a table needs cleaning, not its
     party.** What changes for a person using the till:
     - Finish closes the party at once. Where the venue's clearing setting is on, each of its tables
@@ -3506,17 +3518,23 @@ ongoing overhaul listed at the top of Track A.
 
 - **The sidebar's sections now open folded shut (C35, #822, owner decision 2026-09-28).** Two
   leftovers from its review, not fixed:
-  (1) **Owner question:** outside a search, the header of the section holding the current page stays
+  (1) Outside a search, the header of the section holding the current page stays
   clickable (during a nav search the headers are plain labels, C46), but a click changes nothing on
   screen until you open a page outside that section (the section shows open because it holds the
   current page; the click only records a collapse for later). The old code had the same no-op.
   `wt-disclosure` and `wt-data-table` instead hide or disable a collapse control that would do
-  nothing. Should this header do the same?
+  nothing. **DECIDED (owner, 2026-09-29): the header is not changed.** Instead each section gets an
+  info page, which its header would open — the next entry.
   (2) **A test that guards nothing:** "keeps the clicked group header at the same on-screen position…"
   in `apps/dashboard/src/dashboard-app.test.ts` still passes with the scroll correction in
   `#toggleGroup` deleted — on `main` at 55504ee1b too, before C35. Making it catch a missing correction
   needs a layout where the browser pulls the list back on its own, which may not be reachable; next
   action is to find out whether it is, then either fix the test or drop the correction and its test.
+
+- **Every dashboard sidebar section gets an info page — OPEN (owner, 2026-09-29).** A page saying
+  what the section is for and what is in it, opened by the section's header. It replaces the
+  question C35 left about the header of the section you are on. **Next action:** brainstorm what
+  each section's page says; it needs a spec.
 
 - **A generated display name is the first given name and first surname (C38, #827, owner decision
   2026-09-28).** `deriveDisplayName` (`packages/shared/src/derive-display-name.ts`) takes the first
@@ -3566,7 +3584,7 @@ ongoing overhaul listed at the top of Track A.
   chooser, by choice; (2) the servers list (`apps/dashboard/src/screens/servers-screen.ts`) offers
   no chooser: its one column beside the buttons holds the address, the machine id, the role and, on
   its own row, "this server" together, so there is nothing to offer unless that cell is split into
-  separate columns — whether to split it is the owner's call; (3)
+  separate columns — **DECIDED (owner, 2026-09-29): leave it**, unsplit and with no chooser; (3)
   `apps/dashboard/src/widgets/category-manager.ts` renders a table that no screen mounts (only its
   own tests do), and was left alone; (4) nothing checks that a NEW dashboard table offers the
   chooser; (5) where a screen keeps its search and filters outside the table (staff, card readers)
@@ -3598,7 +3616,9 @@ ongoing overhaul listed at the top of Track A.
   `Math.floor(contrast * 100) / 100`) while the older entry rounds. Measured 2026-09-29 by running
   axe at 1280 px over the dashboard with this branch's production changes reverted to a5474be6e: six
   colour-contrast failures at 4.32:1 in the light theme, none in the dark; the narrow-drawer cases
-  pass.
+  pass. Two choices the branch made are **DECIDED (owner, 2026-09-29): keep both** — "ñ" is matched
+  as "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
+  sidebar.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
@@ -3609,8 +3629,15 @@ ongoing overhaul listed at the top of Track A.
   press each bad field
   shows its message, the bottom message asks to fix the marked fields and the action stays disabled
   until they are fixed; a refusal that names no field on the form (a failed save, a conflict) is the
-  bottom message instead and leaves the action working, so the person can try again.
-  `docs/developers/design-system.md` → Forms states the rule. Deliberate exceptions in
+  bottom message instead and leaves the action working, so the person can try again. In the image
+  library that bottom message reads "The image could not be saved." followed by the refusal's own
+  sentence (`image.save_error`), where the design guide asks for the refusal's sentence alone;
+  **DECIDED (owner, 2026-09-29): leave it.**
+  `docs/developers/design-system.md` → Forms states the rule. **The owner restated the rule on
+  2026-09-29:** the button works until the first press; a form validation error (a field the form
+  itself finds wrong) keeps it disabled until fixed; an error that comes back from a request (the
+  server refused, or it could not be reached) leaves it enabled. Queued item C54 is to make the code
+  and `docs/developers/design-system.md` match it. Deliberate exceptions in
   `apps/dashboard`: the add-to-menus dialog (`apps/dashboard/src/widgets/add-to-menus.ts`) keeps its
   list of places that failed, and its menu-load error, at the top of the dialog; the backups panel's
   refusal paragraph (`apps/dashboard/src/screens/stream-settings-panel.ts`) stays directly under the
@@ -3632,7 +3659,8 @@ ongoing overhaul listed at the top of Track A.
   operations editors. A refused card-provider key (`payment.provider_credential_rejected`) is said
   beside Connect and leaves it working, because the code carries only the provider's id: each
   package's `card-provider.ts` `connect()` raises it for an empty key, for any failure of its one
-  lookup call to the provider and, in SumUp's, when that lookup finds no merchant. A refused SumUp
+  lookup call to the provider and, in SumUp's, when that lookup finds no merchant. **DECIDED (owner,
+  2026-09-29): leave Connect working** after that refusal. A refused SumUp
   pairing request is said beside Pair, with the form kept. On the venue operations screen a failed
   load, and with no editor open a refused list action or setting that saves at once, is a plain
   alert where the summary was; an open editor keeps its own refusal beside Save, apart from a failed
@@ -3995,9 +4023,10 @@ itself is not named there. **Next action:** name it and its hedge on that rule's
 
 **The mode screen's certificate note** (C40, #833, 2026-09-29): it now shows only when the wizard
 skipped the connection question, because the server offered no certificate authority to download,
-and reads "If your browser shows a certificate warning, open certificate help". **Open, the owner's
-call:** on that skipped path, ask the connection question anyway instead of showing the note (the
-Codex review's alternative) — it changes #330's design, so it was not taken.
+and reads "If your browser shows a certificate warning, open certificate help". The Codex review's
+alternative, asking the connection question anyway on that skipped path instead of showing the
+note, changes #330's design and was not taken. **DECIDED (owner, 2026-09-29): keep it as built** —
+the note shows on that skipped path and the question is not asked there.
 
 ### B2. Backups that leave the box
 
@@ -6557,9 +6586,11 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
     load still shows "Could not verify the passkey". The reviewer reported `main` behaving the same
     before the branch. A fix would make the automatic attempt quiet for that case too, or have the
     request helper refuse an unreadable success body with a code; the second touches every request.
+    Queued as C58 (owner chose (a), 2026-09-29): the automatic attempt stays quiet for that case.
   - **Left OPEN by #843's review:** sign-in has no classifier for passkey errors like the one
     registration uses (`classifyPasskeyRegistrationError`); the button now tells a browser refusal
-    from a server refusal inline. A shared helper would restructure code beyond C8.
+    from a server refusal inline. A shared helper would restructure code beyond C8. Queued as C57
+    (owner, 2026-09-29).
 - The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
   terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
