@@ -759,7 +759,7 @@ components, then make the guard and both documents agree — one of them is curr
 something CI will not enforce. Whoever picks up the next screen should settle this first, because
 every screen after it inherits the answer.
 
-**Fixed (C69): every `var(--wt-…)` read in source text is now checked against the names declared.**
+**Fixed (C69, #865): every `var(--wt-…)` read in source text is now checked against the names declared.**
 The Cloud services screen's two reads of undeclared names (its labels' weight and its card's width)
 now read declared tokens. The guard, `scripts/style-token-names.test.ts`, is weaker than its name
 in the ways its header states, and excuses the five till reads under A4 in its `FALLBACK_READS`; an
