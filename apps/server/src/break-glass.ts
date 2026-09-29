@@ -1,5 +1,5 @@
 import { generatePassword } from "@waitron/provisioning";
-import { hashSecret, verifySecret } from "@waitron/identity";
+import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
   readBreakGlassVerifier,
   setBreakGlassVerifierTx,
@@ -25,5 +25,5 @@ export async function verifyBreakGlass(
   secret: string,
 ): Promise<boolean> {
   const verifier = await readBreakGlassVerifier(appDb, nodeId);
-  return verifier !== null && verifySecret(secret, verifier);
+  return verifier !== null && (await verifySecretAsync(secret, verifier));
 }

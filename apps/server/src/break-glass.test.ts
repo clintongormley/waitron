@@ -3,8 +3,7 @@ import { CORE_MIGRATIONS, stampDeployment, readBreakGlassVerifier } from "@waitr
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mintBreakGlassSecret, verifyBreakGlass } from "./break-glass.js";
 
-// The core set only: mint and verify touch nothing else. The per-test reset leaves the third case
-// a node with no verifier.
+// The core set only: mint and verify touch nothing else.
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -31,6 +30,24 @@ describe("break-glass mint + verify", () => {
     const second = await mintBreakGlassSecret(suite.db, NODE);
     expect(await verifyBreakGlass(suite.db, NODE, first)).toBe(false);
     expect(await verifyBreakGlass(suite.db, NODE, second)).toBe(true);
+  });
+
+  it("lets the event loop keep turning while it checks the secret", async () => {
+    const secret = await mintBreakGlassSecret(suite.db, NODE);
+    let turns = 0;
+    let done = false;
+    const tick = () => {
+      if (done) return;
+      turns += 1;
+      setImmediate(tick);
+    };
+    setImmediate(tick);
+    try {
+      expect(await verifyBreakGlass(suite.db, NODE, secret)).toBe(true);
+    } finally {
+      done = true;
+    }
+    expect(turns).toBeGreaterThan(1);
   });
 
   it("verify returns false when no verifier is set", async () => {

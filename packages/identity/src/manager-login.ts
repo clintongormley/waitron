@@ -48,16 +48,16 @@ async function completeManagerLogin(
   if (person.status === "suspended")
     throw new AppError("person.suspended", { personId: person.id });
   if (person.status !== "active") {
-    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});
   }
   let passwordOk = false;
   if (person.passwordHash === null) {
     // Same KDF work as a wrong password, so an account awaiting password setup does not stand out
     // by its KDF time.
-    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
   } else {
-    passwordOk = verifyPassword(input.password, person.passwordHash);
+    passwordOk = await verifyPassword(input.password, person.passwordHash);
   }
   if (!passwordOk) throw new AppError("password.invalid", {});
   if (person.totpSecret !== null) {
@@ -95,13 +95,13 @@ export async function loginManager(
   // An unknown email gets the same error, after the same KDF work, as a wrong password, so the
   // response does not say which addresses have accounts.
   if (person === undefined) {
-    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});
   }
   // The email login is public, so suspension must not be discoverable by entering somebody else's
   // address.
   if (person.status === "suspended") {
-    verifyPassword(input.password, DUMMY_PASSWORD_HASH);
+    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
     throw new AppError("password.invalid", {});
   }
   return completeManagerLogin(tx, input, person, "totp.required");

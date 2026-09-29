@@ -977,8 +977,8 @@ describe("mountMeApi — own credentials and second factor", () => {
     });
     expect(res.status).toBe(204);
     const row = await personRow(personId);
-    expect(verifyPin("8642", row.pinHash!)).toBe(true);
-    expect(verifyPin("5555", row.pinHash!)).toBe(false);
+    expect(await verifyPin("8642", row.pinHash!)).toBe(true);
+    expect(await verifyPin("5555", row.pinHash!)).toBe(false);
   });
 
   it("refuses a PIN change with the wrong current password (401 password.invalid)", async () => {
@@ -989,7 +989,7 @@ describe("mountMeApi — own credentials and second factor", () => {
     });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
-    expect(verifyPin("5555", (await personRow(personId)).pinHash!)).toBe(true);
+    expect(await verifyPin("5555", (await personRow(personId)).pinHash!)).toBe(true);
   });
 
   it("slows a person down after repeated wrong passwords (429 password.throttled)", async () => {

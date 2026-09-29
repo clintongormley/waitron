@@ -446,8 +446,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     // Plaintext admin secrets were HASHED at the boundary and never reached provision.
     expect(req.venue.admin).not.toHaveProperty("pin");
     expect(req.venue.admin).not.toHaveProperty("password");
-    expect(verifyPin("1357", req.venue.admin.pinHash)).toBe(true);
-    expect(verifyPassword("correct-horse-battery", req.venue.admin.passwordHash)).toBe(true);
+    expect(await verifyPin("1357", req.venue.admin.pinHash)).toBe(true);
+    expect(await verifyPassword("correct-horse-battery", req.venue.admin.passwordHash)).toBe(true);
 
     expect(persistTrading.mock.calls[0][0]).toEqual({
       tillId: TILL_ID,
@@ -3253,7 +3253,7 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
         passwordHash: string;
       };
       expect(proof.personId).toBe(ADOPT_CREDENTIAL.personId);
-      expect(verifyPassword(ADOPT_CREDENTIAL.password, proof.passwordHash)).toBe(true);
+      expect(await verifyPassword(ADOPT_CREDENTIAL.password, proof.passwordHash)).toBe(true);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

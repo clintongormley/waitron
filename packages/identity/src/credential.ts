@@ -27,7 +27,11 @@ export async function verifyPersonCredential(
     .where(eq(persons.id, personId));
   if (person === undefined) throw new AppError("person.not_found", { personId });
   if (person.status === "suspended") throw new AppError("person.suspended", { personId });
-  if (person.status === "pending" || person.pinHash === null || !verifyPin(pin, person.pinHash)) {
+  if (
+    person.status === "pending" ||
+    person.pinHash === null ||
+    !(await verifyPin(pin, person.pinHash))
+  ) {
     throw new AppError("pin.invalid", {});
   }
   return { role: person.role as PersonRoleValue, locale: person.locale };

@@ -1,6 +1,6 @@
 import "./errors.js";
 import { AppError } from "@waitron/shared";
-import { hashSecret, verifySecret } from "./secret-hash.js";
+import { hashSecret, verifySecretAsync } from "./secret-hash.js";
 
 export const MIN_PASSWORD_LENGTH = 8;
 
@@ -14,6 +14,6 @@ export function hashPassword(password: string): string {
   return hashSecret(password);
 }
 
-export function verifyPassword(password: string, stored: string): boolean {
-  return verifySecret(password, stored);
+export function verifyPassword(password: string, stored: string): Promise<boolean> {
+  return verifySecretAsync(password, stored);
 }

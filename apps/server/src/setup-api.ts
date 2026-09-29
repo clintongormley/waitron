@@ -10,12 +10,7 @@ import {
   resolveFiscalJurisdiction,
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
-import {
-  hashPassword,
-  hashPin,
-  normalizeAndValidateEmail,
-  verifyPassword,
-} from "@waitron/identity";
+import { hashPassword, hashPin, normalizeAndValidateEmail, verifySecret } from "@waitron/identity";
 import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
@@ -228,7 +223,7 @@ const runReset = createErrorBoundary(RESET_STATUS, "setup.reset_failed");
 function matchesResetProof(proof: unknown, personId: string, password: string): boolean {
   const saved =
     typeof proof === "object" && proof !== null ? (proof as Record<string, unknown>) : {};
-  const passwordMatches = verifyPassword(
+  const passwordMatches = verifySecret(
     password,
     typeof saved.passwordHash === "string" ? saved.passwordHash : "",
   );

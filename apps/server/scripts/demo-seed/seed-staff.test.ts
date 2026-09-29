@@ -87,7 +87,7 @@ describe("seedStaff", () => {
     expect(roles).toEqual(new Set(["staff", "supervisor", "manager", "admin"]));
 
     for (const person of persons.filter((p) => p.role !== "admin")) {
-      expect(verifyPin(DEMO_PIN, person.pin_hash)).toBe(true);
+      expect(await verifyPin(DEMO_PIN, person.pin_hash)).toBe(true);
     }
 
     // Never plaintext, and never the un-hashed PIN string.
