@@ -3479,8 +3479,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - The till gained wording for `table.not_joined`, and `table.not_shared`'s now reads right for
       Split a table too.
     - A paid bill left on the absorbed party names, in the kitchen, the tables of the party its
-      guests went to: `orderTableLabels` follows the chain of merges (`partySurvivors`,
-      `apps/server/src/parties.ts`) to its last party and reads that party's tables, and the sent
+      guests went to: `orderTableLabels` follows the chain of merges (`partySurvivors`, since C77 in
+      `packages/db/src/party-table-labels.ts`) to its last party and reads that party's tables, and the sent
       work read before a table action includes the bills of every party merged into the acting one
       (`partyFamilies`). The bill's party, label, lines and payments do not change. Run in
       `apps/server/src/party-table-actions.test.ts`: the paid bill's sent dish gets a MOVED notice
@@ -3494,11 +3494,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       view follows the merge (read, not run; see the open points).
     Tests: `apps/server/src/party-table-actions.test.ts` and
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
-    Open points: the manager overview's slow-orders list (`computeOverdueOrders`,
-    `packages/reporting/src/overdue-orders.ts`, which keeps its own copy of the pass's table naming
-    in `readPartyTableLabels`) does not follow the merge chain, so a late dish on a paid bill left
-    on a party combined away is named there from that party's own tables or the bill's label, while
-    the pass names the tables its guests went to (found by reading, not run).
+    Open points: **Fixed (C77):** the manager overview's slow-orders list (`computeOverdueOrders`,
+    `packages/reporting/src/overdue-orders.ts`) kept its own copy of the pass's table naming and did
+    not follow the merge chain. The pass and the list now call one function,
+    `billPartyTableLabels` (`packages/db/src/party-table-labels.ts`, with `partyTableLabels` and
+    `partySurvivors` moved there from `apps/server/src/parties.ts`). Run in
+    `packages/reporting/src/overdue-orders.test.ts`: a late dish on a paid bill whose party was
+    merged twice is named after the last party's tables ("Mesa 7, 8"), where before it was named
+    by the bill's own label ("Ana").
     `party.main_bill_stays`'s till wording says "the table has other unpaid bills",
     which Split a table choosing the main bill need not satisfy. The old merge (`mergeTabs`) still
     writes a merged party's tables in one statement, so they share a joining time and their order in

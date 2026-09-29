@@ -11,6 +11,7 @@
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
+  billPartyTableLabels,
   diningTables,
   kitchenPrintJobLines,
   kitchenPrintJobs,
@@ -38,7 +39,7 @@ import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble } from "./print-job-trouble.js";
-import { partyFamilies, partyFamily, partySurvivors, partyTableLabels } from "./parties.js";
+import { partyFamilies, partyFamily } from "./parties.js";
 import type { KitchenLayout, KitchenTicketItem, KitchenTicketStation } from "./kitchen-ticket.js";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
@@ -267,12 +268,7 @@ export async function orderTableLabels(
   orders: readonly LabelledOrder[],
 ): Promise<Map<string, string | null>> {
   const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
-  const byParty = await partyTableLabels(tx, partyIds);
-  const seatless = partyIds.filter((id) => byParty.get(id)!.length === 0);
-  const survivorOf =
-    seatless.length === 0 ? new Map<string, string>() : await partySurvivors(tx, seatless);
-  const survivors = [...new Set(survivorOf.values())].filter((id) => !byParty.has(id));
-  for (const [id, labels] of await partyTableLabels(tx, survivors)) byParty.set(id, labels);
+  const byParty = await billPartyTableLabels(tx, partyIds);
   const others = orders.filter((order) => order.partyId === null);
   const seatedAt = others.map((order) => order.id);
   const deliveredTo = others.flatMap((order) => order.deliveryTableId ?? []);
@@ -301,7 +297,7 @@ export async function orderTableLabels(
   const labels = new Map<string, string | null>();
   for (const order of orders) {
     if (order.partyId !== null) {
-      const partyLabels = byParty.get(survivorOf.get(order.partyId) ?? order.partyId)!;
+      const partyLabels = byParty.get(order.partyId)!;
       labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
       continue;
     }

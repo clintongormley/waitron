@@ -1,8 +1,14 @@
 import "./errors.js";
 import { eq, or, sql } from "drizzle-orm";
-import { diningTables, parties, sales, workingOrders, type Transaction } from "@waitron/db";
+import {
+  diningTables,
+  parties,
+  partyTableLabels,
+  sales,
+  workingOrders,
+  type Transaction,
+} from "@waitron/db";
 import { AppError, partyReceiptLabel } from "@waitron/shared";
-import { partyTableLabels } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 
 /**

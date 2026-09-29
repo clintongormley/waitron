@@ -27,7 +27,6 @@ import {
   tableHeld,
   partyFamily,
   partyOfOrder,
-  partyTableLabels,
   setMainBill,
 } from "./parties.js";
 import type { PartyCommand } from "./parties.js";
@@ -80,6 +79,7 @@ import {
   ticketItems,
   partyTables,
   parties,
+  partyTableLabels,
   withTransaction,
   workingOrderLines,
   workingOrders,

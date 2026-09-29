@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, parties, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   seedFiredLine,
@@ -316,6 +316,56 @@ describe("computeOverdueOrders", () => {
     const rows = await run();
 
     expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Ana" })]);
+  });
+
+  it("names a bill left on a party combined away after the tables of the party it ended in, as the pass does", async () => {
+    const seed = {
+      tillId: venue.tillId,
+      nodeId: venue.nodeId,
+      locationId: venue.locationId,
+      stationId,
+    };
+    const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
+    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
+      { label: "Mesa 4", joinedAt: "2026-09-28T20:00:00.000Z", leftAt: "2026-09-28T20:45:00.000Z" },
+    ]);
+    await suite.db
+      .update(workingOrders)
+      .set({ label: "Ana", status: "settled", settledAt: "2026-09-28T20:40:00.000Z" })
+      .where(eq(workingOrders.id, orderId));
+    // Two merges in a row, so a reader that follows one step names the middle party's tables.
+    const { orderId: middleBill } = await seedOpenOrder(suite.db, seed, 2);
+    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId: middleBill }, [
+      { label: "Mesa 6", joinedAt: "2026-09-28T20:10:00.000Z", leftAt: "2026-09-28T20:50:00.000Z" },
+    ]);
+    const { orderId: survivorBill } = await seedOpenOrder(suite.db, seed, 3);
+    await seedPartyAt(suite.db, { locationId: venue.locationId, orderId: survivorBill }, [
+      { label: "Mesa 7", joinedAt: "2026-09-28T20:20:00.000Z" },
+      { label: "Mesa 8", joinedAt: "2026-09-28T20:21:00.000Z" },
+    ]);
+    const partyOf = async (id: string) =>
+      (
+        await suite.db
+          .select({ partyId: workingOrders.partyId })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id))
+      )[0]!.partyId!;
+    const moved = await partyOf(orderId);
+    const middle = await partyOf(middleBill);
+    const survivor = await partyOf(survivorBill);
+    const closed = { state: "closed" as const, closedAt: "2026-09-28T20:50:00.000Z" };
+    await suite.db
+      .update(parties)
+      .set({ ...closed, mergedIntoPartyId: middle })
+      .where(eq(parties.id, moved));
+    await suite.db
+      .update(parties)
+      .set({ ...closed, mergedIntoPartyId: survivor })
+      .where(eq(parties.id, middle));
+
+    const rows = await run();
+
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Mesa 7, 8" })]);
   });
 
   it("a bare walk-up (no table) carries a null tableLabel", async () => {
