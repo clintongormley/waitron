@@ -49,7 +49,7 @@ describe("setup-review-screen", () => {
       draft: fullDraft(),
     });
     expect(text(el, "[data-test=summary-mode]")).toBe("live");
-    expect(text(el, "[data-test=summary-country]")).toBe("ES");
+    expect(text(el, "[data-test=summary-country]")).toBe("Spain");
     expect(text(el, "[data-test=summary-taxId]")).toBe("B12345678");
     expect(text(el, "[data-test=summary-legalName]")).toBe("Deli del Sol SL");
     expect(text(el, "[data-test=summary-location]")).toBe("Calle Mayor");

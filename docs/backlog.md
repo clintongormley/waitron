@@ -2045,7 +2045,7 @@ seen in a throwaway test, since deleted, and none has a test pinning it:
 - *In Demo with a draft country that has no venue-setup pack*, the error summary asks for the tax ID
   and the invoice languages, neither of which Demo shows.
 - *A draft carrying a country with no venue-setup pack* (a configuration import can bring one) shows
-  España in the country select while the screen holds the other value, so "Check the country." sits
+  Spain in the country select while the screen holds the other value, so "Check the country." sits
   beside what looks like a valid choice.
 - *A fiscal test or a provision that answers after the wizard has been removed from the page leaves
   it stuck when it is put back*: the Run button stays on "Running test…", or the screen stays on
@@ -2062,6 +2062,14 @@ calls `this.#fetch(...)` as a method. It works today only because `main.ts` hand
 `createInstrumentedFetch`'s arrow wrapper (`packages/diagnostics/src/instrument-fetch.ts`), which
 calls the real `fetch` as a plain function. A `DashboardApi` built with its default `fetch` would be
 refused on the configuration export with `Illegal invocation`.
+
+**A country pack's `name` is no longer read by the product — OPEN (left by C41, 2026-09-29).** The
+wizard now names countries through the browser in its own language, so `CountryPack.name`
+(`packages/country/src/country.ts`; "España" and "United Kingdom" in the two packs) is read only by
+`packages/country-packs/src/registry.test.ts`. Delete the field, have that test identify packs by
+`countryCode`, and drop `name` from the three test fixtures that build a pack
+(`packages/country/src/country.test.ts`, `apps/server/src/setup-api.country-pack.test.ts`,
+`apps/setup/src/screens/venue-screen.test.ts`); allowed freely before go-live.
 
 The original walkthrough is retained under *Detail → Setup wizard*.
 
