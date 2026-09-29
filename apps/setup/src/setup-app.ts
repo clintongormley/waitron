@@ -201,7 +201,7 @@ const BUCKET_FIELD_CODES: Record<string, BucketField> = {
 const BUCKET_FIELD_PATHS: Record<string, BucketField> = { kit: "kit", environment: "environment" };
 
 const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
-  artifact: "restore.check.artifact",
+  artifact: "restore.check.backup_file",
   recoveryKey: "restore.check.recovery_key",
   environment: "restore.check.environment",
 };
@@ -766,11 +766,13 @@ export class SetupApp extends LitElement {
           RESTORE_FIELD_PATHS,
         );
         this.restoreError =
-          this.restoreInvalidField !== undefined
-            ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
-            : typeof code === "string"
-              ? sayWith("shell.restore.staging_failed_code", { code })
-              : say("shell.restore.staging_failed");
+          code === "restore.environment_mismatch"
+            ? say("shell.restore.environment_mismatch")
+            : this.restoreInvalidField !== undefined
+              ? say(RESTORE_FIELD_CHECKS[this.restoreInvalidField])
+              : typeof code === "string"
+                ? sayWith("shell.restore.staging_failed_code", { code })
+                : say("shell.restore.staging_failed");
       }
       this.screen = "restore";
     }

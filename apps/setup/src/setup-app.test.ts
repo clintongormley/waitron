@@ -2913,7 +2913,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       "restore.environment_mismatch",
       { backup: "preproduction", target: "production" },
       "environment",
-      "Check the backup environment.",
+      "The backup comes from the other environment. Choose the environment it came from.",
     ],
     ["setup.request_invalid", { field: "artifact" }, "artifact", "Check the backup file."],
     ["setup.request_invalid", { field: "recoveryKey" }, "recoveryKey", "Check the recovery key."],
@@ -2924,7 +2924,7 @@ describe("restoring a backup file whose old server may still be running", () => 
       "Check the backup environment.",
     ],
   ])(
-    "returns the archive refusal %s %o under the %s field as %j, leaving Restore working",
+    "returns the archive refusal %s %o under the %s field, leaving Restore working",
     async (code, params, field, message) => {
       const el = await mountSetupApp(
         stubApi({ restore: vi.fn().mockRejectedValue({ code, params, status: 400 }) }),

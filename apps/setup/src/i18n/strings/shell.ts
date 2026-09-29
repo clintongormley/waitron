@@ -64,6 +64,8 @@ export const shellEn = {
     "The backup could not be staged. Check the connection and try again.",
   "shell.restore.staging_failed_code":
     "The backup could not be staged. Check the file, key and environment. ({code})",
+  "shell.restore.environment_mismatch":
+    "The backup comes from the other environment. Choose the environment it came from.",
 
   "shell.bucket.no_answer": "The copy could not be restored. Check the connection and try again.",
   "shell.bucket.refused_code": "The copy could not be restored. ({code})",
@@ -181,6 +183,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido preparar la copia de seguridad. Comprueba la conexión e inténtalo de nuevo.",
   "shell.restore.staging_failed_code":
     "No se ha podido preparar la copia de seguridad. Revisa el archivo, la clave y el entorno. ({code})",
+  "shell.restore.environment_mismatch":
+    "La copia viene del otro entorno. Elige el entorno del que viene.",
 
   "shell.bucket.no_answer":
     "No se ha podido restaurar la copia. Comprueba la conexión e inténtalo de nuevo.",
