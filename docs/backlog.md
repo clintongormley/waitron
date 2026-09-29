@@ -4504,7 +4504,7 @@ approved.
   agent. Low priority.
 - **On-device agent** — a till hosting a print agent, the single-box venue's box-death printing path.
   Needs a native app; parked behind the go-native decision.
-- **DONE (C70): a sent print job is no longer recorded as failed when its `done` report is
+- **DONE (C70, #866): a sent print job is no longer recorded as failed when its `done` report is
   refused.** `runAgentOnce` (`packages/printing/src/runtime.ts`) now holds only `transport.send`
   inside its `try`, so a refused `done` report no longer uses up an attempt or stores the
   database's refusal text as a printer error; the refusal now reaches the caller. The refused job
