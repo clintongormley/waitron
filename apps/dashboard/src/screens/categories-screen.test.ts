@@ -1502,6 +1502,12 @@ async function openMainCategory(el: CategoriesScreen, remove: boolean) {
   await mainCategoryCombobox(el).updateComplete;
   return dialog;
 }
+/** The main-category dialog's one message, drawn beside Save inside its action row. */
+async function besideSave(dialog: Element): Promise<string | null> {
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? null;
+}
 function mainCategoryCombobox(el: CategoriesScreen) {
   return el.shadowRoot!.querySelector<
     HTMLElement & { value: string; updateComplete: Promise<unknown> }
@@ -1868,11 +1874,10 @@ it("explains a refused main-category save and keeps its dialog open", async () =
   await openProducts(el, "food");
   const dialog = await openMainCategory(el, true);
   dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
-  await vi.waitFor(() =>
-    expect(dialog.querySelector('p[role="alert"]')?.textContent).toBe(
-      codeMessage("category.not_found"),
-    ),
+  await vi.waitFor(async () =>
+    expect(await besideSave(dialog)).toBe(codeMessage("category.not_found")),
   );
+  expect(alertTexts(dialog)).toEqual([]);
   expect(dialog.open).toBe(true);
 });
 
@@ -1993,7 +1998,7 @@ it.each(["Cancel", "a close"])(
     await openProducts(el, "food");
     const dialog = await openMainCategory(el, true);
     dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
-    await vi.waitFor(() => expect(dialog.querySelector('p[role="alert"]')).not.toBeNull());
+    await vi.waitFor(async () => expect(await besideSave(dialog)).not.toBeNull());
     if (way === "Cancel") dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
     else dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
@@ -2220,7 +2225,8 @@ it.each([
     };
     await vi.waitFor(() => expect(picker.error).toBe(codeMessage(refusal.code)));
     await el.updateComplete;
-    expect(alertTexts(dialog)).toEqual([t("form.fix_fields")]);
+    expect(alertTexts(dialog)).toEqual([]);
+    expect(await besideSave(dialog)).toBe(t("form.fix_fields"));
     await vi.waitFor(() => expect(holdsFocus(picker)).toBe(true));
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2230,6 +2236,7 @@ it.each([
     await el.updateComplete;
     expect(picker.error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
+    expect(await besideSave(dialog)).toBeNull();
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },

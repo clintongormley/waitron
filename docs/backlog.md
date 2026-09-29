@@ -3931,15 +3931,16 @@ ongoing overhaul listed at the top of Track A.
   says the code is incorrect or no longer valid and how to get a new one (`profile.email_code_refused`, used only in the
   screen's email mode; the code's own link sentence stays for the login screen's links), and
   `locale.unsupported` has its own sentence in `apps/dashboard/src/i18n/codes.ts`;
-  (13) the categories screen's change-main-category dialog draws its message above the picker (it
-  did before C54), and since C54 that message reads "Correct the highlighted fields to continue."
-  when a refusal is placed under the picker — a summary at the top, which Forms forbids; moving it
-  beside the action (inside `wt-form-actions`' shadow root) changes two assertions older than
-  C54 that read `p[role="alert"]` from the dialog (`apps/dashboard/src/screens/categories-screen.test.ts`),
-  and the owner decided to move it and let those assertions change (queued as C65). **Next
-  action:** the owner decided on 2026-09-29 that (5) is queued as C64, (13) as C65, and the setup
-  screens' wording under a refused field in (1) as C62; the other open points still wait for the
-  owner to say which are worth doing.
+  (13) **DONE (C65, 2026-09-29):** the categories screen's change-main-category dialog now says its
+  message beside Save, through `wt-form-actions`' `error`, instead of above the picker: a refusal
+  naming no field shows its own sentence there, and one placed under the picker shows "Correct the
+  highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`.
+  Still open there, read and not run: the same screen's delete dialog draws its message in the
+  dialog's body, below the preview, rather than beside Delete (`#dialogMessage` in
+  `apps/dashboard/src/screens/categories-screen.ts`). **Next action:** the owner decided on
+  2026-09-29 that (5) is queued as C64 and the setup screens' wording under a refused field in (1)
+  as C62; the other open points, and the delete dialog's message above, still wait for the owner to
+  say which are worth doing.
 
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it

@@ -413,11 +413,14 @@ export class CategoriesScreen extends LitElement {
     await this.#load();
   }
   /** A refusal placed under a picker is said there, so the dialog's own line only points at it. */
-  #dialogMessage(fieldMarked: boolean) {
-    const message = [
+  #dialogError(fieldMarked: boolean): string {
+    return [
       ...(this.saveError ? [this.saveError] : []),
       ...(fieldMarked ? [t("form.fix_fields")] : []),
     ].join(" ");
+  }
+  #dialogMessage(fieldMarked: boolean) {
+    const message = this.#dialogError(fieldMarked);
     return message ? html`<p role="alert">${message}</p>` : nothing;
   }
   #focusRefused(dialog: "delete-dialog" | "main-category-dialog"): void {
@@ -1007,7 +1010,6 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.#closeMainCategory();
         }}
       >
-        ${mainProduct ? this.#dialogMessage(this.mainCategoryError !== "") : nothing}
         ${
           mainProduct
             ? html`<p>${mainProduct.name}</p>
@@ -1027,7 +1029,9 @@ export class CategoriesScreen extends LitElement {
                 })}`
             : nothing
         }
-        <wt-form-actions slot="footer"
+        <wt-form-actions
+          slot="footer"
+          .error=${mainProduct ? this.#dialogError(this.mainCategoryError !== "") : ""}
           ><wt-button
             slot="cancel"
             variant="secondary"
