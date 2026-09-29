@@ -8312,6 +8312,14 @@ it. Left open:
   whose body is already sent, such as a delete of 1,000 keys, is cut off, and how long real
   providers take for one was not measured; and the tests run the handler's below-6,000 ms path,
   while its production path was measured by hand, not by a test.
+- **OPEN (found by lane C, 2026-09-29): the pause test's bucket control failed once on `main`.** CI
+  run 36619928071 (head `573253221`, #885, which changed only `apps/server/src/order-groups.ts`, its
+  test, the backlog and a plan) failed `test-server-stream`: at step 6 of
+  `apps/server/src/stream-pause.e2e.test.ts` (line 540), the control `store.list("")` sent just
+  after the test SIGSTOPs the bucket came back `answered` within the bound instead of
+  `unanswered`. The next `main` run that ran the job, 36624117576 (head `7f0ad17f7`, which contains
+  #885), passed it. Not reproduced and not diagnosed; not re-run. A guess to test, not a finding: a
+  reply already on its way, or a request the bucket had read, before the SIGSTOP landed.
 - **Open, left by #668 (A37): two things about the pause test and its deadline.** (1) The test's
   fill of the side file to 16 MiB took 82 s and 895 sales on CI (run for head `464d9eca7`) against
   its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the
