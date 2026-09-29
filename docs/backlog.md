@@ -2373,7 +2373,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     Current orders — every group of the party with each dish from every bill of the party, paid
     ones included and abandoned ones left out, an "Added later" mark on a group started as a later
     addition, and the serving controls; a group's summary shows only when Current orders cannot be
-    read)_ _(A119, 2026-09-29: the mark is gone; a fired group's header shows when it was fired and
+    read)_ _(A119, #845, 2026-09-29: the mark is gone; a fired group's header shows when it was fired and
     who fired it, a held group's when it was held and who held it, and the name is left out when
     there is no person record; owner 2026-09-28: "show when and who")_; group numbers are the
     server's positions,
@@ -2825,7 +2825,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       Groups existing at that upgrade read `added_later` false and existing lines `served_quantity`
       0, so a line marked served before the upgrade keeps `served_at` with a served count of 0 (no
       backfill, by the pre-live rule). `0034`'s column is dropped again by core
-      `0040_drop_order_group_added_later` (campaign item A119), a plain `DROP COLUMN` that rebuilds
+      `0040_drop_order_group_added_later` (campaign item A119, #845), a plain `DROP COLUMN` that rebuilds
       no table. Measured 2026-09-29: a scratch venue migrated at main `8235f63e7` (core `0039` there
       is `0039_table_needs_cleaning`), holding one party
       with four groups (two fired, one of them marked added later, one held, one removed), six
