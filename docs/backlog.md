@@ -4377,8 +4377,7 @@ approved.
     (found by #862's Codex review, which saw `main` do the same; not changed there).
     `createLinuxDevices`'s `scan()` (`apps/print-agent/src/linux-devices.ts`) awaits the Bluetooth
     scan last with no catch, and the loop's `scan failed` catch in
-    `packages/print-agent/src/agent.ts` then reports nothing for that pass. Under the shipped
-    profile a box whose BlueZ has no controller now reaches that throw. **Next action:** catch the
+    `packages/print-agent/src/agent.ts` then reports nothing for that pass. **Next action:** catch the
     Bluetooth part inside `scan()`, keep the other results, and test it with a throwing Bluetooth
     fake beside a USB fixture.
   - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
