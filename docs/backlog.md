@@ -3516,7 +3516,7 @@ ongoing overhaul listed at the top of Track A.
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
   message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
   (`packages/ui-core/src/interactive.ts`) moves focus to the first marked field after a failed
-  submission. The forms in `apps/dashboard` follow it, and so, since C47m, does the image library's
+  submission. The forms in `apps/dashboard` follow it, and so, since C47m (#839), does the image library's
   upload and edit dialog (`packages/media/src/dashboard/image-library.ts`): after the first failed
   press each bad field
   shows its message, the bottom message asks to fix the marked fields and the action stays disabled
