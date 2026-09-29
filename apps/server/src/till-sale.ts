@@ -1500,17 +1500,14 @@ export async function collectOrder(
     if (req.tender.method !== "cash" && req.tender.method !== "card") {
       throw new AppError("sale.unsupported_tender", { method: req.tender.method });
     }
-    const [sale] = await tx
-      .select({ id: sales.id, total: sales.total })
-      .from(sales)
-      .where(eq(sales.workingOrderId, req.id));
+    const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
-    if (sale !== undefined) {
-      const { settledAmount } = settlementFor(req.tender, centsToDecimal(sale.total));
+    if (outstanding !== undefined) {
+      const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       const settledAt = deps.clock.now().instant;
 
       await settleSale(tx, {
-        saleId: brandSaleId(sale.id),
+        saleId: outstanding.saleId,
         tenders: [
           {
             method: req.tender.method,
@@ -1525,14 +1522,14 @@ export async function collectOrder(
       if (req.tender.method === "card") {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
           workingOrderId: req.id,
-          amount: centsToDecimal(sale.total),
+          amount: outstanding.amountDue,
           settledAt,
           externalRef: req.tender.externalRef,
         });
         await associatePaymentWithSale(tx, {
           provider,
           paymentRef,
-          saleId: brandSaleId(sale.id),
+          saleId: outstanding.saleId,
         });
       }
 
@@ -1546,7 +1543,9 @@ export async function collectOrder(
         .where(eq(workingOrders.id, req.id));
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-      if (req.tender.method === "cash") await enqueueCashSaleDrawer(tx, cfg, sale.id, operatorId);
+      if (req.tender.method === "cash") {
+        await enqueueCashSaleDrawer(tx, cfg, outstanding.saleId, operatorId);
+      }
       return ticket;
     }
 

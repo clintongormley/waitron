@@ -3037,12 +3037,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     an invoice-first zone and moved to a pay-first zone is settled with its one invoice, and the
     reverse issues one; before the change the first was refused by `sales_working_order_id_key` and
     the second threw "has no sale" (`apps/server/src/collect-by-invoice.test.ts`).
-    Left open, both raised by #818's review and not changed there:
-    - When the bill already has an invoice, `collectOrder` settles against the invoice's own
-      `total`, while the card path (`readOutstandingSaleForOrder`) and `settleSale` use the total
-      plus any corrections, so an invoice carrying a correction may be refused at collection. Read
-      only, not run; the line dates from `16f240709` (2026-09-21), before the branch. **Next
-      action:** a test that corrects an invoice-first bill's sale and then collects it in cash.
+    Two points #818's review raised, not changed there:
+    - **DONE (C50, 2026-09-29):** collecting a bill whose invoice carries a corrective invoice now
+      settles at what the customer owes, the invoice total plus its corrections. New cases in
+      `apps/server/src/collect-by-invoice.test.ts` issue an invoice-first bill for 18.00, correct it
+      by -2.20 through `recordCorrection`, then collect it in cash and by manual card. On the old
+      code both were refused with `sale.tender_shortfall` (due 15.80, charged 18.00). `collectOrder`
+      now reads the amount due through `readOutstandingSaleForOrder`, as the card-reader path does,
+      and the manual card's `payments` row records that amount too.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
