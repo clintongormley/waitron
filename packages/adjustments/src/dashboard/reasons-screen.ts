@@ -8,6 +8,7 @@ import {
   baseStyles,
   ContentLanguageController,
   currentContentLanguages,
+  focusFirstInvalid,
   selectStyles,
   submitOnEnter,
   type DataTableColumn,
@@ -65,6 +66,8 @@ interface Draft {
   approverRole: PersonRole;
   noteRequired: boolean;
 }
+
+type FieldErrors = Partial<Record<Field, string>>;
 
 type Editor =
   { kind: "reason"; reason?: AdjustmentReason } | { kind: "deactivate"; reason: AdjustmentReason };
@@ -216,7 +219,11 @@ export class AdjustmentReasonsScreen extends LitElement {
   @state() private orderError?: string;
   @state() private editor?: Editor;
   @state() private draft?: Draft;
-  @state() private fieldErrors: Partial<Record<Field, string>> = {};
+  /** Save has been pressed since the editor opened, so the fields are checked on every change. */
+  @state() private attempted = false;
+  /** The server's refusal of a field, until the operator changes that field or saves again. */
+  @state() private refusedFields: FieldErrors = {};
+  /** A refusal that names no field the form shows, until the operator saves again. */
   @state() private editorError?: string;
   @state() private busy = false;
   #loaded = false;
@@ -307,8 +314,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   #open(editor: Editor, opener: HTMLElement): void {
     this.#opener = opener;
     this.editor = editor;
-    this.fieldErrors = {};
-    this.editorError = undefined;
+    this.#restart();
     if (editor.kind === "reason") {
       const reason = editor.reason;
       this.draft = {
@@ -328,46 +334,61 @@ export class AdjustmentReasonsScreen extends LitElement {
   #close(): void {
     this.editor = undefined;
     this.draft = undefined;
-    this.fieldErrors = {};
-    this.editorError = undefined;
+    this.#restart();
     const opener = this.#opener;
     void this.updateComplete.then(() => {
       if (opener?.isConnected) opener.focus();
     });
   }
 
-  #edit(patch: Partial<Draft>): void {
-    this.draft = { ...this.draft!, ...patch };
+  #restart(): void {
+    this.attempted = false;
+    this.refusedFields = {};
+    this.editorError = undefined;
   }
 
-  /** The body to send, or `undefined` after marking every field that cannot be sent as it is. */
-  #validated(): AdjustmentReasonInput | undefined {
+  /** A draft's keys are the fields they are entered in, so an edit clears those fields' refusals. */
+  #edit(patch: Partial<Draft>): void {
+    this.draft = { ...this.draft!, ...patch };
+    const refused = { ...this.refusedFields };
+    for (const key of Object.keys(patch)) delete refused[key as Field];
+    this.refusedFields = refused;
+  }
+
+  #check(): FieldErrors {
     const draft = this.draft!;
-    const errors: Partial<Record<Field, string>> = {};
-    const name = draft.name.trim();
-    if (name === "") errors.name = t("adjustments.error.name");
+    const errors: FieldErrors = {};
+    if (draft.name.trim() === "") errors.name = t("adjustments.error.name");
     if (draft.actions.length === 0) errors.actions = t("adjustments.error.actions");
-    const maxPercentBp = percentBp(draft.maxPercent);
-    if (maxPercentBp === undefined) errors.maxPercent = t("adjustments.error.maxPercent");
-    const maxAmount = amount(draft.maxAmount);
-    if (maxAmount === undefined) errors.maxAmount = t("adjustments.error.maxAmount");
+    if (percentBp(draft.maxPercent) === undefined) {
+      errors.maxPercent = t("adjustments.error.maxPercent");
+    }
+    if (amount(draft.maxAmount) === undefined) errors.maxAmount = t("adjustments.error.maxAmount");
     if (ROLES.indexOf(draft.approverRole) < ROLES.indexOf(draft.applyRole)) {
       errors.approverRole = t("adjustments.error.approverRole");
     }
-    this.fieldErrors = errors;
-    this.editorError = undefined;
-    if (Object.keys(errors).length > 0) return undefined;
+    return errors;
+  }
+
+  /** What each field shows: its refusal, and once Save has been pressed, what the check finds. */
+  #fieldErrors(): FieldErrors {
+    return { ...this.refusedFields, ...(this.attempted ? this.#check() : {}) };
+  }
+
+  /** The body to send; call it only once `#check` finds nothing. */
+  #input(): AdjustmentReasonInput {
+    const draft = this.draft!;
     const names = Object.fromEntries(
       Object.entries(draft.names)
         .map(([language, text]) => [language, text.trim()] as const)
         .filter(([, text]) => text !== ""),
     );
     return {
-      name,
+      name: draft.name.trim(),
       names,
       actions: ACTIONS.filter((action) => draft.actions.includes(action)),
-      maxPercentBp: maxPercentBp!,
-      maxAmount: maxAmount!,
+      maxPercentBp: percentBp(draft.maxPercent)!,
+      maxAmount: amount(draft.maxAmount)!,
       applyRole: draft.applyRole,
       approverRole: draft.approverRole,
       noteRequired: draft.noteRequired,
@@ -383,12 +404,20 @@ export class AdjustmentReasonsScreen extends LitElement {
       Object.hasOwn(SERVER_FIELDS, field)
     ) {
       const target = SERVER_FIELDS[field]!;
-      this.fieldErrors = { [target]: t(`adjustments.error.${target}` as StringKey) };
+      this.refusedFields = { [target]: t(`adjustments.error.${target}` as StringKey) };
     } else if (code === "adjustment_reason.name_taken") {
-      this.fieldErrors = { name: codeMessage(code) };
+      this.refusedFields = { name: codeMessage(code) };
     } else {
       this.editorError = codeMessage(code);
+      return;
     }
+    void this.#focusInvalid();
+  }
+
+  /** The screen's shadow root also holds the list, so only the editor is searched. */
+  async #focusInvalid(): Promise<void> {
+    await this.updateComplete;
+    await focusFirstInvalid(this.renderRoot.querySelector("wt-modal")!);
   }
 
   /** A refresh that fails after a write succeeded is a load failure: the editor has already closed. */
@@ -433,8 +462,14 @@ export class AdjustmentReasonsScreen extends LitElement {
 
   #save(): void {
     const editor = this.editor as { kind: "reason"; reason?: AdjustmentReason };
-    const input = this.#validated();
-    if (input === undefined) return;
+    this.attempted = true;
+    this.refusedFields = {};
+    this.editorError = undefined;
+    if (Object.keys(this.#check()).length > 0) {
+      void this.#focusInvalid();
+      return;
+    }
+    const input = this.#input();
     const reason = editor.reason;
     void this.#write(() =>
       reason ? this.api.updateReason(reason.id, input) : this.api.createReason(input),
@@ -561,16 +596,16 @@ export class AdjustmentReasonsScreen extends LitElement {
     ];
   }
 
-  #fieldError(field: Field) {
-    const message = this.fieldErrors[field];
+  #fieldError(errors: FieldErrors, field: Field) {
+    const message = errors[field];
     return message
       ? html`<p id=${`error-${field}`} class="field-error" data-field-error=${field}>${message}</p>`
       : nothing;
   }
 
-  #roleSelect(field: "applyRole" | "approverRole", label: string) {
+  #roleSelect(errors: FieldErrors, field: "applyRole" | "approverRole", label: string) {
     const draft = this.draft!;
-    const invalid = this.fieldErrors[field] !== undefined;
+    const invalid = errors[field] !== undefined;
     return html`<div class="select-field">
       <label class="select-label" for=${field}>${label}</label>
       <select
@@ -589,13 +624,12 @@ export class AdjustmentReasonsScreen extends LitElement {
             </option>`,
         )}
       </select>
-      ${this.#fieldError(field)}
+      ${this.#fieldError(errors, field)}
     </div>`;
   }
 
-  #reasonForm() {
+  #reasonForm(errors: FieldErrors) {
     const draft = this.draft!;
-    const errors = this.fieldErrors;
     const languages = currentContentLanguages().languages;
     const text = (field: "name" | "maxPercent" | "maxAmount") => ({
       value: draft[field],
@@ -624,6 +658,7 @@ export class AdjustmentReasonsScreen extends LitElement {
             html`<wt-input
               name=${`names-${language}`}
               label=${tf("adjustments.field.name_in", { language: languageName(language) })}
+              .invalid=${errors.names !== undefined}
               .value=${draft.names[language] ?? ""}
               .disabled=${this.busy}
               @wt-change=${(event: CustomEvent<{ value: string }>) => {
@@ -632,7 +667,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               }}
             ></wt-input>`,
         )}
-        ${this.#fieldError("names")}
+        ${this.#fieldError(errors, "names")}
       </fieldset>
       <fieldset aria-describedby=${errors.actions ? "error-actions" : nothing}>
         <legend>
@@ -646,6 +681,7 @@ export class AdjustmentReasonsScreen extends LitElement {
                 name="actions"
                 value=${action}
                 .checked=${live(draft.actions.includes(action))}
+                aria-invalid=${errors.actions !== undefined}
                 ?disabled=${this.busy}
                 @change=${(event: Event) => {
                   const checked = (event.target as HTMLInputElement).checked;
@@ -655,7 +691,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               />${actionChoice(action)}</label
             >`,
         )}
-        ${this.#fieldError("actions")}
+        ${this.#fieldError(errors, "actions")}
       </fieldset>
       <wt-input
         name="maxPercent"
@@ -677,8 +713,8 @@ export class AdjustmentReasonsScreen extends LitElement {
         .disabled=${this.busy}
         @wt-change=${money.change}
       ></wt-price-input>
-      ${this.#roleSelect("applyRole", t("adjustments.field.apply_role"))}
-      ${this.#roleSelect("approverRole", t("adjustments.field.approver_role"))}
+      ${this.#roleSelect(errors, "applyRole", t("adjustments.field.apply_role"))}
+      ${this.#roleSelect(errors, "approverRole", t("adjustments.field.approver_role"))}
       <div>
         <wt-switch
           name="noteRequired"
@@ -690,7 +726,7 @@ export class AdjustmentReasonsScreen extends LitElement {
             this.#edit({ noteRequired: event.detail.checked });
           }}
         ></wt-switch>
-        ${this.#fieldError("noteRequired")}
+        ${this.#fieldError(errors, "noteRequired")}
       </div>`;
   }
 
@@ -702,6 +738,12 @@ export class AdjustmentReasonsScreen extends LitElement {
     const heading = deactivating
       ? t("adjustments.deactivate_heading")
       : t(reason ? "adjustments.edit_heading" : "adjustments.new");
+    const errors = this.#fieldErrors();
+    const invalid = Object.keys(errors).length > 0;
+    const bottom = [
+      ...(this.editorError ? [this.editorError] : []),
+      ...(invalid ? [t("adjustments.fix_fields")] : []),
+    ].join(" ");
     return keyed(
       editor,
       html`<wt-modal
@@ -714,21 +756,14 @@ export class AdjustmentReasonsScreen extends LitElement {
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-editor"]'))}
       >
-        <wt-form-error-summary
-          heading=${t("adjustments.form_error_heading")}
-          .errors=${[
-            ...Object.values(this.fieldErrors),
-            ...(this.editorError ? [this.editorError] : []),
-          ]}
-        ></wt-form-error-summary>
         <div class="form">
           ${
             deactivating
               ? html`<p>${tf("adjustments.deactivate_explained", { name: editor.reason.name })}</p>`
-              : this.#reasonForm()
+              : this.#reasonForm(errors)
           }
         </div>
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${bottom}
           ><wt-button
             slot="cancel"
             variant="secondary"
@@ -748,7 +783,7 @@ export class AdjustmentReasonsScreen extends LitElement {
               : html`<wt-button
                   variant="primary"
                   data-test="save-editor"
-                  ?disabled=${this.busy}
+                  ?disabled=${this.busy || invalid}
                   @click=${() => this.#save()}
                   >${t("adjustments.save")}</wt-button
                 >`

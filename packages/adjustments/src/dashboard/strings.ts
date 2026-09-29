@@ -54,7 +54,7 @@ const en = {
   "adjustments.deactivate_heading": "Deactivate reason",
   "adjustments.deactivate_explained":
     "Staff will no longer be offered {name}. It stays in the list as inactive.",
-  "adjustments.form_error_heading": "There is a problem with this form",
+  "adjustments.fix_fields": "Correct the highlighted fields to continue.",
   "adjustments.error.name": "Enter a name.",
   "adjustments.error.names": "Check the names in each language.",
   "adjustments.error.actions": "Choose at least one action.",
@@ -116,7 +116,7 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.deactivate_heading": "Desactivar motivo",
   "adjustments.deactivate_explained":
     "El personal dejará de ver {name}. Seguirá en la lista como inactivo.",
-  "adjustments.form_error_heading": "Hay un problema con este formulario",
+  "adjustments.fix_fields": "Corrige los campos marcados para continuar.",
   "adjustments.error.name": "Escribe un nombre.",
   "adjustments.error.names": "Revisa los nombres en cada idioma.",
   "adjustments.error.actions": "Elige al menos una acción.",
