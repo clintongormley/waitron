@@ -4911,8 +4911,22 @@ approved.
     `Agent1.Release` is not allowed either, and was never seen.
     `waitron.sh install` also switches off bluetoothd's `autopair` plugin with a systemd drop-in
     where it can (`deploy/README.md` says when it leaves Bluetooth alone), because on the owner's box it answered a PIN-1234 printer with `0000` before any agent was
-    asked (`deploy/README.md`). Not yet run on the owner's box: pairing and `remove` under the new
-    profile.
+    asked (`deploy/README.md`). On the owner's box (2026-09-29), under the new profile, a real PIN
+    pairing from `docker compose exec -it print-agent bluetoothctl` succeeded and `remove` printed
+    `Device has been removed`.
+  - **`scan off` and a device's `Disconnected` signals are in the profile — BUILT (A134).** That
+    pairing on the owner's box logged four refusals: `Adapter1.StopDiscovery` (twice, from the
+    interactive session) and the `Disconnected` signal on the device's `Device1` and
+    `Bearer.BREDR1`; none named `Agent1.Release`. The profile now allows those three messages, and
+    image-smoke runs an interactive `scan off` and a pairing the stand-in BlueZ follows with both
+    signals, failing on any refusal but its `trust` control. Probe run 36617097865 reproduced the
+    three refusals without the new rules and 36617716323 refused none with them. The agent's own
+    scan (`bluetoothctl --timeout 6 scan on`) sends no `StopDiscovery`, measured on both runs:
+    three scans each, no call reached the stand-in and none was refused. **Box check owed:** after
+    `sudo bash waitron.sh install`, `scan on` / `scan off` and a pairing from
+    `docker compose exec -it print-agent bluetoothctl`, then
+    `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
+    `waitron-print-agent`.
   - **The owner's box, in this order — done 2026-09-29.** The owner took the real-box pairing
     measurement with the profile `unconfined`, then ran `waitron.sh install`; afterwards `.env`
     named the profile and `docker compose exec print-agent bluetoothctl list` showed the controller.

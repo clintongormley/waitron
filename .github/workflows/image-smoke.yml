@@ -264,8 +264,8 @@ jobs:
       # What an operator's interactive `scan off` and the agent's Pair and Forget run, under the shipped
       # profile: interactive bluetoothctl over pipes stops a scan it started and answers the stand-in's
       # PIN request, the stand-in follows the pairing with its `Disconnected` signals, and `remove`
-      # forgets the printer again. A D-Bus
-      # refusal reaches the kernel log through the kernel's printk rate limit, which drops lines: in
+      # forgets the printer again. A D-Bus refusal reaches the kernel log through the kernel's printk
+      # rate limit, which drops lines: in
       # probe run 36585218089, under the previous rules in complain mode, one pairing and two removes
       # logged one AppArmor line with the limit on and nine with it off. So it is switched off first. `trust`, which the profile does
       # not allow, is the control: it must never reach the stand-in, its refusal must reach the log,
