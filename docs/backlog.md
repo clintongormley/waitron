@@ -2063,7 +2063,7 @@ calls `this.#fetch(...)` as a method. It works today only because `main.ts` hand
 calls the real `fetch` as a plain function. A `DashboardApi` built with its default `fetch` would be
 refused on the configuration export with `Illegal invocation`.
 
-**A country pack's `name` is no longer read by the product — OPEN (left by C41, 2026-09-29).** The
+**A country pack's `name` is no longer read by the product — OPEN (left by C41, #835, 2026-09-29).** The
 wizard now names countries through the browser in its own language, so `CountryPack.name`
 (`packages/country/src/country.ts`; "España" and "United Kingdom" in the two packs) is read only by
 `packages/country-packs/src/registry.test.ts`. Delete the field, have that test identify packs by
