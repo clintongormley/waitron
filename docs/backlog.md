@@ -4549,17 +4549,16 @@ ongoing overhaul listed at the top of Track A.
   editor and the venue operations editors put a refused field's message under it in their generic
   words (`editor.field_rejected` in `apps/dashboard/src/screens/catalogue-screen.ts` `#rejectedField`;
   `venue.field_refused` in `packages/venue-service/src/dashboard/venue-operations-screen.ts`), not
-  the refusal's own sentence, and the setup screens disagree on what goes under a refused field
-  (read, not run): the setup connect and reset screens show the field's own "Check the …" sentence
-  and the refusal's own sentence appears nowhere (`apps/setup/src/setup-app.ts` sets
-  `connectError` and `resetError` only when no field was placed; `connect-screen.ts` `#field`,
-  `reset-screen.ts` `CHECK`), while the restore and bucket-restore screens show the shell's refusal
-  sentence under the field (`restore-screen.ts` `#fieldError`, `restore-bucket-screen.ts`
-  `kitError`) — for restore that is always the whole-form "The backup could not be staged. Check the
-  file, key and environment. ({code})" with the raw code, and for bucket-restore the sentence
-  `describeBucketRefusal` picks: `shell.bucket.kit_damaged` for `backup.stream_kit_invalid` with
-  reason `encoding` or `shape`, otherwise the code's own sentence when `BUCKET_ERROR_MESSAGES` has
-  one, else "The copy could not be restored. ({code})"; (2) controls with no place for an error keep their refusal in the
+  the refusal's own sentence; **DONE (C62, 2026-09-29):** the setup screens now agree on what goes
+  under a refused field — a sentence about that field alone. Connect and reset already showed the
+  field's own "Check the …" sentence (venue shows one about the field, some of them "Check the …"),
+  and the restore screen now does too ("Check the backup file.", "Check the recovery
+  key.", "Check the backup environment.") instead of the whole-form "The backup could not be staged.
+  Check the file, key and environment. ({code})"; the bucket-restore screen does the same for
+  `setup.request_invalid` ("Check the recovery kit.", "Check the environment.") and keeps its own
+  sentences for `backup.stream_kit_invalid` and `restore.environment_mismatch`, which already speak
+  about that one field and say which way it is wrong (`RESTORE_FIELD_CHECKS` and
+  `BUCKET_FIELD_CHECKS` in `apps/setup/src/setup-app.ts`; tests in `apps/setup/src/setup-app.test.ts`); (2) controls with no place for an error keep their refusal in the
   bottom message — `wt-switch` (`active` on the ingredient, extras, options and menu-price forms;
   `available` on the product editor), the allergen and dietary-origin pickers on the ingredient
   form, and the purchase form's VAT regime select; (3) refusals naming two fields or a row the refusal does not number stay
