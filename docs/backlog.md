@@ -2314,8 +2314,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   36585218089 and 36586467212), and image-smoke pairs and forgets the stand-in's PIN printer
   under the profile through `scripts/bluetoothctl-pair.mjs` and `bluetoothctl remove`, not
   through the agent's own code. None of this has run on the real box.
-- **The dashboard's Bluetooth pairing (P2c, the plan's third branch,
-  `feat/dashboard-bluetooth-pairing`) — BUILT.** What a manager can now do from the Printers screen.
+- **The dashboard's Bluetooth pairing (P2c, the plan's third branch) — BUILT (#884).** What a manager can now do from the Printers screen.
   All of it has run against fake print agents and fake server replies only, never a Bluetooth radio:
   - Add a printer lists the Bluetooth devices the agent's scan found beside network and USB
     printers, showing only those the agent marked as looking like a printer, and any device with a
@@ -8828,7 +8827,7 @@ while it holds decisions still open.
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
-| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c on `feat/dashboard-bluetooth-pairing`); a real pairing at the box to go | A3 |
+| [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
 `wa-wt reset demo|onboarding [worktree-name]` — the rule is in CLAUDE.md §6; detail in
