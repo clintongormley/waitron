@@ -33,8 +33,9 @@ import "./errors.js";
 
 /**
  * Move guests, join tables and split a table (spec §6). Each checks the revision of the party in
- * the path, then of the party holding the target table, before any table's or bill's own state
- * (P27), so of two tills acting from one read the second is refused `party.out_of_date`.
+ * the path; a move or join then checks that the party the till read at the target table still holds
+ * it, and that party's revision, before any table's or bill's own state (P27), so of two tills
+ * acting from one read the second is refused `party.out_of_date`.
  */
 
 export interface TableActionOptions extends OtherPartyRead {
@@ -156,9 +157,10 @@ async function combineAt(
  * Party `from` becomes part of `into` and closes, recorded as merged into it. Its groups and drafts
  * move, and its open and presented bills move across whole (P13); its paid and abandoned bills stay
  * on it and count through the family. The bill choice (P12): with `"merge"`, `from`'s main bill
- * merges into `into`'s when both are untouched and in one service mode; otherwise `into`'s main bill
- * stays, or, when it has none, `from`'s becomes main. `from`'s tables are left for clearing, or
- * join `into`. The caller has checked and moved on both parties' revisions, and tells the kitchen.
+ * merges into `into`'s when both are untouched and in one service mode; otherwise `into`'s main
+ * bill stays, or, when it has none, `from`'s becomes main if it is open. `from`'s tables are left
+ * for clearing, or join `into`. The caller has checked and moved on both parties' revisions, and
+ * tells the kitchen.
  */
 export async function combineParties(
   tx: Transaction,
