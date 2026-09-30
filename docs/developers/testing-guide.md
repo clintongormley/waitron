@@ -696,8 +696,8 @@ once the side file holds 1,000 pages by default, line 36). Its emergency checkpo
 `truncate-page-n` pages, is separate. What switching off the timed one and setting the regular
 page-count one to a billion pages did is below.
 
-**Switching off Litestream's timed checkpoint and setting its page-count one to a billion pages
-removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
+**Switching off Litestream's timed checkpoint and setting its regular page-count one to a billion
+pages removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
 second** (A135, measured 2026-09-30, run 36657175716, probe commit `bc3b94671` on the throwaway
 branch `probe/a135-litestream-checkpoints`). The same probe, streaming on, one seller for 300 s,
 three runs each of the product's settings and of a variant adding `checkpoint-interval: 0s` and
