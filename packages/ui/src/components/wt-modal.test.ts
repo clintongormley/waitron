@@ -300,3 +300,27 @@ test("paints the body's message from the danger token", async () => {
   const message = modal.shadowRoot!.querySelector<HTMLElement>(".body [data-error]")!;
   expect(getComputedStyle(message).color).toBe("rgb(1, 2, 3)");
 });
+
+test("opens with a message its footer actions already carry, and shows it in the body", async () => {
+  const errors: unknown[] = [];
+  const onError = (event: PromiseRejectionEvent) => errors.push(event.reason);
+  window.addEventListener("unhandledrejection", onError);
+  try {
+    const modal = (await mount(`<wt-modal heading="Add printer" open>
+      <wt-input name="name" label="Name"></wt-input>
+      <wt-form-actions slot="footer" error="Check the form and try again">
+        <wt-button>Save</wt-button>
+      </wt-form-actions>
+    </wt-modal>`)) as WtModal;
+    await vi.waitFor(() =>
+      expect(modal.shadowRoot!.querySelector(".body [data-error]")?.textContent).toBe(
+        "Check the form and try again",
+      ),
+    );
+    expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(errors).toEqual([]);
+  } finally {
+    window.removeEventListener("unhandledrejection", onError);
+  }
+});

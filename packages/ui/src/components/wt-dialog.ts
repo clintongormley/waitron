@@ -92,8 +92,10 @@ export class WtDialog extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>): void {
-    if (changed.has("footerMessage") && this.footerMessage !== "") {
-      this.renderRoot.querySelector(".body > [data-error]")!.scrollIntoView({ block: "nearest" });
+    // Absent after the first render even when the footer carries a message: `firstUpdated` reads
+    // it only after that render, and the update it schedules brings it into view.
+    if (changed.has("footerMessage")) {
+      this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
     if (!changed.has("open")) return;
     if (this.open && !this.dialog.open) this.dialog.showModal();
