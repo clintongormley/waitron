@@ -5642,9 +5642,9 @@ ongoing overhaul listed at the top of Track A.
   nothing while the sign-in copies always render. Second, which browser and address the owner saw
   the empty field in. The payments screen's manager-PIN prompt
   (`apps/dashboard/src/screens/payments-screen.ts`), which this entry left marked
-  `autocomplete="current-password"`, now says `autocomplete="off"`, as the profile screen's PIN
-  fields do (C110, owner 2026-09-30: "a"); whether a browser then stops offering the dashboard
-  password there was not measured in one.
+  `autocomplete="current-password"`, now says `autocomplete="off"`, the owner's choice on
+  2026-09-30 (C110) to match the profile screen's PIN fields; nobody checked in a real browser
+  whether it then stops offering the dashboard password there.
 - **A sign-in step's links are one bulleted list, with its buttons on the first item's row — DONE
   (C96, #936, owner 2026-09-30: "Move 'Login with passkey' under 'i've forgotten my password' … the same
   for any other similar links. Also the login button should be at the same level as the 'I've
