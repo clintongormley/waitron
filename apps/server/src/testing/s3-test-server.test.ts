@@ -75,7 +75,7 @@ describe("startS3TestServer", () => {
   });
   afterEach(async () => {
     vi.mocked(freePort).mockReset();
-    await Promise.all(started.splice(0).map((server) => server.stop()));
+    await Promise.all(started.splice(0).map((server) => server?.stop()));
   });
   afterAll(async () => {
     await rm(scratch, { recursive: true, force: true });
