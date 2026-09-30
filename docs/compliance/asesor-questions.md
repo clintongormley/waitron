@@ -9,7 +9,27 @@ Each question has English context (for us) and a Spanish formulation (to hand ov
 Question numbers are **stable identifiers**, not reading order — sections are ordered by
 priority. Q9 is referenced from other documents; do not renumber it.
 
-Last revised **2026-09-29** — Q5(c) answered on primary source: RD 1619/2012 art. 7.1.a) requires
+Last revised **2026-09-30**, checked against the backlog, the owner's decisions and `main` at
+`34fb2b487`:
+
+- **Q27** describes what the server now does: paying a bill in parts landed on the server (#721);
+  the till does not use it yet. Part (d) added, about the daily close.
+- **Q29** describes what the till now does: comps and discounts landed (#916). The receipt prints
+  the old price beside the new one. Part (e) added, for a discount that splits one dish into two
+  lines at different prices.
+- **Q31 added:** whether a corrective invoice should be by differences (what the software files
+  today) or by substitution. The owner raised this on 2026-09-29.
+- **Q5(a)** gains a banner: the owner shelved two servers selling at once on 2026-09-05. One server
+  sells at a time, and a restored server starts a new chain under new series.
+- **Q19(d)/(e)** say what the software already prints.
+- **Q21** notes that a bill request is now recorded but prints nothing.
+- **Q25** re-checked: still no route voids an invoice.
+- *Notes for the conversation* now open with which questions to send first. The old note calling
+  Q16 the live question is marked out of date.
+- A separate standalone copy for the advisor, written 2026-09-23 and kept outside the repository,
+  does not have these changes.
+
+Before that, **2026-09-29**: Q5(c) answered on primary source. RD 1619/2012 art. 7.1.a) requires
 separate series for simplified and full invoices issued in the same calendar year. Q5(d) added to
 confirm the scope (F3, and simplified rectificativas); Q17(b) points to it. Before that,
 **2026-09-27** — Q30 added for certificate permissions when consulting AEAT records. Earlier that day, Q26 reworded again: the owner narrowed the 2026-09-26 rule, and
@@ -441,6 +461,17 @@ with one reliable till and one in a dead spot is a realistic configuration.
 > disaster-*restore* flow is different — the dead server is confirmed dead and numbering resumes above
 > a high-water mark on the same series, no concurrency; see cloud-storage §5.)
 
+> **The 2026-08-01 banner is out of date, 2026-09-30.** Two servers selling at once is off the table:
+> the owner shelved it on 2026-09-05 and chose a warm standby that a person promotes. Only the
+> primary sells (`CLAUDE.md` §5). Today a venue has one server and no failover at all. What does
+> happen today is a restore, from a backup file or from the owner's bucket copy. Restoring a server
+> that was filing gives it a new installation number, retires its invoice series and opens new ones
+> (`runRestoreHooks` in `apps/server/src/restore.ts`; #248). So the Spanish **(e)** below replaces
+> (a). It asks about one series per server-SIF, with the old series closed and new ones opened each
+> time a restored server starts a new chain: is that allowed, and does it need a documented reason? The note
+> above about numbering resuming on the same series after a restore describes the older cloud-storage
+> design, not what the software does.
+
 **Why it matters.** We assume one series per till. Research confirmed the chaining rules but
 never verified the underlying series permission in RD 1619/2012 art. 6.1.a. Low risk, but it
 is the foundation of the numbering scheme. The rectificativa question is the practical one:
@@ -472,6 +503,12 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 > - (ii) ¿Las rectificativas de facturas simplificadas (R5) deben ir en una serie distinta de las
 >   rectificativas de facturas completas (R1–R4), o pueden compartir una única serie de
 >   rectificativas?
+>
+> **(e)** *(añadida el 30-09-2026; sustituye a la (a))* En cada local factura un único servidor, que
+> es el SIF, con su propio número de instalación y sus propias series. Si ese servidor se pierde y se
+> restaura desde una copia de seguridad, el servidor restaurado recibe un número de instalación
+> nuevo y empieza una cadena nueva. Además, cerramos sus series y abrimos otras nuevas. ¿Es
+> admisible abrir series nuevas por este motivo? ¿Debe documentarse la razón en algún sitio?
 
 ---
 
@@ -563,7 +600,8 @@ rather than freezing it.
 
 **Why it matters.** Today the table screen has no "print the bill" action: charging the table takes
 the payment, issues the invoice and prints the ticket in one step, so nothing is printed before
-payment. The counter already offers both orders of events per venue (invoice issued when the order is
+payment. *2026-09-30:* staff can now mark that a table has asked for the bill (#908). That mark
+only shows on the floor plan and prints nothing. The counter already offers both orders of events per venue (invoice issued when the order is
 confirmed, or a pre-bill then the invoice at payment), and the
 [service design](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) leaves the
 timing for tables to be settled with the advisor. The two routes trade against each other:
@@ -653,9 +691,27 @@ decision 3). The case that needs an answer:
   €40. Only then is the original bill's simplified invoice issued, for €90.
 
 So money is held for a while against consumption that has no invoice yet, and the lines that
-invoice covers change after money was received. Today the software never does this: every bill is
-paid in one go at the moment its invoice is issued. It also touches Q21 (pre-bill or invoice when
-the bill is asked for) and Q14 (whether a *precuenta* is a *prefactura*).
+invoice covers change after money was received. It also touches Q21 (pre-bill or invoice when the
+bill is asked for) and Q14 (whether a *precuenta* is a *prefactura*).
+
+**What the software does, 2026-09-30.** The server side of this has landed (#721, 2026-09-27;
+[bill payments design](../superpowers/specs/2026-09-26-bill-payments-design.md)). The till does not
+use it yet (service plan Task 15), so at the till every bill is still paid in one go, at the moment
+its invoice is issued. On the server:
+
+- a bill can take several payments, and no invoice exists until the payments cover the total;
+- the invoice is issued in the same database transaction as whatever makes the bill fully paid. That
+  can be a payment, or a change that lowers the total to what has already been received: lines moved
+  or split away, a line removed, a quantity reduced, a comp or a discount;
+- lines can be moved off a bill that has received money only if the bill's total stays at or above
+  what it has received. Otherwise the move is refused, and staff move fewer lines or refund first
+  (design §4.3);
+- the daily cash-up counts each payment and refund on the day the money moves, separately from
+  invoiced sales, and does not count it again when the invoice is issued (owner decision 2026-09-26,
+  design §9a).
+
+What waits for this answer: printing the invoice before anyone pays, and correcting it if the table
+then splits (design §10).
 
 The owner also wants the option of printing the invoice at the START, before anyone pays. If the
 table then splits, the original has to be corrected. We would build that only after this answer.
@@ -674,6 +730,11 @@ table then splits, the original has to be corrected. We would build that only af
 > cobrar, y después los comensales piden facturas separadas, ¿procede una factura rectificativa de
 > la original y la expedición de nuevas facturas por cada parte? ¿Hay un procedimiento más sencillo
 > admitido en hostelería?
+>
+> **(d)** *(añadida el 30-09-2026)* Nuestro cierre diario de caja (un documento interno, no una
+> declaración) recoge cada cobro a cuenta el día en que se recibe, separado de las ventas facturadas,
+> y no lo vuelve a contar cuando después se expide la factura. Si la factura se expide otro día, el
+> cobro y la venta facturada quedan en días distintos. ¿Hay algún inconveniente?
 
 ---
 
@@ -721,9 +782,21 @@ that:
   other item is one given free). The invoice shows what was actually charged, and staff see it
   before confirming.
 
+**What the software does, 2026-09-30.** This is now built (service plan Task 11, #916). Staff can
+comp or discount only a bill whose invoice has not been issued yet (an open bill of a table). The
+filed record carries only the reduced price. On the printed ticket, and on the ticket the till
+shows, each adjusted line shows its total before and after: a comped burger reads
+`12,00 € -> 0,00 €` and a bottle with 10% off reads `30,00 € -> 27,00 €`. So a discount does show
+the old price, beside the line, but there is no separate discount line. One more case the list
+above does not cover: a discount on a dish sold by the piece can split its line in two, because
+every unit price must be a whole cent. Three croquetas at €3.33, less €1.00, become 2 × €3.00 and
+1 × €2.99.
+
 > **(a)** En una factura simplificada, ¿es correcto reflejar un descuento concedido antes de la
 > expedición reduciendo directamente el precio unitario de la línea afectada, sin una línea de
-> descuento separada? ¿O debe figurar el descuento de forma expresa?
+> descuento separada? ¿O debe figurar el descuento de forma expresa? *(30-09-2026: el ticket impreso
+> muestra, junto a cada línea afectada, su importe antes y después del descuento, por ejemplo
+> «30,00 € -> 27,00 €». El registro de facturación sólo recoge el precio reducido.)*
 >
 > **(b)** Cuando el descuento se aplica al total de la cuenta, ¿es correcto repartirlo entre las
 > líneas en proporción a su importe, de modo que la base imponible de cada tipo de IVA se reduzca en
@@ -740,6 +813,12 @@ that:
 > sobre el total de la cuenta, cuando las demás líneas no pueden absorber esa diferencia —, ¿basta
 > con que la factura refleje el importe efectivamente cobrado, que el personal confirma antes de
 > aplicarlo?
+>
+> **(e)** *(añadida el 30-09-2026)* Los precios unitarios van siempre en céntimos enteros. Por eso un
+> descuento sobre un producto vendido por unidades puede dividir su línea en dos, con precios
+> unitarios distintos. Por ejemplo, 3 croquetas a 3,33 € con 1,00 € de descuento quedan como
+> 2 × 3,00 € y 1 × 2,99 €. ¿Es correcto que un mismo producto figure así en dos líneas con precios
+> distintos?
 
 ---
 
@@ -909,6 +988,20 @@ Two readings, and we need to know which is right before building:
 
 Note also that in (B) the guests are anonymous: a factura simplificada identifies no recipient at all,
 so there is nothing on the document that says who each *duplicado* belongs to.
+
+**What the software already prints, for (d) and (e), 2026-09-30.** Both were built in #324
+(2026-09-12):
+
+- **(d)** The till's Reprint prints the word **DUPLICADO** on the ticket (`reprintSale`,
+  `apps/server/src/till-sale.ts`). In a venue that does not print automatically (Q22), the till
+  first offers a Print receipt button, which prints the ticket as an original. The till hides that
+  button once one print has been queued (`#onPrintReceipt`, `apps/till/src/till-app.ts`); the server
+  does not refuse a second original. Resending a job from the print queue, for example after a
+  printer failure, sends the same bytes again, so an original that failed to print comes out as an
+  original. That is the case (d) asks the advisor to confirm.
+- **(e)** Staff can print a slip for each card payment on its own: *JUSTIFICANTE DE PAGO — Este
+  documento no es una factura*, with no invoice number, series or QR code
+  (`apps/server/src/payment-slip.ts`).
 
 > **(a)** En un establecimiento de hostelería que expide **facturas simplificadas**, cuando varios
 > clientes comparten mesa y desean cada uno su propio justificante, ¿es conforme a derecho expedir una
@@ -1436,7 +1529,8 @@ This records a question; no enquiry has been sent.
 **Why it matters.** The fiscal core voids a sale by filing an RF de anulación of the original
 invoice, and it checks nothing about the sale's date (`recordVoid`,
 `packages/core/src/record-void.ts`). No till screen or server route calls it yet (on 2026-09-24,
-`git grep recordVoid` outside `packages/payments` and the fiscal packages found only tests), so the
+`git grep recordVoid` outside `packages/payments` and the fiscal packages found only tests; on
+2026-09-30, `git grep -l "recordVoid" -- apps ':!*.test.ts'` found nothing), so the
 product has not yet decided when a void is allowed — which part (b) below would settle. The
 quarterly *modelo 303* figure (`packages/reporting/src/vat-return.ts`) leaves a voided sale out of
 the period it was ISSUED in, whenever the void happened. Until 2026-09-24 the daily reports did the
@@ -1468,6 +1562,41 @@ changes which mechanism applies.
 > **(c)** Nuestro cierre diario (cierre Z) es un documento interno de control de caja, no una
 > declaración, y reflejará la anulación el día en que se hace. ¿Hay algún inconveniente en que ese
 > documento interno la sitúe en un día distinto del que corresponda a efectos del IVA?
+
+This records a question; no enquiry has been sent.
+
+---
+
+### Q31. Correcting an issued ticket — by differences, or by substitution? (added 2026-09-30)
+
+**Why it matters.** The fiscal core can file a corrective invoice (R5) against a simplified invoice
+(`recordCorrection`, `packages/core/src/record-correction.ts`). The Veri\*Factu backend files it
+*by differences*: `TipoRectificativa: "I"` in `packages/fiscal-verifactu/src/backend.ts`, so the
+record carries only the amount that changes. No till screen or server route calls it yet. Its only
+callers under `apps/` are three demo scripts in `apps/server/scripts/`, plus tests. Since
+2026-09-30 (#922), a correction that would take the invoice's total below zero, counting earlier
+corrections, is refused (`sale.correction_exceeds_total`).
+
+On 2026-09-29 the owner asked whether a correction should instead cancel the original and issue a
+new invoice for the right amount: a corrective invoice *by substitution*, `TipoRectificativa` "S".
+That is not decided, and it should be settled before the correction screen is designed
+([backlog](../backlog.md), the **Left open** note in the *Menus M7v landed* entry). Two things are
+already settled and not asked here. A void (*anulación*) is only for an invoice that should never
+have existed ([verifactu-findings.md](verifactu-findings.md) §7; Q25 asks about its VAT period).
+And tickets and full invoices need separate series (Q5).
+
+> Nuestro TPV podrá corregir un ticket ya emitido (factura simplificada) mediante una factura
+> rectificativa (R5). Hoy la rectificativa se emite por diferencias: sólo recoge el importe que
+> cambia, en negativo si es una devolución. No se admite una rectificativa que deje el importe de la
+> factura original por debajo de cero.
+>
+> **(a)** ¿Es preferible, o en algún caso obligatorio, emitir la rectificativa por sustitución, es
+> decir, que sustituya a la factura original y recoja el importe correcto completo, en lugar de por
+> diferencias? ¿Hay algún criterio para elegir entre las dos en hostelería?
+>
+> **(b)** Si se corrige varias veces la misma factura, ¿puede emitirse una rectificativa por
+> diferencias sobre cada corrección anterior? ¿O conviene, a partir de la segunda, una rectificativa
+> por sustitución que recoja el importe final?
 
 This records a question; no enquiry has been sent.
 
@@ -1532,8 +1661,14 @@ This records a question; no enquiry has been sent.
 
 ## Notes for the conversation
 
+- **Send first, 2026-09-30: Q27, Q28 and Q29** (the backlog's "send now"). They are about table
+  service, which is being built now. A table that leaves without paying (service plan Task 17) will
+  not be built until Q28 is answered, or until the owner decides without it. Q29 and most of Q27
+  describe features that are already built, so an answer against them may mean changing shipped
+  behaviour. **Q31** should be answered before the correction screen is designed.
 - **Nothing here blocks the build any more.** As of 2026-07-27 this document is a list of things
   worth confirming, not things worth waiting for. If an asesor engagement slips, build anyway.
+  *(2026-09-30: one exception above. Task 17 waits on Q28 by the owner's choice.)*
 - **Q1 and Q2 are now moot / non-load-bearing** under server-as-SIF (#33) — the server is the SIF,
   so a till need not be one (Q1) and the SIF files its own records (Q2). They were demoted on
   inference before; the architecture change retires them outright. Don't lead with them any more.
@@ -1544,7 +1679,9 @@ This records a question; no enquiry has been sent.
 - **Q9(a) is the standing consulta candidate**, and it is a lawyer's question. RD-ley 15/2025 moved
   the obligation to January 2027, so a 3–6 month consulta fits comfortably — file it rather than
   building on an opinion.
-- **Q16 is the live architecture question**, and only if a cloud-primary or standalone topology is on
+- *(2026-09-30: out of date. Q16 was closed on 2026-09-05 by an owner decision, not an answer:
+  cloud instances are hosted in Spain. See its banner. Do not send it.)* **Q16 is the live
+  architecture question**, and only if a cloud-primary or standalone topology is on
   the table. It absorbs the retired **Q11/Q12** (certificate custody in a hosted deployment): under
   the default architecture (client's own local server is the SIF) that custody question does not
   arise; it re-emerges only when the SIF runs in a cloud we operate, which is what Q16 asks. **The

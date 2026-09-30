@@ -560,7 +560,8 @@ correction is what the customer gets back, VAT included — a €2.00 correction
 plus €0.18 VAT, not €2.00 base; (2) the owner asks whether a correction should instead cancel the
 original and issue a new invoice (a corrective invoice by substitution, `TipoRectificativa` "S",
 where today's correction path files one by differences, "I", in
-`packages/fiscal-verifactu/src/backend.ts`) — an open question for the asesor, not decided.
+`packages/fiscal-verifactu/src/backend.ts`) — an open question for the asesor, not decided; asked
+as asesor Q31 (2026-09-30).
 _2026-09-27, A68 (landed as #726, main `27b54f877`) narrows M7v on the owner's instruction: the
 published version freezes the VAT CLASS only; `working_order_lines.vat_class` replaces `vat_rate`
 (and the net `unit_price` goes); each class's percentage is a dated table in code (`VAT_RATE_TABLE`,
@@ -9893,6 +9894,8 @@ Spain-hosting assumption; wider country policy belongs to Cloud.
 | **Q14 (precuenta → amendment log)** | a printed pre-bill may oblige an amendment log | **Open** — the interpretive hinge |
 | Q21 (pre-bill, or the invoice when a table asks for the bill) | the table screen prints no pre-bill; when one is built, printing it never fires held food and never marks a line sent (menus plan D10) | needs advisor |
 | F3 canje (`IDOtro`, a separate F3 series, `Destinatarios` XSD) | foreign recipient refused; F3 reuses `standard` | needs advisor / XSD before the first real filing |
+| Q27–Q29 (paying a bill in parts, a table that leaves without paying, how a comp or discount shows) | parts: server built (#721), the till does not use it yet; comps and discounts built (#916); leaving without paying waits | **send now** — service plan Task 17 waits on Q28 |
+| Q31 (correct an issued ticket by differences or by substitution) | `recordCorrection` files by differences (`"I"`); no route calls it | needs advisor before the correction screen is designed |
 
 **The laboral advisor** (a *graduado social / gestoría*) has its own list in
 [asesor-laboral-questions.md](compliance/asesor-laboral-questions.md). Nothing there blocks the build;
