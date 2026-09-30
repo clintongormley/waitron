@@ -122,11 +122,11 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Fourteen of the service
-   plan's eighteen tasks are done: 0–11, 13 and 14 have landed (Task 9, marking dishes served, as
-   #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 13,
-   standalone ordering, as #903). Left: the till's Cancel
-   taking a reason (waits on the owner, see Task 11's entry), the adjustment reports (12),
+1. **Finish table service and paying a bill in parts** (A4, lane B). Fifteen of the service
+   plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
+   #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
+   the adjustment reports; Task 13, standalone ordering, as #903). Left: the till's Cancel
+   taking a reason (waits on the owner, see Task 11's entry),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
@@ -3413,6 +3413,31 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     through unchanged; no request was sent through a route. **Next action:** send such a line through
     `POST` park and the held-order edit route; if it is stored, re-price or refuse client-sent frozen
     selections at the route boundary.
+  - **Task 12 (adjustment reports)** DONE (lane B item B12, 2026-09-30). A Reports screen in the
+    adjustments module (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`, under
+    `report.view`) shows, for a range of business days, the cancellations, comps and discounts
+    overall, per person and for guests: counts and amounts by action, by reason (grouped by reason,
+    named as recorded) and by how far the dish had got (before firing, after firing, after serving,
+    whole-bill), who approved each person's requests, the list value of cancelled items apart from
+    what they took off, and each person's rate — what they took off ÷ the sales credited to them at
+    their prices before any adjustment (plan D21). A person, the guests or everyone opens the list of
+    single adjustments. Computed by `computeAdjustmentReport` and `listAdjustmentEntries`
+    (`packages/adjustments/src/reports.ts`) behind `GET /management-api/adjustments/report` and
+    `…/report/entries`; with no range asked for they answer the venue's current business day. A
+    bill counts on the business day it was OPENED, for both its credited sales and its adjustments;
+    lines on an abandoned bill are not sales. `requireRange` moved to `@waitron/server-kit` for
+    both this route and `apps/server/src/report-api.ts`. A dashboard module can now contribute
+    further screens beside its first (`moreScreens`, `packages/dashboard-kit/src/contract.ts`).
+    Core migration `0051_opened_at_index` indexes `working_orders.opened_at`, which both report
+    queries now search. **The upgrade was measured** (2026-09-30): a scratch venue migrated to
+    core `0050` with 20,000 bills took `applyMigrations` 16 ms to add the index, and kept all
+    20,000 bills. Left open:
+    - A weighed item cancelled in part can differ by a cent between the cancel's list value and
+      what stays on the line, so a rate can be a cent's share off. **Next action:** none unless
+      someone sees it matter.
+    - With no day picked, a screen left open past the day's cutover moves to the new, empty day;
+      the date inputs show it, nothing announces it. **Next action:** decide whether it should
+      keep the day it opened on.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -3499,9 +3524,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     recording which element has focus just before the Escape; then press a real Escape during a save
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
-  - **Tasks left: 10 to 12 and 15 to 17.** The menus tasks that change the same order and till code
+  - **Tasks left: 15 to 17** (2026-09-30; 10 to 12 have landed). The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
-    plan's order among them: 12 after 11; 16 after 10. Task 15 is the till side of
+    plan's order among them: 16 after 10. Task 15 is the till side of
     Task 14 — no till code calls the bill-payment routes yet.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
