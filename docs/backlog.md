@@ -3590,7 +3590,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         on Hold, New sale, a retrieve or a sign-out, and at the latest after the till's request
         limit (150 s). How long it lasts on a real network is not measured. **Next action:** dim
         the basket, or show a one-line note, while `editsLocked` is set.
-    - _Done by lane C item C89 (2026-09-30):_ approver PINs are limited. A run-it review had sent
+    - _Done by lane C item C89 (2026-09-30, #951):_ approver PINs are limited. A run-it review had sent
       twelve wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). Now a
       manager's or supervisor's PIN typed on the till to approve an adjustment, to open the cash
       drawer for someone, or to approve a refund (the PIN that confirms a hand-keyed card refund
@@ -3616,6 +3616,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       case checks that the sign-in and override counts are separate in either direction (the drawer
       suite checks only that signing in again does not start the count again); and no case uses a
       second till, so nothing checks that the count is per till.
+      Left open by #951's review, for the owner: the two PIN prompts say "wait a moment" rather
+      than counting down the seconds the server sends, as the sign-in screen does, and the
+      approver prompt hides the message as soon as someone types; the limit is an optional
+      argument, so a future route that takes an approver's PIN could leave it off and neither the
+      compiler nor a test would notice — making it required whenever a PIN is sent would; and the
+      dashboard's `verifyManagerPin` (`apps/server/src/payments-api.ts`) and the till's sign-in
+      route each still repeat the check, count and reset steps that `verifyThrottledCredential`
+      (`packages/identity/src/credential.ts`) now packages. **Next action:** the owner decides
+      whether to add the countdown and make the limit required.
     - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
       discount, or two bill discounts under one reason, because a bill discount counts as 0% on
       each line (a run-it review, 2026-09-30, applied two successive 30% whole-bill discounts under a
