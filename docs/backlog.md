@@ -5203,7 +5203,7 @@ ongoing overhaul listed at the top of Track A.
   `totp.invalid` through so it sits under the code field; queued as lane C's C92). A CORRECT code
   was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
   without the key ring that decrypts a stored authenticator secret, so an admin with an
-  authenticator set up could not connect a standby at all. **DONE (C91, 2026-09-30):** the route
+  authenticator set up could not connect a standby at all. **DONE (C91, #921, 2026-09-30):** the route
   passes the ring the server builds in `apps/server/src/boot.ts` (`credentialKeyRing` in
   `apps/server/src/mirror-bundle-api.ts`). Test: "signs in an admin with an authenticator who sends
   a correct current code" in `apps/server/src/mirror-bundle-api.test.ts` enrols an authenticator
