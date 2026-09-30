@@ -131,7 +131,16 @@ function emptyTally(): AdjustmentTally {
   return { count: 0, reduction: ZERO, cancelledNominalValue: ZERO };
 }
 
-function add(tally: AdjustmentTally, row: Row): void {
+/** What the totals read of one adjustment. */
+interface Tallied {
+  action: AdjustmentAction;
+  stage: AdjustmentStage | null;
+  reasonId: string;
+  reduction: Decimal;
+  nominalValue: Decimal;
+}
+
+function add(tally: AdjustmentTally, row: Tallied): void {
   tally.count += 1;
   tally.reduction = addDecimal(tally.reduction, row.reduction);
   if (row.action === "cancel") {
@@ -159,9 +168,7 @@ function accumulator(): Accumulator {
   };
 }
 
-type Row = Awaited<ReturnType<typeof readRows>>[number];
-
-function tallyRow(into: Accumulator, row: Row): void {
+function tallyRow(into: Accumulator, row: Tallied): void {
   add(into, row);
   add(into.byAction[row.action], row);
   add(into.byStage[row.stage === null ? "billDiscount" : STAGE_GROUP[row.stage]], row);
@@ -198,6 +205,36 @@ function totalsOf(acc: Accumulator, reasonNames: Map<string, string>): Adjustmen
 function rateOf(reduction: Decimal, sales: Decimal): Decimal | null {
   if (compareDecimal(sales, ZERO) <= 0) return null;
   return divideDecimal(multiplyDecimal(reduction, HUNDRED), sales, 1);
+}
+
+/**
+ * What the report reads of each adjustment on the bills opened in the range, in no order, with
+ * the name its reason's most recent row in the range recorded.
+ */
+async function readReportRows(tx: Transaction, window: SQL) {
+  const rows = await tx
+    .select({
+      action: adjustments.action,
+      stage: adjustments.stage,
+      reasonId: adjustments.reasonId,
+      newestReasonName: sql<string>`first_value(${adjustments.reasonName}) over (
+        partition by ${adjustments.reasonId}
+        order by ${adjustments.createdAt} desc, ${adjustments.id} desc)`,
+      reduction: adjustments.reduction,
+      nominalValue: adjustments.nominalValue,
+      requestedBy: adjustments.requestedBy,
+      approvedBy: adjustments.approvedBy,
+      creditedTo: adjustments.creditedTo,
+      byGuest: adjustments.byGuest,
+    })
+    .from(adjustments)
+    .innerJoin(workingOrders, eq(workingOrders.id, adjustments.workingOrderId))
+    .where(window);
+  return rows.map((row) => ({
+    ...row,
+    reduction: centsToDecimal(row.reduction),
+    nominalValue: centsToDecimal(row.nominalValue),
+  }));
 }
 
 /** The adjustments on bills opened in the range, newest first, converted at the row. */
@@ -291,7 +328,7 @@ export async function computeAdjustmentReport(
   input: AdjustmentReportInput,
 ): Promise<AdjustmentReport> {
   const window = validated(input);
-  const rows = await readRows(tx, window);
+  const rows = await readReportRows(tx, window);
   const credited = await readCreditedSales(tx, window);
 
   const people = new Map<string, PersonAccumulator>();
@@ -314,10 +351,9 @@ export async function computeAdjustmentReport(
   };
 
   for (const { creditedTo, sales } of credited) credit(creditedTo, sales);
-  // Rows arrive newest first, so the first name seen for a reason is its most recent.
   const reasonNames = new Map<string, string>();
   for (const row of rows) {
-    if (!reasonNames.has(row.reasonId)) reasonNames.set(row.reasonId, row.reasonName);
+    reasonNames.set(row.reasonId, row.newestReasonName);
     tallyRow(overall, row);
     if (row.action === "cancel") credit(row.creditedTo, row.nominalValue);
     if (row.byGuest) {

@@ -747,6 +747,34 @@ describe("stages, reasons and guests", () => {
     expect((await entries()).map((row) => row.reasonName)).toEqual(["Queja", "Complaint"]);
   });
 
+  it("names a reason by the row with the larger id when its two newest rows share a time", async () => {
+    const alex = await person("Alex");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const comp = (reasonName: string) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName,
+        action: "comp",
+        line: { name: "Coffee", list: "1.50", creditedTo: alex, stage: "served" },
+        before: "1.50",
+        after: "0.00",
+        nominal: "1.50",
+        by: alex,
+        at: "2026-09-15T20:00:00.000Z",
+      });
+    const named = [
+      { id: await comp("Queja"), name: "Queja" },
+      { id: await comp("Complaint"), name: "Complaint" },
+    ].sort((a, b) => b.id.localeCompare(a.id));
+
+    const read = await report();
+
+    expect(read.overall.byReason.map((row) => row.reasonName)).toEqual([named[0]!.name]);
+    expect((await entries()).map((row) => row.reasonName)).toEqual(named.map((row) => row.name));
+  });
+
   it("gives guests' actions their own row, never the requester's, and counts the approval they needed", async () => {
     const alex = await person("Alex");
     const mia = await person("Mia");
