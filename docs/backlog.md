@@ -2709,7 +2709,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     pull). They print if the printer is switched on again (read, not run: `claimPrintJobs`,
     `packages/printing/src/runtime.ts`, claims only a switched-on printer's jobs and has no age
     limit on a queued one). _(2026-10-01: changed by A163 — the same pull now ends the jobs that
-    were waiting for it; see A163's entry below.)_
+    were waiting for it, and A163 changed that case, which now finds the job ended, `failed` with
+    `printer.unpaired`; see A163's entry below.)_
   - A Bluetooth printer an agent reports paired offers one row-menu action, Unpair, in place of
     Disable (owner's "ok" to the recommendation, 2026-09-30 ~19:00). One no agent reports paired
     keeps Disable, since there is nothing to unpair; network and USB printers keep Disable.
@@ -2724,8 +2725,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     jobs already queued for it can be handed out, whether or not calibration is then saved.
     **Next action (owner, 2026-10-01: "(c)"):** lane A's A163 ends a printer's waiting jobs when
     its Unpair succeeds, so nothing stale can print during a later Add again. _(2026-10-01: done in
-    A163 — not the jobs a succeeded Unpair ended; a printer switched off with Disable still keeps
-    its waiting jobs.)_
+    A163 — a later Add again no longer prints the jobs a succeeded Unpair ended; jobs kept in the
+    cases A163's entry lists, and a printer switched off with Disable, can still print after Add again.)_
   - A row shows Disable whenever Unpair would not appear, such as after a succeeded Unpair while
     the agent's paired report is still listed (`#printerActions`,
     `apps/dashboard/src/screens/printers-screen.ts`).
@@ -2750,7 +2751,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `apps/server/src/print-api.ts`). Waiting means what a pull would claim (queued, failed with
     attempts left, or printing with a lapsed or missing claim), plus jobs this agent itself holds
     as printing. Each ends `failed` with no attempts left and the reason `printer.unpaired`, which
-    the Printers screen words as "The printer was unpaired, so this job will not be sent again."
+    the Printers screen words as "The printer was unpaired, so this job will not be retried."
     with "—" for attempts. Rows are kept, not deleted. A job this agent holds as printing may
     already have printed, if the agent sent it and its report was lost.
   - Left alone: another box's live claim, printed jobs, jobs already given up (they keep their

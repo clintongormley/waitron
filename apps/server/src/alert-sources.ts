@@ -292,7 +292,8 @@ export function printingAlertSource(): AlertSource {
           and(
             eq(printers.active, true),
             printJobInTrouble(now),
-            // Ended on purpose, and a resend makes a new job, so these would hold the alert for ever.
+            // Ended on purpose by an Unpair, not a fault to fix; a resend makes a new job, so these
+            // would hold the alert for ever.
             or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
           ),
         )

@@ -157,8 +157,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El agente de impresión de esta impresora no puede imprimir en impresoras Bluetooth.",
   },
   "printer.unpaired": {
-    en: "The printer was unpaired, so this job will not be sent again.",
-    es: "La impresora se desvinculó, así que este trabajo no se volverá a enviar.",
+    en: "The printer was unpaired, so this job will not be retried.",
+    es: "La impresora se desvinculó, así que este trabajo no se volverá a intentar.",
   },
   "content.language_invalid": {
     en: "Choose a recognised language.",

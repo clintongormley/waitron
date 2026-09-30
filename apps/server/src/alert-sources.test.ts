@@ -21,6 +21,11 @@ import {
   type ReaderStatus,
 } from "@waitron/payments";
 import {
+  BLUETOOTH_PRINTING_UNAVAILABLE,
+  MAX_DELIVERY_ATTEMPTS,
+  PRINTER_UNPAIRED,
+} from "@waitron/printing";
+import {
   awaitingCertAlertSource,
   backupAlertSource,
   type BackupOutcomeHolder,
@@ -35,11 +40,6 @@ import {
 } from "./alert-sources.js";
 import type { BackupStatus } from "./backup-status.js";
 import { createTtlCache } from "./ttl-cache.js";
-import {
-  BLUETOOTH_PRINTING_UNAVAILABLE,
-  MAX_DELIVERY_ATTEMPTS,
-  PRINTER_UNPAIRED,
-} from "@waitron/printing";
 
 const NOW = new Date("2026-09-15T12:00:00Z");
 const ctx = { tx: {} as never, now: NOW };

@@ -7732,7 +7732,7 @@ describe("A job ended because its printer was unpaired", () => {
     const el = await mountWithUnpaired();
 
     expect(text(el, "[data-test=job-error-j11]")).toBe(
-      "La impresora se desvinculó, así que este trabajo no se volverá a enviar.",
+      "La impresora se desvinculó, así que este trabajo no se volverá a intentar.",
     );
     expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
     expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
@@ -7745,7 +7745,7 @@ describe("A job ended because its printer was unpaired", () => {
       const el = await mountWithUnpaired();
 
       expect(text(el, "[data-test=job-error-j11]")).toBe(
-        "The printer was unpaired, so this job will not be sent again.",
+        "The printer was unpaired, so this job will not be retried.",
       );
     } finally {
       setLocale(before);
