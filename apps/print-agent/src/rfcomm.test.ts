@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,8 +25,48 @@ const STUB = [
   'exit "${WT_RFCOMM_EXIT:-0}"',
 ].join("\n");
 
+// Imported by the real python3 ahead of the real helper, through PYTHONPATH: it replaces
+// `socket.socket` with a fake that records what the helper asks of it under WT_RFCOMM_OUT, and
+// supplies the Linux Bluetooth constants a Python built without them lacks (macOS has none).
+const FAKE_SOCKET = [
+  "import json, os, socket",
+  "",
+  "if not hasattr(socket, 'AF_BLUETOOTH'):",
+  "    socket.AF_BLUETOOTH = 31",
+  "if not hasattr(socket, 'BTPROTO_RFCOMM'):",
+  "    socket.BTPROTO_RFCOMM = 3",
+  "",
+  "_out = os.environ['WT_RFCOMM_OUT']",
+  "",
+  "def _record(call, *args):",
+  "    with open(os.path.join(_out, 'calls'), 'a') as f:",
+  "        f.write(json.dumps([call, *args]) + '\\n')",
+  "",
+  "class FakeSocket:",
+  "    def __init__(self, family=-1, type=-1, proto=-1, fileno=None):",
+  "        _record('socket', family, type, proto)",
+  "    def __enter__(self):",
+  "        return self",
+  "    def __exit__(self, *exc):",
+  "        _record('close')",
+  "    def settimeout(self, timeout):",
+  "        _record('settimeout', timeout)",
+  "    def connect(self, address):",
+  "        _record('connect', *address)",
+  "        errno = os.environ.get('WT_RFCOMM_CONNECT_ERRNO')",
+  "        if errno:",
+  "            raise OSError(int(errno), 'Host is down')",
+  "    def sendall(self, data):",
+  "        _record('sendall', len(data))",
+  "        with open(os.path.join(_out, 'sent'), 'ab') as f:",
+  "            f.write(data)",
+  "",
+  "socket.socket = FakeSocket",
+].join("\n");
+
 const CONTROLS = [
   "WT_RFCOMM_OUT",
+  "WT_RFCOMM_CONNECT_ERRNO",
   "WT_RFCOMM_EARLY",
   "WT_RFCOMM_HANG",
   "WT_RFCOMM_SLEEP",
@@ -37,8 +77,10 @@ const CONTROLS = [
 
 let bin: string;
 let stub: string;
+let fakeSocketDir: string;
 let out: string;
 let savedPath: string | undefined;
+let savedPythonPath: string | undefined;
 
 beforeAll(async () => {
   bin = await mkdtemp(join(tmpdir(), "print-agent-rfcomm-bin-"));
@@ -46,6 +88,9 @@ beforeAll(async () => {
   stub = join(bin, "python3");
   await writeFile(stub, `${STUB}\n`);
   await chmod(stub, 0o755);
+  fakeSocketDir = join(bin, "fake-socket");
+  await mkdir(fakeSocketDir);
+  await writeFile(join(fakeSocketDir, "sitecustomize.py"), `${FAKE_SOCKET}\n`);
 });
 afterAll(async () => {
   await rm(bin, { recursive: true, force: true });
@@ -55,9 +100,12 @@ beforeEach(async () => {
   out = await mkdtemp(join(tmpdir(), "print-agent-rfcomm-out-"));
   process.env.WT_RFCOMM_OUT = out;
   savedPath = process.env.PATH;
+  savedPythonPath = process.env.PYTHONPATH;
 });
 afterEach(async () => {
   process.env.PATH = savedPath;
+  if (savedPythonPath === undefined) delete process.env.PYTHONPATH;
+  else process.env.PYTHONPATH = savedPythonPath;
   for (const name of CONTROLS) delete process.env[name];
   await rm(out, { recursive: true, force: true });
 });
@@ -175,6 +223,48 @@ describe("RfcommTransport", () => {
     await expect(sent).rejects.toThrow(/^bluetooth printer p1 /);
     await expect(sent).rejects.toThrow(/Bluetooth address/);
     await expect(readFile(join(out, "argv"))).rejects.toThrow(/ENOENT/);
+  });
+});
+
+// The real python3 runs the real helper beside this module; only its socket is the fake above.
+describe("RfcommTransport running the real helper", () => {
+  beforeEach(() => {
+    process.env.PYTHONPATH = fakeSocketDir;
+  });
+
+  const calls = async (): Promise<unknown[][]> =>
+    (await readFile(join(out, "calls"), "utf8"))
+      .split("\n")
+      .filter((line) => line !== "")
+      .map((line) => JSON.parse(line) as unknown[]);
+
+  it("opens an RFCOMM socket to the printer's address on channel 1 and sends every byte of the job", async () => {
+    const bytes = new Uint8Array(100_000).map((_, i) => (i * 7) % 256);
+    expect(bytes).toContain(0x00);
+    expect(bytes).toContain(0xff);
+    await expect(new RfcommTransport().send(target(), bytes)).resolves.toBeUndefined();
+    const recorded = await calls();
+    expect(recorded.slice(0, 3)).toStrictEqual([
+      ["socket", 31, 1, 3],
+      ["settimeout", 20],
+      ["connect", ADDRESS, 1],
+    ]);
+    expect(recorded.at(-1)).toStrictEqual(["close"]);
+    expect(new Uint8Array(await readFile(join(out, "sent")))).toStrictEqual(bytes);
+  });
+
+  it("rejects with the helper's error line when the connection fails, having sent nothing", async () => {
+    process.env.WT_RFCOMM_CONNECT_ERRNO = "112";
+    await expect(new RfcommTransport().send(target(), new Uint8Array([0x41]))).rejects.toThrow(
+      new Error(`bluetooth printer p1: rfcomm ${ADDRESS} channel 1: [Errno 112] Host is down`),
+    );
+    expect((await calls()).map(([call]) => call)).toStrictEqual([
+      "socket",
+      "settimeout",
+      "connect",
+      "close",
+    ]);
+    await expect(readFile(join(out, "sent"))).rejects.toThrow(/ENOENT/);
   });
 });
 

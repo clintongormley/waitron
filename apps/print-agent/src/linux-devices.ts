@@ -42,6 +42,10 @@ export const BLUETOOTH_RECHECK_MS = 30_000;
 /** How often the process asks `checkBluetooth()`; the check itself decides whether to list. */
 export const BLUETOOTH_CHECK_TICK_MS = 5_000;
 const LIST_TIMEOUT_MS = 3_000;
+/** A Bluetooth job is resolved against a paired listing started this recently rather than a new
+ * one, so a pull's jobs do not each wait on BlueZ. A printer unpaired outside this agent within that
+ * time still resolves as attached. */
+export const PAIRED_REUSE_MS = 10_000;
 
 type LocalDevice = VisibleDevice & { devicePath: string };
 
@@ -78,6 +82,8 @@ export function createLinuxDevices(
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
+  let recentPaired: { startedAt: number; devices: BluetoothDevice[] } | undefined;
+  let forgottenAt = -Infinity;
 
   const record = (next: BluetoothAvailability): void => {
     const changed = availability === undefined || !sameAvailability(availability, next);
@@ -88,12 +94,15 @@ export function createLinuxDevices(
   };
 
   const listPaired = async (): Promise<BluetoothDevice[]> => {
-    listedAt = now();
+    const startedAt = now();
+    listedAt = startedAt;
     try {
       const paired = await bluetooth.paired();
       record({ available: true });
+      recentPaired = { startedAt, devices: paired };
       return paired;
     } catch (error) {
+      recentPaired = undefined;
       record(classifyBluetoothFailure(error));
       throw error;
     }
@@ -116,7 +125,16 @@ export function createLinuxDevices(
       ...(d.name !== undefined ? { model: d.name } : {}),
       devicePath: btDevicePath(d.mac),
     }));
-  const pairedLocal = async (): Promise<LocalDevice[]> => toLocal(await bluetooth.paired());
+  // A listing that started before a forget finished may still hold the forgotten printer.
+  const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
+    const recent = recentPaired;
+    const reusable =
+      recent !== undefined &&
+      recent.startedAt > forgottenAt &&
+      now() - recent.startedAt < PAIRED_REUSE_MS &&
+      recent.devices.some((d) => d.mac === mac);
+    return toLocal(reusable ? recent.devices : await sharedListing());
+  };
 
   const dropPath = (d: LocalDevice): VisibleDevice => ({
     transport: d.transport,
@@ -190,8 +208,12 @@ export function createLinuxDevices(
       }));
     },
 
-    forgetBluetooth(mac): Promise<BluetoothCommandResult> {
-      return bluetooth.forget(mac);
+    async forgetBluetooth(mac): Promise<BluetoothCommandResult> {
+      try {
+        return await bluetooth.forget(mac);
+      } finally {
+        forgottenAt = now();
+      }
     },
 
     bluetoothPrinting: () => true,
@@ -207,8 +229,9 @@ export function createLinuxDevices(
         };
       }
       // Only the matching transport's list is consulted, so a USB job never reaches the radio.
-      const local: LocalDevice[] =
-        job.transport === "bluetooth" ? await pairedLocal() : await usb();
+      const local: LocalDevice[] = await (job.transport === "bluetooth"
+        ? pairedFor(job.localKey)
+        : usb());
       const match = local.find((d) => d.localKey === job.localKey);
       if (match === undefined) {
         throw new Error(`device ${job.localKey} not attached`);

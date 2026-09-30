@@ -66,15 +66,27 @@ RUN set -eux; \
 # Runs as the unprivileged `node` user the base image already ships (uid 1000).
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS print-agent
+# python3-minimal goes in alone and first, so the packages it adds to the base image can be listed:
+# their Debian copyright files ship in /app/third-party/python3-minimal (deploy/third-party/README.md).
 RUN set -eux; \
   apt-get update; \
-  apt-get install -y --no-install-recommends bluez python3-minimal; \
-  rm -rf /var/lib/apt/lists/*
+  dpkg-query -W -f '${Package}\n' | sort > /tmp/base-packages; \
+  apt-get install -y --no-install-recommends python3-minimal; \
+  dpkg-query -W -f '${Package}\n' | sort | comm -13 /tmp/base-packages - > /tmp/python3-packages; \
+  grep -qx python3-minimal /tmp/python3-packages; \
+  while read -r pkg; do \
+    install -d "/app/third-party/python3-minimal/$pkg"; \
+    cp -L "/usr/share/doc/$pkg/copyright" "/app/third-party/python3-minimal/$pkg/copyright"; \
+  done < /tmp/python3-packages; \
+  dpkg-query -W -f '${Package} ${Version}\n' $(cat /tmp/python3-packages) \
+    > /app/third-party/python3-minimal/PACKAGES.txt; \
+  apt-get install -y --no-install-recommends bluez; \
+  rm -rf /var/lib/apt/lists/* /tmp/base-packages /tmp/python3-packages
 # The state volume's mount path, pre-created and chowned so a fresh named volume comes up writable by
 # the non-root process (same rule as the app image's /var/lib/waitron paths).
 RUN install -d -o node -g node /var/lib/waitron-print-agent
 COPY --from=build --chown=node:node /src/apps/print-agent/dist/print-agent.js /app/print-agent.js
-COPY --from=build --chown=node:node /src/apps/print-agent/src/rfcomm-send.py /app/rfcomm-send.py
+COPY --from=build --chown=node:node /src/apps/print-agent/dist/rfcomm-send.py /app/rfcomm-send.py
 ENV NODE_ENV=production \
   WAITRON_STATE_DIR=/var/lib/waitron-print-agent \
   WAITRON_SETUP_PORT=9110

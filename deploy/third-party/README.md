@@ -3,9 +3,9 @@
 The box image carries software written by others under their own licences. This folder is
 copied to `/app/third-party/` in the image (`deploy/Dockerfile`). It covers libvips, Litestream
 and the Moby template the print agent's AppArmor profile is copied from; the npm packages bundled
-into the server, the web apps and the print-agent have no notice file yet, and the print-agent
-image, built by the same `deploy/Dockerfile`, has no `/app/third-party/` at all
-(`docs/backlog.md`).
+into the server, the web apps and the print-agent have no notice file yet (`docs/backlog.md`).
+The print-agent image, built by the same `deploy/Dockerfile`, does not carry this folder; its own
+`/app/third-party/` holds the notices of its Python, described below.
 
 ## libvips and the libraries built into it
 
@@ -54,6 +54,16 @@ says so and gives the licence's address, <https://www.apache.org/licenses/LICENS
 header is the only part of this notice that reaches `/etc/apparmor.d`.
 
 - `licenses/Apache-2.0.txt` is that licence.
+
+## The print agent's Python
+
+The print-agent image installs Debian's `python3-minimal` to run the agent's Bluetooth sender,
+`rfcomm-send.py`. Its build lists the packages that install adds to the `node:26-slim` base image,
+`python3-minimal` and what it pulls in, and copies each one's Debian copyright file, which states
+the package's copyright and licences, into `/app/third-party/python3-minimal/` in that image, as
+`<package>/copyright`. `PACKAGES.txt` in the same folder names each of those packages and the
+version installed. The build fails if the list does not include `python3-minimal`, or if a listed
+package has no copyright file.
 
 ## Litestream
 

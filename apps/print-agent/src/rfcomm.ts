@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { type PrinterTarget, type Transport, isBluetoothAddress } from "@waitron/print-agent";
 
@@ -8,7 +8,6 @@ export const RFCOMM_TIMEOUT_MS = 20_000;
 /** How long past twice its own timeout the helper may run before it is killed: the timeout bounds
  * its connect and, again, its send. */
 export const RFCOMM_GRACE_MS = 5_000;
-const STDERR_KEPT = 2048;
 
 export interface RfcommOptions {
   python?: string;
@@ -45,50 +44,37 @@ export class RfcommTransport implements Transport {
       );
     }
     const args = [this.script, address, String(this.channel), String(this.timeoutMs / 1000)];
+    const limit = 2 * this.timeoutMs + this.graceMs;
     return new Promise<void>((resolve, reject) => {
-      const child = spawn(this.python, args, { stdio: ["pipe", "ignore", "pipe"] });
-      let settled = false;
-      let stderr = "";
-      const settle = (error?: Error): void => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(backstop);
-        if (error === undefined) resolve();
-        else reject(error);
-      };
-      const limit = 2 * this.timeoutMs + this.graceMs;
-      const backstop = setTimeout(() => {
-        child.kill("SIGKILL");
-        settle(new Error(`bluetooth printer ${printer.id} timed out after ${limit}ms`));
-      }, limit);
-
-      child.once("error", (error) => {
-        settle(
-          new Error(
-            `bluetooth printer ${printer.id}: could not run ${this.python}: ${error.message}`,
-          ),
-        );
-      });
-      child.stderr.setEncoding("utf8");
-      child.stderr.on("data", (chunk: string) => {
-        stderr = (stderr + chunk).slice(-STDERR_KEPT);
-      });
-      child.once("close", (code, signal) => {
-        if (code === 0) {
-          settle();
-          return;
-        }
-        const reason =
-          stderr
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line !== "")
-            .at(-1) ?? `the Bluetooth helper exited with ${code ?? signal}`;
-        settle(new Error(`bluetooth printer ${printer.id}: ${reason}`));
-      });
+      const child = execFile(
+        this.python,
+        args,
+        { timeout: limit, killSignal: "SIGKILL", maxBuffer: 1_048_576, encoding: "utf8" },
+        (error, _stdout, stderr) => {
+          if (error === null) return resolve();
+          // Only a failure to start the interpreter names the system call.
+          if (error.syscall !== undefined) {
+            return reject(
+              new Error(
+                `bluetooth printer ${printer.id}: could not run ${this.python}: ${error.message}`,
+              ),
+            );
+          }
+          if (error.killed) {
+            return reject(new Error(`bluetooth printer ${printer.id} timed out after ${limit}ms`));
+          }
+          const reason =
+            stderr
+              .split("\n")
+              .map((line) => line.trim())
+              .filter((line) => line !== "")
+              .at(-1) ?? `the Bluetooth helper exited with ${error.code ?? error.signal}`;
+          reject(new Error(`bluetooth printer ${printer.id}: ${reason}`));
+        },
+      );
       // A helper that exits before reading everything breaks the pipe; its exit status reports why.
-      child.stdin.on("error", () => {});
-      child.stdin.end(Buffer.from(bytes));
+      child.stdin?.on("error", () => {});
+      child.stdin?.end(Buffer.from(bytes));
     });
   }
 }

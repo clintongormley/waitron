@@ -4,7 +4,7 @@ import { delimiter, join } from "node:path";
 import type { BluetoothHost } from "./bluetooth.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredDevice, WireJob } from "@waitron/print-agent";
-import { buildPdlQuery, createLinuxDevices } from "./linux-devices.js";
+import { PAIRED_REUSE_MS, buildPdlQuery, createLinuxDevices } from "./linux-devices.js";
 
 // A one-printer usblp sysfs tree (the real box's identity), so USB discovery is real in these
 // composition tests while Bluetooth/network are injected fakes.
@@ -574,5 +574,111 @@ describe("createLinuxDevices — resolve()", () => {
     await expect(
       devices.resolve(wireJob({ transport: "usb", localKey: "SN-GONE" })),
     ).rejects.toThrow("device SN-GONE not attached");
+  });
+});
+
+describe("createLinuxDevices — resolve() against a recent paired listing", () => {
+  const PRINTER = "5A:4A:45:D4:FB:BB";
+  const OTHER = "11:22:33:44:55:66";
+  const job = (localKey: string): WireJob => wireJob({ transport: "bluetooth", localKey });
+
+  function setup(listings: { mac: string }[][]) {
+    let clock = 0;
+    const paired = vi.fn(async () => {
+      const next = listings.shift();
+      if (next === undefined) throw new Error("No default controller available");
+      return next;
+    });
+    const forget = vi.fn(async () => ({ ok: true as const }));
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      now: () => clock,
+      bluetooth: fakeBluetooth({ paired, forget }),
+    });
+    // The agent's poll: the paired listing and the visible read share one listing.
+    const poll = async (): Promise<void> => {
+      const listed = devices.pairedBluetooth().catch(() => []);
+      await devices.visibleDevices();
+      await listed;
+    };
+    return { devices, paired, poll, advance: (ms: number) => (clock += ms) };
+  }
+
+  it("resolves the Bluetooth jobs of one poll without listing again for each", async () => {
+    const { devices, paired, poll } = setup([[{ mac: PRINTER }, { mac: OTHER }]]);
+    await poll();
+    for (const key of [PRINTER, OTHER, PRINTER]) {
+      expect((await devices.resolve(job(key))).devicePath).toBe(key);
+    }
+    expect(paired).toHaveBeenCalledTimes(1);
+  });
+
+  it("lists again once the poll's listing is as old as the reuse window", async () => {
+    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
+    await poll();
+    advance(PAIRED_REUSE_MS - 1);
+    expect((await devices.resolve(job(PRINTER))).devicePath).toBe(PRINTER);
+    advance(1);
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists again for a printer the recent listing does not hold, so one paired since resolves", async () => {
+    const { devices, paired, poll } = setup([[{ mac: OTHER }], [{ mac: OTHER }, { mac: PRINTER }]]);
+    await poll();
+    expect((await devices.resolve(job(PRINTER))).devicePath).toBe(PRINTER);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
+  it("lists again after this agent forgets a printer, so the forgotten one is not attached", async () => {
+    const { devices, paired, poll, advance } = setup([[{ mac: PRINTER }], []]);
+    await poll();
+    await devices.forgetBluetooth(PRINTER);
+    advance(1);
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse a listing that was still running when a forget finished", async () => {
+    let clock = 0;
+    let release!: (devices: { mac: string }[]) => void;
+    const paired = vi
+      .fn<() => Promise<{ mac: string }[]>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      )
+      .mockResolvedValueOnce([]);
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      now: () => clock,
+      bluetooth: fakeBluetooth({ paired, forget: async () => ({ ok: true }) }),
+    });
+    const listed = devices.pairedBluetooth();
+    clock += 1;
+    await devices.forgetBluetooth(PRINTER);
+    release([{ mac: PRINTER }]);
+    await listed;
+    clock += 1;
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow(`device ${PRINTER} not attached`);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not reuse an earlier listing once a later one has failed", async () => {
+    const { devices, paired, poll } = setup([[{ mac: PRINTER }]]);
+    await poll();
+    await expect(devices.pairedBluetooth()).rejects.toThrow("No default controller available");
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow("No default controller available");
+    expect(paired).toHaveBeenCalledTimes(3);
+  });
+
+  it("lists again after a failed listing, and a failure there rejects the job with its error", async () => {
+    const { devices, paired, poll } = setup([]);
+    await poll();
+    await expect(devices.resolve(job(PRINTER))).rejects.toThrow("No default controller available");
+    expect(paired).toHaveBeenCalledTimes(2);
   });
 });

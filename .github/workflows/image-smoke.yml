@@ -335,6 +335,14 @@ jobs:
           grep -qF "rfcomm 66:55:44:33:22:11 channel 1: [Errno " "$RUNNER_TEMP/bt-send.txt"
           if grep -qF "[Errno 13]" "$RUNNER_TEMP/bt-send.txt"; then exit 1; fi
 
+      - name: The print-agent image carries its Python's copyright files
+        run: |
+          set -euo pipefail
+          agent=$(docker compose ps -q print-agent)
+          docker exec "$agent" cat /app/third-party/python3-minimal/PACKAGES.txt
+          docker exec "$agent" sh -c "grep -q '^python3-minimal ' /app/third-party/python3-minimal/PACKAGES.txt \
+            && test -s /app/third-party/python3-minimal/python3-minimal/copyright"
+
       - name: Tear the stack down, volumes and all
         if: always()
         run: docker compose down -v --remove-orphans
