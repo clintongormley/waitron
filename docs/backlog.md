@@ -8643,7 +8643,8 @@ it. Left open:
   `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
   are in memory"). Found by the probe, and open:
   - **MEASURED (lane A's A133, 2026-09-29): a sale waits behind Litestream's own checkpoint. The
-    owner chose to narrow CLAUDE.md §5 now (DONE, A133, #889) and to measure the fix next (A135, below).**
+    owner chose to narrow CLAUDE.md §5 now (DONE, A133, #889) and to measure switching off its
+    timed checkpoint and moving its page-count one out of reach next (A135, below).**
     Litestream 0.5.17 holds the database's write lock for a PASSIVE checkpoint: it opens a
     transaction writing `_litestream_lock` around the checkpoint (`checkpointWithExecutor`, `db.go`
     lines 2492–2512 at tag v0.5.17). The probe (a throwaway branch, since deleted; workflow run
@@ -8671,19 +8672,35 @@ it. Left open:
     no Litestream setting has changed. Since A142 (#898) the full figures sit in
     [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
     checkpoint", and §5 keeps the rule, the longest wait on each disk and a link there.
-    **Next (A135):** measure, with the same probe and the
-    stream-loop and restore checks, whether taking routine checkpoints away from Litestream stops
-    the wait, and ask the owner before changing any setting. Read in the code at tag v0.5.17:
-    `checkpoint-interval: 0` switches the timed checkpoint off — `cmd/litestream/main.go` copies an
-    explicit 0 through, and `db.go` line 1471 runs that checkpoint only when the interval is above
-    0. A 3 s run of the pinned binary during A133's review logged no `checkpoint mode=PASSIVE` line
-    with it, which a run that short cannot tell apart from the 1-minute default. The page-count
-    checkpoint cannot be switched off: `db.go` line 788 refuses a `min-checkpoint-page-count` of 0
-    or less, and the pinned binary given 0 exited at start-up with
-    `cannot open store: minimum checkpoint page count required`. Unmeasured risks: Litestream
-    holds a long read transaction, so the side file may grow until the server's side-file limit
-    pauses the stream; and a checkpoint's disk cost still lands on some sale — with streaming off,
-    the slowest sale on the slow disk was 0.40–0.54 s.
+  - **MEASURED (lane C's A135, 2026-09-30, run 36657175716, probe commit `bc3b94671` on the
+    throwaway branch `probe/a135-litestream-checkpoints`): switching off Litestream's timed
+    checkpoint and setting its page-count one to a billion pages removed the wait on the delayed
+    disk, but not on the runner's normal disk at about 80 sales a second. No setting has
+    changed.** The variant wrote
+    `checkpoint-interval: 0s` and `min-checkpoint-page-count: 1000000000` into the database's
+    Litestream entry (the page-count checkpoint cannot be switched off, as A133's review found:
+    `db.go` line 788 at tag v0.5.17 refuses 0, and the pinned binary given 0 exited with
+    `cannot open store: minimum checkpoint page count required`). A local pre-check with the pinned
+    binary, in 20 s of writes, logged one Litestream checkpoint with the variant — an emergency
+    PASSIVE one, run when the side file passed its 499,999,112-byte threshold — and no timed or
+    page-count one, against 19 with the product's settings. Judged by A133's criterion, reused
+    unchanged — writes wait under 20 ms to begin with streaming on — the variant met it on the
+    delayed disk and failed it on the normal disk. In CI, three 300 s runs of each
+    on each disk: on the delayed disk the variant removed the waits (none over 1 ms, against 12–13
+    per run at 829–831 ms) and the slowest sale fell from about 1.08 s to 0.57–0.65 s; on the
+    runner's normal disk the side file grew by about 230 KiB a sale and reached Litestream's
+    emergency threshold (about 477 MiB) before the server's once-a-minute size measurement; 10
+    writes per run waited 20 ms or more, the longest 430–729 ms per run, against 129–179 ms with the
+    product's settings. Each of those 30 waits contained one of Litestream's emergency checkpoints:
+    the 20 behind a PASSIVE one lasted 33–179 ms; every wait of 229–729 ms began just after
+    Litestream logged `forcing truncate checkpoint` and lasted through that checkpoint and the
+    snapshot Litestream takes right after it. The server
+    paused the stream one to three times per run under the variant. The stream loop and stream
+    pause tests passed three times each with it. Full figures:
+    [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
+    checkpoint". Not measured: a venue's own sale rate, several sellers, the box's own disk.
+    **Next action:** the owner decides whether to ship those two settings or leave Litestream's
+    checkpoints alone (lane C's questions.md, A135).
   - Litestream at trace logging deadlocked sales for five seconds. The probe first ran it at trace
     level by mistake, and 13 of 24 runs failed with a 500. Each one looked at was `begin immediate`
     failing `database is locked` after 5,006 to 5,008 ms (runs 36571860113, 36572745451). The inferred
