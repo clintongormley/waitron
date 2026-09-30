@@ -746,6 +746,80 @@ describe("printer configuration tabs", () => {
   });
 });
 
+describe("the Printers tab at phone width", () => {
+  // A long printer name, and a printer whose last print names its agent, widen the name and "last
+  // seen by" columns. Each width and language also runs with larger text, in Verdana, and with both.
+  const phonePrinters: Printer[] = [
+    {
+      ...printers[0]!,
+      name: "Impresora de tickets de la cocina caliente",
+      pendingJobs: 3,
+      lastPrintAt: "2026-08-25T14:00:00.000Z",
+      lastPrintAgentId: "a1",
+    },
+    ...printers.slice(1),
+  ];
+  it.each(
+    [390, 360, 320].flatMap((phoneWidth) =>
+      ["en-GB", "es-ES"].flatMap((locale) =>
+        [false, true].flatMap((scaled) =>
+          ["default", "Verdana"].map((font) => ({ phoneWidth, locale, scaled, font })),
+        ),
+      ),
+    ),
+  )(
+    "keeps every printer row's menu on screen and uncovered while the other columns scroll sideways ($phoneWidth px, $locale, larger text: $scaled, font: $font)",
+    async ({ phoneWidth, locale, scaled, font }) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(phoneWidth, 844);
+        expect(window.innerWidth).toBe(phoneWidth);
+        const { el, host } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+          api: stubApi({ listPrinters: vi.fn().mockResolvedValue(phonePrinters) }),
+        });
+        if (scaled) {
+          host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
+          host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+        }
+        if (font === "Verdana") {
+          const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+          expect(family).not.toBe("");
+          host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+        }
+        await flush(el);
+        await selectTab(el, "printers");
+        await filterPrinters(el, "all");
+        const table = q(el, '[data-test="printers-table"]')!;
+        const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+        expect(scroll.scrollLeft).toBe(0);
+        const box = scroll.getBoundingClientRect();
+        const menus = [...table.shadowRoot!.querySelectorAll("dashboard-row-actions")];
+        expect(menus).toHaveLength(phonePrinters.length);
+        for (const [index, menu] of menus.entries()) {
+          const button = menu.shadowRoot!.querySelector("button")!;
+          const at = button.getBoundingClientRect();
+          expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+          expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+          expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(
+            window.innerWidth,
+          );
+          // Anything painted over the button, such as a cell scrolling under the menu's column,
+          // is what this hit test finds instead.
+          const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+          expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
+        }
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+});
+
 describe("printers-screen", () => {
   it("updates a printer and its recent jobs after a data event while preserving an editing draft", async () => {
     const liveData = new LiveData();

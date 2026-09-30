@@ -25,6 +25,9 @@ export interface DataTableColumn<Row> {
   /** Offers the column in the column chooser, shown or hidden until the person chooses. Absent, the
    * column is always shown. A hidden column still filters and is still searched, but does not sort. */
   choosable?: "shown" | "hidden";
+  /** On the table's last column, keeps it at the box's trailing edge while the other columns scroll
+   * sideways under it. */
+  pinned?: "end";
 }
 
 type SortDirection = "ascending" | "descending";
@@ -84,6 +87,29 @@ export class WtDataTable<Row = unknown> extends LitElement {
       }
 
       tbody tr:hover {
+        background: var(--wt-color-surface-raised);
+      }
+
+      /* Opaque, so the columns scrolling under it do not show through; above the lifted controls of
+         a clickable row, which would otherwise paint over it as they pass. */
+      [data-pinned="end"] {
+        position: sticky;
+        inset-inline-end: 0;
+        z-index: 2;
+        background: var(--wt-color-surface);
+      }
+
+      /* A collapsed border is drawn where the cell sits unscrolled, so the edge that must travel with
+         it is drawn by the cell itself. */
+      [data-pinned="end"]::before {
+        content: "";
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        border-inline-start: 1px solid var(--wt-color-border);
+      }
+
+      tbody tr:hover td[data-pinned="end"] {
         background: var(--wt-color-surface-raised);
       }
 
@@ -766,6 +792,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 role="columnheader"
                 scope="col"
                 data-align=${column.align ?? "start"}
+                data-pinned=${column.pinned ?? nothing}
                 aria-sort=${
                   column.sortValue === undefined
                     ? nothing
@@ -963,7 +990,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
                     ${this.#renderSelectCell(key, row, false)}
                     ${shown.map(
                       (column, ci) => html`
-                        <td data-align=${column.align ?? "start"}>
+                        <td
+                          data-align=${column.align ?? "start"}
+                          data-pinned=${column.pinned ?? nothing}
+                        >
                           ${
                             ci === 0 && this.rowClick !== undefined
                               ? html`<button
@@ -1007,7 +1037,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
                 ${this.#renderSelectCell(key, row, true)}
                 ${shown.map(
                   (column, ci) =>
-                    html`<td role="gridcell" data-align=${column.align ?? "start"}>
+                    html`<td
+                      role="gridcell"
+                      data-align=${column.align ?? "start"}
+                      data-pinned=${column.pinned ?? nothing}
+                    >
                       ${
                         ci === 0
                           ? html`<span
