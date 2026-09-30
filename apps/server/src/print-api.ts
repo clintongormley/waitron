@@ -415,11 +415,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // A usb/bluetooth printer is claimed only by the box that currently sees its `local_key`; a
-  // network_tcp printer by any box at the printer's location. A box that says it cannot print over
-  // Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another box
-  // reported it can print to that printer within `DISCOVERED_TTL_MS`. That report is held in memory,
-  // so until the other box's first pull after a server restart the jobs are ended anyway.
+  // A usb/bluetooth printer is claimed only by a box whose `visible` report lists its `local_key`;
+  // a network_tcp printer by any box at the printer's location. A box that says it cannot print
+  // over Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another
+  // box reported it can print to that printer within `DISCOVERED_TTL_MS`. The jobs are ended anyway
+  // when that report is older than the window or, being held in memory, lost to a server restart.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
@@ -476,20 +476,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const visibleKeys = visible
         .filter((v) => v.transport === "usb" || v.transport === "bluetooth")
         .map((v) => v.localKey);
-      // Absent from an agent that predates the field, which then changes nothing. A printer another
-      // agent reported it can print to within the window is left for that agent to claim.
-      const printableElsewhere = new Set(
-        [...discovered.values()]
-          .filter(
-            (e) =>
-              e.agentId !== agentId && e.transport === "bluetooth" && isFresh(e.visibleAt, now),
-          )
-          .map((e) => e.localKey),
-      );
-      const unprintable =
-        bluetoothPrinting === false
-          ? pairedBluetooth.map((p) => p.localKey).filter((key) => !printableElsewhere.has(key))
-          : [];
 
       // The claim commits within this request: no transaction is held across the agent's socket write,
       // and the agent reports the outcome in a separate request.
@@ -516,7 +502,27 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             );
         }
-        await failUnprintableBluetoothJobs(tx, agentId, unprintable);
+        // Absent from an agent that predates the field, which then changes nothing.
+        if (bluetoothPrinting === false && pairedBluetooth.length > 0) {
+          // Read here rather than before the transaction, so a report another agent recorded while
+          // this pull waited for the write lock counts.
+          const checkedAt = Date.now();
+          const printableElsewhere = new Set(
+            [...discovered.values()]
+              .filter(
+                (e) =>
+                  e.agentId !== agentId &&
+                  e.transport === "bluetooth" &&
+                  isFresh(e.visibleAt, checkedAt),
+              )
+              .map((e) => e.localKey),
+          );
+          await failUnprintableBluetoothJobs(
+            tx,
+            agentId,
+            pairedBluetooth.map((p) => p.localKey).filter((key) => !printableElsewhere.has(key)),
+          );
+        }
         return claimPrintJobs(tx, agentId, {
           locationId: deps.cfg.locationId,
           visibleKeys,

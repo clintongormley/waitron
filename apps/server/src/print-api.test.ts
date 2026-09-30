@@ -2360,6 +2360,103 @@ describe("agent inventory screening and the discovered-printer list", () => {
     });
   });
 
+  function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  }
+
+  /** A pull whose body is sent only on `release`; `reading` settles once the route asks for it. */
+  function heldPull(
+    app: Hono,
+    token: string,
+  ): {
+    reading: Promise<void>;
+    release: (inventory: unknown) => void;
+    response: Promise<Response>;
+  } {
+    const reading = deferred();
+    const inventory = deferred<unknown>();
+    const body = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          reading.resolve();
+          controller.enqueue(new TextEncoder().encode(JSON.stringify(await inventory.promise)));
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const response = Promise.resolve(
+      app.request("/print-api/agent/jobs", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body,
+        duplex: "half",
+      } as RequestInit),
+    );
+    return { reading: reading.promise, release: inventory.resolve, response };
+  }
+
+  it("leaves the job when the other box reports it can print to the printer while this box's pull waits for the write lock", async () => {
+    const app = mountApp();
+    const printing = await joinAndAccept(app, "Barra agent");
+    const blind = await joinAndAccept(app, "Cocina agent");
+    const { mac, printerId } = await bluetoothPrinter(app);
+    const jobId = await enqueue(printerId, esc().text("Mesa 9").cut().bytes());
+
+    // Both pulls are past authentication, which takes the write lock, before a writer is held.
+    const blindPull = heldPull(app, blind.token);
+    const printingPull = heldPull(app, printing.token);
+    await Promise.all([blindPull.reading, printingPull.reading]);
+    const writerHeld = deferred();
+    const releaseWriter = deferred();
+    const writer = withTransaction(suite.db, async () => {
+      writerHeld.resolve();
+      await releaseWriter.promise;
+    });
+    await writerHeld.promise;
+
+    // A pull that asks for the write lock has recorded its report and now waits behind the writer.
+    const withWriteLock = suite.db.withWriteLock.bind(suite.db);
+    let lockAsked = deferred();
+    const lockSpy = vi
+      .spyOn(suite.db, "withWriteLock")
+      .mockImplementation(<T>(body: () => Promise<T>): Promise<T> => {
+        lockAsked.resolve();
+        return withWriteLock(body);
+      });
+    try {
+      blindPull.release({
+        visible: [],
+        pairedBluetooth: [{ localKey: mac }],
+        bluetoothPrinting: false,
+      });
+      await lockAsked.promise;
+      lockAsked = deferred();
+      printingPull.release({
+        visible: [{ transport: "bluetooth", localKey: mac }],
+        pairedBluetooth: [{ localKey: mac }],
+        bluetoothPrinting: true,
+      });
+      await lockAsked.promise;
+    } finally {
+      lockSpy.mockRestore();
+      releaseWriter.resolve();
+    }
+    await writer;
+
+    const [blindResponse, printingResponse] = await Promise.all([
+      blindPull.response,
+      printingPull.response,
+    ]);
+    expect(blindResponse.status).toBe(200);
+    expect(printingResponse.status).toBe(200);
+    expect(await jobRow(jobId)).toMatchObject({ status: "printing", last_error: null });
+    const reply = (await printingResponse.json()) as PullReply;
+    expect(reply.jobs.map((job) => job.id)).toContain(jobId);
+  });
+
   it("refuses a pull whose bluetoothPrinting is not a boolean, naming the field, before recording its pairing report", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
