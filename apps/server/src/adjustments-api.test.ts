@@ -21,6 +21,7 @@ import {
   rowsOf,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
+import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
 // The till's adjustment routes (service plan Task 11): apply, preview, and the reasons and
@@ -294,6 +295,35 @@ describe("the route's own rules", () => {
       expect([answer.status, answer.json.code]).toEqual([status, code]);
     }
     expect(await recordedOn(billId)).toEqual([]);
+  });
+
+  it("refuses an open counter order, which has no party, as tab.not_open, writing nothing", async () => {
+    const orderId = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: orderId,
+      lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
+      zoneId: venue.tables.zoneId,
+      operatorId: venue.staffId,
+    });
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, orderId)),
+    );
+    expect(order).toEqual({ status: "open", partyId: null });
+    const revision = await revisionOf(orderId);
+    const rows = await rowsOf(venue, orderId);
+
+    const answer = await post(orderId, { lineId: rows[0]!.id, action: "comp" });
+
+    expect([answer.status, answer.json]).toEqual([
+      409,
+      { code: "tab.not_open", params: { tabId: orderId } },
+    ]);
+    expect(await recordedOn(orderId)).toEqual([]);
+    expect(await revisionOf(orderId)).toBe(revision);
+    expect(await rowsOf(venue, orderId)).toEqual(rows);
   });
 
   it("maps over_limit, partial_with_extras and reason_inactive to 409", async () => {

@@ -33,6 +33,7 @@ import {
   advanceTicketItem,
   readOrderRevision,
   recallLines,
+  updateHeldOrder,
   updateOrderLine,
 } from "./working-order.js";
 import { serveLine } from "./testing/serve-line.js";
@@ -638,6 +639,23 @@ describe("split rows and groups (plan D19)", () => {
       stage: "held",
       creditedTo: venue.staffId,
     });
+  });
+
+  it("records a line nothing has sent or held as unsent", async () => {
+    // Saving a party's empty bill as an order adds lines no group holds and nothing sends.
+    const { billId } = await bill([]);
+    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+      revision: (await stateOf(billId)).order!.revision,
+      lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
+      operatorId: venue.staffId,
+    });
+    const [row] = await rowsOf(venue, billId);
+    expect(row!.groupId).toBeNull();
+    expect(await ticketItemCount(billId)).toBe(0);
+
+    await adjust(billId, { lineId: row!.id, action: "comp" });
+
+    expect((await recordedOn(billId))[0]).toMatchObject({ stage: "unsent", reduction: 1200 });
   });
 
   it("marks a held group removed when its only line is cancelled", async () => {

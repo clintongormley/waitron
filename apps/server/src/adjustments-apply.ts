@@ -14,7 +14,7 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { assertQuantityPrecision, MAX_UNIT_PRECISION } from "@waitron/catalogue";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -42,6 +42,7 @@ import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import {
+  assertPartyBillOpen,
   bumpRevision,
   isReleased,
   partyAfterEdit,
@@ -270,23 +271,11 @@ function spread(
  */
 async function planAdjustment(tx: Transaction, cfg: TillConfig, ask: AdjustmentAsk): Promise<Plan> {
   const { orderId } = ask;
-  const [order] = await tx
-    .select({
-      status: workingOrders.status,
-      partyId: workingOrders.partyId,
-      revision: workingOrders.revision,
-    })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
   // The table screen is the only surface (ruling R1): an open bill of a party, as a void needs.
-  if (order?.status !== "open" || order.partyId === null) {
-    throw new AppError("tab.not_open", { tabId: orderId });
-  }
-  if (order.revision !== ask.expectedRevision) {
-    throw new AppError("working_order.out_of_date", {
-      workingOrderId: orderId,
-      revision: order.revision,
-    });
+  await assertPartyBillOpen(tx, cfg, orderId);
+  const revision = await readOrderRevision(tx, orderId);
+  if (revision !== ask.expectedRevision) {
+    throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
   await refusePaymentInFlight(tx, [orderId]);
   const reason = await findAdjustmentReason(tx, ask.reasonId);

@@ -1050,7 +1050,11 @@ export async function openTab(
 }
 
 /** This working order is an open bill of a party, else `tab.not_open`. A counter order is not. */
-async function assertPartyBillOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
+export async function assertPartyBillOpen(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+): Promise<void> {
   void cfg;
   const [order] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
