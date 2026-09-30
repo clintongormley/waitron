@@ -2528,6 +2528,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the printer paired. It is in the printer's row on the Printers tab, behind the three-dot button
   (⋮) in the Actions column, below Edit and Disable; a second click confirms it. A printer
   forgotten while switched on stays switched on and registered. While no agent reports it paired,
+  anything sent to it stays waiting and the jobs list gives no reason; this is the case A139's
+  **Not covered** names. Once an agent reports it paired again, the box's agent ends those jobs
+  failed with A139's reason, because Bluetooth printing is not built yet (read, not run: when an
+  agent asks for work, the server passes `failUnprintableBluetoothJobs` only the addresses that
+  agent reports paired, `apps/server/src/print-api.ts`). While no agent reports it paired,
   Add a printer lists it once an agent's scan finds it, without Show all devices even if the scan
   does not call it a printer, and offers a plain **Pair** (Spanish "Emparejar"; `#canPairOnly`): it pairs the printer again,
   opens no add form and changes nothing about the printer's registration. The row keeps Pair,
@@ -2544,7 +2549,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   paired device, without asking for a device path, which would throw" in
   `apps/print-agent/src/linux-devices.test.ts` passes; when `pairedBluetooth()` was made to ask for
   a device path, that test failed with `liveBtDevicePath`'s "resolution not implemented" error.
-  The server's forget route takes an agent and an address, never a printer, so it had no
+  That test and the A139 end-to-end case both use a stand-in for the Bluetooth adapter, so what the
+  box's real adapter reports as paired is still unchecked. The server's forget route takes an agent and an address, never a printer, so it had no
   switched-on check to change (read, not run: `apps/server/src/print-api.ts`).
 - **A print job for a Bluetooth printer waited with no reason (A139, owner 2026-09-29: _"i tried
   to print the character set block, but nothing printed, the jobs just get stuck"_) — FIXED where
@@ -2593,8 +2599,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the transport or the stored code, each place the dashboard says Bluetooth printing is not
   available yet: the note on a Bluetooth printer's row and the hint in its edit dialog (both
   `codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)`, shown for every Bluetooth printer,
-  `apps/dashboard/src/screens/printers-screen.ts`), the last sentence of
-  `printers.bluetooth_pair_note` (`apps/dashboard/src/i18n/strings.ts`), and the jobs list's "—" in
+  `apps/dashboard/src/screens/printers-screen.ts`), the sentence of
+  `printers.bluetooth_pair_note` saying Bluetooth printing is not available yet even once paired (`apps/dashboard/src/i18n/strings.ts`), and the jobs list's "—" in
   place of the attempt count. The stored code also becomes that sentence as a job's reason, through
   `jobReason` in the jobs list and in the calibration dialog's "Not printed: <reason>"
   (`apps/dashboard/src/screens/printers-screen.ts`); A140 decides whether jobs ended before it keep
@@ -2604,7 +2610,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   holds Edit, Disable and Forget pairing is reached only by scrolling the table sideways — which
   works against A141's aim of making Forget pairing easy to find (observed 2026-09-30 in
   screenshots taken during the A141 work, not kept; the A141 finish-branch run-it review (Codex)
-  reported the same at 390 px). The cause is not investigated. The product editor's variants table
+  reported the same at 390 px; both before A139's note under a Bluetooth printer's name landed, so
+  re-check with it). The cause is not investigated. The product editor's variants table
   keeps its row menu on screen at phone width with its own layout rule for a narrow table, and the
   phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts` check that each row menu
   ends inside the frame ([design-system.md](developers/design-system.md), under
