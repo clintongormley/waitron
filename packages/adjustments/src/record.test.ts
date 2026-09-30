@@ -9,6 +9,7 @@ import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
   readBillAdjustments,
   readCompedLines,
+  readLinePercents,
   readReasonTotals,
   recordAdjustment,
   type NewAdjustment,
@@ -294,6 +295,41 @@ describe("readReasonTotals", () => {
     await record(percent(other, reason, line, 1000, [{ from: line, to: carved }]));
     await record(percent(order, reason, line, 2000));
     expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(0);
+  });
+});
+
+describe("readLinePercents", () => {
+  it("answers each line's percentages apart in one call, each following its own splits", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const another = await seedReason(db);
+    const [dish, extra, carved, untouched] = [
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+      randomUUID(),
+    ];
+    await record(percent(order, reason, dish, 1000));
+    await record(percent(order, reason, extra, 2500));
+    await record(percent(order, another, extra, 500));
+    await record(percent(order, reason, dish, 500, [{ from: dish, to: carved }]));
+
+    const percents = await withTransaction(db, (tx) =>
+      readLinePercents(tx, {
+        workingOrderId: order,
+        reasonId: reason.id,
+        lineIds: [dish, extra, carved, untouched],
+      }),
+    );
+
+    expect(percents).toEqual(
+      new Map([
+        [dish, 1500],
+        [extra, 2500],
+        [carved, 1500],
+        [untouched, 0],
+      ]),
+    );
   });
 });
 

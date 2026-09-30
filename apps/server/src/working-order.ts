@@ -2769,7 +2769,7 @@ export async function carveOffLines(
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
   opts: { refuseHeld: boolean; splitExtras?: boolean },
-): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, string> }> {
+): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
     .select({
@@ -2895,7 +2895,7 @@ export async function carveOffLines(
     wholeLineNos.length > 0 ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos) : [];
 
   const splitFrom = new Map<string, string>();
-  const splitLines = new Map<string, string>();
+  const splitLines = new Map<string, SplitRow>();
   // Split line numbers are allocated after the moves, so they do not collide with moved rows.
   if (partials.length > 0) {
     const [{ maxLineNo }] = await tx
@@ -2926,10 +2926,11 @@ export async function carveOffLines(
       const splitServed =
         row.servedQuantity - Math.min(row.servedQuantity, decimalToThousandths(remaining));
       const splitRowId = randomUUID();
+      const lineNo = ++nextLineNo;
       await tx.insert(workingOrderLines).values({
         id: splitRowId,
         workingOrderId: toTabId,
-        lineNo: ++nextLineNo,
+        lineNo,
         productId: row.productId,
         parentLineId,
         name: row.name,
@@ -2957,7 +2958,7 @@ export async function carveOffLines(
         creditedTo: row.creditedTo,
         listUnitPriceGross: row.listUnitPriceGross,
       });
-      splitLines.set(row.id, splitRowId);
+      splitLines.set(row.id, { id: splitRowId, lineNo });
       await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
       return splitRowId;
     };
@@ -3031,10 +3032,16 @@ export async function clearGroups(tx: Transaction, lineIds: readonly string[]): 
     );
 }
 
+/** A row a split made. */
+export interface SplitRow {
+  id: string;
+  lineNo: number;
+}
+
 /**
  * Split `quantity` of each of these top-level lines off into a new row of the same order, which
- * keeps its prices, group, credit and a ticket item of its own for the part; returns each new row's
- * id keyed by the id of the line it split. Each `quantity` must be less than its line's. A dish with
+ * keeps its prices, group, credit and a ticket item of its own for the part; returns each new row
+ * keyed by the id of the line it split. Each `quantity` must be less than its line's. A dish with
  * extras is refused unless `splitExtras` is set, as {@link carveOffLines} describes.
  */
 export async function splitLinesWithinOrder(
@@ -3043,7 +3050,7 @@ export async function splitLinesWithinOrder(
   orderId: string,
   splits: { lineNo: number; quantity: string }[],
   opts: { splitExtras?: boolean } = {},
-): Promise<Map<string, string>> {
+): Promise<Map<string, SplitRow>> {
   const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, splits, {
     refuseHeld: false,
     ...opts,

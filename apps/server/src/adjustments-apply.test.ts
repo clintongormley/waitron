@@ -2459,6 +2459,88 @@ describe("part of a dish with extras (B11d)", () => {
   });
 });
 
+describe("what an adjustment reads (B11d)", () => {
+  /** `tx`, counting the raw statements run on it and the reads of a row's line number alone. */
+  function counting(tx: Transaction) {
+    const counts = { statements: 0, lineNoReads: 0 };
+    const counted = new Proxy(tx, {
+      get(target, prop) {
+        const value: unknown = Reflect.get(target, prop, target);
+        if (prop === "execute") {
+          return (...args: Parameters<Transaction["execute"]>) => {
+            counts.statements += 1;
+            return target.execute(...args);
+          };
+        }
+        if (prop === "select") {
+          return (...args: Parameters<Transaction["select"]>) => {
+            const [fields] = args as unknown[];
+            if (fields !== undefined && Object.keys(fields as object).join() === "lineNo") {
+              counts.lineNoReads += 1;
+            }
+            return target.select(...args);
+          };
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    return { tx: counted, counts };
+  }
+
+  async function previewCounted(billId: string, ask: Ask) {
+    return inTx(venue, async (tx) => {
+      const { submissionId, approver, ...args } = await argsFor(tx, billId, ask);
+      void submissionId;
+      void approver;
+      const probe = counting(tx);
+      await previewAdjustment(probe.tx, args, venue.venueLocale);
+      return probe.counts;
+    });
+  }
+
+  async function adjustCounted(billId: string, ask: Ask) {
+    return inTx(venue, async (tx) => {
+      const args = await argsFor(tx, billId, ask);
+      const probe = counting(tx);
+      await applyAdjustment(probe.tx, venue.cfg, args, venue.venueLocale);
+      return probe.counts;
+    });
+  }
+
+  it("reads a percentage's priors for a dish with an extra in as many statements as for one without", async () => {
+    const burger = await bill([{ name: "Burger" }]);
+    const pizza = await bill([{ name: "Pizza", olives: 1 }]);
+    const ask = (billId: string) =>
+      lineIdOf(venue, billId, 1).then((lineId) => ({
+        lineId,
+        action: "discount_percent" as const,
+        percentBp: 1000,
+      }));
+
+    const plain = await previewCounted(burger.billId, await ask(burger.billId));
+    const withExtra = await previewCounted(pizza.billId, await ask(pizza.billId));
+
+    expect(withExtra.statements).toBe(plain.statements);
+  });
+
+  it("looks up no line number for the rows it carves off a dish, however many extras go with it", async () => {
+    const steak = await bill([{ name: "Steak", quantity: "2" }]);
+    const pizza = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+    const ask = (billId: string) =>
+      lineIdOf(venue, billId, 1).then((lineId) => ({
+        lineId,
+        action: "discount_percent" as const,
+        percentBp: 1000,
+        quantity: "1",
+      }));
+
+    const plain = await adjustCounted(steak.billId, await ask(steak.billId));
+    const withExtra = await adjustCounted(pizza.billId, await ask(pizza.billId));
+
+    expect([plain.lineNoReads, withExtra.lineNoReads]).toEqual([0, 0]);
+  });
+});
+
 describe("a weighed line (B11d)", () => {
   it.each([
     { action: "discount_percent", percentBp: 1000 },

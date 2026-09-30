@@ -9,6 +9,7 @@ import {
   policySnapshotOf,
   readAdjustmentSettings,
   readCompedLines,
+  readLinePercents,
   readReasonTotals,
   recordAdjustment,
   spreadBillDiscount,
@@ -63,6 +64,7 @@ import {
   refusePaymentInFlight,
   removeFromLine,
   splitLinesWithinOrder,
+  type SplitRow,
   type VoidTarget,
 } from "./working-order.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
@@ -520,9 +522,9 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
 
 /**
  * The reason's earlier reductions on the bill and its earlier percentage on the line
- * ({@link readReasonTotals}). A percentage taken off a dish was spread over its extras too, so on a
- * percentage discount an extra's line also counts its dish's, and a dish's line the largest any of
- * its extras took on its own.
+ * ({@link readReasonTotals}, {@link readLinePercents}). A percentage taken off a dish was spread
+ * over its extras too, so on a percentage discount an extra's line also counts its dish's, and a
+ * dish's line the largest any of its extras took on its own.
  */
 async function priorsOf(
   tx: Transaction,
@@ -532,17 +534,22 @@ async function priorsOf(
   action: AdjustmentAction,
   rows: readonly Row[],
 ): Promise<ReasonTotals> {
-  const read = (lineId: string | null) =>
-    readReasonTotals(tx, { workingOrderId, reasonId, lineId });
-  const own = await read(line?.id ?? null);
-  if (line === null || action !== "discount_percent") return own;
-  const related =
-    line.parentLineId === null
-      ? rows.filter((row) => row.parentLineId === line.id).map((row) => row.id)
-      : [line.parentLineId];
-  let most = 0;
-  for (const id of related) most = Math.max(most, (await read(id)).priorPercentOnLineBp);
-  return { ...own, priorPercentOnLineBp: own.priorPercentOnLineBp + most };
+  const bill = await readReasonTotals(tx, { workingOrderId, reasonId, lineId: null });
+  if (line === null) return bill;
+  let related: string[] = [];
+  if (action === "discount_percent") {
+    related =
+      line.parentLineId === null
+        ? rows.filter((row) => row.parentLineId === line.id).map((row) => row.id)
+        : [line.parentLineId];
+  }
+  const percents = await readLinePercents(tx, {
+    workingOrderId,
+    reasonId,
+    lineIds: [line.id, ...related],
+  });
+  const most = Math.max(0, ...related.map((id) => percents.get(id)!));
+  return { ...bill, priorPercentOnLineBp: percents.get(line.id)! + most };
 }
 
 /**
@@ -679,14 +686,6 @@ async function setPrice(tx: Transaction, lineId: string, row: PricedRow): Promis
     .where(eq(workingOrderLines.id, lineId));
 }
 
-async function lineNoOf(tx: Transaction, lineId: string): Promise<number> {
-  const [row] = await tx
-    .select({ lineNo: workingOrderLines.lineNo })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.id, lineId));
-  return row!.lineNo;
-}
-
 /**
  * Writes the plan's new prices, first splitting the part `carve` covers off its dish, with its
  * extras, when a change is to that part; answers each row it split off, with the row it came from,
@@ -715,21 +714,16 @@ async function reprice(
         [{ lineNo: carve!.lineNo, quantity: thousandthsToDecimal(carve!.quantity) }],
         { splitExtras: true },
       )
-    : new Map<string, string>();
-  const splits: AdjustmentSplit[] = [...carved].map(([from, to]) => ({ from, to }));
-  const subjects: { id: string; lineNo: number; change: Change }[] = [];
-  for (const change of changes) {
-    if (!change.carved) {
-      subjects.push({ id: change.row.id, lineNo: change.row.lineNo, change });
-      continue;
-    }
-    const id = carved.get(change.row.id)!;
-    subjects.push({ id, lineNo: await lineNoOf(tx, id), change });
-  }
+    : new Map<string, SplitRow>();
+  const splits: AdjustmentSplit[] = [...carved].map(([from, to]) => ({ from, to: to.id }));
+  const subjects = changes.map((change) => {
+    const { id, lineNo } = change.carved ? carved.get(change.row.id)! : change.row;
+    return { id, lineNo, change };
+  });
   const twoRows = subjects.filter(({ change }) => change.rows.length === 2);
   const seconds =
     twoRows.length === 0
-      ? new Map<string, string>()
+      ? new Map<string, SplitRow>()
       : await splitLinesWithinOrder(
           tx,
           cfg,
@@ -740,8 +734,8 @@ async function reprice(
     await setPrice(tx, id, change.rows[0]!);
     const second = seconds.get(id);
     if (second !== undefined) {
-      splits.push({ from: id, to: second });
-      await setPrice(tx, second, change.rows[1]!);
+      splits.push({ from: id, to: second.id });
+      await setPrice(tx, second.id, change.rows[1]!);
     }
   }
   return splits;
