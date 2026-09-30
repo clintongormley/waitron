@@ -85,6 +85,13 @@
       "when": 1790482432170,
       "tag": "0011_device_profile_home_layouts",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1790799877333,
+      "tag": "0012_drop_labels",
+      "breakpoints": true
     }
   ]
 }

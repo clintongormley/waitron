@@ -25,7 +25,6 @@ import {
   menuItemExtraItems,
   menuItemExtraLists,
 } from "./schema/extras.js";
-import { labels, productLabels } from "./schema/labels.js";
 import { optionLabels } from "./schema/options.js";
 import { productUnits, unitSeedStates, units } from "./schema/units.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
@@ -47,8 +46,6 @@ const TABLES = [
   "menu_details",
   "menu_items",
   "category_details",
-  "labels",
-  "product_labels",
   "units",
   "unit_seed_states",
   "product_units",
@@ -157,8 +154,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_details: "menu_id",
       menu_items: "id",
       category_details: "category_id",
-      labels: "id",
-      product_labels: "product_id, label_id",
       units: "id",
       unit_seed_states: "id",
       product_units: "product_id",
@@ -198,8 +193,6 @@ describe("the catalogue migration set carries no tenant column", () => {
       "menu_items(menu_id)": "catalogues(id) on delete cascade",
       "menu_items(product_id)": "products(id) on delete restrict",
       "option_labels(list_id)": "option_lists(id) on delete cascade",
-      "product_labels(label_id)": "labels(id) on delete cascade",
-      "product_labels(product_id)": "products(id) on delete cascade",
       "product_modifiers(extra_list_id)": "extra_lists(id) on delete cascade",
       "product_modifiers(option_list_id)": "option_lists(id) on delete cascade",
       "product_modifiers(product_id)": "products(id) on delete cascade",
@@ -279,9 +272,7 @@ describe("the catalogue migration set carries no tenant column", () => {
       menu_details_root_uq: { unique: true, columns: "root_section_id" },
       menu_items_id_product_key: { unique: true, columns: "id, product_id" },
       menu_items_menu_product_key: { unique: true, columns: "menu_id, product_id" },
-      labels_name_uq: { unique: true, columns: "name" },
       option_labels_list_sort_idx: { unique: false, columns: "list_id, sort" },
-      product_labels_label_idx: { unique: false, columns: "label_id" },
       product_modifiers_product_extra_uq: { unique: true, columns: "product_id, extra_list_id" },
       product_modifiers_product_option_uq: { unique: true, columns: "product_id, option_list_id" },
       product_modifiers_product_sort_idx: { unique: false, columns: "product_id, sort" },
@@ -319,6 +310,15 @@ describe("the catalogue set keeps no per-menu section table", () => {
       )
     ).rows;
     expect(left).toEqual([]);
+  });
+});
+
+describe("the catalogue set keeps no product labels", () => {
+  it("leaves no labels tables", async () => {
+    const { rows } = await db.execute<{ name: string }>(
+      sql`select name from sqlite_master where type = 'table' and name in ('labels', 'product_labels')`,
+    );
+    expect(rows).toEqual([]);
   });
 });
 
@@ -531,28 +531,6 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
       () => db.insert(categoryDetails).values({ categoryId: c.categoryId, parentId: missing }),
       "category_details_parent_fk",
     );
-  });
-
-  it("refuses a product label whose product or label does not exist, and a repeated label name", async () => {
-    const c = await catalogue();
-    const [label] = await db
-      .insert(labels)
-      .values({ name: "Alcoholic" })
-      .returning({ id: labels.id });
-    await refusal(
-      () => db.insert(productLabels).values({ productId: missing, labelId: label!.id }),
-      "product_labels_product_fk",
-    );
-    await refusal(
-      () => db.insert(productLabels).values({ productId: c.productId, labelId: missing }),
-      "product_labels_label_fk",
-    );
-    const repeated = await captureError(() => db.insert(labels).values({ name: "Alcoholic" }));
-    expect(isRefusal(repeated, UNIQUE_VIOLATION)).toBe(true);
-    // The accepting control: a real product and a real label.
-    await expect(
-      db.insert(productLabels).values({ productId: c.productId, labelId: label!.id }),
-    ).resolves.toBeDefined();
   });
 
   it("refuses a unit assignment whose product or unit does not exist", async () => {
