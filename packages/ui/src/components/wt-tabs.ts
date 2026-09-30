@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles } from "../base-styles.js";
-import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
+import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
 
 export interface TabItem {
   key: string;
@@ -66,7 +66,10 @@ export class WtTabs extends LitElement {
   #select(event: Event, key: string): void {
     if (key === this.#selected) return;
     this.value = key;
-    dispatchWtChange(this, event, { value: key });
+    event.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent("wt-tab-change", { detail: { value: key }, bubbles: true, composed: true }),
+    );
   }
 
   #keydown(event: KeyboardEvent, index: number): void {

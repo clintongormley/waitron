@@ -2304,6 +2304,21 @@ it("keeps the Prices tab in the address, and switching tabs keeps the chosen men
   );
 });
 
+it("keeps its tab when a change event bubbles up from a control inside a tab's content", async () => {
+  const el = await mountLunch();
+  await chooseTab(el, "prices");
+  q(el, '[slot="prices"]')!.dispatchEvent(
+    new CustomEvent("wt-change", {
+      detail: { value: "structure" },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+  expect(q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!.value).toBe("prices");
+  expect(location.pathname).toBe(PRICES_PATH);
+});
+
 it("opens the Prices tab the address names, with the library's sections, categories and products", async () => {
   const client = api({ listLibraryProducts: vi.fn().mockResolvedValue(variantProducts()) });
   const el = await mountPrices(client);

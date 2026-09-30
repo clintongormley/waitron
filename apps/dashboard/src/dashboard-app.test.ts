@@ -1065,7 +1065,7 @@ describe("dashboard-app", () => {
     // Switch to Security — Edit disappears (Security has no equivalent single action) — then close.
     const profileScreen = el.shadowRoot!.querySelector<ProfileScreen>("dashboard-profile-screen")!;
     const wtTabs = profileScreen.shadowRoot!.querySelector("wt-tabs")!;
-    wtTabs.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "security" } }));
+    wtTabs.dispatchEvent(new CustomEvent("wt-tab-change", { detail: { value: "security" } }));
     await profileScreen.updateComplete;
     await flush(el);
     expect(editButton()).toBeNull();

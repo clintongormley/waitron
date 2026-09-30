@@ -264,7 +264,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); no product form uses it any more; it is deleted once its remaining users, listed in `docs/backlog.md`, are gone | — |
 | `wt-form-actions` | `error` (the form's one message about a failed submission: shown beside the primary action, announced as an alert, painted `--wt-color-danger`; on a narrow row it wraps onto its own line above the actions); `cancel`, `secondary`, and default slots | — |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
-| `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-change` — `detail: { value: string }` |
+| `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden; and `pinned` — `"end"` — which, set on the last column, keeps it at the trailing edge of the table's box while the others scroll sideways), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
@@ -1334,17 +1334,17 @@ html`<wt-tabs
   label="Venue operations"
   .items=${[{ key: "status", label: "Status" }, { key: "zones", label: "Service zones" }]}
   .value=${this.view}
-  @wt-change=${this.selectView}
+  @wt-tab-change=${this.selectView}
 >
   <section slot="status">${this.renderStatus()}</section>
   <section slot="zones">${this.renderZones()}</section>
 </wt-tabs>`;
 ```
 
-Your selection handler receives `event.detail.value`. Ignore events whose `target` differs from
-`currentTarget` if your panels contain controls that also emit `wt-change`. The component updates its
-own selection, while your screen records it with `UrlStateController`. An unknown or omitted value
-shows the first tab. Arrow keys wrap between tabs; Home and End select the first and last tab.
+Your selection handler receives `event.detail.value`. The strip's event has its own name, so a
+`wt-change` from a control inside a panel never reaches it. The component updates its own
+selection, while your screen records it with `UrlStateController`. An unknown or omitted value shows
+the first tab. Arrow keys wrap between tabs; Home and End select the first and last tab.
 The tab strip scrolls on narrow screens. Hidden panels remain mounted, so switching tabs retains
 their input values. Supply unique, nonempty keys and a localized `label` for the tab group.
 

@@ -1499,12 +1499,10 @@ What Task 11 left open:
   case in `apps/dashboard/src/widgets/category-form.test.ts` pins this, so a decision to change it
   changes that case. **Next action:** try (1) in Safari or Playwright's WebKit, and (2) by hand in
   Chromium.
-- **`wt-tabs` shares the `wt-change` event name with every control a panel slots in, and five
-  screens now carry the same `event.target !== event.currentTarget` guard against it**
-  (`alerts-screen.ts`, `printers-screen.ts`, `profile-screen.ts`, `venue-operations-screen.ts`, and
-  the Modifiers screen Task 11 rebuilt). CLAUDE.md §3 says a custom event stops the triggering event
-  before re-emitting; `wt-tabs` does not. **Next action:** give the strip its own event name, or
-  have it stop the inner event, and retire the guard in all five.
+- **DONE (lane A): `wt-tabs` announces a tab choice as its own `wt-tab-change`, no longer the
+  `wt-change` every control in a panel dispatches.** It still stops the click before re-emitting.
+  The `event.target !== event.currentTarget` guard is gone from all seven screens that carried it
+  (alerts, categories, menus, modifiers, printers, profile and venue operations).
 - **Two things on the Venue operations screen that #546's review raised and left for the owner**
   (`packages/venue-service/src/dashboard/venue-operations-screen.ts`; found 2026-09-24, not fixed
   because #546 changed tests only). (1) A zone-menu row whose menu is not in the loaded list shows
