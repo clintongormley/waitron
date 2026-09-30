@@ -67,8 +67,8 @@ import {
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// Cancellations, comps and discounts applied to a party's bill (service plan Task 11, spec §7),
-// against a provisioned venue that files real Veri*Factu records. Each case seats its own party.
+// Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
+// against a provisioned venue that files real Veri*Factu records.
 let venue: AdjustmentVenue;
 
 useVenueDb({
@@ -2423,6 +2423,53 @@ describe("a counter order (B11c)", () => {
         .where(eq(serviceCommands.scopeId, billId)),
     );
     expect(commands).toEqual([{ scopeKind: "bill" }]);
+  });
+
+  it("refuses a comp of a dish paid for on its own, writing nothing, and comps the unpaid one", async () => {
+    const { billId, partyId } = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        tip: "0.00",
+        kind: "items",
+        lines: [{ lineNo: 2 }],
+        method: "cash",
+        tendered: "25.00",
+        applied: "25.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    const expectedPartyRevision = await partyRevision(partyId);
+    await inTx(venue, (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        billId,
+        { counter: { zoneId: counterZone } },
+        { bills: "merge", partyId, expectedPartyRevision, operatorId: venue.staffId },
+      ),
+    );
+    const before = await counterStateOf(billId);
+    expect(before.order).toMatchObject({ status: "open", partyId: null });
+
+    await expect(
+      adjust(billId, { lineId: await lineIdOf(venue, billId, 2), action: "comp" }),
+    ).rejects.toMatchObject({
+      code: "bill.line_paid",
+      params: { workingOrderId: billId, lineNo: 2 },
+    });
+    expect(await counterStateOf(billId)).toEqual(before);
+
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "0.00", "12.00", "0.00"],
+      ["Steak", "1.000", "25.00", null, "25.00"],
+    ]);
+    expect(await recordedOn(billId)).toMatchObject([{ action: "comp", reduction: 1200 }]);
   });
 
   it("discounts a parked order, and the sale route charges the discounted price", async () => {
