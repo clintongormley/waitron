@@ -9,6 +9,8 @@ import { decimal } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { withReceiptAdjustments } from "./receipt-adjustments.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
+import { formatReceipt } from "./receipt-ticket.js";
+import { printedLines } from "./testing/decode-ticket.js";
 import {
   billWith,
   inTx,
@@ -17,6 +19,7 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
+import { payWorkingOrder } from "./till-sale.js";
 import { readStoredOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -229,5 +232,49 @@ describe("withReceiptAdjustments", () => {
     await expect(withReceiptAdjustments(unreadable, billId, lines, identities)).resolves.toEqual({
       lines,
     });
+  });
+
+  it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {
+    const billId = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }]);
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 2),
+      action: "discount_percent",
+      percentBp: 2000,
+    });
+    await adjust(billId, { action: "discount_percent", percentBp: 1000 });
+    const result = await payWorkingOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: billId, tender: { method: "cash", amount: "23.85" }, lines: [] },
+    );
+
+    const printed = printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Ajustes SL", nif: "62000003K" },
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: {
+          paperWidth: "80mm",
+          resolution: "180dpi",
+          characterSet: "wpc1252",
+          characterTable: 16,
+        },
+      }),
+    );
+    const start = printed.findIndex((line) => line.startsWith("Fecha")) + 2;
+
+    const at80 = (label: string, amount: string) =>
+      label + " ".repeat(42 - label.length - amount.length) + amount;
+    expect(printed.slice(start, printed.indexOf("", start))).toEqual([
+      at80("1 ud  Hamburguesa", "12,00 €"),
+      at80("  Invitación", "-12,00 €"),
+      at80("1 ud  Rioja crianza", "30,00 €"),
+      at80("  Descuento 20%", "-6,00 €"),
+      at80("1 ud  Pan de pueblo", "2,50 €"),
+      at80("Descuento 10%", "-2,65 €"),
+    ]);
+    expect(printed).toContain(at80("TOTAL", "23,85 €"));
   });
 });

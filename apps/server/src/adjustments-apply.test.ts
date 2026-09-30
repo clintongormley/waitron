@@ -405,9 +405,9 @@ describe("the receipt (ruling R13)", () => {
         },
       }),
     );
-    expect(
-      printed.filter((line) => /^1 ud {2}Hamburguesa +12,00 € -> 0,00 €$/u.test(line)),
-    ).toHaveLength(1);
+    const burger = printed.findIndex((line) => /^1 ud {2}Hamburguesa +12,00 €$/u.test(line));
+    expect(burger).toBeGreaterThanOrEqual(0);
+    expect(printed[burger + 1]).toMatch(/^ {2}Invitación +-12,00 €$/u);
   });
 
   it("shows the change on a card reader's receipt too", async () => {
