@@ -1596,6 +1596,25 @@ describe("the venue's limit on a bill's total discount (B11b)", () => {
     );
   });
 
+  it("counts a row priced above its list price as no discount, answering rather than failing", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    // Written by hand: no product path is known to price a row above its list price.
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: 2000 })
+        .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 2))),
+    );
+
+    expect(await preview(billId, billPercent(1000))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, billPercent(1000));
+    expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null]);
+  });
+
   it("counts a comped dish as discount on a bill it has moved to, erring toward a manager", async () => {
     await setLimit(4000);
     const { billId } = await bill([

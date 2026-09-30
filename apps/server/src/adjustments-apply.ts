@@ -496,8 +496,8 @@ async function planAdjustment(
 
 /**
  * The bill's discount and its price before adjustments, over its rows at `quantityOf`. The discount
- * is each row's list price less its price, left out for the rows this bill's own comp records
- * prove comped. A comped row that has moved to another bill is not proven comped there, so there
+ * is each row's list price less its price, none for a row priced above its list price, and left
+ * out for the rows this bill's own comp records prove comped. A comped row that has moved to another bill is not proven comped there, so there
  * it counts as discount, which errs toward asking for a manager.
  */
 function shareOf(
@@ -513,9 +513,13 @@ function shareOf(
     (row.parentLineId !== null && dishIds.has(row.parentLineId));
   const discounts = rows
     .filter((row) => !wasComped(row))
-    .map((row) =>
-      subtractDecimal(listValue(row, quantityOf(row)), gross(row.unit, quantityOf(row))),
-    );
+    .map((row) => {
+      const off = subtractDecimal(
+        listValue(row, quantityOf(row)),
+        gross(row.unit, quantityOf(row)),
+      );
+      return compareDecimal(off, ZERO) > 0 ? off : ZERO;
+    });
   return {
     discount: sumDecimals(discounts),
     value: sumDecimals(rows.map((row) => listValue(row, quantityOf(row)))),
