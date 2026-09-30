@@ -5199,8 +5199,9 @@ ongoing overhaul listed at the top of Track A.
   `apps/setup/src/setup-app.test.ts`). A refused code is not such a refusal: the primary refuses it
   as `totp.invalid`, and this box's fetch turns any refused answer into
   `mirror.bundle_fetch_failed`, which names no field (`apps/server/src/mirror-bundle-fetch.ts`), so
-  it shows beside Connect with the code field empty and unmarked (C92, queued). A CORRECT code was
-  refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
+  it shows beside Connect with the code field empty and unmarked (owner 2026-09-30: pass
+  `totp.invalid` through so it sits under the code field; queued as lane C's C92). A CORRECT code
+  was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
   without the key ring that decrypts a stored authenticator secret, so an admin with an
   authenticator set up could not connect a standby at all. **DONE (C91, 2026-09-30):** the route
   passes the ring the server builds in `apps/server/src/boot.ts` (`credentialKeyRing` in
@@ -5215,11 +5216,11 @@ ongoing overhaul listed at the top of Track A.
   (`apps/server/src/promote-api.ts`) calls `loginManagerById` without the ring as well. Measured
   2026-09-30 with a temporary case on a real database: an admin with an authenticator sending a
   correct current code drew 401 `totp.invalid` and the promotion never ran. Its deps carry no ring,
-  so the fix threads one from `boot.ts` as C91 did. Still open, for the owner: whether a refused
-  code should be marked under its field.
+  so the fix threads one from `boot.ts` as C91 did.
   Still open, seen while looking at C87 at 390 by 900 px: the wizard's floating language button sits
   over the bottom of the connect form, covering part of the refusal message beside Connect and, in
-  the English dark-theme screenshot, part of the Connect button; (6) the setup
+  the English dark-theme screenshot, part of the Connect button (owner 2026-09-30: move the
+  language choice into one shared footer; queued as lane C's C93); (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also

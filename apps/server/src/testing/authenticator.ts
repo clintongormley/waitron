@@ -31,7 +31,10 @@ export async function enrolAuthenticator(
   });
 }
 
-/** A six-digit code that no step the verifier accepts around now produces for `secret`. */
+/**
+ * A six-digit code that no step the verifier accepts around now produces for `secret`. The secret
+ * is random per run, so a fixed code would occasionally be an accepted one.
+ */
 export function wrongTotpCode(secret: string): string {
   const now = Math.floor(Date.now() / 1000);
   const accepted = new Set(

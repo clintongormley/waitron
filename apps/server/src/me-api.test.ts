@@ -29,6 +29,7 @@ import type { Logger } from "./logger.js";
 import { mountMeApi, type MeApiDeps } from "./me-api.js";
 import type { AccountEmail } from "./account-email.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { wrongTotpCode } from "./testing/authenticator.js";
 import "./errors.js";
 
 // The route mechanics: whoami, the happy paths, the request-shape 400s and the not-logged-in 401.
@@ -1099,15 +1100,7 @@ describe("mountMeApi — own credentials and second factor", () => {
       enrollmentId: string;
       secret: string;
     };
-    // Any fixed code is valid for some secret, so pick one that no step the verifier accepts
-    // around now produces for this secret.
-    const now = Math.floor(Date.now() / 1000);
-    const accepted = new Set(
-      [-60, -30, 0, 30, 60].map((offset) => generateSync({ secret, epoch: now + offset })),
-    );
-    const wrong = ["000000", "111111", "222222", "333333", "444444", "555555"].find(
-      (code) => !accepted.has(code),
-    )!;
+    const wrong = wrongTotpCode(secret);
 
     const res = await send(app, "POST", "/management-api/session/me/totp/finish", {
       cookie,
