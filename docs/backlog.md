@@ -4307,7 +4307,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     that floor without comparing revisions (`apps/till/src/till-app.ts`). Found by reading during
     Task 12's review (2026-09-29); the same calls are on `main` before that branch (a6de0cde3).
     Task 12 fixed the same shape in `#onMoveBill` (7f82c958a) by taking the party only when the
-    floor read worked. _(Campaign item C84, branch `fix/till-sent-order-stale-party`, 2026-09-30:
+    floor read worked. _(Campaign item C84, #913, 2026-09-30:
     reproduced by "keeps the party on screen, not the older copy on the kept floor, when a send from
     another bill got no answer and the floor cannot be read" in
     `apps/till/src/till-app-parties.test.ts` — on the old code the screen went back from revision 4
