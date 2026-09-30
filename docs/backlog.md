@@ -2455,6 +2455,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     it paired now, and asks for a second, confirming click. _2026-09-30 (A141): switched on or
     off._ _2026-09-30 (C103): named Unpair, and it acts on one press._ Switching a printer off does not forget its pairing (read, not run: the screen's Disable
     calls only `deactivatePrinter`, in `apps/dashboard/src/screens/printers-screen.ts`).
+    _2026-09-30 (C109): an Unpair that succeeds also switches the printer off, unless another box
+    reported within 15 seconds that it can print to it, and only if the outcome reaches the server
+    within 120 seconds of the command; a Bluetooth printer an agent reports paired offers Unpair in
+    place of Disable._
   - Both need the existing `printer.manage` permission. The server takes a Pair only for a device
     the same agent's scan reported within the last 15 seconds, and a Forget only for a device the
     same agent reported paired within that time (`reportedFresh` and `DISCOVERED_TTL_MS` in
@@ -2683,6 +2687,52 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - While pairing the row says only "Pairing…" ("Emparejando…", matching the Emparejar button), to
     the right of the buttons; at phone width it wraps below them.
 
+- **Unpairing a Bluetooth printer switches it off, and adding it again runs calibration (C109, owner
+  2026-09-30) — DONE (2026-09-30).** The owner: _"If i unpair it, it tells me it is unpaired, then
+  shows the printer as Active again, but it won't print. An unpaired printer should be disabled.
+  After unpairing i went to add printer, repaired it, then it doesn't show me calibration (because
+  the printer is still active)."_ Unpair only asked the box's agent to unpair the address; the
+  printer's registration stayed switched on.
+  - When an agent reports that an Unpair it ran succeeded, the server switches off the registered
+    Bluetooth printer at that address, in the same transaction as that pull's job claim and before
+    it, so the pull hands out none of its jobs (`apps/server/src/print-api.ts`, the agent job pull).
+    It does so whichever screen sent the Unpair, and the printers table shows the change through its
+    live query. A failed Unpair changes nothing. A printer that another box reported, within the
+    last 15 seconds, that it can print to stays switched on, the same test the pull already applies
+    before ending a Bluetooth printer's jobs. Printers belong to no agent, and one address has at
+    most one registration per location (`printers_local_key_key`), so this is how "a printer on
+    another agent is untouched" was read.
+  - Jobs already queued for it wait, unclaimed, as for any switched-off printer (run: the new case
+    in `apps/server/src/print-api.test.ts` finds the job still `queued` with no attempts after the
+    pull). They print if the printer is switched on again (read, not run: `claimPrintJobs`,
+    `packages/printing/src/runtime.ts`, claims only a switched-on printer's jobs and has no age
+    limit on a queued one).
+  - A Bluetooth printer an agent reports paired offers one row-menu action, Unpair, in place of
+    Disable (owner's "ok" to the recommendation, 2026-09-30 ~19:00). One no agent reports paired
+    keeps Disable, since there is nothing to unpair; network and USB printers keep Disable.
+  - Add again (Add a printer, on a switched-off registration) still switches the printer on before
+    it opens calibration, because a switched-off printer refuses test prints (`enqueuePrintJob`,
+    `packages/printing/src/outbox.ts`) and calibration prints; calibration opens for the same
+    record with its saved paper width, resolution, character table and drawer. Closing the wizard
+    without saving now switches it off again. Leaving the Printers screen mid-wizard asks the server
+    to switch it off (`disconnectedCallback`); if that request fails nothing reports it and the
+    printer stays on. Closing the browser tab mid-wizard does not switch it off. Saving leaves it on. This
+    holds for any printer's Add again, not only a Bluetooth one. While it is on during calibration,
+    jobs already queued for it can be handed out, whether or not calibration is then saved.
+  - A row shows Disable whenever Unpair would not appear, such as after a succeeded Unpair while
+    the agent's paired report is still listed (`#printerActions`,
+    `apps/dashboard/src/screens/printers-screen.ts`).
+  - Left open: the edit dialog's Active switch can still switch a paired Bluetooth printer off
+    without unpairing it.
+  - Left open: leaving the Printers screen while a Save is in flight and that save then fails, or
+    in the moment between Add again switching the printer on and the wizard opening, leaves the
+    printer on.
+  - Left open: an Unpair outcome that reaches the server after it has dropped the command (120
+    seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`) leaves the printer
+    on; the owner can switch it off with Disable, which the row then shows.
+  - Left open: keeping the printer off until calibration is saved would need a calibration-only
+    print path for a switched-off printer, since `enqueuePrintJob` refuses one and `claimPrintJobs`
+    claims only switched-on printers' jobs.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
@@ -2690,8 +2740,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   on. Now the row offers it whether the printer is switched on or off, as long as an agent reports
   the printer paired. It is in the printer's row on the Printers tab, behind the three-dot button
   (⋮) in the Actions column, below Edit and Disable; a second click confirms it.
-  _2026-09-30 (C103): named Unpair, and it acts on one press._ A printer
-  forgotten while switched on stays switched on and registered. While no agent reports it paired,
+  _2026-09-30 (C103): named Unpair, and it acts on one press._ _2026-09-30 (C109): for a printer an
+  agent reports paired, Unpair stands in for Disable, except where C109's entry says the row shows
+  Disable._ A printer
+  forgotten while switched on stays switched on and registered. _2026-09-30 (C109): no longer — an
+  Unpair that succeeds switches it off, unless another box reported within 15 seconds that it can
+  print to it, and only if the outcome reaches the server within 120 seconds of the command; it
+  stays registered, and Add a printer offers it as Add again. The rest of this paragraph — jobs
+  staying waiting, the agent ending them failed with A139's reason, and the plain Pair — now holds
+  only for a printer that is still switched on._ While no agent reports it paired,
   anything sent to it stays waiting and the jobs list gives no reason; this is the case A139's
   **Not covered** names. Once an agent reports it paired again, the box's agent ends those jobs
   failed with A139's reason, because Bluetooth printing is not built yet (read, not run: when an
@@ -2784,7 +2841,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **DONE (2026-09-30, A145, #935): on a phone, a printer's row menu on the Printers tab stays on
   screen.** The Printers tab's Actions column is pinned to the right-hand edge of the table's box
   with `wt-data-table`'s new opt-in `pinned: "end"` column option, so the three-dot button (⋮)
-  holding Edit, Disable and Forget pairing (_2026-09-30 (C103): named Unpair_) is in view without
+  holding Edit, Disable and Forget pairing (_2026-09-30 (C103): named Unpair_; _2026-09-30 (C109): a
+  Bluetooth printer an agent reports paired shows Unpair in place of Disable, except where C109's
+  entry says the row shows Disable_) is in view without
   scrolling; the other columns still
   scroll sideways under it. Measured 2026-09-30 in headless Chromium, with a long printer name and
   a long agent name: before the change the table was 1175 px (English) to 1402 px (Spanish in

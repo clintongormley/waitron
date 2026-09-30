@@ -44,9 +44,9 @@ const MAX_RESULTS_PER_AGENT = BLUETOOTH_COMMAND_LIMIT;
  * command queued behind another can still expire. */
 const COMMAND_TTL_MS = 120_000;
 const RESULT_TTL_MS = 60_000;
-/** `enqueue`, `current`, `accept` and `latest` each prune the agent they name, and at most once per
- * interval every agent, so an agent none of them names again still loses its expired entries at the
- * first of those calls after the interval. */
+/** Each method that names an agent prunes that agent, and at most once per interval every agent, so
+ * an agent none of them names again still loses its expired entries at the first of those calls
+ * after the interval. */
 const SWEEP_INTERVAL_MS = 60_000;
 
 function statusOf({ command, expiresAt }: Pending, instant: number): BluetoothCommandStatus {
@@ -66,6 +66,8 @@ export function createPrinterBluetoothCommands(
     pin?: string,
   ): BluetoothCommandStatus;
   current(agentId: string): BluetoothCommand[];
+  /** The addresses whose pending unpairing `outcomes` report succeeded; settles nothing. */
+  unpaired(agentId: string, outcomes: BluetoothCommandOutcome[]): string[];
   accept(agentId: string, outcomes: BluetoothCommandOutcome[]): void;
   latest(agentId: string, address: string): BluetoothCommandStatus | undefined;
   /** How many agents hold entries. */
@@ -120,6 +122,15 @@ export function createPrinterBluetoothCommands(
     current(agentId) {
       const pending = prune(agentId).agent?.pending.values() ?? [];
       return [...pending].map(({ command }) => ({ ...command }));
+    },
+
+    unpaired(agentId, outcomes) {
+      const first = new Map<string, boolean>();
+      for (const { id, ok } of outcomes) if (!first.has(id)) first.set(id, ok);
+      const pending = prune(agentId).agent?.pending ?? new Map<string, Pending>();
+      return [...pending]
+        .filter(([, { command }]) => command.kind === "forget" && first.get(command.id) === true)
+        .map(([address]) => address);
     },
 
     accept(agentId, outcomes) {

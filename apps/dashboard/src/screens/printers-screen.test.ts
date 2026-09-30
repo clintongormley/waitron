@@ -5903,6 +5903,134 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
+  describe("Unpair stands in for Disable, and Add again switches it off again unless calibration is saved", () => {
+    const saved: Printer = {
+      ...btPrinter("p9", ADDRESS, false),
+      paperWidth: "58mm",
+      resolution: "203dpi",
+      hasCashDrawer: true,
+    };
+    const pairedAgain: DiscoveredPrinter = {
+      ...barPrinter,
+      paired: true,
+      alreadyRegistered: true,
+      printerId: "p9",
+    };
+
+    it("offers Unpair and no Disable on a Bluetooth printer its agent reports paired, and Disable on one it does not", async () => {
+      const unreported = btPrinter("p5", OTHER, true);
+      const { el } = await mountPairing([{ ...pairedAgain, printerId: "p8" }], {
+        listPrinters: vi
+          .fn()
+          .mockResolvedValue([...printers, btPrinter("p8", ADDRESS, true), unreported]),
+      });
+      await selectTab(el, "printers");
+      expect(text(el, sel("forget-pairing-p8"))).toBe(t("printers.bluetooth_forget"));
+      expect(q(el, sel("deactivate-printer-p8"))).toBeNull();
+      expect(q(el, sel("forget-pairing-p5"))).toBeNull();
+      expect(text(el, sel("deactivate-printer-p5"))).toBe(t("printers.disable"));
+      expect(text(el, sel("deactivate-printer-p1"))).toBe(t("printers.disable"));
+    });
+
+    async function addAgain() {
+      const mounted = await mountPairing([pairedAgain], {
+        listPrinters: vi.fn().mockResolvedValue([...printers, saved]),
+      });
+      await openDiscovery(mounted.el);
+      expect(text(mounted.el, sel(`register-${ADDRESS}`))).toBe(t("printers.add_again"));
+      await addDiscovered(mounted.el, q(mounted.el, sel(`register-${ADDRESS}`))!);
+      await vi.waitFor(() => expect(q(mounted.el, sel("calibration-step-1"))).not.toBeNull());
+      await flush(mounted.el);
+      return mounted;
+    }
+
+    it("opens calibration for the same printer with its saved settings, and cancelling switches it off again", async () => {
+      const { el, api } = await addAgain();
+      expect(api.createPrinter).not.toHaveBeenCalled();
+      expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p9", { active: true });
+      expect((q(el, 'select[name="printer-paper-width"]') as HTMLSelectElement).value).toBe("58mm");
+      expect((q(el, 'select[name="printer-resolution"]') as HTMLSelectElement).value).toBe(
+        "203dpi",
+      );
+      expect(
+        (q(el, '[name="printer-cash-drawer"]') as HTMLElement & { checked: boolean }).checked,
+      ).toBe(true);
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+
+      q(el, sel("cancel-edit-printer"))!.click();
+      await flush(el);
+
+      await vi.waitFor(() => expect(q(el, sel("edit-printer-modal"))).toBeNull());
+      expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p9");
+    });
+
+    it("switches the printer off again when the screen is left during calibration", async () => {
+      const { el, api } = await addAgain();
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+
+      el.remove();
+
+      await vi.waitFor(() => expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p9"));
+    });
+
+    it("leaves the printer switched on once its calibration is saved", async () => {
+      const { el, api } = await addAgain();
+      for (let step = 1; step < 4; step++) {
+        q(el, sel("calibration-next"))!.click();
+        await flush(el);
+      }
+      q(el, sel("save-printer-p9"))!.click();
+      await flush(el);
+
+      await vi.waitFor(() => expect(q(el, sel("edit-printer-modal"))).toBeNull());
+      await flush(el);
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    });
+
+    async function saveChangedWidth(el: PrintersScreen): Promise<void> {
+      q(el, sel("calibration-next"))!.click();
+      await flush(el);
+      await chooseOption(el, "printer-paper-width", "80mm");
+      for (let step = 2; step < 4; step++) {
+        q(el, sel("calibration-next"))!.click();
+        await flush(el);
+      }
+      q(el, sel("save-printer-p9"))!.click();
+      await flush(el);
+    }
+
+    it("leaves the printer switched on when the screen is left while its calibration is being saved", async () => {
+      const { el, api } = await addAgain();
+      let answer!: () => void;
+      vi.mocked(api.updatePrinter).mockReturnValueOnce(
+        new Promise<void>((resolve) => (answer = resolve)),
+      );
+      await saveChangedWidth(el);
+      expect(api.updatePrinter).toHaveBeenLastCalledWith("p9", { paperWidth: "80mm" });
+
+      el.remove();
+      answer();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("switches the printer off again when its calibration fails to save and the wizard is then closed", async () => {
+      const { el, api } = await addAgain();
+      vi.mocked(api.updatePrinter).mockRejectedValueOnce({ code: "connection.failed" });
+      await saveChangedWidth(el);
+      expect(api.updatePrinter).toHaveBeenLastCalledWith("p9", { paperWidth: "80mm" });
+      expect(q(el, sel("edit-printer-modal"))).not.toBeNull();
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+
+      q(el, sel("cancel-edit-printer"))!.click();
+      await flush(el);
+
+      await vi.waitFor(() => expect(q(el, sel("edit-printer-modal"))).toBeNull());
+      expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p9");
+    });
+  });
+
   describe("an added printer that is switched on", () => {
     const added = btPrinter("p8", ADDRESS, true);
     const reported: DiscoveredPrinter = {
@@ -7047,6 +7175,28 @@ describe("printers-screen Bluetooth pairing", () => {
       await fadeNotice(el, "printer-command-p4");
       expect(q(el, sel("printer-command-p4"))).toBeNull();
       expect(q(el, sel("forget-pairing-p4"))).toBeNull();
+    });
+
+    it("offers Disable in place of the hidden Unpair while the pairing report lingers, since the server may have kept the printer on", async () => {
+      const done = { ...reported, bluetoothCommand: finishedCommand("forget", "succeeded") };
+      const listPrinters = vi.fn().mockResolvedValue([...printers, btPrinter("p4", ADDRESS, true)]);
+      const { el, api } = await mountForget([], {
+        listPrinters,
+        background: stubApi({
+          listPrinters,
+          listDiscoveredPrinters: vi.fn().mockResolvedValue([done]),
+        }),
+      });
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+      expect(q(el, sel("forget-pairing-p4"))).toBeNull();
+      expect(text(el, sel("deactivate-printer-p4"))).toBe(t("printers.disable"));
+      expect(isDisabled(el, sel("deactivate-printer-p4"))).toBe(false);
+      q(el, sel("deactivate-printer-p4"))!.click();
+      await flush(el);
+      expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p4");
     });
 
     it("offers Unpair again once the list, after an unpairing succeeded, leaves the device out and then reports it paired", async () => {

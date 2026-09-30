@@ -598,6 +598,9 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
+  /** A retained printer Add again switched on so its calibration can print; closing the wizard
+   * without saving switches it off again. */
+  #readdingId?: string;
 
   @state() private errorKey: string | null = null;
   @state() private refreshErrorKey: string | null = null;
@@ -635,6 +638,11 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    const readding = this.#readdingId;
+    this.#readdingId = undefined;
+    // Not #deactivatePrinter, whose reload would read the lists again for a screen that is gone, and
+    // a gone screen has nowhere to show a refusal.
+    if (readding !== undefined) void this.api.deactivatePrinter(readding).catch(() => undefined);
     this.#endScan();
     this.#stopRenewing();
     this.#stopAgentModal();
@@ -1066,7 +1074,7 @@ export class PrintersScreen extends LitElement {
   }
 
   /** A Bluetooth device registered to a switched-on printer that no agent reports paired, such as
-   * one whose pairing was forgotten: it is offered Pair, which adds nothing. */
+   * one unpaired on the box outside Waitron: it is offered Pair, which adds nothing. */
   #canPairOnly(device: DiscoveredPrinter): boolean {
     const printer =
       device.transport === "bluetooth"
@@ -1151,6 +1159,7 @@ export class PrintersScreen extends LitElement {
               active: true,
             },
       );
+      if (disabled) this.#readdingId = disabled.id;
       this.calibrationStep = 1;
       await this.#load();
     } catch (error) {
@@ -1452,7 +1461,16 @@ export class PrintersScreen extends LitElement {
     if (row.characterTable !== row.saved.characterTable) patch.characterTable = row.characterTable;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
     await this.#submit(async () => {
-      if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
+      // Cleared before the request, so leaving the screen while it is in flight does not switch
+      // off a printer being saved; a failed save puts it back for the wizard's close.
+      const readding = this.#readdingId === id;
+      if (readding) this.#readdingId = undefined;
+      try {
+        if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
+      } catch (error) {
+        if (readding) this.#readdingId = id;
+        throw error;
+      }
       await this.#closeModal("edit-printer-modal");
     });
   }
@@ -1946,6 +1964,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #printerActions(p: Printer): TemplateResult {
+    const unpair = this.#forgetAction(p);
     return html`<dashboard-row-actions
       .label=${t("printers.row_actions").replace("{name}", p.name)}
     >
@@ -1954,14 +1973,18 @@ export class PrintersScreen extends LitElement {
         @click=${(event: Event) => this.#openPrinter(p, event)}
         >${t("action.edit")}</wt-button
       >
-      <wt-button
-        variant="danger"
-        data-test=${`deactivate-printer-${p.id}`}
-        ?disabled=${!p.active}
-        @click=${() => void this.#deactivatePrinter(p.id)}
-        >${t("printers.disable")}</wt-button
-      >
-      ${this.#forgetAction(p)}
+      ${
+        // A succeeded Unpair can switch the printer off (the job pull, `apps/server/src/print-api.ts`).
+        unpair !== nothing
+          ? unpair
+          : html`<wt-button
+              variant="danger"
+              data-test=${`deactivate-printer-${p.id}`}
+              ?disabled=${!p.active}
+              @click=${() => void this.#deactivatePrinter(p.id)}
+              >${t("printers.disable")}</wt-button
+            >`
+      }
     </dashboard-row-actions>`;
   }
 
@@ -2426,6 +2449,10 @@ export class PrintersScreen extends LitElement {
         this.editingPrinter = null;
         this.#closeTest();
         this.#restoreEditFocus();
+        if (this.#readdingId === p.id) {
+          this.#readdingId = undefined;
+          void this.#deactivatePrinter(p.id);
+        }
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 4 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
