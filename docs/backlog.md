@@ -5801,12 +5801,15 @@ ongoing overhaul listed at the top of Track A.
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
   a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
-  **Done since (2026-09-30, lane A's A153):** the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
+  **Done since (2026-09-30, lane A's A153, #952):** the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
   (`apps/setup/src/i18n/strings/shell.ts`, English and Spanish) no longer names a refused login among
   its causes, a refused login now arriving as `password.invalid` and showing
   `shell.adopt.login_failed`; and the setup wizard's Reset form no longer marks its person-ID and
   password fields on `password.invalid` (`apps/setup/src/screens/reset-screen.ts`) — it marks no
-  field and moves the cursor to the password.
+  field and moves the cursor to the password. Still open, left as it is by A153: after a refused
+  login the setup wizard's Connect form leaves the cursor where it was (an existing test pins that),
+  while Reset and the dashboard sign-in move it to the password; the owner's rule covers marking
+  fields, not the cursor, so whether Connect should match is the owner's call.
 - **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the
