@@ -586,6 +586,54 @@ describe("sorting and columns", () => {
 });
 
 describe("live data", () => {
+  async function watched(): Promise<{ liveData: LiveData; background: Fake }> {
+    const liveData = new LiveData();
+    const background = fakeApi();
+    const api = fakeApi({ liveData });
+    api.background = background;
+    const el = await mount(api);
+    await open(el, ALEX);
+    return { liveData, background };
+  }
+
+  it.each(["adjustments", "working_orders", "working_order_lines", "persons", "locations"])(
+    "reads the report again, passively, when %s changes",
+    async (type) => {
+      const { liveData, background } = await watched();
+      liveData.invalidate([{ type }]);
+      await vi.waitFor(() => expect(background.getReport).toHaveBeenCalledOnce());
+      liveData.clear();
+    },
+  );
+
+  it.each(["adjustments", "working_orders", "persons", "locations"])(
+    "reads the open list again, passively, when %s changes",
+    async (type) => {
+      const { liveData, background } = await watched();
+      liveData.invalidate([{ type }]);
+      await vi.waitFor(() => expect(background.listEntries).toHaveBeenCalledOnce());
+      liveData.clear();
+    },
+  );
+
+  it("does not read the open list again when only a credited line changes", async () => {
+    const { liveData, background } = await watched();
+    liveData.invalidate([{ type: "working_order_lines" }]);
+    await vi.waitFor(() => expect(background.getReport).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(background.listEntries).not.toHaveBeenCalled();
+    liveData.clear();
+  });
+
+  it("reads nothing again when an adjustment reason changes", async () => {
+    const { liveData, background } = await watched();
+    liveData.invalidate([{ type: "adjustment_reasons" }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(background.getReport).not.toHaveBeenCalled();
+    expect(background.listEntries).not.toHaveBeenCalled();
+    liveData.clear();
+  });
+
   it("leaves nothing observed when the screen closes before its first answer", async () => {
     const liveData = new LiveData();
     let first!: (report: ReturnType<typeof fixtureReport>) => void;
