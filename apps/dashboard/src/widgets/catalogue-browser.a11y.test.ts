@@ -48,35 +48,64 @@ beforeEach(() => {
   localStorage.clear();
 });
 describe.each(["light", "dark"] as const)("catalogue browser (%s)", (theme) => {
-  it.each(["top", "folder", "search", "all", "form"])("renders %s accessibly", async (state) => {
-    const { el, host } = await mountWidget<CatalogueBrowser>(
-      "dashboard-catalogue-browser",
-      {
-        products: PRODUCTS,
-        api: { createCategory: vi.fn() } as unknown as DashboardApi,
-        categories: [
-          { id: "d", name: "Drinks", parentId: null },
-          { id: "b", name: "Beer", parentId: "d" },
-        ],
-        folderId: state === "folder" ? "b" : null,
-        view: state === "all" ? "all" : "folders",
-      },
-      theme,
-    );
-    if (state === "search") {
-      el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
-        new CustomEvent("wt-change", { detail: { value: "beer" } }),
+  it.each(["top", "folder", "search", "all", "form", "selection", "move", "delete"])(
+    "renders %s accessibly",
+    async (state) => {
+      const { el, host } = await mountWidget<CatalogueBrowser>(
+        "dashboard-catalogue-browser",
+        {
+          products: PRODUCTS,
+          api: {
+            createCategory: vi.fn(),
+            summariseFolders: vi
+              .fn()
+              .mockResolvedValue([{ id: "d", folders: 1, products: 2, routes: 1 }]),
+          } as unknown as DashboardApi,
+          categories: [
+            { id: "d", name: "Drinks", parentId: null },
+            { id: "b", name: "Beer", parentId: "d" },
+          ],
+          folderId: state === "folder" ? "b" : null,
+          view: state === "all" ? "all" : "folders",
+        },
+        theme,
       );
-      await el.updateComplete;
-    }
-    if (state === "form") {
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
-      await el.updateComplete;
-      await el.shadowRoot!.querySelector("dashboard-category-form")!.updateComplete;
-    }
-    const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
-    await list.updateComplete;
-    await list.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
-    await expectNoA11yViolations(host);
-  });
+      if (state === "search") {
+        el.shadowRoot!.querySelector('[name="catalogue-search"]')!.dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "beer" } }),
+        );
+        await el.updateComplete;
+      }
+      if (state === "form") {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="new-folder"]')!.click();
+        await el.updateComplete;
+        await el.shadowRoot!.querySelector("dashboard-category-form")!.updateComplete;
+      }
+      const list = el.shadowRoot!.querySelector("dashboard-product-list")!;
+      await list.updateComplete;
+      await list.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+      if (["selection", "move", "delete"].includes(state)) {
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!.click();
+        await el.updateComplete;
+        await list.updateComplete;
+        const table = list.shadowRoot!.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        for (const key of ["folder:d", "bread"]) {
+          table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`)!.click();
+          await el.updateComplete;
+          await list.updateComplete;
+          await table.updateComplete;
+        }
+        if (state !== "selection") {
+          el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${state}"]`)!.click();
+          await el.updateComplete;
+          await vi.waitFor(() => {
+            if (el.shadowRoot!.querySelector("wt-spinner")) throw new Error("summary pending");
+          });
+          await el.shadowRoot!.querySelector("wt-modal")!.updateComplete;
+        }
+      }
+      await expectNoA11yViolations(host);
+    },
+  );
 });

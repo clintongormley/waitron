@@ -95,6 +95,8 @@ export class ProductList extends LitElement {
     `,
   ];
 
+  @property({ type: Boolean }) selecting = false;
+  @property({ attribute: false }) selected: string[] = [];
   @property({ attribute: false }) folders: CategorySummary[] = [];
   @property({ type: Boolean }) showPath = true;
   @property({ attribute: false }) products: Product[] = [];
@@ -458,6 +460,10 @@ export class ProductList extends LitElement {
       collapseLabel=${t("categories.collapse")}
       expandLabel=${t("categories.expand")}
       initiallyCollapsed
+      .selectable=${this.selecting}
+      .selected=${this.selected}
+      .rowSelectable=${(row: ListRow) => row.kind === "folder" || row.variant === null}
+      .selectionLabel=${(row: ListRow) => (row.kind === "folder" ? row.folder.name : (row.variant?.name ?? row.product.name))}
       .rows=${this.#rows()}
       .columns=${this.#columns()}
       .rowKey=${(row: ListRow) => row.key}

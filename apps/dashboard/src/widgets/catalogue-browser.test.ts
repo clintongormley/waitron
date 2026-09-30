@@ -61,6 +61,9 @@ export const PRODUCTS = [
 ];
 export async function mountBrowser(overrides: Partial<CatalogueBrowser> = {}) {
   const api = {
+    moveCatalogueItems: vi.fn().mockResolvedValue(undefined),
+    deleteCatalogueItems: vi.fn().mockResolvedValue(undefined),
+    summariseFolders: vi.fn().mockResolvedValue([{ id: "d", folders: 1, products: 2, routes: 1 }]),
     createCategory: vi.fn().mockResolvedValue(folder("new", "Juice", "d")),
     updateCategory: vi.fn().mockResolvedValue(folder("d", "Beverages", null)),
   } as unknown as DashboardApi;
@@ -331,3 +334,347 @@ it.each(["en-GB", "es-ES"])(
     }
   },
 );
+
+export async function press(el: CatalogueBrowser, action: string) {
+  const button = el.shadowRoot!.querySelector<HTMLElement>(`[data-test="${action}"]`);
+  expect(button, action).not.toBeNull();
+  button!.click();
+  await el.updateComplete;
+}
+export async function selectKeys(el: CatalogueBrowser, keys: string[]) {
+  await press(el, "select");
+  for (const key of keys) {
+    const checkbox = (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+      `tr[data-row-key="${key}"] input[type="checkbox"]`,
+    );
+    expect(checkbox, key).not.toBeNull();
+    checkbox!.click();
+    await el.updateComplete;
+  }
+}
+export const dialog = (el: CatalogueBrowser) => el.shadowRoot!.querySelector("wt-modal");
+const count = (el: CatalogueBrowser) =>
+  el.shadowRoot!.querySelector('[data-test="selected-count"]')?.textContent?.trim();
+export async function destination(el: CatalogueBrowser, value: string) {
+  el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value } }),
+  );
+  await el.updateComplete;
+}
+it("selects folders and products but never variants", async () => {
+  const el = await mountBrowser({
+    folderId: "d",
+    products: [
+      {
+        ...PRODUCTS[0]!,
+        variants: [
+          {
+            id: "v",
+            name: "Large",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            active: true,
+            available: true,
+            effective: { unitPrice: "2.00", vatClass: "reduced", primaryCategoryId: "d" },
+          },
+        ],
+      },
+    ],
+  });
+  await selectKeys(el, ["folder:b", "cola"]);
+  const table = await tableOf(el);
+  table.shadowRoot!.querySelector<HTMLElement>('tr[data-row-key="cola"] .tree-toggle')?.click();
+  await table.updateComplete;
+  expect(table.shadowRoot!.querySelector('tr[data-row-key="cola:v"]')).not.toBeNull();
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="cola:v"] input[type="checkbox"]'),
+  ).toBeNull();
+  expect(count(el)).toBe("2 selected");
+});
+it.each(["cancel-selection", "folder", "view", "search", "filter"])(
+  "clears selection on %s and keeps selection mode on",
+  async (trigger) => {
+    const el = await mountBrowser();
+    await selectKeys(el, ["bread"]);
+    if (trigger === "cancel-selection") await press(el, trigger);
+    if (trigger === "folder") el.folderId = "d";
+    if (trigger === "view") el.view = "all";
+    if (trigger === "search") await typeSearch(el, "bread");
+    if (trigger === "filter") await chooseFilter(el, "active", "inactive");
+    await el.updateComplete;
+    expect(count(el)).toBe("0 selected");
+    expect((await tableOf(el)).selectable).toBe(true);
+    expect(
+      el.shadowRoot!.querySelector("[data-test=move]")!.getAttribute("disabled"),
+    ).not.toBeNull();
+  },
+);
+it("requires a move destination, excludes selected folders and descendants, and clears after success", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["folder:d", "bread"]);
+  await press(el, "move");
+  const combo = el.shadowRoot!.querySelector("wt-combobox")!;
+  expect(combo.required).toBe(true);
+  expect(combo.value).toBe("");
+  expect(combo.options).toEqual([
+    { value: "top", label: "All products (top level)" },
+    { value: "f", label: "Food" },
+  ]);
+  expect(
+    el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
+  ).not.toBeNull();
+  await destination(el, "f");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+      { productIds: ["bread"], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+  await vi.waitFor(() => expect(dialog(el)).toBeNull());
+  expect(count(el)).toBe("0 selected");
+});
+it("moves products to the explicitly chosen top level", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  await press(el, "move");
+  await destination(el, "top");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+      { productIds: ["bread"], categoryIds: [] },
+      null,
+    ),
+  );
+});
+it("deletes only completely summarised empty folders without asking", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "f", folders: 0, products: 0, routes: 0 },
+  ]);
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["f"] },
+      "move_up",
+    ),
+  );
+  expect(dialog(el)).toBeNull();
+  expect(count(el)).toBe("0 selected");
+});
+it.each(["network", "missing", "partial"])(
+  "keeps deletion disabled on %s summary",
+  async (state) => {
+    const el = await mountBrowser();
+    if (state === "network")
+      vi.mocked(el.api.summariseFolders).mockRejectedValue(new Error("network"));
+    else
+      vi.mocked(el.api.summariseFolders).mockResolvedValue(
+        state === "missing" ? [] : [{ id: "d", folders: 0, products: 0, routes: 0 }],
+      );
+    await selectKeys(el, ["folder:d", "folder:f"]);
+    await press(el, "delete");
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+    expect(
+      el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled"),
+    ).not.toBeNull();
+    expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  },
+);
+it("shows folder contents and routes, defaults to moving up, and sends delete choice", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 folder and 2 products"));
+  expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
+  const radio = el.shadowRoot!.querySelector<HTMLInputElement>("input[value=delete]")!;
+  expect(el.shadowRoot!.querySelector<HTMLInputElement>("input[value=move_up]")!.checked).toBe(
+    true,
+  );
+  radio.click();
+  await el.updateComplete;
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "delete",
+    ),
+  );
+});
+it("deletes a folder through its own row action", async () => {
+  const el = await mountBrowser();
+  (await tableOf(el))
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="delete-folder-d"]')!
+    .click();
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "move_up",
+    ),
+  );
+});
+it.each([1, 2])("confirms %i product deletion with inactive and sales wording", async (number) => {
+  const el = await mountBrowser({ view: "all" });
+  await selectKeys(el, number === 1 ? ["bread"] : ["bread", "cola"]);
+  await press(el, "delete");
+  expect(dialog(el)!.heading).toBe(number === 1 ? "Delete 1 product?" : "Delete 2 products?");
+  expect(el.shadowRoot!.textContent).toContain("past sales");
+  expect(el.shadowRoot!.textContent).toContain("inactive");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: number === 1 ? ["bread"] : ["bread", "cola"], categoryIds: [] },
+      "move_up",
+    ),
+  );
+});
+it.each(["move", "delete"])(
+  "keeps %s refusal open at bottom of body and blocks Escape while busy",
+  async (action) => {
+    const el = await mountBrowser();
+    let reject!: (error: unknown) => void;
+    vi.mocked(
+      action === "move" ? el.api.moveCatalogueItems : el.api.deleteCatalogueItems,
+    ).mockImplementation(
+      () =>
+        new Promise((_resolve, r) => {
+          reject = r;
+        }),
+    );
+    await selectKeys(el, ["bread"]);
+    await press(el, action);
+    if (action === "move") await destination(el, "f");
+    await press(el, "confirm");
+    const confirming = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      'wt-button[data-test="confirm"]',
+    )!;
+    await confirming.updateComplete;
+    expect(confirming.shadowRoot!.querySelector("button")!.getAttribute("aria-busy")).toBe("true");
+    expect(dialog(el)!.dismissible).toBe(false);
+    const cancel = new Event("cancel", { cancelable: true });
+    dialog(el)!.shadowRoot!.querySelector("dialog")!.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
+    expect(dialog(el)!.open).toBe(true);
+    reject({ code: "category.parent_cycle" });
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+    expect(dialog(el)!.open).toBe(true);
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent).toBe(
+      "Choose a parent outside this category and its descendants.",
+    );
+    expect(el.shadowRoot!.querySelector("[role=alert]")!.closest("[slot=footer]")).toBeNull();
+    expect(count(el)).toBe("1 selected");
+  },
+);
+
+it("counts overlapping selected folders once in the delete consent", async () => {
+  const el = await mountBrowser();
+  await typeSearch(el, "Drinks");
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", folders: 1, products: 2, routes: 1 },
+    { id: "b", folders: 0, products: 1, routes: 1 },
+  ]);
+  await selectKeys(el, ["folder:d", "folder:b"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("1 folder and 2 products"));
+  expect(el.shadowRoot!.textContent).toContain("1 kitchen routing rule names");
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.deleteCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d", "b"] },
+      "move_up",
+    ),
+  );
+});
+it("shows a spinner and blocks confirmation while summaries are pending", async () => {
+  const el = await mountBrowser();
+  let resolve!: (
+    value: { id: string; folders: number; products: number; routes: number }[],
+  ) => void;
+  vi.mocked(el.api.summariseFolders).mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  expect(el.shadowRoot!.querySelector("wt-spinner")).not.toBeNull();
+  expect(dialog(el)).toBeNull();
+  expect(el.api.deleteCatalogueItems).not.toHaveBeenCalled();
+  resolve([{ id: "d", folders: 1, products: 2, routes: 0 }]);
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
+  expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
+});
+
+it("can move after cancelling a failed delete summary", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.summariseFolders).mockRejectedValue(new Error("network"));
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull());
+  dialog(el)!.dispatchEvent(new CustomEvent("wt-close"));
+  await el.updateComplete;
+  await press(el, "move");
+  await destination(el, "f");
+  expect(el.shadowRoot!.querySelector("[data-test=confirm]")!.getAttribute("disabled")).toBeNull();
+  await press(el, "confirm");
+  await vi.waitFor(() =>
+    expect(el.api.moveCatalogueItems).toHaveBeenCalledWith(
+      { productIds: [], categoryIds: ["d"] },
+      "f",
+    ),
+  );
+});
+
+it("never opens a confirmation while reading or deleting empty folders and blocks duplicate reads", async () => {
+  const el = await mountBrowser();
+  let resolve!: (
+    value: { id: string; folders: number; products: number; routes: number }[],
+  ) => void;
+  vi.mocked(el.api.summariseFolders).mockImplementation(
+    () =>
+      new Promise((r) => {
+        resolve = r;
+      }),
+  );
+  let finish!: () => void;
+  vi.mocked(el.api.deleteCatalogueItems).mockImplementation(
+    () =>
+      new Promise<void>((r) => {
+        finish = r;
+      }),
+  );
+  await selectKeys(el, ["folder:f"]);
+  await press(el, "delete");
+  expect(dialog(el)).toBeNull();
+  await press(el, "delete");
+  expect(el.api.summariseFolders).toHaveBeenCalledOnce();
+  resolve([{ id: "f", folders: 0, products: 0, routes: 0 }]);
+  await vi.waitFor(() => expect(el.api.deleteCatalogueItems).toHaveBeenCalledOnce());
+  expect(dialog(el)).toBeNull();
+  finish();
+  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+});
+
+it("places dialog Cancel on the left and its primary action on the right", async () => {
+  const el = await mountBrowser();
+  await selectKeys(el, ["bread"]);
+  await press(el, "delete");
+  const modal = dialog(el)!;
+  await modal.updateComplete;
+  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  const buttons = actions.querySelectorAll("wt-button");
+  await Promise.all([...buttons].map((button) => button.updateComplete));
+  const midpoint =
+    (modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect().left +
+      modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect().right) /
+    2;
+  expect(buttons[0]!.getBoundingClientRect().right).toBeLessThan(midpoint);
+  expect(buttons[1]!.getBoundingClientRect().left).toBeGreaterThan(midpoint);
+});
