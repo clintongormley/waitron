@@ -652,6 +652,8 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("adjustment.quantity_invalid", "comp", true)).toBe("quantity");
     expect(refusalField("adjustment.quantity_invalid", "comp", false)).toBeNull();
     expect(refusalField("adjustment.exceeds_amount", "comp", false)).toBeNull();
+    expect(refusalField("adjustment.no_reduction", "discount", false)).toBe("value");
+    expect(refusalField("adjustment.no_reduction", "comp", true)).toBeNull();
     expect(refusalField("bill.line_paid", "comp", false)).toBeNull();
   });
 });

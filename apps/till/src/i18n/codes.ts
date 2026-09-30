@@ -219,6 +219,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That quantity cannot be used on this line. Check how many are on it; an extra goes whole, with its dish",
     es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero, con su plato",
   },
+  "adjustment.no_reduction": {
+    en: "That takes nothing off. Check whether it is already free, or enter a larger discount",
+    es: "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
+  },
   "adjustment_reason.not_found": {
     en: "That reason no longer exists. Reload and choose another",
     es: "Ese motivo ya no existe. Vuelve a cargar y elige otro",

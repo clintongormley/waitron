@@ -17,6 +17,9 @@ declare module "@waitron/shared" {
     /** The requester is below the reason's `apply_role`, or the bill's discount limit asks for a
      * manager, and no approver at or above `approverRole` was given. */
     "adjustment.approval_required": { approverRole: PersonRoleValue };
+    /** A give-away or a discount that would take nothing off: the line is already free, or the
+     * discount rounds to nothing at the prices it can set. A cancel is never refused this way. */
+    "adjustment.no_reduction": { workingOrderId: string };
     /** Part of a line sold in a unit with decimal places, which a give-away or a discount takes
      * only whole; a cancel can take part of it. */
     "adjustment.weighed_partial": { workingOrderId: string; lineNo: number };

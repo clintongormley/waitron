@@ -287,12 +287,19 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "adjustment.approval_required",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
+    "adjustment.no_reduction",
     "adjustment_reason.not_found",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(generic.en);
     expect(codeMessage(code, "es"), code).not.toBe(generic.es);
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage(code, "es"));
   }
+  expect(codeMessage("adjustment.no_reduction", "en")).toBe(
+    "That takes nothing off. Check whether it is already free, or enter a larger discount",
+  );
+  expect(codeMessage("adjustment.no_reduction", "es")).toBe(
+    "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
+  );
   expect(codeMessage("adjustment.weighed_partial", "en")).toBe(
     "A weighed item can't be split. Give a discount on the whole line instead",
   );

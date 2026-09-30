@@ -472,6 +472,9 @@ async function planAdjustment(
     }
   }
 
+  if (ask.action !== "cancel" && compareDecimal(reduction, ZERO) === 0) {
+    throw new AppError("adjustment.no_reduction", { workingOrderId: orderId });
+  }
   const [actor] = await tx
     .select({ role: persons.role, locale: persons.locale })
     .from(persons)

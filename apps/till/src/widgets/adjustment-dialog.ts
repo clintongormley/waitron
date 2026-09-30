@@ -55,6 +55,7 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment.note_required":
       return "note";
     case "adjustment.exceeds_amount":
+    case "adjustment.no_reduction":
       return kind === "discount" ? "value" : null;
     case "adjustment.over_limit":
       return kind === "discount" ? "value" : "reason";

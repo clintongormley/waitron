@@ -406,6 +406,20 @@ describe("the route's own rules", () => {
     expect([retired.status, retired.json.code]).toEqual([409, "adjustment.reason_inactive"]);
   });
 
+  it("maps a give-away that takes nothing off to 409", async () => {
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+    const comp = async () => ({
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      reasonId: venue.reasonId.house,
+    });
+    expect((await post(billId, await comp())).status).toBe(200);
+
+    const again = await post(billId, await comp());
+
+    expect([again.status, again.json.code]).toEqual([409, "adjustment.no_reduction"]);
+  });
+
   it("screens the body field by field", async () => {
     const { billId } = await billWith(venue, [{ name: "Bottle" }]);
     const lineId = await lineIdOf(venue, billId, 1);

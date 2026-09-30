@@ -2671,6 +2671,91 @@ describe("the bill's own rules", () => {
   });
 });
 
+describe("a give-away or a discount that takes nothing off", () => {
+  const comped = async (billId: string) =>
+    adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+  const onLine =
+    (lineNo: number, ask: Ask) =>
+    async (billId: string): Promise<Ask> => ({
+      ...ask,
+      lineId: await lineIdOf(venue, billId, lineNo),
+    });
+  const onBill = (ask: Ask) => (): Promise<Ask> => Promise.resolve(ask);
+
+  it.each([
+    {
+      what: "a give-away of a dish already given away",
+      lines: [{ name: "Steak" }],
+      before: comped,
+      ask: onLine(1, { action: "comp" }),
+    },
+    {
+      what: "a discount of a dish already given away",
+      lines: [{ name: "Steak" }],
+      before: comped,
+      ask: onLine(1, { action: "discount_percent", percentBp: 1000 }),
+    },
+    {
+      what: "a discount of a bill whose only dish is given away",
+      lines: [{ name: "Steak" }],
+      before: comped,
+      ask: onBill({ action: "discount_percent", percentBp: 1000 }),
+    },
+    {
+      what: "0.01% off a €12.00 dish, which rounds to nothing",
+      lines: [{ name: "Burger" }],
+      ask: onLine(1, { action: "discount_percent", percentBp: 1 }),
+    },
+    {
+      what: "0.01% off a €14.50 bill, which rounds to nothing",
+      lines: [{ name: "Burger" }, { name: "Bread" }],
+      ask: onBill({ action: "discount_percent", percentBp: 1 }),
+    },
+    {
+      what: "€0.01 off a bill of 2.5 kg of fish, whose price moves the total by more",
+      lines: [{ name: "Fish", quantity: "2.5" }],
+      ask: onBill({ action: "discount_amount", amount: "0.01" }),
+    },
+    {
+      what: "€0.01 off Pizza ×2 with an olive each, each row keeping a whole-cent price",
+      lines: [{ name: "Pizza", quantity: "2", olives: 1 }],
+      ask: onLine(1, { action: "discount_amount", amount: "0.01" }),
+    },
+    {
+      what: "€0.01 off the two olives of Pizza ×2 alone",
+      lines: [{ name: "Pizza", quantity: "2", olives: 1 }],
+      ask: onLine(2, { action: "discount_amount", amount: "0.01" }),
+    },
+  ] satisfies {
+    what: string;
+    lines: RoundLine[];
+    before?: (billId: string) => Promise<unknown>;
+    ask: (billId: string) => Promise<Ask>;
+  }[])("refuses $what, in the preview too, recording nothing", async (shape) => {
+    const { billId } = await bill(shape.lines);
+    if (shape.before !== undefined) await shape.before(billId);
+    const ask = await shape.ask(billId);
+
+    await expect(preview(billId, ask)).rejects.toMatchObject({
+      code: "adjustment.no_reduction",
+      params: { workingOrderId: billId },
+    });
+    await refusedWith(billId, ask, "adjustment.no_reduction", { workingOrderId: billId });
+  });
+
+  it("still records a cancel of a dish already given away, which takes nothing off the bill", async () => {
+    const { billId } = await bill([{ name: "Steak" }]);
+    await comped(billId);
+
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "cancel" });
+
+    expect((await recordedOn(billId)).map((row) => [row.action, row.reduction])).toEqual([
+      ["comp", 2500],
+      ["cancel", 0],
+    ]);
+  });
+});
+
 describe("refusals change nothing", () => {
   it.each([
     [
