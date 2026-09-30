@@ -1,7 +1,8 @@
 /**
  * One thing on a table that wants attention (service spec §1). Several coexist on one table. The
- * party's signals are read over its FAMILY — the party and every party merged into it — and every
- * table the party sits at carries them; `needs_clearing` is the table's own.
+ * party's bills and their dishes' kitchen state are read over its FAMILY — the party and every party
+ * merged into it — while its drafts, held groups and bill request are its own. Every table the party
+ * sits at carries its signals; `needs_clearing` is the table's own.
  */
 export type TableSignal =
   /** An open party with no line on any bill of its family that is not abandoned, and no open draft. */
