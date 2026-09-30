@@ -1019,11 +1019,12 @@ export class DashboardApp extends LitElement {
 
   /**
    * Runs on every probe/login and rebuilds the maps from scratch, so a module disabled server-side
-   * since the last session stops showing. A contribution naming an unknown nav group id THROWS rather
-   * than silently dropping the screen.
+   * since the last session stops showing. A screen naming an unknown nav group id, or repeating
+   * another screen's id, THROWS rather than silently dropping or replacing a screen.
    */
   #activate(enabled: readonly string[]): void {
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
+    const ids = new Set<string>();
     this.#activeScreens.clear();
     this.#navGroups.clear();
     for (const c of DASHBOARD_MODULES) {
@@ -1032,11 +1033,15 @@ export class DashboardApp extends LitElement {
         { screen: c.screen, create: (ctx) => c.create(ctx) },
         ...(c.moreScreens ?? []),
       ];
-      for (const { screen } of screens)
+      for (const { screen } of screens) {
         if (!knownGroups.has(screen.group))
           throw new Error(
             `dashboard module "${c.module}" names unknown nav group "${screen.group}"`,
           );
+        if (ids.has(screen.id))
+          throw new Error(`dashboard module "${c.module}" repeats screen id "${screen.id}"`);
+        ids.add(screen.id);
+      }
       registerCatalogue(c.strings);
       for (const { screen, create } of screens) {
         this.#activeScreens.set(screen.id, {

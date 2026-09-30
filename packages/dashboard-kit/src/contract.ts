@@ -2,7 +2,7 @@ import type { LiveData } from "./live-data.js";
 import type { TemplateResult } from "lit";
 import type { DashboardRequest } from "./request.js";
 
-// The contract a dashboard module UI fills to contribute a screen. A module hands the app one
+// The contract a dashboard module UI fills to contribute its screens. A module hands the app one
 // DashboardContribution; the app validates its nav groups, registers its strings, and mounts its screens.
 // It names no concrete module.
 
@@ -35,8 +35,8 @@ export interface DashboardFurtherScreen {
   create(ctx: DashboardModuleContext): DashboardScreenHandle;
 }
 
-/** One module's dashboard contribution: its identity, the screen's nav placement + permission, its
- * localised strings, and a factory the app calls with the module context. */
+/** One module's dashboard contribution: its identity, its first screen's placement and factory, any
+ * further screens, and its localised strings. */
 export interface DashboardContribution {
   module: string; // == the server descriptor name
   screen: DashboardScreenPlacement;

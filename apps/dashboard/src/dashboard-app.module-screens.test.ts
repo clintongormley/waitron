@@ -165,3 +165,20 @@ it("refuses to start when a further screen names an unknown nav group", async ()
     report.group = "reports";
   }
 });
+
+it("refuses to start when a further screen repeats another screen's id", async () => {
+  const report = DASHBOARD_MODULES[0]!.moreScreens![0]!.screen;
+  report.id = "widgets";
+  try {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi(),
+      request: async () => [] as never,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull(),
+    );
+    expect(navItem(el, "widgets")).toBeNull();
+  } finally {
+    report.id = "widget-report";
+  }
+});
