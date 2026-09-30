@@ -164,8 +164,7 @@ import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { ticketLinesFrom } from "./receipt-lines.js";
-import { withReceiptAdjustments } from "./receipt-adjustments.js";
+import { receiptLines } from "./receipt-adjustments.js";
 import { enqueueOriginalReceipt } from "./receipt-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import {
@@ -4502,12 +4501,7 @@ export async function placeOrder(
         total: priced.total,
         qr: fiscal.verificationUrl ?? "",
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await withReceiptAdjustments(
-          tx,
-          id,
-          ticketLinesFrom(priced, order.identities),
-          order.identities,
-        )),
+        ...(await receiptLines(tx, id, priced, order.identities)),
         tender: { method: "unpaid" },
       };
       placeResult = {

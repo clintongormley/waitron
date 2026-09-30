@@ -1,6 +1,6 @@
 /**
- * Formats a filed sale into the customer's ESC/POS receipt. Pure — no database, no state — so the
- * whole layout is pinned in a unit test.
+ * Formats a filed sale into the customer's ESC/POS receipt. Pure — no database, and no state beyond
+ * a formatter cache — so the whole layout is pinned in a unit test.
  *
  * FISCAL SAFETY. It only reads an already-filed `TillSaleResult`: the paper is a re-render of the
  * filed record, never a second source of fiscal truth.
@@ -12,9 +12,9 @@
  * and is never read by it.
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: the fiscal labels
- * are fixed Spanish constants, and only money, percentages, date and product names are formatted
- * with `invoiceLocale`. The helpers shared with the till screen are copied rather than imported,
- * because `apps/server` must not depend on `apps/till`; keep them in step.
+ * are fixed Spanish constants, and only money, discount percentages, date and product names are
+ * formatted with `invoiceLocale`. The helpers shared with the till screen are copied rather than
+ * imported, because `apps/server` must not depend on `apps/till`; keep them in step.
  */
 import {
   QR_QUIET_ZONE,
@@ -41,8 +41,9 @@ import {
 } from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";
+import { groupByParent } from "./receipt-lines.js";
 import { formatMoney } from "./receipt-money.js";
-import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
+import type { ReceiptAdjustment, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface ReceiptIssuer {
@@ -74,7 +75,7 @@ export interface FormatReceiptInput {
   issuer: ReceiptIssuer;
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
-  /** The locale the money, percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
+  /** The locale the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
   /** The receipt printer's settings: they set the column count, the QR dot size and the text encoding. */
   printer: ReceiptPrinterSettings;
@@ -117,38 +118,18 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
+const percentFormatters = new Map<string, Intl.NumberFormat>();
+
 /** The label of an amount taken off: `Descuento 12,5%` for 1250 basis points. */
 function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
   if (adjustment.kind === "comp") return LABEL.comp;
   if (adjustment.percentBp === undefined) return LABEL.discount;
-  const percent = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
-    adjustment.percentBp / 100,
-  );
-  return `${LABEL.discount} ${percent}%`;
-}
-
-interface LineGroup {
-  dish: TillSaleLine;
-  options: TillSaleLine[];
-}
-
-/**
- * Group the filed lines into dishes with their option lines. Filed lines arrive dish-first
- * (`grossBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
- * lines still reconcile with the filed total. A child with no dish before it becomes its own group
- * rather than being dropped, so no filed line vanishes from a legal receipt.
- */
-export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
-  const groups: LineGroup[] = [];
-  for (const line of lines) {
-    const current = groups[groups.length - 1];
-    if (line.parentLineNo == null || current === undefined) {
-      groups.push({ dish: line, options: [] });
-    } else {
-      current.options.push(line);
-    }
+  let formatter = percentFormatters.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+    percentFormatters.set(locale, formatter);
   }
-  return groups;
+  return `${LABEL.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
 }
 
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */

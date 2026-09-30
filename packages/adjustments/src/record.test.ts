@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
+  readBillAdjustments,
   readCompedLines,
   readReasonTotals,
   recordAdjustment,
@@ -329,6 +330,105 @@ describe("readCompedLines", () => {
     const plan = await db.execute<{ detail: string }>(
       sql`explain query plan select line_id, splits from adjustments
         where working_order_id = ${randomUUID()} and action = 'comp'`,
+    );
+    expect(plan.rows.map((row) => row.detail).join("\n")).toContain(
+      "USING INDEX adjustments_order_reason_idx (working_order_id=?)",
+    );
+  });
+});
+
+describe("readBillAdjustments", () => {
+  /** Record `row` as if written at `at`, which is its `created_at`. */
+  async function recordAt(at: string, row: NewAdjustment): Promise<void> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(at));
+    try {
+      await record(row);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("answers nothing on a bill nobody adjusted", async () => {
+    const order = await seedWorkingOrder(db);
+    expect(await withTransaction(db, (tx) => readBillAdjustments(tx, order))).toEqual([]);
+  });
+
+  it("reads this bill's comps and discounts oldest first, and not its cancellations", async () => {
+    const order = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const part = { from: randomUUID(), to: randomUUID() };
+    const whole = randomUUID();
+    const percentLine = randomUUID();
+    await recordAt(
+      "2026-09-30T12:00:03.000Z",
+      comp(order, reason, {
+        line: null,
+        quantity: null,
+        action: "discount_amount",
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("15.00"),
+        reduction: decimal("5.00"),
+        nominalValue: decimal("5.00"),
+      }),
+    );
+    await recordAt(
+      "2026-09-30T12:00:01.000Z",
+      comp(order, reason, {
+        line: { ...comp(order, reason).line!, id: part.from, quantity: "3" },
+        quantity: "1",
+        splits: [part],
+      }),
+    );
+    await recordAt("2026-09-30T12:00:02.000Z", percent(order, reason, percentLine, 2500));
+    await recordAt(
+      "2026-09-30T12:00:00.000Z",
+      comp(order, reason, { line: { ...comp(order, reason).line!, id: whole } }),
+    );
+    await recordAt("2026-09-30T12:00:04.000Z", comp(order, reason, { action: "cancel" }));
+    await recordAt("2026-09-30T12:00:05.000Z", comp(other, reason));
+
+    expect(await withTransaction(db, (tx) => readBillAdjustments(tx, order))).toEqual([
+      {
+        lineId: whole,
+        splits: [],
+        partOfLine: false,
+        action: "comp",
+        percentBp: null,
+        reduction: "12.00",
+      },
+      {
+        lineId: part.from,
+        splits: [part],
+        partOfLine: true,
+        action: "comp",
+        percentBp: null,
+        reduction: "12.00",
+      },
+      {
+        lineId: percentLine,
+        splits: [],
+        partOfLine: false,
+        action: "discount_percent",
+        percentBp: 2500,
+        reduction: "2.50",
+      },
+      {
+        lineId: null,
+        splits: [],
+        partOfLine: false,
+        action: "discount_amount",
+        percentBp: null,
+        reduction: "5.00",
+      },
+    ]);
+  });
+
+  it("reads the bill's adjustments through the index that leads with the working order", async () => {
+    const plan = await db.execute<{ detail: string }>(
+      sql`explain query plan select * from adjustments
+        where working_order_id = ${randomUUID()} and action <> 'cancel' order by created_at, id`,
     );
     expect(plan.rows.map((row) => row.detail).join("\n")).toContain(
       "USING INDEX adjustments_order_reason_idx (working_order_id=?)",

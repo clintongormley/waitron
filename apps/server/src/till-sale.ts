@@ -59,8 +59,7 @@ import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { ticketLinesFrom } from "./receipt-lines.js";
-import { withReceiptAdjustments } from "./receipt-adjustments.js";
+import { receiptLines } from "./receipt-adjustments.js";
 import type { TillConfig } from "./till-config.js";
 import {
   enqueueCashSaleDrawer,
@@ -559,12 +558,7 @@ export async function readSettledTicket(
   /* v8 ignore stop */
 
   const stored = await readStoredOrder(tx, workingOrderId);
-  const ticketLines = await withReceiptAdjustments(
-    tx,
-    workingOrderId,
-    ticketLinesFrom(stored.gross, stored.identities),
-    stored.identities,
-  );
+  const ticketLines = await receiptLines(tx, workingOrderId, stored.gross, stored.identities);
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -717,12 +711,7 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await withReceiptAdjustments(
-      tx,
-      workingOrderId,
-      ticketLinesFrom(priced, order.identities),
-      order.identities,
-    )),
+    ...(await receiptLines(tx, workingOrderId, priced, order.identities)),
     tender: tenderBlock,
     qr: fiscal.verificationUrl ?? "",
   };
@@ -1188,12 +1177,7 @@ async function finalizeCapture(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        ...(await withReceiptAdjustments(
-          tx,
-          req.id,
-          ticketLinesFrom(priced, identities),
-          identities,
-        )),
+        ...(await receiptLines(tx, req.id, priced, identities)),
         tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
@@ -1333,12 +1317,7 @@ async function finalizeRecovery(
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      ...(await withReceiptAdjustments(
-        tx,
-        req.id,
-        ticketLinesFrom(priced, order.identities),
-        order.identities,
-      )),
+      ...(await receiptLines(tx, req.id, priced, order.identities)),
       tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };

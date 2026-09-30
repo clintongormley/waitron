@@ -646,11 +646,10 @@ describe("till-ticket-view: a line given away or discounted (service plan Task 1
     ]);
   });
 
-  it("no longer strikes through the price a line had", async () => {
+  it("shows no struck-through price", async () => {
     const { el } = await mount(adjusted);
 
     expect(el.shadowRoot!.querySelectorAll("s")).toHaveLength(0);
-    expect(text(el)).not.toContain("Antes");
   });
 
   it("writes a percentage in the invoice locale, to two decimals at most", async () => {

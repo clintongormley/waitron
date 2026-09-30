@@ -53,8 +53,7 @@ import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
-import { ticketLinesFrom } from "./receipt-lines.js";
-import { withReceiptAdjustments } from "./receipt-adjustments.js";
+import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueBillPaymentDrawer, enqueueSaleReceipt } from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
@@ -726,12 +725,7 @@ async function issueWhenFullyPaid(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    ...(await withReceiptAdjustments(
-      tx,
-      workingOrderId,
-      ticketLinesFrom(priced, stored.identities),
-      stored.identities,
-    )),
+    ...(await receiptLines(tx, workingOrderId, priced, stored.identities)),
     tender: await readTenderBlock(tx, cfg, saleId, workingOrderId),
     payments: await readBillTenderLines(tx, saleId),
     qr: fiscal.verificationUrl ?? "",

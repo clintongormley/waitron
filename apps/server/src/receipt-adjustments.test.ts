@@ -7,7 +7,7 @@ import { workingOrders, type Transaction } from "@waitron/db";
 import type { AdjustmentAction } from "@waitron/adjustments";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
-import { withReceiptAdjustments } from "./receipt-adjustments.js";
+import { receiptLines } from "./receipt-adjustments.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -71,12 +71,7 @@ const bill = async (lines: RoundLine[]) => (await billWith(venue, lines)).billId
 function receiptOf(billId: string) {
   return inTx(venue, async (tx) => {
     const stored = await readStoredOrder(tx, billId);
-    return withReceiptAdjustments(
-      tx,
-      billId,
-      ticketLinesFrom(stored.gross, stored.identities),
-      stored.identities,
-    );
+    return receiptLines(tx, billId, stored.gross, stored.identities);
   });
 }
 
@@ -91,7 +86,7 @@ function shown(receipt: Awaited<ReturnType<typeof receiptOf>>) {
   ]);
 }
 
-describe("withReceiptAdjustments", () => {
+describe("receiptLines", () => {
   it("puts a comp of one of three units under the unit it split off", async () => {
     const billId = await bill([{ name: "Burger", quantity: "3" }]);
     await adjust(billId, {
@@ -157,8 +152,6 @@ describe("withReceiptAdjustments", () => {
   });
 
   it("falls back to what each dish lost when the records no longer add up to the bill", async () => {
-    // €3.00 off three Burgers, then one of them cancelled: the record still says €3.00, but the two
-    // Burgers left lost €2.00.
     const billId = await bill([{ name: "Burger", quantity: "3" }, { name: "Bottle" }]);
     const burgers = await lineIdOf(venue, billId, 1);
     await adjust(billId, { lineId: burgers, action: "discount_amount", amount: "3.00" });
@@ -201,12 +194,7 @@ describe("withReceiptAdjustments", () => {
       const stored = await readStoredOrder(tx, billId);
       // The same row under another id: the €12.00 record still adds up, but names no row here.
       const elsewhere = stored.identities.map((identity) => ({ ...identity, id: randomUUID() }));
-      return withReceiptAdjustments(
-        tx,
-        billId,
-        ticketLinesFrom(stored.gross, elsewhere),
-        elsewhere,
-      );
+      return receiptLines(tx, billId, stored.gross, elsewhere);
     });
 
     expect(shown(receipt)).toEqual([
@@ -216,22 +204,16 @@ describe("withReceiptAdjustments", () => {
 
   it("reads nothing when no line was comped or discounted", async () => {
     const billId = await bill([{ name: "Burger" }]);
-    const { lines, identities } = await inTx(venue, async (tx) => {
-      const stored = await readStoredOrder(tx, billId);
-      return {
-        lines: ticketLinesFrom(stored.gross, stored.identities),
-        identities: stored.identities,
-      };
-    });
+    const stored = await inTx(venue, (tx) => readStoredOrder(tx, billId));
     const unreadable = new Proxy({} as Transaction, {
       get: () => {
         throw new Error("the bill's adjustments were read");
       },
     });
 
-    await expect(withReceiptAdjustments(unreadable, billId, lines, identities)).resolves.toEqual({
-      lines,
-    });
+    await expect(
+      receiptLines(unreadable, billId, stored.gross, stored.identities),
+    ).resolves.toEqual({ lines: ticketLinesFrom(stored.gross, stored.identities) });
   });
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {

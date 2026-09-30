@@ -70,7 +70,7 @@ interface LineGroup {
  * The filed lines arrive dish-then-its-options, so a single forward scan attaching each child to the most
  * recent dish groups them. It recomputes no figure: it only groups the SAME already-filed lines.
  *
- * A LOCAL copy of `apps/server/src/receipt-ticket.ts`'s `groupByParent`: importing it would drag server
+ * A LOCAL copy of `apps/server/src/receipt-lines.ts`'s `groupByParent`: importing it would drag server
  * code into the browser bundle. A leading child with no dish yet is treated as its own dish rather than
  * dropped, so no filed line ever vanishes from the on-screen ticket.
  */
@@ -92,18 +92,26 @@ function lineGross(line: TillSaleLine, locale: string) {
   return html`<span class="line-gross">${formatMoney(line.listGross ?? line.gross, locale)}</span>`;
 }
 
+const percentFormatters = new Map<string, Intl.NumberFormat>();
+
 /** `Descuento 12,5%` for 1250 basis points, as `apps/server/src/receipt-ticket.ts` prints it. */
 function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
   if (adjustment.kind === "comp") return LABEL.comp;
   if (adjustment.percentBp === undefined) return LABEL.discount;
-  const percent = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
-    adjustment.percentBp / 100,
-  );
-  return `${LABEL.discount} ${percent}%`;
+  let formatter = percentFormatters.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+    percentFormatters.set(locale, formatter);
+  }
+  return `${LABEL.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
 }
 
-function adjustmentRow(adjustment: ReceiptAdjustment, locale: string, extraClass = "") {
-  return html`<li class="line adjustment ${extraClass}">
+function adjustmentRow(
+  adjustment: ReceiptAdjustment,
+  locale: string,
+  kind: "adjustment" | "bill-adjustment",
+) {
+  return html`<li class="line ${kind}">
     <span class="line-name">${adjustmentLabel(adjustment, locale)}</span>
     <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
   </li>`;
@@ -271,17 +279,17 @@ export class TillTicketView extends LitElement {
         flex: 1;
       }
 
-      /* A selected option (ordering modifiers, Task 14) — indented beneath its dish, name left and its
-         own delta right (0,00 for a free option), never its own quantity column (an option is priced per
-         dish, so repeating the count reads as noise) — matching the printed receipt's identical indent. */
+      /* An option, or an amount taken off a dish, is indented beneath the dish as the printed
+         receipt indents it. */
       .line.option,
       .line.adjustment {
         padding-left: var(--wt-space-4);
-        color: var(--wt-color-text-muted);
       }
 
+      .line.option,
+      .line.adjustment,
       .line.bill-adjustment {
-        padding-left: 0;
+        color: var(--wt-color-text-muted);
       }
 
       .total-row {
@@ -449,7 +457,9 @@ export class TillTicketView extends LitElement {
                 },
               )}
               ${[group.dish, ...group.options].flatMap((line) =>
-                (line.adjustments ?? []).map((adjustment) => adjustmentRow(adjustment, locale)),
+                (line.adjustments ?? []).map((adjustment) =>
+                  adjustmentRow(adjustment, locale, "adjustment"),
+                ),
               )}
             `,
           )}

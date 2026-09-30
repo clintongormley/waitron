@@ -1,46 +1,33 @@
-import { and, asc, eq, ne } from "drizzle-orm";
-import { adjustments } from "@waitron/adjustments";
+import { readBillAdjustments } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
 import {
   addDecimal,
-  centsToDecimal,
   compareDecimal,
   decimal,
   isZeroDecimal,
   subtractDecimal,
   sumDecimals,
 } from "@waitron/shared";
-import { groupByParent } from "./receipt-ticket.js";
+import { groupByParent, ticketLinesFrom, type ReceiptSource } from "./receipt-lines.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
 import type { OrderLineIdentity } from "./working-order.js";
 
 /**
- * The comps and discounts a receipt prints as their own lines: each line's beneath the row it was
- * made on, or the part it carved off, and each on the whole bill after the goods. When the bill's
- * records no longer add up to its lines (a part cancelled after it was discounted, for one) each
- * dish instead prints what its rows lost, which always adds up. Presentation only: nothing here is
- * filed.
+ * The receipt's lines for `priced` (`ticketLinesFrom`), with the comps and discounts it prints as
+ * their own lines: each line's beneath the row it was made on, or the part it carved off, and each
+ * on the whole bill after the goods. When the bill's records no longer add up to its lines (a part
+ * cancelled after it was discounted, for one) each dish instead prints what its rows lost, which
+ * always adds up. Presentation only: nothing here is filed.
  */
-export async function withReceiptAdjustments(
+export async function receiptLines(
   tx: Transaction,
   workingOrderId: string,
-  lines: TillSaleLine[],
-  identities: readonly Pick<OrderLineIdentity, "id">[],
+  priced: { lines: readonly ReceiptSource[] },
+  identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross">[],
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
+  const lines = ticketLinesFrom(priced, identities);
   if (!lines.some((line) => line.listGross !== undefined)) return { lines };
-  const records = await tx
-    .select({
-      lineId: adjustments.lineId,
-      splits: adjustments.splits,
-      quantity: adjustments.quantity,
-      lineQuantity: adjustments.lineQuantity,
-      action: adjustments.action,
-      percentBp: adjustments.percentBp,
-      reduction: adjustments.reduction,
-    })
-    .from(adjustments)
-    .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
-    .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
+  const records = await readBillAdjustments(tx, workingOrderId);
 
   const rowIndex = new Map<string | undefined, number>(
     identities.map((identity, i) => [identity.id, i]),
@@ -50,12 +37,11 @@ export async function withReceiptAdjustments(
   let placed = true;
   let takenOff = decimal("0.00");
   for (const record of records) {
-    const amount = centsToDecimal(record.reduction);
-    takenOff = addDecimal(takenOff, amount);
+    takenOff = addDecimal(takenOff, record.reduction);
     const entry: ReceiptAdjustment = {
       kind: record.action === "comp" ? "comp" : "discount",
       ...(record.action === "discount_percent" ? { percentBp: record.percentBp! } : {}),
-      amount,
+      amount: record.reduction,
     };
     if (record.lineId === null) {
       onBill.push(entry);
@@ -63,8 +49,7 @@ export async function withReceiptAdjustments(
     }
     // Only a part carved off the line moves to the row split from it: a whole line can also split,
     // into two prices, and that second row can be numbered after other dishes.
-    const carved = record.quantity! < record.lineQuantity!;
-    const row = carved
+    const row = record.partOfLine
       ? record.splits.find((split) => split.from === record.lineId)?.to
       : record.lineId;
     const at = rowIndex.get(row);
@@ -72,7 +57,9 @@ export async function withReceiptAdjustments(
       placed = false;
       continue;
     }
-    byLine.set(at, [...(byLine.get(at) ?? []), entry]);
+    const entries = byLine.get(at);
+    if (entries === undefined) byLine.set(at, [entry]);
+    else entries.push(entry);
   }
 
   const listed = sumDecimals(lines.map((line) => decimal(line.listGross ?? line.gross)));

@@ -356,9 +356,14 @@ describe("a comp (plan D4)", () => {
 });
 
 describe("the receipt (ruling R13)", () => {
-  /** A ticket's lines as `[customer name, gross, total before the change]`. */
+  /** A ticket's lines as `[customer name, gross, total before the change, what was taken off]`. */
   const shown = (ticket: TillSaleResult) =>
-    ticket.lines.map((line) => [line.descriptions["es-ES"], line.gross, line.listGross]);
+    ticket.lines.map((line) => [
+      line.descriptions["es-ES"],
+      line.gross,
+      line.listGross,
+      line.adjustments,
+    ]);
 
   async function compBurgerAndDiscountBottle() {
     const { billId } = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }]);
@@ -372,12 +377,12 @@ describe("the receipt (ruling R13)", () => {
   }
 
   const ADJUSTED_LINES = [
-    ["Hamburguesa", "0.00", "12.00"],
-    ["Rioja crianza", "27.00", "30.00"],
-    ["Pan de pueblo", "2.50", undefined],
+    ["Hamburguesa", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
+    ["Rioja crianza", "27.00", "30.00", [{ kind: "discount", percentBp: 1000, amount: "3.00" }]],
+    ["Pan de pueblo", "2.50", undefined, undefined],
   ];
 
-  it("prints the Burger's €12.00 before its €0.00, when the bill is paid and when it is printed again", async () => {
+  it("prints the Burger at €12.00 with an Invitación line beneath it, when the bill is paid and when it is printed again", async () => {
     const billId = await compBurgerAndDiscountBottle();
 
     const ticket = await payWorkingOrder(
