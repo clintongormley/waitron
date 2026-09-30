@@ -5663,8 +5663,8 @@ ongoing overhaul listed at the top of Track A.
   with it; C97, queued next, is to move it to the bottom of the form. Layout only,
   `apps/dashboard/src/screens/login-screen.ts`.
 - **A new passkey is listed under the person's email, with their name as its display name — DONE
-  (C99, owner 2026-09-30, on Google Password Manager showing a waitron.local passkey with Username
-  "Clinton Gormley" and Display name "No display name").** `beginPasskeyRegistration`
+  (C99, #939, owner 2026-09-30, on Google Password Manager showing a waitron.local passkey with
+  Username "Clinton Gormley" and Display name "No display name").** `beginPasskeyRegistration`
   (`packages/identity/src/passkey.ts`) now sends the person's email as the passkey's `user.name` and
   their display name as `user.displayName`; before, it sent the display name as `user.name` and no
   display name, so the library sent an empty one. A person with no email gets their display name
