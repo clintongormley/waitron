@@ -3495,7 +3495,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `tab.void_quantity_invalid` are gone. Part of a dish with extras can be cancelled, its extras
       following the dish. An extras row cannot be cancelled on its own
       (`adjustment.line_not_adjustable`); the old route took the whole of one, but the till offers
-      no Cancel on an extras row. Left open:
+      no Cancel on an extras row. _(2026-09-30, B11d: the server now cancels, comps and discounts
+      an extras row on its own, whole only, and that code is retired.)_ Left open:
       - **A newly set-up venue has no adjustment reasons, so its till cannot cancel anything** until
         a manager adds a reason that allows a cancel, in the dashboard under Adjustment reasons; the
         dialog says so (`adjust.no_reasons`). Outside tests, reasons are created only by the
@@ -3586,6 +3587,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       orders are offered since B11c, above.)_ A run-it review found that exactly representable weighed cases
       are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
       decides whether exactly representable partial weighed adjustments should be allowed.
+      _(2026-09-30, B11d: the server now comps or discounts part of a dish with extras, splitting
+      its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
+      line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.)_
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
       close report arrives with the next animation frame): "saves on Enter and cancels on Escape from
       a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and `pressEscape`'s fixed
