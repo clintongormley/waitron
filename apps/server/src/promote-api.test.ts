@@ -141,6 +141,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
       personId: PERSON,
       password: "pw",
       totp: "123456",
+      totpKeyRing: TOTP_KEY_RING,
     });
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
   });
