@@ -340,7 +340,7 @@ describe("the fixture day (spec §7)", () => {
     });
   });
 
-  it("keeps the cancellations' nominal €37.00 apart from their €25.00 reduction, and counts the comped-then-cancelled Burger's €12.00 once, under the comp", async () => {
+  it("keeps the cancellations' €37.00 list value apart from their €25.00 reduction: the comped-then-cancelled Burger's €12.00 reduction is counted once, under the comp, and its list value under the cancel", async () => {
     const day = await fixtureDay();
 
     const alex = personRow(await report(), day.alex);
