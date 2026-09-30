@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import type { TabLine } from "../api/client.js";
 import {
   confirmationOf,
+  payLines,
   paymentAsk,
   submissionFor,
   unansweredAfter,
@@ -197,5 +199,50 @@ describe("the submission id of a confirmation", () => {
 
     expect(first).toMatch(/^[0-9a-f-]{36}$/);
     expect(second).not.toBe(first);
+  });
+});
+
+describe("payLines", () => {
+  const row = (over: Partial<TabLine>): TabLine => ({
+    id: `line-${over.lineNo}`,
+    lineNo: 1,
+    productId: "p",
+    quantity: "1.000",
+    unitPrecision: 0,
+    unitPriceGross: "1.00",
+    servedAt: null,
+    courseId: null,
+    sentAt: null,
+    firedAt: null,
+    state: null,
+    groupId: null,
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
+    ...over,
+  });
+
+  it("offers each dish with its extras, a unit at a time only when sold by the unit, in several units, with no extras", () => {
+    const lines = [
+      row({ lineNo: 1, name: "Beer", quantity: "3.000", unitPriceGross: "3.00" }),
+      row({ lineNo: 2, name: "Burger", quantity: "2.000", unitPriceGross: "10.00" }),
+      row({
+        lineNo: 3,
+        name: "Cheese",
+        quantity: "2.000",
+        unitPriceGross: "1.50",
+        parentLineNo: 2,
+      }),
+      row({ lineNo: 4, name: "Ham", quantity: "0.250", unitPrecision: 3, unitPriceGross: "40.00" }),
+      row({ lineNo: 5, name: "Tiramisu", unitPriceGross: "6.00" }),
+    ];
+
+    expect(payLines(lines, (line) => line.name!)).toEqual([
+      { lineNo: 1, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
+      { lineNo: 2, name: "Burger", quantity: "2", total: "23.00", unitTotal: null },
+      { lineNo: 4, name: "Ham", quantity: "0.25", total: "10.00", unitTotal: null },
+      { lineNo: 5, name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
+    ]);
   });
 });

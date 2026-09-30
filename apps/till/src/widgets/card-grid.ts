@@ -16,6 +16,7 @@ import "../screens/till-table-order-screen.js";
 import { CARD_REQUIRED_CAPABILITY, CARD_REQUIRED_PERMISSION } from "../layout.js";
 import type { CapabilityFlag, CardInstance, CardType, TabDef } from "../layout.js";
 import type {
+  BillBalance,
   CurrentOrders,
   DeviceStation,
   FloorZone,
@@ -121,6 +122,8 @@ export class TillCardGrid extends LitElement {
   @property({ attribute: false }) takeOversAnswered = 0;
   @property({ attribute: false }) party: TableParty | null = null;
   @property({ attribute: false }) partyBills: PartyBill[] = [];
+  /** The payments of the order's bill; see the table-order card's `billBalance`. */
+  @property({ attribute: false }) billBalance: BillBalance | null = null;
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
   @property({ type: Boolean }) groupCommandBusy = false;
@@ -275,6 +278,7 @@ export class TillCardGrid extends LitElement {
           .takeOversAnswered=${this.takeOversAnswered}
           .party=${this.party}
           .bills=${this.partyBills}
+          .billBalance=${this.billBalance}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .busy=${this.busy}

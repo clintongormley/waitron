@@ -68,6 +68,7 @@ import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import type { ModifierConfirmDetail } from "../widgets/modifier-picker.js";
 import type {
+  BillBalance,
   CurrentOrderGroup,
   CurrentOrderRow,
   CurrentOrders,
@@ -102,6 +103,8 @@ import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
+import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
+import { payLines } from "../state/bill-payment.js";
 
 export type { TableServiceStatus };
 
@@ -298,6 +301,14 @@ export interface AdjustDetail {
   /** Pressed in the counter's basket, on the stored order it holds, rather than on the table's
    * open bill. */
   counter?: true;
+}
+
+/** `bill-pay`: Pay items, Contribute or Split equally pressed on the bill on screen, with its dishes;
+ * `amount` starts a contribution at what the bill still owes. */
+export interface BillPayDetail {
+  way: PayWay;
+  lines: PayLine[];
+  amount?: string;
 }
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
@@ -538,6 +549,19 @@ export class TillTableOrderScreen extends LitElement {
       .bill-adjust {
         display: flex;
         justify-content: flex-end;
+      }
+
+      .bill-pay-ways {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
+        margin-top: var(--wt-space-2);
+      }
+
+      .line-paid {
+        display: block;
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
       }
 
       .empty {
@@ -1081,6 +1105,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) party: TableParty | null = null;
   /** Every bill of {@link party}, merged parties' included. */
   @property({ attribute: false }) bills: PartyBill[] = [];
+  /** The payments of the bill on screen, when it holds any; a balance of another bill is ignored. */
+  @property({ attribute: false }) billBalance: BillBalance | null = null;
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
@@ -2727,22 +2753,95 @@ export class TillTableOrderScreen extends LitElement {
   #paySection(): TemplateResult {
     const shown = this.#shownBill;
     const partlyPaid = shown !== undefined && paidInPart(shown) ? shown : undefined;
-    return partlyPaid === undefined
-      ? html`<section
-          class="pay"
-          @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
-          @park-order=${(event: Event) => this.#onTenderPark(event)}
-        >
-          <h2>${t("table.pay_title")}</h2>
-          <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
-        </section>`
-      : html`<section class="pay" data-bill-payments>
-          <h2>${t("table.pay_title")}</h2>
-          <p class="amount">
-            ${t("table.bill_to_pay").replace("{amount}", () => this.#money(partlyPaid.outstanding))}
-          </p>
-          <p>${t("bill.pay_with_bill_payments")}</p>
-        </section>`;
+    if (partlyPaid === undefined)
+      return html`<section
+        class="pay"
+        @confirm-payment=${(event: Event) => this.#onTenderConfirm(event)}
+        @park-order=${(event: Event) => this.#onTenderPark(event)}
+      >
+        <h2>${t("table.pay_title")}</h2>
+        <till-tender-pay .store=${this.#payStore} .busy=${this.busy}></till-tender-pay>
+        ${this.#payWays()}
+      </section>`;
+    const received = this.#balanceShown()?.received;
+    return html`<section class="pay" data-bill-payments>
+      <h2>${t("table.pay_title")}</h2>
+      <p class="amount">
+        ${t("table.bill_to_pay").replace("{amount}", () => this.#money(partlyPaid.outstanding))}
+      </p>
+      ${
+        received === undefined
+          ? nothing
+          : html`<p data-bill-received>${t("bill_pay.received")}: ${this.#money(received)}</p>`
+      }
+      <wt-button
+        variant="primary"
+        data-pay-rest
+        .disabled=${this.busy}
+        @click=${() => this.#payPart("contribution", partlyPaid.outstanding)}
+      >
+        ${t("bill.pay_with_bill_payments")}
+      </wt-button>
+      ${this.#payWays()}
+    </section>`;
+  }
+
+  /** The balance read, when it is the bill on screen's. */
+  #balanceShown(): BillBalance | null {
+    const balance = this.billBalance;
+    return balance !== null && balance.workingOrderId === this.orderId ? balance : null;
+  }
+
+  #payWays(): TemplateResult {
+    const ways = [
+      { way: "items", label: "bill_pay.way_items" },
+      { way: "contribution", label: "bill_pay.way_contribution" },
+      { way: "share", label: "bill_pay.way_share" },
+    ] as const satisfies readonly { way: PayWay; label: StringKey }[];
+    return html`<div class="bill-pay-ways">
+      ${ways.map(
+        ({ way, label }) =>
+          html`<wt-button
+            variant="secondary"
+            size="sm"
+            data-open-bill-pay=${way}
+            .disabled=${this.busy}
+            @click=${() => this.#payPart(way)}
+          >
+            ${t(label)}
+          </wt-button>`,
+      )}
+    </div>`;
+  }
+
+  #payPart(way: PayWay, amount?: string): void {
+    const detail: BillPayDetail = {
+      way,
+      lines: payLines(
+        this.lines,
+        (line) => this.#nameForLine(line),
+        (line) => this.#lineGross(line),
+      ),
+      ...(amount === undefined ? {} : { amount }),
+    };
+    this.#dispatch("bill-pay", detail);
+  }
+
+  /** What is paid of the line numbered `lineNo` on the bill on screen, when any is. */
+  #paidMark(lineNo: number, quantity: string): TemplateResult | typeof nothing {
+    const paid = this.#balanceShown()?.paidLines.find((line) => line.lineNo === lineNo);
+    if (paid === undefined || compareDecimal(decimal(paid.paidQuantity), decimal("0")) <= 0)
+      return nothing;
+    const whole = compareDecimal(decimal(paid.paidQuantity), decimal(quantity)) >= 0;
+    return html`<span class="line-paid" data-line-paid
+      >${
+        whole
+          ? t("bill_pay.paid")
+          : t("bill_pay.paid_part")
+              .replace("{paid}", () => this.#displayQty(paid.paidQuantity))
+              .replace("{quantity}", () => this.#displayQty(quantity))
+      }</span
+    >`;
   }
 
   /** Abandoned bills are left out: nobody pays them. */
@@ -2912,7 +3011,7 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#nameForLine(line);
     return html`<li class="line pending-line${this.#isChild(line) ? " child-line" : ""}">
       <span class="name"
-        >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}</span
+        >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
       ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#lineActions(line)}
@@ -2937,7 +3036,7 @@ export class TillTableOrderScreen extends LitElement {
                 (line) =>
                   html`<li class="line served-line${this.#isChild(line) ? " child-line" : ""}">
                     <span class="name"
-                      >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}</span
+                      >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}${this.#paidMark(line.lineNo, line.quantity)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
                     ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#servedActions(line)}
@@ -3191,6 +3290,7 @@ export class TillTableOrderScreen extends LitElement {
             ? nothing
             : html`<span class="line-note">${t("line.note.label")}: ${row.note}</span>`
         }
+        ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
         ${
           state === nothing && !partly
             ? nothing
@@ -3396,6 +3496,7 @@ export class TillTableOrderScreen extends LitElement {
     const name = this.#nameForLine(line);
     return html`<li class="group-line" data-group-line=${line.id}>
       <span class="group-line-name">${name} ×${this.#displayQty(line.quantity)}</span>
+      ${this.#paidMark(line.lineNo, line.quantity)}
       ${
         group === null
           ? nothing
