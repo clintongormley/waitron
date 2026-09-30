@@ -78,3 +78,4 @@ export { readableTextColor, isHexColor, CATEGORY_PALETTE } from "./category-colo
 export { WtLozenge } from "./components/wt-lozenge.js";
 export { WtCountBadge, type WtCountBadgeTone } from "./components/wt-count-badge.js";
 export { WtToast, type WtToastTone } from "./components/wt-toast.js";
+export { WtLanguageFooter, type WtLocaleOption } from "./components/wt-language-footer.js";

@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -7,6 +7,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
+import indexHtml from "../index.html?raw";
 
 /**
  * Stubs `window.matchMedia` for the drawer breakpoint only; every other query delegates to the real
@@ -311,9 +312,9 @@ const NAV_GROUP_KEYS = [
   "nav.group.configuration",
 ] as const;
 const shellChooser = (el: DashboardApp) =>
-  el.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
+  el.shadowRoot!.querySelector<HTMLElement>("wt-language-footer");
 const loginChooser = (el: DashboardApp) =>
-  login(el)!.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
+  login(el)!.shadowRoot!.querySelector<HTMLElement>("wt-language-footer");
 
 const SCREEN_TAGS = [
   "dashboard-my-schedule-screen",
@@ -466,7 +467,7 @@ describe("dashboard-app", () => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
     // ...while the person explicitly picks English, which persists and repaints.
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(currentLocale()).toBe("en-GB");
     // The probe now answers with the pre-pick row.
@@ -498,7 +499,7 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
     // The person picks English; the save is still in flight, so nothing has repainted yet.
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
     // NOW a background probe starts — after the pick, so it captures the already-bumped counter.
@@ -2524,7 +2525,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     logoutBtn(el)!.click();
     await flush(el);
-    emit(login(el)!, "locale-selected", { code: "es-ES" });
+    emit(login(el)!, "wt-locale-selected", { code: "es-ES" });
     await flush(el);
     resolveLocales({
       locales: [],
@@ -2701,7 +2702,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(login(el)).toBeTruthy();
     expect(loginChooser(el)).toBeTruthy(); // the login screen renders the chooser
 
-    emit(loginChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(loginChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(currentLocale()).toBe("en-GB"); // switched
     expect(api.putLocale).not.toHaveBeenCalled(); // but NOT persisted
@@ -2723,7 +2724,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         passkeyName: "Work laptop",
       });
       await flush(el);
-      emit(loginChooser(el)!, "locale-selected", { code: "en-GB" });
+      emit(loginChooser(el)!, "wt-locale-selected", { code: "en-GB" });
       await flush(el);
       expect(login(el)).toBe(screen);
       expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
@@ -2749,10 +2750,22 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(shellChooser(el)).toBeTruthy(); // the logged-in shell renders the chooser
     expect(currentLocale()).toBe("es-ES"); // manager, no stored preference, es-ES venue
 
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(putLocale).toHaveBeenCalledWith("en-GB");
     expect(currentLocale()).toBe("en-GB"); // the switch happened AFTER the persist resolved
+  });
+
+  it("names the shell's language on the chooser, and the new one once a pick is saved", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const trigger = () =>
+      shellChooser(el)!.shadowRoot!.querySelector("[data-test=lang-trigger]")!.textContent!.trim();
+    expect(trigger()).toBe("Español");
+
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
+    await flush(el);
+    expect(trigger()).toBe("English");
   });
 
   it("a rejected putLocale leaves the language unchanged (the switch is gated behind the durable write)", async () => {
@@ -2763,7 +2776,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
 
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(putLocale).toHaveBeenCalledWith("en-GB");
     expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
@@ -2851,7 +2864,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el); // logged in as a manager, es-ES
     expect(currentLocale()).toBe("es-ES");
 
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" }); // putLocale now pending
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" }); // putLocale now pending
     await el.updateComplete;
     host.remove(); // torn down before putLocale resolves
     resolvePut();
@@ -3145,7 +3158,161 @@ describe("dashboard URL navigation", () => {
   });
 });
 
-it("leaves long dashboard content clear of the bottom-right language chooser on a narrow screen", async () => {
+/**
+ * Mounts the app the way the real page does: inside `#app`, under `index.html`'s own page style, so a
+ * layout test sees the body padding and sizing the browser applies.
+ */
+async function mountInRealPage(
+  api: DashboardApi,
+  width: number,
+  height: number,
+): Promise<{ el: DashboardApp; unmount: () => Promise<void> }> {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  const style = document.createElement("style");
+  style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+  document.head.append(style);
+  const app = document.createElement("div");
+  app.id = "app";
+  applyTokens(app);
+  document.body.append(app);
+  await page.viewport(width, height);
+  const el = document.createElement("dashboard-app") as DashboardApp;
+  el.api = api;
+  app.append(el);
+  await flush(el);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  return {
+    el,
+    unmount: async () => {
+      app.remove();
+      style.remove();
+      document.scrollingElement!.scrollTop = 0;
+      await page.viewport(before.width, before.height);
+    },
+  };
+}
+
+const footerTrigger = (host: Element) =>
+  host
+    .shadowRoot!.querySelector("wt-language-footer")!
+    .shadowRoot!.querySelector("[data-test=lang-trigger]")!
+    .getBoundingClientRect();
+
+it.each([
+  [1280, 844],
+  [390, 844],
+])(
+  "fits the signed-in page in a %ix%i window, footer and all, and scrolls long content inside the column",
+  async (width, height) => {
+    const { el, unmount } = await mountInRealPage(
+      stubApi({
+        listStaff: vi.fn().mockResolvedValue(
+          Array.from({ length: 30 }, (_, i) => ({
+            ...people[0]!,
+            personId: `p${i}`,
+            displayName: `Person ${i}`,
+          })),
+        ),
+      }),
+      width,
+      height,
+    );
+    try {
+      if (width < 768) {
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+        await flush(el);
+      }
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+      await flush(el);
+      const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+      main.scrollTo(0, main.scrollHeight);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(footerTrigger(el).bottom).toBeLessThanOrEqual(window.innerHeight);
+      expect(main.scrollHeight).toBeGreaterThan(main.clientHeight);
+      expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+    } finally {
+      await unmount();
+    }
+  },
+);
+
+it("keeps the phone drawer within the window inside the real page", async () => {
+  const { el, unmount } = await mountInRealPage(stubApi(), 390, 844);
+  try {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await flush(el);
+    const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!.getBoundingClientRect();
+    expect(sidebar.top).toBeGreaterThanOrEqual(
+      el.shadowRoot!.querySelector("[data-test=brand-banner]")!.getBoundingClientRect().bottom - 1,
+    );
+    expect(sidebar.bottom).toBeLessThanOrEqual(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+it("puts the sign-in view's language footer at the foot of a window taller than the form", async () => {
+  const { el, unmount } = await mountInRealPage(
+    stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    1280,
+    1200,
+  );
+  try {
+    const screen = login(el)!;
+    await (screen as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const footer = screen.shadowRoot!.querySelector("wt-language-footer")!.getBoundingClientRect();
+    const column = screen.parentElement!;
+    const columnEnd =
+      column.getBoundingClientRect().bottom - parseFloat(getComputedStyle(column).paddingBottom);
+    const pageEnd = window.innerHeight - parseFloat(getComputedStyle(document.body).paddingBottom);
+    expect(Math.abs(footer.bottom - columnEnd)).toBeLessThan(1);
+    expect(Math.abs(column.getBoundingClientRect().bottom - pageEnd)).toBeLessThan(1);
+    const form = screen.shadowRoot!.querySelector("wt-form-actions")!.getBoundingClientRect();
+    expect(footer.top).toBeGreaterThan(form.bottom + 100);
+    expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+it("puts the sign-in view's language footer after the form when the window is shorter than it", async () => {
+  const { el, unmount } = await mountInRealPage(
+    stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    390,
+    300,
+  );
+  try {
+    const screen = login(el)!;
+    await (screen as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const footer = screen.shadowRoot!.querySelector("wt-language-footer")!.getBoundingClientRect();
+    const form = screen.shadowRoot!.querySelector("wt-form-actions")!.getBoundingClientRect();
+    expect(footer.top).toBeGreaterThanOrEqual(form.bottom);
+    expect(footer.bottom).toBeGreaterThan(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+it("ends the content column with the language footer, at the column's foot when the screen is short", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 1600);
+  try {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const footer = main.lastElementChild!;
+    expect(footer.localName).toBe("wt-language-footer");
+    const body = main.querySelector(".body")!.getBoundingClientRect();
+    const footerBox = footer.getBoundingClientRect();
+    expect(footerBox.top).toBeGreaterThanOrEqual(body.bottom);
+    expect(Math.abs(footerBox.bottom - main.getBoundingClientRect().bottom)).toBeLessThan(1);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
+it("ends long dashboard content above the language button on a narrow screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
   await page.viewport(375, 667);
@@ -3169,7 +3336,7 @@ it("leaves long dashboard content clear of the bottom-right language chooser on 
     const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
     main.scrollTo(0, main.scrollHeight);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     const trigger = chooser
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
@@ -4312,7 +4479,7 @@ describe("the nav search", () => {
     await search(el, "impresora");
     expect(shownItems(el)).toEqual([]);
 
-    emit(shellChooser(el)!, "locale-selected", { code: "es-ES" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
     expect(searchBox(el).value).toBe("impresora");

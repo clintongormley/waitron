@@ -2099,7 +2099,7 @@ first is still open:
   reads in Spanish or English from the wizard's own catalogue (`apps/setup/src/i18n/`, the till's
   pattern rather than `@waitron/dashboard-kit`'s), opens in the browser's language when it is one
   Waitron ships and in English otherwise, and offers the language chooser at the bottom right of
-  every screen. A choice lasts for the page's life only. When the operator chose, the provision
+  every screen (since C93, 2026-09-30, in a footer below each screen instead). A choice lasts for the page's life only. When the operator chose, the provision
   request carries that language as its `Accept-Language`, so the admin account gets it; when they
   did not, the browser's own header decides as before. Left open by it:
   - *The configuration preview names what it will copy by database table* (`products`,
@@ -5502,10 +5502,18 @@ ongoing overhaul listed at the top of Track A.
   dependencies — the management and profile routes had silently fallen back to an authenticator
   key of their own when none was given, and that fallback is gone, with the management routes'
   `accountActionCodeKey`, which fed nothing else.
-  Still open, seen while looking at C87 at 390 by 900 px: the wizard's floating language button sits
+  Seen while looking at C87 at 390 by 900 px: the wizard's floating language button sat
   over the bottom of the connect form, covering part of the refusal message beside Connect and, in
   the English dark-theme screenshot, part of the Connect button (owner 2026-09-30: move the
-  language choice into one shared footer; queued as lane C's C93); (6) the setup
+  language choice into one shared footer) — **DONE for the setup wizard and the dashboard (C93,
+  branch `fix/footer-language-chooser`, 2026-09-30):** both now end the page with one shared
+  footer, `wt-language-footer` (`packages/ui/src/components/wt-language-footer.ts`), which sits in
+  the page's flow below the content, so the closed chooser no longer floats over the page (its open
+  menu still opens upwards over the content above it). The till still has its own
+  floating copy, which moves onto the footer in lane B's B18. Seen while looking at C93 and not
+  fixed there: on the dashboard at 390 px a sliver of the closed side-menu drawer's search box
+  shows at the left edge, in the page's 24 px margin; C93 does not change the drawer's rules, so I
+  believe it predates it (not checked on `main`). Still open: (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also

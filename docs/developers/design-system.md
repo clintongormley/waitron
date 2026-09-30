@@ -268,6 +268,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
 | `wt-data-table` | `rows`, `columns` (each has `cell` — `(row, { ancestorOnly }) => content` — and may carry `sortValue`, `searchValue` and a `filter` — `{ label, allLabel, value, options, initial }`, which draws a dropdown whether or not the table is `searchable`, and whose optional `initial` is the option value it starts on while no choice has been made or restored and the column's options include it; and `choosable` — `"shown"`\|`"hidden"` — which offers the column in the column chooser, starting shown or hidden), `rowKey`, `rowParent` (opts into tree mode), `collapseLabel`, `expandLabel`, `rowToggleLabel` (`(row, expanded) => string` — names each row's toggle in place of the two fixed labels), `initiallyCollapsed`, `loading`, `loadingMessage`, `emptyMessage`, `errorMessage`, `aria-label`, `selectable`, `selected`, `selectionLabel` (`(row) => string`), `selectAllLabel`, `sortKey`, `sortDirection`, `searchable`, `searchLabel`, `searchPlaceholder` (defaults to `searchLabel`), `noMatchesMessage`, `columnsLabel` (the column chooser's button text and its group's accessible name; defaults to `"Columns"`), `viewKey`, `rowClick` (`(row) => void` — on a plain (non-tree) table, makes each row clickable via a stretched activator button rendered in the first cell; ignored in tree mode), `rowClickLabel` (`(row) => string` — the activator's accessible name; defaults to `"Open row"`) | `wt-selection-change` — `detail: { selected: string[] }`; `wt-sort-change` — `detail: { sortKey, sortDirection }`; `wt-columns-change` — `detail: { shown: string[] }` (every shown column's key, in column order); native events from consumer-provided cells |
 | `wt-combobox` | `options` (`{value,label}[]`), `multiple`, `value`, `values`, `allowAdd`, `label`, `name`, `placeholder`, `required`, `disabled`, `invalid`, `error`, `countLabel`, `noResultsLabel`, `searchPlaceholder`, `addLabel` | `wt-change` — `detail: { value: string }` or `detail: { values: string[] }`; `wt-combobox-add` — `detail: { text: string }` |
+| `wt-language-footer` | `active` (the code of the page's language; the parent sets it and the component never changes it), `loadLocales` (property; `() => Promise<{ code, label }[]>`, called on the first open and again after a failed load; defaults to `SUPPORTED_LOCALES`; one load at a time; while it is pending, a second press, Escape, or a press or focus outside cancels the opening, and a further press asks for it again). A page footer in the page's flow, never fixed, holding a `wt-button` named with the active language (from the loaded list, then `SUPPORTED_LOCALES`, then the bare code) whose menu of `menuitemradio` options opens upwards over what is above it. Opening focuses the checked option (or the first); ArrowDown and ArrowUp move between options and wrap, Home and End reach the ends; Escape closes it and returns focus to the trigger, and goes no further only when it closed the menu; a press or focus outside closes it without moving focus; `data-test` hooks `lang-trigger` and `lang-<code>` | `wt-locale-selected` — `detail: { code: string }`; a pick closes the menu and returns focus to the trigger |
 
 `wt-button shape="round"` renders a circular button of exactly `--wt-tap-min` diameter, meant for
 one icon with its own `aria-label` rather than a text label — the round "Add" button beside a table
@@ -848,8 +849,10 @@ open). A group header can also carry an `icon` (a registered `wt-icon` name) —
 where it's as unambiguous as Settings' gear; most groups have none.
 
 The sidebar and the content column both scroll independently, bounded to the space below the
-banner (`.shell { height: 100vh }`, `.sidebar`/`.main` both `max-height: 100%; overflow-y: auto`) —
-the page itself never scrolls. Before this, only `.sidebar` was self-contained
+banner (`.shell { height: 100%; max-height: 100vh }` filling `apps/dashboard/index.html`'s body,
+which is one window tall with its padding inside, and `.sidebar`/`.main` both `max-height: 100%;
+overflow-y: auto`) — the page itself never scrolls, and the language footer at the end of `.main`
+stays inside the window. Before this, only `.sidebar` was self-contained
 (`max-height: 100vh`); `.main` just grew with its content and pushed the whole page taller, so once
 a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
 the page actually ended. Both panes now share the same bound, so they always end at the same line.
@@ -1208,7 +1211,9 @@ error message, disabled and required — verified 2026-09-13 by running
 `wt-count-badge` in its neutral, warning and error tones — verified 2026-09-14 by running
 `packages/ui/src/components/wt-count-badge.a11y.test.ts`; `wt-toast` open in its info and error
 tones, and closed — verified 2026-09-14 by running
-`packages/ui/src/components/wt-toast.a11y.test.ts`). No
+`packages/ui/src/components/wt-toast.a11y.test.ts`; `wt-language-footer` closed, and open with the
+active language checked — verified 2026-09-30 by running
+`packages/ui/src/components/wt-language-footer.a11y.test.ts`). No
 token values needed changing. (axe does flag unrelated `incomplete` — not
 violation — results: a `color-contrast` "background partially obscured" reading on `wt-dialog`'s
 `.body` slot, an [axe/shadow-DOM slot-content limitation](https://github.com/dequelabs/axe-core), and
@@ -1406,8 +1411,12 @@ never alters basket contents or browser history. Browser storage being blocked m
 The production server serves app HTML for browser navigation under `/manage` and `/tabs`. APIs and
 static assets keep their own responses; setup continues to use its existing root page.
 
-The till and dashboard language controls display the names from `SUPPORTED_LOCALES` before their
-options load. Place the chooser at the bottom right, open its menu upwards, and leave enough bottom
-padding for the last content and action buttons to scroll clear of it. A signed-in operator's choice
-uses the existing preference write; login, pairing and kitchen-display choices are local UI changes.
-The setup wizard's chooser sits the same way, and its page's bottom margin gives the same clearance.
+The language controls display the names from `SUPPORTED_LOCALES` before their options load. The
+setup wizard and the dashboard end the page with `wt-language-footer`: a footer in the page's flow,
+below the content, with the chooser at its trailing edge and its menu opening upwards over the
+content above it. The footer takes its own place in the flow, so the page needs no extra bottom
+padding for it. The parent passes the page's language as `active` and decides what a pick means.
+The till still has its own chooser floating at the bottom right, with bottom padding so the last
+content and action buttons scroll clear of it, until it moves onto the footer (lane B's B18). A
+signed-in operator's choice uses the existing preference write; login, pairing and kitchen-display
+choices are local UI changes.

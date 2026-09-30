@@ -32,7 +32,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import "./widgets/language-chooser.js";
+import "@waitron/ui/src/components/wt-language-footer.js";
 import "./screens/login-screen.js";
 import "./screens/profile-screen.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -232,8 +232,11 @@ export class DashboardApp extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
+         stays inside the window rather than below it. */
       :host {
         display: block;
+        height: 100%;
         /* Sidebar column width — a documented LOCAL custom property, not design-system chrome.
            Override it on the host to reflow. Expressed in ch (not rem/em, not a pixel guess) so the
            column tracks its own nav text; the responsive drawer (Task 12) layers over this. */
@@ -241,13 +244,28 @@ export class DashboardApp extends LitElement {
       }
 
       /* The banner owns the first full-width row; navigation and content share the row below it.
-         A firm height (not min-height) bounds the shell to exactly one screen, so overflow below
-         the banner has to happen INSIDE .sidebar/.main (each scrolls independently) rather than by
-         growing the whole page — see .sidebar and .main below. */
+         A firm height (not min-height) bounds the shell to the page, never more than one screen, so
+         overflow below the banner has to happen INSIDE .sidebar/.main (each scrolls independently)
+         rather than by growing the whole page — see .sidebar and .main below. */
       .shell {
         display: flex;
         flex-direction: column;
-        height: 100vh;
+        height: 100%;
+        max-height: 100vh;
+      }
+
+      /* At least the page's height, so a short sign-in form still ends with its footer at the foot. */
+      .login-page {
+        display: flex;
+        flex-direction: column;
+        min-height: 100%;
+      }
+
+      .login-page > .body,
+      .login-page dashboard-login-screen {
+        display: flex;
+        flex-direction: column;
+        flex: 1 0 auto;
       }
 
       /* Two-column app chrome below the banner: a fixed-width sidebar beside the main column. */
@@ -492,9 +510,11 @@ export class DashboardApp extends LitElement {
 
       .body {
         padding: var(--wt-space-4);
-        padding-bottom: calc(
-          var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)
-        );
+      }
+
+      .main > wt-language-footer {
+        margin-top: auto;
+        padding-inline: var(--wt-space-4);
       }
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
@@ -644,6 +664,8 @@ export class DashboardApp extends LitElement {
       this.contentLanguageError = codeOf(error);
     },
   );
+  /** A stable field, so the footer's `loadLocales` property does not change on every render. */
+  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
   @state() private alerts: AlertView[] = [];
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
@@ -1130,16 +1152,18 @@ export class DashboardApp extends LitElement {
       // The login controller repaints translated text without discarding credentials or account setup.
       // Its chooser bubbles here so the shell can apply the transient pre-login language choice.
       return html`
-        ${this.#banner(false, false)}
-        <div
-          class="body"
-          @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
-        >
-          <dashboard-login-screen
-            .api=${this.api}
-            .noticeCode=${this.sessionNoticeCode}
-            @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
-          ></dashboard-login-screen>
+        <div class="login-page">
+          ${this.#banner(false, false)}
+          <div
+            class="body"
+            @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+          >
+            <dashboard-login-screen
+              .api=${this.api}
+              .noticeCode=${this.sessionNoticeCode}
+              @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
+            ></dashboard-login-screen>
+          </div>
         </div>
       `;
     }
@@ -1149,7 +1173,7 @@ export class DashboardApp extends LitElement {
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
-        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         <div class="banner-row">
           ${this.#banner(true, hasNav)}
@@ -1219,9 +1243,10 @@ export class DashboardApp extends LitElement {
                     : nothing
               }
             </div>
-            <dashboard-language-chooser
-              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-            ></dashboard-language-chooser>
+            <wt-language-footer
+              .active=${currentLocale()}
+              .loadLocales=${this.#loadLocales}
+            ></wt-language-footer>
           </div>
         </div>
         ${this.#renderProfileModal()}

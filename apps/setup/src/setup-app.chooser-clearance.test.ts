@@ -71,7 +71,7 @@ describe("the language chooser, with the page scrolled to the bottom", () => {
       scroller.scrollTop = scroller.scrollHeight;
 
       const trigger = el
-        .shadowRoot!.querySelector("setup-language-chooser")!
+        .shadowRoot!.querySelector("wt-language-footer")!
         .shadowRoot!.querySelector("[data-test=lang-trigger]")!
         .getBoundingClientRect();
       const screenRoot = el.shadowRoot!.querySelector(`[data-test=screen-${screen}]`)!.shadowRoot!;

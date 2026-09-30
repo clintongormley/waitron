@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyTokens } from "@waitron/ui";
 import { SetupApp, assembleBody } from "./setup-app.js";
@@ -2274,6 +2274,27 @@ describe("page shell", () => {
     expect(Math.abs(pageBox.left - hostBox.left - (hostBox.right - pageBox.right))).toBeLessThan(1);
   });
 
+  it("ends the page with the language footer, at the foot of a window taller than the page", async () => {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    await page.viewport(1280, 1600);
+    document.body.style.margin = "0";
+    try {
+      const el = await mountSetupApp();
+      const footer = el.shadowRoot!.querySelector("wt-language-footer")!;
+      expect(
+        footer.compareDocumentPosition(wizard(el)) & Node.DOCUMENT_POSITION_PRECEDING,
+      ).toBeTruthy();
+      const footerBox = footer.getBoundingClientRect();
+      expect(footerBox.top).toBeGreaterThanOrEqual(wizard(el).getBoundingClientRect().bottom);
+      expect(wizard(el).getBoundingClientRect().bottom).toBeLessThan(window.innerHeight);
+      expect(Math.abs(footerBox.bottom - window.innerHeight)).toBeLessThan(1);
+    } finally {
+      document.body.style.margin = "";
+      await page.viewport(width, height);
+    }
+  });
+
   const screens: Screen[] = [
     "connection",
     "role",
@@ -3533,7 +3554,7 @@ describe("the wizard's language", () => {
   async function choose(el: SetupApp, code: string): Promise<void> {
     const chooser = el.shadowRoot!.querySelector<
       HTMLElement & { updateComplete: Promise<unknown> }
-    >("setup-language-chooser")!;
+    >("wt-language-footer")!;
     chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!.click();
     await new Promise((resolve) => setTimeout(resolve));
     await chooser.updateComplete;
@@ -3554,6 +3575,18 @@ describe("the wizard's language", () => {
     await mountWithBrowserLanguages(["fr-FR"], unreachable());
     expect(document.documentElement.lang).toBe("en-GB");
     expect(document.title).toBe("Waitron — set up your server");
+  });
+
+  it("names the chosen language on the chooser once the page switches to it", async () => {
+    const el = await mountWithBrowserLanguages(["en-GB"], unreachable());
+    const trigger = () =>
+      el
+        .shadowRoot!.querySelector("wt-language-footer")!
+        .shadowRoot!.querySelector("[data-test=lang-trigger]")!
+        .textContent!.trim();
+    expect(trigger()).toBe("English");
+    await choose(el, "es-ES");
+    expect(trigger()).toBe("Español");
   });
 
   it("offers the language chooser, and a choice re-words the message already on screen", async () => {
