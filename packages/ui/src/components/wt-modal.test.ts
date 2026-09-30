@@ -411,3 +411,62 @@ test("brings the message of actions placed in the body into view when it appears
     await page.viewport(1280, 900);
   }
 });
+
+test.each([
+  ["in the footer", 'slot="footer"'],
+  ["in the body", ""],
+])(
+  "does not scroll away from a field being typed in when the message of actions %s reappears",
+  async (_, slot) => {
+    await page.viewport(390, 500);
+    try {
+      const modal = (await mount(`<wt-modal heading="Add unit">
+        <wt-input name="name" label="Name"></wt-input>
+        ${LONG_BODY}
+        <wt-form-actions ${slot}><wt-button>Save</wt-button></wt-form-actions>
+      </wt-modal>`)) as WtModal;
+      modal.open = true;
+      await modal.updateComplete;
+      const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const actions = modal.querySelector("wt-form-actions")!;
+      const input = modal.querySelector("wt-input")!;
+      await input.updateComplete;
+      input.shadowRoot!.querySelector("input")!.focus();
+      body.scrollTop = 0;
+      actions.error = "Correct the highlighted fields to continue.";
+      await actions.updateComplete;
+      await modal.updateComplete;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      expect(body.scrollTop).toBe(0);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
+
+test.each([
+  ["a text area", '<textarea name="notes" aria-label="Notes"></textarea>'],
+  ["a list", '<select name="unit" aria-label="Unit"><option>kg</option></select>'],
+])("does not scroll away from %s in focus when the message reappears", async (_, field) => {
+  await page.viewport(390, 500);
+  try {
+    const modal = (await mount(`<wt-modal heading="Add unit">
+      ${field}
+      ${LONG_BODY}
+      <wt-form-actions slot="footer"><wt-button>Save</wt-button></wt-form-actions>
+    </wt-modal>`)) as WtModal;
+    modal.open = true;
+    await modal.updateComplete;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    modal.querySelector<HTMLElement>("textarea, select")!.focus();
+    body.scrollTop = 0;
+    const actions = modal.querySelector("wt-form-actions")!;
+    actions.error = "Correct the highlighted fields to continue.";
+    await actions.updateComplete;
+    await modal.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(body.scrollTop).toBe(0);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});

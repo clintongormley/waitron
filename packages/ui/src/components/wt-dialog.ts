@@ -9,6 +9,19 @@ import {
   WtFormActions,
 } from "./wt-form-actions.js";
 
+/** Whether focus is in a text field. A form that re-checks its fields on every keystroke clears and
+ * re-shows its message as the person types, and scrolling to it then would carry a long dialog away
+ * from the field they are typing in. */
+function typingInField(): boolean {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return (
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLTextAreaElement ||
+    active instanceof HTMLSelectElement
+  );
+}
+
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
@@ -98,7 +111,7 @@ export class WtDialog extends LitElement {
     }
     // A footer row's message set while the dialog was shut could not be scrolled to then, so
     // opening does it.
-    if (changed.has("footerMessage") || changed.has("open")) {
+    if ((changed.has("footerMessage") || changed.has("open")) && !typingInField()) {
       this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
   }
@@ -143,7 +156,7 @@ export class WtDialog extends LitElement {
    * body. The row dispatches the event once it has rendered, so the message is already there. */
   private onBodyMessage(event: FormErrorEvent): void {
     const row = event.composedPath()[0];
-    if (row instanceof WtFormActions) {
+    if (row instanceof WtFormActions && !typingInField()) {
       row.shadowRoot!.querySelector("[data-error]")?.scrollIntoView({ block: "nearest" });
     }
   }

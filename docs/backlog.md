@@ -5699,7 +5699,10 @@ ongoing overhaul listed at the top of Track A.
   panel's full width while it has a message. A dialog with more than one action row in its footer
   shows every row's message, joined; a dialog opened with a footer row's message already present
   scrolls it into view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
-  message scrolled into view when it appears.
+  message scrolled into view when it appears. None of these scrolls happens while focus is in a text
+  field, list or text area: a form that re-checks its fields on every keystroke clears and re-shows
+  its message as the person types, and a measured case scrolled a long dialog 1,773 px away from
+  the focused field.
   Two dialogs on the categories screen drew their own message instead and now pass it to their
   footer `wt-form-actions`: its delete dialog (`#dialogMessage`, removed) and its products window, which drew
   a refused add at the top of its body.

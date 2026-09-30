@@ -425,8 +425,9 @@ query cannot read a custom property, and the no-hardcoded-chrome guard
 independently, so your footer actions stay visible. It uses the raised surface and shadow tokens:
 white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
 its `footer` slot to keep Cancel on the left and Save on the right. The dialog then shows that row's
-message at the end of its scrolling body, below the last field, and scrolls it into view; the footer
-holds only the buttons. This needs the `wt-form-actions` itself in the footer slot: one wrapped in
+message at the end of its scrolling body, below the last field, and scrolls it into view — unless
+focus is in a text field, list or text area, because a form that re-checks as the person types
+re-shows its message then; the footer holds only the buttons. This needs the `wt-form-actions` itself in the footer slot: one wrapped in
 another element keeps its message in the footer. One placed in the body shows its own message above
 its buttons:
 
