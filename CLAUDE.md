@@ -262,8 +262,8 @@ hook, or how tests are scheduled:
   36559470238 failed the pause test's 1000 ms bound; a probe reproduced it on one runner in 20, where
   a disk stall held one commit for about a second. Guard: `scripts/ci-workflow.test.mjs`, weaker than
   its name — it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:` that sets
-  `TMPDIR` again, passes; and it never reads the two tests, so one that makes its scratch somewhere
-  other than `tmpdir()` passes too. Receipt: [testing-guide.md](docs/developers/testing-guide.md),
+  `TMPDIR` again, passes; and it never reads the step's test files, so one that makes its scratch
+  somewhere other than `tmpdir()` passes too. Receipt: [testing-guide.md](docs/developers/testing-guide.md),
   "In CI their temporary files are in memory".
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because
@@ -764,7 +764,8 @@ browser test** — most of these rules exist because a test passed while proving
   `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the case. **Vitest's default reporter
   prints a skipped run as `1 skipped` and nothing else** — the reason shows only under
   `--reporter=verbose` — so a local green run of `apps/server` may not have run them. CI runs both in
-  `test-server-stream`. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the
+  `test-server-stream`, beside `apps/server/src/testing/s3-test-server.test.ts`, whose versitygw
+  cases skip and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the
   install commands left only in a YAML comment, or in a step an `if:` switches off, pass it. See
   [testing-guide.md](docs/developers/testing-guide.md).
 - **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console

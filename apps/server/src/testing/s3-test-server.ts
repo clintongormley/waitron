@@ -1,9 +1,10 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { createConnection } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 import { LITESTREAM_VERSION } from "@waitron/stream";
 import { isUnset } from "../env-value.js";
 import { freePort } from "./free-ports.js";
@@ -25,11 +26,12 @@ export const DEFAULT_VERSITYGW_BIN = join(REPO_ROOT, ".bin", "versitygw");
 /** Where `node scripts/setup-litestream.mjs` installs it. `WAITRON_LITESTREAM_BIN` overrides. */
 export const DEFAULT_LITESTREAM_BIN = join(REPO_ROOT, ".bin", "litestream");
 
-const ACCESS_KEY_ID = "waitronlooptest";
-const SECRET_ACCESS_KEY = "waitron-loop-test-secret";
 /** At least three characters: versitygw refuses shorter names with `InvalidBucketName`. */
 const BUCKET = "waitron-loop";
-/** How long `startS3TestServer` waits for the port to accept, before it gives up. */
+/**
+ * How long `startS3TestServer` waits for its server to answer, over every port it tries. No readiness
+ * listing is given longer than what is left of it.
+ */
 export const READY_TIMEOUT_MS = 10_000;
 const STOP_GRACE_MS = 5_000;
 const VERSION_TIMEOUT_MS = 10_000;
@@ -46,9 +48,9 @@ export interface S3TestServer {
   log(): string;
   /** SIGTERM, then SIGKILL after a grace period; resolves once the process is gone either way. */
   stop(): Promise<void>;
-  /** Freezes the process (SIGSTOP): every call to it then goes unanswered. */
+  /** Freezes the process (SIGSTOP): every call to it then goes unanswered. Throws once it has exited. */
   pause(): void;
-  /** Lets a paused process run again (SIGCONT). */
+  /** Lets a paused process run again (SIGCONT). Throws once it has exited. */
   resume(): void;
 }
 
@@ -108,11 +110,25 @@ process.once("exit", () => {
   for (const child of live) child.kill("SIGKILL");
 });
 
+/** What versitygw 1.8.0 prints when its port is already bound (it prints its banner first). */
+const PORT_TAKEN = "address already in use";
+/** How many ports `startS3TestServer` draws before it gives up. */
+export const PORT_ATTEMPTS = 5;
+/** How long one readiness listing may take before it counts as not ready yet. */
+export const PROBE_TIMEOUT_MS = 1_000;
+
+class PortTaken extends Error {}
+
 /**
  * Start versitygw on an OS-chosen loopback port, serving one bucket from a directory under `root`.
  * `--sidecar` keeps object metadata in a plain directory rather than in extended attributes, so the
  * server does not depend on what the temporary filesystem supports. A directory under the gateway
  * root IS a bucket, so the bucket is made with `mkdir` and no S3 call.
+ *
+ * The port is drawn and released before versitygw binds it, so another test's server can take it
+ * first. Each server therefore gets credentials of its own and is ready only once a listing signed
+ * with them is answered, which no other server can do; a server that lost its port is started again
+ * on a fresh one.
  */
 export async function startS3TestServer(opts: {
   bin: string;
@@ -122,15 +138,37 @@ export async function startS3TestServer(opts: {
   const meta = join(opts.root, "meta");
   await mkdir(join(data, BUCKET), { recursive: true });
   await mkdir(meta, { recursive: true });
-  const port = await freePort();
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  const taken: string[] = [];
+  for (let attempt = 0; attempt < PORT_ATTEMPTS; attempt += 1) {
+    try {
+      return await startOnPort(opts.bin, data, meta, await freePort(), deadline);
+    } catch (error) {
+      if (!(error instanceof PortTaken)) throw error;
+      taken.push(error.message);
+    }
+  }
+  throw new Error(
+    `versitygw lost every one of the ${PORT_ATTEMPTS} ports it drew:\n${taken.join("\n")}`,
+  );
+}
 
+async function startOnPort(
+  bin: string,
+  data: string,
+  meta: string,
+  port: number,
+  deadline: number,
+): Promise<S3TestServer> {
+  const accessKeyId = `waitron${randomBytes(8).toString("hex")}`;
+  const secretAccessKey = randomBytes(16).toString("hex");
   const child = spawn(
-    opts.bin,
+    bin,
     [
       "--access",
-      ACCESS_KEY_ID,
+      accessKeyId,
       "--secret",
-      SECRET_ACCESS_KEY,
+      secretAccessKey,
       "--port",
       `127.0.0.1:${port}`,
       "posix",
@@ -150,29 +188,35 @@ export async function startS3TestServer(opts: {
   child.stderr?.on("data", collect);
 
   let exitCode: number | null | undefined;
+  // `close`, not `exit`: Node emits it once the pipes have closed, so the log already holds the
+  // line a lost port is recognised by.
   const exited = new Promise<void>((resolve) => {
     const settle = (code: number | null): void => {
       exitCode = code;
       live.delete(child);
       resolve();
     };
-    child.once("exit", settle);
+    child.once("close", settle);
     child.once("error", () => settle(null));
   });
+  const signal = (name: "SIGSTOP" | "SIGCONT"): void => {
+    if (exitCode !== undefined) {
+      throw new Error(
+        `versitygw on 127.0.0.1:${port} exited with ${exitCode}, so it cannot take ${name}: ${log}`,
+      );
+    }
+    child.kill(name);
+  };
 
   const server: S3TestServer = {
     endpoint: `http://127.0.0.1:${port}`,
     region: "us-east-1",
     bucket: BUCKET,
-    accessKeyId: ACCESS_KEY_ID,
-    secretAccessKey: SECRET_ACCESS_KEY,
+    accessKeyId,
+    secretAccessKey,
     log: () => log,
-    pause() {
-      if (exitCode === undefined) child.kill("SIGSTOP");
-    },
-    resume() {
-      if (exitCode === undefined) child.kill("SIGCONT");
-    },
+    pause: () => signal("SIGSTOP"),
+    resume: () => signal("SIGCONT"),
     async stop() {
       if (exitCode !== undefined) return;
       child.kill("SIGCONT"); // a paused process cannot act on SIGTERM
@@ -189,36 +233,44 @@ export async function startS3TestServer(opts: {
     },
   };
 
-  const deadline = Date.now() + READY_TIMEOUT_MS;
+  const client = new S3Client({
+    endpoint: server.endpoint,
+    region: server.region,
+    forcePathStyle: true,
+    credentials: { accessKeyId, secretAccessKey },
+    maxAttempts: 1,
+  });
   try {
     for (;;) {
       if (exitCode !== undefined) {
-        throw new Error(`versitygw exited with ${exitCode} before listening on ${port}: ${log}`);
+        const words = `versitygw exited with ${exitCode} before answering on 127.0.0.1:${port}: ${log}`;
+        throw log.includes(PORT_TAKEN) ? new PortTaken(words) : new Error(words);
       }
-      if (await accepts(port)) return server;
-      if (Date.now() >= deadline) {
+      const left = deadline - Date.now();
+      if (left <= 0) {
         throw new Error(
-          `versitygw did not listen on 127.0.0.1:${port} within ${READY_TIMEOUT_MS}ms: ${log}`,
+          `versitygw did not answer on 127.0.0.1:${port} within ${READY_TIMEOUT_MS}ms: ${log}`,
         );
       }
+      if (await answers(client, Math.min(PROBE_TIMEOUT_MS, left))) return server;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   } catch (error) {
     await server.stop();
     throw error;
+  } finally {
+    client.destroy();
   }
 }
 
-function accepts(port: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const socket = createConnection({ host: "127.0.0.1", port });
-    socket.once("connect", () => {
-      socket.destroy();
-      resolve(true);
+/** Whether a listing signed with this server's own credentials is answered. */
+async function answers(client: S3Client, timeoutMs: number): Promise<boolean> {
+  try {
+    await client.send(new ListObjectsV2Command({ Bucket: BUCKET, MaxKeys: 1 }), {
+      abortSignal: AbortSignal.timeout(timeoutMs),
     });
-    socket.once("error", () => {
-      socket.destroy();
-      resolve(false);
-    });
-  });
+    return true;
+  } catch {
+    return false;
+  }
 }

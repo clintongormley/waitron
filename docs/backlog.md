@@ -6073,7 +6073,12 @@ approved.
   often. Removing that would need the server to accept port 0 and report the port it bound
   (`WAITRON_HTTP_PORT` refuses `"0"` today). `bench/sqlite-failover/src/unreachable-store.ts`'s
   `reservePort` and the inline copy in `apps/server/scripts/cloud-integration-fixture.ts` have the
-  same release-then-use shape and were not changed.
+  same release-then-use shape and were not changed. (2026-09-30: C88 reproduced this gap as one way
+  the pause test's single CI failure could happen; that run's log does not show whether it did.
+  `startS3TestServer` now recovers from it; see C88, "the pause test's bucket control failed once
+  on `main`". C88 also measured one drawing pattern: two processes each drawing 20,000 ports back
+  to back in `node:24-slim` drew the other's latest port 0 times. The Waitron servers' own ports
+  still have the gap.)
 
 - **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
   matched — DONE (lane A's A31b, **PR #661**).** The docker stub now drops `compose` and one leading
@@ -9015,14 +9020,46 @@ it. Left open:
   whose body is already sent, such as a delete of 1,000 keys, is cut off, and how long real
   providers take for one was not measured; and the tests run the handler's below-6,000 ms path,
   while its production path was measured by hand, not by a test.
-- **OPEN (found by lane C, 2026-09-29): the pause test's bucket control failed once on `main`.** CI
+- **DONE (lane C's C88, 2026-09-30): the pause test's bucket control failed once on `main`.** CI
   run 36619928071 (head `573253221`, #885, which changed only `apps/server/src/order-groups.ts`, its
   test, the backlog and a plan) failed `test-server-stream`: at step 6 of
   `apps/server/src/stream-pause.e2e.test.ts` (line 540), the control `store.list("")` sent just
   after the test SIGSTOPs the bucket came back `answered` within the bound instead of
   `unanswered`. The next `main` run that ran the job, 36624117576 (head `7f0ad17f7`, which contains
-  #885), passed it. Not reproduced and not diagnosed; not re-run. A guess to test, not a finding: a
-  reply already on its way, or a request the bucket had read, before the SIGSTOP landed.
+  #885), passed it. Not re-run to green. **The mechanism, reproduced:** `startS3TestServer`
+  (`apps/server/src/testing/s3-test-server.ts`) drew a port with `freePort()`, which releases it
+  before versitygw binds it, and called the server ready once the port accepted a connection; every
+  server it started had the same credentials and bucket name. The loop and pause tests run side by
+  side in that job, each with a server of its own. Forcing a second `startS3TestServer` onto the
+  first one's port (a mocked `freePort()`, real versitygw 1.8.0, macOS, 2026-09-30): the second
+  start resolved with the first one's endpoint, its own versitygw had printed `bind: address
+  already in use` and exited, a listing through its endpoint after its `pause()` was `answered`,
+  and after the FIRST server's `pause()` the same listing was `unanswered`. Two versitygw processes
+  on one port in `node:24-slim` (kernel 6.12): the second exited 1 with the same line. versitygw
+  prints its "listening on" banner before it binds, so its output cannot mark readiness. **The
+  failed run itself** does not show versitygw's output, so it is not proven to be this; but an
+  `answered` listing needs a live server that accepts the pause test's credentials on its port
+  while its own process is frozen, and the only other one in that job was the loop test's. How
+  often a port collides: two processes each drawing 20,000 ports back to back in `node:24-slim`
+  drew the other's latest port 0 times, so it is rare per draw. **The fix, in the harness only:**
+  each server gets random credentials and is ready only once a listing signed with them is
+  answered; one that exits with `address already in use` is started again on a fresh port, up to
+  five, within the one `READY_TIMEOUT_MS`, each readiness probe cut to the time left in it; and
+  `pause()`/`resume()` throw, with the server's log, once its process has exited, where they did
+  nothing. **Tests:** `apps/server/src/testing/s3-test-server.test.ts`, which runs in
+  `test-server-stream` and is excluded from the server shards (`scripts/ci-workflow.test.mjs`
+  pins both). Its first three cases start versitygw; the other four run without it, three of them
+  on a stub program. Before the fix three of the first four failed (the second server's endpoint
+  equal to the first's; a start whose every port is taken resolving; `pause()` on an exited server
+  not throwing). With the fix, each failed again with its own part taken out: the same credentials
+  for every server (the first two cases), no retry on a lost port (the first two, the second by its
+  draw count), and `pause()` silent on an exited server (the third). The fourth, a server that
+  exits for another reason, is not retried; it passed before and after. The three stub cases each
+  fail with one part taken out: the deadline reset per port, `exit` observed in place of `close`
+  (so a bind error written after the exit is missed), or a probe allowed to run past the deadline.
+  **Left:** the Waitron
+  servers' own ports in the loop and pause tests are drawn the same way, and a lost one fails the
+  boot loudly (`server.listen_failed`) rather than silently; not changed.
 - **Open, left by #668 (A37): two things about the pause test and its deadline.** (1) The test's
   fill of the side file to 16 MiB took 82 s and 895 sales on CI (run for head `464d9eca7`) against
   its 180 s allowance, about 13 KB a sale, where a local run wrote about 79 KB a sale; why the

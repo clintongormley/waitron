@@ -192,7 +192,11 @@ v26.7.0) repeated 0 times in 20,000 pairs, so local runs did not show it. `freeP
 `apps/server/src/testing/free-ports.ts` holds every probe until the last port is drawn, which rules
 out a repeat within one call. It does not cover a port another worker takes between the release and
 the test's own bind, nor a port drawn to stay unused (an "unreachable peer") that another worker
-later binds. Nothing checks that a new suite uses the helper rather than its own copy.
+later binds. Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
+server is the one caller that recovers from a port taken in that gap, because versitygw exits when
+its port is already bound and so can be started again on another (the stream loop test's section
+below, "The S3 test server knows its own server"). A Waitron server the suites start is not retried:
+a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
 
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
@@ -522,9 +526,11 @@ minutes, for the reason the "per-test timeout" section above gives.
 both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
 the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and
 FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_STREAM_BINARIES=1`.
-CI runs both tests in `test-server-stream`, the one job that installs both binaries
-(`.github/workflows/ci.yml`; see [ci-and-gates.md](ci-and-gates.md), "The stream loop and pause
-tests run in a job of their own").
+CI runs both tests in `test-server-stream`, the one job that installs both binaries, together
+with the S3 test server's own suite, `apps/server/src/testing/s3-test-server.test.ts`, whose
+cases that start versitygw skip and fail the same way; its other cases start a stub or Node in
+versitygw's place and always run (`.github/workflows/ci.yml`; see
+[ci-and-gates.md](ci-and-gates.md), "The stream loop and pause tests run in a job of their own").
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
 `WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run
@@ -579,16 +585,17 @@ and 14,907 ms beside 72, on the owner's Mac, which reports 18 CPUs (2026-09-26).
 `apps/server/src/boot.ts`, so the default 256 MiB limit applied, the same run failed with `timed out
 waiting for the fold-back: the stream reads {"state":"streaming",…}, the side file 27558712 bytes`.
 
-**In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests
-with `TMPDIR=/dev/shm`, pinned by `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text. It
-is the CI step's environment, not `scratchParent()`, so a local run still uses the system temporary
-directory. Each test makes its scratch directory under `tmpdir()`, and that directory holds the
-server's database, Litestream's files and versitygw's bucket, so all of them move. Main run
-36559470238 (2026-09-29) failed with the slowest frozen sale at 1,228 ms. A probe with per-sale
-timing reproduced it on one runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill
-stage): that sale's commit took 1,017 ms. The next write waited 1,029 ms to begin, which the
-backlog's A130 entry infers was Litestream's own checkpoint (A133 later measured such checkpoints
-holding a write up: see
+**In CI their temporary files are in memory.** `test-server-stream` runs the loop and pause tests,
+and the S3 test server's own suite, with `TMPDIR=/dev/shm`, pinned by
+`scripts/ci-workflow.test.mjs`, which reads `ci.yml` as text. It is the CI step's environment, not
+`scratchParent()`, so a local run still uses the system temporary directory. The loop and pause
+tests each make their scratch directory under `tmpdir()`, and that directory holds the server's
+database, Litestream's files and versitygw's bucket, so all of them move; the S3 test server's suite
+keeps its scratch and its stub programs under `tmpdir()` too. Main run 36559470238 (2026-09-29)
+failed with the slowest frozen sale at 1,228 ms. A probe with per-sale timing reproduced it on one
+runner of 20 (run 36574315468, a sale of 1,262 ms, in the fill stage): that sale's commit took 1,017
+ms. The next write waited 1,029 ms to begin, which the backlog's A130 entry infers was Litestream's
+own checkpoint (A133 later measured such checkpoints holding a write up: see
 [A sale can wait behind Litestream's own checkpoint](#a-sale-can-wait-behind-litestreams-own-checkpoint)),
 and Linux's pressure counters showed every process stalled on the disk for 1,094 ms of that sale. The write queue wait was 0 ms and nothing waited on the
 bucket. `node:sqlite` commits synchronously on the main thread of the process the test runs the
@@ -597,7 +604,7 @@ still reached 790 ms on slow-disk runners. With `TMPDIR=/dev/shm`, 58 runs acros
 passed, and the slowest frozen sale was 104 ms (run 36575480881). So in CI no timed sale includes
 a commit waiting on the runner's disk. What it gave up, in CI only, is timing sales against a real
 disk, and with it any view there of how long a sale waits behind a Litestream checkpoint on a slow
-disk (`docs/backlog.md`, A130); its assertions are unchanged. How much of `/dev/shm` the two tests
+disk (`docs/backlog.md`, A130); its assertions are unchanged. How much of `/dev/shm` the job's tests
 use, and its size on CI's runners, was not measured; the 58 runs passed with it.
 
 **A bucket question the pause is waiting on.** While paused, the supervisor asks the bucket for a
@@ -655,6 +662,25 @@ not possible with our weak-consistency replication model". versitygw was preferr
 answers `If-Match` on a missing key with 404 as AWS documents (SeaweedFS answers 412), it is one
 process on one port, and its release publishes SHA-256 checksums (SeaweedFS publishes MD5). MinIO's
 repository is archived and its community binaries are no longer published.
+
+**The S3 test server knows its own server.** `startS3TestServer` draws its port with `freePort()`,
+which releases it before versitygw binds it, so a server another test started in the same run can
+take it first. versitygw 1.8.0 prints its "listening on" banner BEFORE it binds, and on a taken port
+then prints `bind: address already in use` and exits 1 (run by hand 2026-09-30, on macOS and in
+`node:24-slim`). Until 2026-09-30 the harness called a server ready once its port accepted a
+connection, and every server shared one set of credentials, so a start whose port the other test's
+server had taken came up talking to that server; its own `pause()` then did nothing, because its
+process had exited. That is what the pause test's bucket control failing once on `main` looks like
+(run 36619928071; `docs/backlog.md`, C88). Now each server has credentials of its own and is ready
+only once a listing signed with them is answered; a server that exits on a taken port is started
+again on a fresh one, up to five ports within the one `READY_TIMEOUT_MS`, each readiness probe cut
+to the time left in it; and `pause()` and `resume()` throw, with the server's log, once its process
+has exited. In `apps/server/src/testing/s3-test-server.test.ts`, two cases force a second server
+onto the first one's port through a mocked `freePort()` and fail without each server's own
+credentials or without the retry; one fails when `pause()` is silent on an exited server; three run
+a stub in versitygw's place and fail when the deadline is reset per port, when a bind error written
+after the process exited is missed, or when a probe may run past the deadline; and one checks that a
+server exiting for another reason is not started again.
 
 **It runs with `--sidecar`** (`apps/server/src/testing/s3-test-server.ts`), which keeps object
 metadata in a plain directory instead of extended attributes, so it does not depend on what the

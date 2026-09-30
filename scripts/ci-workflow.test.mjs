@@ -46,7 +46,11 @@ const PNPM_LS_SPAWN_TIMEOUT_MS = 30_000;
 const PNPM_LS_TEST_TIMEOUT_MS = 60_000;
 
 const STREAM_JOB = "test-server-stream";
-const STREAM_TEST_FILES = ["src/stream-loop.e2e.test.ts", "src/stream-pause.e2e.test.ts"];
+const STREAM_TEST_FILES = [
+  "src/stream-loop.e2e.test.ts",
+  "src/stream-pause.e2e.test.ts",
+  "src/testing/s3-test-server.test.ts",
+];
 const STREAM_BINARY_INSTALLERS = [
   "node scripts/setup-litestream.mjs",
   "node scripts/setup-s3-test-server.mjs",
@@ -801,11 +805,12 @@ describe("the sharded jobs", () => {
 });
 
 /**
- * The stream loop and pause tests run in a job of their own, beside the apps/server shards: they
- * need two downloaded binaries. Their blob joins the server's coverage merge. Read from ci.yml as
- * TEXT, so a step an `if:` switches off still passes.
+ * The stream loop and pause tests, and the S3 test server's own suite, run in a job of their own,
+ * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
+ * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
+ * passes.
  */
-describe("the stream loop and pause tests' own job", () => {
+describe("the stream loop and pause tests' and the S3 test server suite's own job", () => {
   const stream = () => job(STREAM_JOB);
   const streamText = () => stream().body.join("\n");
 
@@ -870,7 +875,7 @@ describe("the stream loop and pause tests' own job", () => {
     }
   });
 
-  it("takes both files out of every apps/server shard", () => {
+  it("takes those files out of every apps/server shard", () => {
     const step = shardStep(job("test-server").body)?.join("\n") ?? "";
     for (const file of STREAM_TEST_FILES) expect(step).toContain(`--exclude ${file}`);
   });
