@@ -123,9 +123,9 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 1. **Finish table service and paying a bill in parts** (A4, lane B). Thirteen of the service
-   plan's eighteen tasks are done: 0–9, 13 and 14 have landed (Task 9, marking dishes served, as
-   #814; Task 13, standalone ordering, as #903), and 10, the attention signals, is on branch
-   `feat/service-service-dashboard`. Left: applying a cancellation,
+   plan's eighteen tasks are done: 0–10, 13 and 14 have landed (Task 9, marking dishes served, as
+   #814; Task 10, the attention signals, as #908; Task 13, standalone ordering, as #903). Left:
+   applying a cancellation,
    comp or discount to an order (11) and its reports (12),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
@@ -3254,11 +3254,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     and "fires and pays a table's held standalone line after a publish makes it not sold
     separately"); the same line in a draft is refused when the draft is sent or saved, and the till
     marks it for removal.
-  - **Task 10 (the service dashboard's attention signals)** is on branch
-    `feat/service-service-dashboard` (lane B item B10, 2026-09-30). The floor read and the
+  - **Task 10 (the service dashboard's attention signals)** DONE (#908, 2026-09-30, main
+    `c6eb459df`; lane B item B10). The floor read and the
     counter's held-orders list carry a list of signals per table or order, the till shows them as
     chips with a per-station summary of dishes ready, and a party can be marked as having asked
-    for the bill. Decided by the owner on that branch:
+    for the bill. Defaults the branch chose, sent to the owner as an FYI (not the owner's rulings):
     - A bill request is cleared only when a PAYMENT leaves the party's family with nothing to pay.
       Other ways of leaving nothing owed — moving the last owing bill away, voiding its last line,
       or asking for the bill when nothing is owed — keep the request until staff press Cancel or
