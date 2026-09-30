@@ -702,7 +702,7 @@ async function issueWhenFullyPaid(
     .update(workingOrders)
     .set({ label: receiptOrder.orderLabel, status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
-  await clearBillRequestIfPaid(tx, workingOrderId);
+  await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
 
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),

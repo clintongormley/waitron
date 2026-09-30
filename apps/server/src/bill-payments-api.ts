@@ -230,7 +230,7 @@ export async function withSaleTillWhenIssuing<T>(
  * payment is taken on the device's own till, which is the till its cash drawer and its invoice use.
  */
 export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock };
+  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
 
   app.get("/api/working-orders/:id/payments", (c) =>
     run(c, log, async () => {

@@ -1939,22 +1939,42 @@ describe("a party's bill request goes when a card or collect settles its last ow
     );
   }
 
-  async function payByCard(cfg: TillConfig, tabId: string): Promise<void> {
+  async function payByCard(cfg: TillConfig, tabId: string, log?: Logger): Promise<void> {
     const { deps } = integratedDeps(cfg, suite.db);
-    expect((await payWorkingOrderIntegrated(deps, cfg, { id: tabId, lines: [] })).outcome).toBe(
-      "captured",
-    );
+    expect(
+      (await payWorkingOrderIntegrated({ ...deps, log }, cfg, { id: tabId, lines: [] })).outcome,
+    ).toBe("captured");
     expect((await orderState(tabId)).status).toBe("settled");
   }
 
-  async function collectInCash(cfg: TillConfig, tabId: string): Promise<void> {
-    await collectOrder(
-      { db: suite.db, backend, clock },
+  async function payInCash(cfg: TillConfig, tabId: string, log?: Logger): Promise<void> {
+    await payWorkingOrder(
+      { db: suite.db, backend, clock, log },
       cfg,
       { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
       OPERATOR,
     );
     expect((await orderState(tabId)).status).toBe("settled");
+  }
+
+  async function collectInCash(cfg: TillConfig, tabId: string, log?: Logger): Promise<void> {
+    await collectOrder(
+      { db: suite.db, backend, clock, log },
+      cfg,
+      { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
+      OPERATOR,
+    );
+    expect((await orderState(tabId)).status).toBe("settled");
+  }
+
+  /** A trigger refusing the clearing of any party's bill request; answers its removal. */
+  function refuseClearing(): () => void {
+    suite.db.run(
+      sql.raw(`create trigger refuse_bill_request_clearing
+        before update of bill_requested_at on parties when new.bill_requested_at is null
+        begin select raise(abort, 'clearing refused'); end`),
+    );
+    return () => suite.db.run(sql.raw("drop trigger refuse_bill_request_clearing"));
   }
 
   /** The party's stored request time, and whether the floor shows its table asking for the bill. */
@@ -1975,42 +1995,65 @@ describe("a party's bill request goes when a card or collect settles its last ow
   const gone = { billRequestedAt: null, shown: false };
   const kept = { billRequestedAt: expect.any(String), shown: true };
 
-  const paths: [string, ServiceMode, (cfg: TillConfig, tabId: string) => Promise<void>][] = [
+  const paths: [
+    string,
+    ServiceMode,
+    (cfg: TillConfig, tabId: string, log?: Logger) => Promise<void>,
+  ][] = [
     ["a card capture of an open bill", "table_tab", payByCard],
+    ["a cash payment of an open bill", "table_tab", payInCash],
     [
       "the recovery of a card capture never filed",
       "table_tab",
-      async (cfg, tabId) => {
+      async (cfg, tabId, log) => {
         await lostCapture(tabId);
-        await payByCard(cfg, tabId);
+        await payByCard(cfg, tabId, log);
       },
     ],
     [
       "a card settling a presented bill's invoice",
       "invoice_first",
-      async (cfg, tabId) => {
+      async (cfg, tabId, log) => {
         await placed(cfg, tabId);
-        await payByCard(cfg, tabId);
+        await payByCard(cfg, tabId, log);
       },
     ],
     [
       "the recovery of a card capture of a presented bill's invoice",
       "invoice_first",
-      async (cfg, tabId) => {
+      async (cfg, tabId, log) => {
         await placed(cfg, tabId);
         await lostCapture(tabId);
-        await payByCard(cfg, tabId);
+        await payByCard(cfg, tabId, log);
       },
     ],
     [
       "collecting a presented bill's invoice",
       "invoice_first",
-      async (cfg, tabId) => {
+      async (cfg, tabId, log) => {
         await placed(cfg, tabId);
-        await collectInCash(cfg, tabId);
+        await collectInCash(cfg, tabId, log);
       },
     ],
   ];
+
+  it("a clearing failure that is not a refusal still fails the payment, filing nothing", async () => {
+    const { cfg, tabId, partyId, tableId } = await partyAskingForBill("table_tab");
+    suite.db.run(
+      sql.raw(`create trigger break_bill_request_clearing
+        before update of bill_requested_at on parties when new.bill_requested_at is null
+        begin insert into no_such_table values (1); end`),
+    );
+    try {
+      await expect(payInCash(cfg, tabId)).rejects.toThrow("no such table");
+    } finally {
+      suite.db.run(sql.raw("drop trigger break_bill_request_clearing"));
+    }
+
+    expect((await orderState(tabId)).status).toBe("open");
+    expect(await saleCount(tabId)).toBe(0);
+    expect(await request(cfg, partyId, tableId)).toEqual(kept);
+  });
 
   describe.each(paths)("through %s", (_name, serviceMode, settle) => {
     it("goes when that bill was the party's last owing one", async () => {
@@ -2028,6 +2071,31 @@ describe("a party's bill request goes when a card or collect settles its last ow
       await settle(cfg, tabId);
 
       expect(await request(cfg, partyId, tableId)).toEqual(kept);
+    });
+
+    it("stays, and the payment still settles the bill, when clearing it is refused", async () => {
+      const { cfg, tabId, partyId, tableId } = await partyAskingForBill(serviceMode);
+      const logged: unknown[][] = [];
+      const log: Logger = (...args) => void logged.push(args);
+
+      const drop = refuseClearing();
+      try {
+        await settle(cfg, tabId, log);
+      } finally {
+        drop();
+      }
+
+      expect(await orderState(tabId)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await saleCount(tabId)).toBe(1);
+      expect((await rawPaymentsFor(tabId)).filter((payment) => !payment.hasSale)).toEqual([]);
+      expect(await request(cfg, partyId, tableId)).toEqual(kept);
+      expect(logged).toEqual([
+        [
+          "warn",
+          "bill_request.clear_failed",
+          { billId: tabId, partyId, error: expect.stringContaining("clearing refused") },
+        ],
+      ]);
     });
   });
 });

@@ -4,7 +4,6 @@ import {
   kitchenStations,
   orderDrafts,
   orderGroups,
-  parties,
   products,
   ticketItems,
   workingOrderLines,
@@ -13,7 +12,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { classifyBand, worstBand } from "@waitron/shared";
 import type { KitchenSignal, ReadyAtStation, TableSignal } from "@waitron/shared";
-import { partyFamilies } from "./parties.js";
+import type { FamilyBill } from "./parties.js";
 import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
 
@@ -117,39 +116,33 @@ function groupBy<T>(rows: readonly T[], key: (row: T) => string): Map<string, T[
   return groups;
 }
 
+/** What the floor read already knows of a seated party beyond {@link TableParty}. */
+export interface SeatedPartyFacts {
+  /** Every bill of the party's family, abandoned ones included. */
+  bills: readonly FamilyBill[];
+  billRequestedAt: string | null;
+}
+
 /**
  * Each seated party's signals, keyed by party, in {@link TableSignal}'s order. Bills and dishes are
- * read over the party's family, abandoned bills left out, so a paid bill's dish still waiting shows.
- * Every kind of fact is one query for all the parties, whatever their number.
+ * the party's family's, abandoned bills left out, so a paid bill's dish still waiting shows. Every
+ * kind of fact read here is one query for all the parties, whatever their number.
  */
 export async function readPartySignals(
   tx: Transaction,
   seated: readonly TableParty[],
+  facts: ReadonlyMap<string, SeatedPartyFacts>,
   nowMs: number,
 ): Promise<Map<string, TableSignal[]>> {
   const partyIds = seated.map((party) => party.id);
   if (partyIds.length === 0) return new Map();
-  const families = await partyFamilies(tx, partyIds);
-  const bills = await tx
-    .select({
-      id: workingOrders.id,
-      partyId: workingOrders.partyId,
-      lines: sql<number>`count(${workingOrderLines.id})`,
-    })
-    .from(workingOrders)
-    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(
-      and(
-        inArray(workingOrders.partyId, [...new Set([...families.values()].flat())]),
-        ne(workingOrders.status, "abandoned"),
-      ),
-    )
-    .groupBy(workingOrders.id);
-  const billsByParty = groupBy(bills, (bill) => bill.partyId!);
+  const billsOf = new Map(
+    partyIds.map((id) => [id, facts.get(id)!.bills.filter((bill) => bill.status !== "abandoned")]),
+  );
   const kitchen = groupBy(
     await readKitchenLines(
       tx,
-      bills.map((bill) => bill.id),
+      [...billsOf.values()].flat().map((bill) => bill.workingOrderId),
     ),
     (line) => line.billId,
   );
@@ -189,18 +182,10 @@ export async function readPartySignals(
         .where(and(inArray(orderDrafts.partyId, partyIds), eq(orderDrafts.state, "open")))
     ).map((row) => row.partyId),
   );
-  const requests = new Map(
-    (
-      await tx
-        .select({ id: parties.id, at: parties.billRequestedAt })
-        .from(parties)
-        .where(inArray(parties.id, partyIds))
-    ).map((row) => [row.id, row.at]),
-  );
 
   const signals = new Map<string, TableSignal[]>();
   for (const party of seated) {
-    const own = families.get(party.id)!.flatMap((id) => billsByParty.get(id) ?? []);
+    const own = billsOf.get(party.id)!;
     const list: TableSignal[] = [];
     if (own.every((bill) => bill.lines === 0) && !drafting.has(party.id)) {
       list.push({ kind: "take_order" });
@@ -213,7 +198,7 @@ export async function readPartySignals(
     }
     list.push(
       ...kitchenSignals(
-        own.flatMap((bill) => kitchen.get(bill.id) ?? []),
+        own.flatMap((bill) => kitchen.get(bill.workingOrderId) ?? []),
         nowMs,
       ),
     );
@@ -224,17 +209,12 @@ export async function readPartySignals(
         dueAt: party.reminder.dueAt,
       });
     }
-    const held = new Map<string, string[]>();
-    for (const line of unavailable.get(party.id) ?? []) {
-      const names = held.get(line.groupId) ?? [];
-      names.push(staffPresentationName(line));
-      held.set(line.groupId, names);
+    const held = groupBy(unavailable.get(party.id) ?? [], (line) => line.groupId);
+    for (const [groupId, lines] of held) {
+      list.push({ kind: "held_unavailable", groupId, lineNames: lines.map(staffPresentationName) });
     }
-    for (const [groupId, lineNames] of held) {
-      list.push({ kind: "held_unavailable", groupId, lineNames });
-    }
-    const requestedAt = requests.get(party.id);
-    if (requestedAt != null) list.push({ kind: "bill_requested", requestedAt });
+    const requestedAt = facts.get(party.id)!.billRequestedAt;
+    if (requestedAt !== null) list.push({ kind: "bill_requested", requestedAt });
     signals.set(party.id, list);
   }
   return signals;

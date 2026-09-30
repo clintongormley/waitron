@@ -59,7 +59,6 @@ import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
-import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import {
   enqueueCashSaleDrawer,
@@ -389,8 +388,6 @@ export type IntegratedPayDeps = TillSaleDeps & {
   /** The `card_readers.id` the pay routed to, stamped onto the payment when it is associated with
    * the sale; `undefined` leaves `payments.reader_id` NULL. */
   readerId?: string;
-  /** Where a failure to clear the in-flight mark after an attempt that filed nothing is logged. */
-  log?: Logger;
 };
 
 /**
@@ -679,7 +676,7 @@ async function fileImmediateSale(
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
     .where(eq(workingOrders.id, workingOrderId));
-  await clearBillRequestIfPaid(tx, workingOrderId);
+  await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
 
   // After both writes above, so a manual acquirer reference is visible.
   const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId);
@@ -1114,7 +1111,7 @@ async function finalizeCapture(
             : { paymentAttemptAt: null }),
         })
         .where(eq(workingOrders.id, req.id));
-      await clearBillRequestIfPaid(tx, req.id);
+      await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
@@ -1251,7 +1248,7 @@ async function finalizeRecovery(
           : { paymentAttemptAt: null }),
       })
       .where(eq(workingOrders.id, req.id));
-    await clearBillRequestIfPaid(tx, req.id);
+    await clearBillRequestIfPaid(tx, req.id, deps.log);
 
     const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
@@ -1347,7 +1344,7 @@ async function finalizeSettle(
           collectedAt: settledAt.toISOString(),
         })
         .where(eq(workingOrders.id, req.id));
-      await clearBillRequestIfPaid(tx, req.id);
+      await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -1437,7 +1434,7 @@ async function finalizeSettleRecovery(
         collectedAt: settledAt.toISOString(),
       })
       .where(eq(workingOrders.id, req.id));
-    await clearBillRequestIfPaid(tx, req.id);
+    await clearBillRequestIfPaid(tx, req.id, deps.log);
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -1552,7 +1549,7 @@ export async function collectOrder(
           collectedAt: settledAt.toISOString(),
         })
         .where(eq(workingOrders.id, req.id));
-      await clearBillRequestIfPaid(tx, req.id);
+      await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       if (req.tender.method === "cash" && !paysNothing) {

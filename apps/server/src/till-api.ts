@@ -773,7 +773,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // Built once per mount so its in-memory state persists across requests.
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock };
+  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
   mountBillPaymentsApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
@@ -1087,7 +1087,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         allowCashDrawer: device === null || kindOfFormFactor(device.formFactor) === "till",
       };
       const result = await recordTillSale(
-        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,
         { ...body, zoneId },
         personId,
@@ -1253,7 +1253,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // box's configured `cfg.tillId`, matching `cancelPlacedOrder`.
       const saleTillId = await requireSaleTillId(deps, c, device);
       const result = await placeOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         deps.cfg,
         id,
         personId,
@@ -1483,7 +1483,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // The device supplies `tillId`; `nodeId`/`seriesId`, the SIF and chain key, stay `deps.cfg`.
       const saleCfg: TillConfig = { ...deps.cfg, tillId: await requireSaleTillId(deps, c, device) };
       const result = await collectOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         saleCfg,
         { id, lines: [], tender: body.tender },
         personId,
@@ -1500,7 +1500,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       const body = await readJsonBody<{ reason: string }>(c);
       await cancelPlacedOrder(
-        { db: deps.db, backend: deps.backend, clock: deps.clock },
+        { db: deps.db, backend: deps.backend, clock: deps.clock, log },
         deps.cfg,
         id,
         body.reason,

@@ -529,6 +529,11 @@ The ones worth grepping for:
   clear that follows a card attempt which filed nothing (`releasePaymentAttempt`,
   `src/till-sale.ts`). That clear threw; the till still gets the attempt's own outcome, and the
   loop's next release tries again. It does not flip `/health`.
+- **`bill_request.clear_failed`** (`warn`) — `{ billId, partyId, error }`. A payment left nothing of
+  the party's family to pay, but taking away the party's bill request was refused
+  (`clearBillRequestIfPaid`, `src/bill-request.ts`). The payment went through; the bill request
+  stays up until staff take it back, a later payment clears it, or the party is closed (Finish
+  table, or merged into another). It raises no alert.
 - **`transport.close_failed`** (`warn`) — `{ errorCode, message }`. An mTLS
   `Agent` failed to close gracefully at the end of a pass (`aeatClientResolver`'s `closeAll`,
   `packages/fiscal-verifactu/src/aeat-transport.ts`). `message` is the raw `Error#message` — safe to log here, unlike

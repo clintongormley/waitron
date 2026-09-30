@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -28,8 +28,10 @@ import {
   writeClearingWorkflow,
   writeReleaseReminderMinutes,
 } from "@waitron/venue-service";
+import { takeBillPayment } from "./bill-payments.js";
 import { requestBill } from "./bill-request.js";
 import { createStation } from "./kitchen.js";
+import type { Logger } from "./logger.js";
 import { moveBill } from "./move-bill.js";
 import { saveDraft } from "./order-drafts.js";
 import { fireGroup, placeGroups, snoozeReminder } from "./order-groups.js";
@@ -591,6 +593,49 @@ describe("a bill request", () => {
     await cashContribution(v, other, "3.00");
 
     expect(await billRequestedAt(v, partyId)).toBeNull();
+  });
+
+  it("stays, and a bill payment still settles the bill, when clearing it is refused", async () => {
+    const v = await setupPartyVenue(suite.db);
+    const { partyId, tabId } = await seat(v, await v.table("Mesa 2"));
+    await order(v, tabId, "Caña");
+    const requestedAt = await askForBill(v, partyId);
+    const logged: unknown[][] = [];
+    const log: Logger = (...args) => void logged.push(args);
+
+    v.db.run(sql`create trigger refuse_bill_request_clearing
+      before update of bill_requested_at on parties when new.bill_requested_at is null
+      begin select raise(abort, 'clearing refused'); end`);
+    try {
+      const paid = await takeBillPayment(
+        { db: v.db, backend: v.backend, clock: v.clock, log },
+        v.cfg,
+        tabId,
+        {
+          submissionId: randomUUID(),
+          kind: "contribution",
+          amount: "3.00",
+          method: "cash",
+          tendered: "3.00",
+          applied: "3.00",
+          tip: "0.00",
+        },
+        OPERATOR,
+      );
+      expect(paid.invoice).toBeDefined();
+    } finally {
+      v.db.run(sql`drop trigger refuse_bill_request_clearing`);
+    }
+
+    expect(await billsOn(v, partyId)).toEqual([{ status: "settled" }]);
+    expect(await billRequestedAt(v, partyId)).toBe(requestedAt);
+    expect(logged).toEqual([
+      [
+        "warn",
+        "bill_request.clear_failed",
+        { billId: tabId, partyId, error: expect.stringContaining("clearing refused") },
+      ],
+    ]);
   });
 
   it("stays on the surviving party while a merged-in party's bill still owes, and goes when that bill is paid", async () => {
