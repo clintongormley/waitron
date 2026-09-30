@@ -1365,7 +1365,7 @@ describe("the bill's own rules", () => {
     );
   });
 
-  it("refuses a settled bill as the void does", async () => {
+  it("refuses a give-away on a settled bill", async () => {
     const { billId } = await bill([{ name: "Bottle" }]);
     const line = await lineIdOf(venue, billId, 1);
     await payAll(billId);

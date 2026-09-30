@@ -1881,7 +1881,7 @@ export async function insertTabRound(
   return inserted;
 }
 
-/** A line as a void reads it, with its ticket item's kitchen state. */
+/** A line as a cancel takes from it, with its ticket item's kitchen state. */
 export interface VoidTarget {
   id: string;
   parentLineId: string | null;
