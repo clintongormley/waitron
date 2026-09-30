@@ -21,6 +21,7 @@ import type {
   PersonRole,
 } from "./client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { perLocale } from "./per-locale.js";
 import { actionChoice, actionName, roleName, t, tf, type StringKey } from "./strings.js";
 
 const ACTIONS: readonly AdjustmentAction[] = [
@@ -90,19 +91,6 @@ function amount(text: string): string | null | undefined {
   const whole = String(Number(match[1]));
   if (whole === "0" && Number(match[2] ?? "0") === 0) return undefined;
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
-}
-
-/** One per locale, built on first use: the list formats every row on every render. */
-function perLocale<T>(make: (locale: string) => T): (locale: string) => T {
-  const made = new Map<string, T>();
-  return (locale) => {
-    let value = made.get(locale);
-    if (value === undefined) {
-      value = make(locale);
-      made.set(locale, value);
-    }
-    return value;
-  };
 }
 
 const decimalMark = perLocale(
