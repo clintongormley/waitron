@@ -80,8 +80,9 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations asking for approval before confirming", async () => {
+  it("has no violations asking for approval of one of two units before confirming", async () => {
     const { el, host } = await mount({});
+    await pressed(el, 'input[name="quantity"][value="1"]');
     await pressed(el, 'input[name="reason"]');
     await pressed(el, "[data-adjust-continue]");
     el.preview = { reduction: "50.00", nominalValue: "50.00", needsApproval: "manager", lines: [] };

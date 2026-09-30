@@ -1,0 +1,821 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanupWidgets,
+  draftServer,
+  mountWidget,
+  type DraftServer,
+} from "./widgets/test-helpers.js";
+import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, setLocale, t } from "./i18n/t.js";
+import { codeMessage } from "./i18n/codes.js";
+import type { TillLockScreen } from "./screens/till-lock-screen.js";
+import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import type { TillFloorScreen } from "./screens/till-floor-screen.js";
+import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
+import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
+import type { CanvasDef, CapabilityFlag } from "./layout.js";
+import type {
+  AdjustmentCommand,
+  AdjustmentPreview,
+  AdjustmentReason,
+  FloorZone,
+  PartyBill,
+  TabLine,
+  TableParty,
+  TableState,
+  TillApi,
+  ZoneOfferCatalogue,
+} from "./api/client.js";
+
+// The till's cancel, give-away and discount flow through the app: reasons, the preview, approval
+// and the refusals (service plan Task 11, part B). The API is stubbed at the client boundary.
+
+const zone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
+
+const party: TableParty = {
+  id: "v1",
+  revision: 3,
+  guestCount: 3,
+  state: "open",
+  name: null,
+  displayName: "4",
+  mainBillId: "wo-4",
+  outstanding: "30.00",
+  billCount: 1,
+  tableIds: ["t4"],
+  unsentDrafts: [],
+  reminder: null,
+};
+
+const mesa4: TableState = {
+  id: "t4",
+  label: "4",
+  zoneId: "z1",
+  capacity: 4,
+  state: "open-tab",
+  condition: "held",
+  hasOpenTab: true,
+  tabLineCount: 1,
+  tabTotal: "30.00",
+  pendingDeliveries: 0,
+  pendingToServe: 0,
+  readyToServe: 0,
+  enRoute: 0,
+  timingBand: "fresh",
+  status: null,
+  nextReservation: null,
+  posX: null,
+  posY: null,
+  shape: null,
+  rotation: null,
+  signals: [],
+  party,
+};
+
+const bill: PartyBill = {
+  workingOrderId: "wo-4",
+  partyId: "v1",
+  label: null,
+  status: "open",
+  total: "30.00",
+  outstanding: "30.00",
+  hasPayments: false,
+  receiptAvailable: false,
+};
+
+const wine: TabLine = {
+  id: "line-1",
+  name: "Wine",
+  groupId: null,
+  lineNo: 1,
+  productId: "vino",
+  quantity: "1.000",
+  unitPrecision: 0,
+  unitPriceGross: "30.00",
+  servedAt: null,
+  courseId: null,
+  sentAt: "2026-09-30T09:00:00.000Z",
+  firedAt: "2026-09-30T09:00:00.000Z",
+  state: "queued",
+  note: null,
+  listId: null,
+  menuItemId: null,
+  parentProductId: null,
+};
+
+const complaint: AdjustmentReason = {
+  id: "r-complaint",
+  name: "Complaint",
+  actions: ["comp", "discount_percent"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "supervisor",
+  approverRole: "manager",
+};
+const mistake: AdjustmentReason = {
+  ...complaint,
+  id: "r-mistake",
+  name: "Mistake",
+  actions: ["cancel"],
+  noteRequired: true,
+};
+
+const canvas: CanvasDef = {
+  formFactor: "till",
+  tabs: [
+    {
+      key: "counter",
+      title: "Counter",
+      columns: 12,
+      cards: [{ type: "product-grid", colSpan: 8, rowSpan: 6, config: {} }],
+    },
+    {
+      key: "floor",
+      title: "Floor",
+      columns: 24,
+      cards: [{ type: "floor-plan", colSpan: 24, rowSpan: 12, config: {} }],
+    },
+  ],
+};
+
+const till = {
+  locale: "en",
+  invoiceLocale: "es-ES",
+  venueName: "Bar Pepe",
+  nif: "B12345678",
+  orderFlow: "prepay" as const,
+  receiptPrintMode: "auto" as const,
+  bumpMode: "line" as const,
+  fireControl: "waiter" as const,
+  courses: [] as { id: string; name: string; displayOrder: number }[],
+  cardProvider: "none" as const,
+  tipsEnabled: false,
+  canvas,
+  capabilities: ["print-receipt"] as CapabilityFlag[],
+  inactivityTimeoutSeconds: null as number | null,
+  nodeId: "n1",
+  servers: [],
+};
+
+const offers: ZoneOfferCatalogue = {
+  context: { zoneId: zone.id, departmentId: "department-default", serviceMode: "prepay" },
+  defaultMenuId: null,
+  menus: [],
+  offers: [],
+};
+
+const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
+  reduction: "30.00",
+  nominalValue: "30.00",
+  needsApproval: null,
+  lines: [],
+  ...over,
+});
+
+let drafts: DraftServer;
+let api: TillApi;
+
+function stubApi(overrides: Record<string, unknown> = {}): TillApi {
+  return {
+    getContentLanguages: vi
+      .fn()
+      .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
+    getTill: vi.fn().mockResolvedValue(till),
+    getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      stationId: null,
+    }),
+    getDeviceStation: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+    listStaff: vi.fn().mockResolvedValue([]),
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(offers),
+    listZoneOffers: vi.fn().mockResolvedValue(offers),
+    setServiceZone: vi.fn(),
+    listWorkingOrders: vi.fn().mockResolvedValue([]),
+    getTablesState: vi.fn().mockResolvedValue([mesa4]),
+    listZones: vi.fn().mockResolvedValue([zone]),
+    listStatuses: vi.fn().mockResolvedValue([]),
+    getPartyBills: vi.fn().mockResolvedValue([bill]),
+    getTabLines: vi.fn().mockResolvedValue({ lines: [wine], revision: 6, editSentLines: true }),
+    listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [] }),
+    logout: vi.fn().mockResolvedValue(undefined),
+    openDrawer: vi.fn().mockResolvedValue(undefined),
+    listDrafts: drafts.listDrafts,
+    saveDraft: drafts.saveDraft,
+    submitDraft: drafts.submitDraft,
+    listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake]),
+    listAdjustmentApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
+    previewAdjustment: vi.fn().mockResolvedValue(preview()),
+    applyAdjustment: vi
+      .fn()
+      .mockResolvedValue({ adjustmentIds: ["a-1"], revision: 7, party: { id: "v1", revision: 4 } }),
+    ...overrides,
+  } as unknown as TillApi;
+}
+
+async function mountApp(overrides: Record<string, unknown> = {}) {
+  api = stubApi(overrides);
+  return mountWidget<TillApp>("till-app", { api });
+}
+
+async function flush(el: TillApp, rounds = 3): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+  }
+}
+
+function emit(source: Element, type: string, detail?: unknown): void {
+  source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+}
+
+const lock = (el: TillApp) => el.shadowRoot!.querySelector<TillLockScreen>("till-lock-screen");
+const shell = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>("till-tab-shell")!;
+const floor = (el: TillApp) =>
+  el
+    .shadowRoot!.querySelector<HTMLElement>("till-card-grid")!
+    .shadowRoot!.querySelector<TillFloorScreen>("till-floor-screen")!;
+const tableOrder = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
+const banner = (el: TillApp) => el.shadowRoot!.querySelector<HTMLElement>(".error");
+const dialog = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillAdjustmentDialog>("till-adjustment-dialog");
+const approval = (el: TillApp) =>
+  el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>("till-supervisor-override-dialog");
+const inDialog = (el: TillApp, selector: string) =>
+  dialog(el)!.shadowRoot!.querySelector<HTMLElement>(selector)!;
+const bottomMessage = (el: TillApp) =>
+  dialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error;
+
+async function openMesa4(el: TillApp): Promise<TillTableOrderScreen> {
+  await flush(el);
+  emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+  await flush(el);
+  emit(shell(el), "tab-select", { key: "floor" });
+  await flush(el);
+  emit(floor(el), "open-table", { tableId: "t4", seated: true });
+  await flush(el);
+  const order = tableOrder(el);
+  order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+  await flush(el);
+  return order;
+}
+
+async function press(el: TillApp, target: HTMLElement): Promise<void> {
+  target.click();
+  await flush(el);
+}
+
+async function chooseReason(el: TillApp, name: string): Promise<void> {
+  const radio = [
+    ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
+  ].find((candidate) => candidate.closest("label")!.textContent!.trim() === name)!;
+  await press(el, radio);
+}
+
+/** Opens Give away on the wine, chooses Complaint and presses Continue. */
+async function previewComp(el: TillApp, order: TillTableOrderScreen): Promise<void> {
+  await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+  await chooseReason(el, "Complaint");
+  await press(el, inDialog(el, "[data-adjust-continue]"));
+}
+
+const ask = {
+  expectedRevision: 6,
+  lineId: "line-1",
+  reasonId: "r-complaint",
+  action: "comp",
+  note: null,
+};
+
+const applied = () =>
+  vi.mocked(api.applyAdjustment).mock.calls.map(([orderId, command]) => ({ orderId, command }));
+
+async function pinPad(el: TillApp, digits: string): Promise<void> {
+  const override = approval(el)!;
+  override.shadowRoot!.querySelector<HTMLElement>('[data-person="m-1"]')!.click();
+  await override.updateComplete;
+  for (const digit of digits) {
+    override
+      .shadowRoot!.querySelector("till-numeric-pad")!
+      .shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!
+      .click();
+    await override.updateComplete;
+  }
+  await press(el, override.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
+}
+
+beforeEach(() => {
+  setLocale("en");
+  drafts = draftServer();
+});
+afterEach(cleanupWidgets);
+
+describe("till-app: giving away a dish", () => {
+  it("offers only the reasons that allow it, shows what comes off, then applies it and reads the bill again", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
+      .mockResolvedValue({
+        lines: [{ ...wine, unitPriceGross: "0.00", listUnitPriceGross: "30.00" }],
+        revision: 7,
+        editSentLines: true,
+      });
+    const { el } = await mountApp({ getTabLines });
+    const order = await openMesa4(el);
+
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
+    const names = [
+      ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
+    ].map((radio) => radio.closest("label")!.textContent!.trim());
+    expect(names).toEqual(["Complaint"]);
+    await chooseReason(el, "Complaint");
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", ask);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(inDialog(el, "[data-takes-off]").textContent!.trim()).toBe(
+      t("adjust.takes_off").replace("{amount}", formatMoney("30.00", currentLocale())),
+    );
+
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(applied()).toEqual([
+      { orderId: "wo-4", command: { ...ask, submissionId: expect.any(String) } },
+    ]);
+    expect(dialog(el)).toBeNull();
+    expect(order.revision).toBe(7);
+    expect(order.shadowRoot!.querySelector(".pending-line s")!.textContent).toBe(
+      formatMoney("30.00", currentLocale()),
+    );
+    expect(banner(el)).toBeNull();
+  });
+
+  it("sends nothing when closed", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-back]"));
+    await press(el, inDialog(el, "[data-adjust-close]"));
+    expect(dialog(el)).toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("says a manager must add a reason when none allows the action", async () => {
+    const { el } = await mountApp({
+      listAdjustmentReasons: vi.fn().mockResolvedValue([mistake]),
+    });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    expect(inDialog(el, "[data-no-reasons]").textContent!.trim()).toBe(t("adjust.no_reasons"));
+  });
+
+  it("says so when the reasons cannot be read, and opens nothing", async () => {
+    const { el } = await mountApp({
+      listAdjustmentReasons: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    expect(dialog(el)).toBeNull();
+    expect(banner(el)!.textContent).toBe(t("adjust.reasons_error"));
+  });
+
+  it("discounts the whole bill", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!);
+    await chooseReason(el, "Complaint");
+    const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
+    input.value = "10";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", {
+      expectedRevision: 6,
+      lineId: null,
+      reasonId: "r-complaint",
+      action: "discount_percent",
+      percentBp: 1000,
+      note: null,
+    });
+  });
+});
+
+describe("till-app: an adjustment someone must approve", () => {
+  it("asks the approver for their PIN and applies it under the waiter, who stays signed in", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
+      t("adjust.approval_manager"),
+    );
+
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(approval(el)!.authorizers).toEqual([{ personId: "m-1", displayName: "Marta" }]);
+
+    await pinPad(el, "7777");
+
+    expect(applied()).toEqual([
+      {
+        orderId: "wo-4",
+        command: {
+          ...ask,
+          submissionId: expect.any(String),
+          approver: { personId: "m-1", pin: "7777" },
+        },
+      },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+    // Still the waiter's session: not locked, not signed out, and the drawer override untouched.
+    expect(lock(el)).toBeNull();
+    expect(tableOrder(el)).not.toBeNull();
+    expect(api.logout).not.toHaveBeenCalled();
+    expect(api.openDrawer).not.toHaveBeenCalled();
+  });
+
+  it("keeps the PIN prompt open after a wrong PIN, saying so", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "pin.invalid", status: 401 }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    await pinPad(el, "0000");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.invalid"));
+    expect(dialog(el)).not.toBeNull();
+  });
+
+  it("goes back to the confirm step when the approver prompt is cancelled", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    await press(el, approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!);
+    expect(approval(el)).toBeNull();
+    expect(inDialog(el, "[data-adjust-confirm]")).not.toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+});
+
+describe("till-app: a bill changed on another device", () => {
+  it("reads the bill again after a refused apply, says what changed, and sends nothing again", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
+      .mockResolvedValue({
+        lines: [{ ...wine, quantity: "2.000" }],
+        revision: 8,
+        editSentLines: true,
+      });
+    const { el } = await mountApp({
+      getTabLines,
+      applyAdjustment: vi.fn().mockRejectedValue({
+        code: "working_order.out_of_date",
+        workingOrderId: "wo-4",
+        revision: 8,
+        status: 409,
+      }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    const reads = getTabLines.mock.calls.length;
+
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+    expect(getTabLines.mock.calls.length).toBeGreaterThan(reads);
+    expect(dialog(el)).toBeNull();
+    expect(order.revision).toBe(8);
+    expect(banner(el)!.textContent).toBe(t("adjust.changed_line").replace("{line}", "Wine"));
+
+    // Acting again starts from the bill as it is now.
+    await previewComp(el, order);
+    expect(api.previewAdjustment).toHaveBeenLastCalledWith("wo-4", { ...ask, expectedRevision: 8 });
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+  });
+
+  it("says a dish is gone when the bill read again no longer has it, after a refused preview", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
+      .mockResolvedValue({ lines: [], revision: 8, editSentLines: true });
+    const { el } = await mountApp({
+      getTabLines,
+      previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    expect(dialog(el)).toBeNull();
+    expect(banner(el)!.textContent).toBe(t("adjust.changed_line_gone").replace("{line}", "Wine"));
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("says the bill changed when a whole-bill discount is refused as out of date", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+    });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>("[data-discount-bill]")!);
+    await chooseReason(el, "Complaint");
+    const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
+    input.value = "10";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+    expect(banner(el)!.textContent).toBe(t("adjust.changed_bill"));
+  });
+});
+
+describe("till-app: an adjustment with no answer", () => {
+  it("sends a request that got no answer again under the same submission id, and a new confirmation under a new one", async () => {
+    const applyAdjustment = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ adjustmentIds: ["a-1"], revision: 7, party: null });
+    const { el } = await mountApp({ applyAdjustment });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+
+    inDialog(el, "[data-adjust-confirm]").click();
+    await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS + 100));
+    await flush(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    const ids = applyAdjustment.mock.calls.map(
+      ([, command]) => (command as AdjustmentCommand).submissionId,
+    );
+    expect(ids).toHaveLength(3);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
+  it("reads the bill again and says the change may have been made when no answer ever comes", async () => {
+    const applyAdjustment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ applyAdjustment });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    const reads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    inDialog(el, "[data-adjust-confirm]").click();
+    await new Promise((resolve) => setTimeout(resolve, 3 * SUBMIT_RETRY_PAUSE_MS + 200));
+    await flush(el);
+
+    expect(applyAdjustment).toHaveBeenCalledTimes(3);
+    expect(dialog(el)).toBeNull();
+    expect(banner(el)!.textContent).toBe(t("adjust.unconfirmed"));
+    expect(vi.mocked(api.getTabLines).mock.calls.length).toBeGreaterThan(reads);
+  });
+});
+
+describe("till-app: a refused adjustment", () => {
+  it("shows a refusal that names no field beside the action, and the action stays usable", async () => {
+    const { el } = await mountApp({
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "bill.line_paid", status: 409 }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(bottomMessage(el)).toBe(codeMessage("bill.line_paid"));
+    expect(
+      (inDialog(el, "[data-adjust-confirm]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false);
+  });
+
+  it("goes back to the form with a refusal naming a field under that field", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.over_limit", status: 409 }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+
+    expect(
+      dialog(el)!.shadowRoot!.querySelector('[data-error-for="reason"]')!.textContent!.trim(),
+    ).toBe(codeMessage("adjustment.over_limit"));
+    expect(bottomMessage(el)).toBe(t("form.fix_fields"));
+  });
+
+  it("reads the reasons again when the one chosen is no longer in use", async () => {
+    const listAdjustmentReasons = vi
+      .fn()
+      .mockResolvedValueOnce([complaint, mistake])
+      .mockResolvedValue([{ ...complaint, id: "r-other", name: "Guest recovery" }]);
+    const { el } = await mountApp({
+      listAdjustmentReasons,
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.reason_inactive" }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(listAdjustmentReasons).toHaveBeenCalledTimes(2);
+    expect(
+      [...dialog(el)!.shadowRoot!.querySelectorAll('input[name="reason"]')].map((radio) =>
+        radio.closest("label")!.textContent!.trim(),
+      ),
+    ).toEqual(["Guest recovery"]);
+    expect(
+      dialog(el)!.shadowRoot!.querySelector('[data-error-for="reason"]')!.textContent!.trim(),
+    ).toBe(codeMessage("adjustment.reason_inactive"));
+  });
+
+  it("shows a preview that got no answer as a failure beside the action", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+  });
+
+  it("says so beside the action when the approvers cannot be read", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      listAdjustmentApprovers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(approval(el)).toBeNull();
+    expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
+  });
+
+  it("closes the approver prompt and shows another refusal beside the action", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      applyAdjustment: vi
+        .fn()
+        .mockRejectedValue({ code: "adjustment.approval_required", approverRole: "manager" }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    await pinPad(el, "7777");
+    expect(approval(el)).toBeNull();
+    expect(bottomMessage(el)).toBe(codeMessage("adjustment.approval_required"));
+  });
+});
+
+describe("till-app: the adjustment flow and the operator's session", () => {
+  it("closes the dialog when the till locks", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    emit(tableOrder(el), "logout");
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+  });
+});
+
+describe("till-app: answers that arrive after the flow moved on", () => {
+  function deferred<T>() {
+    let resolve!: (value: T) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  it("reads the reasons once however often Give away is pressed while they load", async () => {
+    const reasons = deferred<AdjustmentReason[]>();
+    const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
+    const order = await openMesa4(el);
+    const comp = order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!;
+    await press(el, comp);
+    await press(el, comp);
+    reasons.resolve([complaint]);
+    await flush(el);
+    expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
+    expect(dialog(el)).not.toBeNull();
+  });
+
+  it("opens nothing when the till locks while the reasons load", async () => {
+    const reasons = deferred<AdjustmentReason[]>();
+    const { el } = await mountApp({ listAdjustmentReasons: vi.fn(() => reasons.promise) });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    emit(tableOrder(el), "logout");
+    await flush(el);
+    reasons.resolve([complaint]);
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("sends one preview while one is out, and none of its answer reaches a closed dialog", async () => {
+    const answer = deferred<AdjustmentPreview>();
+    const { el } = await mountApp({ previewAdjustment: vi.fn(() => answer.promise) });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await chooseReason(el, "Complaint");
+    const choice = { action: "comp", reasonId: "r-complaint", note: null };
+    emit(dialog(el)!, "adjust-preview", choice);
+    emit(dialog(el)!, "adjust-preview", choice);
+    await flush(el);
+    expect(api.previewAdjustment).toHaveBeenCalledOnce();
+
+    emit(dialog(el)!, "adjust-close");
+    await flush(el);
+    answer.resolve(preview());
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("says nothing of a refused preview once the dialog is closed", async () => {
+    const answer = deferred<AdjustmentPreview>();
+    const { el } = await mountApp({ previewAdjustment: vi.fn(() => answer.promise) });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    emit(dialog(el)!, "adjust-close");
+    await flush(el);
+    answer.reject({ code: "working_order.out_of_date" });
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("opens no PIN prompt when the approvers arrive after the dialog closed", async () => {
+    const approvers = deferred<{ personId: string; displayName: string }[]>();
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      listAdjustmentApprovers: vi.fn(() => approvers.promise),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    emit(dialog(el)!, "adjust-close");
+    await flush(el);
+    approvers.resolve([{ personId: "m-1", displayName: "Marta" }]);
+    await flush(el);
+    expect(approval(el)).toBeNull();
+  });
+
+  it("sends one apply however often the approver authorizes while it is out", async () => {
+    const answer = deferred<unknown>();
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      applyAdjustment: vi.fn(() => answer.promise),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "7777" });
+    emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "7777" });
+    await flush(el);
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+    answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("changes nothing on screen when an apply is answered after the till locked", async () => {
+    for (const outcome of ["applied", "refused"] as const) {
+      const answer = deferred<unknown>();
+      const { el } = await mountApp({ applyAdjustment: vi.fn(() => answer.promise) });
+      const order = await openMesa4(el);
+      await previewComp(el, order);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+      emit(tableOrder(el), "logout");
+      await flush(el);
+      const reads = vi.mocked(api.getTabLines).mock.calls.length;
+      if (outcome === "applied")
+        answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
+      else answer.reject({ code: "bill.line_paid" });
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+      expect(banner(el)).toBeNull();
+      expect(vi.mocked(api.getTabLines).mock.calls.length).toBe(reads);
+      cleanupWidgets();
+    }
+  });
+
+  it("says the bill changed when the dish it named is as it was", async () => {
+    const { el } = await mountApp({
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(banner(el)!.textContent).toBe(t("adjust.changed_bill"));
+  });
+});

@@ -281,11 +281,12 @@ export class TillAdjustmentDialog extends LitElement {
       : refusalField(this.shownRefusal, this.kind, this.#partial());
   }
 
-  /** What each field shows under it: its own check once a submission was tried, else a refusal. */
+  /** What each field shows under it: the server's refusal of it, else its own check once a
+   * submission was tried. */
   #fieldErrors(): Map<Field, string> {
     const errors = this.attempted ? this.#ownErrors() : new Map<Field, string>();
     const field = this.#refusalField();
-    if (field !== null && !errors.has(field)) errors.set(field, codeMessage(this.shownRefusal!));
+    if (field !== null) errors.set(field, codeMessage(this.shownRefusal!));
     return errors;
   }
 
@@ -350,6 +351,7 @@ export class TillAdjustmentDialog extends LitElement {
       ${trackDialog()}
       .open=${true}
       .heading=${title}
+      .dismissible=${!this.busy}
       @wt-close=${() => this.#emit("adjust-close")}
     >
       <div class="body">
@@ -375,6 +377,7 @@ export class TillAdjustmentDialog extends LitElement {
       slot=${slot}
       variant="secondary"
       data-adjust-close
+      .disabled=${this.busy}
       @click=${() => this.#emit("adjust-close")}
     >
       ${t("adjust.close")}
@@ -580,6 +583,13 @@ export class TillAdjustmentDialog extends LitElement {
           </p>`
         : nothing;
     return html`${
+        choice.quantity === undefined
+          ? nothing
+          : html`<p class="detail" data-quantity-shown>
+              ${t("adjust.quantity_shown").replace("{n}", () => this.target!.quantity!)}
+            </p>`
+      }
+      ${
         reason === undefined
           ? nothing
           : html`<p class="detail">
@@ -613,7 +623,7 @@ export class TillAdjustmentDialog extends LitElement {
           ${t("action.back")}
         </wt-button>
         <wt-button
-          variant=${this.kind === "discount" ? "primary" : "danger"}
+          variant=${this.kind === "cancel" ? "danger" : "primary"}
           data-adjust-confirm
           .loading=${this.busy}
           .disabled=${this.busy}

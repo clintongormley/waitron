@@ -43,6 +43,7 @@ import "./screens/till-schedule-screen.js";
 import "./screens/till-floor-screen.js";
 import "./screens/till-table-order-screen.js";
 import type {
+  AdjustDetail,
   ChangeLineDetail,
   Draft,
   FireGroupDetail,
@@ -67,6 +68,13 @@ import "./screens/till-device-chooser.js";
 import "./screens/till-expo-screen.js";
 import "./screens/till-allergen-screen.js";
 import "./widgets/supervisor-override-dialog.js";
+import "./widgets/adjustment-dialog.js";
+import {
+  refusalField,
+  type AdjustKind,
+  type AdjustmentChoice,
+  type AdjustTarget,
+} from "./widgets/adjustment-dialog.js";
 import "./widgets/basket-refresh-dialog.js";
 import { dialogOpenUnder } from "./widgets/track-dialog.js";
 import "./widgets/tab-shell.js";
@@ -79,6 +87,10 @@ import { owing, paidInPart } from "./state/bill-state.js";
 import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
+  AdjustmentAsk,
+  AdjustmentCommand,
+  AdjustmentPreview,
+  AdjustmentReason,
   BillParty,
   DeviceStation,
   DraftSubmission,
@@ -401,6 +413,32 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
 
+/** An adjustment dialog: the bill and the revision its lines were read at when it opened, the
+ * order visit it opened on, and the server's last answer. */
+interface Adjusting {
+  id: number;
+  orderId: string;
+  revision: number;
+  visit: number;
+  kind: AdjustKind;
+  target: AdjustTarget;
+  reasons: AdjustmentReason[];
+  choice: AdjustmentChoice | null;
+  preview: AdjustmentPreview | null;
+  refusal: string | null;
+  busy: boolean;
+}
+
+/** Refusals of an approver's PIN, which the PIN prompt shows. */
+const APPROVER_REFUSALS = new Set(["pin.invalid", "person.not_found", "person.suspended"]);
+
+/** Refusals about the reason chosen, after which the reasons are read again. */
+const REASON_REFUSALS = new Set([
+  "adjustment.action_not_allowed",
+  "adjustment.reason_inactive",
+  "adjustment_reason.not_found",
+]);
+
 /** A change to a line of an order the waiter had started leaving, and how it failed. */
 interface LateChange {
   lineName: string;
@@ -436,7 +474,15 @@ type CounterError =
   | { billPayments: string }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
+  | { billChanged: BillChange }
   | { lateChange: LateChange; also?: StringKey };
+
+/** What a refusal as out of date found changed when the bill was read again: the dish the
+ * adjustment named, gone or changed, or something else on the bill. */
+interface BillChange {
+  key: "adjust.changed_bill" | "adjust.changed_line" | "adjust.changed_line_gone";
+  line: string;
+}
 
 /** When a table action was sent: its operator session, and how many table opens had begun. */
 interface Sent {
@@ -469,6 +515,8 @@ function errorText(error: CounterError): string | TemplateResult {
           t("table.draft_taken_over_unsaved_unnamed"),
         );
   if ("partyChanged" in error) return partyChangeMessage(error.partyChanged);
+  if ("billChanged" in error)
+    return t(error.billChanged.key).replace("{line}", () => error.billChanged.line);
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -1022,6 +1070,14 @@ export class TillApp extends LitElement {
   /** An error code shown inside the open override dialog; cleared before each attempt so a repeat
    * re-shows. */
   @state() private overrideError: string | null = null;
+  /** The open cancel, give-away or discount dialog, with what the server last answered it. */
+  @state() private adjusting: Adjusting | null = null;
+  /** The people who can approve the adjustment being confirmed; set, their PIN prompt is open. */
+  @state() private adjustApprovers?: StaffMember[];
+  @state() private adjustApproverError: string | null = null;
+  /** Each opening of the adjustment dialog, so an answer to a closed one changes nothing. */
+  #adjustments = 0;
+  #adjustOpening = false;
   /**
    * The outcome of the last non-captured `collect-card` attempt. Cleared wherever the basket it describes
    * leaves the counter, and deliberately not by `#onDiscardOrder`, which never touches the loaded basket.
@@ -2367,6 +2423,39 @@ export class TillApp extends LitElement {
     }
   }
 
+  /** The adjustment dialog and, over it, its approver's PIN prompt, whose events stop here so the
+   * drawer's override handlers on the wrapper never see them. */
+  #renderAdjusting(): TemplateResult | typeof nothing {
+    const open = this.adjusting;
+    if (open === null) return nothing;
+    return html`<till-adjustment-dialog
+        .kind=${open.kind}
+        .target=${open.target}
+        .reasons=${open.reasons}
+        .preview=${open.preview}
+        .refusal=${open.refusal}
+        .busy=${open.busy}
+        @adjust-preview=${(event: Event) => void this.#onAdjustPreview(event)}
+        @adjust-confirm=${() => void this.#onAdjustConfirm()}
+        @adjust-edit=${() => this.#onAdjustEdit()}
+        @adjust-close=${() => this.#closeAdjust()}
+      ></till-adjustment-dialog>
+      ${
+        this.adjustApprovers === undefined
+          ? nothing
+          : html`<till-supervisor-override-dialog
+              data-adjust-approval
+              .authorizers=${this.adjustApprovers}
+              .error=${this.adjustApproverError}
+              @override-confirm=${(event: Event) => void this.#onAdjustApproverConfirm(event)}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                this.#closeApprovers();
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
+  }
+
   /** Also the cancel handler. */
   #closeOverrideDialog(): void {
     this.overrideAuthorizers = undefined;
@@ -3462,6 +3551,224 @@ export class TillApp extends LitElement {
     await this.#rereadAmounts(orderId, orderVisit);
   }
 
+  /** Give away or Discount pressed: the reasons are read, then the dialog opens on the bill as the
+   * screen last read it. */
+  async #onAdjust(event: Event): Promise<void> {
+    const { kind, target } = (event as CustomEvent<AdjustDetail>).detail;
+    const orderId = this.activeTabId;
+    if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
+    const revision = this.tabRevision;
+    const visit = this.#orderVisit;
+    const session = this.#operatorSession;
+    this.errorKey = undefined;
+    this.#adjustOpening = true;
+    let reasons: AdjustmentReason[];
+    try {
+      reasons = await this.api.listAdjustmentReasons();
+    } catch {
+      if (session === this.#operatorSession) this.errorKey = "adjust.reasons_error";
+      return;
+    } finally {
+      this.#adjustOpening = false;
+    }
+    if (session !== this.#operatorSession || this.#hasLeftOrder(orderId, visit)) return;
+    this.adjusting = {
+      id: ++this.#adjustments,
+      orderId,
+      revision,
+      visit,
+      kind,
+      target,
+      reasons,
+      choice: null,
+      preview: null,
+      refusal: null,
+      busy: false,
+    };
+  }
+
+  #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
+    return { expectedRevision: open.revision, lineId: open.target.lineId, ...choice };
+  }
+
+  /** The dialog as it is now, when it is still the one `id` names. */
+  #adjustingNow(id: number): Adjusting | null {
+    return this.adjusting?.id === id ? this.adjusting : null;
+  }
+
+  async #onAdjustPreview(event: Event): Promise<void> {
+    const choice = (event as CustomEvent<AdjustmentChoice>).detail;
+    // The dialog's events come only while it is open. A press while a request is out is dropped.
+    const open = this.adjusting!;
+    if (open.busy) return;
+    this.adjusting = { ...open, choice, refusal: null, busy: true };
+    try {
+      const preview = await this.api.previewAdjustment(open.orderId, this.#adjustAsk(open, choice));
+      const now = this.#adjustingNow(open.id);
+      if (now !== null) this.adjusting = { ...now, preview, busy: false };
+    } catch (error) {
+      if (this.#adjustingNow(open.id) !== null) await this.#onAdjustRefused(error, "preview");
+    }
+  }
+
+  /** Confirmed: applied at once, or first the approver's PIN when the preview asked for it. */
+  async #onAdjustConfirm(): Promise<void> {
+    const open = this.adjusting!;
+    if (open.busy) return;
+    const role = open.preview!.needsApproval;
+    if (role === null) {
+      await this.#applyAdjustment(open);
+      return;
+    }
+    this.adjusting = { ...open, refusal: null, busy: true };
+    try {
+      const approvers = await this.api.listAdjustmentApprovers(role);
+      const now = this.#adjustingNow(open.id);
+      if (now === null) return;
+      this.adjusting = { ...now, busy: false };
+      this.adjustApproverError = null;
+      this.adjustApprovers = approvers;
+    } catch (error) {
+      if (this.#adjustingNow(open.id) !== null) await this.#onAdjustRefused(error, "approvers");
+    }
+  }
+
+  /** The approver's PIN leaves in the request and is never kept. */
+  async #onAdjustApproverConfirm(event: Event): Promise<void> {
+    event.stopPropagation();
+    const { personId, pin } = (event as CustomEvent<{ personId: string; pin: string }>).detail;
+    // The PIN prompt is drawn only over an open dialog.
+    const open = this.adjusting!;
+    if (open.busy) return;
+    this.adjustApproverError = null;
+    await this.#applyAdjustment(open, { personId, pin });
+  }
+
+  /**
+   * A fresh submission id for each confirmation, sent again unchanged only while a request gets no
+   * answer (plan D8). Applied, the dialog closes and the bill, its party and what it owes are read
+   * again; with no answer at all, they are read again too and the message says the change may have
+   * been made.
+   */
+  async #applyAdjustment(
+    open: Adjusting,
+    approver?: { personId: string; pin: string },
+  ): Promise<void> {
+    const command: AdjustmentCommand = {
+      ...this.#adjustAsk(open, open.choice!),
+      submissionId: crypto.randomUUID(),
+      ...(approver === undefined ? {} : { approver }),
+    };
+    this.adjusting = { ...open, refusal: null, busy: true };
+    const session = this.#operatorSession;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const answer = await resendUnanswered(
+        (signal) => this.api.applyAdjustment(open.orderId, command, { signal }),
+        limit.signal,
+        () => session === this.#operatorSession,
+      );
+      this.#noteBillParty(answer.party);
+      this.#closeAdjust();
+      if (this.#hasLeftOrder(open.orderId, open.visit)) return;
+      await this.#rereadAmounts(open.orderId, open.visit);
+    } catch (error) {
+      if (this.#adjustingNow(open.id) === null) return;
+      await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
+    } finally {
+      limit.done();
+    }
+  }
+
+  /** A refusal goes where it can be acted on: a PIN's in the PIN prompt, one naming a field under
+   * that field, back on the form, and any other beside the dialog's action. */
+  async #onAdjustRefused(
+    error: unknown,
+    stage: "preview" | "approvers" | "apply" | "approved",
+  ): Promise<void> {
+    const open = this.adjusting!;
+    const code = (error as { code?: string } | undefined)?.code;
+    if (stage === "approved" && code !== undefined && APPROVER_REFUSALS.has(code)) {
+      this.adjustApproverError = code;
+      this.adjusting = { ...open, busy: false };
+      return;
+    }
+    this.#closeApprovers();
+    if (code === "working_order.out_of_date") {
+      await this.#onAdjustOutOfDate(open);
+      return;
+    }
+    if ((stage === "apply" || stage === "approved") && isNetworkFailure(error)) {
+      this.#closeAdjust();
+      await this.#rereadAmounts(open.orderId, open.visit);
+      if (!this.#hasLeftOrder(open.orderId, open.visit)) this.errorKey = "adjust.unconfirmed";
+      return;
+    }
+    const refusal = code ?? "server.internal";
+    const onField = refusalField(refusal, open.kind, open.target.unitTotal !== null) !== null;
+    let reasons = open.reasons;
+    if (REASON_REFUSALS.has(refusal)) {
+      try {
+        reasons = await this.api.listAdjustmentReasons();
+      } catch {
+        // The reasons already shown stay; the refusal says to choose another.
+      }
+    }
+    const now = this.#adjustingNow(open.id);
+    if (now === null) return;
+    this.adjusting = {
+      ...now,
+      reasons,
+      refusal,
+      busy: false,
+      preview: onField ? null : now.preview,
+    };
+  }
+
+  /**
+   * The bill changed on another device since the dialog opened. It closes, the bill is read again,
+   * and the message says what changed; nothing is sent again, so the person acts again on what
+   * they now see.
+   */
+  async #onAdjustOutOfDate(open: Adjusting): Promise<void> {
+    const lineId = open.target.lineId;
+    const before = this.tabLines.find((line) => line.id === lineId);
+    this.#closeAdjust();
+    await this.#rereadAmounts(open.orderId, open.visit);
+    if (this.#hasLeftOrder(open.orderId, open.visit)) return;
+    const after = this.tabLines.find((line) => line.id === lineId);
+    const changed =
+      before !== undefined &&
+      after !== undefined &&
+      (before.quantity !== after.quantity ||
+        before.unitPriceGross !== after.unitPriceGross ||
+        before.listUnitPriceGross !== after.listUnitPriceGross);
+    const key =
+      lineId === null
+        ? "adjust.changed_bill"
+        : after === undefined
+          ? "adjust.changed_line_gone"
+          : changed
+            ? "adjust.changed_line"
+            : "adjust.changed_bill";
+    this.errorKey = { billChanged: { key, line: open.target.name } };
+  }
+
+  #onAdjustEdit(): void {
+    if (this.adjusting !== null)
+      this.adjusting = { ...this.adjusting, preview: null, refusal: null };
+  }
+
+  #closeApprovers(): void {
+    this.adjustApprovers = undefined;
+    this.adjustApproverError = null;
+  }
+
+  #closeAdjust(): void {
+    this.adjusting = null;
+    this.#closeApprovers();
+  }
+
   /**
    * A saved change stores the new revision and reads the order, its bills and what the party owes
    * again whenever that order is still the open one, wherever the waiter is, so the next change is
@@ -3947,6 +4254,7 @@ export class TillApp extends LitElement {
     this.#markedRounds.clear();
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
+    this.#closeAdjust();
     this.#operatorSession++;
   }
 
@@ -4380,6 +4688,7 @@ export class TillApp extends LitElement {
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
         @void-line=${(event: Event) => void this.#onVoidLine(event)}
+        @adjust=${(event: Event) => void this.#onAdjust(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @set-status=${(event: Event) => void this.#onSetStatus(event)}
@@ -4453,6 +4762,7 @@ export class TillApp extends LitElement {
               ></till-supervisor-override-dialog>`
             : nothing
         }
+        ${this.#renderAdjusting()}
         ${
           this.basketRefresh === undefined
             ? nothing

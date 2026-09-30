@@ -294,6 +294,40 @@ describe("till-adjustment-dialog: the form", () => {
     ]);
   });
 
+  it("goes back to all of the dish when All is chosen again", async () => {
+    const el = await mount({ kind: "comp", target: steaks });
+    const asked = capture<AdjustmentChoice>(el, "adjust-preview");
+    await chooseReason(el, "Complaint");
+    await choose(el, "quantity", "1");
+    await choose(el, "quantity", "all");
+    await press(continueButton(el), el);
+    expect(asked).toEqual([{ action: "comp", reasonId: "Complaint", note: null }]);
+  });
+
+  it("continues on Enter in the note and in the amount", async () => {
+    const el = await mount({ kind: "discount", reasons: [staffMeal] });
+    const asked = capture<AdjustmentChoice>(el, "adjust-preview");
+    await chooseReason(el, "Staff meal");
+    for (const name of ["amount", "note"]) {
+      await type(el, name, name === "amount" ? "2" : "Regular");
+      field(el, name)
+        .shadowRoot!.querySelector("input")!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+        );
+      await el.updateComplete;
+    }
+    expect(asked).toEqual([
+      { action: "discount_amount", reasonId: "Staff meal", note: null, amount: "2" },
+      { action: "discount_amount", reasonId: "Staff meal", note: "Regular", amount: "2" },
+    ]);
+  });
+
+  it("draws nothing until it is given what it acts on", async () => {
+    const el = await mount({ target: null });
+    expect(root(el).querySelector("wt-dialog")).toBeNull();
+  });
+
   it("asks no quantity of a line that can only be done whole", async () => {
     const el = await mount({ kind: "comp", target: burger });
     expect(root(el).querySelector('input[name="quantity"]')).toBeNull();
@@ -307,9 +341,20 @@ describe("till-adjustment-dialog: the form", () => {
     expect(closed).toHaveLength(2);
   });
 
-  it("holds its actions while a request is out", async () => {
+  it("holds its actions, and cannot be closed, while a request is out", async () => {
     const el = await mount({ busy: true });
     expect(continueButton(el).disabled).toBe(true);
+    expect(
+      root(el).querySelector<HTMLElement & { disabled: boolean }>("[data-adjust-close]")!.disabled,
+    ).toBe(true);
+    expect(
+      root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!.dismissible,
+    ).toBe(false);
+    el.busy = false;
+    await el.updateComplete;
+    expect(
+      root(el).querySelector<HTMLElement & { dismissible: boolean }>("wt-dialog")!.dismissible,
+    ).toBe(true);
   });
 });
 
@@ -353,6 +398,23 @@ describe("till-adjustment-dialog: before confirming", () => {
     expect(confirmed).toEqual(asked);
   });
 
+  it("restates that it acts on one of several units", async () => {
+    const { el } = await atConfirm({ kind: "comp", target: steaks }, async (el) => {
+      await chooseReason(el, "Complaint");
+      await choose(el, "quantity", "1");
+    });
+    expect(text(root(el).querySelector("[data-quantity-shown]")!)).toBe(
+      t("adjust.quantity_shown").replace("{n}", "2"),
+    );
+  });
+
+  it("says nothing of a quantity when it acts on all of the dish", async () => {
+    const { el } = await atConfirm({ kind: "comp", target: steaks }, (el) =>
+      chooseReason(el, "Complaint"),
+    );
+    expect(root(el).querySelector("[data-quantity-shown]")).toBeNull();
+  });
+
   it("asks for approval when the preview says a manager must approve", async () => {
     const { el } = await atConfirm({ preview: preview({ needsApproval: "manager" }) }, (el) =>
       chooseReason(el, "Complaint"),
@@ -376,6 +438,14 @@ describe("till-adjustment-dialog: before confirming", () => {
       t("adjust.nearest").replace("{amount}", money("3.28")).replace("{asked}", money("3.27")),
     );
     expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.do_discount"));
+  });
+
+  it("names no reason once the reasons no longer hold the one chosen", async () => {
+    const { el } = await atConfirm({}, (el) => chooseReason(el, "Complaint"));
+    el.reasons = [staffMeal];
+    await el.updateComplete;
+    expect(text(root(el))).not.toContain(t("adjust.reason_shown").replace("{reason}", "Complaint"));
+    expect(root(el).querySelector("[data-takes-off]")).not.toBeNull();
   });
 
   it("goes back to the form, keeping what was chosen", async () => {
