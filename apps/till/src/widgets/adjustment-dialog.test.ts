@@ -226,6 +226,27 @@ describe("till-adjustment-dialog: the form", () => {
     expect(await heading("cancel", olives)).toBe("Cancelar un extra");
   });
 
+  // Fails if cancelling an extra of a dish the kitchen has does not say the kitchen is told, or if
+  // any other cancel starts saying so.
+  it("says the kitchen is told when an extra of a fired dish is cancelled, and only then", async () => {
+    const olives: AdjustTarget = { ...burger, name: "Olives (with Pizza)", extra: true };
+    const lead = async (target: AdjustTarget) =>
+      text(root(await mount({ kind: "cancel", target })).querySelector("p.lead")!);
+
+    expect(await lead({ ...olives, kitchenTold: true })).toBe(
+      "It comes off the bill, and the kitchen is told.",
+    );
+    expect(await lead(olives)).toBe(t("table.cancel_sent"));
+    expect(await lead(burger)).toBe(t("table.cancel_sent"));
+    expect(t("table.cancel_sent")).toBe("It comes off the bill.");
+
+    setLocale("es-ES");
+    expect(await lead({ ...olives, kitchenTold: true })).toBe(
+      "Se quitará de la cuenta y se avisará a cocina.",
+    );
+    expect(await lead(olives)).toBe("Se quitará de la cuenta.");
+  });
+
   it("names the whole bill for a bill discount", async () => {
     const el = await mount({
       kind: "discount",

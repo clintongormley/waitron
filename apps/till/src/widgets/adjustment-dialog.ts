@@ -36,6 +36,8 @@ export interface AdjustTarget {
   weighed?: boolean;
   /** An extra of a dish, adjusted on its own. */
   extra?: boolean;
+  /** An extra of a dish the kitchen has been sent, so cancelling it tells the kitchen. */
+  kitchenTold?: boolean;
 }
 
 /** The person's choices, which the app asks the server about and then applies. */
@@ -441,7 +443,13 @@ export class TillAdjustmentDialog extends LitElement {
     const cancelWording =
       this.kind === "cancel"
         ? html`<p class="lead">
-            ${target.started === true ? t("table.cancel_started") : t("table.cancel_sent")}
+            ${
+              target.started === true
+                ? t("table.cancel_started")
+                : target.kitchenTold === true
+                  ? t("table.cancel_extra_told")
+                  : t("table.cancel_sent")
+            }
           </p>`
         : nothing;
     return html`${cancelWording}

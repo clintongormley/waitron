@@ -147,6 +147,7 @@ describe("till-table-order-screen: giving away and discounting a dish", () => {
       unitTotal: null,
       started: false,
       extra: true,
+      kitchenTold: true,
     };
     expect(asked).toEqual([
       { kind: "comp", target },
@@ -277,6 +278,7 @@ describe("till-table-order-screen: cancelling a dish", () => {
           unitTotal: null,
           started: false,
           extra: true,
+          kitchenTold: true,
         },
       },
     ]);
