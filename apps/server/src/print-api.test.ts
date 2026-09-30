@@ -2648,7 +2648,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(portless).toMatchObject({ pagePrinter: true });
   });
 
-  it("drops a reported device once its last report is older than fifteen seconds", async () => {
+  it("drops a reported device once its last report is older than fifteen seconds, with no discovery window open", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const serial = `SN-${randomUUID()}`;
@@ -2866,7 +2866,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(forget.status).toBe(202);
   });
 
-  it("accepts Pair up to fifteen seconds after the scan, the window the discovered list shows", async () => {
+  it("accepts Pair up to fifteen seconds after the scan, the window the discovered list shows when no discovery window is open", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();

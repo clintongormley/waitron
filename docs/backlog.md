@@ -2602,19 +2602,23 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   (`apps/dashboard/src/screens/printers-screen.ts`):
   - The Scan for printers button is the one sign of a scan. While it spins, the empty list of found
     printers shows no text; "No printers found yet…" appears when it stops.
-  - It spins for 30 seconds (`SCAN_LISTEN_MS`), a plain timer: nothing tells the dashboard that an
-    agent has finished a scan. A printer reported later still appears, because the list keeps
-    refreshing while the dialog is open. Add a print agent's scan keeps its 10 seconds.
-  - While the dialog is open, the dashboard renews the server's discovery window every minute
-    (`POST /management-api/printer-discovery/renew`, `apps/server/src/print-api.ts`), so agents keep
-    scanning. It stops when the dialog closes or the screen goes away, and the window's own three
-    minutes then end the scanning — after a closed tab too. A renewal is not activity on the
-    dashboard session: the route checks the session without moving its idle clock
-    (`withPassiveManagementRead`), and the dashboard sends it through its background client, which
-    reports no activity. The server refuses a renewal once the session has been idle for 30 minutes
+  - It spins for 30 seconds (`SCAN_LISTEN_MS`) counted from when the first read of the found list
+    returns, stopping at the first re-read (every 2 seconds, `SCAN_POLL_MS`) after that; nothing an
+    agent reports ends it sooner, because nothing tells the dashboard that an agent has finished a
+    scan. A printer reported later still appears, because the list keeps refreshing while the dialog
+    is open. Add a print agent's scan keeps its 10 seconds.
+  - Once a Scan has opened the discovery window, the dashboard renews it every minute while the
+    dialog stays open (`POST /management-api/printer-discovery/renew`,
+    `apps/server/src/print-api.ts`), so agents keep scanning. It stops when the dialog closes or the
+    screen goes away, and the window's own three minutes then end the scanning — after a closed tab
+    too. A renewal is not activity on the dashboard session: the route checks the session without
+    moving its idle clock (`withPassiveManagementRead`), and the dashboard sends it through its
+    background client, which reports no activity. The server refuses a renewal once the session has been idle for 30 minutes
     (`IDLE_TIMEOUT_MS`, `packages/identity/src/management-session.ts`), so a dialog left open stops
-    keeping the window open then. Nothing scans while nobody has the dialog open, on purpose: each pass runs a
-    Bluetooth inquiry and a sweep of the local network.
+    keeping the window open then. Once renewals stop, the window ends within three minutes and the
+    agent starts no further pass, judged by its own clock (see the open entry on that); a pass
+    already running finishes. That is on purpose: each pass runs a Bluetooth inquiry and a sweep of
+    the local network.
   - While a discovery window is open, the list keeps a device for 45 seconds after its last report,
     not 15, and Pair and Forget are accepted on the same terms, because an agent that is scanning
     reports once per scan pass rather than every 2 seconds. With no window open it stays 15 seconds.
@@ -2623,14 +2627,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     1021. Read, not timed: the rest of a pass — a 6-second Bluetooth inquiry, `info` calls each
     killed after 15 seconds, the office-printer check (each query up to 1.5 s, eight at a time), up to 3 s for the paired
     listing — plus the 2-second wait between pulls, so a pass whose `info` call is killed is longer
-    than 15 seconds.
+    than 15 seconds. Added up in the order a pass runs them (`tick`,
+    `packages/print-agent/src/agent.ts`; `scan`, `apps/print-agent/src/linux-devices.ts`), read and
+    not timed, a pass whose 6-second Bluetooth inquiry and `devices` listing answer promptly comes to
+    about 36 seconds between two reports, inside 45: up to 3 s for the paired listing, 8.0 s for the
+    sweep of 1021 addresses (the 1.5-second mDNS listen runs beside it), 6 s for the inquiry, up to
+    15 s for the `info` calls (asked all at once), 1.5 s for the office-printer check of up to eight
+    network devices, and the 2-second wait. 45 seconds does not cover every pass, and a device not
+    reported within 45 seconds drops off the list until its next report.
   - Why the printers disappeared (read, not reproduced: there is no bluetoothctl on macOS, and the
     box was not used): the window closed three minutes after the last Scan, and 15 seconds later the
     list dropped every device known only from a scan — network printers and unpaired Bluetooth
     ones. A paired Bluetooth printer is reported on every pull and stays; whether the owner's printer
     was paired at the time is not known.
-  - Left open: print jobs now wait behind scan passes for as long as the dialog is open (B6, "While
-    Add a printer is open, print jobs wait behind each scan pass").
+  - Left open: print jobs now wait behind scan passes while the dialog is open and for about three
+    minutes after (B6, "While Add a printer is open, print jobs wait behind each scan pass").
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
@@ -2711,7 +2722,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   protection also lapses for a pull made more than 15 seconds after the other agent's latest report
   that it can print to the printer (`DISCOVERED_TTL_MS`), as happens when that agent goes longer
   than that between pulls. _(2026-09-30, C102: an agent that is scanning pulls once per scan pass,
-  and the discovery window now stays open for as long as Add a printer is; this check kept its
+  and the discovery window now stays open while Add a printer is open and for up to three minutes
+  after; this check kept its
   15 seconds.)_ A140 must
   have the agent send `true`, or stop sending the field, once it can print; must close that restart
   gap if it matters then; and must remove, or key on something other than
@@ -6570,9 +6582,9 @@ approved.
   timed). While a discovery window is open the agent runs a whole scan before each job pull (`tick`,
   `packages/print-agent/src/agent.ts`), so a ticket queued during a pass is printed only after it —
   roughly ten seconds or more, by the timeouts in C102's entry under A3. Before C102 this lasted three
-  minutes after each Scan; since C102 it lasts as long as Add a printer stays open. Running the scan
-  beside the pull rather than before it would remove the wait. Needs the owner to say whether it
-  matters.
+  minutes after each Scan; since C102 it lasts while Add a printer stays open and for about three
+  minutes after. Running the scan beside the pull rather than before it would remove the wait. Needs
+  the owner to say whether it matters.
 - **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
   run). `discoveryUntil` is a time on the server's clock, and the agent checks it against
   `host.now()` (`packages/print-agent/src/agent.ts`), where a network probe's deadline is sent as a

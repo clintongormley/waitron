@@ -1957,7 +1957,8 @@ export class PrintersScreen extends LitElement {
   #forgetAction(p: Printer): TemplateResult | typeof nothing {
     const device = this.#pairedReport(p);
     if (device === undefined) return nothing;
-    // The agent's pairing report can outlast a successful forget by up to the list's 15 seconds.
+    // The agent's pairing report can outlast a successful forget by up to the discovered list's own
+    // expiry (`isListed`, `apps/server/src/print-api.ts`).
     const sent = this.commands[this.#commandKeyOf(device)];
     if (sent?.kind === "forget" && sent.state === "succeeded") return nothing;
     const armed = this.armedForgetId === p.id;

@@ -2373,7 +2373,8 @@ export class DashboardApi {
     );
   }
 
-  /** Automatic: called through `background`, so it never counts as session activity. */
+  /** The route leaves the session's idle clock alone; call it through `background` so the
+   * dashboard's own sign-out timer stays put too. */
   renewPrinterDiscovery(): Promise<{ discoveryUntil: number }> {
     return this.#request<{ discoveryUntil: number }>(
       "/management-api/printer-discovery/renew",
