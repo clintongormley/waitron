@@ -5362,7 +5362,7 @@ ongoing overhaul listed at the top of Track A.
   `apps/server/src/management-api.membership.test.ts`. The promote route
   (`apps/server/src/promote-api.ts`) called `loginManagerById` without the ring as well, so an
   admin with an authenticator sending a correct current code drew 401 `totp.invalid` and the
-  promotion never ran. **DONE (C94, 2026-09-30):** `PromoteApiDeps` takes a `credentialKeyRing`,
+  promotion never ran. **DONE (C94, #926, 2026-09-30):** `PromoteApiDeps` takes a `credentialKeyRing`,
   which `boot.ts` fills with the same ring. Test: "signs in with a correct current code and
   promotes" in `apps/server/src/promote-api.authenticator.test.ts` (real database, the promote
   itself stubbed) drew 401 `totp.invalid` before the fix and 200 after, and a wrong code is still
