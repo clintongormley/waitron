@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { AdjustmentReason, AdjustmentsApi } from "./client.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import "./reasons-screen.js";
@@ -300,18 +301,18 @@ describe("the reasons list's column chooser", () => {
     const el = await mount(fakeApi());
     expect(chooser(el)).toBe("Columns");
     expect(choices(el)).toEqual([
-      ["actions", true],
+      ["allows", true],
       ["limits", true],
       ["roles", true],
       ["status", true],
     ]);
     expect(headers(el)).toEqual([
       "Name",
-      "Actions",
       "Allows",
       "Limits",
       "Who applies it",
       "Status",
+      "Actions",
     ]);
     const box = table(el).shadowRoot!.querySelector<HTMLInputElement>(
       'input[data-column="limits"]',
@@ -319,7 +320,7 @@ describe("the reasons list's column chooser", () => {
     box.checked = false;
     box.dispatchEvent(new Event("change"));
     await (table(el) as Table).updateComplete;
-    expect(headers(el)).toEqual(["Name", "Actions", "Allows", "Who applies it", "Status"]);
+    expect(headers(el)).toEqual(["Name", "Allows", "Who applies it", "Status", "Actions"]);
     expect(JSON.parse(localStorage.getItem("waitron.adjustments.reasons.table:columns")!)).toEqual({
       limits: false,
     });
@@ -330,6 +331,53 @@ describe("the reasons list's column chooser", () => {
     const el = await mount(fakeApi());
     expect(chooser(el)).toBe("Columnas");
   });
+});
+
+describe("at phone width", () => {
+  const longName = "Queja del comensal por el tiempo de espera en la terraza";
+
+  it("puts the row controls in the last column, pinned to the table's edge", async () => {
+    const el = await mount(fakeApi());
+    const heads = [...table(el).shadowRoot!.querySelectorAll("thead th")];
+    expect(heads.at(-1)!.textContent!.trim()).toBe("Actions");
+    expect(heads.at(-1)!.getAttribute("data-pinned")).toBe("end");
+    for (const row of table(el).shadowRoot!.querySelectorAll("tbody tr[data-row-key]")) {
+      const last = row.querySelector("td:last-child")!;
+      expect(last.getAttribute("data-pinned")).toBe("end");
+      expect(last.querySelector("wt-row-actions")).not.toBeNull();
+    }
+  });
+
+  it.each(["en", "es"])(
+    "keeps every reason row's menu and move buttons on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const long = { ...complaint, name: longName, names: { en: longName, es: longName } };
+        const el = await mount(
+          fakeApi({ listReasons: vi.fn().mockResolvedValue([entryError, long]) }),
+        );
+        expectRowMenusOnScreen(table(el), 2);
+        const box = table(el).shadowRoot!.querySelector(".scroll")!.getBoundingClientRect();
+        for (const test of ["move-up-e", "move-down-e", "move-up-c", "move-down-c"]) {
+          const button = find(el, `[data-test="${test}"]`)!;
+          const at = button.getBoundingClientRect();
+          expect(at.right, test).toBeLessThanOrEqual(Math.min(box.right, window.innerWidth));
+          expect(at.left, test).toBeGreaterThanOrEqual(box.left);
+          const root = button.getRootNode() as ShadowRoot;
+          expect(root, test).toBe(table(el).shadowRoot);
+          const hit = root.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+          expect(hit !== null && button.contains(hit), `${test} is covered`).toBe(true);
+        }
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
 });
 
 describe("reordering", () => {

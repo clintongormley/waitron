@@ -2755,7 +2755,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **DONE (2026-09-30, A155, #950): every `wt-data-table` whose row menu sits in its last column pins
   that column** (owner's answer "a" to A145's question). `pinned: "end"` stays a per-column option,
   now set on every row-menu column keyed `actions` (the adjustment reasons screen's menu, keyed
-  `manage` and not its last column, is left unpinned — recorded below): the Printers screen's Agents
+  `manage` and not its last column, was left unpinned — moved last and pinned by A162, below): the Printers screen's Agents
   tab, the categories screen
   and its products-in-category table, the units screen and its in-use products table, the menus,
   sections, servers, payments, alerts, modifiers (Extras and Options) and labels screens, the
@@ -2774,15 +2774,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `scripts/pinned-actions-column.test.ts`, weaker than its name — it knows a row-menu column only by
   a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`; its
   header lists the rest.
-- **The adjustment reasons table's row menu leaves a phone's screen when a reason's name is long.**
-  Its menu is not in the last column: the `manage` column (move up, move down and ⋮) is second, on
-  purpose, "so a phone reaches the controls without scrolling the table"
-  (`packages/adjustments/src/dashboard/reasons-screen.ts`). Measured 2026-09-30 at 390 px with a
-  reason named "Queja del cliente por el tiempo de espera en la terraza": the ⋮'s right edge was
-  643 px (English) and 584 px (Spanish) from the window's left. Moving that column last and pinning
-  it would change the column order an existing test pins (`reasons-screen.test.ts`, the column
-  chooser case), so A155 left it; it is an owner decision. Its column keyed `actions` is data (the
-  actions a reason allows), excused in the guard's `NOT_A_ROW_MENU`.
+- **DONE (2026-09-30, A162, #954): the adjustment reasons table's row controls are its last column,
+  keyed `actions` and pinned** (the owner chose to move it last and pin it, answering A155's question). Before, the column holding move
+  up, move down and ⋮ was second, keyed `manage`, and at 390 px with a reason named "Queja del
+  cliente por el tiempo de espera en la terraza" the ⋮'s right edge was 643 px (English) and 584 px
+  (Spanish) from the window's left. The data column that lists what a reason allows is re-keyed
+  `allows`, so `scripts/pinned-actions-column.test.ts` sees the controls column and its data-column
+  excuse (`NOT_A_ROW_MENU`) is gone; a saved column choice under the old `actions` key no longer
+  hides anything, because the controls column is not in the column chooser. The column chooser
+  case in `packages/adjustments/src/dashboard/reasons-screen.test.ts` now expects `allows` and the
+  new heading order (owner-approved). Guards: that suite's "at phone width" cases (the controls
+  column is last and pinned; at 390 px, English and Spanish, with a name as long, every ⋮ and move
+  button is inside the table's box and the window and uncovered), and the guard above.
 - **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
   `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
   not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` and
