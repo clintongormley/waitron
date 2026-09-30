@@ -38,6 +38,36 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with a given-away and a discounted line showing their earlier prices", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result: {
+          ...result,
+          lines: [
+            { descriptions: { "es-ES": "Café" }, quantity: "2", gross: "0.00", listGross: "3.00" },
+            {
+              descriptions: { "es-ES": "Jamón" },
+              quantity: "0.32",
+              gross: "5.76",
+              listGross: "6.40",
+            },
+            {
+              descriptions: { "es-ES": "Extra queso" },
+              quantity: "1",
+              gross: "0.00",
+              listGross: "0.50",
+              parentLineNo: 2,
+            },
+          ],
+        },
+        issuer,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations when the verification URL is empty (no QR)", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",

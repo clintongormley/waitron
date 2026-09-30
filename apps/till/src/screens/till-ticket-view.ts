@@ -5,6 +5,7 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
 import {
   addDecimal,
+  compareDecimal,
   decimal,
   formatMoney,
   perDishOptionQuantity,
@@ -51,6 +52,7 @@ const LABEL = {
   card: "Tarjeta",
   tip: "Propina",
   charged: "Cobrado",
+  was: "Antes",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
@@ -83,6 +85,21 @@ function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
     }
   }
   return groups;
+}
+
+/** A line's total; after a give-away or a discount, the total it had first, struck through, as the
+ * printed receipt writes `12,00 € -> 0,00 €`. Presentation only: no fiscal figure changes. */
+function lineGross(line: TillSaleLine, locale: string) {
+  const now = formatMoney(line.gross, locale);
+  if (
+    line.listGross === undefined ||
+    compareDecimal(decimal(line.listGross), decimal(line.gross)) === 0
+  )
+    return html`<span class="line-gross">${now}</span>`;
+  return html`<span class="line-gross"
+    ><span class="visually-hidden">${LABEL.was} </span
+    ><s class="list-gross">${formatMoney(line.listGross, locale)}</s> ${now}</span
+  >`;
 }
 
 /** The fecha de expedición (art. 7.1.b). */
@@ -247,6 +264,19 @@ export class TillTicketView extends LitElement {
         flex: 1;
       }
 
+      .list-gross {
+        color: var(--wt-color-text-muted);
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
       /* A selected option (ordering modifiers, Task 14) — indented beneath its dish, name left and its
          own delta right (0,00 for a free option), never its own quantity column (an option is priced per
          dish, so repeating the count reads as noise) — matching the printed receipt's identical indent. */
@@ -401,7 +431,7 @@ export class TillTicketView extends LitElement {
                       : ` ${resolveSnapshotText(group.dish.unitName, locale, locale)}`
                   }</span
                 >
-                <span class="line-gross">${formatMoney(group.dish.gross, locale)}</span>
+                ${lineGross(group.dish, locale)}
               </li>
               ${optionAnswers(group.dish.optionSnapshots, { reads: "customer", locale }).map((answer) => html`<li class="line option modifier-answer"><span class="line-name">${answer}</span></li>`)}
               ${group.options.map(
@@ -414,7 +444,7 @@ export class TillTicketView extends LitElement {
                       <span class="line-name"
                         >${lineName(option.descriptions, locale)}${badge}</span
                       >
-                      <span class="line-gross">${formatMoney(option.gross, locale)}</span>
+                      ${lineGross(option, locale)}
                     </li>
                   `;
                 },

@@ -592,3 +592,55 @@ it("shows a dish's frozen options answers in the DINER's wording", async () => {
     ),
   ).toEqual(["¿Cómo lo quiere?: Poco hecho"]);
 });
+
+describe("till-ticket-view: a line given away or discounted (service plan Task 11)", () => {
+  const adjusted: Partial<TillSaleResult> = {
+    total: "27.00",
+    lines: [
+      {
+        descriptions: { "es-ES": "Hamburguesa" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "12.00",
+      },
+      {
+        descriptions: { "es-ES": "Aceitunas" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "1.50",
+        parentLineNo: 1,
+      },
+      { descriptions: { "es-ES": "Rioja" }, quantity: "1", gross: "27.00", listGross: "30.00" },
+      { descriptions: { "es-ES": "Pan" }, quantity: "1", gross: "2.50" },
+    ],
+  };
+  const grossOf = (row: Element) =>
+    norm(row.querySelector(".line-gross")!.textContent!)
+      .replace(/[ \n\t]+/g, " ")
+      .trim();
+
+  it("shows the price a line had, struck through, before its new one, as the printed receipt does", async () => {
+    const { el } = await mount(adjusted);
+    const rows = [...el.shadowRoot!.querySelectorAll(".lines > .line")];
+
+    expect(rows.map(grossOf)).toEqual([
+      "Antes 12,00 € 0,00 €",
+      "Antes 1,50 € 0,00 €",
+      "Antes 30,00 € 27,00 €",
+      "2,50 €",
+    ]);
+    expect(norm(rows[0]!.querySelector("s")!.textContent!)).toBe("12,00 €");
+    expect(rows[3]!.querySelector("s")).toBeNull();
+  });
+
+  it("shows a line whose original price equals its price plainly", async () => {
+    const { el } = await mount({
+      lines: [
+        { descriptions: { "es-ES": "Pan" }, quantity: "1", gross: "2.50", listGross: "2.50" },
+      ],
+    });
+    const row = el.shadowRoot!.querySelector(".lines > .line")!;
+    expect(row.querySelector("s")).toBeNull();
+    expect(grossOf(row)).toBe("2,50 €");
+  });
+});
