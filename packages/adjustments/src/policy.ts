@@ -1,5 +1,11 @@
 import { roleAtLeast, type PersonRoleValue } from "@waitron/identity";
-import { addDecimal, compareDecimal, decimal, type Decimal } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  multiplyDecimal,
+  type Decimal,
+} from "@waitron/shared";
 
 export const ADJUSTMENT_ACTIONS = [
   "cancel",
@@ -105,6 +111,34 @@ export function evaluateAdjustment(
     return { kind: "needs_approval", approverRole: reason.approverRole };
   }
   return { kind: "allowed" };
+}
+
+/** A discount asked on a bill, measured against the venue's limit on the bill's total discount. */
+export interface BillDiscountRequest {
+  /** The venue's limit in basis points of `billValue`; null sets none. */
+  limitBp: number | null;
+  /** Every discount already recorded on the bill, line and bill-level alike. */
+  priorDiscount: Decimal;
+  reduction: Decimal;
+  /** The bill's price before any adjustment. */
+  billValue: Decimal;
+  actorRole: PersonRoleValue;
+}
+
+/**
+ * Whether this discount takes the bill's discounts past the venue's limit when the operator is
+ * below a manager, so a manager must approve it. Reaching the limit exactly is allowed; the
+ * comparison is exact, never rounded to the cent.
+ */
+export function billDiscountNeedsManager(req: BillDiscountRequest): boolean {
+  const { limitBp } = req;
+  if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
+  for (const field of ["priorDiscount", "reduction", "billValue"] as const) {
+    if (compareDecimal(req[field], ZERO) < 0) throw new RangeError(`${field} is negative`);
+  }
+  if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
+  const taken = multiplyDecimal(addDecimal(req.priorDiscount, req.reduction), decimal("10000"));
+  return compareDecimal(taken, multiplyDecimal(req.billValue, decimal(String(limitBp)))) > 0;
 }
 
 /** The policy an adjustment was evaluated under, kept on the adjustment so a later edit of the

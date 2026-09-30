@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
+  billDiscountNeedsManager,
   evaluateAdjustment,
   policySnapshotOf,
   type AdjustmentReason,
@@ -250,5 +251,57 @@ describe("policySnapshotOf", () => {
     reason.actions.push("cancel");
     expect(snapshot.actions).toEqual(["comp", "discount_percent"]);
     expect(policySnapshotOf({ ...COMPLAINT, maxAmount: null }).maxAmount).toBeNull();
+  });
+});
+
+describe("billDiscountNeedsManager", () => {
+  /** A staff member's €10.00 discount on a €100.00 bill that already has €30.00 off, under 40%. */
+  const ask = (overrides: Partial<Parameters<typeof billDiscountNeedsManager>[0]> = {}) =>
+    billDiscountNeedsManager({
+      limitBp: 4000,
+      priorDiscount: decimal("30.00"),
+      reduction: decimal("10.00"),
+      billValue: decimal("100.00"),
+      actorRole: "staff",
+      ...overrides,
+    });
+
+  it("lets the bill's discounts reach the limit exactly", () => {
+    expect(ask()).toBe(false);
+  });
+
+  it("asks for a manager one cent past it", () => {
+    expect(ask({ reduction: decimal("10.01") })).toBe(true);
+  });
+
+  it("compares exactly where the limit is a fraction of a cent: 33.33% of €10.00 is €3.333", () => {
+    const third = { limitBp: 3333, billValue: decimal("10.00"), priorDiscount: decimal("0.00") };
+    expect(ask({ ...third, reduction: decimal("3.33") })).toBe(false);
+    expect(ask({ ...third, reduction: decimal("3.34") })).toBe(true);
+  });
+
+  it("asks a supervisor for a manager too", () => {
+    expect(ask({ actorRole: "supervisor", reduction: decimal("20.00") })).toBe(true);
+  });
+
+  it("never asks a manager or an admin, who may pass the limit themselves", () => {
+    expect(ask({ actorRole: "manager", reduction: decimal("70.00") })).toBe(false);
+    expect(ask({ actorRole: "admin", reduction: decimal("70.00") })).toBe(false);
+  });
+
+  it("sets no limit when the venue has none", () => {
+    expect(ask({ limitBp: null, reduction: decimal("70.00") })).toBe(false);
+  });
+
+  it("allows a 100% limit to take the whole bill", () => {
+    expect(ask({ limitBp: 10000, reduction: decimal("70.00") })).toBe(false);
+  });
+
+  it("throws on a malformed request, the caller's bug", () => {
+    expect(() => ask({ limitBp: 0 })).toThrow(RangeError);
+    expect(() => ask({ limitBp: 10001 })).toThrow(RangeError);
+    expect(() => ask({ reduction: decimal("-0.01") })).toThrow(RangeError);
+    expect(() => ask({ priorDiscount: decimal("-0.01") })).toThrow(RangeError);
+    expect(() => ask({ billValue: decimal("-0.01") })).toThrow(RangeError);
   });
 });

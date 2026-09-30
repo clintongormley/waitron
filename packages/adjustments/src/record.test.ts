@@ -6,7 +6,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
-import { readReasonTotals, recordAdjustment, type NewAdjustment } from "./record.js";
+import {
+  readBillDiscountTotal,
+  readReasonTotals,
+  recordAdjustment,
+  type NewAdjustment,
+} from "./record.js";
 import { adjustments, type AdjustmentSplit } from "./schema/adjustments.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
@@ -288,5 +293,37 @@ describe("readReasonTotals", () => {
     await record(percent(other, reason, line, 1000, [{ from: line, to: carved }]));
     await record(percent(order, reason, line, 2000));
     expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(0);
+  });
+});
+
+describe("readBillDiscountTotal", () => {
+  const read = (workingOrderId: string) =>
+    withTransaction(db, (tx) => readBillDiscountTotal(tx, workingOrderId));
+
+  it("answers nothing on a bill with no discount", async () => {
+    expect(await read(await seedWorkingOrder(db))).toBe("0.00");
+  });
+
+  it("sums every line and bill-level discount on the bill, under any reason, and nothing else", async () => {
+    const order = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const another = await seedReason(db);
+    await record(percent(order, reason, randomUUID(), 2500));
+    await record(
+      comp(order, another, {
+        line: null,
+        quantity: null,
+        action: "discount_amount",
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("15.01"),
+        reduction: decimal("4.99"),
+        nominalValue: decimal("4.99"),
+      }),
+    );
+    await record(comp(order, reason));
+    await record(comp(order, reason, { action: "cancel" }));
+    await record(percent(other, reason, randomUUID(), 5000));
+    expect(await read(order)).toBe("7.49");
   });
 });

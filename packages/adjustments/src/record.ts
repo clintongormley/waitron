@@ -114,3 +114,20 @@ export async function readReasonTotals(
       and line_id in (select line_id from lineage)`);
   return { priorReductionOnBill, priorPercentOnLineBp: percent.rows[0]!.total };
 }
+
+/**
+ * Every discount recorded on the bill, line and bill-level, under any reason: what the venue's
+ * limit on a bill's total discount measures. A discounted line later cancelled or moved to another
+ * bill still counts here, which errs toward asking for a manager.
+ */
+export async function readBillDiscountTotal(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<Decimal> {
+  const result = await tx.execute<{ total: string }>(sql`
+    select cast(coalesce(sum(reduction), 0) as text) as total
+    from adjustments
+    where working_order_id = ${workingOrderId}
+      and action in ('discount_percent', 'discount_amount')`);
+  return rawCentsToDecimal(result.rows[0]!.total);
+}
