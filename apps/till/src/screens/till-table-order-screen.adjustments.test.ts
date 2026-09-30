@@ -255,7 +255,7 @@ describe("till-table-order-screen: cancelling a dish", () => {
   const cancelOf = (el: TillTableOrderScreen, lineNo: number) =>
     el.shadowRoot!.querySelector<HTMLElement>(`[data-cancel-line="${lineNo}"]`);
 
-  it("cancels an extra on its own and whole, as coming off the bill, where its dish offers Cancel", async () => {
+  it("cancels an extra on its own and whole, as coming off the bill and telling the kitchen, where its dish offers Cancel", async () => {
     const el = await mountScreen({
       lines: [
         { ...pizza, quantity: "2.000", state: "preparing" },

@@ -3152,7 +3152,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       decision.
     - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
     - `*** REPRINT ***` and `GROUP n` print in English. _(Task 6, 2026-09-27: so do `*** HOLD ***`,
-      `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_
+      `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_ _(B11g, 2026-10-01:
+      the extra-cancel slip is the one kind whose header and cancel line follow the server's
+      `locale`, so a Spanish venue's slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and `QUITAR:`,
+      mixed on one slip; every other slip stays English.)_
     - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
       there is no way to dismiss one: a detached or replaced printer leaves it showing. _(B6a,
       2026-09-28: a printer detached from the station now drops the problem, tested. A printer
@@ -3874,9 +3877,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         **Next action:** decide whether the upgrade guard should carry rows (it would serve every
         set, not only adjustments).
       - _Done by lane B item B11g (branch `feat/service-extra-cancel-slip`):_ cancelling an extra
-        of a fired dish, or of a held dish whose HOLD ticket printed, now records a `changed`
-        kitchen notice naming the extra and prints a CHANGED (or HOLD CHANGED) slip of the dish as
-        it now stands with a `CANCEL:` line (`tellKitchenOfCancelledExtra`,
+        of a fired dish, or of a held dish whose HOLD ticket was queued for printing, now records
+        a `changed` kitchen notice naming the extra and prints a CHANGED (or HOLD CHANGED) slip of
+        the dish as it now stands with a `CANCEL:` line; with the server's `locale` Spanish those
+        read CAMBIADO, HOLD CAMBIADO and `QUITAR:` (`apps/server/src/kitchen-ticket.ts`,
+        `tellKitchenOfCancelledExtra`,
         `apps/server/src/working-order.ts`). Venue-service `0011` adds
         `kitchen_notices.cancelled_extra` and `0012` rebuilds the table to add
         `kitchen_notices_cancelled_extra_kind_ck`, which refuses a cancelled extra on a notice that
@@ -3888,8 +3893,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `pragma foreign_key_check` returned nothing, the change feed's three triggers came back and
         logged an update, and a cancelled extra on a `void` notice was refused by the new check.
         Left open: for an extra of a held dish whose HOLD
-        ticket printed, the kitchen is told but the till's cancel dialog still says only that it
-        comes off the bill, because the till cannot see whether the HOLD ticket printed.
+        ticket was queued, the kitchen is told but the till's cancel dialog still says only that it
+        comes off the bill, because the till cannot see whether the HOLD ticket was queued.
         **Next action:** decide whether the till should be told that.
       - **An extra now counts its dish's percentage under a reason's per-line cap, and a dish the
         largest of its extras'.** So an extra added after its dish was discounted 30%, under a 50%
