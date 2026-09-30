@@ -165,7 +165,15 @@ export function createLinuxDevices(
         }
       }
       if (wanted.has("network_tcp")) found.push(...(await scanNetwork()));
-      if (wanted.has("bluetooth")) found.push(...(await bluetooth.scan()));
+      if (wanted.has("bluetooth")) {
+        try {
+          found.push(...(await bluetooth.scan()));
+        } catch (error) {
+          opts.log?.warn("bluetooth scan failed", {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       return found;
     },
 

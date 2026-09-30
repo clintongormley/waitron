@@ -237,6 +237,45 @@ describe("createLinuxDevices — scan()", () => {
       btHit,
     ]);
   });
+
+  it("keeps the USB and network printers when the Bluetooth scan fails, and logs the failure", async () => {
+    const warn = vi.fn();
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      bluetooth: fakeBluetooth({
+        scan: async () => {
+          throw new Error("org.bluez.Error.NotReady");
+        },
+      }),
+      scanNetwork: async () => [netHit],
+      log: { info: vi.fn(), warn, error: vi.fn() },
+    });
+    expect(await devices.scan()).toStrictEqual([
+      {
+        transport: "usb",
+        localKey: "B120300001",
+        make: "YICHIP3121",
+        model: "USB Portable Printer",
+      },
+      netHit,
+    ]);
+    expect(warn).toHaveBeenCalledWith("bluetooth scan failed", {
+      error: "org.bluez.Error.NotReady",
+    });
+  });
+
+  it("logs a Bluetooth scan rejected with a bare value as text", async () => {
+    const warn = vi.fn();
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({ scan: () => Promise.reject("adapter gone") }),
+      scanNetwork: async () => [netHit],
+      log: { info: vi.fn(), warn, error: vi.fn() },
+    });
+    expect(await devices.scan(["network_tcp", "bluetooth"])).toStrictEqual([netHit]);
+    expect(warn).toHaveBeenCalledWith("bluetooth scan failed", { error: "adapter gone" });
+  });
 });
 
 describe("createLinuxDevices — pair()", () => {
