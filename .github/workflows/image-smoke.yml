@@ -322,9 +322,10 @@ jobs:
       # (probe run 36656859928 on 6.17.0-1022-azure: `modprobe bluetooth` found no module), so the
       # socket can never open here and Python reports errno 97 — which is also what a container
       # outside the host's network namespace gets on a kernel with Bluetooth (`bt_sock_create`,
-      # net/bluetooth/af_bluetooth.c), so this step cannot tell those apart. A profile refusal reports errno 13 instead, as the same
-      # probe printed under the profile plus `deny network bluetooth`; that is the one failure this
-      # step discriminates. A job reaching a real printer is checked only on the box.
+      # net/bluetooth/af_bluetooth.c:118 on torvalds/linux master, read 2026-09-30), so this step
+      # cannot tell those apart. A profile refusal reports errno 13 instead, as the same probe
+      # printed under the profile plus `deny network bluetooth`; that is the one socket error this
+      # step tells apart. A job reaching a real printer is checked only on the box.
       - name: The print agent's Bluetooth sender runs in the image, and its profile does not refuse the socket
         run: |
           set -euo pipefail

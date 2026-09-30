@@ -349,7 +349,8 @@ own `bluetoothctl` calls, image-smoke runs only the paired listing, by waiting f
 its Bluetooth steps, so a new call is checked only once a step runs it too. It also runs the
 Bluetooth sender, `apps/print-agent/src/rfcomm-send.py`, invoked directly rather than through the
 agent's `RfcommTransport`, and only as far as creating its socket, because the runner's kernel has
-no Bluetooth; it fails only when the profile refuses that socket (errno 13). It pairs through its own
+no Bluetooth; it fails when the helper does not exit 1 with its `rfcomm … [Errno` line, or when
+that error is errno 13 (the profile refusing the socket). It pairs through its own
 driver, `scripts/bluetoothctl-pair.mjs`, not the agent's Pair code, so a bus message the agent's Pair
 starts sending is checked only once the driver sends it too. It reads the kernel log with the
 kernel's printk rate limit switched off and requires at least one refusal logged during the step

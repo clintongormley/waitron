@@ -154,12 +154,13 @@ comment markers break the phrase). That file is produced by `scripts/litestream-
 golang.org/toolchain archive per platform, from proxy.golang.org; `deploy/third-party/README.md`
 has the steps to regenerate it.
 
-What the guards leave open. The two third-party blocks in `scripts/deploy-image-env.test.ts` read
-text and cover libvips and Litestream only; for Litestream they compare `NOTICES.txt`'s
-`Litestream version:` line with the pin, never the module list with the binary. The npm packages
-bundled into the server, the web apps and the print-agent have no notice file; the print-agent
-image (`deploy/Dockerfile`'s `print-agent` stage) copies in its bundle alone and has no
-`/app/third-party/` at all (`docs/backlog.md`).
+What the guards leave open. The third-party blocks in `scripts/deploy-image-env.test.ts` read
+text and cover libvips, Litestream and the print agent's python3-minimal only; for Litestream they
+compare `NOTICES.txt`'s `Litestream version:` line with the pin, never the module list with the
+binary. The npm packages bundled into the server, the web apps and the print-agent have no notice
+file; the print-agent image (`deploy/Dockerfile`'s `print-agent` stage) ships the Debian copyright
+files of python3-minimal and the packages its install added under `/app/third-party/python3-minimal/`,
+and none for bluez (`docs/backlog.md`).
 
 ## `@waitron/db`'s `exports` map is enumerated, not a wildcard
 
