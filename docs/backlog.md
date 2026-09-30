@@ -124,9 +124,10 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 1. **Finish table service and paying a bill in parts** (A4, lane B). Eleven of the service plan's
    eighteen tasks have landed (0–9 and 14; Task 9, marking dishes served, as #814). Left: the
-   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12), standalone
-   ordering (13), several payments on the till (15 — the server side landed as #721 and nothing on
-   the till calls it yet), counter handover (16) and a table that leaves without paying (17).
+   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12),
+   several payments on the till (15 — the server side landed as #721 and nothing on
+   the till calls it yet), counter handover (16) and a table that leaves without paying (17). Task 13,
+   standalone ordering, is done on the branch `feat/service-standalone-ordering`.
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -726,7 +727,8 @@ when every product in it is switched off on the menu (Task 9's choice, pinned by
 fails the filter, because the card grid hands the browser only the products the filter keeps
 (`apps/till/src/widgets/card-grid.ts`; pinned for the structure only by "hides a product the diet
 lens rejects, and a section it leaves with nothing" in `apps/till/src/widgets/card-grid.test.ts`) — as a dish the
-filter rejects already disappears. A section whose products are all sold out keeps its place, and its tile is not greyed;
+filter rejects already disappears. It also happens when every product in it is published as not
+sold separately, because `indexMenu` leaves such products out of the offers it indexes (pinned by "leaves a product not sold separately out of the tiles, the structure, its section and the search, and a section left empty goes too" in `apps/till/src/widgets/menu-browser.test.ts`). A section whose products are all sold out keeps its place, and its tile is not greyed;
 the products inside it are. Spec §5 wants buttons in predictable positions during service. **Next
 action:** the owner decides whether either kind of empty section should keep its place, for example
 greyed.
@@ -2905,7 +2907,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/till/src/state/draft-sync.ts`), keeps the edits unsaved to send again, and shows one
       message for the whole draft, so it still names no line. A Send refused
       `product.unavailable` reads the table's offers again and marks the draft's lines against
-      them (`#markSoldOut`, `apps/till/src/till-app.ts`).)_
+      them (`#markSoldOut`, `apps/till/src/till-app.ts`).)_ _(2026-09-30, B13: now `#markUnsellable`,
+      which also handles `product.not_sold_separately`.)_
     - A merge that names no operator records the draft's owner as the one who discarded it; the one
       product caller, the merge route, always names one.
     - Three rulings made on the branch for the owner to confirm:
@@ -3284,7 +3287,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `dismissible`.
   - **Tasks left: 10 to 12 and 15 to 17.** The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
-    plan's order: 7 then 8; 10 after 8 and 9; 12 after 11; 16 after 10. Task 15 is the till side of
+    plan's order among them: 12 after 11; 16 after 10. Task 15 is the till side of
     Task 14 — no till code calls the bill-payment routes yet.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
@@ -9294,7 +9297,7 @@ while it holds decisions still open.
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
-| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed; Task 13 done on a branch | A4 |
+| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 11 of 18 tasks landed; Task 13 done on a branch | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |

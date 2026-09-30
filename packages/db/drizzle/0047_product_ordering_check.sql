@@ -2,7 +2,9 @@
 -- CHECK constraint, because adding one to an existing table makes drizzle rebuild `products`, and a
 -- rebuild deletes or refuses the rows of its child tables (CLAUDE.md §3). These two triggers are the
 -- refusal instead. The words they raise are declared once, in `packages/db/src/trigger-refusals.ts`,
--- and `scripts/behavioural-triggers.test.ts` tries a real offending write against each.
+-- and `scripts/behavioural-triggers.test.ts` tries a real offending write against each. They live on
+-- `products`, so a later migration that RECREATES `products` (drizzle's rebuild for a column change
+-- SQLite cannot `ALTER`) drops them without a word; that file's name pin is what notices.
 CREATE TRIGGER products_ordering_check_insert
 BEFORE INSERT ON products
 FOR EACH ROW

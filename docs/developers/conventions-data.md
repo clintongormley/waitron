@@ -209,6 +209,9 @@ No `pgEnum` column was left behind in the end. A closed vocabulary is `enumText`
 whose permitted values are listed in a `check()` constraint that `enumCheck` builds from the same
 array the TypeScript type is derived from, so the type and the constraint cannot state different
 sets. On this engine that constraint is the only thing between the column and any string at all.
+`products.ordering` has no CHECK at all: its values are refused by a trigger pair instead
+(`packages/db/drizzle/0047_product_ordering_check.sql`), because adding a CHECK to an existing table
+makes drizzle rebuild it.
 
 Guarded by `scripts/column-vocabulary.test.ts`, whose own header says what it reads and where it is
 blind — read that before changing it, rather than this. Two things about it belong here, because they

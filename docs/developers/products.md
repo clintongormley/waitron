@@ -417,11 +417,12 @@ migration, whose hash changed although the count did not", `packages/provisionin
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Category and labels, Available, ▸ Kitchen, ▸ Descriptors,
+collapsed. Top to bottom: Name, Category and labels, Available, Standalone ordering (absent on a
+variant's page), ▸ Kitchen, ▸ Descriptors,
 ▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and
 Save. An Inactive product's editor also opens with a line saying so, and offers Restore beside
-Save. Opened on a variant, the same form is the variant's own page: it has no Modifiers or Variants
-section, and each field the variant may leave blank to take the parent's value shows that value as
+Save. Opened on a variant, the same form is the variant's own page: it has no Standalone ordering, Modifiers or
+Variants section, and each field the variant may leave blank to take the parent's value shows that value as
 its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
@@ -450,7 +451,8 @@ The product write body carries `name` (required, plain text), `customerName` (a 
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
 main reporting category), `labelIds`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
-dietary declarations, the two required state flags `active` and `available` (below), and `variants`
+dietary declarations, the two required state flags `active` and `available` (below), the required
+`ordering` (a body carrying the retired `soldAlone` is refused), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
 a required `active`, plus `id` when it already exists. Each variant's `active` is written as sent,
 and a saved variant left out of the body is made Inactive (`setProductVariants`,

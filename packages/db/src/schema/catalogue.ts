@@ -82,7 +82,8 @@ export const products = table(
     // Who may order the product on its own: `public`, `staff_only` or `not_sold_separately`. No
     // CHECK, because adding one makes drizzle rebuild this table, whose children a rebuild deletes
     // or refuses; the `products_ordering_check_*` triggers (0047_product_ordering_check.sql) refuse
-    // any other value. Being offered as an extra does not read it.
+    // any other value. Being offered as an extra does not read it. The union is a local copy of
+    // `@waitron/catalogue`'s `PRODUCT_ORDERINGS`, which depends on THIS package, and must match it.
     ordering: label("ordering")
       .$type<"public" | "staff_only" | "not_sold_separately">()
       .notNull()
