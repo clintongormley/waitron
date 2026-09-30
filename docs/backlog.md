@@ -5996,8 +5996,8 @@ approved.
   often. Removing that would need the server to accept port 0 and report the port it bound
   (`WAITRON_HTTP_PORT` refuses `"0"` today). `bench/sqlite-failover/src/unreachable-store.ts`'s
   `reservePort` and the inline copy in `apps/server/scripts/cloud-integration-fixture.ts` have the
-  same release-then-use shape and were not changed. (2026-09-30: this gap is the mechanism C88
-  reproduced behind one CI failure of the pause test, not proven from that run's log, and
+  same release-then-use shape and were not changed. (2026-09-30: C88 reproduced this gap as one way
+  the pause test's single CI failure could happen; that run's log does not show whether it did.
   `startS3TestServer` now recovers from it; see C88, "the pause test's bucket control failed once
   on `main`". C88 also measured one drawing pattern: two processes each drawing 20,000 ports back
   to back in `node:24-slim` drew the other's latest port 0 times. The Waitron servers' own ports

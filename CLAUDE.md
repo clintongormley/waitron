@@ -262,8 +262,8 @@ hook, or how tests are scheduled:
   36559470238 failed the pause test's 1000 ms bound; a probe reproduced it on one runner in 20, where
   a disk stall held one commit for about a second. Guard: `scripts/ci-workflow.test.mjs`, weaker than
   its name — it reads `ci.yml` as text, so a step an `if:` switches off, or a `run:` that sets
-  `TMPDIR` again, passes; and it never reads the two tests, so one that makes its scratch somewhere
-  other than `tmpdir()` passes too. Receipt: [testing-guide.md](docs/developers/testing-guide.md),
+  `TMPDIR` again, passes; and it never reads the step's test files, so one that makes its scratch
+  somewhere other than `tmpdir()` passes too. Receipt: [testing-guide.md](docs/developers/testing-guide.md),
   "In CI their temporary files are in memory".
 
 Bypassing the hook with `--no-verify` is for emergencies; the failure still has to be fixed because

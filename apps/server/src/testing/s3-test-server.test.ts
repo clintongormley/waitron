@@ -1,7 +1,7 @@
 // The S3 test server the stream loop and pause tests run. The cases that start the real pinned
 // versitygw are reported SKIPPED without it; with CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a
-// missing binary FAILS them, as in `stream-loop.e2e.test.ts`. The cases that start a stub run
-// everywhere.
+// missing binary FAILS them, as in `stream-loop.e2e.test.ts`. The cases that start a stub, or
+// Node itself, in its place run everywhere.
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

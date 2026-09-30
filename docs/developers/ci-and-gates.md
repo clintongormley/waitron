@@ -684,8 +684,8 @@ shard's `test:shard` call passes `--exclude` for both files, which Vitest 4.1.11
 config's own `exclude` list rather than replacing it (`vitest list --filesOnly` in `apps/server`
 listed 289 files without the two flags and 287 with them, and the config-excluded
 `src/**/*.preprod.test.ts` file in neither, 2026-09-26). The S3 test server's own suite,
-`apps/server/src/testing/s3-test-server.test.ts`, needs versitygw too and is excluded and run the
-same way (2026-09-30). `test-server-stream` runs
+`apps/server/src/testing/s3-test-server.test.ts`, has cases that need versitygw too and is excluded
+and run the same way (2026-09-30). `test-server-stream` runs
 the same `test:shard` script over those files alone and uploads its blob as `server-blob-stream`,
 which `test-server-merge`'s `server-blob-*` download picks up with the shards' three, so the
 coverage gate counts what those tests reach. It alone runs `node scripts/setup-litestream.mjs` and
