@@ -188,10 +188,10 @@ function entries(
   return withTransaction(db, (tx) => listAdjustmentEntries(tx, { ...input, requester }));
 }
 
-const NONE = { count: 0, reduction: "0.00", nominalValue: "0.00" };
+const NONE = { count: 0, reduction: "0.00", cancelledNominalValue: "0.00" };
 
-function tally(count: number, reduction: string, nominalValue: string) {
-  return { count, reduction, nominalValue };
+function tally(count: number, reduction: string, cancelledNominalValue: string) {
+  return { count, reduction, cancelledNominalValue };
 }
 
 const EMPTY_TOTALS = {
@@ -303,33 +303,33 @@ describe("the fixture day (spec §7)", () => {
     expect(personRow(read, day.alex)).toEqual({
       personId: day.alex,
       name: "Alex",
-      ...tally(3, "37.00", "49.00"),
+      ...tally(3, "37.00", "37.00"),
       sales: "800.00",
       ratePercent: "4.6",
       byAction: {
         cancel: tally(2, "25.00", "37.00"),
-        comp: tally(1, "12.00", "12.00"),
+        comp: tally(1, "12.00", "0.00"),
         discount_percent: NONE,
         discount_amount: NONE,
       },
       byStage: {
         beforeFiring: NONE,
         afterFiring: tally(1, "25.00", "25.00"),
-        afterServing: tally(2, "12.00", "24.00"),
+        afterServing: tally(2, "12.00", "12.00"),
         billDiscount: NONE,
       },
       byReason: [
         { reasonId: day.mistake.id, reasonName: "Mistake", ...tally(2, "25.00", "37.00") },
-        { reasonId: day.complaint.id, reasonName: "Cold food", ...tally(1, "12.00", "12.00") },
+        { reasonId: day.complaint.id, reasonName: "Cold food", ...tally(1, "12.00", "0.00") },
       ],
       approvers: [{ personId: day.mia, name: "Mia", count: 1 }],
       approvalsGiven: 0,
     });
     expect(personRow(read, day.sam)).toMatchObject({
-      ...tally(1, "3.00", "200.00"),
+      ...tally(1, "3.00", "0.00"),
       sales: "200.00",
       ratePercent: "1.5",
-      byStage: { billDiscount: tally(1, "3.00", "200.00") },
+      byStage: { billDiscount: tally(1, "3.00", "0.00") },
     });
   });
 
@@ -339,8 +339,66 @@ describe("the fixture day (spec §7)", () => {
     const alex = personRow(await report(), day.alex);
 
     expect(alex.byAction.cancel).toEqual(tally(2, "25.00", "37.00"));
-    expect(alex.byAction.comp).toEqual(tally(1, "12.00", "12.00"));
+    expect(alex.byAction.comp).toEqual(tally(1, "12.00", "0.00"));
     expect(alex.reduction).toBe("37.00");
+  });
+
+  it("keeps a comp's and a bill discount's list value out of every total's cancelled value", async () => {
+    const alex = await person("Alex");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const base = { bill: visit.id, reason, reasonName: "House", by: alex };
+    await adjust({
+      ...base,
+      action: "comp",
+      line: { name: "Burger", list: "12.00", creditedTo: alex, stage: "served" },
+      before: "12.00",
+      after: "0.00",
+      nominal: "12.00",
+      at: "2026-09-15T19:00:00.000Z",
+    });
+    await adjust({
+      ...base,
+      action: "discount_amount",
+      before: "200.00",
+      after: "197.00",
+      nominal: "200.00",
+      at: "2026-09-15T19:30:00.000Z",
+    });
+    await adjust({
+      ...base,
+      action: "cancel",
+      line: { name: "Olives", list: "5.00", creditedTo: alex, stage: "fired" },
+      before: "5.00",
+      after: "0.00",
+      nominal: "5.00",
+      at: "2026-09-15T20:00:00.000Z",
+    });
+
+    const read = await report();
+
+    for (const totals of [read.overall, personRow(read, alex)]) {
+      expect(totals).toMatchObject({
+        ...tally(3, "20.00", "5.00"),
+        byAction: {
+          cancel: tally(1, "5.00", "5.00"),
+          comp: tally(1, "12.00", "0.00"),
+          discount_amount: tally(1, "3.00", "0.00"),
+        },
+        byStage: {
+          afterFiring: tally(1, "5.00", "5.00"),
+          afterServing: tally(1, "12.00", "0.00"),
+          billDiscount: tally(1, "3.00", "0.00"),
+        },
+        byReason: [{ reasonId: reason.id, reasonName: "House", ...tally(3, "20.00", "5.00") }],
+      });
+    }
+    // The drill-down keeps each row's own list value.
+    expect((await entries()).map((row) => [row.action, row.nominalValue])).toEqual([
+      ["cancel", "5.00"],
+      ["discount_amount", "200.00"],
+      ["comp", "12.00"],
+    ]);
   });
 
   it("lists the approver as a person of their own, who requested nothing and gave one approval", async () => {
@@ -368,25 +426,25 @@ describe("the fixture day (spec §7)", () => {
     expect(read.fromBusinessDay).toBe(DAY);
     expect(read.toBusinessDay).toBe(DAY);
     expect(read.overall).toEqual({
-      ...tally(4, "40.00", "249.00"),
+      ...tally(4, "40.00", "37.00"),
       sales: "1000.00",
       ratePercent: "4.0",
       byAction: {
         cancel: tally(2, "25.00", "37.00"),
-        comp: tally(1, "12.00", "12.00"),
+        comp: tally(1, "12.00", "0.00"),
         discount_percent: NONE,
-        discount_amount: tally(1, "3.00", "200.00"),
+        discount_amount: tally(1, "3.00", "0.00"),
       },
       byStage: {
         beforeFiring: NONE,
         afterFiring: tally(1, "25.00", "25.00"),
-        afterServing: tally(2, "12.00", "24.00"),
-        billDiscount: tally(1, "3.00", "200.00"),
+        afterServing: tally(2, "12.00", "12.00"),
+        billDiscount: tally(1, "3.00", "0.00"),
       },
       byReason: [
         { reasonId: day.mistake.id, reasonName: "Mistake", ...tally(2, "25.00", "37.00") },
-        { reasonId: day.complaint.id, reasonName: "Cold food", ...tally(1, "12.00", "12.00") },
-        { reasonId: day.regular.id, reasonName: "Regular", ...tally(1, "3.00", "200.00") },
+        { reasonId: day.complaint.id, reasonName: "Cold food", ...tally(1, "12.00", "0.00") },
+        { reasonId: day.regular.id, reasonName: "Regular", ...tally(1, "3.00", "0.00") },
       ],
     });
     expect(read.guests).toEqual(EMPTY_TOTALS);
@@ -517,9 +575,9 @@ describe("which bills and lines a range holds", () => {
     const day16 = await report(range("2026-09-16"));
     const both = await report(range("2026-09-14", "2026-09-16"));
 
-    expect(personRow(day15, alex)).toMatchObject({ ...tally(1, "5.00", "10.00"), sales: "10.00" });
-    expect(personRow(day16, alex)).toMatchObject({ ...tally(1, "15.00", "20.00"), sales: "20.00" });
-    expect(personRow(both, alex)).toMatchObject({ ...tally(3, "55.00", "70.00"), sales: "70.00" });
+    expect(personRow(day15, alex)).toMatchObject({ ...tally(1, "5.00", "0.00"), sales: "10.00" });
+    expect(personRow(day16, alex)).toMatchObject({ ...tally(1, "15.00", "0.00"), sales: "20.00" });
+    expect(personRow(both, alex)).toMatchObject({ ...tally(3, "55.00", "0.00"), sales: "70.00" });
     expect(
       (await entries(undefined, range("2026-09-16"))).map((row) => row.workingOrderId),
     ).toEqual([nextDay.id]);
@@ -622,13 +680,13 @@ describe("stages, reasons and guests", () => {
     const alexRow = personRow(await report(), alex);
 
     expect(alexRow.byStage).toEqual({
-      beforeFiring: tally(2, "5.00", "14.00"),
+      beforeFiring: tally(2, "5.00", "4.00"),
       afterFiring: NONE,
       afterServing: NONE,
       billDiscount: NONE,
     });
     expect(alexRow.byAction).toMatchObject({
-      discount_percent: tally(1, "1.00", "10.00"),
+      discount_percent: tally(1, "1.00", "0.00"),
       discount_amount: NONE,
     });
     const [discount] = await entries({ personId: alex });
@@ -658,7 +716,7 @@ describe("stages, reasons and guests", () => {
     const read = await report();
 
     expect(read.overall.byReason).toEqual([
-      { reasonId: reason.id, reasonName: "Queja", ...tally(2, "3.00", "3.00") },
+      { reasonId: reason.id, reasonName: "Queja", ...tally(2, "3.00", "0.00") },
     ]);
     expect((await entries()).map((row) => row.reasonName)).toEqual(["Queja", "Complaint"]);
   });
@@ -705,7 +763,7 @@ describe("stages, reasons and guests", () => {
     });
     // Alex approved his own comp: an approval given to nobody else.
     expect(personRow(read, alex)).toMatchObject({
-      ...tally(1, "1.50", "1.50"),
+      ...tally(1, "1.50", "0.00"),
       sales: "6.00",
       approvers: [{ personId: alex, name: "Alex", count: 1 }],
       approvalsGiven: 0,

@@ -421,7 +421,7 @@ describe("adjustment report routes", () => {
     expect(body.overall).toMatchObject({
       count: 2,
       reduction: "9.00",
-      nominalValue: "24.00",
+      cancelledNominalValue: "4.00",
       // The guest's cancelled €4.00 stays in the day's sales.
       sales: "24.00",
       ratePercent: "37.5",
@@ -434,11 +434,13 @@ describe("adjustment report routes", () => {
         reduction: "5.00",
         sales: "20.00",
         ratePercent: "25.0",
-        byAction: { discount_amount: { count: 1, reduction: "5.00", nominalValue: "20.00" } },
+        byAction: {
+          discount_amount: { count: 1, reduction: "5.00", cancelledNominalValue: "0.00" },
+        },
       },
     ]);
     expect(body.guests).toMatchObject({ count: 1, reduction: "4.00" });
-    // The bill was opened at 20:00 in Madrid on the 15th: 04:59 on the 16th is still the 15th.
+    // The bill was opened at 20:00 in Madrid on the 15th, so the 16th holds none of it.
     const nextDay = await send(
       fx.app,
       "GET",

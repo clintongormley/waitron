@@ -43,8 +43,8 @@ export interface AdjustmentTally {
   count: number;
   /** What the bills actually lost. */
   reduction: Decimal;
-  /** The list value of what was adjusted: for a cancellation, the value of the items taken off. */
-  nominalValue: Decimal;
+  /** The list value of the items cancellations took off; comps and discounts add nothing. */
+  cancelledNominalValue: Decimal;
 }
 
 export interface ReasonTally extends AdjustmentTally {
@@ -136,13 +136,15 @@ function validated(input: AdjustmentReportInput): SQL {
 }
 
 function emptyTally(): AdjustmentTally {
-  return { count: 0, reduction: ZERO, nominalValue: ZERO };
+  return { count: 0, reduction: ZERO, cancelledNominalValue: ZERO };
 }
 
-function add(tally: AdjustmentTally, row: { reduction: Decimal; nominalValue: Decimal }): void {
+function add(tally: AdjustmentTally, row: Row): void {
   tally.count += 1;
   tally.reduction = addDecimal(tally.reduction, row.reduction);
-  tally.nominalValue = addDecimal(tally.nominalValue, row.nominalValue);
+  if (row.action === "cancel") {
+    tally.cancelledNominalValue = addDecimal(tally.cancelledNominalValue, row.nominalValue);
+  }
 }
 
 /** Totals while they are being summed: reasons keyed by id, named at the end. */
@@ -194,7 +196,7 @@ function totalsOf(acc: Accumulator, reasonNames: Map<string, string>): Adjustmen
   return {
     count: acc.count,
     reduction: acc.reduction,
-    nominalValue: acc.nominalValue,
+    cancelledNominalValue: acc.cancelledNominalValue,
     byAction: acc.byAction,
     byStage: acc.byStage,
     byReason,

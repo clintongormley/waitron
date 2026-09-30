@@ -240,8 +240,8 @@ describe("whose sales an adjustment rate is measured against (plan D21, spec §7
       count: 1,
       reduction: "12.00",
       ratePercent: "32.4",
-      byAction: { comp: { count: 1, reduction: "12.00", nominalValue: "12.00" } },
-      byStage: { afterFiring: { count: 1, reduction: "12.00", nominalValue: "12.00" } },
+      byAction: { comp: { count: 1, reduction: "12.00", cancelledNominalValue: "0.00" } },
+      byStage: { afterFiring: { count: 1, reduction: "12.00", cancelledNominalValue: "0.00" } },
     });
     expect(rowOf(report, mia)).toMatchObject({ count: 0, ratePercent: "0.0" });
   });
@@ -264,7 +264,7 @@ describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
     expect(rowOf(report, pablo)).toMatchObject({
       count: 1,
       byAction: {
-        cancel: { count: 1, reduction: "25.00", nominalValue: "25.00" },
+        cancel: { count: 1, reduction: "25.00", cancelledNominalValue: "25.00" },
         comp: { count: 0 },
       },
     });
