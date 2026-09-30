@@ -3242,6 +3242,33 @@ describe("POST /setup-api/reset-incomplete-adopt", () => {
     }
   });
 
+  it("lets the event loop turn while it checks the password", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-turn-"));
+    try {
+      const order: string[] = [];
+      let watching = false;
+      const store = createSetupOperationStore(dir);
+      const operations = {
+        ...store,
+        read: async () => {
+          const record = await store.read();
+          if (watching) setImmediate(() => order.push("turned"));
+          return record;
+        },
+      };
+      const stageReset = vi.fn(async () => {
+        order.push("staged");
+      });
+      const { app } = await halfAdopted(dir, { operations, stageReset });
+      watching = true;
+
+      expect((await postReset(app, resetBody())).status).toBe(202);
+      expect(order).toEqual(["turned", "staged"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("saves the proof as the person id and a password hash, never the password", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-reset-proof-"));
     try {

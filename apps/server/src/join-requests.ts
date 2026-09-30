@@ -1,8 +1,15 @@
 import "./errors.js";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { and, eq, lt, sql } from "drizzle-orm";
-import { type Transaction, devices, joinRequests, printAgents } from "@waitron/db";
-import { hashSecret, verifySecret } from "@waitron/identity";
+import {
+  type Database,
+  type Transaction,
+  devices,
+  joinRequests,
+  printAgents,
+  withTransaction,
+} from "@waitron/db";
+import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import type { FormFactor } from "@waitron/layouts";
 import { resolveDeviceBinding } from "./device.js";
@@ -239,6 +246,23 @@ export async function challengeFor(
   return { choices };
 }
 
+type JoinStatus = "pending" | "approved" | "not_approved";
+
+/** The token hash a poller's selector names: its pending request's, or, only when there is none, its
+ * accepted row's. */
+type StoredJoinHash = { pending: string } | { accepted: string } | null;
+
+/** Called once the transaction that read `stored` has closed, so the write lock is not held while
+ * scrypt runs. A pending request whose token does not verify is `not_approved`; it never falls
+ * through to an accepted row. */
+async function statusFor(token: string, stored: StoredJoinHash): Promise<JoinStatus> {
+  if (stored === null) return "not_approved";
+  if ("pending" in stored) {
+    return (await verifySecretAsync(token, stored.pending)) ? "pending" : "not_approved";
+  }
+  return (await verifySecretAsync(token, stored.accepted)) ? "approved" : "not_approved";
+}
+
 /**
  * What a joiner polling with `${joinId}.${token}` should be told.
  *
@@ -248,25 +272,25 @@ export async function challengeFor(
  * joiner's recovery is identical in every case.
  */
 export async function readJoinStatus(
-  tx: Transaction,
+  db: Database,
   cfg: TillConfig,
   joinId: string,
   token: string,
-): Promise<"pending" | "approved" | "not_approved"> {
-  await sweepLapsed(tx, cfg);
-  const [pending] = await tx
-    .select({ tokenHash: joinRequests.tokenHash })
-    .from(joinRequests)
-    .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
-  if (pending !== undefined) {
-    return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
-  }
-  const [accepted] = await tx
-    .select({ tokenHash: devices.tokenHash })
-    .from(devices)
-    .where(and(eq(devices.id, joinId), eq(devices.active, true)));
-  if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
-  return "not_approved";
+): Promise<JoinStatus> {
+  const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
+    await sweepLapsed(tx, cfg);
+    const [pending] = await tx
+      .select({ tokenHash: joinRequests.tokenHash })
+      .from(joinRequests)
+      .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
+    if (pending !== undefined) return { pending: pending.tokenHash };
+    const [accepted] = await tx
+      .select({ tokenHash: devices.tokenHash })
+      .from(devices)
+      .where(and(eq(devices.id, joinId), eq(devices.active, true)));
+    return accepted === undefined ? null : { accepted: accepted.tokenHash };
+  });
+  return statusFor(token, stored);
 }
 
 /** What {@link acceptDeviceJoinRequest} hands back. A wrong choice is a RESULT, never a throw — see
@@ -395,25 +419,25 @@ export async function acceptPrintAgentJoinRequest(
  * `print_agents` by id and `active`, with no node filter.
  */
 export async function readAgentJoinStatus(
-  tx: Transaction,
+  db: Database,
   cfg: TillConfig,
   joinId: string,
   token: string,
-): Promise<"pending" | "approved" | "not_approved"> {
-  await sweepLapsed(tx, cfg);
-  const [pending] = await tx
-    .select({ tokenHash: joinRequests.tokenHash })
-    .from(joinRequests)
-    .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
-  if (pending !== undefined) {
-    return verifySecret(token, pending.tokenHash) ? "pending" : "not_approved";
-  }
-  const [accepted] = await tx
-    .select({ tokenHash: printAgents.tokenHash })
-    .from(printAgents)
-    .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
-  if (accepted !== undefined && verifySecret(token, accepted.tokenHash)) return "approved";
-  return "not_approved";
+): Promise<JoinStatus> {
+  const stored = await withTransaction(db, async (tx): Promise<StoredJoinHash> => {
+    await sweepLapsed(tx, cfg);
+    const [pending] = await tx
+      .select({ tokenHash: joinRequests.tokenHash })
+      .from(joinRequests)
+      .where(and(ownedBy(cfg), eq(joinRequests.id, joinId)));
+    if (pending !== undefined) return { pending: pending.tokenHash };
+    const [accepted] = await tx
+      .select({ tokenHash: printAgents.tokenHash })
+      .from(printAgents)
+      .where(and(eq(printAgents.id, joinId), eq(printAgents.active, true)));
+    return accepted === undefined ? null : { accepted: accepted.tokenHash };
+  });
+  return statusFor(token, stored);
 }
 
 /** Refuse a request. Deleting the row is the whole of it — there is no denied state to carry, because

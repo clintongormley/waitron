@@ -677,28 +677,29 @@ lists the product as "no longer on this menu". A shortcut whose target a newly r
 simply disappears, with no notice. **Next action:** the owner confirms this meets §9, or asks for a
 notice when a shortcut disappears.
 
-**Other secret checks may still hold the venue's write lock while scrypt runs.** Menus Task 9 moved
-only the device-token check off the lock: `tryReadDevice` (`apps/server/src/device-session.ts`) now
-reads the device row outside `withTransaction` and verifies with `verifySecretAsync`
-(`packages/identity/src/secret-hash.ts`), which derives the key on Node's thread pool. The callers
-left on the blocking `verifySecret`, whose `scryptSync` stops the whole event loop while it runs,
-are the print agent's token (`packages/printing/src/agent.ts`), join requests (the pending and
-approved checks in both status readers, `apps/server/src/join-requests.ts`) and the setup reset
-proof (`matchesResetProof`, `apps/server/src/setup-api.ts`), which lane A's queued setup items
-change and which calls `verifySecret` directly so it behaves as before. At least three of them run
-inside `withTransaction`, so every other write waits behind them: the print agent's token
-(`requireAgent` in `apps/server/src/print-agent-session.ts` calls `authenticateAgent` inside it), a
-join request's status (`readJoinStatus`, called inside it in `apps/server/src/device-api.ts`) and a
-print agent's join status (`readAgentJoinStatus`, called inside it in
-`apps/server/src/print-api.ts`). **Done since (2026-09-30, lane A's A126, moved to lane C, #900):**
-`verifyPin` and `verifyPassword` (`packages/identity/src/verify-pin.ts`, `verify-password.ts`) now
-return a promise from `verifySecretAsync`, and every caller awaits them: the PIN check
-(`verifyPersonCredential`, `credential.ts`), manager login including its dummy checks for timing
-(`manager-login.ts`), the current-credentials check behind profile changes (`verifyCurrent`,
-`profile.ts`) and break-glass (`apps/server/src/break-glass.ts`). The PIN, manager-login and
-profile checks still await the key while their caller's `withTransaction` (which is the write lock,
-`packages/db/src/tenancy.ts`) is open, so other writes wait while the key is derived, though the
-event loop now keeps turning. A search of the non-test callers of `verifyPersonCredential`,
+**Some secret checks still hold the venue's write lock while scrypt runs.** Every check against a
+stored hash from `packages/identity/src/secret-hash.ts` now derives the key with
+`verifySecretAsync` on Node's thread pool, so the event loop keeps turning while it runs.
+**Done (2026-09-30, lane A's A125):** the print agent's token (`authenticateAgent`,
+`packages/printing/src/agent.ts`, called by `requireAgent` in
+`apps/server/src/print-agent-session.ts`) reads the stored hash, derives the key and re-reads the
+row with no transaction open, refusing the token if the agent was revoked or re-keyed meanwhile, and
+takes the write lock only for its once-a-minute sighting write, which checks the row again inside
+that transaction; the two join-status readers (`readJoinStatus` and `readAgentJoinStatus`,
+`apps/server/src/join-requests.ts`) derive the key after the transaction holding their sweep and
+reads has closed, and their routes in `apps/server/src/device-api.ts` and
+`apps/server/src/print-api.ts` open none; the setup reset proof (`matchesResetProof`,
+`apps/server/src/setup-api.ts`) awaits `verifySecretAsync`. New tests in
+`packages/printing/src/agent.test.ts` and `apps/server/src/join-requests.test.ts` show another
+writer committing while the key is derived (each failed before the change); the agent's tests also
+have a case authenticating while another caller holds the write lock, when no sighting is due.
+Earlier, the device token (menus Task 9, `tryReadDevice`, `apps/server/src/device-session.ts`) moved
+to `verifySecretAsync` and off the write lock; in #900 (A126), `verifyPin` and `verifyPassword` and
+every caller (`credential.ts`, `manager-login.ts`, `profile.ts`, `apps/server/src/break-glass.ts`)
+moved to `verifySecretAsync` only. The PIN, manager-login and profile checks still await the key
+while their caller's `withTransaction` (which is the write lock, `packages/db/src/tenancy.ts`) is
+open, so other writes wait while the key is derived, though the event loop now keeps turning. A
+search of the non-test callers of `verifyPersonCredential`,
 `authorize` with an override, `loginManager`, `loginManagerById` and the `profile.ts` functions
 (2026-09-30) found every server route among them inside `withTransaction`: PIN login
 (`loginWithPin` in `mountTillApi`, `apps/server/src/till-api.ts`), the drawer override
@@ -708,9 +709,13 @@ event loop now keeps turning. A search of the non-test callers of `verifyPersonC
 (`apps/server/src/management-api.ts`, and `loginManagerById` in `promote-api.ts` and
 `mirror-bundle-api.ts`), and profile changes (`updateProfile` in `apps/server/src/me-api.ts`, and
 `withCredentialChange` in `apps/server/src/management-api.ts` around passkey registration and
-Google linking). **Next action:** switch the remaining callers to `verifySecretAsync` (the print
-agent's token and the two join-status checks first, lane A's A125), then move the checks out of
-`withTransaction` wherever they sit inside one; the blocking export goes when its last caller does.
+Google linking). **Next action:** move the PIN, manager-login and profile checks out of
+`withTransaction` wherever they sit inside one, as A125 did for the print agent. Still blocking the
+event loop, not covered by this entry's work: `hashSecret` derives with `scryptSync`
+(`secret-hash.ts`), so minting a token or setting a PIN or password stops the loop while it runs;
+and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync` too, which the server reaches
+when it encrypts or decrypts a configuration bundle, decrypts a restore archive or a sealed node
+state, or encrypts a recovery bundle.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns (naming the layout if it had shown it, otherwise the menu) until

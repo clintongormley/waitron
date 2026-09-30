@@ -875,6 +875,19 @@ before its venue transaction opens, and its header says so. `adoptFromPrimary` o
 around its writes and has file writes between them, and its header does not say so (tracked in
 `docs/backlog.md`, from #625's review).
 
+A secret check that derives an scrypt key should be the exception: it takes the `Database` rather
+than a `tx` and derives the key with no transaction open, because `withTransaction` is the venue's
+single write lock (`packages/db/src/tenancy.ts`) and every other write would wait on scrypt. One
+that must act on the row afterwards re-reads it once the key is derived, and opens a transaction
+only for its own write. Sites that follow it include `tryReadDevice`
+(`apps/server/src/device-session.ts`), `authenticateAgent` (`packages/printing/src/agent.ts`),
+`verifyBreakGlass` (`apps/server/src/break-glass.ts`), and `readJoinStatus` and
+`readAgentJoinStatus` (`apps/server/src/join-requests.ts`), which read inside one transaction and
+verify after it closes. Not yet: `verifyPersonCredential` (`packages/identity/src/credential.ts`),
+`loginManager` and `loginManagerById` (`packages/identity/src/manager-login.ts`) and the checks in
+`packages/identity/src/profile.ts` still take a `tx` and derive inside their caller's
+`withTransaction` (`docs/backlog.md`).
+
 Queries sharing one transaction are awaited one at a time, never started together with
 `Promise.all`. The MECHANISM changed with the engine; the rule did not. On this one there is nothing
 to overlap in the first place: the driver is synchronous — `execute` hands back its rows rather than

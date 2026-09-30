@@ -82,7 +82,7 @@ export type {
   AccountActionPurpose,
   IssuedAccountAction,
 } from "./account-action.js";
-export { hashSecret, verifySecret, verifySecretAsync } from "./secret-hash.js";
+export { hashSecret, verifySecretAsync } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
   PIN_THROTTLE_FREE_ATTEMPTS,

@@ -19,7 +19,7 @@ export function hashSecret(secret: string): string {
   return `${ALGORITHM}$${salt.toString("hex")}$${derived.toString("hex")}`;
 }
 
-/** The salt and derived key of a stored hash, or null for anything it does not understand. */
+/** The salt and derived key of a stored hash, or null when its shape or algorithm tag is wrong. */
 function parseStored(stored: string): { salt: Buffer; expected: Buffer } | null {
   const parts = stored.split("$");
   if (parts.length !== 3) return null;
@@ -36,19 +36,12 @@ function matches(expected: Buffer, actual: Buffer): boolean {
 }
 
 /**
- * Verifies a secret against a stored hash. Fails CLOSED on anything it does not understand — a
- * malformed value, an unknown algorithm tag, or a derived key of the wrong length — rather than
- * throwing, so a hand-edited or corrupt row rejects the secret instead of crashing the caller.
- */
-export function verifySecret(secret: string, stored: string): boolean {
-  const parsed = parseStored(stored);
-  if (parsed === null) return false;
-  return matches(parsed.expected, scryptSync(secret, parsed.salt, KEY_BYTES));
-}
-
-/**
- * {@link verifySecret}, deriving the key on libuv's thread pool, so the event loop keeps turning —
- * and a caller holding no lock blocks nobody — while scrypt runs.
+ * Verifies a secret against a stored hash. Returns false rather than throwing for a value that is
+ * not three `$`-separated parts, an unknown algorithm tag, or a stored key whose decoded length is
+ * not the derived key's.
+ *
+ * The key is derived on libuv's thread pool, so the event loop keeps turning — and a caller holding
+ * no lock blocks nobody — while scrypt runs.
  */
 export async function verifySecretAsync(secret: string, stored: string): Promise<boolean> {
   const parsed = parseStored(stored);
