@@ -25,6 +25,7 @@ describe("VENUE_SERVICE", () => {
       "recordLineContexts",
       "recordOrderContext",
       "resolveNewOrderZone",
+      "resolvePreparationRouteOutcomes",
       "resolvePreparationRoutes",
       "resolveZoneContext",
       "retargetOrderContext",

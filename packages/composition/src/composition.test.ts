@@ -30,6 +30,7 @@ import { WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS, WORKFORCE_ES_VOCABULARY } from "@waitron/workforce-es";
 import {
   VENUE_SERVICE,
+  VENUE_SERVICE_ALERTS,
   VENUE_SERVICE_PERMISSIONS,
   VENUE_SERVICE_PROVISIONING,
   VENUE_SERVICE_MIGRATIONS,
@@ -207,5 +208,9 @@ describe("ALL_MODULES alerts seat", () => {
     expect(ALL_MODULES.find((m) => m.name === "core")?.alerts).toBe(CORE_ALERTS);
     expect(ALL_MODULES.find((m) => m.name === "payments")?.alerts).toBe(PAYMENTS_ALERTS);
     expect(ALL_MODULES.find((m) => m.name === "fiscal-verifactu")?.alerts).toBe(FISCAL_ALERTS);
+  });
+
+  it("venue-service carries its route. claim, by reference", () => {
+    expect(ALL_MODULES.find((m) => m.name === "venue-service")?.alerts).toBe(VENUE_SERVICE_ALERTS);
   });
 });

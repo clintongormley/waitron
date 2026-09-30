@@ -18,6 +18,16 @@ declare module "@waitron/shared" {
     "route.subject_not_found": { subject: string; id: string };
     "route.duplicate": Record<string, never>;
     "route.station_inactive": { stationId: string };
+    /** A paid order's dishes that no station could take were not sent to the kitchen. `dishes` is
+     *  their staff names; `orderLabel` is the operator's own text. */
+    "route.dish_not_sent": {
+      zoneId: string;
+      zoneName: string;
+      dishes: string;
+      workingOrderId: string;
+      orderNumber: number;
+      orderLabel: string | null;
+    };
     "order.service_context_missing": { workingOrderId: string };
     "kitchen_notice.not_found": { noticeId: string };
     "kitchen_notice.invalid": { field: "direction" };

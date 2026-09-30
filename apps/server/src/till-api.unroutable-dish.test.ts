@@ -1,0 +1,535 @@
+import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
+import { eq, sql } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  deviceProfiles,
+  floorZones,
+  incidents,
+  kitchenStations,
+  sales,
+  products,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { createProduct } from "@waitron/catalogue";
+import { hashPin, persons } from "@waitron/identity";
+import { SimulatorPaymentProvider, insertCapturedPayment } from "@waitron/payments";
+import { decimal } from "@waitron/shared";
+import { createPreparationRoute } from "@waitron/venue-service";
+import { takeBillPayment } from "./bill-payments.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import type { Logger } from "./logger.js";
+import { mountTillApi } from "./till-api.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { placeGroups } from "./order-groups.js";
+import { payWorkingOrderIntegrated } from "./till-sale.js";
+import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { offerProducts } from "./testing/zone-offers.js";
+import { parkOrder } from "./working-order.js";
+
+// A pay-first order is sent to the kitchen when it is paid. A dish no station can take (its route's
+// station switched off with no fallback, or no route at all) no longer refuses the payment: the
+// money is taken and filed, that dish is not sent, and one `route.dish_not_sent` alert per sale
+// names it and the zone.
+
+const suite = useVenueDb({
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+});
+
+const noopLog: Logger = () => {};
+
+let v: PartyVenue;
+let app: Hono;
+let session: string;
+let counterZoneName: string;
+let catalogueId: string;
+
+async function enrolTill(): Promise<string> {
+  const [profile] = await suite.db
+    .insert(deviceProfiles)
+    .values({ name: `Till ${randomUUID()}`, formFactor: "till", capabilities: [] })
+    .returning({ id: deviceProfiles.id });
+  const dev = await enrolDeviceForTest(suite.db, v.cfg, {
+    name: `Counter till ${randomUUID()}`,
+    profileId: profile!.id,
+  });
+  return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
+}
+
+beforeEach(async () => {
+  v = await setupPartyVenue(suite.db);
+  app = new Hono();
+  mountTillApi(
+    app,
+    {
+      db: suite.db,
+      backend: v.backend,
+      clock: v.clock,
+      cfg: v.cfg,
+      secureCookies: false,
+      venueLocale: v.cfg.locale,
+    },
+    noopLog,
+  );
+  const operatorId = await inTx(v, async (tx) => {
+    const [person] = await tx
+      .insert(persons)
+      .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
+      .returning({ id: persons.id });
+    return person!.id;
+  });
+  const login = await app.request("/api/session", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: await enrolTill() },
+    body: JSON.stringify({ personId: operatorId, pin: "5555" }),
+  });
+  expect(login.status).toBe(200);
+  session = login.headers.get("set-cookie")!;
+  const [zone] = await inTx(v, (tx) =>
+    tx
+      .select({ name: floorZones.name })
+      .from(floorZones)
+      .where(eq(floorZones.id, v.counter.zoneId)),
+  );
+  counterZoneName = zone!.name;
+  const [burger] = await inTx(v, (tx) =>
+    tx
+      .select({ catalogueId: products.catalogueId })
+      .from(products)
+      .where(eq(products.id, v.productId("Burger"))),
+  );
+  catalogueId = burger!.catalogueId;
+});
+
+async function station(name: string): Promise<string> {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .insert(kitchenStations)
+      .values({ locationId: v.cfg.locationId, name: `${name} ${randomUUID()}` })
+      .returning({ id: kitchenStations.id }),
+  );
+  return row!.id;
+}
+
+async function switchOff(stationId: string): Promise<void> {
+  await inTx(v, (tx) =>
+    tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, stationId)),
+  );
+}
+
+interface Dish {
+  productId: string;
+  /** The staff name; the customer-facing and kitchen names differ from it. */
+  name: string;
+  counterOffer: string;
+  tablesOffer: string;
+}
+
+/** A new product with three different names, offered in both zones with no route of its own. */
+async function dish(name: string): Promise<Dish> {
+  return inTx(v, async (tx) => {
+    const staffName = `${name} ${randomUUID().slice(0, 8)}`;
+    const product = await createProduct(tx, {
+      catalogueId,
+      categoryId: null,
+      name: staffName,
+      customerName: { [v.cfg.locale]: `Customer ${name}` },
+      kitchenName: `KITCHEN ${name}`,
+      pricingUnit: "each",
+      unitPrice: "4.00",
+      vatClass: "general",
+    });
+    const counter = await offerProducts(tx, v.cfg, {
+      zone: "counter",
+      routes: "none",
+      productIds: [product.id],
+    });
+    const tables = await offerProducts(tx, v.cfg, {
+      zone: "tables",
+      routes: "none",
+      productIds: [product.id],
+    });
+    return {
+      productId: product.id,
+      name: staffName,
+      counterOffer: counter.offerFor(product.id),
+      tablesOffer: tables.offerFor(product.id),
+    };
+  });
+}
+
+async function routeTo(productId: string, stationId: string, zoneId?: string): Promise<void> {
+  await inTx(v, (tx) =>
+    createPreparationRoute(tx, v.cfg, {
+      productId,
+      ...(zoneId === undefined ? {} : { zoneId }),
+      target: { kind: "station", stationId },
+    }),
+  );
+}
+
+/** A dish whose only route's station is switched off. */
+async function strandedDish(name: string): Promise<Dish> {
+  const made = await dish(name);
+  const closed = await station("Closed grill");
+  await routeTo(made.productId, closed);
+  await switchOff(closed);
+  return made;
+}
+
+async function routedDish(name: string): Promise<{ dish: Dish; stationId: string }> {
+  const made = await dish(name);
+  const stationId = await station("Grill");
+  await routeTo(made.productId, stationId);
+  return { dish: made, stationId };
+}
+
+async function park(id: string, dishes: Dish[], label = "Mesa 3"): Promise<void> {
+  const res = await app.request("/api/working-orders", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: session },
+    body: JSON.stringify({
+      id,
+      lines: dishes.map((d) => ({ menuItemId: d.counterOffer, quantity: "1" })),
+      label,
+    }),
+  });
+  expect(res.status).toBe(200);
+}
+
+async function payCash(
+  deviceCookie: string,
+  workingOrderId: string,
+  walkUpLines: Dish[] = [],
+): Promise<Response> {
+  return app.request("/api/sales", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `${session}; ${deviceCookie}` },
+    body: JSON.stringify({
+      workingOrderId,
+      lines: walkUpLines.map((d) => ({ menuItemId: d.counterOffer, quantity: "1" })),
+      tender: { method: "cash", amount: "50.00" },
+    }),
+  });
+}
+
+async function saleOf(workingOrderId: string): Promise<string> {
+  const [row] = await inTx(v, (tx) =>
+    tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, workingOrderId)),
+  );
+  return row!.id;
+}
+
+async function kitchenItems(workingOrderId: string) {
+  return inTx(v, (tx) =>
+    tx
+      .select({ productId: workingOrderLines.productId, stationId: ticketItems.stationId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(ticketItems.workingOrderId, workingOrderId))
+      .orderBy(workingOrderLines.lineNo),
+  );
+}
+
+async function filedFor(workingOrderId: string): Promise<number> {
+  const saleId = await saleOf(workingOrderId);
+  const { rows } = await suite.db.execute<{ n: number }>(
+    sql`select count(*) as n from registros_facturacion where sale_id = ${saleId}`,
+  );
+  return Number(rows[0]!.n);
+}
+
+async function alertsFor(saleId: string) {
+  return inTx(v, (tx) =>
+    tx
+      .select({
+        code: incidents.code,
+        tillId: incidents.tillId,
+        params: incidents.params,
+        severity: incidents.severity,
+      })
+      .from(incidents)
+      .where(eq(incidents.saleId, saleId)),
+  );
+}
+
+async function statusOf(workingOrderId: string): Promise<string> {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, workingOrderId)),
+  );
+  return row!.status;
+}
+
+async function orderNumberOf(workingOrderId: string): Promise<number> {
+  const [row] = await inTx(v, (tx) =>
+    tx
+      .select({ orderNumber: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, workingOrderId)),
+  );
+  return row!.orderNumber;
+}
+
+function dishNotSent(workingOrderId: string, dishes: string, orderNumber: number, label: unknown) {
+  return {
+    code: "route.dish_not_sent",
+    severity: "error",
+    params: {
+      zoneId: v.counter.zoneId,
+      zoneName: counterZoneName,
+      dishes,
+      workingOrderId,
+      orderNumber,
+      orderLabel: label,
+    },
+  };
+}
+
+describe("paying a pay-first order whose dish no kitchen station can take", () => {
+  it("sends a dish whose station is switched off to the next matching route whose station is on", async () => {
+    const made = await dish("Steak");
+    const closed = await station("Closed grill");
+    const open = await station("Kitchen");
+    await routeTo(made.productId, closed, v.counter.zoneId);
+    await routeTo(made.productId, open);
+    await switchOff(closed);
+    const id = randomUUID();
+    await park(id, [made]);
+
+    const res = await payCash(await enrolTill(), id);
+
+    expect(res.status).toBe(200);
+    expect(await kitchenItems(id)).toEqual([{ productId: made.productId, stationId: open }]);
+    expect(await filedFor(id)).toBe(1);
+    expect(await alertsFor(await saleOf(id))).toEqual([]);
+  });
+
+  it("takes a cash payment, files it, sends nothing for the dish and raises one alert naming it", async () => {
+    const made = await strandedDish("Soup");
+    const till = await enrolTill();
+    const id = randomUUID();
+    await park(id, [made]);
+
+    const res = await payCash(till, id);
+
+    expect(res.status).toBe(200);
+    expect(await filedFor(id)).toBe(1);
+    expect(await statusOf(id)).toBe("settled");
+    expect(await kitchenItems(id)).toEqual([]);
+    const saleId = await saleOf(id);
+    const [saleTill] = await inTx(v, (tx) =>
+      tx.select({ tillId: sales.tillId }).from(sales).where(eq(sales.id, saleId)),
+    );
+    const expected = dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3");
+    expect(await alertsFor(saleId)).toEqual([{ ...expected, tillId: saleTill!.tillId }]);
+
+    const replay = await payCash(till, id);
+    expect(replay.status).toBe(200);
+    expect(await filedFor(id)).toBe(1);
+    expect(await kitchenItems(id)).toEqual([]);
+    expect(await alertsFor(saleId)).toHaveLength(1);
+  });
+
+  it("does the same for a dish with no route at all", async () => {
+    const made = await dish("Mystery");
+    const id = randomUUID();
+    await park(id, [made]);
+
+    const res = await payCash(await enrolTill(), id);
+
+    expect(res.status).toBe(200);
+    expect(await filedFor(id)).toBe(1);
+    expect(await statusOf(id)).toBe("settled");
+    expect(await kitchenItems(id)).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Mesa 3")),
+    ]);
+  });
+
+  it("does the same for a walk-up cash sale", async () => {
+    const made = await strandedDish("Tortilla");
+    const id = randomUUID();
+
+    const res = await payCash(await enrolTill(), id, [made]);
+
+    expect(res.status).toBe(200);
+    expect(await filedFor(id)).toBe(1);
+    expect(await statusOf(id)).toBe("settled");
+    expect(await kitchenItems(id)).toEqual([]);
+    const [alert] = await alertsFor(await saleOf(id));
+    expect(alert).toMatchObject({
+      code: "route.dish_not_sent",
+      params: { zoneId: v.counter.zoneId, zoneName: counterZoneName, dishes: made.name },
+    });
+  });
+
+  it("sends the dishes a station can take and names only the others", async () => {
+    const { dish: routed, stationId } = await routedDish("Salad");
+    const stranded = await strandedDish("Paella");
+    const missing = await dish("Crema");
+    const id = randomUUID();
+    await park(id, [stranded, routed, missing]);
+
+    const res = await payCash(await enrolTill(), id);
+
+    expect(res.status).toBe(200);
+    expect(await kitchenItems(id)).toEqual([{ productId: routed.productId, stationId }]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(
+        dishNotSent(id, `${stranded.name}, ${missing.name}`, await orderNumberOf(id), "Mesa 3"),
+      ),
+    ]);
+  });
+
+  it("raises a separate alert for each sale on one till", async () => {
+    const made = await strandedDish("Gazpacho");
+    const till = await enrolTill();
+    const first = randomUUID();
+    const second = randomUUID();
+    await park(first, [made], "Uno");
+    await park(second, [made], "Dos");
+
+    expect((await payCash(till, first)).status).toBe(200);
+    expect((await payCash(till, second)).status).toBe(200);
+
+    const firstSale = await saleOf(first);
+    const secondSale = await saleOf(second);
+    const open = await inTx(v, (tx) =>
+      tx
+        .select({ saleId: incidents.saleId })
+        .from(incidents)
+        .where(
+          sql`${incidents.code} = 'route.dish_not_sent' and ${incidents.saleId} in (${firstSale}, ${secondSale}) and ${incidents.acknowledgedAt} is null`,
+        ),
+    );
+    expect(open.map((row) => row.saleId).sort()).toEqual([firstSale, secondSale].sort());
+  });
+
+  it("takes a bill payment that pays the order off, and raises the alert", async () => {
+    const made = await strandedDish("Croquetas");
+    const id = randomUUID();
+    await parkOrder({ db: suite.db }, v.cfg, {
+      id,
+      lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+      label: "Barra",
+      zoneId: v.counter.zoneId,
+    });
+
+    await takeBillPayment(
+      { db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      id,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "4.00",
+        method: "cash",
+        tendered: "4.00",
+        applied: "4.00",
+        tip: "0.00",
+      },
+      OPERATOR,
+    );
+
+    expect(await statusOf(id)).toBe("settled");
+    expect(await filedFor(id)).toBe(1);
+    expect(await kitchenItems(id)).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Barra")),
+    ]);
+  });
+
+  it("takes a card-reader payment of a parked order, and raises the alert", async () => {
+    const made = await strandedDish("Pimientos");
+    const id = randomUUID();
+    await park(id, [made], "Terraza");
+
+    const out = await payWorkingOrderIntegrated(
+      {
+        db: suite.db,
+        backend: v.backend,
+        clock: v.clock,
+        provider: new SimulatorPaymentProvider(suite.db),
+      },
+      v.cfg,
+      { id, lines: [], simulationOutcome: "captured" },
+    );
+
+    expect(out.outcome).toBe("captured");
+    expect(await statusOf(id)).toBe("settled");
+    expect(await filedFor(id)).toBe(1);
+    expect(await kitchenItems(id)).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Terraza")),
+    ]);
+  });
+
+  it("recovers a card payment captured before its sale was filed, and raises the alert", async () => {
+    const made = await strandedDish("Boquerones");
+    const id = randomUUID();
+    await park(id, [made], "Barra");
+    const provider = new SimulatorPaymentProvider(suite.db);
+    await inTx(v, (tx) =>
+      insertCapturedPayment(tx, {
+        workingOrderId: id,
+        provider: provider.provider,
+        paymentRef: `sim-${randomUUID()}`,
+        amount: decimal("4.00"),
+        settledAt: new Date(),
+        externalRef: `sim-${randomUUID()}`,
+      }),
+    );
+
+    const out = await payWorkingOrderIntegrated(
+      { db: suite.db, backend: v.backend, clock: v.clock, provider },
+      v.cfg,
+      { id, lines: [] },
+    );
+
+    expect(out.outcome).toBe("captured");
+    expect(await statusOf(id)).toBe("settled");
+    expect(await filedFor(id)).toBe(1);
+    expect(await kitchenItems(id)).toEqual([]);
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), "Barra")),
+    ]);
+  });
+
+  it("names a dish whose staff name is blank by its id", async () => {
+    const made = await strandedDish("Nameless");
+    await inTx(v, (tx) =>
+      tx.update(products).set({ name: "" }).where(eq(products.id, made.productId)),
+    );
+    const id = randomUUID();
+    await park(id, [made]);
+
+    expect((await payCash(await enrolTill(), id)).status).toBe(200);
+
+    const [alert] = await alertsFor(await saleOf(id));
+    expect(alert!.params).toMatchObject({ dishes: made.productId });
+  });
+
+  it("still refuses a table round with a dish no station can take", async () => {
+    const stranded = await strandedDish("Pulpo");
+    const missing = await dish("Navajas");
+    const { partyId } = await seat(v, await v.table(`T-${randomUUID().slice(0, 8)}`));
+    const round = (d: Dish) =>
+      inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, partyId, {
+          groups: [{ lines: [{ menuItemId: d.tablesOffer, quantity: "1" }], release: "fire" }],
+          operatorId: OPERATOR,
+        }),
+      );
+
+    await expect(round(stranded)).rejects.toMatchObject({ code: "route.station_inactive" });
+    await expect(round(missing)).rejects.toMatchObject({ code: "route.missing" });
+  });
+});

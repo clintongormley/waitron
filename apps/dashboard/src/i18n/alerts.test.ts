@@ -62,6 +62,23 @@ it("shows every amount an alert carries with the euro sign, where each language 
   }
 });
 
+it("names the dishes a paid order could not send to the kitchen, and its zone", () => {
+  const params = {
+    zoneId: "z1",
+    zoneName: "Barra",
+    dishes: "Croquetas, Pulpo",
+    workingOrderId: "w1",
+    orderNumber: 42,
+    orderLabel: null,
+  };
+  expect(alertMessage("route.dish_not_sent", params, "en")).toBe(
+    "Paid order 42 has dishes no kitchen station in Barra could take: Croquetas, Pulpo. They were not sent to the kitchen. Pass them to the kitchen by hand, and check the zone's preparation routes.",
+  );
+  expect(alertMessage("route.dish_not_sent", params, "es")).toBe(
+    "El pedido pagado 42 tiene platos que ninguna estación de cocina de Barra podía recibir: Croquetas, Pulpo. No se han enviado a cocina. Pásalos a cocina a mano y revisa las rutas de preparación de la zona.",
+  );
+});
+
 it("marks every amount slot in the alert wording as money", () => {
   const unmarked = Object.entries(ALERT_MESSAGES).flatMap(([code, { en, es }]) =>
     [en, es].flatMap((text) =>

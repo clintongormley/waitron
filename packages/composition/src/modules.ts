@@ -55,6 +55,7 @@ import {
 } from "@waitron/workforce";
 import {
   VENUE_SERVICE,
+  VENUE_SERVICE_ALERTS,
   VENUE_SERVICE_CLASSIFICATION,
   VENUE_SERVICE_CHANGE_SOURCES,
   VENUE_SERVICE_CONFIGURATION_TRANSFER,
@@ -130,6 +131,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     provisioning: VENUE_SERVICE_PROVISIONING,
     routes: VENUE_SERVICE_ROUTES,
     permissions: VENUE_SERVICE_PERMISSIONS,
+    alerts: VENUE_SERVICE_ALERTS,
   },
   {
     name: "identity",

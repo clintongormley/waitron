@@ -1073,7 +1073,7 @@ function routeRank(route: { zoneId: string | null; productId: string | null }): 
 
 /** Resolve each distinct product in `productIds` to its route or its coded error, in input order,
  *  in at most three reads whatever the number of products. A missing zone still throws. */
-async function resolvePreparationRouteOutcomes(
+export async function resolvePreparationRouteOutcomes(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,

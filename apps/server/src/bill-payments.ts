@@ -76,6 +76,7 @@ import {
 import type { TillSaleDeps } from "./working-order.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
 import "./errors.js";
+import { raiseDishesNotSent } from "./dish-not-sent-alert.js";
 
 /**
  * Payments taken against a bill before its invoice exists (bill payments design): the balance they
@@ -695,7 +696,7 @@ async function issueWhenFullyPaid(
     }
   }
 
-  await firePrepayOrder(tx, cfg, workingOrderId);
+  const notSent = await firePrepayOrder(tx, cfg, workingOrderId);
   const settledAt = received
     .map((row) => row.receivedAt!)
     .reduce((latest, at) => (at > latest ? at : latest));
@@ -705,6 +706,9 @@ async function issueWhenFullyPaid(
     .set({ label: receiptOrder.orderLabel, status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
+  if (notSent !== null) {
+    await raiseDishesNotSent(tx, cfg, saleId, workingOrderId, notSent, deps.clock.now().instant);
+  }
 
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),
