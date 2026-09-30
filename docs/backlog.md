@@ -6073,7 +6073,7 @@ approved.
   often. Removing that would need the server to accept port 0 and report the port it bound
   (`WAITRON_HTTP_PORT` refuses `"0"` today). `bench/sqlite-failover/src/unreachable-store.ts`'s
   `reservePort` and the inline copy in `apps/server/scripts/cloud-integration-fixture.ts` have the
-  same release-then-use shape and were not changed. (2026-09-30: C88 reproduced this gap as one way
+  same release-then-use shape and were not changed. (2026-09-30: C88, #920, reproduced this gap as one way
   the pause test's single CI failure could happen; that run's log does not show whether it did.
   `startS3TestServer` now recovers from it; see C88, "the pause test's bucket control failed once
   on `main`". C88 also measured one drawing pattern: two processes each drawing 20,000 ports back
@@ -9020,7 +9020,7 @@ it. Left open:
   whose body is already sent, such as a delete of 1,000 keys, is cut off, and how long real
   providers take for one was not measured; and the tests run the handler's below-6,000 ms path,
   while its production path was measured by hand, not by a test.
-- **DONE (lane C's C88, 2026-09-30): the pause test's bucket control failed once on `main`.** CI
+- **DONE (lane C's C88, #920, 2026-09-30): the pause test's bucket control failed once on `main`.** CI
   run 36619928071 (head `573253221`, #885, which changed only `apps/server/src/order-groups.ts`, its
   test, the backlog and a plan) failed `test-server-stream`: at step 6 of
   `apps/server/src/stream-pause.e2e.test.ts` (line 540), the control `store.list("")` sent just
