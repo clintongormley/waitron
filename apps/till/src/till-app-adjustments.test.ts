@@ -1074,6 +1074,98 @@ describe("till-app: cancelling a dish", () => {
       ]);
     });
 
+    it("gives away one of them, then shows the one given away with its own extra under it", async () => {
+      const getTabLines = vi
+        .fn()
+        .mockResolvedValueOnce({ lines: [pair, extra], revision: 6, editSentLines: true })
+        .mockResolvedValue({
+          // As the server lists it once split: the part given away and its extra numbered last.
+          lines: [
+            { ...pair, quantity: "1.000" },
+            { ...extra, quantity: "1.000" },
+            {
+              ...pair,
+              id: "line-3",
+              lineNo: 3,
+              quantity: "1.000",
+              unitPriceGross: "0.00",
+              listUnitPriceGross: "15.00",
+            },
+            {
+              ...extra,
+              id: "line-4",
+              lineNo: 4,
+              parentLineNo: 3,
+              quantity: "1.000",
+              unitPriceGross: "0.00",
+              listUnitPriceGross: "1.00",
+            },
+          ],
+          revision: 7,
+          editSentLines: true,
+        });
+      const { el } = await mountApp({ getTabLines });
+      const order = await openMesa4(el);
+      await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+      await chooseReason(el, "Complaint");
+      await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
+      await press(el, inDialog(el, "[data-adjust-continue]"));
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+      expect(applied()).toEqual([
+        {
+          orderId: "wo-4",
+          command: { ...ask, quantity: "1", submissionId: expect.any(String) },
+        },
+      ]);
+      const rows = [...order.shadowRoot!.querySelectorAll(".pending-line")];
+      expect(rows.map((row) => row.classList.contains("child-line"))).toEqual([
+        false,
+        true,
+        false,
+        true,
+      ]);
+      expect(rows[3]!.querySelector("[data-comp-line]")!.getAttribute("aria-label")).toBe(
+        `${t("table.comp_line")} · Cheese (with Wine)`,
+      );
+      expect(rows[3]!.querySelector(".line-total s")!.textContent).toBe(
+        formatMoney("1.00", currentLocale()),
+      );
+      expect(rows[1]!.querySelector(".line-total s")).toBeNull();
+    });
+
+    it("cancels an extra of a dish being made as coming off the bill, not as binned", async () => {
+      const { el } = await mountApp({
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [{ ...pair, state: "preparing" }, extra],
+          revision: 6,
+          editSentLines: true,
+        }),
+      });
+      const order = await openMesa4(el);
+      await press(el, cancelButton(order, 2));
+      const shown = dialog(el)!.shadowRoot!.textContent!;
+      expect(shown).toContain(t("table.cancel_sent"));
+      expect(shown).not.toContain(t("table.cancel_started"));
+    });
+
+    it("gives away an extra on its own, sending no quantity", async () => {
+      const { el } = await mountPair();
+      const order = await openMesa4(el);
+      await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="2"]')!);
+      expect(dialog(el)!.shadowRoot!.querySelector("[data-quantity]")).toBeNull();
+      await chooseReason(el, "Complaint");
+      await press(el, inDialog(el, "[data-adjust-continue]"));
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+      expect(applied()).toEqual([
+        {
+          orderId: "wo-4",
+          command: { ...ask, lineId: "line-2", submissionId: expect.any(String) },
+        },
+      ]);
+    });
+
     it("cancels both, sending no quantity, when All is left chosen", async () => {
       const { el } = await mountPair();
       const order = await openMesa4(el);

@@ -676,8 +676,9 @@ export interface AdjustmentReason {
   approverRole: PersonRole;
 }
 
-/** An adjustment of one bill, as a preview and an apply share it. `lineId` names the dish; null is a
- * discount on the whole bill. `quantity` absent covers the whole dish. */
+/** An adjustment of one bill, as a preview and an apply share it. `lineId` names the dish or the
+ * extra; null is a discount on the whole bill. `quantity` absent covers the whole line; an extra is
+ * taken only whole. */
 export interface AdjustmentAsk {
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
@@ -702,7 +703,7 @@ export interface AdjustmentCommand extends AdjustmentAsk {
 
 /** What an adjustment would do, read before it is confirmed. `reduction` is what the bill actually
  * loses, which can differ from the discount asked for when a line cannot take its share in whole
- * cents per unit (a weighed dish, or a dish with extras). */
+ * cents per unit (a weighed dish, a dish with extras, or an extra on its own). */
 export interface AdjustmentPreview {
   reduction: string;
   nominalValue: string;

@@ -3495,7 +3495,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `tab.void_quantity_invalid` are gone. Part of a dish with extras can be cancelled, its extras
       following the dish. An extras row cannot be cancelled on its own
       (`adjustment.line_not_adjustable`); the old route took the whole of one, but the till offers
-      no Cancel on an extras row. Left open:
+      no Cancel on an extras row. _(2026-09-30, B11d: the server now cancels, comps and discounts
+      an extras row on its own, whole only, and that code is retired; the till offers all three on
+      an extras row, at a table and in the counter's basket, and Cancel where its dish offers it.)_
+      Left open:
       - **A newly set-up venue has no adjustment reasons, so its till cannot cancel anything** until
         a manager adds a reason that allows a cancel, in the dashboard under Adjustment reasons; the
         dialog says so (`adjust.no_reasons`). Outside tests, reasons are created only by the
@@ -3530,7 +3533,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/adjustments-apply.ts`). On the till, a stored order in the counter's basket
       that matches what the server holds offers Give away and Discount on each dish, Discount the
       bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
-      (`apps/till/src/widgets/basket.ts`). The basket reads each line's sent state and price before
+      (`apps/till/src/widgets/basket.ts`). _(2026-09-30, B11d: an extra's row offers them too,
+      whole; see the B11d note under B11a, above.)_ The basket reads each line's sent state and price before
       an adjustment from `GET /api/working-orders/:id/lines` when it loads the order. It loads the
       order again after an adjustment is made, refused as out of date, or left unanswered while
       its dialog is open (`#reloadCounterOrder`, `apps/till/src/till-app.ts`), taking no edit
@@ -3579,13 +3583,49 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       decide whether the per-line cap should see bill discounts.
       _(2026-09-30: B11b's venue limit on a bill's total discount, above, can ask for a manager's
       PIN when the combined discount passes it; this per-reason cap is unchanged.)_
-    - **Not offered:** a comp or a discount of part of a dish with extras
-      (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
+    - **Not offered (part of a dish with extras is offered since B11d, below):** a comp or a
+      discount of part of a dish with extras (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
       during the build: its two rounded parts need not add up to the line). _(2026-09-30: counter
       orders are offered since B11c, above.)_ A run-it review found that exactly representable weighed cases
-      are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
-      decides whether exactly representable partial weighed adjustments should be allowed.
+      are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). _Settled by the owner,
+      2026-09-30:_ part of a weighed line stays refused for a give-away or a discount, exactly
+      representable or not, and staff are told to discount the whole line instead.
+      _(2026-09-30, B11d: the server now comps or discounts part of a dish with extras, splitting
+      its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
+      line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
+      The till offers one of several of a dish with extras, and never offers part of a weighed
+      line: its give-away and discount dialog says the same sentence beside the action. A
+      give-away or a discount that would take nothing off — the line already free, or a discount
+      too small to move any price — is now refused `adjustment.no_reduction`; before, every such
+      case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
+      still recorded when it takes nothing off.)_ Left open after B11d:
+      - **A discount can escape the bill's discount limit when the dish above it was given away
+        whole.** The limit treats every extra of a dish given away whole as given away too
+        (`shareOf`, `apps/server/src/adjustments-apply.ts`, reading the dishes `readCompedLines`
+        names), including an extra added after the give-away at full price, so a later discount on
+        that extra, or on the whole given-away dish (possible since #931), is not counted. A review
+        measured it on the B11d branch: limit 20%, a held Pizza and Bread ×4, the Pizza given away,
+        Olives added through `updateOrderLine` (€1.50), 100% off the Olives, then a preview of 30%
+        off the Bread answered not over the limit, though the real discount is €4.50 of €20.50,
+        about 22%. This predates B11d (#931,
+        `e511aa831`). **Next action:** have a whole give-away record the rows it covered (an
+        adjustments migration adding them to the record), and have the limit read those rather
+        than work them out from the dish.
+      - **Cancelling an extra of a dish the kitchen already has tells the kitchen nothing** — no
+        VOID slip and no correction to a held ticket — as the cancel route this replaced did not
+        either; the till says the extra comes off the bill. **Next action:** if the owner wants
+        the kitchen told, print a correction slip naming the dish once its ticket has fired.
+      - **An extra now counts its dish's percentage under a reason's per-line cap, and a dish the
+        largest of its extras'.** So an extra added after its dish was discounted 30%, under a 50%
+        cap, is refused a 30% discount of its own. This errs toward refusing; a review found no way
+        to get past the cap through it. **Next action:** none unless staff find it gets in the way.
+      - **Only give-aways and discounts split a dish's extras with it.** Splitting a bill,
+        transferring items and moving part of a dish to another group still refuse part of a dish
+        with extras (`tab.transfer_modifier_line`). A give-away or discount of part of a dish
+        whose extra is not a whole count for each dish, which no product path is known to store,
+        is refused `adjustment.quantity_invalid`, in the preview as well as when it is applied.
+        **Next action:** decide whether those moves should split extras too.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
       close report arrives with the next animation frame): "saves on Enter and cancels on Escape from
       a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and `pressEscape`'s fixed

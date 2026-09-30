@@ -672,8 +672,13 @@ export async function moveLinesToGroup(
         await tx
           .update(workingOrderLines)
           .set({ groupId: targetId })
-          .where(inArray(workingOrderLines.id, [...split.values()]));
-        for (const [from, to] of split) splitIds.set(from, to);
+          .where(
+            inArray(
+              workingOrderLines.id,
+              [...split.values()].map((row) => row.id),
+            ),
+          );
+        for (const [from, to] of split) splitIds.set(from, to.id);
       }
       const taken: HeldChange[] = [];
       const given: HeldChange[] = [];

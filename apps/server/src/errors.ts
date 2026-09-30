@@ -554,7 +554,11 @@ declare module "@waitron/shared" {
     /**
      * A transfer would separate a modifier from its dish: an entry names a CHILD modifier line (it
      * moves only with its dish), or a PARTIAL split names a dish that carries modifier children
-     * (their quantity would no longer match the dish's). `lineNo` is the offending source line.
+     * (their quantity would no longer match the dish's). Also a partial split that takes a dish's
+     * extras with it — asked for only by a give-away or a discount of part of a dish — when an extra
+     * is not a whole count for each dish, so its two parts would not add up to it; that path
+     * refuses the same case first as `adjustment.quantity_invalid`. `lineNo` is the offending
+     * source line.
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**

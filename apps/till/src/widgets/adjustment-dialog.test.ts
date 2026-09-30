@@ -177,6 +177,55 @@ describe("till-adjustment-dialog: the form", () => {
     );
   });
 
+  it("tells staff, beside the action, to discount the whole of a weighed line rather than part", async () => {
+    const ham: AdjustTarget = {
+      lineId: "line-4",
+      name: "Ham",
+      quantity: "0.333",
+      total: "7.99",
+      unitTotal: null,
+      weighed: true,
+    };
+    const hint = (el: TillAdjustmentDialog) =>
+      root(el).querySelector("[data-weighed-hint]")?.textContent?.trim() ?? null;
+    for (const kind of ["comp", "discount"] as const) {
+      const el = await mount({ kind, target: ham });
+      expect(hint(el), kind).toBe(codeMessage("adjustment.weighed_partial"));
+      expect(root(el).querySelector("[data-quantity]"), kind).toBeNull();
+      // Beside the action: the last thing before the row holding it.
+      expect(root(el).querySelector("[data-weighed-hint]")!.nextElementSibling!.tagName).toBe(
+        "WT-FORM-ACTIONS",
+      );
+    }
+    expect(hint(await mount({ kind: "cancel", target: ham }))).toBeNull();
+    expect(hint(await mount({ kind: "discount", target: burger }))).toBeNull();
+
+    setLocale("es-ES");
+    expect(hint(await mount({ kind: "discount", target: ham }))).toBe(
+      "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
+    );
+  });
+
+  it("titles an extra's dialogs with an extra, and a dish's with an item, in both languages", async () => {
+    const olives: AdjustTarget = { ...burger, name: "Olives (with Pizza)", extra: true };
+    const heading = async (kind: TillAdjustmentDialog["kind"], target: AdjustTarget) =>
+      root(await mount({ kind, target })).querySelector<HTMLElement & { heading: string }>(
+        "wt-dialog",
+      )!.heading;
+
+    expect(await heading("comp", olives)).toBe("Give an extra away");
+    expect(await heading("discount", olives)).toBe("Discount an extra");
+    expect(await heading("cancel", olives)).toBe("Cancel an extra");
+    expect(await heading("comp", burger)).toBe("Give an item away");
+    expect(await heading("discount", burger)).toBe("Discount an item");
+    expect(await heading("cancel", burger)).toBe("Cancel an item");
+
+    setLocale("es-ES");
+    expect(await heading("comp", olives)).toBe("Invitar un extra");
+    expect(await heading("discount", olives)).toBe("Descuento en un extra");
+    expect(await heading("cancel", olives)).toBe("Cancelar un extra");
+  });
+
   it("names the whole bill for a bill discount", async () => {
     const el = await mount({
       kind: "discount",
@@ -578,8 +627,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
-    "adjustment.partial_with_extras",
-    "adjustment.line_not_adjustable",
+    "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
     "bill.line_paid",
@@ -620,10 +668,12 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("adjustment.reason_inactive", "comp", false)).toBe("reason");
     expect(refusalField("adjustment.action_not_allowed", "comp", false)).toBe("reason");
     expect(refusalField("adjustment_reason.not_found", "comp", false)).toBe("reason");
-    expect(refusalField("adjustment.partial_with_extras", "comp", true)).toBe("quantity");
+    expect(refusalField("adjustment.weighed_partial", "discount", true)).toBe("quantity");
     expect(refusalField("adjustment.quantity_invalid", "comp", true)).toBe("quantity");
     expect(refusalField("adjustment.quantity_invalid", "comp", false)).toBeNull();
     expect(refusalField("adjustment.exceeds_amount", "comp", false)).toBeNull();
+    expect(refusalField("adjustment.no_reduction", "discount", false)).toBe("value");
+    expect(refusalField("adjustment.no_reduction", "comp", true)).toBeNull();
     expect(refusalField("bill.line_paid", "comp", false)).toBeNull();
   });
 });

@@ -285,16 +285,31 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
-    "adjustment.partial_with_extras",
-    "adjustment.line_not_adjustable",
+    "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
+    "adjustment.no_reduction",
     "adjustment_reason.not_found",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(generic.en);
     expect(codeMessage(code, "es"), code).not.toBe(generic.es);
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage(code, "es"));
   }
-  expect(codeMessage("adjustment.partial_with_extras", "en")).toBe(
-    "A dish with extras can only be given away or discounted whole",
+  expect(codeMessage("adjustment.no_reduction", "en")).toBe(
+    "That takes nothing off. Check whether it is already free, or enter a larger discount",
+  );
+  expect(codeMessage("adjustment.no_reduction", "es")).toBe(
+    "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
+  );
+  expect(codeMessage("adjustment.weighed_partial", "en")).toBe(
+    "Part of an item sold by weight or measure can't be given away or discounted. Discount the whole line instead",
+  );
+  expect(codeMessage("adjustment.weighed_partial", "es")).toBe(
+    "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
+  );
+  expect(codeMessage("adjustment.quantity_invalid", "en")).toBe(
+    "That quantity cannot be used on this line. Check how many are on it; an extra is done whole",
+  );
+  expect(codeMessage("adjustment.quantity_invalid", "es")).toBe(
+    "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero",
   );
 });

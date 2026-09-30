@@ -1809,15 +1809,16 @@ describe("till-table-order-screen", () => {
       parentProductId: null,
     };
 
-    it("renders NO per-line action and NO course picker on a child extras line", async () => {
+    it("renders no Send, Recall or course picker on a child extras line, only its dish's Cancel", async () => {
       // Parent (fired + queued) is recallable and shows its read-only course; the child shows neither.
       const { el } = await mount({ lines: [pendingLine, childLine], courses });
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).not.toBeNull();
-      // The child row: no Send/Recall/Cancel action…
+      // The child row: no Send or Recall action, and Cancel because its dish offers it…
       expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-recall-line="2"]')).toBeNull();
-      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="2"]')).not.toBeNull();
       // …and no course control at all (neither the editable held picker nor the fired static span).
       expect(el.shadowRoot!.querySelector('[data-line-course="2"]')).toBeNull();
       expect(el.shadowRoot!.querySelector('[data-line-course-static="2"]')).toBeNull();

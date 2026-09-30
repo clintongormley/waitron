@@ -44,8 +44,8 @@ export const adjustments = table(
     // No foreign key: a cancel deletes the line, and a key from a row nothing may change would
     // refuse that delete.
     lineId: id("line_id"),
-    /** Each row this adjustment split off, with the row it came from; `readReasonTotals` follows
-     * them back. A bill discount records its splits too. */
+    /** Each row this adjustment split off, with the row it came from; `readLinePercents` follows
+     * them back and `readCompedLines` forward. A bill discount records its splits too. */
     splits: json<AdjustmentSplit[]>("splits").notNull(),
     lineName: label("line_name"),
     lineQuantity: quantity("line_quantity"),

@@ -1545,7 +1545,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("refuses to cancel an extras line, whose quantity follows its dish", async () => {
+  it("refuses to cancel part of an extras line, whose quantity follows its dish", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
@@ -1560,8 +1560,8 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     );
 
     await expect(asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 2, "1"))).rejects.toMatchObject({
-      code: "adjustment.line_not_adjustable",
-      params: { workingOrderId: tabId, lineNo: 2 },
+      code: "adjustment.quantity_invalid",
+      params: { workingOrderId: tabId, lineNo: 2, quantity: "1" },
     });
     expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([2000, 2000]);
   });

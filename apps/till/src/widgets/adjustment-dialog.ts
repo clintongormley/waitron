@@ -20,18 +20,22 @@ export type AdjustKind = "cancel" | "comp" | "discount";
 
 /** What an adjustment acts on, as the dialog names it before anything is done. */
 export interface AdjustTarget {
-  /** The dish; null for the whole bill. */
+  /** The dish or the extra; null for the whole bill. */
   lineId: string | null;
   name: string;
-  /** The dish's quantity as shown; null for the bill. */
+  /** Its quantity as shown; null for the bill. */
   quantity: string | null;
-  /** What the action can take off: the dish with its extras, or the whole bill. */
+  /** What the action can take off: the dish with its extras, the extra, or the whole bill. */
   total: string;
   /** One unit's price, with its share of any extras, when the dish is several whole units the
-   * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or one
-   * with extras given away or discounted). */
+   * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or an
+   * extra). */
   unitTotal: string | null;
   started?: boolean;
+  /** Sold by weight, which the server refuses to give away or discount in part. */
+  weighed?: boolean;
+  /** An extra of a dish, adjusted on its own. */
+  extra?: boolean;
 }
 
 /** The person's choices, which the app asks the server about and then applies. */
@@ -53,6 +57,7 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment.note_required":
       return "note";
     case "adjustment.exceeds_amount":
+    case "adjustment.no_reduction":
       return kind === "discount" ? "value" : null;
     case "adjustment.over_limit":
       return kind === "discount" ? "value" : "reason";
@@ -61,7 +66,7 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment_reason.not_found":
       return "reason";
     case "adjustment.quantity_invalid":
-    case "adjustment.partial_with_extras":
+    case "adjustment.weighed_partial":
       return partial ? "quantity" : null;
     default:
       return null;
@@ -72,6 +77,12 @@ const TITLES: Record<AdjustKind, StringKey> = {
   cancel: "adjust.cancel_title",
   comp: "adjust.comp_title",
   discount: "adjust.discount_title",
+};
+
+const EXTRA_TITLES: Record<AdjustKind, StringKey> = {
+  cancel: "adjust.cancel_extra_title",
+  comp: "adjust.comp_extra_title",
+  discount: "adjust.discount_extra_title",
 };
 
 const APPROVAL: Record<PersonRole, StringKey> = {
@@ -351,7 +362,7 @@ export class TillAdjustmentDialog extends LitElement {
     const title =
       this.kind === "discount" && target.lineId === null
         ? t("adjust.discount_bill_title")
-        : t(TITLES[this.kind]);
+        : t((target.extra === true ? EXTRA_TITLES : TITLES)[this.kind]);
     const noReasons =
       this.kind === "discount" ? this.#discountKinds().length === 0 : this.#offered().length === 0;
     return html`<wt-dialog
@@ -452,6 +463,13 @@ export class TillAdjustmentDialog extends LitElement {
         }}
         @keydown=${(event: KeyboardEvent) => this.#enter(event)}
       ></wt-input>
+      ${
+        target.weighed === true && this.kind !== "cancel"
+          ? html`<p class="detail" data-weighed-hint>
+              ${codeMessage("adjustment.weighed_partial")}
+            </p>`
+          : nothing
+      }
       <wt-form-actions .error=${bottom}>
         ${this.#closeButton("cancel")}
         <wt-button

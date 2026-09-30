@@ -82,11 +82,8 @@ export interface ReasonTotals {
 
 /**
  * This reason's earlier reductions on the bill, bill-level discounts included, and its earlier
- * percentage discounts on `lineId`. A row split off another by an adjustment on this bill, a bill
- * discount included, also counts the percentages taken off the row it came from, at any remove —
- * including ones taken after the split, which err toward refusing. A split made by anything other
- * than an adjustment is not recorded here, so a row split that way starts with none. `lineId` null
- * asks for a bill-level discount, which has no line percentage.
+ * percentage discounts on `lineId` ({@link readLinePercents}). `lineId` null asks for a bill-level
+ * discount, which has no line percentage.
  */
 export async function readReasonTotals(
   tx: Transaction,
@@ -99,45 +96,70 @@ export async function readReasonTotals(
     where working_order_id = ${workingOrderId} and reason_id = ${reasonId}`);
   const priorReductionOnBill = rawCentsToDecimal(reduction.rows[0]!.total);
   if (lineId === null) return { priorReductionOnBill, priorPercentOnLineBp: 0 };
+  const percents = await readLinePercents(tx, { workingOrderId, reasonId, lineIds: [lineId] });
+  return { priorReductionOnBill, priorPercentOnLineBp: percents.get(lineId)! };
+}
+
+/**
+ * This reason's earlier percentage discounts on each of `lineIds`, in one statement. A row split off
+ * another by an adjustment on this bill, a bill discount included, also counts the percentages
+ * taken off the row it came from, at any remove — including ones taken after the split, which err
+ * toward refusing. A split made by anything other than an adjustment is not recorded here, so a row
+ * split that way starts with none.
+ */
+export async function readLinePercents(
+  tx: Transaction,
+  query: { workingOrderId: string; reasonId: string; lineIds: readonly string[] },
+): Promise<Map<string, number>> {
+  const { workingOrderId, reasonId, lineIds } = query;
   // `percent_bp` is null on every action but `discount_percent` (`adjustments_percent_ck`).
-  const percent = await tx.execute<{ total: number }>(sql`
-    with recursive lineage(line_id) as (
-      select ${lineId}
+  const percent = await tx.execute<{ seed: string; total: number }>(sql`
+    with recursive lineage(seed, line_id) as (
+      select value, value from json_each(${JSON.stringify(lineIds)})
       union
-      select json_extract(split.value, '$.from')
+      select lineage.seed, json_extract(split.value, '$.from')
       from adjustments a, json_each(a.splits) split
       join lineage on json_extract(split.value, '$.to') = lineage.line_id
       where a.working_order_id = ${workingOrderId}
     )
-    select coalesce(sum(percent_bp), 0) as total
-    from adjustments
-    where working_order_id = ${workingOrderId} and reason_id = ${reasonId}
-      and line_id in (select line_id from lineage)`);
-  return { priorReductionOnBill, priorPercentOnLineBp: percent.rows[0]!.total };
+    select lineage.seed as seed, coalesce(sum(taken.percent_bp), 0) as total
+    from lineage
+    left join adjustments taken on taken.line_id = lineage.line_id
+      and taken.working_order_id = ${workingOrderId} and taken.reason_id = ${reasonId}
+    group by lineage.seed`);
+  return new Map(percent.rows.map((row) => [row.seed, row.total]));
 }
 
-/** The rows a bill's own comps priced at zero: the row each part comp split off, and the dish of
- * each whole comp, whose extras rows were comped with it. */
+/** The rows a bill's own comps priced at zero: the rows each part comp split off (a dish and its
+ * extras), and the line of each whole comp, a dish's extras rows comped with it. Each also names
+ * the copies later adjustments on the bill split off those rows, at any remove. */
 export interface CompedLines {
   rows: string[];
   dishes: string[];
 }
 
-/** The rows this bill's comp records name; a comp recorded on another bill is not read. */
+/** The rows this bill's adjustments prove comped; a comp recorded on another bill is not read. */
 export async function readCompedLines(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<CompedLines> {
-  const comps = await tx
-    .select({ lineId: adjustments.lineId, splits: adjustments.splits })
+  // In the order they were written: a copy split off a row before the row was comped keeps the
+  // price it had.
+  const written = await tx
+    .select({ lineId: adjustments.lineId, splits: adjustments.splits, action: adjustments.action })
     .from(adjustments)
-    .where(and(eq(adjustments.workingOrderId, workingOrderId), eq(adjustments.action, "comp")));
-  const comped: CompedLines = { rows: [], dishes: [] };
-  for (const { lineId, splits } of comps) {
-    if (splits.length === 0) comped.dishes.push(lineId!);
-    else comped.rows.push(...splits.map((split) => split.to));
+    .where(eq(adjustments.workingOrderId, workingOrderId))
+    .orderBy(sql`rowid`);
+  const rows = new Set<string>();
+  const dishes = new Set<string>();
+  for (const { lineId, splits, action } of written) {
+    if (action === "comp" && splits.length === 0) dishes.add(lineId!);
+    for (const { from, to } of splits) {
+      if (action === "comp" || rows.has(from)) rows.add(to);
+      if (dishes.has(from)) dishes.add(to);
+    }
   }
-  return comped;
+  return { rows: [...rows], dishes: [...dishes] };
 }
 
 /** A comp or discount still standing on a bill. `lineId` is null for one on the whole bill. */
