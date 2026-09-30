@@ -4009,7 +4009,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     to pay" and "Take the rest" above the pay card. The ticket lists every payment. Server: `GET
     /api/refund-authorizers` and `BillPaymentView.entry`. Open:
     - **DONE — the till no longer tells staff to give the money back before a merge** (lane B
-      item B19, 2026-09-30; the owner's "Ok" to the recommendation). A merge, or a transfer
+      item B19, 2026-09-30, landed as #958, main `1ff3c9bfb`; the owner's "Ok" to the
+      recommendation). A merge, or a transfer
       between two existing bills, stays refused while either bill holds a pending or received
       payment, one given back in full included; splitting unpaid items onto a new bill is still
       allowed while what stays still covers what the bill has received
