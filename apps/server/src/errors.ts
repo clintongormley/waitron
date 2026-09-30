@@ -523,7 +523,8 @@ declare module "@waitron/shared" {
      */
     "tab.not_open": { tabId: string };
     /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */
-    "tab.line_not_found": { tabId: string; lineNo: number };
+    /** An adjustment names its line by id, the other line routes by number. */
+    "tab.line_not_found": { tabId: string; lineNo: number } | { tabId: string; lineId: string };
     /**
      * A bill named as BOTH source and destination of a merge (`mergeBills`, or `moveOrderLines`).
      * Refused first: moving a bill's lines onto itself would abandon it or empty it.

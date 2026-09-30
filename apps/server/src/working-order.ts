@@ -1866,7 +1866,38 @@ export async function voidTabLine(
   operatorId?: string,
 ): Promise<void> {
   await assertPartyBillOpen(tx, cfg, tabId);
-  // Read first, because the delete's cascade removes the ticket item too.
+  const target = await readVoidTarget(tx, tabId, lineNo);
+  const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
+  await refusePaidLines(tx, tabId, [
+    { id: target.id, lineNo, keeps: removed === null ? 0 : target.quantity - removed },
+  ]);
+  await removeFromLine(tx, cfg, tabId, target, removed, operatorId);
+}
+
+/** A line as a void reads it, with its ticket item's kitchen state. */
+export interface VoidTarget {
+  id: string;
+  parentLineId: string | null;
+  groupId: string | null;
+  quantity: number;
+  unitPrecision: number | null;
+  unitPriceGross: number;
+  ticketItemId: string | null;
+  firedAt: string | null;
+  stationId: string | null;
+  state: TicketState | null;
+  firedQuantity: number;
+}
+
+/**
+ * Line `lineNo` of the order as a void reads it, else `tab.line_not_found`. Read before the change,
+ * because a delete's cascade removes the ticket item too.
+ */
+export async function readVoidTarget(
+  tx: Transaction,
+  tabId: string,
+  lineNo: number,
+): Promise<VoidTarget> {
   const [target] = await tx
     .select({
       id: workingOrderLines.id,
@@ -1887,10 +1918,22 @@ export async function voidTabLine(
   if (target === undefined) {
     throw new AppError("tab.line_not_found", { tabId, lineNo });
   }
-  const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
-  await refusePaidLines(tx, tabId, [
-    { id: target.id, lineNo, keeps: removed === null ? 0 : target.quantity - removed },
-  ]);
+  return target;
+}
+
+/**
+ * {@link voidTabLine}'s change once the caller has checked the bill and the paid lines: take
+ * `removed` thousandths off the line, or the whole line with its extras children when null, telling
+ * the kitchen as that function describes, and move the bill's and the party's revisions on.
+ */
+export async function removeFromLine(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  target: VoidTarget,
+  removed: number | null,
+  operatorId: string | undefined,
+): Promise<void> {
   const wasStarted = isStarted(target.state);
   const voided =
     target.firedAt !== null
@@ -1968,7 +2011,7 @@ export async function voidTabLine(
  * remove each of `leftGroups` it left held and empty, and move the party's revision on. A bill of no
  * party is left as it was.
  */
-async function partyAfterEdit(
+export async function partyAfterEdit(
   tx: Transaction,
   orderId: string,
   leftGroups: readonly string[],
@@ -2730,6 +2773,7 @@ export async function carveOffLines(
       extraListId: workingOrderLines.extraListId,
       groupId: workingOrderLines.groupId,
       creditedTo: workingOrderLines.creditedTo,
+      listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
     })
@@ -2881,6 +2925,7 @@ export async function carveOffLines(
         extraListId: line.extraListId,
         groupId: line.groupId,
         creditedTo: line.creditedTo,
+        listUnitPriceGross: line.listUnitPriceGross,
       });
       splitLines.set(line.id, splitLineId);
       await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
