@@ -3795,7 +3795,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
       still recorded when it takes nothing off.)_ Left open after B11d (#946, main `c9f0b7317`):
-      - _Fixed by lane B item B11f (2026-10-01):_ a discount on an extra could escape the bill's
+      - _Fixed by lane B item B11f (2026-10-01, PR #959, main `ab73dd7b1`):_ a discount on an extra could escape the bill's
         discount limit when the extra was added after its dish was given away whole. A whole
         give-away now records the extras rows it priced at zero (the adjustments column
         `comped_extras`, migration `packages/adjustments/drizzle/0003_comped_extras.sql`), and the
@@ -3805,10 +3805,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         Olives or off the whole Pizza, then 30% off the Bread) now asks for a manager. A give-away
         recorded before the migration reads an empty list, so its dish's extras count as discount
         and the limit errs toward asking a manager; there is no data migration (pre-production).
+        Left open by #959: both Codex reviews suggested a permanent test that upgrades a database
+        already HOLDING adjustment rows; `scripts/migration-upgrade.test.ts` runs every step on
+        empty tables only, and #959 measured the row-carrying upgrade once, in a throwaway test.
+        **Next action:** decide whether the upgrade guard should carry rows (it would serve every
+        set, not only adjustments).
       - **Cancelling an extra of a dish the kitchen already has tells the kitchen nothing** — no
         VOID slip and no correction to a held ticket — as the cancel route this replaced did not
         either; the till says the extra comes off the bill. **Next action:** if the owner wants
         the kitchen told, print a correction slip naming the dish once its ticket has fired.
+        (Owner, 2026-09-30: yes — queued as lane B's B11g.)
       - **An extra now counts its dish's percentage under a reason's per-line cap, and a dish the
         largest of its extras'.** So an extra added after its dish was discounted 30%, under a 50%
         cap, is refused a 30% discount of its own. This errs toward refusing; a review found no way
