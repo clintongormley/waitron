@@ -5677,16 +5677,17 @@ ongoing overhaul listed at the top of Track A.
   saved first and a sign-in the password manager did not see, the Add passkey and Change password
   steps were filled with the OTHER login's password and the nav's page search with its email, and
   after the change both filled the signed-in owner's password and the search stayed empty. Still
-  open, three things. First, the sign-in page keeps its three inline copies of the field
+  open, two things. First, the sign-in page keeps its three inline copies of the field
   (`apps/dashboard/src/screens/login-screen.ts`). Moving them onto the helper needs at least: a
   `name` parameter (the sign-in page's tests pin `email`; the profile's field is named `username`,
   and its details step also shows an editable `email` field), the `data-autofill-username` hook
   those tests find the field by, and a decision about an empty email, for which the helper renders
-  nothing while the sign-in copies always render. Second, the payments screen's attest prompt
-  (`apps/dashboard/src/screens/payments-screen.ts`) asks for the manager's PIN but marks it
-  `autocomplete="current-password"`, which invites the browser to offer the dashboard password there
-  (not measured); left unchanged, a question to the owner. Third, which browser and address the
-  owner saw the empty field in. **Next action:** the owner answers the PIN-field question.
+  nothing while the sign-in copies always render. Second, which browser and address the owner saw
+  the empty field in. The payments screen's manager-PIN prompt
+  (`apps/dashboard/src/screens/payments-screen.ts`), which this entry left marked
+  `autocomplete="current-password"`, now says `autocomplete="off"`, the owner's choice on
+  2026-09-30 (C110) to match the profile screen's PIN fields; nobody checked in a real browser
+  whether it then stops offering the dashboard password there.
 - **A sign-in step's links are one bulleted list, with its buttons on the first item's row — DONE
   (C96, #936, owner 2026-09-30: "Move 'Login with passkey' under 'i've forgotten my password' … the same
   for any other similar links. Also the login button should be at the same level as the 'I've

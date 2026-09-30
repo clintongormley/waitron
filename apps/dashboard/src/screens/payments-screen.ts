@@ -896,7 +896,7 @@ export class PaymentsScreen extends LitElement {
       <wt-input
         name="pin"
         type="password"
-        autocomplete="current-password"
+        autocomplete="off"
         required
         data-test="bill-attest-pin"
         label=${t("payments.bill.pin")}
