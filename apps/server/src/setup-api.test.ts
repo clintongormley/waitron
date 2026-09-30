@@ -2,6 +2,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { AddressInfo } from "node:net";
+import { serve } from "@hono/node-server";
+import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AppError, SUPPORTED_LOCALE_CODES } from "@waitron/shared";
@@ -13,6 +16,7 @@ import type { ProvisionRequest } from "./provision.js";
 import type { RestoreRequest } from "./restore-request.js";
 import type { AdoptCredential, AdoptHooks, AdoptRequest } from "./adopt.js";
 import type { Logger, LogLevel } from "./logger.js";
+import { fetchMirrorBundle } from "./mirror-bundle-fetch.js";
 import { mountSetup, type SetupDeps } from "./setup-api.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import type { ConfigurationPreview } from "./configuration-import.js";
@@ -2041,26 +2045,59 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(requestRestart).not.toHaveBeenCalled(); // a failed fetch never restarts
   });
 
-  it.each([
-    ["totp.invalid", {}, 401],
-    ["person.not_found", { personId: "op-7" }, 404],
-  ] as const)(
-    "answers the primary's refusal %s from adopt as its own status, for the wizard to place under a field",
-    async (code, params, status) => {
+  it("answers the primary's refused login from adopt as 401 password.invalid, naming no field", async () => {
+    const app = new Hono();
+    const adopt = vi.fn(async () => {
+      throw new AppError("password.invalid", {});
+    });
+    const { deps, requestRestart } = makeAdoptDeps({ adopt });
+    mountSetup(app, deps, noopLog);
+
+    const res = await postAdopt(app, adoptBody());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
+    await tick();
+    expect(requestRestart).not.toHaveBeenCalled();
+  });
+
+  it("relays a primary that refuses the login as 401 password.invalid, carrying nothing the primary wrote", async () => {
+    const primary = new Hono();
+    primary.post("/management-api/mirror-bundle", (c) =>
+      c.json(
+        { error: { code: "password.invalid", params: { detail: "https://primary.internal" } } },
+        401,
+      ),
+    );
+    const server = await new Promise<ServerType>((resolve) => {
+      const started = serve({ fetch: primary.fetch, port: 0, hostname: "127.0.0.1" }, () =>
+        resolve(started),
+      );
+    });
+    try {
+      const { port } = server.address() as AddressInfo;
       const app = new Hono();
-      const adopt = vi.fn(async () => {
-        throw new AppError(code, params);
-      });
+      const adopt = vi.fn((req: AdoptRequest) =>
+        fetchMirrorBundle(req.primaryUrl, req.credential, {
+          nodeId: "55555555-5555-5555-5555-555555555555",
+          publicKey: "STANDBY_PUB",
+          contactUrl: "",
+        }).then(() => ({ breakGlassSecret: BREAK_GLASS_SECRET })),
+      );
       const { deps, requestRestart } = makeAdoptDeps({ adopt });
       mountSetup(app, deps, noopLog);
 
-      const res = await postAdopt(app, adoptBody());
-      expect(res.status).toBe(status);
-      expect(await res.json()).toEqual({ error: { code, params } });
+      const res = await postAdopt(app, {
+        primaryUrl: `http://127.0.0.1:${port}`,
+        credential: ADOPT_CREDENTIAL,
+      });
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: { code: "password.invalid", params: {} } });
       await tick();
       expect(requestRestart).not.toHaveBeenCalled();
-    },
-  );
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
 
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
     const app = new Hono();

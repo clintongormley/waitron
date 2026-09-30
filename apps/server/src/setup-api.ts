@@ -197,15 +197,13 @@ const runProvision = createErrorBoundary(PROVISION_STATUS, "setup.provision_fail
 /**
  * The adopt route's contract. `mirror.bundle_fetch_failed` is 502, not a client fault: the request
  * was well-formed, but the mirror's upstream — the primary it was pointed at — failed.
- * `totp.invalid` and `person.not_found` are the primary's refusals of a field the operator typed,
- * passed through by `fetchMirrorBundle`.
+ * `password.invalid` is the primary's refusal of the login, relayed by `fetchMirrorBundle`.
  */
 const ADOPT_STATUS: Record<string, ContentfulStatusCode> = {
   "setup.request_invalid": 400,
   "mirror.primary_url_invalid": 400,
   "mirror.bundle_fetch_failed": 502,
-  "totp.invalid": 401,
-  "person.not_found": 404,
+  "password.invalid": 401,
   "setup.operation_conflict": 409,
   "setup.already_provisioning": 409,
   "setup.adopt_incomplete": 409,
