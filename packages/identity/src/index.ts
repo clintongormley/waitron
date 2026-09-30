@@ -57,6 +57,7 @@ export {
   clearPersonPin,
   deactivatePerson,
   invitePerson,
+  listActivePersonsAtOrAboveRole,
   listActivePersonsWithPermission,
   listActiveStaff,
   listPersons,
