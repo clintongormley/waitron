@@ -3793,18 +3793,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
       still recorded when it takes nothing off.)_ Left open after B11d (#946, main `c9f0b7317`):
-      - **A discount can escape the bill's discount limit when the dish above it was given away
-        whole.** The limit treats every extra of a dish given away whole as given away too
-        (`shareOf`, `apps/server/src/adjustments-apply.ts`, reading the dishes `readCompedLines`
-        names), including an extra added after the give-away at full price, so a later discount on
-        that extra, or on the whole given-away dish (possible since #931), is not counted. A review
-        measured it on the B11d branch: limit 20%, a held Pizza and Bread ×4, the Pizza given away,
-        Olives added through `updateOrderLine` (€1.50), 100% off the Olives, then a preview of 30%
-        off the Bread answered not over the limit, though the real discount is €4.50 of €20.50,
-        about 22%. This predates B11d (#931,
-        `e511aa831`). **Next action:** have a whole give-away record the rows it covered (an
-        adjustments migration adding them to the record), and have the limit read those rather
-        than work them out from the dish.
+      - ~~**A discount can escape the bill's discount limit when the dish above it was given away
+        whole.**~~ **Fixed by B11f** (branch `feat/service-giveaway-covered-rows`). A whole
+        give-away now records the extras rows it priced at zero (the adjustments column
+        `comped_extras`, migration `packages/adjustments/drizzle/0003_comped_extras.sql`), and the
+        limit (`shareOf`, `apps/server/src/adjustments-apply.ts`) leaves out only the rows the
+        bill's records name, so an extra added afterwards at full price counts. The measured case
+        (limit 20%, a held Pizza and Bread ×4, the Pizza given away, Olives added, 100% off the
+        Olives or off the whole Pizza, then 30% off the Bread) now asks for a manager. A give-away
+        recorded before the migration reads an empty list, so its dish's extras count as discount
+        and the limit errs toward asking a manager; there is no data migration (pre-production).
       - **Cancelling an extra of a dish the kitchen already has tells the kitchen nothing** — no
         VOID slip and no correction to a held ticket — as the cancel route this replaced did not
         either; the till says the extra comes off the bill. **Next action:** if the owner wants
