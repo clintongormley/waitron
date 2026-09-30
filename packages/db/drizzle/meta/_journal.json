@@ -344,6 +344,20 @@
       "when": 1790721756705,
       "tag": "0048_drop_sold_alone",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "6",
+      "when": 1790738670511,
+      "tag": "0049_line_list_price",
+      "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "6",
+      "when": 1790738680057,
+      "tag": "0050_line_list_price_frozen",
+      "breakpoints": true
     }
   ]
 }
