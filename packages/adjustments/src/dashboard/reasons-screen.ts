@@ -677,7 +677,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         }}
         >${label}</wt-button
       >`;
-    return html`<wt-row-actions label=${`${t("adjustments.column.menu")}: ${reason.name}`}>
+    return html`<wt-row-actions label=${`${t("adjustments.column.actions")}: ${reason.name}`}>
       ${item(`edit-${reason.id}`, t("adjustments.edit"), (opener) =>
         this.#open({ kind: "reason", reason }, opener),
       )}
@@ -694,15 +694,9 @@ export class AdjustmentReasonsScreen extends LitElement {
   #columns(): DataTableColumn<AdjustmentReason>[] {
     return [
       { key: "name", label: t("adjustments.column.name"), cell: (reason) => reason.name },
-      // Straight after the name, so a phone reaches the controls without scrolling the table.
       {
-        key: "manage",
-        label: t("adjustments.column.menu"),
-        cell: (reason) => this.#manage(reason),
-      },
-      {
-        key: "actions",
-        label: t("adjustments.column.actions"),
+        key: "allows",
+        label: t("adjustments.column.allows"),
         choosable: "shown",
         cell: (reason) => this.#lines(reason.actions.map((action) => actionName(action))),
       },
@@ -737,6 +731,12 @@ export class AdjustmentReasonsScreen extends LitElement {
           ],
           initial: "active",
         },
+      },
+      {
+        key: "actions",
+        label: t("adjustments.column.actions"),
+        pinned: "end",
+        cell: (reason) => this.#manage(reason),
       },
     ];
   }

@@ -313,8 +313,8 @@ cannot see it, so assert a computed width or colour when you add a styled cell.
 columns scroll sideways under it**, so a row menu can be kept on a phone's screen without the table
 fitting it. It is set per column, and every row-menu column keyed `actions` sets it (A155; guard:
 `scripts/pinned-actions-column.test.ts`, weaker than its name: it knows a row-menu column only by
-a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`; its
-header lists the rest). The
+a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`, and never checks that the column is
+the table's last; its header lists the rest). The
 pinned header and cells paint the row's own
 background (`--wt-color-surface`, and `--wt-color-surface-raised` while the row is hovered, or a
 clickable row focused), sit above a clickable row's lifted controls, and draw a `--wt-color-border`

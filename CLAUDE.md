@@ -344,9 +344,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Cost: most tables put the menu past a
   phone's right edge. Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name — it
-  knows a menu column only by the key `actions`, reads only non-test `.ts` files under `apps/` and `packages/`, and misses a key
+  knows a menu column only by the key `actions`, reads only non-test `.ts` files under `apps/` and `packages/`, misses a key
   not written as the literal `key: "actions"` (a variable, a shorthand, a computed name, an
-  `as const`). The adjustment reasons screen's menu, keyed `manage`, is left unpinned on purpose (`docs/backlog.md`). See [design-system.md](docs/developers/design-system.md).
+  `as const`), and never checks that the column is the table's last. It does not know which objects
+  are table columns, so every object with that literal key is held to the rule and a data column must take
+  another key. See [design-system.md](docs/developers/design-system.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the

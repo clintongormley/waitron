@@ -13,26 +13,15 @@ import { describe, expect, it } from "vitest";
  * a shorthand, a computed name or an `as const`, is invisible to it; a key spread in from another
  * object is judged on that object. Its own `pinned` must be written as the string `"end"`: one set
  * through a variable, a spread or an `as const` is reported even when it holds `"end"`. It does not
- * know which objects are table columns, so any such object is held to the rule. `NOT_A_ROW_MENU`
- * excuses data columns by file and label.
+ * know which objects are table columns, so any such object is held to the rule, and a data column
+ * must take another key. It never checks that the column is the table's last.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 const ROOTS = ["apps", "packages"];
 
-/** Columns keyed `"actions"` that hold data, not the row's menu: file → the column's `label` code. */
-const NOT_A_ROW_MENU: Readonly<Record<string, string>> = {
-  // The actions a reason allows; the row menu is the "manage" column.
-  "packages/adjustments/src/dashboard/reasons-screen.ts": 't("adjustments.column.actions")',
-};
-
-function isDataColumn(file: string, label: string | undefined): boolean {
-  return Object.hasOwn(NOT_A_ROW_MENU, file) && NOT_A_ROW_MENU[file] === label;
-}
-
 interface Unpinned {
   line: number;
-  label: string | undefined;
 }
 
 function ownProperty(node: ts.ObjectLiteralExpression, name: string): ts.Expression | undefined {
@@ -60,10 +49,7 @@ export function unpinnedActionsColumns(source: string): Unpinned[] {
         key.text === "actions" &&
         !(pinned !== undefined && ts.isStringLiteralLike(pinned) && pinned.text === "end")
       )
-        found.push({
-          line: file.getLineAndCharacterOfPosition(key.getStart()).line + 1,
-          label: ownProperty(node, "label")?.getText(),
-        });
+        found.push({ line: file.getLineAndCharacterOfPosition(key.getStart()).line + 1 });
     }
     ts.forEachChild(node, visit);
   };
@@ -88,18 +74,12 @@ describe("the matcher", () => {
       "  },",
       "];",
     ].join("\n");
-    expect(unpinnedActionsColumns(source)).toEqual([{ line: 4, label: 't("a")' }]);
+    expect(unpinnedActionsColumns(source)).toEqual([{ line: 4 }]);
   });
 
   it("does not count a pinned setting inside a nested object as the column's own", () => {
     const source = 'const c = { key: "actions", cell: () => ({ pinned: "end" }) };';
-    expect(unpinnedActionsColumns(source)).toEqual([{ line: 1, label: undefined }]);
-  });
-
-  it("excuses a data column only in the file listed for it", () => {
-    const [file, label] = Object.entries(NOT_A_ROW_MENU)[0]!;
-    expect(isDataColumn(file, label)).toBe(true);
-    expect(isDataColumn("packages/unlisted.ts", undefined)).toBe(false);
+    expect(unpinnedActionsColumns(source)).toEqual([{ line: 1 }]);
   });
 
   it("ignores the string when it is not the key, and the key inside a comment", () => {
@@ -128,21 +108,14 @@ function sourceFilesIn(dir: string): string[] {
 
 describe("the tree", () => {
   const offenders: string[] = [];
-  const excused = new Set<string>();
   for (const file of ROOTS.flatMap((root) => sourceFilesIn(join(repoRoot, root)))) {
     const source = readFileSync(file, "utf8");
     if (!source.includes("actions")) continue;
     const name = relative(repoRoot, file);
-    for (const column of unpinnedActionsColumns(source))
-      if (isDataColumn(name, column.label)) excused.add(name);
-      else offenders.push(`${name}:${column.line}`);
+    for (const column of unpinnedActionsColumns(source)) offenders.push(`${name}:${column.line}`);
   }
 
   it("pins every actions column to the end", () => {
     expect(offenders.sort()).toEqual([]);
-  });
-
-  it("needs every entry in its list of data columns", () => {
-    expect(Object.keys(NOT_A_ROW_MENU).filter((file) => !excused.has(file))).toEqual([]);
   });
 });
