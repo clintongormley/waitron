@@ -98,6 +98,11 @@ async function openPassword(el: LoginScreen, email = "owner@x.com"): Promise<voi
   await el.updateComplete;
 }
 
+async function openGoogle(el: LoginScreen, email = "owner@x.com"): Promise<void> {
+  Object.assign(el as unknown as Record<string, string>, { email, step: "google" });
+  await el.updateComplete;
+}
+
 function input(el: LoginScreen, name: string, value: string): void {
   el.shadowRoot!.querySelector(`wt-input[name=${name}]`)!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value } }),
@@ -2930,9 +2935,15 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
 });
 
 describe("login-screen: a step's links are one bulleted list with its buttons on the first item's row", () => {
+  let restoreLocale: ReturnType<typeof currentLocale>;
+  let restoreViewport: [number, number];
+  beforeEach(() => {
+    restoreLocale = currentLocale();
+    restoreViewport = [window.innerWidth, window.innerHeight];
+  });
   afterEach(async () => {
-    setLocale("en-GB");
-    await page.viewport(1280, 900);
+    setLocale(restoreLocale);
+    await page.viewport(...restoreViewport);
   });
 
   /** Every sign-in method link on the step, in order, and the one list holding them. */
@@ -3022,11 +3033,7 @@ describe("login-screen: a step's links are one bulleted list with its buttons on
       await page.viewport(width, height);
       const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
       await flush(el);
-      Object.assign(el as unknown as Record<string, string>, {
-        email: "owner@x.com",
-        step: "google",
-      });
-      await el.updateComplete;
+      await openGoogle(el);
       const { lists, order } = links(el);
       expect(lists).toHaveLength(1);
       expect(order).toEqual(["use-password", "passkey-login", "reset-by-email"]);

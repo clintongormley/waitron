@@ -128,10 +128,9 @@ export class LoginScreen extends LitElement {
         margin-block: var(--wt-space-2);
       }
 
-      /* A step's buttons share the row of its first link, on the right. The list is pushed down by
-         half the difference between a button's height and a line, so the first link sits level
-         with the buttons' middle. Baseline alignment cannot do it: wt-form-actions takes its
-         baseline from its empty cancel slot's bottom edge when a step has no Cancel. */
+      /* The list's top padding centres the first link on the buttons. Text-baseline alignment
+         put the buttons 16 px high on steps with no Cancel, because wt-form-actions takes its
+         baseline from its empty cancel slot. */
       .links-and-actions {
         display: flex;
         flex-wrap: wrap;
