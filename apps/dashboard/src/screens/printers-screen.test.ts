@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, expectRowMenusOnScreen, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
@@ -812,6 +812,40 @@ describe("the Printers tab at phone width", () => {
           const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
           expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
         }
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
+});
+
+describe("the Agents tab at phone width", () => {
+  const phoneAgents: PrintAgentRow[] = [
+    {
+      ...agents[0]!,
+      name: "Agente de impresión de la cocina caliente",
+      host: "cocina-caliente.local",
+    },
+    ...agents.slice(1),
+  ];
+  it.each(["en-GB", "es-ES"])(
+    "keeps every agent row's menu on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+          api: stubApi({ listAgents: vi.fn().mockResolvedValue(phoneAgents) }),
+        });
+        await flush(el);
+        await selectTab(el, "agents");
+        await filterAgents(el, "all");
+        expectRowMenusOnScreen(q(el, '[data-test="agents-table"]')!, phoneAgents.length);
       } finally {
         setLocale(before);
         await page.viewport(width, height);

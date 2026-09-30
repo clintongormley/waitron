@@ -519,6 +519,7 @@ export class CategoriesScreen extends LitElement {
       {
         key: "actions",
         label: t("categories.actions"),
+        pinned: "end",
         cell: (category) =>
           html`<wt-row-actions label=${`${t("categories.actions")}: ${this.#text(category.name)}`}
             ><wt-button align="start" variant="ghost" @click=${() => this.#edit(category)}
@@ -600,6 +601,7 @@ export class CategoriesScreen extends LitElement {
     return this.#productColumns({
       key: "actions",
       label: t("categories.actions"),
+      pinned: "end",
       cell: (product) =>
         html`<wt-row-actions label=${`${t("categories.actions")}: ${product.name}`}
           ><wt-button

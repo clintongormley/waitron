@@ -197,6 +197,30 @@ export async function customSquarePixels(root: ParentNode): Promise<{
   }
 }
 
+/**
+ * Holds that `table` (a `wt-data-table`) is wider than its box, is unscrolled, and shows each of its
+ * `rows` row menus inside the box and the window with nothing painted over the menu's button.
+ */
+export function expectRowMenusOnScreen(table: Element, rows: number): void {
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
+  expect(scroll.scrollLeft).toBe(0);
+  const box = scroll.getBoundingClientRect();
+  const menus = [
+    ...table.shadowRoot!.querySelectorAll(":is(wt-row-actions, dashboard-row-actions)"),
+  ];
+  expect(menus).toHaveLength(rows);
+  for (const [index, menu] of menus.entries()) {
+    const button = menu.shadowRoot!.querySelector("button")!;
+    const at = button.getBoundingClientRect();
+    expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+    expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+    expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+    const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+    expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
+  }
+}
+
 export function formatViolations(violations: axe.Result[]): string {
   return violations
     .map((violation) => {

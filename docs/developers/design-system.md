@@ -311,8 +311,9 @@ cannot see it, so assert a computed width or colour when you add a styled cell.
 
 **A last column with `pinned: "end"` stays at the trailing edge of the table's box while the other
 columns scroll sideways under it**, so a row menu can be kept on a phone's screen without the table
-fitting it. It is opt-in, and only the Printers tab's Actions column uses it (A145); whether other
-tables pin theirs is open in `docs/backlog.md`. The pinned header and cells paint the row's own
+fitting it. It is set per column, and every row-menu column keyed `actions` sets it (A155; guard:
+`scripts/pinned-actions-column.test.ts`, which knows a row-menu column only by that key). The
+pinned header and cells paint the row's own
 background (`--wt-color-surface`, and `--wt-color-surface-raised` while the row is hovered, or a
 clickable row focused), sit above a clickable row's lifted controls, and draw a `--wt-color-border`
 line on their leading side from the cell's own `::before`: the table collapses its borders, and in
@@ -321,10 +322,8 @@ scrolled to its end, never while the cell was held at the edge. A table with no 
 no `data-pinned` attribute on any cell. Guards: the pinned cases in
 `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, and the
 phone-width cases in `apps/dashboard/src/screens/printers-screen.test.ts`. In a table with
-`rowClick`, a click on a pinned cell's empty space lands on the cell rather than the row's
-activator, so it does not open the row (2026-09-30: an `elementFromPoint` hit test, and a click
-probe in review that called `rowClick` zero times from the pinned cell's padding and once from an
-ordinary cell's; no test holds it).
+`rowClick`, a click on a pinned cell's empty space opens the row, and a click on anything inside
+the cell does not (the pinned-click cases in `wt-data-table.test.ts`).
 
 Supply `rowParent` — a `(row) => string | null` returning the parent row's own key, or `null` for a
 top-level row — to switch the same table into tree mode, as the categories screen does for its

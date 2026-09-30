@@ -751,6 +751,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.collapsed = next;
   }
 
+  /** A pinned cell is layered above the row's activator, so a click on its empty space reaches the
+   * cell rather than the activator. Anything inside the cell may be a control of its own. */
+  #openFromPinnedCell(event: Event, row: Row): void {
+    if (event.target === event.currentTarget) this.rowClick!(row);
+  }
+
   #selectionState(visibleKeys: string[]): { allSelected: boolean; someSelected: boolean } {
     const allSelected =
       visibleKeys.length > 0 && visibleKeys.every((key) => this.selected.includes(key));
@@ -993,6 +999,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
                         <td
                           data-align=${column.align ?? "start"}
                           data-pinned=${column.pinned ?? nothing}
+                          @click=${
+                            column.pinned && this.rowClick !== undefined
+                              ? (event: Event) => this.#openFromPinnedCell(event, row)
+                              : nothing
+                          }
                         >
                           ${
                             ci === 0 && this.rowClick !== undefined

@@ -694,6 +694,7 @@ export class SectionsScreen extends LitElement {
       {
         key: "actions",
         label: t("sections.actions"),
+        pinned: "end",
         cell: ({ key, section }) =>
           html`<wt-row-actions label=${`${t("sections.actions")}: ${section.internalName}`}
             ><wt-button

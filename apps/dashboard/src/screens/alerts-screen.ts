@@ -166,6 +166,7 @@ export class AlertsScreen extends LitElement {
       {
         key: "actions",
         label: t("alerts.col_actions"),
+        pinned: "end",
         cell: (a) => {
           const incidentId = incidentIdOf(a);
           if (incidentId !== null)

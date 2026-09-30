@@ -519,6 +519,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "actions",
             label: t("venue.actions"),
+            pinned: "end",
             cell: (row) =>
               this.#actions(row.name, [
                 {
@@ -570,6 +571,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "actions",
             label: t("venue.actions"),
+            pinned: "end",
             cell: (row) =>
               this.#actions(t("venue.hours"), [
                 {
@@ -642,6 +644,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "actions",
             label: t("venue.actions"),
+            pinned: "end",
             cell: (row) =>
               this.#actions(row.name, [
                 {
@@ -690,6 +693,7 @@ export class VenueOperationsScreen extends LitElement {
                 {
                   key: "actions",
                   label: t("venue.actions"),
+                  pinned: "end",
                   cell: (row) =>
                     this.#actions(
                       model.menus.find((menu) => menu.id === row.menuId)?.name ?? row.menuId,
@@ -763,6 +767,7 @@ export class VenueOperationsScreen extends LitElement {
           {
             key: "actions",
             label: t("venue.actions"),
+            pinned: "end",
             cell: (row) =>
               this.#actions(t("venue.routing"), [
                 {

@@ -1,7 +1,8 @@
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, expectRowMenusOnScreen, mountWidget } from "./test-helpers.js";
 import { roleName, statusName } from "../i18n/domain.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { PersonSummary } from "../api/client.js";
 import { StaffList } from "./staff-list.js";
 
@@ -247,4 +248,42 @@ describe("staff-list sorting", () => {
       { personId: "a", action: "resend-invitation" },
     ]);
   });
+});
+
+describe("the staff list at phone width", () => {
+  // A long unbroken display name widens the name column past a phone's screen.
+  const phonePeople: PersonSummary[] = [
+    ...people,
+    {
+      personId: "p3",
+      displayName: "Maria-Guadalupe-Fernandez-de-la-Concepcion-Montoya",
+      role: "staff",
+      status: "pending",
+      hasPassword: false,
+      hasTotp: false,
+      email: "guadalupe@x.com",
+    },
+  ];
+  it.each(["en-GB", "es-ES"])(
+    "keeps every person row's menu on screen and uncovered at 390 px while the other columns scroll sideways (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const { el } = await mountWidget<StaffList>("dashboard-staff-list", {
+          people: phonePeople,
+        });
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        expectRowMenusOnScreen(table, phonePeople.length);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

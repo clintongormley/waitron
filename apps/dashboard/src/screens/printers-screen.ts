@@ -1735,7 +1735,12 @@ export class PrintersScreen extends LitElement {
             >${this.#timestamp(a.lastSeenAt)}</span
           >`,
       },
-      { key: "actions", label: t("printers.actions"), cell: (a) => this.#agentActions(a) },
+      {
+        key: "actions",
+        label: t("printers.actions"),
+        pinned: "end",
+        cell: (a) => this.#agentActions(a),
+      },
     ];
     return html`<section>
       <wt-data-table

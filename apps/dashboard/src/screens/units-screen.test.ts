@@ -1,9 +1,10 @@
 import { LiveData } from "@waitron/dashboard-kit";
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
-import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { cleanupWidgets, expectRowMenusOnScreen, mountWidget } from "../widgets/test-helpers.js";
 import type { UnitsScreen } from "./units-screen.js";
 import "./units-screen.js";
 
@@ -907,4 +908,86 @@ describe("units-screen", () => {
       parts.mockRestore();
     }
   });
+});
+
+describe("at phone width", () => {
+  const longUnits: Unit[] = [
+    {
+      ...units[0]!,
+      name: { es: "unidad-de-medida-para-raciones-compartidas", en: "unit-for-shared-portions" },
+    },
+    units[1]!,
+  ];
+  const longProducts: ProductUsingUnit[] = [
+    { id: "p1", name: "Tostada-de-pan-de-masa-madre-con-tomate-rallado-y-aceite", active: true },
+    inUseProducts[1]!,
+  ];
+  async function atPhoneWidth(locale: string, body: () => Promise<void>): Promise<void> {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      await body();
+    } finally {
+      setLocale(before);
+      await page.viewport(width, height);
+    }
+  }
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps every unit row's menu on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+    async (locale) => {
+      await atPhoneWidth(locale, async () => {
+        const el = await mountWith(longUnits);
+        const table = el.shadowRoot!.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        expectRowMenusOnScreen(table, longUnits.length);
+      });
+    },
+  );
+
+  // This table's actions column holds a plain Edit button rather than a row menu, so the button
+  // is checked here the way expectRowMenusOnScreen checks a menu's.
+  it.each(["en-GB", "es-ES"])(
+    "keeps every in-use product row's Edit button on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+    async (locale) => {
+      await atPhoneWidth(locale, async () => {
+        const el = await mount(
+          stubApi({
+            listUnits: vi.fn().mockResolvedValue(longUnits),
+            deleteUnit: vi
+              .fn()
+              .mockRejectedValue({ code: "unit.in_use", params: { products: longProducts } }),
+          }),
+        );
+        const dialog = await openInUseModal(el);
+        expect(dialog.open).toBe(true);
+        const table = dialog.querySelector("wt-data-table")!;
+        await table.updateComplete;
+        const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(
+          scroll.clientWidth,
+        );
+        expect(scroll.scrollLeft).toBe(0);
+        const box = scroll.getBoundingClientRect();
+        for (const product of longProducts) {
+          const edit = table.shadowRoot!.querySelector(`[data-test="edit-product-${product.id}"]`)!;
+          const button = edit.shadowRoot!.querySelector("button")!;
+          const at = button.getBoundingClientRect();
+          expect(at.right, product.id).toBeLessThanOrEqual(box.right);
+          expect(at.left, product.id).toBeGreaterThanOrEqual(box.left);
+          expect(at.right, `${product.id} against the screen`).toBeLessThanOrEqual(
+            window.innerWidth,
+          );
+          // Hit-tested from the table's shadow root: the button's label is slotted text, which a
+          // hit test inside the button's own shadow root reports as its host.
+          const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+          expect(hit, `${product.id} is covered`).toBe(edit);
+        }
+      });
+    },
+  );
 });

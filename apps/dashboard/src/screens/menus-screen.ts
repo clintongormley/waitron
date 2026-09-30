@@ -1510,6 +1510,7 @@ export class MenusScreen extends LitElement {
       {
         key: "actions",
         label: t("menus.actions"),
+        pinned: "end",
         cell: (menu) =>
           html`<wt-row-actions label=${`${t("menus.actions")}: ${menu.name}`}
             ><wt-button

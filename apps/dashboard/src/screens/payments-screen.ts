@@ -1204,6 +1204,7 @@ export class PaymentsScreen extends LitElement {
         key: "actions",
         label: t("payments.reader_col_actions"),
         align: "end",
+        pinned: "end",
         cell: (reader) =>
           html`<wt-row-actions label=${`${t("payments.reader_col_actions")}: ${reader.name}`}>
             <wt-button

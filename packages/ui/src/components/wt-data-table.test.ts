@@ -5,6 +5,7 @@ import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 // For its `parkPointer` command type only.
 import type {} from "../a11y-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
+import "./wt-button.js";
 import "./wt-data-table.js";
 
 afterEach(() => {
@@ -2492,4 +2493,71 @@ test("a clickable row's lifted controls pass under a pinned column, not over it"
   const at = edit.getBoundingClientRect();
   expect(passing.getBoundingClientRect().right).toBeGreaterThan(at.right);
   expect(el.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2)).toBe(edit);
+});
+
+// A point inside the cell's padding, clear of its button, where a real pointer lands on the cell.
+async function clickPinnedPadding(el: WtDataTable<Row>): Promise<void> {
+  const cell = el.shadowRoot!.querySelector<HTMLElement>("tbody tr td:last-child")!;
+  const box = cell.getBoundingClientRect();
+  const at = { x: 2, y: 2 };
+  expect(el.shadowRoot!.elementFromPoint(box.x + at.x, box.y + at.y)).toBe(cell);
+  await userEvent.click(cell, { position: at });
+}
+
+test("a real click on a pinned cell's empty space opens its clickable row once", async () => {
+  const clicked: string[] = [];
+  const { el } = await narrowTable("end", { rowClick: (row: Row) => clicked.push(row.id) });
+  await clickPinnedPadding(el);
+  expect(clicked).toEqual(["b"]);
+});
+
+test("a real click on a control inside a pinned cell does not open its clickable row", async () => {
+  const clicked: string[] = [];
+  const { el } = await narrowTable("end", { rowClick: (row: Row) => clicked.push(row.id) });
+  await userEvent.click(el.shadowRoot!.querySelector('button[aria-label="Edit Bea"]')!);
+  expect(clicked).toEqual([]);
+});
+
+test("a real click on an unpinned cell of a clickable row with a pinned column opens it once", async () => {
+  const clicked: string[] = [];
+  const { el } = await narrowTable("end", { rowClick: (row: Row) => clicked.push(row.id) });
+  const cell = el.shadowRoot!.querySelector<HTMLElement>("tbody tr td")!;
+  const box = cell.getBoundingClientRect();
+  expect(el.shadowRoot!.elementFromPoint(box.x + 2, box.y + 2)).toBe(
+    cell.querySelector(".row-activate"),
+  );
+  await userEvent.click(cell, { position: { x: 2, y: 2 } });
+  expect(clicked).toEqual(["b"]);
+});
+
+test("a real click on a shared button inside a pinned cell does not also open its clickable row", async () => {
+  const clicked: string[] = [];
+  const pressed: string[] = [];
+  const el = await table({
+    rowClick: (row: Row) => clicked.push(row.id),
+    columns: [
+      ...pinnedColumns().slice(0, 2),
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (row) => html`<wt-button @click=${() => pressed.push(row.id)}>Edit</wt-button>`,
+      },
+    ],
+  });
+  el.style.width = "240px";
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector("wt-button")!);
+  expect(pressed).toEqual(["b"]);
+  expect(clicked).toEqual([]);
+});
+
+test("a click on a pinned cell's empty space raises no error in a table without rowClick", async () => {
+  const { el } = await narrowTable("end");
+  const errors: string[] = [];
+  const record = (event: ErrorEvent) => errors.push(event.message);
+  addEventListener("error", record);
+  onTestFinished(() => removeEventListener("error", record));
+  await clickPinnedPadding(el);
+  expect(errors).toEqual([]);
 });

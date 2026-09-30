@@ -1,9 +1,9 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, expectRowMenusOnScreen, mountWidget } from "../widgets/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 afterEach(cleanupWidgets);
 // Some tests pin the reader locale (en-GB) so a translated string can be asserted against its exact
@@ -2523,4 +2523,71 @@ describe("tabs", () => {
     await el.updateComplete;
     expect(tabs(el).value).toBe("categories");
   });
+});
+
+describe("at phone width", () => {
+  const longFood: CategorySummary = {
+    ...food,
+    name: { en: "Entrantes-calientes-y-fríos-para-compartir-en-la-mesa" },
+  };
+  const longToast: Product = {
+    ...product,
+    name: "Tostada-de-pan-de-masa-madre-con-tomate-rallado-y-aceite",
+  };
+  async function atPhoneWidth(locale: string, body: () => Promise<void>): Promise<void> {
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      await body();
+    } finally {
+      setLocale(before);
+      await page.viewport(width, height);
+    }
+  }
+  async function mountLong() {
+    const fx = apiFixture();
+    fx.api.listCategories.mockResolvedValue([longFood, drink]);
+    fx.api.listLibraryProducts.mockResolvedValue([longToast]);
+    const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+      api: fx.client,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-data-table")?.rows.length).toBe(2),
+    );
+    return el;
+  }
+
+  it.each(
+    (["tree", "flat"] as const).flatMap((mode) =>
+      ["en-GB", "es-ES"].map((locale) => ({ mode, locale })),
+    ),
+  )(
+    "keeps every category row's menu on screen and uncovered while the other columns scroll sideways (390 px, $mode, $locale)",
+    async ({ mode, locale }) => {
+      await atPhoneWidth(locale, async () => {
+        const el = await mountLong();
+        await chooseMode(el, mode);
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 2);
+      });
+    },
+  );
+
+  it.each(["en-GB", "es-ES"])(
+    "keeps every member product row's menu on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+    async (locale) => {
+      await atPhoneWidth(locale, async () => {
+        const el = await mountLong();
+        await openProducts(el, "food");
+        const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+          'wt-data-table[data-test="category-products"]',
+        )!;
+        await members.updateComplete;
+        expectRowMenusOnScreen(members, 1);
+      });
+    },
+  );
 });
