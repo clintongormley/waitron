@@ -1,5 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
@@ -136,6 +136,38 @@ describe("location invoice description", () => {
     expect(q(el, "[name=operationDescription]").getAttribute("error")).toBe("");
     expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
   });
+  it.each([1280, 390])(
+    "puts a failed save's message on its own line at the form's left edge, between the field and Save (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const client = api({
+          putLocationSettings: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        });
+        const { el } = await mountWidget<LocationSettingsScreen>(
+          "dashboard-location-settings-screen",
+          { api: client },
+        );
+        await flush(el);
+        q(el, "[data-test=save]").click();
+        await flush(el);
+        const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+        await actions.updateComplete;
+        const message = actions.shadowRoot!.querySelector("[data-error]")!;
+        expect(message.textContent).toBe(t("location_settings.save_error"));
+        const field = q(el, "[name=operationDescription]").getBoundingClientRect();
+        const save = q(el, "[data-test=save]").getBoundingClientRect();
+        const box = message.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(field.bottom);
+        expect(box.bottom).toBeLessThanOrEqual(save.top);
+        expect(box.left).toBeCloseTo(field.left, 0);
+        expect(box.right).toBeCloseTo(field.right, 0);
+        expect(getComputedStyle(message).textAlign).toBe("start");
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
   it("leaves the spacing token between the field and the action row", async () => {
     const { el } = await mountWidget<LocationSettingsScreen>("dashboard-location-settings-screen", {
       api: api(),

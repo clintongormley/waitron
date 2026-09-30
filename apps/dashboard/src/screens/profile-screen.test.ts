@@ -743,6 +743,32 @@ describe("your profile", () => {
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
   });
 
+  it("puts the already-registered message at the end of the Add passkey dialog's body, below its last field, not in the footer", async () => {
+    const { el } = await mount();
+    vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
+      new DOMException("already registered", "InvalidStateError"),
+    );
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    const message = body.querySelector<HTMLElement>(":scope > [data-error]");
+    expect(message?.textContent).toBe(codeMessage("passkey.already_registered"));
+    expect(message!.getAttribute("role")).toBe("alert");
+    expect(body.lastElementChild).toBe(message);
+    const fields = [...modal.querySelectorAll("wt-input")];
+    const lastField = fields.at(-1)!.getBoundingClientRect();
+    const box = message!.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(lastField.bottom);
+    expect(box.bottom).toBeLessThanOrEqual(footer.getBoundingClientRect().top);
+    expect(
+      modal.querySelector("wt-form-actions")!.shadowRoot!.querySelector("[data-error]"),
+    ).toBeNull();
+  });
+
   it("shows a passkey-specific message, not the generic banner, for any other ceremony failure", async () => {
     const { el, api } = await mount();
     // The library wraps this in a WebAuthnError whose `.code` must not reach codeOf, or the generic
