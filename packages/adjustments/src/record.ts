@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   decimalToCents,
@@ -115,19 +115,26 @@ export async function readReasonTotals(
   return { priorReductionOnBill, priorPercentOnLineBp: percent.rows[0]!.total };
 }
 
-/**
- * Every discount recorded on the bill, line and bill-level, under any reason: what the venue's
- * limit on a bill's total discount measures. A discounted line later cancelled or moved to another
- * bill still counts here, which errs toward asking for a manager.
- */
-export async function readBillDiscountTotal(
+/** The rows a bill's own comps priced at zero: the row each part comp split off, and the dish of
+ * each whole comp, whose extras rows were comped with it. */
+export interface CompedLines {
+  rows: string[];
+  dishes: string[];
+}
+
+/** The rows this bill's comp records name; a comp recorded on another bill is not read. */
+export async function readCompedLines(
   tx: Transaction,
   workingOrderId: string,
-): Promise<Decimal> {
-  const result = await tx.execute<{ total: string }>(sql`
-    select cast(coalesce(sum(reduction), 0) as text) as total
-    from adjustments
-    where working_order_id = ${workingOrderId}
-      and action in ('discount_percent', 'discount_amount')`);
-  return rawCentsToDecimal(result.rows[0]!.total);
+): Promise<CompedLines> {
+  const comps = await tx
+    .select({ lineId: adjustments.lineId, splits: adjustments.splits })
+    .from(adjustments)
+    .where(and(eq(adjustments.workingOrderId, workingOrderId), eq(adjustments.action, "comp")));
+  const comped: CompedLines = { rows: [], dishes: [] };
+  for (const { lineId, splits } of comps) {
+    if (splits.length === 0) comped.dishes.push(lineId!);
+    else comped.rows.push(...splits.map((split) => split.to));
+  }
+  return comped;
 }

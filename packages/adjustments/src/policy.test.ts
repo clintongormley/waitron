@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
+  billCancelNeedsManager,
   billDiscountNeedsManager,
   evaluateAdjustment,
   policySnapshotOf,
@@ -303,5 +304,64 @@ describe("billDiscountNeedsManager", () => {
     expect(() => ask({ reduction: decimal("-0.01") })).toThrow(RangeError);
     expect(() => ask({ priorDiscount: decimal("-0.01") })).toThrow(RangeError);
     expect(() => ask({ billValue: decimal("-0.01") })).toThrow(RangeError);
+  });
+});
+
+describe("billCancelNeedsManager", () => {
+  /** A staff member's cancel of €300.00 of bottles from a €400.00 bill with €100.00 off, under 40%. */
+  const ask = (overrides: Partial<Parameters<typeof billCancelNeedsManager>[0]> = {}) =>
+    billCancelNeedsManager({
+      limitBp: 4000,
+      before: { discount: decimal("100.00"), value: decimal("400.00") },
+      after: { discount: decimal("100.00"), value: decimal("100.00") },
+      actorRole: "staff",
+      ...overrides,
+    });
+
+  it("asks for a manager when the cancel lifts the bill's discount share past the limit", () => {
+    expect(ask()).toBe(true);
+    expect(ask({ actorRole: "supervisor" })).toBe(true);
+  });
+
+  it("lets the share reach the limit exactly", () => {
+    expect(ask({ after: { discount: decimal("40.00"), value: decimal("100.00") } })).toBe(false);
+  });
+
+  it("asks nobody when the share stays past the limit but does not rise", () => {
+    expect(
+      ask({
+        before: { discount: decimal("78.00"), value: decimal("130.00") },
+        after: { discount: decimal("60.00"), value: decimal("100.00") },
+      }),
+    ).toBe(false);
+  });
+
+  it("asks nobody when the share falls", () => {
+    expect(
+      ask({
+        before: { discount: decimal("80.00"), value: decimal("100.00") },
+        after: { discount: decimal("50.00"), value: decimal("90.00") },
+      }),
+    ).toBe(false);
+  });
+
+  it("asks nobody for a cancel that empties the bill", () => {
+    expect(ask({ after: { discount: decimal("0.00"), value: decimal("0.00") } })).toBe(false);
+  });
+
+  it("never asks a manager or an admin, and sets no limit when the venue has none", () => {
+    expect(ask({ actorRole: "manager" })).toBe(false);
+    expect(ask({ actorRole: "admin" })).toBe(false);
+    expect(ask({ limitBp: null })).toBe(false);
+  });
+
+  it("throws on a malformed request, the caller's bug", () => {
+    const negative = { discount: decimal("-0.01"), value: decimal("1.00") };
+    expect(() => ask({ limitBp: 0 })).toThrow(RangeError);
+    expect(() => ask({ before: negative })).toThrow(RangeError);
+    expect(() => ask({ after: negative })).toThrow(RangeError);
+    expect(() => ask({ after: { discount: decimal("1.00"), value: decimal("-1.00") } })).toThrow(
+      RangeError,
+    );
   });
 });

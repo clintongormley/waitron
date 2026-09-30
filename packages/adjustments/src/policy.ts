@@ -117,7 +117,7 @@ export function evaluateAdjustment(
 export interface BillDiscountRequest {
   /** The venue's limit in basis points of `billValue`; null sets none. */
   limitBp: number | null;
-  /** Every discount already recorded on the bill, line and bill-level alike. */
+  /** What the bill's rows are already discounted by. */
   priorDiscount: Decimal;
   reduction: Decimal;
   /** The bill's price before any adjustment. */
@@ -127,8 +127,8 @@ export interface BillDiscountRequest {
 
 /**
  * Whether this discount takes the bill's discounts past the venue's limit when the operator is
- * below a manager, so a manager must approve it. Reaching the limit exactly is allowed; the
- * comparison is exact, never rounded to the cent.
+ * below a manager, so someone at or above a manager must approve it. Reaching the limit exactly is
+ * allowed; the comparison is exact, never rounded to the cent.
  */
 export function billDiscountNeedsManager(req: BillDiscountRequest): boolean {
   const { limitBp } = req;
@@ -139,6 +139,51 @@ export function billDiscountNeedsManager(req: BillDiscountRequest): boolean {
   if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
   const taken = multiplyDecimal(addDecimal(req.priorDiscount, req.reduction), decimal("10000"));
   return compareDecimal(taken, multiplyDecimal(req.billValue, decimal(String(limitBp)))) > 0;
+}
+
+/** A bill's discount and its price before adjustments, over the same rows. */
+export interface BillShare {
+  discount: Decimal;
+  value: Decimal;
+}
+
+/** A cancel asked on a bill: its share before the cancel and on the rows the cancel leaves. */
+export interface BillCancelRequest {
+  limitBp: number | null;
+  before: BillShare;
+  after: BillShare;
+  actorRole: PersonRoleValue;
+}
+
+/**
+ * Whether a cancel leaves the bill's discount share past the venue's limit and higher than it was,
+ * while the operator is below a manager. A share that does not rise asks nobody, so a cancel from a
+ * bill a manager already took past the limit needs no one; a cancel that empties the bill leaves no
+ * share. Shares are compared by cross-multiplying, exactly.
+ */
+export function billCancelNeedsManager(req: BillCancelRequest): boolean {
+  const { limitBp, before, after } = req;
+  if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
+  for (const [name, share] of [
+    ["before", before],
+    ["after", after],
+  ] as const) {
+    if (compareDecimal(share.discount, ZERO) < 0 || compareDecimal(share.value, ZERO) < 0) {
+      throw new RangeError(`${name} is negative`);
+    }
+  }
+  if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
+  const past =
+    compareDecimal(
+      multiplyDecimal(after.discount, decimal("10000")),
+      multiplyDecimal(after.value, decimal(String(limitBp))),
+    ) > 0;
+  const rises =
+    compareDecimal(
+      multiplyDecimal(after.discount, before.value),
+      multiplyDecimal(before.discount, after.value),
+    ) > 0;
+  return past && rises;
 }
 
 /** The policy an adjustment was evaluated under, kept on the adjustment so a later edit of the

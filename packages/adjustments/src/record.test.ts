@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -7,7 +7,7 @@ import { decimal, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
-  readBillDiscountTotal,
+  readCompedLines,
   readReasonTotals,
   recordAdjustment,
   type NewAdjustment,
@@ -296,34 +296,42 @@ describe("readReasonTotals", () => {
   });
 });
 
-describe("readBillDiscountTotal", () => {
+describe("readCompedLines", () => {
   const read = (workingOrderId: string) =>
-    withTransaction(db, (tx) => readBillDiscountTotal(tx, workingOrderId));
+    withTransaction(db, (tx) => readCompedLines(tx, workingOrderId));
 
-  it("answers nothing on a bill with no discount", async () => {
-    expect(await read(await seedWorkingOrder(db))).toBe("0.00");
+  it("answers no rows on a bill nobody comped", async () => {
+    expect(await read(await seedWorkingOrder(db))).toEqual({ rows: [], dishes: [] });
   });
 
-  it("sums every line and bill-level discount on the bill, under any reason, and nothing else", async () => {
+  it("names a whole comp's dish and a part comp's split-off row, and nothing else", async () => {
     const order = await seedWorkingOrder(db);
     const other = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    const another = await seedReason(db);
-    await record(percent(order, reason, randomUUID(), 2500));
+    const whole = randomUUID();
+    const part = { from: randomUUID(), to: randomUUID() };
+    await record(comp(order, reason, { line: { ...comp(order, reason).line!, id: whole } }));
     await record(
-      comp(order, another, {
-        line: null,
-        quantity: null,
-        action: "discount_amount",
-        beforeAmount: decimal("20.00"),
-        afterAmount: decimal("15.01"),
-        reduction: decimal("4.99"),
-        nominalValue: decimal("4.99"),
+      comp(order, reason, {
+        line: { ...comp(order, reason).line!, id: part.from },
+        splits: [part],
       }),
     );
-    await record(comp(order, reason));
+    await record(
+      percent(order, reason, randomUUID(), 2500, [{ from: randomUUID(), to: randomUUID() }]),
+    );
     await record(comp(order, reason, { action: "cancel" }));
-    await record(percent(other, reason, randomUUID(), 5000));
-    expect(await read(order)).toBe("7.49");
+    await record(comp(other, reason));
+    expect(await read(order)).toEqual({ rows: [part.to], dishes: [whole] });
+  });
+
+  it("reads the bill's comps through the index that leads with the working order", async () => {
+    const plan = await db.execute<{ detail: string }>(
+      sql`explain query plan select line_id, splits from adjustments
+        where working_order_id = ${randomUUID()} and action = 'comp'`,
+    );
+    expect(plan.rows.map((row) => row.detail).join("\n")).toContain(
+      "USING INDEX adjustments_order_reason_idx (working_order_id=?)",
+    );
   });
 });
