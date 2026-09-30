@@ -29,8 +29,9 @@ prefix — the alert area claims (`claimFor`, `apps/server/src/alerts.ts`), the 
 `apps/server/src/rejoin-command.ts`'s `rejoin.` handling and `apps/server/src/restore-command.ts`'s
 `restore.`/`recovery.`/`backup.` handling — so a rename that changes the prefix, or a deletion, is checked
 against those too. It does not find the stored copies, because each store takes whatever code arrives: `incidents.code` (`packages/db/src/schema/incidents.ts`), `scheduled_runs.error_code`
-(`packages/scheduler/src/schema/scheduled-runs.ts`) and `recovery.json`'s `lastErrorCode`
-(`apps/server/src/recovery-state.ts`). Before a venue is live they are not rewritten (CLAUDE.md
+(`packages/scheduler/src/schema/scheduled-runs.ts`), `print_jobs.last_error`
+(`packages/db/src/schema/print-jobs.ts`), which also holds an agent's free-text report, and
+`recovery.json`'s `lastErrorCode` (`apps/server/src/recovery-state.ts`). Before a venue is live they are not rewritten (CLAUDE.md
 §3's no-data-migration rule); once one is live they are, and anything outside this repository that
 reads the code accepts both names until both sides are deployed. Old log lines keep the old name. `server.*` is
 reserved for facts about the process itself (`apps/server/src/errors.ts`). Every file that throws a

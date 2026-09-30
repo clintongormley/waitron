@@ -2310,7 +2310,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     this one did not reach, and a mark is kept while the device stays listed.
   - Each job pull (the agent's regular request to the server for print work) now reports the
     devices the box is paired with, separately from the devices that can take print jobs. A paired
-    printer still takes no jobs (read, not run: see Bluetooth delivery, below).
+    printer still takes no jobs (the Bluetooth case in `apps/server/src/print-agent-e2e.test.ts`,
+    where a job for a printer the pull reports paired never reaches the fake radio); since A139, a
+    pull that also says `bluetoothPrinting: false` ends, failed, the due jobs of each enabled
+    Bluetooth printer it reports paired (A139, below).
   - It carries out Pair and Forget commands the server sends back on a job pull. Pair runs
     `bluetoothctl` interactively, so its own pairing agent is running (the part of `bluetoothctl`
     that BlueZ, the Linux Bluetooth service, asks for a PIN), and answers the printer's PIN
@@ -2519,16 +2522,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `queued`, with no attempt and no error. It was never retried and never failed, because no agent
   was ever handed it: the server hands a USB or Bluetooth printer's job only to an agent that lists
   the printer among the devices it can print to (`claimPrintJobs`,
-  `packages/printing/src/runtime.ts`), and the agent's device layer leaves out every paired
-  Bluetooth device while `liveBtDevicePath` refuses to name a device path (the catch in
-  `visibleDevices`, `apps/print-agent/src/linux-devices.ts`). Now each job pull also says whether
+  `packages/printing/src/runtime.ts`), and the agent's device layer leaves every paired Bluetooth
+  device out of the devices it can print to while `liveBtDevicePath` refuses to name a device path
+  (the catch in `visibleDevices`, `apps/print-agent/src/linux-devices.ts`). Now each job pull also says whether
   the agent can print over Bluetooth (a new optional `bluetoothPrinting` field; the box's agent sends
   `false` while `liveBtDevicePath` is unbuilt, and an agent that predates the field sends nothing and
   changes nothing), and when it says it cannot, the server ends the waiting jobs of every Bluetooth
   printer that agent reports paired, unless the printer is disabled: failed, with no attempts left,
-  so they are not retried (`failUnprintableBluetoothJobs`, `packages/printing/src/runtime.ts`),
+  so they are not retried, at most `PULL_BATCH_LIMIT` of them per pull
+  (`failUnprintableBluetoothJobs`, `packages/printing/src/runtime.ts`),
   recording `printer.bluetooth_printing_unavailable`, which the dashboard shows as "Printing to a
   Bluetooth printer is not available yet." / "Aún no se puede imprimir en una impresora Bluetooth."
+  A document job ended this way counts as in trouble, being failed with no attempts left
+  (`printJobInTrouble`, `apps/server/src/print-job-trouble.ts`), so the printer's alert fires for
+  it, and that alert says the printer's jobs are "stuck" (`printer.jobs_waiting`,
+  `apps/dashboard/src/i18n/alert-messages.ts`).
   A paired report alone still changes no job, as P2c's "never claims its jobs" case in
   `apps/server/src/print-api.test.ts` holds. On the Printers screen the edit and calibration dialog
   shows the last print it sent that failed, as "Not printed: <reason>" / "No se ha impreso:
@@ -2537,12 +2545,23 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the stored attempt count, for such a job, whose Reprint makes a new job that ends the same way
   (read, not run). **Not covered:** a Bluetooth printer no agent reports paired still waits with no
   reason on the job, as a USB printer no agent sees does; with two agents, one that has the printer paired but cannot print over Bluetooth ends
-  the job even if the other could — which no agent can today; and A140 must have the agent send
-  `true`, or stop sending the field, once it can print. Not run on the box.
-- **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
-  every Bluetooth job because no real per-printer radio path has been established on the box; the
-  pairing plan must not make a paired device claim work or say that it can print. Until A140 builds
-  the sending, a paired printer's jobs end failed with a reason (A139, above).
+  the job even if the other could — which no agent can today. A140 must have the agent send
+  `true`, or stop sending the field, once it can print; must not let an agent that cannot print over
+  Bluetooth end a job another agent could print; and must remove, or key on something other than
+  the transport or the stored code, each place the dashboard says Bluetooth printing is not
+  available yet: the note on a Bluetooth printer's row and the hint in its edit dialog (both
+  `codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)`, shown for every Bluetooth printer,
+  `apps/dashboard/src/screens/printers-screen.ts`), the last sentence of
+  `printers.bluetooth_pair_note` (`apps/dashboard/src/i18n/strings.ts`), and the jobs list's "—" in
+  place of the attempt count. The stored code also becomes that sentence as a job's reason, through
+  `jobReason` in the jobs list and in the calibration dialog's "Not printed: <reason>"
+  (`apps/dashboard/src/screens/printers-screen.ts`); A140 decides whether jobs ended before it keep
+  that reason text. Not run on the box.
+- **Bluetooth delivery from a paired printer (A140) remains separate.** `liveBtDevicePath` throws
+  for every paired device, because no real per-printer radio path has been established on the box,
+  so `visibleDevices` leaves every paired device out and no Bluetooth job is handed to the box's
+  agent; the pairing plan must not make a paired device claim work or say that it can print. Until
+  A140 builds the sending, a paired printer's jobs end failed with a reason (A139, above).
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
