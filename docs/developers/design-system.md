@@ -293,6 +293,10 @@ primitive. Always supply `aria-label`; use its loading, empty and error properti
 replacing the table with unrelated markup. A column can supply `sortValue` for a stable sortable
 header and `align: "center" | "end"` for non-text values; cell rendering stays with the consumer.
 
+Table cells line up by their first line of text (`vertical-align: baseline`). Cell markup that is a
+flex row must put its text on that line too — `align-items: baseline`, or an inline picture with
+`vertical-align: middle` beside the text — or it draws off the row's line.
+
 **Style your own cell markup with `part=` and `::part()`, never with a CSS class.** A cell callback
 returns a template, but the nodes it produces are rendered by `wt-data-table` and so end up inside
 `wt-data-table`'s shadow root — not your screen's. A stylesheet only reaches nodes inside the shadow

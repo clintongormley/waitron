@@ -21,6 +21,7 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-spinner.js";
+import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
 import "../widgets/print-job-preview.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -95,7 +96,14 @@ type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
   /** A Pair's device as listed when its Pair dialog was opened, so its status keeps a row once the
    * scan loses it. */
   device?: DiscoveredPrinter;
+  /** A success notice that has faded; the command stays, so a lingering pairing report does not
+   * bring Unpair back. */
+  noticeGone?: true;
 };
+
+/** How long a command's success notice stays before it fades. A failure stays until the next
+ * command for that device replaces it. */
+const NOTICE_MS = 4000;
 
 const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, StringKey>> = {
   pair: {
@@ -196,16 +204,20 @@ export class PrintersScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
-      /* wt-data-table is at least max-content wide, so an agent's reason (up to
-         MAX_OUTCOME_ERROR_LENGTH characters) that does not wrap widens the whole list. */
+      /* wt-data-table is at least max-content wide, so without a cap these would never wrap, and an
+         agent's reason (up to MAX_OUTCOME_ERROR_LENGTH characters) would widen the whole list. */
       wt-data-table::part(bluetooth-actions) {
         display: flex;
-        flex-direction: column;
+        flex-wrap: wrap;
         gap: var(--wt-space-2);
-        align-items: flex-start;
+        align-items: center;
+        max-width: 40vw;
+        /* A button's label stays on one line: the cap gives way to the widest one instead. */
+        min-width: min-content;
+        white-space: nowrap;
       }
       wt-data-table::part(bluetooth-status) {
-        max-width: 40vw;
+        white-space: normal;
         overflow-wrap: anywhere;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
@@ -219,13 +231,13 @@ export class PrintersScreen extends LitElement {
         align-items: center;
       }
 
-      wt-data-table::part(job-status) {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
+      /* An inline dot, not a flex row: the table lines a row up by its cells' first baselines, and a
+         flex row would take its baseline from the dot's box rather than the status text. */
       wt-data-table::part(job-status)::before {
         content: "";
+        display: inline-block;
+        vertical-align: middle;
+        margin-inline-end: var(--wt-space-2);
         width: var(--wt-space-2);
         height: var(--wt-space-2);
         border-radius: 50%;
@@ -532,11 +544,8 @@ export class PrintersScreen extends LitElement {
   #pairEpoch = 0;
   @state() private commands: Record<string, TrackedCommand> = {};
   /** Command key to answerBy for each pairing that succeeded while Add a printer is open. Kept apart
-   * from `commands`, so dismissing the Paired status leaves the device counted as paired. */
+   * from `commands`, so a new command on the device leaves it counted as paired. */
   @state() private pairedDevices: Record<string, number> = {};
-  @state() private armedForgetId: string | null = null;
-  /** Separate from `armedForgetId`, so a listed device's arm never matches a printer id. */
-  @state() private armedForgetDevice: string | null = null;
   @state() private forgetting = false;
   #commandTimer?: ReturnType<typeof setInterval>;
   #commandReadInFlight = false;
@@ -625,8 +634,6 @@ export class PrintersScreen extends LitElement {
     this.armedRevokeId = null;
     this.armedAllowId = null;
     this.armedDenyId = null;
-    this.armedForgetId = null;
-    this.armedForgetDevice = null;
     try {
       await Promise.all([
         this.#queries.watch("listAgents", [], (agents) => {
@@ -1253,7 +1260,7 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Reads continue while a command waits, and after a pairing succeeds until the agent reports the
-   * device paired, so Forget pairing can appear; no read starts for it past that pairing's own
+   * device paired, so Unpair can appear; no read starts for it past that pairing's own
    * deadline. */
   #commandPollNeeded(): boolean {
     const now = Date.now();
@@ -1277,10 +1284,10 @@ export class PrintersScreen extends LitElement {
     this.#commandReadError = null;
   }
 
-  #dismissCommand(key: string): void {
-    const next = { ...this.commands };
-    delete next[key];
-    this.commands = next;
+  #noticeGone(key: string, id: string): void {
+    const command = this.commands[key];
+    if (command?.id === id)
+      this.commands = { ...this.commands, [key]: { ...command, noticeGone: true } };
   }
 
   #resetPair(): void {
@@ -1323,27 +1330,9 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** The agent's current pairing report for a Bluetooth printer, which Forget needs. */
+  /** The agent's current pairing report for a Bluetooth printer, which Unpair needs. */
   #pairedReport(p: Printer): DiscoveredPrinter | undefined {
     return p.transport === "bluetooth" ? this.#pairedReports.get(p.id) : undefined;
-  }
-
-  #onForget(p: Printer, device: DiscoveredPrinter): void {
-    if (this.armedForgetId !== p.id) {
-      this.armedForgetId = p.id;
-      return;
-    }
-    this.armedForgetId = null;
-    void this.#forget(device);
-  }
-
-  #onForgetDevice(key: string, device: DiscoveredPrinter): void {
-    if (this.armedForgetDevice !== key) {
-      this.armedForgetDevice = key;
-      return;
-    }
-    this.armedForgetDevice = null;
-    void this.#forget(device);
   }
 
   async #forget(device: DiscoveredPrinter): Promise<void> {
@@ -1359,41 +1348,22 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** A pairing whose device cannot be added opens no form afterwards (`#addPaired`), so its pending
-   * text does not promise one. */
-  #commandText(key: string, command: TrackedCommand): StringKey {
-    return command.kind === "pair" &&
-      command.state === "pending" &&
-      !this.#canAdd(this.#listedDevice(key) ?? command.device!)
-      ? "printers.bluetooth_pairing_only"
-      : COMMAND_TEXT[command.kind][command.state];
-  }
-
   #renderCommand(key: string, command: TrackedCommand | undefined, test: string) {
-    if (command === undefined) return nothing;
+    if (command === undefined || command.noticeGone) return nothing;
     const problem = command.state === "failed" || command.state === "no_answer";
-    const status = html`<span
-      part=${problem ? "bluetooth-status bluetooth-problem" : "bluetooth-status"}
-      role="status"
-      data-test=${test}
-      >${t(this.#commandText(key, command))}${command.error === undefined ? "" : `: ${command.error}`}</span
+    return html`<span part="bluetooth-progress"
+      >${
+        command.kind === "pair" && command.state === "pending"
+          ? html`<wt-spinner decorative size="sm" data-test=${`progress-${test}`}></wt-spinner>`
+          : nothing
+      }<wt-notice
+        part=${problem ? "bluetooth-status bluetooth-problem" : "bluetooth-status"}
+        data-test=${test}
+        .duration=${command.state === "succeeded" ? NOTICE_MS : 0}
+        @wt-notice-gone=${() => this.#noticeGone(key, command.id)}
+        >${t(COMMAND_TEXT[command.kind][command.state])}${command.error === undefined ? "" : `: ${command.error}`}</wt-notice
+      ></span
     >`;
-    if (command.kind === "pair" && command.state === "pending")
-      return html`<span part="bluetooth-progress"
-        ><wt-spinner decorative size="sm" data-test=${`progress-${test}`}></wt-spinner
-        >${status}</span
-      >`;
-    return html`${status}${
-      command.state === "pending"
-        ? nothing
-        : html`<wt-button
-            size="sm"
-            variant="ghost"
-            data-test=${`dismiss-${test}`}
-            @click=${() => this.#dismissCommand(key)}
-            >${t("printers.bluetooth_dismiss")}</wt-button
-          >`
-    }`;
   }
 
   #editPrinter(id: string, patch: Partial<EditablePrinter>): void {
@@ -1961,15 +1931,12 @@ export class PrintersScreen extends LitElement {
     // expiry (`isListed`, `apps/server/src/print-api.ts`).
     const sent = this.commands[this.#commandKeyOf(device)];
     if (sent?.kind === "forget" && sent.state === "succeeded") return nothing;
-    const armed = this.armedForgetId === p.id;
     return html`<wt-button
       variant="danger"
-      data-keep-open
       data-test=${`forget-pairing-${p.id}`}
-      data-armed=${armed ? "true" : nothing}
       ?disabled=${this.forgetting || this.#printerCommands.get(p.id)?.[1].state === "pending"}
-      @click=${() => this.#onForget(p, device)}
-      >${armed ? t("printers.bluetooth_forget_confirm") : t("printers.bluetooth_forget")}</wt-button
+      @click=${() => void this.#forget(device)}
+      >${t("printers.bluetooth_forget")}</wt-button
     >`;
   }
 
@@ -2879,23 +2846,20 @@ export class PrintersScreen extends LitElement {
     </wt-modal>`;
   }
 
-  /** Forget pairing for a paired device with no printer row, such as one whose add was cancelled. */
+  /** Unpair for a paired device with no printer row, such as one whose add was cancelled. */
   #forgetDeviceAction(
     d: DiscoveredPrinter,
-    key: string,
     command: TrackedCommand | undefined,
   ): TemplateResult | typeof nothing {
     if (d.paired !== true || d.printerId !== null) return nothing;
-    // As on a printer row (#forgetAction): hidden once a forget succeeds, while the report lingers.
+    // As on a printer row (#forgetAction): hidden once an unpairing succeeds, while the report lingers.
     if (command?.kind === "forget" && command.state === "succeeded") return nothing;
-    const armed = this.armedForgetDevice === key;
     return html`<wt-button
       variant="danger"
       data-test=${`forget-device-${this.#deviceKey(d)}`}
-      data-armed=${armed ? "true" : nothing}
       ?disabled=${this.forgetting || command?.state === "pending"}
-      @click=${() => this.#onForgetDevice(key, d)}
-      >${armed ? t("printers.bluetooth_forget_confirm") : t("printers.bluetooth_forget")}</wt-button
+      @click=${() => void this.#forget(d)}
+      >${t("printers.bluetooth_forget")}</wt-button
     >`;
   }
 
@@ -2917,10 +2881,10 @@ export class PrintersScreen extends LitElement {
     const bluetoothKeys = (devices: DiscoveredPrinter[]) =>
       new Set(devices.filter((d) => d.transport === "bluetooth").map((d) => this.#commandKeyOf(d)));
     const rowKeys = bluetoothKeys(rows);
-    // A Pair whose device the list no longer shows keeps a status-only row until it is dismissed.
+    // A Pair whose device the list no longer shows keeps a status-only row while its notice shows.
     const lost = new Set(
-      Object.entries(this.commands).flatMap(([key, { device }]) =>
-        device !== undefined && !rowKeys.has(key) ? [device] : [],
+      Object.entries(this.commands).flatMap(([key, { device, noticeGone }]) =>
+        device !== undefined && !noticeGone && !rowKeys.has(key) ? [device] : [],
       ),
     );
     const listed = lost.size > 0 ? bluetoothKeys(this.discovered) : rowKeys;
@@ -2984,7 +2948,7 @@ export class PrintersScreen extends LitElement {
           return html`<div part="bluetooth-actions">
             ${
               paired
-                ? html`${add}${this.#forgetDeviceAction(d, key, command)}`
+                ? html`${add}${this.#forgetDeviceAction(d, command)}`
                 : html`<wt-button
                     variant="primary"
                     data-test=${`pair-${this.#deviceKey(d)}`}
@@ -3012,7 +2976,6 @@ export class PrintersScreen extends LitElement {
       @wt-close=${() => {
         this.addingPrinter = false;
         this.namingPrinter = null;
-        this.armedForgetDevice = null;
         this.#endScan();
         this.#stopRenewing();
         this.commands = Object.fromEntries(

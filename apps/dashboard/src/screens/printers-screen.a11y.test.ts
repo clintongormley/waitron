@@ -588,7 +588,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders the form a finished pairing opens, then the paired row's Add and Forget pairing, accessibly", async () => {
+  it("renders the form a finished pairing opens, then the paired row's Add and Unpair, accessibly", async () => {
     const paired = {
       ...bluetooth[0]!,
       paired: true as const,
@@ -704,7 +704,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders a switched-off Bluetooth printer's Forget pairing and its outcome accessibly", async () => {
+  it("renders a switched-off Bluetooth printer's Unpair and its outcome accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
       {
@@ -733,8 +733,6 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await flush(el);
     expect(forget.checkVisibility()).toBe(true);
     await expectNoA11yViolations(host);
-    forget.click();
-    await flush(el);
     forget.click();
     await flush(el);
     expect(q(el, "[data-test=printer-command-p4]")).not.toBeNull();
