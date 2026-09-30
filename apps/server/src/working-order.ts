@@ -68,6 +68,7 @@ import {
   kitchenStations,
   nowIso,
   orderGroups,
+  orderTableLabels,
   products,
   sales,
   ticketItems,
@@ -150,7 +151,6 @@ import {
   enqueueKitchenTickets,
   firedQuantity,
   isStarted,
-  orderTableLabels,
   ordersWithPrintProblem,
 } from "./kitchen-print.js";
 import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";

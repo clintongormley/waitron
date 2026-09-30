@@ -736,7 +736,8 @@ greyed.
 **A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
 Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
 `apps/server/src/kitchen-print.ts`), so after a join a MOVED slip's "from" can name the other
-table; recording each ticket's printed table would fix it. A party's bill names all its tables
+table; recording each ticket's printed table would fix it. _(2026-09-30, C86: `orderTableLabels`
+now lives in `packages/db/src/party-table-labels.ts`.)_ A party's bill names all its tables
 instead (the table-actions "Task 4 DONE" entry below). Outside tests, `openTab`'s one caller is
 `seatTable` (`apps/server/src/parties.ts`), which opens the tab on a new party. Whether a tab of no
 party can reach a join in production is not established: `moveTab` of an open parked order onto a
@@ -3600,7 +3601,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the till's list of a party's bills (`readBillsOfParties`, `apps/server/src/parties.ts`);
       `orderTableLabel`'s fallback once the party holds no table (slips and the pass); and the
       overdue report's own fallback to the order's label (`computeOverdueOrders`,
-      `packages/reporting/src/overdue-orders.ts`). Not yet checked: the payment API's
+      `packages/reporting/src/overdue-orders.ts`). _(2026-09-30, C86: the overdue report no longer
+      has its own; it calls `orderTableLabels`, the same fallback as the slips and the pass.)_ Not
+      yet checked: the payment API's
       `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
       `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which
       read the same column. **DECIDED (owner, 2026-09-29): leave it** — after payment the
@@ -3859,7 +3862,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       after a move to a held table the pass names the new table. A one-off probe (not kept as a
       test) marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
       neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels`, and not every
-      other view follows the merge (read, not run).
+      other view follows the merge (read, not run). _(2026-09-30, C86: a receipt of a bill of no
+      party now calls `orderTableLabels`; a party's receipt still does not.)_
     Tests: `apps/server/src/party-table-actions.test.ts` and
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
     Open points: **Fixed (C77):** the manager overview's slow-orders list (`computeOverdueOrders`,
@@ -3872,13 +3876,36 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     by the bill's own label ("Ana"). (#880, main `d4324632e`.) A party with no table whose chain of
     merges never ends (an unknown id, or two parties recorded as merged into each other, which the
     database accepts) is named by the bill's own label, as before; whether any till action can make
-    such a loop was not checked. Left by C77's review, not done: the rule for a bill of NO party
-    (its seated table, else its delivery table, else its label) is still written three times —
-    `orderTableLabels` (`apps/server/src/kitchen-print.ts`), the `tableLabel` subquery in
-    `computeOverdueOrders`, and `apps/server/src/receipt-order.ts`; moving `orderTableLabels` itself
-    into `@waitron/db` would leave one. And `partyFamilies`, the reverse lookup of
+    such a loop was not checked. Left by C77's review: the rule for a bill of NO party was written
+    three times — `orderTableLabels` (`apps/server/src/kitchen-print.ts`), the `tableLabel`
+    subquery in `computeOverdueOrders`, and `apps/server/src/receipt-order.ts`. **Done (C86,
+    2026-09-30):** `orderTableLabels` moved into `packages/db/src/party-table-labels.ts` and is
+    exported from `@waitron/db`; the kitchen papers, the pass (`listExpoQueue`), the slow-orders
+    list (whose subquery and hand-written party branch are gone) and the no-party branch of
+    `readReceiptOrder` all call it. A receipt's party branch stays its own on purpose (the party's
+    name and active tables, no merge chain). The rule as written here before, "its seated table,
+    else its delivery table, else its label", was out of date: the seated-table branch went with
+    `dining_tables.tab_id` in Task 13 (#897, `c05388158`), so a bill of no party is named by the
+    table it is delivered to, else its own label, and null for an unlabelled walk-up. The moved
+    function keeps its filter on the table's location; the slow-orders list now passes its node's
+    location (`nodes.location_id`) and receipts the till's, where before neither filtered. That
+    shows nothing different on a real venue: outside tests, `createOpenOrder`
+    (`apps/server/src/working-order.ts`) is the one writer of a non-null `delivery_table_id` and it
+    refuses a table of another location (`table.not_found`), `apps/server/src/move-bill.ts` only
+    clears the column, and provisioning refuses a second venue (`provisioning.second_venue`,
+    `packages/provisioning/src/venue-apply.ts`); the grep was
+    `grep -rn "deliveryTableId\|delivery_table_id" apps packages --include='*.ts'` and
+    `grep -rln "insert(locations)\|insert into locations" apps packages --include='*.ts'`, whose
+    other hits are test seeds and fixtures and the demo scripts under `apps/server/scripts`. Run: six
+    deletion probes on the moved function, each failing a case in
+    `packages/db/src/party-table-labels.test.ts`; then a probe making the no-party branch return
+    the order's own label failed the slow-orders suites (`packages/reporting` and
+    `apps/server/src/report-api.overdue-orders.test.ts`), the kitchen-slip suite and the receipt
+    suites, but no case reading the pass, so one pass case was added to
+    `apps/server/src/working-order.test.ts` (red under that probe). No existing assertion changed.
+    **Still open:** `partyFamilies`, the reverse lookup of
     `partySurvivors`, stayed in `apps/server/src/parties.ts`, so the two merge-chain queries now
-    live in different packages. **Still open:** `party.main_bill_stays`'s till wording says
+    live in different packages. And `party.main_bill_stays`'s till wording says
     "the table has other unpaid bills", which Split a table choosing the main bill need not
     satisfy. The old merge (`mergeTabs`) still writes a merged party's tables in one statement, so
     they share a joining time and their order in its name is not fixed; it goes with Task 13.
@@ -6076,7 +6103,8 @@ approved.
     `working-order.ts`'s `splitOffCheck`
     points at "line ~221". _(2026-09-30, Task 13: `splitOffCheck` is deleted, which closes this
     one.)_ Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
-    `receipt-order.ts` takes a `cfg` it never uses; `me-api.ts`'s profile save logs
+    `receipt-order.ts` takes a `cfg` it never uses _(2026-09-30, C86: it now reads
+    `cfg.locationId`, which closes this one)_; `me-api.ts`'s profile save logs
     `account_email.send_failed` with the caught error's message. The lock-ordering and deadlock
     cases for transfers, merges and split bills went with PostgreSQL and nothing replaced them (one
     write transaction per venue file is what serialises those writers now). Test titles #622 could
