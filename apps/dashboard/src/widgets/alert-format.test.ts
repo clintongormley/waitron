@@ -63,6 +63,13 @@ it("labels areas and severities in the active language, keeping an unknown area 
   expect(areaLabel("payments")).toBe("Pagos con tarjeta");
 });
 
+it("labels the kitchen area in both languages", () => {
+  setLocale("en-GB");
+  expect(areaLabel("kitchen")).toBe("Kitchen");
+  setLocale("es-ES");
+  expect(areaLabel("kitchen")).toBe("Cocina");
+});
+
 it("names a Spanish warning differently from the alert column it sits under", () => {
   setLocale("es-ES");
   expect(severityLabel("warning")).toBe("Advertencia");

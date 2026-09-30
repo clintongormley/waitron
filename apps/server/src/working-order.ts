@@ -1137,6 +1137,10 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
  * one fire point every path funnels through. A zoned order routes by the venue-service route
  * (`no_preparation` skips the line); a context-less order uses the product, category and
  * location-default station chain. Also enqueues kitchen print jobs on the same transaction.
+ *
+ * A zoned line no station can take (`route.missing`, `route.station_inactive`) refuses the whole
+ * fire, unless `unroutable: "skip"`: then it is left unfired and unstamped and returned, and the
+ * rest fire. Only a payment skips, because the money is taken whether or not the kitchen is told.
  */
 export async function fireLines(
   tx: Transaction,
@@ -1147,10 +1151,11 @@ export async function fireLines(
   // `hold: true` inserts the line unfired whatever its course, and `release: true` fires it whatever
   // its course; neither is stored.
   lines: (FireableLine & { hold?: boolean; release?: boolean })[],
-): Promise<void> {
+  options: { unroutable?: "skip" } = {},
+): Promise<FireableLine[]> {
   const parentLines = lines.filter((line) => line.parentLineId === null);
   if (parentLines.length === 0) {
-    return;
+    return [];
   }
   lines = parentLines;
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, orderId);
@@ -1158,10 +1163,38 @@ export async function fireLines(
     ...new Set(lines.map((line) => line.productId).filter((id): id is string => id !== null)),
   ];
 
-  const serviceRouteByProduct =
-    serviceContext === null
-      ? new Map<string, PreparationRoute>()
-      : await VENUE_SERVICE.resolvePreparationRoutes(tx, cfg, serviceContext.zoneId, productIds);
+  const unrouted: FireableLine[] = [];
+  let serviceRouteByProduct: ReadonlyMap<string, PreparationRoute> = new Map();
+  if (serviceContext !== null && options.unroutable === "skip") {
+    const outcomes = await VENUE_SERVICE.resolvePreparationRouteOutcomes(
+      tx,
+      cfg,
+      serviceContext.zoneId,
+      productIds,
+    );
+    const routes = new Map<string, PreparationRoute>();
+    const stranded = new Set<string>();
+    for (const [productId, outcome] of outcomes) {
+      if (!(outcome instanceof AppError)) routes.set(productId, outcome);
+      else if (outcome.code === "route.missing" || outcome.code === "route.station_inactive") {
+        stranded.add(productId);
+      } else throw outcome;
+    }
+    serviceRouteByProduct = routes;
+    lines = lines.filter((line) => {
+      const skipped = line.productId !== null && stranded.has(line.productId);
+      if (skipped) unrouted.push(line);
+      return !skipped;
+    });
+    if (lines.length === 0) return unrouted;
+  } else if (serviceContext !== null) {
+    serviceRouteByProduct = await VENUE_SERVICE.resolvePreparationRoutes(
+      tx,
+      cfg,
+      serviceContext.zoneId,
+      productIds,
+    );
+  }
 
   const legacyLines = lines.filter(
     (line) => line.productId === null || !serviceRouteByProduct.has(line.productId),
@@ -1285,7 +1318,7 @@ export async function fireLines(
     })
     .filter((value): value is NonNullable<typeof value> => value !== null);
   await stampSent(tx, orderId, sentLineIds, firedAt);
-  if (values.length === 0) return;
+  if (values.length === 0) return unrouted;
   let inserted: { workingOrderLineId: string; stationId: string; firedAt: string | null }[];
   try {
     // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
@@ -1309,6 +1342,7 @@ export async function fireLines(
     .filter((row) => row.firedAt !== null)
     .map((row) => ({ workingOrderLineId: row.workingOrderLineId, stationId: row.stationId }));
   await enqueueKitchenTickets(tx, cfg, orderId, firedItems);
+  return unrouted;
 }
 
 /**

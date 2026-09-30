@@ -303,6 +303,14 @@ export interface VenueServiceContribution {
     zoneId: string,
     productIds: readonly string[],
   ): Promise<ReadonlyMap<string, PreparationRoute>>;
+  /** As `resolvePreparationRoutes`, but each failing product's coded error is returned in its place
+   *  rather than thrown. An unknown zone still throws. */
+  resolvePreparationRouteOutcomes(
+    tx: Transaction,
+    cfg: { locationId: LocationId },
+    zoneId: string,
+    productIds: readonly string[],
+  ): Promise<ReadonlyMap<string, PreparationRoute | AppError>>;
   /** Refused `menu.version_changed` unless every `asserted` version is the live version of one of
    *  the zone's active menus. With `menuItemIds`, only the offers it names are served. Each menu's home
    *  layout is the one `deviceProfileId` chose for it when the menu's live version holds it, and

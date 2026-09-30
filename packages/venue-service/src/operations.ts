@@ -1073,7 +1073,7 @@ function routeRank(route: { zoneId: string | null; productId: string | null }): 
 
 /** Resolve each distinct product in `productIds` to its route or its coded error, in input order,
  *  in at most three reads whatever the number of products. A missing zone still throws. */
-async function resolvePreparationRouteOutcomes(
+export async function resolvePreparationRouteOutcomes(
   tx: Transaction,
   cfg: VenueScope,
   zoneId: string,
@@ -1162,11 +1162,16 @@ async function resolvePreparationRouteOutcomes(
       ...(routesByProduct.get(routedIdById.get(uuid)!) ?? []),
       ...(categoryId === null ? [] : (routesByCategory.get(categoryId) ?? [])),
     ];
-    const winner = candidates.reduce<RouteRow | undefined>(
-      (best, route) => (best === undefined || routeRank(route) > routeRank(best) ? route : best),
-      undefined,
-    );
-    if (winner !== undefined) winners.set(id, winner);
+    const ranked = candidates.sort((a, b) => routeRank(b) - routeRank(a));
+    const winner = ranked[0];
+    if (winner === undefined) continue;
+    // A station switched off falls back to the highest-ranked route whose station is on. A
+    // no-preparation route has no station (`preparation_routes_target_ck`), so it is never the
+    // fallback: taking it would drop a dish meant to be cooked.
+    const usable = winner.noPreparation
+      ? winner
+      : ranked.find((route) => route.stationActive === true);
+    winners.set(id, usable ?? winner);
   }
 
   for (const [uuid, id] of spellingByUuid) {

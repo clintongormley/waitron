@@ -52,6 +52,7 @@ import {
 } from "./working-order.js";
 import type { GrossOrder, LineExtras, OrderLineIdentity, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
+import { raiseDishesNotSent, type DishesNotSent } from "./dish-not-sent-alert.js";
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
 import { perDatabase } from "./live-in-process.js";
@@ -414,7 +415,9 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrderForIssuance`), never a
  *     re-price of `req.lines`.
  *  Steps 4 and 5, in a pay-first context, give the kitchen the dishes it has not been given, a
- *  later course's dish held for its course, in the same transaction (`firePrepayOrder`).
+ *  later course's dish held for its course, in the same transaction (`firePrepayOrder`); a dish no
+ *  station can take is not sent and is named in a `route.dish_not_sent` alert instead, or logged
+ *  under that code if the alert is refused.
  *  6. A unique violation is replayed in a FRESH transaction, filing nothing. Step 1 already
  *     serialises pays in this process; the backstop stays because `sales_working_order_id_key`
  *     refuses a second sale for one working order whatever wrote it.
@@ -472,9 +475,25 @@ export async function payWorkingOrder(
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
-      await firePrepayOrder(tx, cfg, req.id);
+      const notSent = await firePrepayOrder(tx, cfg, req.id);
 
-      return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+      const ticket = await fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
+      if (notSent !== null) {
+        const [sale] = await tx
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.workingOrderId, req.id));
+        await raiseDishesNotSent(
+          tx,
+          cfg,
+          sale!.id,
+          req.id,
+          notSent,
+          deps.clock.now().instant,
+          deps.log,
+        );
+      }
+      return ticket;
     });
   } catch (error) {
     // Step 6. Anything but a unique violation is a real failure and surfaces unchanged.
@@ -1110,9 +1129,7 @@ async function finalizeCapture(
 
       // After `recordSale`, so a concurrent loser, refused there, never reaches the fire. A placed
       // order was fired when it was placed and must not be fired again.
-      if (!markCollected) {
-        await firePrepayOrder(tx, cfg, req.id);
-      }
+      const notSent = markCollected ? null : await firePrepayOrder(tx, cfg, req.id);
 
       await tx
         .update(workingOrders)
@@ -1126,6 +1143,17 @@ async function finalizeCapture(
         })
         .where(eq(workingOrders.id, req.id));
       await clearBillRequestIfPaid(tx, req.id, deps.log);
+      if (notSent !== null) {
+        await raiseDishesNotSent(
+          tx,
+          cfg,
+          saleId,
+          req.id,
+          notSent,
+          deps.clock.now().instant,
+          deps.log,
+        );
+      }
 
       const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
@@ -1237,10 +1265,9 @@ async function finalizeRecovery(
       ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),
     });
 
-    // A placed order was fired when it was placed; an open pay-first one's unsent dishes go now.
-    if (locked?.status === "open") {
-      await firePrepayOrder(tx, cfg, req.id);
-    }
+    // A placed order was fired when it was placed; an open pay-first one's unsent dishes go now,
+    // except a dish no station can take (`firePrepayOrder`).
+    const notSent = locked?.status === "open" ? await firePrepayOrder(tx, cfg, req.id) : null;
 
     // Settled at the ORIGINAL capture instant. A recovered `placed` order was a counter collect, so
     // it is stamped collected too.
@@ -1256,6 +1283,17 @@ async function finalizeRecovery(
       })
       .where(eq(workingOrders.id, req.id));
     await clearBillRequestIfPaid(tx, req.id, deps.log);
+    if (notSent !== null) {
+      await raiseDishesNotSent(
+        tx,
+        cfg,
+        saleId,
+        req.id,
+        notSent,
+        deps.clock.now().instant,
+        deps.log,
+      );
+    }
 
     const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
@@ -1278,18 +1316,30 @@ async function finalizeRecovery(
 
 /**
  * Fire an open order's unsent dishes at payment when its service context uses the prepay flow. A
- * bill moved here from a table has dishes already sent, which are not sent again.
+ * bill moved here from a table has dishes already sent, which are not sent again. A dish no
+ * station can take is not sent and does not refuse the payment; it is returned, for the caller to
+ * raise `raiseDishesNotSent` once the sale exists.
  */
 export async function firePrepayOrder(
   tx: Transaction,
   cfg: TillConfig,
   workingOrderId: string,
-): Promise<void> {
+): Promise<DishesNotSent | null> {
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, workingOrderId);
   if ((serviceContext?.serviceMode ?? cfg.orderFlow) !== "prepay") {
-    return;
+    return null;
   }
-  await fireLines(tx, cfg, workingOrderId, await unsentDishLines(tx, workingOrderId));
+  const unrouted = await fireLines(
+    tx,
+    cfg,
+    workingOrderId,
+    await unsentDishLines(tx, workingOrderId),
+    { unroutable: "skip" },
+  );
+  // Only a zoned order has routes to miss, so a returned line means a service context.
+  return unrouted.length === 0
+    ? null
+    : { zoneId: serviceContext!.zoneId, productIds: unrouted.map((line) => line.productId!) };
 }
 
 /**

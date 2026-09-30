@@ -1133,5 +1133,14 @@ declare module "@waitron/shared" {
     };
     /** Join tables refuses a table in a service zone other than the party's, when both have one. */
     "service_zone.join_mismatch": { orderZoneId: string; tableZoneId: string };
+    /** Raised by `raiseDishesNotSent` (`./dish-not-sent-alert.ts`). */
+    "route.dish_not_sent": {
+      zoneId: string;
+      zoneName: string;
+      dishes: string;
+      workingOrderId: string;
+      orderNumber: number;
+      orderLabel: string | null;
+    };
   }
 }

@@ -4142,6 +4142,32 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/till-api.move-bill.test.ts` move a table bill whose dish was sent to a
       pay-first counter and pay it the same way: one invoice and no second send. Made to send
       every dish rather than the unsent ones, those two failed and the parked ones still passed.)_
+      _(2026-09-30, lane A's A143, owner's decision: since #914 that payment was refused
+      `route.station_inactive` or `route.missing` when a dish had no kitchen station to go to.
+      Now a route whose station is switched off falls back to the next matching route whose
+      station is on (never to a no-preparation route), for every caller
+      (`resolvePreparationRouteOutcomes`, `packages/venue-service/src/operations.ts`). When no
+      usable route is left, paying a pay-first order takes the payment and files it, sends nothing
+      for that dish, and records one `route.dish_not_sent` alert for the sale naming the dishes'
+      staff names and the zone (`raiseDishesNotSent`, `apps/server/src/dish-not-sent-alert.ts`;
+      the `route.` claim, area "Kitchen", needs `venue_service.manage`,
+      `packages/venue-service/src/alerts.ts`). An alert the database refuses is logged under the
+      same code instead and the sale still commits; any other error is rethrown and fails the
+      payment, and a `raise(rollback)` trigger, which ends the transaction, failed it too. Run: a
+      cash payment over `POST /api/sales` of a parked order and of a walk-up, a card-reader
+      payment and its recovery through `payWorkingOrderIntegrated`, and a cash bill payment that
+      pays the order off; and,
+      under "when the alert cannot be written", a cash payment, a card-reader capture with its
+      log line, a recovery and a bill payment whose alert a `raise(abort)` trigger refuses, and a
+      cash payment whose alert trigger uses `raise(rollback)` and one whose trigger names a
+      missing table. A table round still refuses; invoice-first placing uses the same unchanged
+      refusing send, not run here. Cases in `apps/server/src/till-api.unroutable-dish.test.ts`
+      and in the `resolvePreparationRoutes` block of
+      `packages/venue-service/src/operations.test.ts`; every new case in those two files but the
+      table round and the "when the alert cannot be written" ones failed on the code before this
+      change. Of those, the four `raise(abort)` cases failed with the alert's catch removed, the
+      missing-table case failed with a catch that swallowed every error, and the `raise(rollback)`
+      case passed both ways.)_
     - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
       otherwise), and the party's next order then starts a new one. A table the bill's own party
       holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is

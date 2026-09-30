@@ -24,6 +24,7 @@ const root = join(import.meta.dirname, "..");
 const INCIDENT_CODE_SOURCES = [
   "apps/server/src/bill-payments-loop.ts",
   "apps/server/src/bill-refund-alerts.ts",
+  "apps/server/src/dish-not-sent-alert.ts",
   "packages/core/src/record-correction.ts",
   "packages/core/src/record-sale.ts",
   "packages/core/src/record-substitution.ts",
