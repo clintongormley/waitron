@@ -3496,7 +3496,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       following the dish. An extras row cannot be cancelled on its own
       (`adjustment.line_not_adjustable`); the old route took the whole of one, but the till offers
       no Cancel on an extras row. _(2026-09-30, B11d: the server now cancels, comps and discounts
-      an extras row on its own, whole only, and that code is retired.)_ Left open:
+      an extras row on its own, whole only, and that code is retired; the till offers all three on
+      an extras row, at a table and in the counter's basket, and Cancel where its dish offers it.)_
+      Left open:
       - **A newly set-up venue has no adjustment reasons, so its till cannot cancel anything** until
         a manager adds a reason that allows a cancel, in the dashboard under Adjustment reasons; the
         dialog says so (`adjust.no_reasons`). Outside tests, reasons are created only by the
@@ -3589,7 +3591,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       decides whether exactly representable partial weighed adjustments should be allowed.
       _(2026-09-30, B11d: the server now comps or discounts part of a dish with extras, splitting
       its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
-      line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.)_
+      line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
+      The till offers one of several of a dish with extras, and never offers part of a weighed
+      line: its give-away and discount dialog says the same sentence beside the action.)_
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
       close report arrives with the next animation frame): "saves on Enter and cancels on Escape from
       a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and `pressEscape`'s fixed
