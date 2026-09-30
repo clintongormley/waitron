@@ -3905,7 +3905,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         captured card payment with no sale still takes the recovery branch first, settling at the
         captured amount with all of it recorded as tip; the below-zero case with a capture was not
         run. The branch for an order with no sale yet was not run with a zero total.
-        **DONE (A144, 2026-09-30): a correction is filed at the cent amounts its rows store.**
+        **DONE (A144, #929, 2026-09-30): a correction is filed at the cent amounts its rows store.**
         Measured first, with a new suite that drives core's `recordCorrection` through the real
         Veri\*Factu backend (`packages/fiscal-verifactu/src/correction-amount.huella.test.ts`). On
         the code before the change, the TOTAL was not the problem there: a -1.005 correction was
