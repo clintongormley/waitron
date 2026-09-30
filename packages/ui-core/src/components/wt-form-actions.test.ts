@@ -34,7 +34,7 @@ test("shows no message until the form gives one", async () => {
   expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 });
 
-test("announces the form's message beside the primary action", async () => {
+test("announces the form's message on its own line above the actions, from the left edge", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>',
   )) as WtFormActions;
@@ -45,14 +45,15 @@ test("announces the form's message beside the primary action", async () => {
   const message = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
   expect(message.getAttribute("role")).toBe("alert");
   expect(message.textContent).toBe("Correct the highlighted fields to continue.");
-  const primary = el.querySelector<HTMLElement>("wt-button:not([slot])")!;
-  const cancel = el.querySelector<HTMLElement>('[slot="cancel"]')!;
-  expect(message.getBoundingClientRect().right).toBeLessThanOrEqual(
-    primary.getBoundingClientRect().left,
-  );
-  expect(message.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-    cancel.getBoundingClientRect().right,
-  );
+  const box = message.getBoundingClientRect();
+  const primary = el.querySelector<HTMLElement>("wt-button:not([slot])")!.getBoundingClientRect();
+  const cancel = el.querySelector<HTMLElement>('[slot="cancel"]')!.getBoundingClientRect();
+  const own = el.getBoundingClientRect();
+  expect(box.bottom).toBeLessThanOrEqual(primary.top);
+  expect(box.bottom).toBeLessThanOrEqual(cancel.top);
+  expect(box.left).toBe(own.left);
+  expect(box.right).toBe(own.right);
+  expect(getComputedStyle(message).textAlign).toBe("start");
 });
 
 test("keeps the primary action on the right while a message shows", async () => {
@@ -102,7 +103,7 @@ test("on a narrow row, keeps cancel level with the primary action below the mess
   expect(cancel.bottom).toBe(primary.bottom);
 });
 
-test("centres a message beside a lone cancel action on it", async () => {
+test("puts the message above a lone cancel action", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button slot="cancel">Close</wt-button></wt-form-actions>',
   )) as WtFormActions;
@@ -114,7 +115,37 @@ test("centres a message beside a lone cancel action on it", async () => {
     .shadowRoot!.querySelector<HTMLElement>("[data-error]")!
     .getBoundingClientRect();
   const cancel = el.querySelector<HTMLElement>('[slot="cancel"]')!.getBoundingClientRect();
-  expect(message.top + message.height / 2).toBeCloseTo(cancel.top + cancel.height / 2, 0);
+  expect(message.bottom).toBeLessThanOrEqual(cancel.top);
+  expect(message.left).toBe(cancel.left);
+});
+
+test("shows no message of its own while its container shows it", async () => {
+  const el = (await mount(
+    '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  )) as WtFormActions;
+  el.showError = false;
+  el.error = "Correct the highlighted fields to continue.";
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+});
+
+test("reports each change of its message to its container", async () => {
+  const el = (await mount(
+    '<wt-form-actions><wt-button variant="primary">Save</wt-button></wt-form-actions>',
+  )) as WtFormActions;
+  const seen: string[] = [];
+  const composed: boolean[] = [];
+  host.addEventListener("wt-form-error", (event) => {
+    seen.push((event as CustomEvent<{ message: string }>).detail.message);
+    composed.push(event.composed);
+  });
+  el.error = "Correct the highlighted fields to continue.";
+  await el.updateComplete;
+  el.error = "";
+  await el.updateComplete;
+  expect(seen).toEqual(["Correct the highlighted fields to continue.", ""]);
+  expect(composed).toEqual([true, true]);
 });
 
 test("paints the message from the danger token", async () => {

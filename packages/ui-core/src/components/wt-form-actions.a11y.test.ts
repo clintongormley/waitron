@@ -16,7 +16,7 @@ describe.each(["light", "dark"] as const)("wt-form-actions a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  test("with the form's message beside the actions", async () => {
+  test("with the form's message above the actions", async () => {
     const el = (await mountThemed(
       '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary" disabled>Save</wt-button></wt-form-actions>',
       theme,

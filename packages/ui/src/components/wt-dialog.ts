@@ -1,12 +1,19 @@
 import { LitElement, css, html, nothing } from "lit";
-import { customElement, property, query } from "lit/decorators.js";
+import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
+import {
+  type FormErrorEvent,
+  formMessage,
+  formMessageStyles,
+  WtFormActions,
+} from "./wt-form-actions.js";
 
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       dialog {
         padding: 0;
@@ -24,6 +31,10 @@ export class WtDialog extends LitElement {
 
       .body {
         padding: var(--wt-space-5);
+      }
+
+      .body > .form-message {
+        margin: var(--wt-space-4) 0 0;
       }
 
       h2 {
@@ -67,6 +78,11 @@ export class WtDialog extends LitElement {
 
   private readonly headingId = uniqueId("wt-dialog-heading");
 
+  /** The message of the `wt-form-actions` in the footer, shown at the end of the body instead, so
+   * it sits below the fields it is about rather than between the pinned buttons. */
+  @state() private footerMessage = "";
+  private footerActions: WtFormActions[] = [];
+
   @query("dialog") private dialog!: HTMLDialogElement;
   @query(".footer") private footerEl!: HTMLElement;
   @query('slot[name="footer"]') private footerSlot!: HTMLSlotElement;
@@ -76,6 +92,9 @@ export class WtDialog extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>): void {
+    if (changed.has("footerMessage") && this.footerMessage !== "") {
+      this.renderRoot.querySelector(".body > [data-error]")!.scrollIntoView({ block: "nearest" });
+    }
     if (!changed.has("open")) return;
     if (this.open && !this.dialog.open) this.dialog.showModal();
     if (!this.open && this.dialog.open) this.dialog.close();
@@ -100,8 +119,19 @@ export class WtDialog extends LitElement {
   // Toggled imperatively rather than through a reactive property, so a `slotchange` does not
   // schedule another Lit update just to flip a class.
   private updateHasFooter(): void {
-    const hasFooter = this.footerSlot.assignedNodes({ flatten: true }).length > 0;
-    this.footerEl.classList.toggle("has-content", hasFooter);
+    const assigned = this.footerSlot.assignedNodes({ flatten: true });
+    this.footerEl.classList.toggle("has-content", assigned.length > 0);
+    const actions = assigned.filter((node) => node instanceof WtFormActions);
+    for (const gone of this.footerActions) if (!actions.includes(gone)) gone.showError = true;
+    for (const each of actions) each.showError = false;
+    this.footerActions = actions;
+    this.footerMessage = actions.at(-1)?.error ?? "";
+  }
+
+  private onFooterMessage(event: FormErrorEvent): void {
+    if (event.target instanceof WtFormActions && this.footerActions.includes(event.target)) {
+      this.footerMessage = event.detail.message;
+    }
   }
 
   override render() {
@@ -125,9 +155,14 @@ export class WtDialog extends LitElement {
         <div class="body">
           ${this.heading ? html`<h2 id=${this.headingId}>${this.heading}</h2>` : nothing}
           <slot></slot>
+          ${formMessage(this.footerMessage)}
         </div>
         <div class="footer">
-          <slot name="footer" @slotchange=${this.updateHasFooter}></slot>
+          <slot
+            name="footer"
+            @slotchange=${this.updateHasFooter}
+            @wt-form-error=${this.onFooterMessage}
+          ></slot>
         </div>
       </dialog>
     `;

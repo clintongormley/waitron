@@ -4,6 +4,7 @@ import { cleanup, host, mount } from "../test-helpers.js";
 import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";
 import "./wt-button.js";
+import "./wt-input.js";
 
 afterEach(cleanup);
 
@@ -199,4 +200,103 @@ test("keeps the body in the tab order, whether or not there is anything to scrol
   await userEvent.keyboard("{PageDown}");
   // The browser lands the scroll several frames after the key press, not on the next one.
   await vi.waitFor(() => expect(longBody.scrollTop).toBeGreaterThan(0));
+});
+
+async function openModalWithMessage(body: string, footer: string) {
+  const modal = (await mount(`<wt-modal heading="Add printer">
+    ${body}
+    <wt-form-actions slot="footer">${footer}<wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  modal.open = true;
+  await modal.updateComplete;
+  const actions = modal.querySelector("wt-form-actions")!;
+  actions.error = "This device already holds a passkey for your account.";
+  await actions.updateComplete;
+  await modal.updateComplete;
+  return { modal, actions };
+}
+
+test.each([
+  ["with Cancel", '<wt-button slot="cancel" variant="secondary">Cancel</wt-button>'],
+  ["without Cancel", ""],
+])(
+  "shows the footer actions' message in the body, below the last field, not in the footer (%s)",
+  async (_, cancel) => {
+    const { modal, actions } = await openModalWithMessage(
+      '<wt-input name="name" label="Name"></wt-input>',
+      cancel,
+    );
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    const footer = modal.shadowRoot!.querySelector<HTMLElement>(".footer")!;
+    const message = body.querySelector<HTMLElement>("[data-error]")!;
+    expect(message.textContent).toBe("This device already holds a passkey for your account.");
+    expect(message.getAttribute("role")).toBe("alert");
+    expect(footer.querySelector("[data-error]")).toBeNull();
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    const field = modal.querySelector("wt-input")!.getBoundingClientRect();
+    const box = message.getBoundingClientRect();
+    expect(box.top).toBeGreaterThanOrEqual(field.bottom);
+    expect(box.bottom).toBeLessThanOrEqual(footer.getBoundingClientRect().top);
+    expect(getComputedStyle(message).textAlign).toBe("start");
+  },
+);
+
+test("clears the body's message when the footer actions' message is cleared", async () => {
+  const { modal, actions } = await openModalWithMessage("Printer settings", "");
+  expect(modal.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+  actions.error = "";
+  await actions.updateComplete;
+  await modal.updateComplete;
+  expect(modal.shadowRoot!.querySelector("[data-error]")).toBeNull();
+});
+
+test("brings the message into view at the end of a long body", async () => {
+  await page.viewport(390, 500);
+  try {
+    const { modal } = await openModalWithMessage(
+      `<div style="height: 2000px">Long settings</div>`,
+      "",
+    );
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+    const message = body.querySelector<HTMLElement>("[data-error]")!.getBoundingClientRect();
+    expect(message.bottom).toBeLessThanOrEqual(body.getBoundingClientRect().bottom + 1);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("leaves actions placed in the body showing their own message", async () => {
+  const modal = (await mount(`<wt-modal heading="Pay">
+    <wt-form-actions><wt-button>Pay</wt-button></wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  modal.open = true;
+  await modal.updateComplete;
+  const actions = modal.querySelector("wt-form-actions")!;
+  actions.error = "Choose a payment method.";
+  await actions.updateComplete;
+  await modal.updateComplete;
+  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent).toBe(
+    "Choose a payment method.",
+  );
+  expect(modal.shadowRoot!.querySelector("[data-error]")).toBeNull();
+});
+
+test("gives actions moved out of the footer their own message back", async () => {
+  const { modal, actions } = await openModalWithMessage("Printer settings", "");
+  actions.removeAttribute("slot");
+  await vi.waitFor(() =>
+    expect(actions.shadowRoot!.querySelector("[data-error]")?.textContent).toBe(
+      "This device already holds a passkey for your account.",
+    ),
+  );
+  await modal.updateComplete;
+  expect(modal.shadowRoot!.querySelector("[data-error]")).toBeNull();
+});
+
+test("paints the body's message from the danger token", async () => {
+  const { modal } = await openModalWithMessage("Printer settings", "");
+  host.style.setProperty("--wt-color-danger", "rgb(1, 2, 3)");
+  const message = modal.shadowRoot!.querySelector<HTMLElement>(".body [data-error]")!;
+  expect(getComputedStyle(message).color).toBe("rgb(1, 2, 3)");
 });

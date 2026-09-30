@@ -24,4 +24,24 @@ describe.each(["light", "dark"] as const)("wt-modal a11y (%s theme)", (theme) =>
     await modal.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  test("with the form's message at the end of the body", async () => {
+    const modal = (await mountThemed(
+      `<wt-modal heading="Add passkey">
+        <wt-input name="passkey-name" label="Passkey name"></wt-input>
+        <wt-form-actions slot="footer">
+          <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+          <wt-button>Save</wt-button>
+        </wt-form-actions>
+      </wt-modal>`,
+      theme,
+    )) as WtModal;
+    modal.open = true;
+    await modal.updateComplete;
+    const actions = modal.querySelector("wt-form-actions")!;
+    actions.error = "This device already holds a passkey for your account.";
+    await actions.updateComplete;
+    await modal.updateComplete;
+    await expectNoA11yViolations(host);
+  });
 });
