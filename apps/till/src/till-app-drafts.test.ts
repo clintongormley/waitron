@@ -865,7 +865,14 @@ describe("till-app: sending the draft", () => {
     const reads = api.listDrafts.mock.calls.length;
 
     await act(el, "fire-all");
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    // Two pauses between the three tries run on real time; wait for the message they end in.
+    await vi.waitFor(
+      () => expect(banner(el)?.textContent).toContain(t("table.round_unconfirmed")),
+      {
+        timeout: 4000,
+        interval: 50,
+      },
+    );
     await flush(el);
 
     const calls = api.submitDraft.mock.calls;
@@ -890,7 +897,14 @@ describe("till-app: sending the draft", () => {
     await toggle(el, "Beer");
 
     await act(el, "fire-selected");
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    // Two pauses between the three tries run on real time; wait for the message they end in.
+    await vi.waitFor(
+      () => expect(banner(el)?.textContent).toContain(t("table.round_unconfirmed")),
+      {
+        timeout: 4000,
+        interval: 50,
+      },
+    );
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledTimes(3);
@@ -1234,7 +1248,8 @@ describe("till-app: a Send the session outlives", () => {
     });
     await tap(el, "Beer");
     await act(el, "fire-all");
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    // Two pauses between the three tries run on real time; wait for the read they end in.
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"), { timeout: 4000, interval: 50 });
     await flush(el);
     expect(api.submitDraft).toHaveBeenCalledTimes(3);
 
