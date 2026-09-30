@@ -4,7 +4,7 @@ import type {
   AdjustmentReport,
   AdjustmentTally,
   AdjustmentTotals,
-} from "./client.js";
+} from "../src/dashboard/client.js";
 
 // The service plan's fixture day (Task 12), as the report routes answer it: Alex comps a €12.00
 // Burger (approved by Mia), cancels that comped Burger, and cancels a fired €25.00 Steak; Sam takes
@@ -209,12 +209,12 @@ export function onePage(entries: AdjustmentEntry[]): AdjustmentEntryPage {
   return { entries, next: null };
 }
 
-/** Sam's discount on a whole bill: no item, no quantity, no stage. */
+/** Sam's €3.00 off a whole bill: no item, no quantity, no stage. */
 export function samEntry(): AdjustmentEntry {
   return {
     id: "e4",
     createdAt: "2026-09-29T21:05:00.000Z",
-    action: "discount_percent",
+    action: "discount_amount",
     stage: null,
     stageGroup: "billDiscount",
     reasonId: "r-staff",
@@ -222,7 +222,7 @@ export function samEntry(): AdjustmentEntry {
     note: null,
     lineName: null,
     quantity: null,
-    percentBp: 1250,
+    percentBp: null,
     beforeAmount: "24.00",
     afterAmount: "21.00",
     reduction: "3.00",

@@ -4,7 +4,7 @@ import { LiveData, codeMessage, createRequest } from "@waitron/dashboard-kit";
 import { ADJUSTMENTS_DASHBOARD } from "./index.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
-import { emptyReport } from "./test-helpers.js";
+import { emptyReport } from "../../test/report-fixtures.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {

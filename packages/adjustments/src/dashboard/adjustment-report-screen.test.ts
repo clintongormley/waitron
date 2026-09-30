@@ -12,7 +12,7 @@ import {
   onePage,
   samEntry,
   SAM,
-} from "./test-helpers.js";
+} from "../../test/report-fixtures.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
@@ -411,10 +411,18 @@ describe("the drill-down", () => {
     expect(api.listEntries).toHaveBeenCalledWith("2026-09-29", "2026-09-29", "everyone");
     expect(text(part(el, "entries-heading"))).toBe("Every adjustment");
     const cells = row(part(el, "entries")!, "e4");
-    expect(cells.Action).toBe("Percentage discount (12.5%)");
+    expect(cells.Action).toBe("Amount discount");
     expect(cells.When).toBe("Whole bill");
     expect(cells.Item).toBe("Whole bill");
     expect(cells.Quantity).toBe("—");
+  });
+
+  it("writes a percentage discount's percentage beside its action", async () => {
+    const entry = { ...samEntry(), action: "discount_percent" as const, percentBp: 1250 };
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([entry])) }));
+    part(el, "show-all")!.click();
+    await settle(el);
+    expect(row(part(el, "entries")!, "e4").Action).toBe("Percentage discount (12.5%)");
   });
 
   it("lists the guests' adjustments, and says so in words when there are none", async () => {
@@ -549,7 +557,7 @@ describe("sorting and columns", () => {
     await settle(el);
     const orders: [string, string[]][] = [
       ["time", ["e1", "e2", "e3", "e4"]],
-      ["action", ["e3", "e2", "e1", "e4"]],
+      ["action", ["e4", "e3", "e2", "e1"]],
       ["reason", ["e1", "e3", "e2", "e4"]],
       ["reduction", ["e2", "e4", "e1", "e3"]],
       ["listValue", ["e2", "e1", "e4", "e3"]],

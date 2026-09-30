@@ -5,7 +5,13 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import type { AdjustmentsApi } from "./client.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
-import { ALEX, alexEntries, emptyReport, fixtureReport, onePage } from "./test-helpers.js";
+import {
+  ALEX,
+  alexEntries,
+  emptyReport,
+  fixtureReport,
+  onePage,
+} from "../../test/report-fixtures.js";
 
 afterEach(() => {
   cleanup();
