@@ -71,7 +71,9 @@ type Ask = Partial<Omit<AdjustmentArgs, "amount">> & {
 
 /** Apply `ask` to the bill as its current revision reads, as the supervisor, under House. */
 async function adjust(billId: string, ask: Ask) {
-  return inTx(venue, async (tx) => applyAdjustment(tx, venue.cfg, await argsFor(tx, billId, ask)));
+  return inTx(venue, async (tx) =>
+    applyAdjustment(tx, venue.cfg, await argsFor(tx, billId, ask), venue.venueLocale),
+  );
 }
 
 async function argsFor(tx: Transaction, billId: string, ask: Ask): Promise<AdjustmentArgs> {
@@ -98,7 +100,7 @@ function preview(billId: string, ask: Ask) {
     const { submissionId, approver, ...args } = await argsFor(tx, billId, ask);
     void submissionId;
     void approver;
-    return previewAdjustment(tx, venue.cfg, args);
+    return previewAdjustment(tx, venue.cfg, args, venue.venueLocale);
   });
 }
 
@@ -599,15 +601,21 @@ describe("retries (plan D8)", () => {
       }),
     );
 
-    const first = await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args));
-    const again = await inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, args));
+    const first = await inTx(venue, (tx) =>
+      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+    );
+    const again = await inTx(venue, (tx) =>
+      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+    );
 
     expect(again).toEqual(first);
     expect(await recordedOn(billId)).toHaveLength(1);
     expect(await priced(billId)).toEqual([["Bottle", "1.000", "25.00", "30.00", "25.00"]]);
     const before = await stateOf(billId);
     await expect(
-      inTx(venue, (tx) => applyAdjustment(tx, venue.cfg, { ...args, amount: decimal("6.00") })),
+      inTx(venue, (tx) =>
+        applyAdjustment(tx, venue.cfg, { ...args, amount: decimal("6.00") }, venue.venueLocale),
+      ),
     ).rejects.toMatchObject({
       code: "submission.id_reused",
       params: { submissionId: args.submissionId },
@@ -813,8 +821,28 @@ describe("the reason as it was (plan D20)", () => {
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
-    // The operator has no language of their own, so the till's, es-ES, is used.
+    // The operator has no language of their own, so the venue's display language, es-ES in this
+    // venue, is used.
     expect((await recordedOn(billId))[0]!.reasonName).toBe("Queja");
+  });
+
+  it("falls back to the venue's display language, as the till's reasons list does, not the receipt's", async () => {
+    const { billId } = await bill([{ name: "Burger" }]);
+    const lineId = await lineIdOf(venue, billId, 1);
+    expect(venue.cfg.locale).toBe("es-ES");
+    await inTx(venue, async (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        await argsFor(tx, billId, {
+          lineId,
+          action: "comp",
+          reasonId: venue.reasonId.complaint,
+        }),
+        "en-GB",
+      ),
+    );
+    expect((await recordedOn(billId))[0]!.reasonName).toBe("Complaint");
   });
 });
 

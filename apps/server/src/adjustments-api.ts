@@ -110,11 +110,12 @@ export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, r
       );
       const answer = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
         withTransaction(deps.db, async (tx) => {
-          const applied = await applyAdjustment(tx, deps.cfg, {
-            ...ask,
-            submissionId,
-            ...(approver === undefined ? {} : { approver }),
-          });
+          const applied = await applyAdjustment(
+            tx,
+            deps.cfg,
+            { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
+            deps.venueLocale,
+          );
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           return { ...applied, party: await partyRevisionOfOrder(tx, id) };
         }),
@@ -128,7 +129,9 @@ export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, r
       const { personId } = await requireSession(deps, c);
       const id = requireBill(c.req.param("id"));
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
-      const preview = await withTransaction(deps.db, (tx) => previewAdjustment(tx, deps.cfg, ask));
+      const preview = await withTransaction(deps.db, (tx) =>
+        previewAdjustment(tx, deps.cfg, ask, deps.venueLocale),
+      );
       return c.json(preview);
     }),
   );
@@ -142,10 +145,9 @@ export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, r
           .select({ locale: persons.locale })
           .from(persons)
           .where(eq(persons.id, personId));
-        const locale = person?.locale ?? deps.venueLocale;
         return (await listAdjustmentReasons(tx)).map((reason) => ({
           id: reason.id,
-          name: reasonNameIn(reason, locale),
+          name: reasonNameIn(reason, person?.locale ?? null, deps.venueLocale),
           actions: reason.actions,
           noteRequired: reason.noteRequired,
           maxPercentBp: reason.maxPercentBp,

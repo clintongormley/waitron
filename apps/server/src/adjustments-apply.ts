@@ -188,9 +188,16 @@ function stageOf(dish: Row): AdjustmentStage {
   return dish.groupState === "held" ? "held" : "unsent";
 }
 
-/** The reason's name in the operator's language, else its own. */
-export function reasonNameIn(reason: AdjustmentReason, locale: string): string {
-  const language = locale.split("-")[0]!.toLowerCase();
+/**
+ * The reason's name in the operator's language, else in the venue's display language (what the
+ * till screen shows an operator with no language of their own), else the reason's own name.
+ */
+export function reasonNameIn(
+  reason: AdjustmentReason,
+  operatorLocale: string | null,
+  venueLocale: string,
+): string {
+  const language = (operatorLocale ?? venueLocale).split("-")[0]!.toLowerCase();
   const name = reason.names[language];
   return name === undefined ? reason.name : name;
 }
@@ -269,7 +276,12 @@ function spread(
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount, the paid lines and the reason's policy, and the rows it would change.
  */
-async function planAdjustment(tx: Transaction, cfg: TillConfig, ask: AdjustmentAsk): Promise<Plan> {
+async function planAdjustment(
+  tx: Transaction,
+  cfg: TillConfig,
+  ask: AdjustmentAsk,
+  venueLocale: string,
+): Promise<Plan> {
   const { orderId } = ask;
   // The table screen is the only surface (ruling R1): an open bill of a party, as a void needs.
   await assertPartyBillOpen(tx, cfg, orderId);
@@ -397,7 +409,7 @@ async function planAdjustment(tx: Transaction, cfg: TillConfig, ask: AdjustmentA
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   return {
     reason,
-    reasonName: reasonNameIn(reason, actor.locale ?? cfg.locale),
+    reasonName: reasonNameIn(reason, actor.locale, venueLocale),
     dish,
     covered,
     removed,
@@ -419,8 +431,9 @@ export async function previewAdjustment(
   tx: Transaction,
   cfg: TillConfig,
   ask: AdjustmentAsk,
+  venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  const plan = await planAdjustment(tx, cfg, ask);
+  const plan = await planAdjustment(tx, cfg, ask, venueLocale);
   const lines =
     ask.action === "cancel"
       ? [
@@ -536,12 +549,14 @@ async function reprice(
  * on the bill (plan D8): a cancel removes the part as a void does, telling the kitchen; a comp or a
  * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's
  * revision and the party's on, and records one adjustment. The PIN never enters the recorded
- * command.
+ * command. `venueLocale` is the venue's display language, which names the reason for an operator
+ * with no language of their own.
  */
 export async function applyAdjustment(
   tx: Transaction,
   cfg: TillConfig,
   args: AdjustmentArgs,
+  venueLocale: string,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
   const { submissionId, approver, expectedRevision, ...command } = args;
   void expectedRevision;
@@ -552,7 +567,7 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, approverId: approver?.personId },
     async () => {
-      const plan = await planAdjustment(tx, cfg, args);
+      const plan = await planAdjustment(tx, cfg, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver);
       let carved: string[] = [];
       if (args.action === "cancel") {

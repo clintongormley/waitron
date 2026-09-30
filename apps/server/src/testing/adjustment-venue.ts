@@ -217,6 +217,8 @@ export interface AdjustmentVenue {
   backend: FiscalBackend;
   clock: TrustedClock;
   cfg: TillConfig;
+  /** The display language the till routes are mounted with; the same code as `cfg.locale`. */
+  venueLocale: string;
   tables: ZoneOffers;
   /** The offer selling the product named `name` in the tables zone. */
   item(name: string): string;
@@ -383,6 +385,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     backend,
     clock,
     cfg,
+    venueLocale: LOCALE,
     tables: seeded.tables,
     item: (name) => seeded.tables.offerFor(seeded.productIds.get(name)!),
     pizzaExtras: seeded.pizzaExtras,

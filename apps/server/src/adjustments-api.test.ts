@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
+import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -21,6 +22,7 @@ import {
   rowsOf,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
+import { mountTillApi } from "./till-api.js";
 import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -444,6 +446,49 @@ describe("what the till reads", () => {
         tx.update(persons).set({ locale: null }).where(eq(persons.id, venue.staffId)),
       );
     }
+  });
+
+  it("records an adjustment's reason in the language the reasons list showed it in", async () => {
+    // A venue whose display language is English while its receipts are Spanish.
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: "en-GB",
+      },
+      () => {},
+    );
+    expect(venue.cfg.locale).toBe("es-ES");
+    const listed = await send(app, venue.cookie.manager, "GET", "/api/adjustment-reasons");
+    expect(
+      (listed.json as unknown as { id: string; name: string }[]).find(
+        (reason) => reason.id === venue.reasonId.complaint,
+      )!.name,
+    ).toBe("Complaint");
+    const { billId } = await billWith(venue, [{ name: "Burger" }]);
+
+    const answer = await send(
+      app,
+      venue.cookie.manager,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      {
+        submissionId: randomUUID(),
+        expectedRevision: await revisionOf(billId),
+        lineId: await lineIdOf(venue, billId, 1),
+        reasonId: venue.reasonId.complaint,
+        action: "comp",
+        note: null,
+      },
+    );
+
+    expect(answer.status).toBe(200);
+    expect((await recordedOn(billId))[0]!.reasonName).toBe("Complaint");
   });
 
   it("lists who can approve at a role, and refuses a role that is not one", async () => {
