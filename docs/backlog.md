@@ -3788,8 +3788,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       now reads the amount due through `readOutstandingSaleForOrder`, as the card-reader path does,
       and the manual card's `payments` row records that amount too.
       Left OPEN by C50. No product route records a corrective invoice today (R5, above), and none of
-      the three scripts that call `recordCorrection` collects through `collectOrder`, so today only
-      the new cases in `apps/server/src/collect-by-invoice.test.ts` reach this path.
+      the three scripts that call `recordCorrection` collects through `collectOrder` or pays
+      through `payWorkingOrderIntegrated`, so today only the new cases in
+      `apps/server/src/collect-by-invoice.test.ts`, and on the card-reader path new cases in
+      `apps/server/src/till-sale-integrated.db.test.ts`, collect a corrected bill.
       - **The ticket still shows the original invoice total.** `collectOrder` queues no receipt on
         this path, only the cash drawer job (read, not run: the receipt is queued at placing by
         `placeOrder`, `apps/server/src/working-order.ts`), and for a bill that owes nothing it
@@ -3797,6 +3799,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         till's screen, the original receipt that screen offers when the till's own order flow is not
         invoice-first (`#showTicket`, `apps/till/src/till-app.ts`), and any reprint are all built by
         `readSettledTicket` (`apps/server/src/till-sale.ts`) and show the invoice's original total.
+        Since C67 (below) this covers the card-reader payment too: on a bill that owes nothing,
+        `payWorkingOrderIntegrated` returns a `readSettledTicket` ticket carrying the invoice's
+        original total, which the till shows (the till's handling read, not run: the `captured`
+        branch in `apps/till/src/till-app.ts`).
         The printed receipt and the screen both give the cash line as total plus change
         (`apps/server/src/receipt-ticket.ts:270`, `apps/till/src/screens/till-ticket-view.ts:105`;
         the screen's line read, not run), so it overstates what was handed over. The review's Codex
@@ -3859,16 +3865,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         asking the reader.** `payWorkingOrderIntegrated` (`apps/server/src/till-sale.ts`) now
         settles a bill with a sale whose corrections leave nothing owed the way `collectOrder` does,
         through one shared step (`settleOwingNothing`): no tender, no `payments` row, the bill
-        `settled` with `collected_at` stamped, and the ticket's tender `{ method: "unpaid" }`. A tip
-        sent with the request is not charged, since the reader is never asked. A bill below zero is
-        refused with `sale.tender_shortfall`, as `collectOrder` refuses it, and stays placed. New
-        cases in `apps/server/src/till-sale-integrated.db.test.ts` ("a bill whose corrections leave
-        nothing owed"), driving the Stripe provider over its fake HTTP client: before the change the
-        zero case asked the reader to charge 0.30 (the tip alone on a 0.00 bill), and the below-zero
-        case failed with `CHECK constraint failed` on the provider's `payments` row for -0.50.
-        Unchanged: a captured card payment with no sale on such a bill still takes the recovery
-        branch first and settles at the captured amount; and the branch for an order with no sale
-        yet was not run with a zero total.
+        `settled` with `collected_at` stamped, and the ticket's tender `{ method: "unpaid" }`. A
+        well-formed tip sent with the request is not charged, since the reader is never asked; a
+        malformed one is still refused with `shared.invalid_decimal` when tips are on, as before
+        the change. A malformed cash amount on such a bill is still refused by `collectOrder` with
+        `shared.invalid_decimal`, as before the change (case in
+        `apps/server/src/collect-by-invoice.test.ts`). A bill below zero is refused with
+        `sale.tender_shortfall`, as `collectOrder` refuses it, and stays placed. New cases in
+        `apps/server/src/till-sale-integrated.db.test.ts` drive the Stripe provider over its fake
+        HTTP client; the bill-request one sits in the describe "a party's bill request goes when a
+        card or collect settles its last owing bill". Before the change the zero case asked the
+        reader to charge 0.30 (the tip alone on a 0.00 bill), and the below-zero case failed with
+        `CHECK constraint failed` on the provider's `payments` row for -0.50. For a bill corrected
+        to exactly zero, the review's Codex probe of 2026-09-30 (not a committed test) showed a
+        captured card payment with no sale still takes the recovery branch first, settling at the
+        captured amount with all of it recorded as tip; the below-zero case with a capture was not
+        run. The branch for an order with no sale yet was not run with a zero total.
         **Still open: a correction's third decimal place (queued as A144).** `recordCorrection` stores the
         correction's total rounded to the cent on the `sales` row but hands the unrounded input to
         the fiscal backend (`total: decimal(input.total)`,

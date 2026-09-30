@@ -725,9 +725,10 @@ async function readOutstandingSaleForOrder(
  * any database transaction, because an open write transaction holds the whole venue file against
  * every other writer, so this is three phases:
  *
- *  - P1 (tx A). Resolve the order and decide what to do. A WALK-UP is created `open` and COMMITTED
- *    here, because the provider's payment row carries a foreign key to `working_orders`
- *    (`payments_working_order_fk`).
+ *  - P1 (tx A). Resolve the order and decide what to do; a bill whose amount due is exactly zero is
+ *    settled here, and one below zero is refused.
+ *    A WALK-UP is created `open` and COMMITTED here, because the provider's payment row carries a
+ *    foreign key to `working_orders` (`payments_working_order_fk`).
  *  - P2 (no tx). Drive the reader for the amount plus tip. A non-captured result files NOTHING and is
  *    returned as data (CLAUDE.md §5).
  *  - P3 (tx B). File or settle the sale, associate the captured payment and settle the order,
@@ -735,8 +736,8 @@ async function readOutstandingSaleForOrder(
  *
  * P1's serialisation ends at its own commit, so two pays for one id can both pass P1 with the order
  * unsettled and both reach P3 — which is why `finalizeCapture` and `finalizeSettle` each keep a
- * duplicate backstop, while `finalizeRecovery`, `finalizeSettleRecovery` and `collectOrder` (one
- * transaction end to end) need none.
+ * duplicate backstop, while `finalizeRecovery`, `finalizeSettleRecovery`, the `owes-nothing`
+ * settlement in P1 and `collectOrder` (one transaction end to end) need none.
  *
  * P1's result:
  *  - `replay` — already `settled`; return the stored ticket, file nothing.
@@ -820,6 +821,9 @@ async function payIntegrated(
 
       if (outstanding !== undefined) {
         if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
+          // Called only to refuse a malformed tip when tips are on; none is charged on a bill that
+          // owes nothing.
+          tipOf(cfg, req);
           return {
             kind: "owes-nothing" as const,
             ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
@@ -884,9 +888,7 @@ async function payIntegrated(
   }
 
   // ---- P2 (no tx) ----
-  // The default sits outside the ternary so a tips-off call exercises it too.
-  const tipInput = req.tip ?? "0.00";
-  const tip = cfg.tipsEnabled ? decimal(tipInput) : decimal("0.00");
+  const tip = tipOf(cfg, req);
   const baseAmount =
     prepared.kind === "settle" ? prepared.outstanding.amountDue : prepared.gross.total;
   // Only a collect of an open order marked it; a settle is of a placed order.
@@ -931,6 +933,12 @@ async function payIntegrated(
     prepared.wasPlaced,
   );
   return { outcome: "captured", ticket };
+}
+
+function tipOf(cfg: TillConfig, req: IntegratedPayRequest): Decimal {
+  // The default sits outside the ternary so a tips-off call exercises it too.
+  const tipInput = req.tip ?? "0.00";
+  return cfg.tipsEnabled ? decimal(tipInput) : decimal("0.00");
 }
 
 /** The integrated card attempts running in this process: order id to the mark its P1 wrote (plan
@@ -1505,10 +1513,11 @@ export async function collectOrder(
     const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
     if (outstanding !== undefined) {
+      // Before the owes-nothing return, so a malformed cash amount is refused whatever is owed.
+      const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
         return settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
       }
-      const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       const settledAt = deps.clock.now().instant;
 
       await settleSale(tx, {
@@ -1561,10 +1570,10 @@ export async function collectOrder(
 }
 
 /**
- * Close a placed order whose issued sale's corrections leave nothing owed: no money changes hands,
- * so no tender, no `payments` row and no drawer opening (`tenders_amount_ck` refuses a tender of
- * zero or less). Below zero, `settleSale` refuses the empty tender list with
- * `sale.tender_shortfall` and the order stays placed.
+ * Close an order whose issued sale's corrections leave nothing owed: no money changes hands, so no
+ * tender, no `payments` row and no drawer opening (`tenders_amount_ck` refuses a tender of zero or
+ * less). Below zero, `settleSale` refuses the empty tender list with `sale.tender_shortfall` and
+ * the order is left as it was.
  */
 async function settleOwingNothing(
   tx: Transaction,

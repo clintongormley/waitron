@@ -449,6 +449,47 @@ async function rawPaymentsFor(
   return rows.map((r) => ({ state: r.state, hasSale: r.has_sale === 1 })); // 0/1 — see `orderState`
 }
 
+/** The venue's rectificative series. */
+function rectificativeSeries(cfg: TillConfig): string {
+  return suite.db.all<{ id: string }>(sql`
+    select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
+  `)[0]!.id;
+}
+
+/** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
+ *  `recordCorrection`. */
+async function correctToZero(cfg: TillConfig, saleId: string): Promise<void> {
+  const adminId = suite.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!
+    .id;
+  await withTransaction(suite.db, async (tx) => {
+    const session = await loginWithPin(tx, {
+      tillId: cfg.tillId,
+      personId: adminId,
+      pin: "1234",
+    });
+    await recordCorrection(tx, backend, {
+      tillId: cfg.tillId,
+      nodeId: cfg.nodeId,
+      seriesId: brandSeriesId(rectificativeSeries(cfg)),
+      correctsSaleId: brandSaleId(saleId),
+      total: "-1.50",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Descuento",
+          descriptions: { [LOCALE]: "Descuento" },
+          quantity: "-1",
+          unitPrice: "1.24",
+          vatRate: "21.00",
+          lineTotal: "-1.24",
+        },
+      ],
+      clock,
+      authz: { sessionId: session.id },
+    });
+  });
+}
+
 beforeAll(() => {
   clock = systemClock();
   backend = new VerifactuBackend({
@@ -1257,48 +1298,6 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
   });
 
   describe("a bill whose corrections leave nothing owed", () => {
-    /** The venue's rectificative series. */
-    function rectificativeSeries(cfg: TillConfig): string {
-      return suite.db.all<{ id: string }>(sql`
-        select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
-      `)[0]!.id;
-    }
-
-    /** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
-     *  `recordCorrection`. */
-    async function correctToZero(cfg: TillConfig, saleId: string): Promise<void> {
-      const adminId = suite.db.all<{ id: string }>(
-        sql`select id from persons where role = 'admin'`,
-      )[0]!.id;
-      await withTransaction(suite.db, async (tx) => {
-        const session = await loginWithPin(tx, {
-          tillId: cfg.tillId,
-          personId: adminId,
-          pin: "1234",
-        });
-        await recordCorrection(tx, backend, {
-          tillId: cfg.tillId,
-          nodeId: cfg.nodeId,
-          seriesId: brandSeriesId(rectificativeSeries(cfg)),
-          correctsSaleId: brandSaleId(saleId),
-          total: "-1.50",
-          lines: [
-            {
-              lineNo: 1,
-              name: "Descuento",
-              descriptions: { [LOCALE]: "Descuento" },
-              quantity: "-1",
-              unitPrice: "1.24",
-              vatRate: "21.00",
-              lineTotal: "-1.24",
-            },
-          ],
-          clock,
-          authz: { sessionId: session.id },
-        });
-      });
-    }
-
     it("closes the bill without asking the reader, writing no tender and no payment", async () => {
       const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
       const cfg = { ...baseCfg, tipsEnabled: true };
@@ -1306,6 +1305,8 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
       await correctToZero(cfg, saleId);
       expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
+      expect(await stationQueueOrderIds(station)).toEqual([id]);
+      expect(await collectedAtSet(id)).toBe(false);
       const { deps, client } = integratedDeps(cfg, suite.db);
 
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
@@ -1314,6 +1315,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(out.outcome).toBe("captured");
       if (out.outcome !== "captured") throw new Error("unreachable");
       expect(out.ticket.invoiceNumber).toBe("A/1");
+      expect(out.ticket.total).toBe("1.50");
       expect(out.ticket.tender).toEqual({ method: "unpaid" });
       expect(await tendersFor(id)).toEqual([]);
       expect(await paymentCount(id)).toBe(0);
@@ -1322,6 +1324,58 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await stationQueueOrderIds(station)).toEqual([]);
       expect(await outstandingSalesFor()).toEqual([]);
       expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+    });
+
+    it("refuses a malformed tip without asking the reader, and leaves the bill open", async () => {
+      const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
+      const cfg = { ...baseCfg, tipsEnabled: true };
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      await correctToZero(cfg, saleId);
+      const { deps, client } = integratedDeps(cfg, suite.db);
+
+      await expect(
+        payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "not-money" }),
+      ).rejects.toMatchObject({ code: "shared.invalid_decimal", params: { value: "not-money" } });
+
+      expect(client.lastCreateIntent).toBeUndefined();
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await paymentCount(id)).toBe(0);
+      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+      expect(await collectedAtSet(id)).toBe(false);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
+    });
+
+    it("two pays at once close the bill once, and neither asks the reader", async () => {
+      const { cfg, cafe } = await modeVenue("invoice_first");
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      await correctToZero(cfg, saleId);
+      const { deps: depsA, client: clientA } = integratedDeps(cfg, suite.db);
+      const { deps: depsB, client: clientB } = integratedDeps(cfg, suite.db);
+      const req = { id, lines: [] };
+
+      const [a, b] = await Promise.allSettled([
+        payWorkingOrderIntegrated(depsA, cfg, req),
+        payWorkingOrderIntegrated(depsB, cfg, req),
+      ]);
+
+      if (a.status !== "fulfilled" || b.status !== "fulfilled") {
+        throw new Error(`both pays should settle: a=${JSON.stringify(a)} b=${JSON.stringify(b)}`);
+      }
+      expect(a.value.outcome).toBe("captured");
+      expect(b.value.outcome).toBe("captured");
+      if (a.value.outcome !== "captured" || b.value.outcome !== "captured") {
+        throw new Error("unreachable");
+      }
+      expect(a.value.ticket.invoiceNumber).toBe(b.value.ticket.invoiceNumber);
+      expect(clientA.lastCreateIntent).toBeUndefined();
+      expect(clientB.lastCreateIntent).toBeUndefined();
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await paymentCount(id)).toBe(0);
+      expect(await saleCount(id)).toBe(1);
+      expect(await registroCount(id)).toBe(1);
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await outstandingSalesFor()).toEqual([]);
     });
 
     it("refuses a bill already below zero with the domain code, without asking the reader", async () => {
@@ -1360,6 +1414,7 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
       expect(await paymentCount(id)).toBe(0);
       expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
       expect(await collectedAtSet(id)).toBe(false);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "-0.50" }]);
     });
   });
 
@@ -2135,6 +2190,19 @@ describe("a party's bill request goes when a card or collect settles its last ow
         await placed(cfg, tabId);
         await lostCapture(tabId);
         await payByCard(cfg, tabId, log);
+      },
+    ],
+    [
+      "a card closing a presented bill whose corrections leave nothing owed",
+      "invoice_first",
+      async (cfg, tabId, log) => {
+        await placed(cfg, tabId);
+        const saleId = await saleIdFor(tabId);
+        await correctToZero(cfg, saleId);
+        expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
+        await payByCard(cfg, tabId, log);
+        // No card tender, so the reader was never asked for the 1.50.
+        expect(await tendersFor(tabId)).toEqual([]);
       },
     ],
     [
