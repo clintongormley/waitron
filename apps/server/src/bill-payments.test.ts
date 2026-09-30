@@ -53,6 +53,7 @@ import { ALL_MODULES } from "./modules.js";
 import { printSalePaymentSlip } from "./payment-slip-print.js";
 import { createTable } from "./tables.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
+import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrder, readBillTenderLines } from "./till-sale.js";
@@ -687,15 +688,6 @@ describe("the invoice at full payment", () => {
   });
 });
 
-// Ids that sort against the order they are made in, so a tie broken by id gives the reverse of
-// the taking order on every run rather than by chance.
-function descendingIds() {
-  const real = crypto.randomUUID.bind(crypto);
-  let made = 0;
-  return () =>
-    `${(0xffffffff - made++).toString(16)}${real().slice(8)}` as ReturnType<typeof randomUUID>;
-}
-
 describe("the receipt's payments, taken within one millisecond", () => {
   const AMOUNTS = [100, 200, 300, 400, 500, 2800];
 
@@ -845,26 +837,22 @@ describe("the bill's payments, taken within one millisecond", () => {
   it("prints the card slips in the order the cards were taken", async () => {
     const billId = await tabWith("Chuletón", "Tarta");
     const at = new Date().toISOString();
-    const first = await insertPayment(billId, { applied: 2000, state: "received", receivedAt: at });
-    const second = await insertPayment(billId, {
+    const untipped = await insertPayment(billId, {
+      applied: 2000,
+      state: "received",
+      receivedAt: at,
+    });
+    const tipped = await insertPayment(billId, {
       applied: 2300,
       tip: 200,
       state: "received",
       receivedAt: at,
     });
     const paymentId = descendingIds();
+    // The cards are taken in the opposite order to their bill payments, so a tie broken by the
+    // tenders' write order gives the wrong answer too.
     await inTx(async (tx) => {
       await tx.insert(payments).values([
-        {
-          id: paymentId(),
-          workingOrderId: billId,
-          provider: "simulator",
-          paymentRef: randomUUID(),
-          amount: 2000,
-          state: "captured",
-          settledAt: at,
-          billPaymentId: first,
-        },
         {
           id: paymentId(),
           workingOrderId: billId,
@@ -873,7 +861,17 @@ describe("the bill's payments, taken within one millisecond", () => {
           amount: 2500,
           state: "captured",
           settledAt: at,
-          billPaymentId: second,
+          billPaymentId: tipped,
+        },
+        {
+          id: paymentId(),
+          workingOrderId: billId,
+          provider: "simulator",
+          paymentRef: randomUUID(),
+          amount: 2000,
+          state: "captured",
+          settledAt: at,
+          billPaymentId: untipped,
         },
       ]);
     });
@@ -892,9 +890,9 @@ describe("the bill's payments, taken within one millisecond", () => {
       .filter((job) => !before.some((old) => old.id === job.id))
       .map((slip) => decodeTicket(slip.payload));
     expect(printed).toHaveLength(2);
-    expect(printed[0]).toContain("20,00");
-    expect(printed[0]).not.toContain("Propina");
-    expect(printed[1]).toContain("23,00");
-    expect(printed[1]).toContain("Propina");
+    expect(printed[0]).toContain("23,00");
+    expect(printed[0]).toContain("Propina");
+    expect(printed[1]).toContain("20,00");
+    expect(printed[1]).not.toContain("Propina");
   });
 });

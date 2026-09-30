@@ -35,6 +35,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
+import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -324,12 +325,7 @@ describe("readTenderBlock", () => {
   });
 
   it("shows the tender taken first when two were taken in the same millisecond", async () => {
-    // Tender ids that sort against the order they are written in, so a tie broken by id picks the
-    // later tender on every run rather than by chance.
-    const real = crypto.randomUUID.bind(crypto);
-    let made = 0;
-    const descending = () =>
-      `${(0xffffffff - made++).toString(16)}${real().slice(8)}` as ReturnType<typeof randomUUID>;
+    const descending = descendingIds();
 
     const { block, written } = await withTransaction(suite.db, async (tx) => {
       const workingOrderId = randomUUID();

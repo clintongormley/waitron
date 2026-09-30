@@ -230,13 +230,15 @@ async function readPaymentRows(
   workingOrderIds: readonly string[],
 ): Promise<PaymentRow[]> {
   if (workingOrderIds.length === 0) return [];
-  // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
-  // written in.
-  return tx
-    .select()
-    .from(billPayments)
-    .where(inArray(billPayments.workingOrderId, [...workingOrderIds]))
-    .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`);
+  return (
+    tx
+      .select()
+      .from(billPayments)
+      .where(inArray(billPayments.workingOrderId, [...workingOrderIds]))
+      // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
+      // written in.
+      .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`)
+  );
 }
 
 /** Each payment of the bills, with what its completed refunds leave of it. */
