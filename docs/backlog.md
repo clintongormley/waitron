@@ -2688,7 +2688,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the right of the buttons; at phone width it wraps below them.
 
 - **Unpairing a Bluetooth printer switches it off, and adding it again runs calibration (C109, owner
-  2026-09-30) — DONE (2026-09-30).** The owner: _"If i unpair it, it tells me it is unpaired, then
+  2026-09-30) — DONE (#960, main `d98010314`, 2026-10-01).** The owner: _"If i unpair it, it tells me it is unpaired, then
   shows the printer as Active again, but it won't print. An unpaired printer should be disabled.
   After unpairing i went to add printer, repaired it, then it doesn't show me calibration (because
   the printer is still active)."_ Unpair only asked the box's agent to unpair the address; the
@@ -2719,6 +2719,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     printer stays on. Closing the browser tab mid-wizard does not switch it off. Saving leaves it on. This
     holds for any printer's Add again, not only a Bluetooth one. While it is on during calibration,
     jobs already queued for it can be handed out, whether or not calibration is then saved.
+    **Next action (owner, 2026-10-01: "(c)"):** lane A's A163 ends a printer's waiting jobs when
+    its Unpair succeeds, so nothing stale can print during a later Add again.
   - A row shows Disable whenever Unpair would not appear, such as after a succeeded Unpair while
     the agent's paired report is still listed (`#printerActions`,
     `apps/dashboard/src/screens/printers-screen.ts`).
