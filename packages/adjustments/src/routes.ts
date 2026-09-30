@@ -9,7 +9,7 @@ import {
   requireBodyUuid,
   requireEnum,
   requireManagementSession,
-  requirePeriod,
+  requireRange,
   requireString,
   requireUuidParam,
 } from "@waitron/server-kit";
@@ -102,13 +102,6 @@ function requireReasonInput(body: Record<string, unknown>): AdjustmentReasonInpu
 function requireIds(value: unknown): string[] {
   if (!Array.isArray(value)) throw invalid("ids");
   return value.map((id) => requireBodyUuid(id, "ids"));
-}
-
-/** Both ends passed `requirePeriod`'s fixed "YYYY-MM-DD" shape, so a string compare orders them. */
-function requireRange(from: unknown, to: unknown): { from: string; to: string } {
-  const range = { from: requirePeriod(from, "from"), to: requirePeriod(to, "to") };
-  if (range.from > range.to) throw invalid("range");
-  return range;
 }
 
 /** Everyone's rows when neither is given; `person` and `guests=true` exclude each other. */

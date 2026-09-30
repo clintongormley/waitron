@@ -12,6 +12,7 @@ export {
   requireNullableBodyUuid,
   requireNullableString,
   requirePeriod,
+  requireRange,
   requireString,
   requireUuidParam,
 } from "./request-screens.js";

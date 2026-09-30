@@ -38,7 +38,7 @@ import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody, requireBodyUuid, requireEnum } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
-import { requirePeriod } from "@waitron/server-kit";
+import { requirePeriod, requireRange } from "@waitron/server-kit";
 import { formatCategorySalesPage } from "./category-sales-page.js";
 import { resolveSessionLocale } from "./session-locale.js";
 import type { Logger } from "./logger.js";
@@ -77,15 +77,6 @@ interface CategoryRequest {
   to: string;
   mode: CategoryReportMode;
   extrasIntoDish: boolean;
-}
-
-/** Both ends passed `requirePeriod`'s fixed "YYYY-MM-DD" shape, so a string compare orders them. */
-function requireRange(from: unknown, to: unknown): { from: string; to: string } {
-  const range = { from: requirePeriod(from, "from"), to: requirePeriod(to, "to") };
-  if (range.from > range.to) {
-    throw new AppError("management.request_invalid", { field: "range" });
-  }
-  return range;
 }
 
 /** Absent is false; the query string spells a flag "true" or "false". */
