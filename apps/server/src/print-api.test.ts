@@ -2271,6 +2271,95 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(await jobRow(jobId)).toMatchObject({ status: "printing", last_error: null });
   });
 
+  async function bluetoothPrinter(app: Hono): Promise<{ mac: string; printerId: string }> {
+    const mac = lowerMac().toUpperCase();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+    });
+    return { mac, printerId: ((await created.json()) as { id: string }).id };
+  }
+
+  it("leaves a paired bluetooth printer's job for another box that reported it can print to it within fifteen seconds", async () => {
+    const app = mountApp();
+    const printing = await joinAndAccept(app, "Barra agent");
+    const blind = await joinAndAccept(app, "Cocina agent");
+    const { mac, printerId } = await bluetoothPrinter(app);
+    // The same device in the same pull's scan must not wipe what the visible report said.
+    await pull(app, printing.token, {
+      visible: [{ transport: "bluetooth", localKey: mac }],
+      scanned: [{ transport: "bluetooth", localKey: mac }],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: true,
+    });
+    const jobId = await enqueue(printerId, esc().text("Mesa 6").cut().bytes());
+
+    await pull(app, blind.token, {
+      visible: [],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: false,
+    });
+    expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, last_error: null });
+
+    const reply = await pull(app, printing.token, {
+      visible: [{ transport: "bluetooth", localKey: mac }],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: true,
+    });
+    expect(reply.jobs.map((job) => job.id)).toContain(jobId);
+  });
+
+  it("ends the job once the other box's report that it can print to the printer is older than fifteen seconds", async () => {
+    const app = mountApp();
+    const printing = await joinAndAccept(app, "Barra agent");
+    const blind = await joinAndAccept(app, "Cocina agent");
+    const { mac, printerId } = await bluetoothPrinter(app);
+    const reportedAt = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+    await pull(app, printing.token, {
+      visible: [{ transport: "bluetooth", localKey: mac }],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: true,
+    });
+    const jobId = await enqueue(printerId, esc().text("Mesa 7").cut().bytes());
+
+    vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
+    await pull(app, blind.token, {
+      visible: [],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: false,
+    });
+
+    expect(await jobRow(jobId)).toMatchObject({
+      status: "failed",
+      last_error: BLUETOOTH_PRINTING_UNAVAILABLE,
+    });
+  });
+
+  it("ends the job when the other box reported the printer only paired, not among the devices it can print to", async () => {
+    const app = mountApp();
+    const other = await joinAndAccept(app, "Barra agent");
+    const blind = await joinAndAccept(app, "Cocina agent");
+    const { mac, printerId } = await bluetoothPrinter(app);
+    await pull(app, other.token, {
+      visible: [],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: true,
+    });
+    const jobId = await enqueue(printerId, esc().text("Mesa 8").cut().bytes());
+
+    await pull(app, blind.token, {
+      visible: [],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: false,
+    });
+
+    expect(await jobRow(jobId)).toMatchObject({
+      status: "failed",
+      last_error: BLUETOOTH_PRINTING_UNAVAILABLE,
+    });
+  });
+
   it("refuses a pull whose bluetoothPrinting is not a boolean, naming the field, before recording its pairing report", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);

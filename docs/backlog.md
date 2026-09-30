@@ -2313,7 +2313,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     printer still takes no jobs (the Bluetooth case in `apps/server/src/print-agent-e2e.test.ts`,
     where a job for a printer the pull reports paired never reaches the fake radio); since A139, a
     pull that also says `bluetoothPrinting: false` ends, failed, the due jobs of each enabled
-    Bluetooth printer it reports paired (A139, below).
+    Bluetooth printer it reports paired that no other agent has lately reported it can print to
+    (A139, below).
   - It carries out Pair and Forget commands the server sends back on a job pull. Pair runs
     `bluetoothctl` interactively, so its own pairing agent is running (the part of `bluetoothctl`
     that BlueZ, the Linux Bluetooth service, asks for a PIN), and answers the printer's PIN
@@ -2528,7 +2529,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the agent can print over Bluetooth (a new optional `bluetoothPrinting` field; the box's agent sends
   `false` while `liveBtDevicePath` is unbuilt, and an agent that predates the field sends nothing and
   changes nothing), and when it says it cannot, the server ends the waiting jobs of every Bluetooth
-  printer that agent reports paired, unless the printer is disabled: failed, with no attempts left,
+  printer that agent reports paired, unless the printer is disabled or another agent has lately
+  reported it can print to it (below): failed, with no attempts left,
   so they are not retried, at most `PULL_BATCH_LIMIT` of them per pull
   (`failUnprintableBluetoothJobs`, `packages/printing/src/runtime.ts`),
   recording `printer.bluetooth_printing_unavailable`, which the dashboard shows as "Printing to a
@@ -2544,10 +2546,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the printers list say Bluetooth printing is not available yet; and the jobs list shows "—", not
   the stored attempt count, for such a job, whose Reprint makes a new job that ends the same way
   (read, not run). **Not covered:** a Bluetooth printer no agent reports paired still waits with no
-  reason on the job, as a USB printer no agent sees does; with two agents, one that has the printer paired but cannot print over Bluetooth ends
-  the job even if the other could — which no agent can today. A140 must have the agent send
-  `true`, or stop sending the field, once it can print; must not let an agent that cannot print over
-  Bluetooth end a job another agent could print; and must remove, or key on something other than
+  reason on the job, as a USB printer no agent sees does. With two agents, one that cannot print
+  over Bluetooth leaves a paired printer's jobs alone while another agent has reported, within the
+  last 15 seconds (`DISCOVERED_TTL_MS`, `apps/server/src/print-api.ts`), that it can print to that
+  printer; that report is held only in the server's memory, so after a server restart, until the
+  other agent's first pull, the first agent still ends the job (a throwaway route test on
+  2026-09-30 mounted the print routes a second time over the same database, standing in for a
+  restart, and the job ended; the same pull against the first mount left it waiting). A140 must
+  have the agent send `true`, or stop sending the field, once it can print; must close that restart
+  gap if it matters then; and must remove, or key on something other than
   the transport or the stored code, each place the dashboard says Bluetooth printing is not
   available yet: the note on a Bluetooth printer's row and the hint in its edit dialog (both
   `codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)`, shown for every Bluetooth printer,

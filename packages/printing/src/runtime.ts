@@ -130,8 +130,8 @@ export async function claimPrintJobs(
 export const BLUETOOTH_PRINTING_UNAVAILABLE = "printer.bluetooth_printing_unavailable";
 
 /**
- * Ends failed, with no attempts left, the due jobs of the active Bluetooth printers at `addresses`:
- * the ones paired with an agent that says it cannot print over Bluetooth. One call ends at most
+ * Ends failed, with no attempts left, the due jobs of the active Bluetooth printers at `addresses`,
+ * which the caller chooses (the job pull in `apps/server/src/print-api.ts`). One call ends at most
  * `PULL_BATCH_LIMIT` jobs; later pulls that report the same printers end the rest.
  */
 export async function failUnprintableBluetoothJobs(
