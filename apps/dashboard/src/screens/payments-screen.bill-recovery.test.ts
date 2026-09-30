@@ -228,6 +228,18 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(q(el, "[data-test=bill-action-result]")!.textContent).toContain("Payment not charged");
   });
 
+  it.each([["attest-bill-payment-bp-1"], ["attest-bill-refund-br-1"]])(
+    "does not invite the browser to fill the manager PIN with a saved password (%s)",
+    async (opener) => {
+      const el = await mount(stubApi());
+      q(el, `[data-test=${opener}]`)!.click();
+      await flush(el);
+      const native = q(el, "[data-test=bill-attest-pin]")!.shadowRoot!.querySelector("input")!;
+      expect(native.type).toBe("password");
+      expect(native.getAttribute("autocomplete")).toBe("off");
+    },
+  );
+
   it("requires a confirmed outcome, note and PIN before attesting a refund", async () => {
     const api = stubApi();
     const el = await mount(api);
