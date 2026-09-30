@@ -191,8 +191,7 @@ describe("setup-reset-screen", () => {
     expect(await alerts(el)).toHaveLength(1);
   });
 
-  // Owner rule (A153, 2026-09-30): a refused login marks no field, so it cannot say which part was
-  // wrong; only a missing or malformed value is marked.
+  // Owner rule (A153, 2026-09-30): a refused login marks no field; only a missing or malformed value is marked.
   it("marks no field on a refused login, says so once beside the reset button and focuses the password", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     await fillValid(el);
@@ -344,21 +343,28 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
   });
 
-  it("withdraws a refused login's message once either field changes, and the reset then sends the new login", async () => {
-    const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
-    const events = collect(host);
-    await fillValid(el);
-    el.credentialsRejected = true;
-    await el.updateComplete;
+  it.each([
+    ["personId", "op-2", { personId: "op-2", password: "correct horse" }],
+    ["password", "battery staple", { personId: "op-1", password: "battery staple" }],
+  ])(
+    "withdraws a refused login's message once %s changes, and the reset then sends the new login",
+    async (field, value, credential) => {
+      const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+      const events = collect(host);
+      await fillValid(el);
+      el.credentialsRejected = true;
+      await el.updateComplete;
+      expect(await bottomOf(el)).toBe(REJECTED);
 
-    await type(el, "password", "battery staple");
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
-    expect(await bottomOf(el)).toBe("");
-    expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
-    q(el, "[data-test=reset]")!.click();
-    expect(events).toEqual([{ credential: { personId: "op-1", password: "battery staple" } }]);
-  });
+      await type(el, field, value);
+      expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+      expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
+      expect(await bottomOf(el)).toBe("");
+      expect(q(el, "[data-test=reset]")!.hasAttribute("disabled")).toBe(false);
+      q(el, "[data-test=reset]")!.click();
+      expect(events).toEqual([{ credential }]);
+    },
+  );
 
   it("keeps a field's wt-change inside the screen", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});

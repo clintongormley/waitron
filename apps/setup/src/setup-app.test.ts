@@ -1298,8 +1298,8 @@ describe("setup-app", () => {
     },
   );
 
-  // A refused login arrives as `password.invalid` (`apps/server/src/mirror-bundle-fetch.ts`), so this
-  // sentence must not name one (A153).
+  // A primary of this version answers every refused login with `password.invalid`, which the fetcher
+  // in `apps/server/src/mirror-bundle-fetch.ts` passes on, so this sentence must not name one (A153).
   it.each([
     [
       "en-GB",

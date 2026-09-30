@@ -51,8 +51,8 @@ export class SetupResetScreen extends LitElement {
 
   @property({ type: Boolean }) busy = false;
 
-  /** The server refused the login. It marks no field, so it never says which part was wrong
-   * (owner rule, A153); its message stays until either field changes or the reset is asked again. */
+  /** The server refused the login. Marks no field (owner rule, A153); its message stays until
+   * either field changes or the reset is asked again. */
   @property({ type: Boolean }) credentialsRejected = false;
 
   /** A field the server refused on its own (`setup.request_invalid`'s `params.field`). */
@@ -98,7 +98,7 @@ export class SetupResetScreen extends LitElement {
   #focusPassword(): void {
     void this.updateComplete.then(() => {
       if (this.isConnected)
-        this.shadowRoot!.querySelector<HTMLElement>("[data-test=password]")?.focus();
+        this.shadowRoot!.querySelector<HTMLElement>("wt-input[name=password]")?.focus();
     });
   }
 
