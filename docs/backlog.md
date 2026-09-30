@@ -2491,8 +2491,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   the printer is first marked, and look for `bluetooth info failed` lines in
   `docker compose logs print-agent`.
 - **Pairing a Bluetooth printer and adding it are one step (A138, owner 2026-09-29) — DONE (#899).** In
-  Add a printer, an unpaired Bluetooth device offers Pair and add: it asks for the PIN, pairs, and
-  when the agent reports the pairing succeeded it opens the same form Add opens, prefilled, with no
+  Add a printer, an unpaired Bluetooth device offers Pair and add (2026-09-30: except one whose
+  printer is added and switched on and that no agent reports paired, which offers Pair, A141): it
+  asks for the PIN, pairs, and when the agent reports the pairing succeeded it opens the same form Add opens, prefilled, with no
   second press on the row. A failed or unanswered pairing opens no form, and its reason stays in the
   row. If another add form or PIN dialog is open when a pairing succeeds, the row offers Add instead.
   Cancelling the form leaves the device paired: its row offers Add, and Forget pairing beside it
@@ -2525,9 +2526,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `apps/dashboard/src/screens/printers-screen.ts`), and a printer you have just added is switched
   on. Now the row offers it whether the printer is switched on or off, as long as an agent reports
   the printer paired. It is in the printer's row on the Printers tab, behind the three-dot button
-  (⋮) in the Actions column, below Edit and Disable; a second click confirms it. On a phone-width
-  screen the Actions column starts off the right-hand edge, so the table has to be scrolled
-  sideways to reach the three dots (seen in screenshots at 390 px, 2026-09-30). In Spanish the
+  (⋮) in the Actions column, below Edit and Disable; a second click confirms it. A printer
+  forgotten while switched on stays switched on and registered. While no agent reports it paired,
+  Add a printer lists it once an agent's scan finds it, without Show all devices even if the scan
+  does not call it a printer, and offers a plain **Pair** (Spanish "Emparejar"; `#canPairOnly`): it pairs the printer again,
+  opens no add form and changes nothing about the printer's registration. The row keeps Pair,
+  disabled while the pairing is pending, so a pairing the agent never confirms can be retried; once
+  an agent reports it paired, the row loses its Pair button and keeps only its Paired status until
+  that is dismissed or Add a printer closes, and Forget pairing is back in the printer's row menu.
+  On a phone-width screen the Actions column starts off the right-hand edge, so the table has to be scrolled sideways to reach the three dots (observed 2026-09-30 in screenshots taken
+  during the A141 work, not kept; the A141 finish-branch run-it review (Codex) reported the same at
+  390 px). Left open below. In Spanish the
   action is now "Desvincular" ("¿Desvincular?" to confirm; `printers.bluetooth_forget` and its
   siblings in `apps/dashboard/src/i18n/strings.ts`). The suspect that was ruled out: the agent's
   paired listing does not drop paired devices. `pairedBluetooth()` in
@@ -2590,6 +2599,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `jobReason` in the jobs list and in the calibration dialog's "Not printed: <reason>"
   (`apps/dashboard/src/screens/printers-screen.ts`); A140 decides whether jobs ended before it keep
   that reason text. Not run on the box.
+- **On a phone, a printer's row menu on the Printers tab starts off the right-hand edge.** At
+  390 px wide the Actions column is past the edge of the screen, so the three-dot button (⋮) that
+  holds Edit, Disable and Forget pairing is reached only by scrolling the table sideways — which
+  works against A141's aim of making Forget pairing easy to find (observed 2026-09-30 in
+  screenshots taken during the A141 work, not kept; the A141 finish-branch run-it review (Codex)
+  reported the same at 390 px). The cause is not investigated. The product editor's variants table
+  keeps its row menu on screen at phone width with its own layout rule for a narrow table, and the
+  phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts` check that each row menu
+  ends inside the frame ([design-system.md](developers/design-system.md), under
+  `--wt-cell-name-max-width`). In `apps/dashboard/src/screens/printers-screen.a11y.test.ts`, the
+  390 px case for the Printers tab's list runs only the accessibility check; the one check that
+  the screen does not scroll sideways is on a printer's status view (read, not run).
 - **Bluetooth delivery from a paired printer (A140) remains separate.** `liveBtDevicePath` throws
   for every paired device, because no real per-printer radio path has been established on the box,
   so `visibleDevices` leaves every paired device out and no Bluetooth job is handed to the box's

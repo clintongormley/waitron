@@ -86,14 +86,14 @@ stops the job pull, the same way a failed scan does not today.
   characters, no spaces), and waitron.sh install switches off bluetoothd's autopair plugin where it
   can (`deploy/README.md` says when it leaves Bluetooth alone); the dashboard's Pair must ask for the PIN, and the server must never store, log or echo it. See the
   P2c entry in `docs/backlog.md`._
-  _2026-09-30 (A138): the button is Pair and add, and a succeeded pairing opens the add form._
+  _2026-09-30 (A138): the button is Pair and add, and a succeeded pairing opens the add form. (A141: for a switched-on printer the button is Pair, and no form opens.)_
 - **Forget pairing.** A switched-off Bluetooth printer (`POST /management-api/printers/:id/deactivate`
   already exists) shows a **Forget pairing** action. The server refuses it unless that agent reports
   the address among its paired devices. The agent removes the pairing (`bluetoothctl remove <address>`
   is the expected command; the plan confirms it on the box). The printer's registration stays, as
   every switched-off printer's does, so it can be paired and switched on again later.
   _2026-09-30 (A138): a listed paired device with no printer row also offers Forget pairing._
-  _2026-09-30 (A141): an added Bluetooth printer's row offers Forget pairing whether it is switched on or off; in Spanish it is "Desvincular"._
+  _2026-09-30 (A141): an added Bluetooth printer's row offers Forget pairing whether it is switched on or off; in Spanish it is "Desvincular". A printer forgotten while switched on stays switched on. While no agent reports it paired, Add a printer lists it once an agent's scan finds it, without Show all devices, and offers **Pair** (Spanish "Emparejar"), which pairs it again without adding anything; the row keeps Pair so an unconfirmed pairing can be retried, and loses its Pair button once an agent reports it paired (its Paired status stays until dismissed)._
 - **Both commands** take the same permission as starting a discovery scan, read from the existing
   route. Their error codes follow the `printer_discovery` / `agent` siblings — grep them before naming
   them.
