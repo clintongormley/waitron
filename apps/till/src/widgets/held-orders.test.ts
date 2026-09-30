@@ -16,6 +16,7 @@ const mesa: HeldOrderSummary = {
   hasPayments: false,
   partyId: null,
   openedAt: "2026-08-05T10:00:00.000Z",
+  signals: [],
 };
 
 const barra: HeldOrderSummary = {
@@ -28,6 +29,7 @@ const barra: HeldOrderSummary = {
   hasPayments: false,
   partyId: null,
   openedAt: "2026-08-05T10:05:00.000Z",
+  signals: [],
 };
 
 afterEach(cleanupWidgets);
@@ -64,6 +66,59 @@ describe("till-held-orders", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.textContent).toContain("6");
     expect(rows[0]!.textContent).toContain(formatMoney("1.50", currentLocale()));
+  });
+
+  describe("what wants attention on each order", () => {
+    const ana: HeldOrderSummary = {
+      ...barra,
+      id: "wo-7",
+      orderNumber: 7,
+      label: "Ana",
+      signals: [
+        {
+          kind: "ready",
+          byStation: [
+            { stationId: "bar", stationName: "Bar", count: 2 },
+            { stationId: "kitchen", stationName: "Kitchen", count: 1 },
+          ],
+        },
+        { kind: "long_wait", band: "overdue" },
+      ],
+    };
+    const chips = (row: Element) =>
+      [...row.querySelectorAll("[data-chip]")].map((chip) => chip.textContent!.trim());
+    const rowOf = (el: TillHeldOrders, number: number) =>
+      [...el.shadowRoot!.querySelectorAll(".order")].find((row) =>
+        row.querySelector(".number")!.textContent!.includes(`#${number}`),
+      )!;
+
+    beforeEach(() => setLocale("en"));
+    afterEach(() => setLocale("en"));
+
+    it("shows a counter tab with no table by its label, with its signals", async () => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [mesa, ana],
+      });
+      const row = rowOf(el, 7);
+      expect(row.querySelector(".label")!.textContent!.trim()).toBe("Ana");
+      expect(chips(row)).toEqual(["Bar: 2 ready", "Kitchen: 1 ready", "Overdue"]);
+      expect(chips(rowOf(el, 5))).toEqual([]);
+    });
+
+    it("shows an order with no label by its number, with its signals", async () => {
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+        orders: [{ ...ana, label: null, signals: [{ kind: "long_wait", band: "forgotten" }] }],
+      });
+      const row = rowOf(el, 7);
+      expect(row.querySelector(".label")).toBeNull();
+      expect(chips(row)).toEqual(["Forgotten"]);
+    });
+
+    it("says them in Spanish", async () => {
+      setLocale("es");
+      const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [ana] });
+      expect(chips(rowOf(el, 7))).toEqual(["Bar: 2 listos", "Kitchen: 1 listo", "Con retraso"]);
+    });
   });
 
   it("a Retrieve control emits a composed retrieve-order carrying its own id", async () => {
@@ -176,6 +231,7 @@ describe("till-held-orders: moving a counter order to a table", () => {
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
     ...over,
   });

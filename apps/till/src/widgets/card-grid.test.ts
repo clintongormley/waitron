@@ -38,6 +38,7 @@ const mesa: HeldOrderSummary = {
   hasPayments: false,
   partyId: null,
   openedAt: "2026-08-05T10:00:00.000Z",
+  signals: [],
 };
 
 const barra: HeldOrderSummary = {
@@ -50,6 +51,7 @@ const barra: HeldOrderSummary = {
   hasPayments: false,
   partyId: null,
   openedAt: "2026-08-05T10:05:00.000Z",
+  signals: [],
 };
 
 const stationGroup: StationQueueGroup = {
@@ -285,6 +287,23 @@ describe("till-card-grid", () => {
     expect(floor).not.toBeNull();
     expect(floor.embedded).toBe(true);
     expect(floor.canEdit).toBe(false);
+  });
+
+  it("tells the floor whether the device can open a station's view", async () => {
+    const store = new WorkingOrderStore();
+    const floorOf = async (canOpenStation?: boolean) => {
+      const { el } = await mountWidget<TillCardGrid>("till-card-grid", {
+        tab: floorTab,
+        store,
+        ...(canOpenStation === undefined ? {} : { canOpenStation }),
+      });
+      return el.shadowRoot!.querySelector<HTMLElement & { canOpenStation?: boolean }>(
+        "till-floor-screen",
+      )!.canOpenStation;
+    };
+    expect(await floorOf(true)).toBe(true);
+    expect(await floorOf(false)).toBe(false);
+    expect(await floorOf()).toBe(false);
   });
 
   it("renders an embedded editable floor screen for a table-layout-editor card", async () => {

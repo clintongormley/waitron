@@ -1329,6 +1329,7 @@ describe("TillApi", () => {
         posY: 400,
         shape: "round",
         rotation: 15,
+        signals: [],
         party: null,
       },
       {
@@ -1351,6 +1352,7 @@ describe("TillApi", () => {
         posY: null,
         shape: null,
         rotation: null,
+        signals: [],
         party: null,
       },
     ];
@@ -2492,6 +2494,24 @@ describe("TillApi: a seated party", () => {
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/parties/v1/groups/g3/unsnooze",
       post({ submissionId: "sub-7", expectedPartyRevision: 8 }),
+    );
+  });
+
+  it("requestBill POSTs the submission, revision and whether the bill is asked for to the party's /bill-request route", async () => {
+    const answer = { revision: 4, billRequestedAt: "2026-09-30T20:00:00.000Z" };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+    await expect(
+      new TillApi("", fetchStub).requestBill("v1", {
+        submissionId: "sub-8",
+        expectedPartyRevision: 3,
+        requested: true,
+      }),
+    ).resolves.toEqual(answer);
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/bill-request",
+      post({ submissionId: "sub-8", expectedPartyRevision: 3, requested: true }),
     );
   });
 

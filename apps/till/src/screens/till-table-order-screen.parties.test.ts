@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TabLine, TableParty, PartyBill } from "../api/client.js";
+import type { TabLine, TableParty, PartyBill, TableState } from "../api/client.js";
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 
@@ -255,6 +255,86 @@ describe("till-table-order-screen: paying a bill by its state", () => {
     expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-bill-payments]")!.textContent).toContain(
       t("bill.pay_with_bill_payments"),
+    );
+  });
+});
+
+describe("till-table-order-screen: the bill request", () => {
+  /** The floor's row for the party's table, as the app passes it down. */
+  const floorRow = (requested: boolean): TableState => ({
+    id: "t4",
+    label: "4",
+    zoneId: "z1",
+    capacity: 4,
+    state: "open-tab",
+    condition: "held",
+    hasOpenTab: true,
+    pendingDeliveries: 0,
+    pendingToServe: 0,
+    readyToServe: 0,
+    enRoute: 0,
+    timingBand: "fresh",
+    status: null,
+    nextReservation: null,
+    posX: null,
+    posY: null,
+    shape: null,
+    rotation: null,
+    party,
+    signals: requested ? [{ kind: "bill_requested", requestedAt: "2026-09-30T20:00:00.000Z" }] : [],
+  });
+
+  it("offers to mark the bill requested, naming the party it is for", async () => {
+    const el = await mountScreen({ tables: [floorRow(false)] });
+    const asked = capture(el, "request-bill");
+
+    const action = bills(el).querySelector<HTMLElement>("[data-request-bill]")!;
+    expect(action.textContent!.trim()).toBe("Mark bill requested for Ana");
+    expect(bills(el).querySelector("[data-bill-requested]")).toBeNull();
+    expect(bills(el).querySelector("[data-cancel-bill-request]")).toBeNull();
+    action.click();
+
+    expect(asked).toEqual([{ requested: true }]);
+  });
+
+  it("shows a requested bill, and offers to cancel the request for the party it names", async () => {
+    const el = await mountScreen({ tables: [floorRow(true)] });
+    const asked = capture(el, "request-bill");
+
+    expect(bills(el).querySelector("[data-bill-requested]")!.textContent!.trim()).toBe(
+      "Bill requested",
+    );
+    expect(bills(el).querySelector("[data-request-bill]")).toBeNull();
+    const cancel = bills(el).querySelector<HTMLElement>("[data-cancel-bill-request]")!;
+    expect(cancel.textContent!.trim()).toBe("Cancel the bill request for Ana");
+    cancel.click();
+
+    expect(asked).toEqual([{ requested: false }]);
+  });
+
+  it("holds the action while another command on the party runs", async () => {
+    const asking = await mountScreen({ tables: [floorRow(false)], groupCommandBusy: true });
+    const cancelling = await mountScreen({ tables: [floorRow(true)], groupCommandBusy: true });
+    const disabled = (el: TillTableOrderScreen, selector: string) =>
+      bills(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
+
+    expect(disabled(asking, "[data-request-bill]")).toBe(true);
+    expect(disabled(cancelling, "[data-cancel-bill-request]")).toBe(true);
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const asking = await mountScreen({ tables: [floorRow(false)] });
+    const cancelling = await mountScreen({ tables: [floorRow(true)] });
+
+    expect(bills(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
+      "Marcar cuenta pedida para Ana",
+    );
+    expect(bills(cancelling).querySelector("[data-bill-requested]")!.textContent!.trim()).toBe(
+      "Cuenta pedida",
+    );
+    expect(bills(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
+      "Anular la cuenta pedida de Ana",
     );
   });
 });

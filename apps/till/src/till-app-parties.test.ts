@@ -7,6 +7,7 @@ import {
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
 import { ServerRouter } from "./api/server-router.js";
+import { BILL_REQUEST_RETRY_PAUSE_MS } from "./state/bill-request.js";
 import { formatMoney } from "@waitron/shared";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -53,6 +54,7 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
     ...over,
   };
@@ -2327,6 +2329,7 @@ describe("till-app: moving a bill", () => {
       hasPayments: false,
       partyId: null,
       openedAt: "2026-08-05T10:00:00.000Z",
+      signals: [],
     };
     const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
     const listWorkingOrders = vi.fn().mockResolvedValue([]);
@@ -2923,6 +2926,188 @@ function floorThat(before: TableState[], after: TableState[]) {
   const other = { acted: false };
   return { other, getTablesState: vi.fn(async () => (other.acted ? after : before)) };
 }
+
+describe("till-app: the bill request", () => {
+  const requestedAt = "2026-09-30T20:00:00.000Z";
+  /** Mesa 4 as the floor reads it once the party has asked for the bill. */
+  const asked = (revision: number) => ({
+    ...seated({}, { revision }),
+    signals: [{ kind: "bill_requested" as const, requestedAt }],
+  });
+  /** Opens the order's Tab drawer, where the bills are, if it is closed. */
+  async function drawer(el: TillApp): Promise<ShadowRoot> {
+    const root = tableOrder(el)!.shadowRoot!;
+    if (root.querySelector("[data-drawer]") === null) {
+      root.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(el);
+    }
+    return root;
+  }
+  const requestedOnScreen = async (el: TillApp) =>
+    (await drawer(el)).querySelector("[data-bill-requested]") !== null;
+
+  it("records the request under a submission id of its own, at the revision the party was shown at", async () => {
+    const requestBill = vi.fn().mockResolvedValue({ revision: 4, billRequestedAt: requestedAt });
+    const { el } = await mountApp({
+      requestBill,
+      getTablesState: vi.fn(async () =>
+        requestBill.mock.calls.length > 0 ? [asked(4), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+      ),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledOnce();
+    expect(requestBill).toHaveBeenCalledWith("v1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 3,
+      requested: true,
+    });
+    expect(tableOrder(el)!.party!.revision).toBe(4);
+    expect(await requestedOnScreen(el)).toBe(true);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("cancels the request, and the screen offers it again", async () => {
+    const requestBill = vi.fn().mockResolvedValue({ revision: 5, billRequestedAt: null });
+    const { el } = await mountApp({
+      requestBill,
+      getTablesState: vi.fn(async () =>
+        requestBill.mock.calls.length > 0
+          ? [seated({}, { revision: 5 }), mesa7, mesa9]
+          : [asked(4), mesa7, mesa9],
+      ),
+    });
+    const order = await openMesa(el);
+    expect(await requestedOnScreen(el)).toBe(true);
+
+    emit(order, "request-bill", { requested: false });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledWith("v1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 4,
+      requested: false,
+    });
+    expect(await requestedOnScreen(el)).toBe(false);
+    expect((await drawer(el)).querySelector("[data-request-bill]")).not.toBeNull();
+  });
+
+  it("sends a request that got no answer again under the same submission id, and a new press under a new one", async () => {
+    const requestBill = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ revision: 4, billRequestedAt: requestedAt });
+    const { el } = await mountApp({ requestBill });
+    const order = await openMesa(el);
+
+    emit(order, "request-bill", { requested: true });
+    await new Promise((resolve) => setTimeout(resolve, BILL_REQUEST_RETRY_PAUSE_MS + 50));
+    await flush(el);
+    emit(tableOrder(el)!, "request-bill", { requested: true });
+    await flush(el);
+
+    const [first, retry, next] = requestBill.mock.calls.map(([, command]) => command);
+    expect(requestBill).toHaveBeenCalledTimes(3);
+    expect(retry).toEqual(first);
+    expect(next.submissionId).not.toBe(first.submissionId);
+  });
+
+  it("reads the floor again and says so when no answer comes at all", async () => {
+    const requestBill = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ requestBill });
+    const order = await openMesa(el);
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(order, "request-bill", { requested: true });
+    await new Promise((resolve) => setTimeout(resolve, 2 * BILL_REQUEST_RETRY_PAUSE_MS + 50));
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledTimes(3);
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("drops a second press while the first is out, and a press with no party's order open", async () => {
+    let answer!: (value: { revision: number; billRequestedAt: string }) => void;
+    const requestBill = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ requestBill });
+    const screen = await toFloor(el);
+    emit(screen, "request-bill", { requested: true });
+    await flush(el);
+    expect(requestBill).not.toHaveBeenCalled();
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const order = tableOrder(el)!;
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+    answer({ revision: 4, billRequestedAt: requestedAt });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledOnce();
+  });
+
+  it("shows a refusal in its code's own words", async () => {
+    const { el } = await mountApp({
+      requestBill: vi.fn().mockRejectedValue({ code: "party.not_open" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+  });
+
+  it("reloads and says the bill was asked for elsewhere, and sends nothing more until the person acts again", async () => {
+    const requestBill = vi
+      .fn()
+      .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 });
+    const reads = floorThat([mesa4, mesa7, mesa9], [asked(5), mesa7, mesa9]);
+    const { el } = await mountApp({ requestBill, getTablesState: reads.getTablesState });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.changed_bill_requested"));
+    expect(tableOrder(el)!.party!.revision).toBe(5);
+    expect(await requestedOnScreen(el)).toBe(true);
+
+    requestBill.mockResolvedValue({ revision: 6, billRequestedAt: null });
+    emit(tableOrder(el)!, "request-bill", { requested: false });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenLastCalledWith("v1", {
+      submissionId: expect.any(String),
+      expectedPartyRevision: 5,
+      requested: false,
+    });
+  });
+
+  it("says the request was cancelled elsewhere when that is what changed", async () => {
+    const reads = floorThat([asked(4), mesa7, mesa9], [seated({}, { revision: 5 }), mesa7, mesa9]);
+    const { el } = await mountApp({
+      requestBill: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+      getTablesState: reads.getTablesState,
+    });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "request-bill", { requested: false });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("party.changed_bill_request_cancelled"));
+  });
+});
 
 describe("till-app: another device changed the table first", () => {
   const moved = seated(

@@ -13,6 +13,7 @@ import {
   type SeatedRead,
 } from "./table-targets.js";
 import { paidInPart } from "../state/bill-state.js";
+import { renderChips, signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { HeldOrderSummary, TableState } from "../api/client.js";
@@ -37,6 +38,7 @@ export class TillHeldOrders extends LitElement {
   static override styles = [
     baseStyles,
     tableTargetStyles,
+    signalChipStyles,
     css`
       :host {
         display: block;
@@ -93,6 +95,12 @@ export class TillHeldOrders extends LitElement {
       .meta {
         color: var(--wt-color-text-muted);
         font-variant-numeric: tabular-nums;
+      }
+
+      .signals {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--wt-space-2);
       }
 
       .action-options {
@@ -166,6 +174,11 @@ export class TillHeldOrders extends LitElement {
     return parts.join(" · ");
   }
 
+  #signals(order: HeldOrderSummary): TemplateResult | typeof nothing {
+    const chips = signalChips(order.signals);
+    return chips.length === 0 ? nothing : html`<span class="signals">${renderChips(chips)}</span>`;
+  }
+
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
     return html`
@@ -174,6 +187,7 @@ export class TillHeldOrders extends LitElement {
           <span class="number">#${order.orderNumber}</span>
           ${order.label ? html`<span class="label">${order.label}</span>` : nothing}
           <span class="meta">${this.#meta(order)}</span>
+          ${this.#signals(order)}
         </div>
         <div class="controls">
           <wt-button

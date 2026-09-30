@@ -2822,6 +2822,7 @@ describe("till-table-order-screen", () => {
       posY: null,
       shape: null,
       rotation: null,
+      signals: [],
       party: null,
       ...over,
     });

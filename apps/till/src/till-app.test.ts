@@ -86,6 +86,7 @@ const heldSummary: HeldOrderSummary = {
   hasPayments: false,
   partyId: null,
   openedAt: "2026-08-05T10:00:00.000Z",
+  signals: [],
 };
 
 const floorZone: FloorZone = { id: "z1", name: "Comedor", displayOrder: 0, active: true };
@@ -109,6 +110,7 @@ const freeTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  signals: [],
   party: null,
 };
 
@@ -133,6 +135,7 @@ const openTable: TableState = {
   posY: null,
   shape: null,
   rotation: null,
+  signals: [],
   party: {
     id: "v-2",
     revision: 3,
@@ -1125,6 +1128,11 @@ describe("till-app", () => {
       // gone (a handheld has no counter to return to).
       expect(floor(el)!.canExitToCounter).toBe(false);
       expect(floor(el)!.shadowRoot!.querySelector(".back")).toBeNull();
+    });
+
+    it("gives the handheld's floor no way into a station view, which a handheld cannot open", async () => {
+      const el = await toHandheldFloor();
+      expect(floor(el)!.canOpenStation).toBe(false);
     });
 
     it("does NOT leave the face-set when back-to-counter fires from the floor (stays on floor)", async () => {
@@ -7463,6 +7471,25 @@ describe("persistent till destinations", () => {
     await flush(fresh);
     expect(location.pathname).toBe(departed);
     expect(station(fresh)).toBeNull();
+  });
+
+  it("opens the station the floor's summary names, and the floor offers it on a till", async () => {
+    const second = { ...defaultStation, id: "st-bar", name: "Bar", isDefault: false };
+    const { el } = await mountApp({
+      listStations: vi.fn().mockResolvedValue([defaultStation, second]),
+    });
+    await toCounter(el);
+    selectTab(el, "floor");
+    await flush(el);
+    expect(floor(el)!.canOpenStation).toBe(true);
+
+    emit(floor(el)!, "show-station", { stationId: "st-bar" });
+    await flush(el);
+
+    expect(location.pathname).toBe("/tabs/floor/view/station/station/st-bar");
+    expect(
+      station(el)!.shadowRoot!.querySelector<TillStationQueue>("till-station-queue")!.stationId,
+    ).toBe("st-bar");
   });
 
   it("uses the current destination when login is pending and leaves history inert after logout", async () => {

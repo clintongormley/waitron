@@ -143,6 +143,7 @@ function table(id: string, label: string, tableParty: TableParty | null): TableS
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: tableParty,
   };
 }

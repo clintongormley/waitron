@@ -93,6 +93,8 @@ import {
   type DraftPreview,
 } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
+import { signalChipStyles } from "../widgets/signal-chips.js";
+import { billRequestOf } from "../state/table-signals.js";
 
 export type { TableServiceStatus };
 
@@ -592,6 +594,7 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       .bill-actions,
+      .bill-request,
       .finish {
         grid-column: 1 / -1;
         display: flex;
@@ -1010,6 +1013,7 @@ export class TillTableOrderScreen extends LitElement {
       }
     `,
     segmentedOptionStyles,
+    signalChipStyles,
   ];
 
   /** The APP owns and reloads them; the drawer, total and badge render from these, never a re-price. */
@@ -2787,6 +2791,7 @@ export class TillTableOrderScreen extends LitElement {
             </div>`
           : nothing
       }
+      ${this.#billRequest(this.party)}
       <div class="finish">
         <wt-button
           variant="secondary"
@@ -2797,6 +2802,37 @@ export class TillTableOrderScreen extends LitElement {
         </wt-button>
       </div>
     </section>`;
+  }
+
+  /** Whether the party has asked for the bill is read from the floor, which carries it. */
+  #billRequest(party: TableParty): TemplateResult {
+    const requested = billRequestOf(this.tables, party.id) !== undefined;
+    const scope = (key: "table.request_bill" | "table.cancel_bill_request") =>
+      t(key).replace("{party}", () => party.displayName);
+    return html`<div class="bill-request">
+      ${
+        requested
+          ? html`<span class="chip tone-primary-filled" data-bill-requested
+                >${t("signal.bill_requested")}</span
+              >
+              <wt-button
+                variant="secondary"
+                data-cancel-bill-request
+                .disabled=${this.groupCommandBusy}
+                @click=${() => this.#dispatch("request-bill", { requested: false })}
+              >
+                ${scope("table.cancel_bill_request")}
+              </wt-button>`
+          : html`<wt-button
+              variant="secondary"
+              data-request-bill
+              .disabled=${this.groupCommandBusy}
+              @click=${() => this.#dispatch("request-bill", { requested: true })}
+            >
+              ${scope("table.request_bill")}
+            </wt-button>`
+      }
+    </div>`;
   }
 
   #billRow(bill: PartyBill, index: number): TemplateResult {

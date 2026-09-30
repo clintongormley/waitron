@@ -35,6 +35,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
   {
@@ -56,6 +57,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
   {
@@ -77,6 +79,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
   {
@@ -98,6 +101,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
   {
@@ -121,6 +125,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
   {
@@ -144,6 +149,7 @@ const tables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
 ];
@@ -171,6 +177,7 @@ const placedTables: TableState[] = [
     posY: 400,
     shape: "round",
     rotation: 0,
+    signals: [],
     party: null,
   },
   {
@@ -192,6 +199,7 @@ const placedTables: TableState[] = [
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
   },
 ];
@@ -357,6 +365,62 @@ describe.each(["light", "dark"] as const)("till-floor-screen a11y (%s theme)", (
     >("wt-table-token")!;
     await token.updateComplete;
     expect(token.shadowRoot!.querySelector("[data-fire-due]")).not.toBeNull();
+    await expectNoA11yViolations(map.host);
+  });
+
+  it("has no violations with signals side by side and the stations' summary, on the list and on the map", async () => {
+    const signalled = partyTables.map((table): TableState =>
+      table.party === null
+        ? table
+        : {
+            ...table,
+            readyToServe: 1,
+            signals: [
+              { kind: "take_order" },
+              {
+                kind: "ready",
+                byStation: [
+                  { stationId: "bar", stationName: "Bar", count: 3 },
+                  { stationId: "kitchen", stationName: "Kitchen", count: 1 },
+                ],
+              },
+              { kind: "long_wait", band: "warm" },
+              { kind: "long_wait", band: "overdue" },
+              { kind: "held_unavailable", groupId: "g2", lineNames: ["Steak"] },
+              { kind: "bill_requested", requestedAt: "2026-09-29T20:00:00.000Z" },
+            ],
+          },
+    );
+    const list = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: signalled, canOpenStation: true },
+      theme,
+    );
+    expect(list.el.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
+    expect(list.el.shadowRoot!.querySelector("[data-open-station]")).not.toBeNull();
+    await expectNoA11yViolations(list.host);
+    cleanupWidgets();
+
+    const onMap = signalled.map((table, index) => ({
+      ...table,
+      posX: 100 + index * 200,
+      posY: 300,
+      shape: "round" as const,
+      rotation: 0,
+    }));
+    const map = await mountWidget<TillFloorScreen>(
+      "till-floor-screen",
+      { zones, tables: onMap },
+      theme,
+    );
+    const canvas = map.el.shadowRoot!.querySelector("wt-floor-canvas")!;
+    await canvas.updateComplete;
+    const token = canvas.shadowRoot!.querySelector<
+      HTMLElement & { updateComplete: Promise<unknown> }
+    >("wt-table-token")!;
+    await token.updateComplete;
+    expect(token.shadowRoot!.querySelectorAll("[data-chip]").length).toBeGreaterThan(5);
+    expect(map.el.shadowRoot!.querySelector("[data-station-summary]")).not.toBeNull();
     await expectNoA11yViolations(map.host);
   });
 

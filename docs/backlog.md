@@ -3075,7 +3075,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         in screenshots during A117 but not measured: a round token's "Reservada 22:30" chip does
         the same. The owner chose on 2026-09-29 to land #891 with the chip inside the token and
         fix this later. **Next action:** decide whether the map keeps a token inside the plan, or
-        the chip hangs off the token's edge like "Unsent".
+        the chip hangs off the token's edge like "Unsent". _(2026-09-30, service plan Task 10: the
+        token now also carries the table's signal chips (ready per station, take order, a wait,
+        an unavailable held dish, bill requested), one row each, drawn like "Time to fire": they
+        wrap only between words and run past the token's edge. Seen in screenshots, not measured:
+        at 390 px a floor of six tables with two or three chips each overlapped so much that
+        tokens covered each other's chips; at 1280 px they did not overlap.)_
       - The map gives its "forgotten table" corner marker no spoken name. This predates the
         branch: at `700ec7f70` `wt-floor-canvas` passes its tables no such label.
     - The table screen:

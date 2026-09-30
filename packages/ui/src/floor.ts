@@ -22,6 +22,17 @@ export interface TableServiceStatus {
   color: string;
 }
 
+/** Which token a chip's colour reads: a border in that colour, or `primary-filled` for a chip painted
+ * in the primary colour itself. */
+export type FloorChipTone = "success" | "primary" | "warning" | "danger" | "primary-filled";
+
+/** A chip the consumer has already worded; `key` names it for the consumer's own tests. */
+export interface FloorChip {
+  key: string;
+  text: string;
+  tone: FloorChipTone;
+}
+
 /** `posX`/`posY` are permille (0..1000) and `rotation` is degrees. */
 export interface FloorTable {
   id: string;
@@ -45,6 +56,8 @@ export interface FloorTable {
   partyName?: string;
   /** The seated party's release reminder has fallen due. */
   fireDue?: boolean;
+  /** What wants attention at the table, several at once, shown after the other badges. */
+  chips?: readonly FloorChip[];
 }
 
 /** A table's spatial placement — the mutable subset an edit-mode gesture produces. */
@@ -153,6 +166,7 @@ export interface FloorOccupancyInput {
   unsentDrafts?: readonly string[];
   partyName?: string;
   fireDue?: boolean;
+  chips?: readonly FloorChip[];
 }
 
 export function toFloorTable(
@@ -177,5 +191,6 @@ export function toFloorTable(
     unsentDrafts: occupancy.unsentDrafts,
     partyName: occupancy.partyName,
     fireDue: occupancy.fireDue,
+    chips: occupancy.chips,
   };
 }

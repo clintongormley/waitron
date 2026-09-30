@@ -335,6 +335,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
           posY: null,
           shape: null,
           rotation: null,
+          signals: [],
           party: party,
         },
       ]),

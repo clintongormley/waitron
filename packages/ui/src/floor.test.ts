@@ -336,3 +336,14 @@ test("toFloorTable carries the names of the people with an unsent order through 
   );
   expect(table.unsentDrafts).toEqual(["Alex", "Sam"]);
 });
+
+test("toFloorTable carries the consumer's signal chips through the occupancy half", () => {
+  const chips = [
+    { key: "bill-requested", text: "Bill requested", tone: "primary-filled" as const },
+  ];
+  const table = toFloorTable(
+    { id: "t1", label: "4", posX: 200, posY: 300 },
+    { state: "open-tab", pendingToServe: 0, chips },
+  );
+  expect(table.chips).toEqual(chips);
+});

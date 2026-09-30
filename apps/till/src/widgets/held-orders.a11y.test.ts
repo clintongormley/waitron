@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./held-orders.js";
 import type { TillHeldOrders } from "./held-orders.js";
@@ -15,6 +15,7 @@ const orders: HeldOrderSummary[] = [
     hasPayments: false,
     partyId: null,
     openedAt: "2026-08-05T10:00:00.000Z",
+    signals: [],
   },
   {
     id: "wo-2",
@@ -26,6 +27,7 @@ const orders: HeldOrderSummary[] = [
     hasPayments: false,
     partyId: null,
     openedAt: "2026-08-05T10:05:00.000Z",
+    signals: [],
   },
 ];
 
@@ -39,6 +41,27 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
 
   it("a populated held-orders list (with Retrieve/Discard controls) has no violations", async () => {
     const { host } = await mountWidget<TillHeldOrders>("till-held-orders", { orders }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("a list whose orders carry signals has no violations", async () => {
+    const signalled: HeldOrderSummary[] = [
+      {
+        ...orders[0]!,
+        label: "Ana",
+        signals: [
+          { kind: "ready", byStation: [{ stationId: "bar", stationName: "Bar", count: 2 }] },
+          { kind: "long_wait", band: "warm" },
+        ],
+      },
+      { ...orders[1]!, signals: [{ kind: "long_wait", band: "forgotten" }] },
+    ];
+    const { el, host } = await mountWidget<TillHeldOrders>(
+      "till-held-orders",
+      { orders: signalled },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-chip]")).toHaveLength(3);
     await expectNoA11yViolations(host);
   });
 
@@ -61,6 +84,7 @@ describe.each(["light", "dark"] as const)("till-held-orders a11y (%s theme)", (t
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
     ...over,
   });

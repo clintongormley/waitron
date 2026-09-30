@@ -224,6 +224,36 @@ export class WtTableToken extends LitElement {
         border: 1px solid var(--wt-color-warning);
       }
 
+      /* A consumer's signal chip: theme text on the neutral chip, its tone as the border, except the
+         filled tone, which is the primary/on-primary pair. */
+      .badge.chip {
+        border: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface-raised);
+        color: var(--wt-color-text);
+      }
+
+      .badge.chip.tone-success {
+        border-color: var(--wt-color-success);
+      }
+
+      .badge.chip.tone-primary {
+        border-color: var(--wt-color-primary);
+      }
+
+      .badge.chip.tone-warning {
+        border-color: var(--wt-color-warning);
+      }
+
+      .badge.chip.tone-danger {
+        border-color: var(--wt-color-danger);
+      }
+
+      .badge.chip.tone-primary-filled {
+        border-color: var(--wt-color-primary);
+        background: var(--wt-color-primary);
+        color: var(--wt-color-on-primary);
+      }
+
       /* The manual-status chip: text in the theme colour on a neutral chip, with the DATA-driven status
          colour as a border + a small swatch — never as a text background, so contrast stays token-fixed
          and the arbitrary colour cannot fail a11y. Verbatim from FP-1's .badge.status. */
@@ -311,6 +341,12 @@ export class WtTableToken extends LitElement {
               : nothing
           }
           ${this.#fireDueChip(t)}
+          ${(t.chips ?? []).map(
+            (chip) =>
+              html`<span class="badge chip tone-${chip.tone}" data-chip=${chip.key}
+                >${chip.text}</span
+              >`,
+          )}
           ${
             t.status != null
               ? html`<span class="badge status" data-status style="border-color: ${t.status.color}">

@@ -76,6 +76,8 @@ import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { MoveBillDetail } from "./screens/till-table-order-screen.js";
 import { owing, paidInPart } from "./state/bill-state.js";
+import { sendBillRequest } from "./state/bill-request.js";
+import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
   BillParty,
@@ -298,6 +300,7 @@ type PartyChange = { tables: string } & (
   | { kind: "gone" }
   | { kind: "tables"; now: string }
   | { kind: "bills"; outstanding: string }
+  | { kind: "bill_request"; requested: boolean }
   | { kind: "other" }
 );
 
@@ -326,6 +329,10 @@ function describePartyChange(
   if (was.billCount !== is.billCount || was.outstanding !== is.outstanding) {
     return { tables, kind: "bills", outstanding: is.outstanding };
   }
+  const requested = billRequestOf(after, was.id) !== undefined;
+  if (requested !== (billRequestOf(before, was.id) !== undefined)) {
+    return { tables, kind: "bill_request", requested };
+  }
   return { tables, kind: "other" };
 }
 
@@ -338,6 +345,10 @@ function partyChangeDetail(change: PartyChange): string {
     case "bills":
       return t("party.changed_bills").replace("{amount}", () =>
         formatMoney(change.outstanding, currentLocale()),
+      );
+    case "bill_request":
+      return t(
+        change.requested ? "party.changed_bill_requested" : "party.changed_bill_request_cancelled",
       );
     case "other":
       return t("party.changed_other");
@@ -2084,10 +2095,16 @@ export class TillApp extends LitElement {
     await this.#refreshStationQueue();
   }
 
-  #onShowStation(): void {
+  /** The floor's station summary names the station to open; the station screen reads it from the
+   * address when it mounts. */
+  #onShowStation(event: Event): void {
     this.errorKey = undefined;
-    if (this.#inShell()) this.#pushDrill({ kind: "station" });
-    else this.#setScreen("station");
+    const stationId = (event as CustomEvent<{ stationId?: string } | undefined>).detail?.stationId;
+    if (this.#inShell()) {
+      this.#pushDrill({ kind: "station" });
+      if (stationId !== undefined && this.drill?.kind === "station")
+        this.#url.write({ "till-station": stationId }, true);
+    } else this.#setScreen("station");
   }
 
   /**
@@ -3325,6 +3342,26 @@ export class TillApp extends LitElement {
     await this.#onGroupRequest(request);
   }
 
+  /** Records or takes back the party's bill request, then reads the floor, which carries it. A
+   * request that got no answer is sent again under its submission id before the floor is read. */
+  async #onRequestBill(event: Event): Promise<void> {
+    const { requested } = (event as CustomEvent<{ requested: boolean }>).detail;
+    const party = this.orderParty;
+    if (party === null || this.groupCommandBusy) return;
+    this.groupCommandBusy = true;
+    this.errorKey = undefined;
+    try {
+      const answer = await sendBillRequest(this.api, party.id, requested, party.revision);
+      this.#notePartyRevision(party.id, answer.revision);
+      await this.#retakePartyFromFloor();
+    } catch (error) {
+      if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
+      await this.#onTableRefusal(error);
+    } finally {
+      this.groupCommandBusy = false;
+    }
+  }
+
   async #onServeLines(event: Event): Promise<void> {
     const { items } = (event as CustomEvent<ServeLinesDetail>).detail;
     await this.#onServiceRequest((party, command) => this.api.markServed(party.id, items, command));
@@ -4208,6 +4245,7 @@ export class TillApp extends LitElement {
       .nameRefusal=${this.nameRefusal}
       .groupCommandBusy=${this.groupCommandBusy}
       .handheld=${this.handheldMode}
+      .canOpenStation=${this.#allowsDestination("station")}
     ></till-card-grid>`;
   }
 
@@ -4313,7 +4351,7 @@ export class TillApp extends LitElement {
         @collect-order=${(event: Event) => void this.#onCollectOrder(event)}
         @advance-ticket-item=${(event: Event) => void this.#onAdvanceTicketItem(event)}
         @mark-collected=${(event: Event) => void this.#onMarkCollected(event)}
-        @show-station=${() => this.#onShowStation()}
+        @show-station=${(event: Event) => this.#onShowStation(event)}
         @enrolled=${() => void this.#onEnrolled()}
         @switch-device=${() => void this.#onSwitchDevice()}
         @device-unauthorized=${() => void this.#onDeviceUnauthorized()}
@@ -4361,6 +4399,7 @@ export class TillApp extends LitElement {
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}
         @split-lines=${(event: Event) => void this.#onSplitLines(event)}
         @finish-table=${() => void this.#onFinishTable()}
+        @request-bill=${(event: Event) => void this.#onRequestBill(event)}
         @take-payment=${(event: Event) => void this.#onTakePayment(event)}
         @reprint-bill=${(event: Event) => void this.#onReprintBill(event)}
         @reprint-kitchen-tickets=${(event: Event) => void this.#onReprintKitchenTickets(event)}

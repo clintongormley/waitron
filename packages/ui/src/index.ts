@@ -45,6 +45,8 @@ export {
   toFloorTable,
 } from "./floor.js";
 export type {
+  FloorChip,
+  FloorChipTone,
   FloorOccupancyInput,
   FloorPlacementInput,
   FloorTable,
