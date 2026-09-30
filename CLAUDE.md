@@ -284,7 +284,7 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   one localized message beside the action, which stays disabled until the fields are fixed — no
   summary at the top (owner, 2026-09-28). A refusal from a request never disables the action by
   itself, and one that names a shown field says so under that field (owner, 2026-09-29) — except a
-  login's refusal, which singles out no field (below). Every input has a semantic `name`, never a
+  sign-in's refusal, which marks no field (below). Every input has a semantic `name`, never a
   generated widget id.
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -332,13 +332,15 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   and the successful method only with Remember selected, never in tab storage.
 - **A login's refusal never says whether the account exists** (owner, 2026-09-30): unknown,
   suspended, pending, wrong password or PIN and wrong code all answer one code (`password.invalid`
-  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, naming no
-  field as the wrong one; identity's refusals carry the real cause as a log-only `reason`, which
-  `createErrorBoundary` logs. One owner-approved exception: a passkey Waitron holds no row for
-  answers `passkey.not_registered` so the browser can be told to forget it — it says only whether
-  that credential id has a row; a suspended owner's passkey stays generic. Guards: the one-answer
-  cases in identity's login suites and the route suites conventions-ui.md names, weaker than the
-  set looks — some sign-in routes have no case of their own, and a new one is seen by none. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, marking no
+  field on a sign-in form — only a missing or malformed value is marked there; identity's refusals
+  carry the real cause as a log-only `reason`, which `createErrorBoundary` logs. One owner-approved
+  exception: a passkey Waitron holds no row for answers `passkey.not_registered` so the browser can
+  be told to forget it — it says only whether that credential id has a row; a suspended owner's
+  passkey stays generic. Guards: the one-answer cases in identity's login suites and the route
+  suites conventions-ui.md names, weaker than the set looks — some sign-in routes have no case of
+  their own, and a new one is seen by none. See
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
   menu stays on a phone's screen (owner decision, A155). Cost: most tables put the menu past a
   phone's right edge. Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name — it

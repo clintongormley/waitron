@@ -25,7 +25,7 @@ describe.each(["light", "dark"] as const)("setup-reset-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the refused login marked", async () => {
+  it("has no violations with the refused login shown", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>(
       "setup-reset-screen",
       { credentialsRejected: true },

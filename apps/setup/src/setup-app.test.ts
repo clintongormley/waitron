@@ -1298,6 +1298,35 @@ describe("setup-app", () => {
     },
   );
 
+  // A primary of this version answers every refused login with `password.invalid`, which the fetcher
+  // in `apps/server/src/mirror-bundle-fetch.ts` passes on, so this sentence must not name one (A153).
+  it.each([
+    [
+      "en-GB",
+      "Couldn't join the primary server: it couldn't be reached, it refused the request, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server, then try again.",
+    ],
+    [
+      "es-ES",
+      "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado la solicitud o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante e inténtalo de nuevo.",
+    ],
+  ] as const)(
+    "says a failed join covers an unreachable primary, a refused request or an unusable reply, naming no refused login (%s)",
+    async (locale, sentence) => {
+      try {
+        const adopt = vi
+          .fn()
+          .mockRejectedValue({ code: "mirror.bundle_fetch_failed", params: {}, status: 502 });
+        const el = await mountSetupApp(stubApi({ adopt }));
+        setLocale(locale);
+        adoptRequest(el);
+        await flush(el);
+        expect(await bottomOf(await screenHost(el, "connect"))).toBe(sentence);
+      } finally {
+        setLocale("en-GB");
+      }
+    },
+  );
+
   it.each([
     ["mirror.primary_url_invalid", {}, "primaryUrl", "Check the primary server address."],
     [
@@ -1986,7 +2015,7 @@ describe("resetting a join that stopped partway", () => {
     expect(screen.shadowRoot!.querySelector("[data-test=personId]")).toBeNull();
   });
 
-  it("marks the fields and names the refused login when the password is refused", async () => {
+  it("marks no field and names the refused login when the password is refused", async () => {
     const resetIncompleteAdopt = vi
       .fn()
       .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
@@ -1995,10 +2024,10 @@ describe("resetting a join that stopped partway", () => {
     await submitReset(el);
     const screen = await screenHost(el, "reset");
     expect(screen.shadowRoot!.querySelector("[data-test=personId]")!.hasAttribute("invalid")).toBe(
-      true,
+      false,
     );
     expect(screen.shadowRoot!.querySelector("[data-test=password]")!.hasAttribute("invalid")).toBe(
-      true,
+      false,
     );
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
       "That person ID and password are not the admin login used to connect this server. Check them and try again.",
@@ -2043,7 +2072,7 @@ describe("resetting a join that stopped partway", () => {
     expect(resetIncompleteAdopt).toHaveBeenCalledTimes(2);
     const screen = await screenHost(el, "reset");
     expect(screen.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
-      "Check the admin password.",
+      "",
     );
     expect(await bottomOf(await screenHost(el, "reset"))).toBe(
       "That person ID and password are not the admin login used to connect this server. Check them and try again.",

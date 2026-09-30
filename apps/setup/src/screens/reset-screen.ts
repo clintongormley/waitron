@@ -51,8 +51,8 @@ export class SetupResetScreen extends LitElement {
 
   @property({ type: Boolean }) busy = false;
 
-  /** The server refused the person ID and password as a pair, so both fields are marked until
-   * either changes or the reset is asked for again. */
+  /** The server refused the login. Marks no field (owner rule, A153); its message stays until
+   * either field changes or the reset is asked again. */
   @property({ type: Boolean }) credentialsRejected = false;
 
   /** A field the server refused on its own (`setup.request_invalid`'s `params.field`). */
@@ -90,11 +90,16 @@ export class SetupResetScreen extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (
-      (changed.has("credentialsRejected") && this.#rejected()) ||
-      (changed.has("invalidField") && this.#refusedField() !== undefined)
-    )
+    if (changed.has("invalidField") && this.#refusedField() !== undefined)
       this.#focusFirstInvalid();
+    else if (changed.has("credentialsRejected") && this.#rejected()) this.#focusPassword();
+  }
+
+  #focusPassword(): void {
+    void this.updateComplete.then(() => {
+      if (this.isConnected)
+        this.shadowRoot!.querySelector<HTMLElement>("wt-input[name=password]")?.focus();
+    });
   }
 
   #focusFirstInvalid(): void {
@@ -143,7 +148,7 @@ export class SetupResetScreen extends LitElement {
   #field(label: string, key: ResetField, missing: Set<ResetField>): TemplateResult {
     const error = missing.has(key)
       ? t(MISSING[key])
-      : this.#rejected() || this.#refusedField() === key
+      : this.#refusedField() === key
         ? t(CHECK[key])
         : "";
     return html`<wt-input

@@ -41,7 +41,7 @@ export const shellEn = {
     "Provisioning failed. Check that the server is on and your device is connected to its network, then try again. If you see a certificate warning, use the certificate help below.",
 
   "shell.adopt.bundle_fetch_failed":
-    "Couldn't join the primary server: it couldn't be reached, it refused the login, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server and that the login is correct, then try again.",
+    "Couldn't join the primary server: it couldn't be reached, it refused the request, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server, then try again.",
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
   "shell.adopt.login_failed":
@@ -161,7 +161,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "La configuración ha fallado. Comprueba que el servidor está encendido y que tu dispositivo está conectado a su red, e inténtalo de nuevo. Si ves un aviso de certificado, usa la ayuda sobre el certificado de abajo.",
 
   "shell.adopt.bundle_fetch_failed":
-    "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado el inicio de sesión o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante y que el inicio de sesión es correcto, e inténtalo de nuevo.",
+    "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado la solicitud o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante e inténtalo de nuevo.",
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.login_failed":
