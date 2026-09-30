@@ -770,6 +770,14 @@ hours past the threshold was not measured; and the whole arm lasts about half a 
 less than the 116 seconds S4's probe waited before litestream logged its first sync error, so the
 absence of log lines says nothing.
 
+> 2026-09-30: Litestream 0.5.17 compares the side file with 499,999,112 bytes, not 497,086,464: it
+> also counts the file's 32-byte header and each page's 24-byte header (`calcWALSize`, `db.go` line
+> 1563 at tag v0.5.17; its own log prints `threshold=499999112`, A135). The probe's
+> `TRUNCATE_THRESHOLD_BYTES` (`bench/sqlite-failover/src/probes/autocheckpoint.ts`) uses the smaller
+> figure. Round 13 is still the first sample past the real one: the `D-wal-by-round` line above has
+> 496,328,192 bytes after round 12 and 537,754,792 after round 13. Figures:
+> [testing-guide.md](../developers/testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
+
 ### 3 — which restore points survive
 
 **Failing would print** (the probe is a measurement, so these make it `VOID`):

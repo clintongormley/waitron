@@ -673,14 +673,76 @@ command starts with a Waitron checkout's `.bin/litestream` or `.bin/versitygw`
 
 ## A sale can wait behind Litestream's own checkpoint
 
-CLAUDE.md §5 states the rule; these are its figures. Litestream 0.5.17 holds the write lock through
-each of its PASSIVE checkpoints. Measured 2026-09-29 with one seller through `POST /api/sales` (run
-36615242523): on a disk delayed 100 ms per flush, 14 writes in three runs waited 829–831 ms to
-begin; on a CI runner's normal disk, 288 writes waited 20 ms or more, most of them 33–105 ms and
-the longest 629 ms. Each such wait spanned a Litestream checkpoint log line; with streaming off no
-write waited over 1 ms. How long a write waits behind a checkpoint with several sellers at once,
-and on the box's own disk, is not measured. How the probe ran, and what taking those checkpoints
-away from Litestream would involve, are in `docs/backlog.md`, A130's entry, under A133.
+CLAUDE.md §5 states the rule; these are its figures. SQLite writes each change first to a side
+file beside the database (its write-ahead log); a checkpoint copies those changes into the database
+itself so SQLite can write the side file again from its beginning (below, "restart the side
+file"); a TRUNCATE checkpoint also cuts the file to zero bytes, and the server's fold-back is one
+of those (`checkpointTruncate`, `packages/store/src/index.ts`); a PASSIVE checkpoint copies as much
+as it can "without waiting for any database readers or writers to finish" (SQLite's
+`sqlite3_wal_checkpoint_v2` documentation). Read in Litestream 0.5.17's code (A133), Litestream
+holds the write lock through each of its PASSIVE checkpoints; measured by A135 (below), writes also
+waited through the TRUNCATE checkpoint it forces when the side file has passed about 477 MiB and a
+PASSIVE one could not restart it, and through the snapshot it takes right after that. Measured
+2026-09-29 with one seller through `POST /api/sales` (run 36615242523): on a disk delayed 100 ms
+per flush, 14 writes in three runs waited 829–831 ms to begin; on a CI runner's normal disk, 288
+writes waited 20 ms or more, most of them 33–105 ms and the longest 629 ms. Each such wait spanned
+a Litestream checkpoint log line; with streaming off no write waited over 1 ms. How long a write
+waits behind a checkpoint with several sellers at once, and on the box's own disk, is not measured.
+How A133's probe ran is in `docs/backlog.md`, A130's entry, under A133. Litestream runs two routine
+checkpoints, and the product leaves both at Litestream's defaults: a timed one (by default once the
+database file has gone a minute without changing, `DefaultCheckpointInterval`, `db.go` line 34 at
+tag v0.5.17, checked at line 1479), and a regular page-count one (`min-checkpoint-page-count`,
+once the side file holds 1,000 pages by default, line 36). Its emergency checkpoint, at
+`truncate-page-n` pages, is separate. What switching off the timed one and setting the regular
+page-count one to a billion pages did is below.
+
+**Switching off Litestream's timed checkpoint and setting its regular page-count one to a billion
+pages removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
+second** (A135, measured 2026-09-30, run 36657175716, probe commit `bc3b94671` on the throwaway
+branch `probe/a135-litestream-checkpoints`). The same probe, streaming on, one seller for 300 s,
+three runs each of the product's settings and of a variant adding `checkpoint-interval: 0s` and
+`min-checkpoint-page-count: 1000000000` to the database's Litestream entry. On the runner's normal
+disk Litestream still forced its emergency checkpoints under the variant: the ones it runs once the
+side file passes about 477 MiB (third bullet). On the delayed disk it logged no checkpoint at all;
+the side file peaked at 278–280 MiB there. Judged by A133's criterion, reused unchanged: with
+streaming on, writes wait under 20 ms to begin, as in A133's streaming-off runs, where none waited
+over 1 ms. The variant met it on the delayed disk and failed it on the normal disk, where 10 writes
+per run waited 20 ms or more.
+
+- Delayed disk (10 ms per write and 100 ms per flush; 50 synced 4 KiB writes took 6.8–7.1 s,
+  against 14–17 ms on the runner's own disk). Product settings: 12–13 writes per run waited
+  829–831 ms, slowest sale 1.07–1.08 s. Variant: no write waited more than 1 ms to begin, slowest
+  sale 0.57–0.65 s. In one run the slowest sale began 1 ms before the server's fold-back, which
+  held the write queue for 278–294 ms across the runs, and the sale's first write was recorded the
+  millisecond that fold-back ended; in the other two it was a sale whose own commit took
+  624–625 ms, about a second before the fold-back.
+- The runner's normal disk (about 80 sales a second). Product settings: 125–160 writes per run
+  waited 20 ms or more, the longest 129–179 ms. Variant: 10 writes per run waited 20 ms or more and
+  6–7 waited 100 ms or more, the longest 430–729 ms. Each of those 30 waits contained one of
+  Litestream's emergency checkpoints: the 20 that contained a PASSIVE one lasted 33–179 ms, and
+  every wait of 229–729 ms began 21–205 ms after Litestream logged `forcing truncate checkpoint`,
+  and lasted through that checkpoint and the snapshot Litestream takes right after it.
+- Under the variant SQLite's own automatic checkpoint, still on, did not restart the side file
+  (Litestream keeps a read transaction open "to prevent checkpointing", `db.go` line 1183 at tag
+  v0.5.17). Measured from the last size measurement before the file began to grow (about 4 MiB)
+  to the first at or above 256 MiB, and counting the sales that both started and finished between
+  those two measurements, the file grew by 226–228 KiB per one-line cash sale on either disk, over
+  1,132–1,155 sales. On the normal disk, past 499,999,112 bytes, Litestream ran an emergency
+  PASSIVE checkpoint and, when that did not restart the file, an emergency TRUNCATE one. That byte
+  count is the side-file size of 121,359 pages of 4,096 bytes (Litestream's default
+  `truncate-page-n`), counting each page's 24-byte header and the file's 32-byte header
+  (`calcWALSize`, `db.go` line 1563 at tag v0.5.17); Litestream's own log printed
+  `threshold=499999112`. The server measures the file against its 256 MiB limit once a minute
+  (`TICK_MS`, `packages/stream/src/supervisor.ts`), so at this rate the file reached 525–529 MiB
+  between measurements.
+- Under the variant the server paused the stream once per run on the delayed disk and one to three
+  times per run on the normal disk (`apps/server/src/alert-sources.ts` lists `backup.stream_paused`
+  for as long as the stream reads paused). Every run ended streaming, and every sale in all twelve
+  runs was answered 200.
+- The stream loop and stream pause tests passed three times each with the variant written into
+  every Litestream configuration their runs made.
+
+Not measured: a venue's own sale rate, several sellers at once, and the box's own disk.
 
 **What a test run prints**
 
