@@ -3501,8 +3501,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`apps/till/src/widgets/basket.ts`); the basket reads each line's sent state and price before
       an adjustment from `GET /api/working-orders/:id/lines` when it loads the order, and loads the
       order again after an adjustment is made, refused as out of date, or left unanswered, taking
-      no edit until that load answers, the basket moves on, the operator signs out, or the till's
-      request limit (150 s) passes, after which a late answer is dropped. An unsaved or changed basket offers none of them, nor does
+      no edit until that load answers, the basket moves on (cleared, or loaded again, the same
+      order included), the operator signs out, or the till's request limit (150 s) passes, after
+      which a late answer is dropped. An unsaved or changed basket offers none of them, nor does
       one whose pay, place or hold is out; a changed one offers them again once it is held and
       retrieved. Left open:
       - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be
@@ -3517,13 +3518,6 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         while it has read the order's lines; when they cannot be read, it shows both on every
         line. **Next action:** decide whether the edit should refuse dropping a sent line, as the
         table's Cancel requires a reason.
-      - **Retrieving the same order again while it is being read again ends the basket's lock
-        early.** After an adjustment the counter reads the order again and takes no edit meanwhile
-        (`#reloadCounterOrder`, `apps/till/src/till-app.ts`). Retrieving that same order from the
-        held orders list in that moment loads it and ends the lock (`loadFrom` ends it whichever
-        load calls it). An edit made after that retrieve is replaced when the earlier read lands,
-        because the order's id has not changed. **Next action:** decide whether a retrieve should
-        cancel a read that is still out, or accept the window.
       - **Two basket changes the app makes by itself do not check the lock:** the menu poll's
         price-version update of the basket's lines (`adoptLines`) and the order's label
         (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). Neither checked `sending`

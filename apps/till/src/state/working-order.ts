@@ -196,6 +196,7 @@ export class WorkingOrderStore {
   #sending = false;
   /** Set by {@link lockEdits}; the lock that is current, if any. */
   #editLock: object | null = null;
+  #loadGeneration = 0;
   #lastAdded?: OrderLine;
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
@@ -262,6 +263,12 @@ export class WorkingOrderStore {
       this.#editLock = null;
       this.emit("changed");
     };
+  }
+
+  /** Counts {@link clear} and {@link loadFrom} calls, so a copy of the same order loaded again
+   * reads as a different basket where {@link id} does not. */
+  get loadGeneration(): number {
+    return this.#loadGeneration;
   }
 
   get editsLocked(): boolean {
@@ -489,6 +496,7 @@ export class WorkingOrderStore {
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does
    * not collide with the settled one. */
   clear(): void {
+    this.#loadGeneration++;
     this.#editLock = null;
     this.#lines.length = 0;
     this.#id = crypto.randomUUID();
@@ -516,6 +524,7 @@ export class WorkingOrderStore {
     this.#persisted = true;
     this.#dirty = false;
     this.#editLock = null;
+    this.#loadGeneration++;
     this.emit("changed");
   }
 

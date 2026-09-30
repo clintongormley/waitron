@@ -1100,6 +1100,21 @@ describe("WorkingOrderStore.lockEdits", () => {
     expect(s.lines[0]!.quantity).toBe("3");
   });
 
+  it("counts every load and clear, a load of the same order included, and nothing else", () => {
+    const s = new WorkingOrderStore();
+    const first = s.loadGeneration;
+
+    s.loadFrom("wo-2", [{ product: cafe, quantity: "1" }]);
+    s.loadFrom("wo-2", [{ product: cafe, quantity: "1" }]);
+    expect(s.loadGeneration).toBe(first + 2);
+    s.setLineQuantity(0, "2");
+    s.label = "Mesa 4";
+    s.lockEdits()();
+    expect(s.loadGeneration).toBe(first + 2);
+    s.clear();
+    expect(s.loadGeneration).toBe(first + 3);
+  });
+
   it("leaves a later lock in place when an earlier one is unlocked", () => {
     const s = new WorkingOrderStore();
     const earlier = s.lockEdits();

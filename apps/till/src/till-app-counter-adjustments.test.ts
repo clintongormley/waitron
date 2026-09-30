@@ -689,6 +689,31 @@ describe("till-app: the basket while the order is loaded again", () => {
     await press(el, plus(el, 1));
     expect(counter(el).store.dirty).toBe(true);
   });
+
+  it("keeps an edit made after the same order was retrieved again while it was being read again", async () => {
+    const reload = deferred<HeldOrder>();
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementationOnce(() => reload.promise)
+        .mockResolvedValue(heldOrder(5, "0.00")),
+    });
+    await previewComp(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+
+    emit(counter(el), "retrieve-order", { id: "wo-9" });
+    await flush(el);
+    expect(counter(el).store.revision).toBe(5);
+    await press(el, plus(el, 1));
+    expect(counter(el).store.lines[1]!.quantity).toBe("2");
+
+    reload.resolve(heldOrder(5, "0.00"));
+    await flush(el);
+    expect(counter(el).store.lines[1]!.quantity).toBe("2");
+    expect(counter(el).store.dirty).toBe(true);
+  });
 });
 
 describe("till-app: the basket's lock while the order is loaded again", () => {
