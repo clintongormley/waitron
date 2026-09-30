@@ -3441,23 +3441,33 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     (`readCreditedSales`) and the list (`readEntryRows`: a first and a later page, for everyone and
     for one person) — reading the bills through `SEARCH working_orders USING INDEX
     working_orders_opened_at_idx`, and both adjustment reads sorting in a `USE TEMP B-TREE FOR
-    ORDER BY`. Over the whole month the medians were 125 ms for the report, 32 ms for the list's
-    first page and 29 ms for its 21st, and 20 ms for one person's page; over one day, 5 ms for the
-    report and under 2 ms for any page. No index was added for the list. One on
-    `adjustments (created_at, id)` left every plan unchanged and every median within 2 ms: no code
-    under `packages/`, `apps/`, `scripts/` or `deploy/` runs `ANALYZE`, and without its statistics
-    the planner still starts from the bills. One on `adjustments (requested_by, created_at, id)`
-    was used for one person's page, and on a year of data (96,000 bills, 240,000 adjustments) took
-    that page from about 25 ms to 0.8 ms over the newest month, but from about 1 ms to about 39 ms
-    over a single day. Added by the review fixes:
-    the list of single adjustments comes one page at a time (200 by default, with a "Show more"
+    ORDER BY`. The timings were taken on the development Mac (Apple M5 Pro, 64 GiB of memory).
+    Over the whole month the medians were 125 ms for a `computeAdjustmentReport` call (the route
+    around it was not timed), 32 ms for the list's first page and 29 ms for its 21st, and 20 ms for
+    one person's page; over one day, 5 ms for `computeAdjustmentReport` and under 2 ms for any
+    page. No index was added for the list. One on `adjustments (created_at, id)`, in that run,
+    with no `ANALYZE` statistics, was not chosen by the planner: every plan stayed the same and
+    every median within 2 ms. The same measuring run reported that with `ANALYZE` run in the
+    scratch database the planner did use it, and the list's month pages took 1.46 ms and
+    1.36 ms. Nothing in the product runs `ANALYZE`: `git grep -niw analyze` over `packages/`,
+    `apps/`, `scripts/` and `deploy/` found nothing on 2026-09-30. One on `adjustments
+    (requested_by, created_at, id)` was used for one person's page, and on a year of data (96,000
+    bills, 240,000 adjustments) took that page from about 25 ms to 0.8 ms over the newest month,
+    but from about 1 ms to about 39 ms over a single day. Added by the review fixes: the list of
+    single adjustments comes one page at a time (200 by default, with a "Show more"
     button under the list; the route takes `limit` and `after` and answers `{ entries, next }`),
-    and its person is chosen with `?personId=`. When the open list is read again (every minute, or
-    when something it shows changes), it reads on until it holds every row it showed, stopping
-    early if a further page brings back none of them; so rows loaded with "Show more" stay and a
-    new adjustment appears at the top. A new range or person starts from the first page. Choosing
-    a person or the guests shows that person's own totals by action, by stage and by reason;
-    otherwise the totals are everyone's.
+    and its person is chosen with `?personId=`. The open list is read again every 60 seconds and
+    whenever any adjustment, bill, person or location in the venue changes. That read starts at
+    the top and stops at the first page holding a row already on screen, reading at most 500 rows
+    (the largest page): the new rows go on top, the rows it read again are shown as they now read,
+    and the rows below them and the "Show more" position stay as they were, so rows loaded with
+    "Show more" stay and a "Show more" on its way still adds its page. If 500 new rows come before
+    any row on screen, the list starts again from those 500 and a "Show more" on its way is
+    dropped. The cost: rows below those read again are not read again, so a person's changed
+    name on them, or a change to the location's day cutover or time zone that moves rows into or
+    out of the range, shows only when the list is opened again. A new range or person starts from
+    the first page. Choosing a person or the guests shows that person's own totals by action, by
+    stage and by reason; otherwise the totals are everyone's.
     `@waitron/reporting` gained `validatedRangeWindow` (one call that checks a range's time zone,
     cutover and days and builds its window, used by top sellers, category sales, the VAT summary
     and this report) and `readLocationClock` (used by this report and the kitchen notices list).
