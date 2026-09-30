@@ -383,9 +383,13 @@ describe("cancelling an extra of a dish the kitchen does not have (B11g)", () =>
 
   it("tells the kitchen nothing for a dish that goes to no station", async () => {
     const billId = await billOf("toastie", "fire");
+    let recorded: Awaited<ReturnType<typeof notices>> = [];
 
-    const printed = await jobsDuring(() => cancelGherkins(billId));
+    const printed = await jobsDuring(async () => {
+      recorded = await noticesDuring(() => cancelGherkins(billId));
+    });
 
     expect(printed).toEqual([]);
+    expect(recorded).toEqual([]);
   });
 });
