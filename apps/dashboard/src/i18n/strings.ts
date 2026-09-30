@@ -1397,10 +1397,6 @@ export const en = {
     "Gross total incomplete: {count} lines recorded before classification began",
   "sales.gross_incomplete_one":
     "Gross total incomplete: 1 line recorded before classification began",
-  "sales.labels_title": "Labels",
-  "sales.label": "Label",
-  "sales.labels_overlap":
-    "Label totals overlap: a line counts in every label it carries, and a label can cut across categories.",
   "sales.printer": "Printer",
   "sales.print_categories": "Print category sales",
   "sales.print_sent": "Category sales sent to {printer}.",
@@ -3340,10 +3336,6 @@ export const es: Record<StringKey, string> = {
     "Total bruto incompleto: {count} líneas registradas antes de que empezara la clasificación",
   "sales.gross_incomplete_one":
     "Total bruto incompleto: 1 línea registrada antes de que empezara la clasificación",
-  "sales.labels_title": "Etiquetas",
-  "sales.label": "Etiqueta",
-  "sales.labels_overlap":
-    "Los totales por etiqueta se solapan: una línea cuenta en cada etiqueta que lleva, y una etiqueta puede abarcar varias categorías.",
   "sales.printer": "Impresora",
   "sales.print_categories": "Imprimir ventas por categoría",
   "sales.print_sent": "Ventas por categoría enviadas a {printer}.",

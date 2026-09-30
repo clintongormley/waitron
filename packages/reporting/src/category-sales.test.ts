@@ -3,18 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import type { SaleLineClassification } from "@waitron/shared";
 import { seedNodeAndSeries, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
-import {
-  at,
-  chain,
-  classified,
-  CUTOVER,
-  labelRows,
-  rows,
-  sellLines,
-  TZ,
-} from "../test/category-fixtures.js";
+import { at, chain, classified, CUTOVER, rows, sellLines, TZ } from "../test/category-fixtures.js";
 import type { LineSpec } from "../test/category-fixtures.js";
 import { computeCategorySales } from "./category-sales.js";
 import type { CategoryReport, CategorySalesInput, CurrentClassifier } from "./category-sales.js";
@@ -83,7 +75,6 @@ describe("computeCategorySales at time of sale", () => {
     expect(await run()).toEqual({
       mode: "at_time_of_sale",
       tree: [],
-      labels: [],
       gross: "0.00",
       net: "0.00",
       grossComplete: true,
@@ -424,59 +415,35 @@ describe("computeCategorySales at time of sale", () => {
     );
   });
 
-  it("counts a line in every label it carries, named by the latest recorded name, ordered by name", async () => {
-    const happyLater = { id: "lab-happy", name: "Happy hour drinks" };
-    const happyEarlier = { id: "lab-happy", name: "Happy hour" };
-    const alcoholic = { id: "lab-alcoholic", name: "Alcoholic" };
-    await sell("2026-08-20", [
-      { net: "10.00", gross: "11.00", cls: classified(chain(COCKTAILS), [alcoholic, happyLater]) },
-    ]);
-    await sell("2026-08-03", [
-      { net: "3.00", gross: "3.30", cls: classified(chain(DRINKS), [alcoholic, happyEarlier]) },
-      { net: "4.00", gross: "4.40", cls: classified(chain(DRINKS), [alcoholic]) },
-      { net: "5.00" },
-    ]);
+  it("reports no label totals, and ignores a stored line that still carries labels", async () => {
+    const storedWithLabels = {
+      reporting: chain(DRINKS),
+      labels: [{ id: "lab-alcoholic", name: "Alcoholic" }],
+    } as SaleLineClassification;
+    await sell("2026-08-04", [{ net: "1.00", gross: "1.10", cls: storedWithLabels }]);
 
     const report = await run();
 
-    expect(labelRows(report)).toEqual([
-      "Alcoholic [lab-alcoholic]: 18.70/17.00",
-      "Happy hour drinks [lab-happy]: 14.30/13.00",
+    expect(report).not.toHaveProperty("labels");
+    expect(rows(report.tree).map((r) => `${r.path}: ${r.gross}/${r.net} ${r.direct}`)).toEqual([
+      "Drinks: 1.10/1.00 1.10/1.00/1",
     ]);
-    expect([report.gross, report.net]).toEqual(["18.70", "22.00"]);
-  });
-
-  it("orders two labels of one name by id", async () => {
-    await sell("2026-08-04", [
-      {
-        net: "1.00",
-        gross: "1.10",
-        cls: classified(chain(DRINKS), [
-          { id: "lab-b", name: "Same" },
-          { id: "lab-a", name: "Same" },
-        ]),
-      },
-    ]);
-
-    expect(labelRows(await run())).toEqual(["Same [lab-a]: 1.10/1.00", "Same [lab-b]: 1.10/1.00"]);
   });
 
   it("counts an extra under its own classification by default, and under its dish's with extrasIntoDish", async () => {
     const dish = randomUUID();
-    const mains = { id: "lab-mains", name: "Mains" };
-    const dairy = { id: "lab-dairy", name: "Dairy" };
     await sell("2026-08-04", [
       {
         id: dish,
         net: "10.00",
         gross: "11.00",
-        cls: classified(chain(["cat-food", "Food"], ["cat-burgers", "Burgers"]), [mains]),
+        cls: classified(chain(["cat-food", "Food"], ["cat-burgers", "Burgers"])),
       },
       {
         parentLineId: dish,
         net: "1.00",
         gross: "1.10",
-        cls: classified(chain(["cat-extras", "Extras"]), [dairy]),
+        cls: classified(chain(["cat-extras", "Extras"])),
       },
     ]);
 
@@ -487,10 +454,6 @@ describe("computeCategorySales at time of sale", () => {
       "Food: 11.00/10.00 0.00/0.00/0",
       "Food > Burgers: 11.00/10.00 11.00/10.00/1",
     ]);
-    expect(labelRows(own)).toEqual([
-      "Dairy [lab-dairy]: 1.10/1.00",
-      "Mains [lab-mains]: 11.00/10.00",
-    ]);
 
     const rolled = await run({ extrasIntoDish: true });
 
@@ -498,7 +461,6 @@ describe("computeCategorySales at time of sale", () => {
       "Food: 12.10/11.00 0.00/0.00/0",
       "Food > Burgers: 12.10/11.00 12.10/11.00/2",
     ]);
-    expect(labelRows(rolled)).toEqual(["Mains [lab-mains]: 12.10/11.00"]);
   });
 
   it("rolls an extra of an unclassified dish into Not recorded under the dish's free-text category", async () => {

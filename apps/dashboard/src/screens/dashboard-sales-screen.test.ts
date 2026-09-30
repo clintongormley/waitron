@@ -80,7 +80,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getCategorySales: vi.fn().mockResolvedValue({
       mode: "at_time_of_sale",
       tree: [],
-      labels: [],
       gross: "0.00",
       net: "0.00",
       grossComplete: true,

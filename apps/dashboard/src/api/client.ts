@@ -965,18 +965,9 @@ export interface CategoryTotalDto {
   children: CategoryTotalDto[];
 }
 
-/** A label's totals overlap other labels' and cut across the category tree. */
-export interface LabelTotalDto {
-  id: string;
-  name: string;
-  gross: string;
-  net: string;
-}
-
 export interface CategorySalesDto {
   mode: CategoryReportMode;
   tree: CategoryTotalDto[];
-  labels: LabelTotalDto[];
   gross: string;
   net: string;
   grossComplete: boolean;

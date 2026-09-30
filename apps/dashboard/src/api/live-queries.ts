@@ -93,8 +93,6 @@ export const QUERY_DEPENDENCIES = {
     "products",
     "categories",
     "category_details",
-    "labels",
-    "product_labels",
     "content_languages",
   ],
   getReportPrinters: ["printers"],

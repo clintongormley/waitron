@@ -28,8 +28,6 @@ import {
   createProduct,
   listAvailableProducts,
   priceBasket,
-  createLabel,
-  setProductLabels,
   setMenuVariants,
   setProductVariants,
   units,
@@ -2813,7 +2811,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     });
   });
 
-  it("routes a product by its main category whatever labels it carries, and freezes the category on its line", async () => {
+  it("routes a product by its main category, and freezes the category on its line", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
@@ -2823,11 +2821,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       await setCategoryStation(tx, cfg, drinks.id, bar.id);
       await setCategoryStation(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
-      // A label named like the other category implies nothing about routing or reporting.
-      const label = await createLabel(tx, "Food");
-      await setProductLabels(tx, product, [label.id]);
 
-      // The station comes from the context-less chain; the frozen label from a sale, which a
+      // The station comes from the context-less chain; the frozen category from a sale, which a
       // context-less order cannot carry.
       const { id: routedId } = await fireContextless(tx, cfg, [product]);
       expect(byProduct(await ticketItemsFor(tx, routedId), product).stationId).toBe(bar.id);

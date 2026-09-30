@@ -2841,7 +2841,6 @@ describe("DashboardApi — reporting (sales & takings)", () => {
           children: [],
         },
       ],
-      labels: [{ id: "l1", name: "Hora feliz", gross: "12.10", net: "10.00" }],
       gross: "12.10",
       net: "10.00",
       grossComplete: false,

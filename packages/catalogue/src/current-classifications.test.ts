@@ -4,7 +4,6 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory, updateCategory } from "./categories.js";
-import { createLabel, renameLabel, setProductLabels } from "./labels.js";
 import { setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
 import { currentClassifications } from "./current-classifications.js";
@@ -54,14 +53,10 @@ async function fixture() {
       ],
       "en",
     );
-    const happyHour = await createLabel(tx, "Happy hour drinks");
-    await setProductLabels(tx, cola.id, [happyHour.id]);
-    await setProductLabels(tx, gin.id, [happyHour.id]);
     return {
       drinks,
       softs,
       spirits,
-      happyHour,
       cola: cola.id,
       water: water.id,
       gin: gin.id,
@@ -71,7 +66,7 @@ async function fixture() {
 }
 
 describe("currentClassifications", () => {
-  it("classifies each listed product by today's chain and labels, named in the default language", async () => {
+  it("classifies each listed product by today's chain, named in the default language", async () => {
     const f = await fixture();
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
@@ -85,14 +80,10 @@ describe("currentClassifications", () => {
           { id: f.drinks.id, name: "Bebidas" },
           { id: f.softs.id, name: "Refrescos" },
         ],
-        labels: [{ id: f.happyHour.id, name: "Happy hour drinks" }],
       },
-      [f.water]: { reporting: [], labels: [] },
-      // A variant with no main category of its own follows its parent's, and carries its labels.
-      [f.double]: {
-        reporting: [{ id: f.spirits.id, name: "Licores" }],
-        labels: [{ id: f.happyHour.id, name: "Happy hour drinks" }],
-      },
+      [f.water]: { reporting: [] },
+      // A variant with no main category of its own follows its parent's.
+      [f.double]: { reporting: [{ id: f.spirits.id, name: "Licores" }] },
     });
   });
 
@@ -107,14 +98,13 @@ describe("currentClassifications", () => {
     ]);
   });
 
-  it("follows a move, a rename and a relabel made since, rather than any earlier state", async () => {
+  it("follows a move and a rename made since, rather than any earlier state", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await updateCategory(tx, f.softs.id, {
         name: { en: "Soft drinks", es: "Bebidas sin alcohol" },
         parentId: f.spirits.id,
       });
-      await renameLabel(tx, f.happyHour.id, "Two for one");
       await setMainReportingCategory(tx, f.water, f.drinks.id);
     });
 
@@ -125,12 +115,8 @@ describe("currentClassifications", () => {
         { id: f.spirits.id, name: "Spirits" },
         { id: f.softs.id, name: "Soft drinks" },
       ],
-      labels: [{ id: f.happyHour.id, name: "Two for one" }],
     });
-    expect(map.get(f.water)).toEqual({
-      reporting: [{ id: f.drinks.id, name: "Drinks" }],
-      labels: [],
-    });
+    expect(map.get(f.water)).toEqual({ reporting: [{ id: f.drinks.id, name: "Drinks" }] });
   });
 
   it("leaves out an id no product row has, rather than refusing the whole list", async () => {

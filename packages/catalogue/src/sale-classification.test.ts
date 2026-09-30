@@ -5,7 +5,6 @@ import type { SaleLineClassification } from "@waitron/shared";
 import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { createCategory, setMainReportingCategory } from "./categories.js";
-import { createLabel, setProductLabels } from "./labels.js";
 import { setProductVariants } from "./variants.js";
 import {
   classifyLine,
@@ -73,14 +72,8 @@ async function fixture() {
     );
     // A variant with a main category of its own, which it takes over its parent's.
     await setMainReportingCategory(tx, wine175!.id, cocktails.id, "any");
-
-    const happyHour = await createLabel(tx, "Happy hour drinks");
-    const alcoholicLabel = await createLabel(tx, "Alcoholic");
-    await setProductLabels(tx, mojito.id, [happyHour.id, alcoholicLabel.id]);
-    await setProductLabels(tx, wine.id, [alcoholicLabel.id]);
     return {
       categories: { drinks, alcoholic, cocktails, extras },
-      labels: { happyHour, alcoholic: alcoholicLabel },
       products: {
         mojito: mojito.id,
         wine: wine.id,
@@ -96,12 +89,6 @@ async function fixture() {
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-function sortedLabels(f: Fixture, ...which: ("happyHour" | "alcoholic")[]) {
-  return which
-    .map((key) => ({ id: f.labels[key].id, name: f.labels[key].name }))
-    .sort((a, b) => (a.id < b.id ? -1 : 1));
-}
-
 function chain(f: Fixture, language: "en" | "es", ...which: (keyof Fixture["categories"])[]) {
   return which.map((key) => ({
     id: f.categories[key].id,
@@ -114,13 +101,12 @@ async function loaded(f: Fixture, language = "en"): Promise<LoadedClassification
 }
 
 describe("classifyLine", () => {
-  it("records a dish's main reporting chain from the root to the leaf, and its labels sorted by id", async () => {
+  it("records a dish's main reporting chain from the root to the leaf, and nothing else", async () => {
     const f = await fixture();
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.mojito)).toEqual({
       reporting: chain(f, "en", "drinks", "alcoholic", "cocktails"),
-      labels: sortedLabels(f, "happyHour", "alcoholic"),
     });
   });
 
@@ -132,30 +118,28 @@ describe("classifyLine", () => {
     );
   });
 
-  it("gives a variant with no main category its parent's chain and its parent's labels", async () => {
+  it("gives a variant with no main category its parent's chain", async () => {
     const f = await fixture();
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.wine125)).toEqual({
       reporting: chain(f, "en", "drinks", "alcoholic"),
-      labels: sortedLabels(f, "alcoholic"),
     });
   });
 
-  it("gives a variant with a main category of its own that chain, and still its parent's labels", async () => {
+  it("gives a variant with a main category of its own that chain", async () => {
     const f = await fixture();
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.wine175)).toEqual({
       reporting: chain(f, "en", "drinks", "alcoholic", "cocktails"),
-      labels: sortedLabels(f, "alcoholic"),
     });
   });
 
-  it("records an Uncategorised product with an empty chain and no labels", async () => {
+  it("records an Uncategorised product with an empty chain", async () => {
     const f = await fixture();
 
-    expect(classifyLine(await loaded(f), f.products.water)).toEqual({ reporting: [], labels: [] });
+    expect(classifyLine(await loaded(f), f.products.water)).toEqual({ reporting: [] });
   });
 
   it("classifies an extras pick by its own product, not by any dish", async () => {
@@ -163,7 +147,6 @@ describe("classifyLine", () => {
 
     expect(classifyLine(await loaded(f), f.products.lemon)).toEqual({
       reporting: chain(f, "en", "extras"),
-      labels: [],
     });
   });
 
@@ -183,8 +166,7 @@ describe("classifyLine", () => {
     const c: LoadedClassification = {
       categories: new Map([["leaf", { name: { en: "Leaf" }, parentId: "gone" }]]),
       language: "en",
-      labels: new Map(),
-      products: new Map([["p", { categoryId: "leaf", labelIds: [] }]]),
+      products: new Map([["p", { categoryId: "leaf" }]]),
     };
 
     expect(() => classifyLine(c, "p")).toThrow(
@@ -202,8 +184,7 @@ describe("classifyLine", () => {
         ["b", { name: { en: "B" }, parentId: "a" }],
       ]),
       language: "en",
-      labels: new Map(),
-      products: new Map([["p", { categoryId: "a", labelIds: [] }]]),
+      products: new Map([["p", { categoryId: "a" }]]),
     };
 
     expect(() => classifyLine(c, "p")).toThrow(
@@ -244,17 +225,6 @@ describe("loadClassification", () => {
     expect(counts.loadedProducts).toBe(5);
   });
 
-  it("reads only the labels the loaded products carry", async () => {
-    const f = await fixture();
-    const [variantOnly, unlabelled] = await app(async (tx) => [
-      await loadClassification(tx, [f.products.wine125], "en"),
-      await loadClassification(tx, [f.products.water, f.products.lemon], "en"),
-    ]);
-
-    expect([...variantOnly.labels.keys()]).toEqual([f.labels.alcoholic.id]);
-    expect(unlabelled.labels.size).toBe(0);
-  });
-
   it("loads nothing for an empty basket but still answers", async () => {
     const f = await fixture();
     const c = await app((tx) => loadClassification(tx, [], "en"));
@@ -280,44 +250,32 @@ describe("validateSnapshot", () => {
     expect(() => validateSnapshot(c, f.products.mojito, snapshot)).not.toThrow();
   });
 
-  it.each<[string, (f: Fixture, s: SaleLineClassification) => SaleLineClassification]>([
-    [
-      "a category id that names no category",
-      (_f, s) => ({ ...s, reporting: [{ id: "no-such-category", name: "Gone" }, ...s.reporting] }),
-    ],
-    [
-      "a label id that names no label",
-      (_f, s) => ({ ...s, labels: [...s.labels, { id: "no-such-label", name: "Gone" }] }),
-    ],
-  ])("refuses %s", async (_case, corrupt) => {
+  it("refuses a category id that names no category", async () => {
     const { f, c, snapshot } = await classified();
+    const corrupt: SaleLineClassification = {
+      reporting: [{ id: "no-such-category", name: "Gone" }, ...snapshot.reporting],
+    };
 
-    expect(
-      await captureError(() => validateSnapshot(c, f.products.mojito, corrupt(f, snapshot))),
-    ).toMatchObject({
-      code: "sale_classification.invalid",
-      params: { productId: f.products.mojito, reason: "unknown_id" },
-    });
+    expect(await captureError(() => validateSnapshot(c, f.products.mojito, corrupt))).toMatchObject(
+      {
+        code: "sale_classification.invalid",
+        params: { productId: f.products.mojito, reason: "unknown_id" },
+      },
+    );
   });
 
-  it.each<[string, (s: SaleLineClassification) => SaleLineClassification]>([
-    [
-      "an empty category name",
-      (s) => ({ ...s, reporting: s.reporting.map((e, i) => (i === 1 ? { ...e, name: "" } : e)) }),
-    ],
-    [
-      "an empty label name",
-      (s) => ({ ...s, labels: s.labels.map((e, i) => (i === 0 ? { ...e, name: "" } : e)) }),
-    ],
-  ])("refuses %s", async (_case, corrupt) => {
+  it("refuses an empty category name", async () => {
     const { f, c, snapshot } = await classified();
+    const corrupt: SaleLineClassification = {
+      reporting: snapshot.reporting.map((e, i) => (i === 1 ? { ...e, name: "" } : e)),
+    };
 
-    expect(
-      await captureError(() => validateSnapshot(c, f.products.mojito, corrupt(snapshot))),
-    ).toMatchObject({
-      code: "sale_classification.invalid",
-      params: { productId: f.products.mojito, reason: "empty_name" },
-    });
+    expect(await captureError(() => validateSnapshot(c, f.products.mojito, corrupt))).toMatchObject(
+      {
+        code: "sale_classification.invalid",
+        params: { productId: f.products.mojito, reason: "empty_name" },
+      },
+    );
   });
 
   it("refuses a chain that names one category twice", async () => {
@@ -363,7 +321,7 @@ describe("validateSnapshot", () => {
 
     expect(
       await captureError(() =>
-        validateSnapshot(c, f.products.water, { reporting: chain(f, "en", "extras"), labels: [] }),
+        validateSnapshot(c, f.products.water, { reporting: chain(f, "en", "extras") }),
       ),
     ).toMatchObject({
       code: "sale_classification.invalid",

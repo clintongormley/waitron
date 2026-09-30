@@ -46,6 +46,6 @@ export interface RecordSaleLine {
   menuVersionId?: string | null;
   /** The line's VAT-inclusive total as a decimal string, e.g. "12.10". */
   lineGross?: string | null;
-  /** The product's reporting chain and labels, as the line recorded them when it was added. */
+  /** The product's reporting chain, as the line recorded it when it was added. */
   classification?: SaleLineClassification | null;
 }

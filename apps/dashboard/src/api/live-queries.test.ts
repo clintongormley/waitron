@@ -123,8 +123,6 @@ it.each([
       "products",
       "categories",
       "category_details",
-      "labels",
-      "product_labels",
       "content_languages",
     ],
   ],

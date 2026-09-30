@@ -9,9 +9,7 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createLabel,
   createProduct,
-  setProductLabels,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
@@ -181,7 +179,6 @@ async function fileOneSale(db: Database) {
       LOCALE,
     );
     await writeProductModifiers(tx, negroni.id, [{ kind: "extras", id: extras.id }]);
-    await setProductLabels(tx, negroni.id, [(await createLabel(tx, "Happy hour drinks")).id]);
     await assignCatalogueToLocation(tx, venue.locationId, menu.id);
     return { negroni: negroni.id, hielo: hielo.id, extrasListId: extras.id };
   });

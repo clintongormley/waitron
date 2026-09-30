@@ -8,9 +8,8 @@ import type { GrossOrder } from "./working-order.js";
 /**
  * The issuance pass: what each line of the sale about to be filed records about its product — the
  * product sold, a variant's parent, the menu and menu version it was sold from, and the reporting
- * chain and labels the line recorded when it was added, copied as they are. Every till filing path
- * calls it on the gross lines it files, before `issueMoment` rates them, and a replay or reprint
- * never does.
+ * chain the line recorded when it was added, copied as it is. Every till filing path calls it on
+ * the gross lines it files, before `issueMoment` rates them, and a replay or reprint never does.
  *
  * `order.identities[i]` is the working-order line `order.gross.lines[i]` was priced from, as
  * `priceStoredOrderForIssuance` and `createOpenOrder` both return them.

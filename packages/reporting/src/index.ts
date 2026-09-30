@@ -15,7 +15,6 @@ export type {
   CategorySalesInput,
   CategoryTotal,
   CurrentClassifier,
-  LabelTotal,
 } from "./category-sales.js";
 export { computeOverdueOrders } from "./overdue-orders.js";
 export { computeVatReturn } from "./vat-return.js";

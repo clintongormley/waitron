@@ -16,10 +16,8 @@ import {
   createCatalogue,
   createCategory,
   createExtraList,
-  createLabel,
   createProduct,
   menuPublications,
-  setProductLabels,
   setProductVariants,
   updateCategory,
   writeProductModifiers,
@@ -211,15 +209,9 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
       LOCALE,
     );
     await writeProductModifiers(tx, burger.id, [{ kind: "extras", id: extras.id }]);
-    const happyHour = await createLabel(tx, "Happy hour drinks");
-    const alcohol = await createLabel(tx, "Alcoholic");
-    await setProductLabels(tx, negroni.id, [happyHour.id, alcohol.id]);
-    await setProductLabels(tx, cana.id, [alcohol.id]);
-    await setProductLabels(tx, cafe.id, [happyHour.id]);
     await assignCatalogueToLocation(tx, venue.locationId, menu.id);
     return {
       categories: { bebidas, alcoholicas, cocteles, licores, cafes, comida, anadidos },
-      labels: { happyHour, alcohol },
       products: {
         negroni: negroni.id,
         cana: cana.id,
@@ -245,8 +237,6 @@ const entry = (c: { id: string; name: Record<string, string> }): Entry => ({
   id: c.id,
   name: c.name.es!,
 });
-const labelsOf = (...labels: { id: string; name: string }[]): Entry[] =>
-  labels.map((l) => ({ id: l.id, name: l.name })).sort((a, b) => (a.id < b.id ? -1 : 1));
 
 /** The chain Cócteles records before and after it moves from Bebidas alcohólicas to Licores. */
 const underAlcoholic = (v: Venue) =>
@@ -364,7 +354,7 @@ function cardDeps(provider: PaymentProvider): IntegratedPayDeps {
 }
 
 describe("what a filed sale line records about its product", () => {
-  it("records a dish's product, gross, menu and its reporting chain and labels", async () => {
+  it("records a dish's product, gross, menu and its reporting chain", async () => {
     const v = await setupVenue();
     const id = randomUUID();
     await recordTillSale(deps(), v.cfg, {
@@ -385,10 +375,7 @@ describe("what a filed sale line records about its product", () => {
         menuId: v.counter.menuId,
         menuVersionId: published!.versionId,
         lineGross: 1800,
-        classification: {
-          reporting: underAlcoholic(v),
-          labels: labelsOf(v.labels.happyHour, v.labels.alcohol),
-        },
+        classification: { reporting: underAlcoholic(v) },
       }),
     ]);
   });
@@ -414,10 +401,7 @@ describe("what a filed sale line records about its product", () => {
       productId: v.products.doble,
       parentProductId: v.products.cafe,
       lineGross: 220,
-      classification: {
-        reporting: [v.categories.bebidas, v.categories.cafes].map(entry),
-        labels: labelsOf(v.labels.happyHour),
-      },
+      classification: { reporting: [v.categories.bebidas, v.categories.cafes].map(entry) },
     });
   });
 
@@ -444,7 +428,7 @@ describe("what a filed sale line records about its product", () => {
       productId: v.products.burger,
       category: "Comida",
       menuId: v.counter.menuId,
-      classification: { reporting: [entry(v.categories.comida)], labels: [] },
+      classification: { reporting: [entry(v.categories.comida)] },
     });
     expect(extra).toMatchObject({
       productId: v.products.queso,
@@ -454,7 +438,7 @@ describe("what a filed sale line records about its product", () => {
       category: "Comida",
       menuId: v.counter.menuId,
       lineGross: 75,
-      classification: { reporting: [entry(v.categories.anadidos)], labels: [] },
+      classification: { reporting: [entry(v.categories.anadidos)] },
     });
   });
 
@@ -470,7 +454,7 @@ describe("what a filed sale line records about its product", () => {
 
     expect((await filedLines(id))[0]).toMatchObject({
       productId: v.products.pan,
-      classification: { reporting: [], labels: [] },
+      classification: { reporting: [] },
     });
   });
 
@@ -724,7 +708,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
     }
 
     expect(await filedLines(id)).toEqual(filed);
-    expect(statements.filter((s) => /from "labels"/.test(s))).toEqual([]);
+    expect(statements.filter((s) => /from "categories"/.test(s))).toEqual([]);
   });
 });
 
@@ -786,7 +770,6 @@ describe("issuancePass", () => {
 
       const issued = await issuancePass(tx, v.cfg, five, pricedFive);
 
-      expect(prepared.mock.calls.filter(([query]) => /from "labels"/.test(query.sql))).toEqual([]);
       expect(prepared.mock.calls.filter(([query]) => /from "categories"/.test(query.sql))).toEqual(
         [],
       );
@@ -831,7 +814,7 @@ describe("issuancePass", () => {
     ]);
 
     expect(forFive).toHaveLength(forOne.length);
-    expect(forFive.filter((s) => /from "labels"/.test(s))).toHaveLength(1);
+    expect(forFive.filter((s) => /from "categories"/.test(s))).toHaveLength(1);
   });
 
   it("copies each stored line's recorded classification as it is: a line whose product id is gone keeps its snapshot, and a line with none recorded files none", async () => {
@@ -854,10 +837,7 @@ describe("issuancePass", () => {
       issuancePass(tx, v.cfg, id, await priceStoredOrderForIssuance(tx, id)),
     );
 
-    const negroni = {
-      reporting: underAlcoholic(v),
-      labels: labelsOf(v.labels.happyHour, v.labels.alcohol),
-    };
+    const negroni = { reporting: underAlcoholic(v) };
     expect(issued.lines.map((l) => [l.productId, l.parentProductId, l.classification])).toEqual([
       [v.products.negroni, null, negroni],
       [null, null, negroni],

@@ -144,7 +144,6 @@ describe("saleLineRows", () => {
         { id: "cat-drinks", name: "Drinks" },
         { id: "cat-wine", name: "Wine" },
       ],
-      labels: [{ id: "label-alcoholic", name: "Alcoholic" }],
     };
     const line: RecordSaleLine = {
       lineNo: 1,

@@ -46,18 +46,9 @@ export interface CategoryTotal {
   children: CategoryTotal[];
 }
 
-/** One label's lines. Label totals overlap each other and cut across the tree. */
-export interface LabelTotal {
-  id: string;
-  name: string;
-  gross: Decimal;
-  net: Decimal;
-}
-
 export interface CategoryReport {
   mode: CategoryReportMode;
   tree: CategoryTotal[];
-  labels: LabelTotal[];
   gross: Decimal;
   net: Decimal;
   /** False when any counted line, issued or reversed, recorded no gross. */
@@ -157,12 +148,9 @@ function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }
 
-function byReportOrder(
-  a: { kind?: CategoryTotal["kind"]; name: string; id: string },
-  b: { kind?: CategoryTotal["kind"]; name: string; id: string },
-): number {
+function byReportOrder(a: Node, b: Node): number {
   return (
-    KIND_ORDER[a.kind ?? "category"] - KIND_ORDER[b.kind ?? "category"] ||
+    KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
     compareText(a.name, b.name) ||
     compareText(a.id, b.id)
   );
@@ -262,17 +250,13 @@ export async function computeCategorySales(
     }
     return path;
   };
-  let classify: (line: (typeof lines)[number]) => {
-    classification: SaleLineClassification | null | undefined;
-    path: Segment[];
-  };
+  let classify: (line: (typeof lines)[number]) => Segment[];
   if (input.mode === "current") {
     const productIds = new Set<string>();
     for (const line of lines) if (line.productId !== null) productIds.add(line.productId);
     const today = await classifyCurrent!([...productIds]);
     classify = ({ productId }) => {
-      const classification = productId === null ? null : today.get(productId);
-      return { classification, path: pathFor(classification, null) };
+      return pathFor(productId === null ? null : today.get(productId), null);
     };
   } else {
     const parsed = new Map<string, SaleLineClassification | null>();
@@ -280,19 +264,17 @@ export async function computeCategorySales(
       if (recorded !== null && !parsed.has(recorded)) {
         parsed.set(recorded, JSON.parse(recorded) as SaleLineClassification | null);
       }
-      const classification = recorded === null ? null : parsed.get(recorded);
-      return { classification, path: pathFor(classification, freeText) };
+      return pathFor(recorded === null ? null : parsed.get(recorded), freeText);
     };
   }
 
   const roots = new Map<string, Node>();
-  const labels = new Map<string, Tally & { id: string }>();
   let linesWithoutGross = 0;
   let netCents = 0;
   let grossCents = 0;
   for (const line of lines) {
     const { row } = line;
-    const { classification, path } = classify(line);
+    const path = classify(line);
     const rank: Rank = { issuedAt: row.issued_at, saleId: row.sale_id, lineNo: row.line_no };
     const net = cents(row.net);
     const gross = row.gross === null ? null : cents(row.gross);
@@ -324,26 +306,11 @@ export async function computeCategorySales(
     node!.directNetCents += net;
     node!.directGrossCents += gross ?? 0;
     node!.directLines += 1;
-
-    for (const label of classification?.labels ?? []) {
-      let total = labels.get(label.id);
-      if (total === undefined) {
-        total = { id: label.id, name: label.name, rank, netCents: 0, grossCents: 0 };
-        labels.set(label.id, total);
-      }
-      tally(total, label.name, rank, net, gross);
-    }
   }
 
   return {
     mode: input.mode,
     tree: [...roots.values()].sort(byReportOrder).map((root) => toTotal(root, 0)),
-    labels: [...labels.values()].sort(byReportOrder).map((label) => ({
-      id: label.id,
-      name: label.name,
-      gross: centsToDecimal(label.grossCents),
-      net: centsToDecimal(label.netCents),
-    })),
     gross: centsToDecimal(grossCents),
     net: centsToDecimal(netCents),
     grossComplete: linesWithoutGross === 0,

@@ -20,7 +20,6 @@ import type {
   CategoryTotalDto,
   DailyCloseDto,
   DashboardApi,
-  LabelTotalDto,
   ReportPrinter,
   SalesPeriodDto,
   VatSummaryDto,
@@ -133,11 +132,6 @@ export class SalesScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
-      h3 {
-        margin: var(--wt-space-4) 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-md);
-        color: var(--wt-color-text-muted);
-      }
       .category-controls {
         display: flex;
         flex-wrap: wrap;
@@ -178,8 +172,7 @@ export class SalesScreen extends LitElement {
         width: 100%;
       }
       tr.direct th,
-      tr.leaf th,
-      tr.label-row th {
+      tr.leaf th {
         font-weight: var(--wt-font-weight-normal);
       }
       tr.direct th {
@@ -537,7 +530,6 @@ export class SalesScreen extends LitElement {
           </tr>
         </tfoot>
       </table>
-      ${report.labels.length > 0 ? this.#renderLabels(report.labels) : nothing}
     `;
   }
 
@@ -579,32 +571,6 @@ export class SalesScreen extends LitElement {
     }
     for (const child of node.children) rows.push(...this.#categoryRows(child, inside));
     return rows;
-  }
-
-  #renderLabels(labels: LabelTotalDto[]): TemplateResult {
-    return html`
-      <h3>${t("sales.labels_title")}</h3>
-      <p class="muted" data-test="labels-overlap">${t("sales.labels_overlap")}</p>
-      <table data-test="label-table">
-        <thead>
-          <tr>
-            <th scope="col" class="name-col">${t("sales.label")}</th>
-            <th scope="col" class="num">${t("sales.gross")}</th>
-            <th scope="col" class="num">${t("sales.net")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${labels.map(
-            (label) =>
-              html`<tr data-test="label-row" class="label-row">
-                <th scope="row" class="cat-name">${label.name}</th>
-                <td class="num">${money(label.gross)}</td>
-                <td class="num">${money(label.net)}</td>
-              </tr>`,
-          )}
-        </tbody>
-      </table>
-    `;
   }
 
   #renderPrint(): TemplateResult {
