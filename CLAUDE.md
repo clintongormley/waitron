@@ -972,9 +972,9 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   did not restart it, and through the snapshot it takes right after. Cost: measured 2026-09-29, one seller's writes waited up to 831 ms to begin
   on a slowed disk and up to 629 ms on a CI runner's normal disk. Switching off Litestream's timed
   checkpoint and moving its regular page-count one out of reach removed every wait over 1 ms on a
-  slowed disk, but not on a CI runner's normal disk at about 80 sales a second, and whether to ship
-  that is the owner's open decision (`docs/backlog.md`, A130's entry, A135). Receipt (the figures,
-  and what was not measured):
+  slowed disk, but not on a CI runner's normal disk at about 80 sales a second; both stay at
+  Litestream's defaults (owner decision 2026-09-30; `docs/backlog.md`, A130's entry, A135).
+  Receipt (the figures, and what was not measured):
   [testing-guide.md](docs/developers/testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
   A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it

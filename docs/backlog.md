@@ -8820,7 +8820,7 @@ it. Left open:
   1,228 ms against 1,000) was the CI runner's disk, not the bucket.** A probe reproduced it with one
   commit taking 1,017 ms while the disk stalled. The stream tests' CI step now sets
   `TMPDIR=/dev/shm` ([testing-guide.md](developers/testing-guide.md), "In CI their temporary files
-  are in memory"). Found by the probe, and open:
+  are in memory"). Found by the probe (only the last item, trace logging, is still open):
   - **MEASURED (lane A's A133, 2026-09-29): a sale waits behind Litestream's own checkpoint. The
     owner chose to narrow CLAUDE.md §5 now (DONE, A133, #889) and to measure switching off its
     timed checkpoint and moving its page-count one out of reach next (A135, below).**
@@ -8851,13 +8851,14 @@ it. Left open:
     no Litestream setting has changed. Since A142 (#898) the full figures sit in
     [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
     checkpoint", and §5 keeps the rule, the longest wait on each disk and a link there; since A135
-    (#907) it also says in one clause what A135 found and points to the owner's open decision.
+    (#907) it also says in one clause what A135 found, and since A135's close-out (#917) the
+    owner's decision to leave the checkpoints alone.
   - **MEASURED (lane C's A135, #907, 2026-09-30, run 36657175716, probe commit `bc3b94671` on the
-    throwaway branch `probe/a135-litestream-checkpoints`): switching off Litestream's timed
-    checkpoint and setting its page-count one to a billion pages removed the wait on the delayed
-    disk, but not on the runner's normal disk at about 80 sales a second. No setting has
-    changed.** The variant wrote
-    `checkpoint-interval: 0s` and `min-checkpoint-page-count: 1000000000` into the database's
+    throwaway branch `probe/a135-litestream-checkpoints`, deleted at A135's close-out, #917):
+    switching off Litestream's timed checkpoint and setting its page-count one to a billion pages
+    removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
+    second. The owner chose to leave both alone (below), so no setting has changed.** The variant
+    wrote `checkpoint-interval: 0s` and `min-checkpoint-page-count: 1000000000` into the database's
     Litestream entry (the page-count checkpoint cannot be switched off, as A133's review found:
     `db.go` line 788 at tag v0.5.17 refuses 0, and the pinned binary given 0 exited with
     `cannot open store: minimum checkpoint page count required`). A local pre-check with the pinned
@@ -8881,8 +8882,10 @@ it. Left open:
     pause tests passed three times each with it. Full figures:
     [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
     checkpoint". Not measured: a venue's own sale rate, several sellers, the box's own disk.
-    **Next action:** the owner decides whether to ship those two settings or leave Litestream's
-    checkpoints alone (lane C's questions.md, A135).
+    **DECIDED (owner, 2026-09-30): leave Litestream's checkpoints as they are; neither setting
+    ships.** The owner was offered shipping the two settings, leaving the checkpoints alone, or
+    first running A133's probe on the box's own disk, and chose to leave them alone (lane C's
+    questions.md, A135).
   - Litestream at trace logging deadlocked sales for five seconds. The probe first ran it at trace
     level by mistake, and 13 of 24 runs failed with a 500. Each one looked at was `begin immediate`
     failing `database is locked` after 5,006 to 5,008 ms (runs 36571860113, 36572745451). The inferred

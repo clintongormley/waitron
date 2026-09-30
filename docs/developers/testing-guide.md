@@ -699,15 +699,15 @@ page-count one to a billion pages did is below.
 **Switching off Litestream's timed checkpoint and setting its regular page-count one to a billion
 pages removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
 second** (A135, measured 2026-09-30, run 36657175716, probe commit `bc3b94671` on the throwaway
-branch `probe/a135-litestream-checkpoints`). The same probe, streaming on, one seller for 300 s,
-three runs each of the product's settings and of a variant adding `checkpoint-interval: 0s` and
-`min-checkpoint-page-count: 1000000000` to the database's Litestream entry. On the runner's normal
-disk Litestream still forced its emergency checkpoints under the variant: the ones it runs once the
-side file passes about 477 MiB (third bullet). On the delayed disk it logged no checkpoint at all;
-the side file peaked at 278–280 MiB there. Judged by A133's criterion, reused unchanged: with
-streaming on, writes wait under 20 ms to begin, as in A133's streaming-off runs, where none waited
-over 1 ms. The variant met it on the delayed disk and failed it on the normal disk, where 10 writes
-per run waited 20 ms or more.
+branch `probe/a135-litestream-checkpoints`, since deleted). The same probe, streaming on, one seller
+for 300 s, three runs each of the product's settings and of a variant adding
+`checkpoint-interval: 0s` and `min-checkpoint-page-count: 1000000000` to the database's Litestream
+entry. On the runner's normal disk Litestream still forced its emergency checkpoints under the
+variant: the ones it runs once the side file passes about 477 MiB (third bullet). On the delayed
+disk it logged no checkpoint at all; the side file peaked at 278–280 MiB there. Judged by A133's
+criterion, reused unchanged: with streaming on, writes wait under 20 ms to begin, as in A133's
+streaming-off runs, where none waited over 1 ms. The variant met it on the delayed disk and failed
+it on the normal disk, where 10 writes per run waited 20 ms or more.
 
 - Delayed disk (10 ms per write and 100 ms per flush; 50 synced 4 KiB writes took 6.8–7.1 s,
   against 14–17 ms on the runner's own disk). Product settings: 12–13 writes per run waited
@@ -743,6 +743,9 @@ per run waited 20 ms or more.
   every Litestream configuration their runs made.
 
 Not measured: a venue's own sale rate, several sellers at once, and the box's own disk.
+
+The owner chose on 2026-09-30 to leave both routine checkpoints at Litestream's defaults, so neither
+setting shipped (`docs/backlog.md`, A130's entry).
 
 **What a test run prints**
 
