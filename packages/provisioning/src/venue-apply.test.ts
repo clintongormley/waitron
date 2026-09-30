@@ -147,6 +147,10 @@ describe("applyVenue", () => {
         module: "fiscal-verifactu",
         report: expect.stringMatching(/^SIF .* \(installation \d+\)$/),
       },
+      {
+        module: "adjustments",
+        report: "default cancel reason ready",
+      },
     ]);
   });
 
@@ -648,9 +652,10 @@ describe("applyVenue", () => {
         "catalogue",
         "venue-service",
         "fiscal-verifactu",
+        "adjustments",
         "probe",
       ]);
-      expect(result.seeded[3]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
+      expect(result.seeded[4]).toEqual({ module: "probe", report: `recorded ${result.nodeId}` });
     });
 
     it("a throwing seed rolls the whole venue back — no tenant row survives", async () => {

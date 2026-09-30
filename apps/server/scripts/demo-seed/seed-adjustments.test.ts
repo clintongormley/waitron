@@ -1,10 +1,12 @@
 /** The adjustment reasons seed, against a database every module set has migrated. */
 
 import { describe, expect, it } from "vitest";
-import { withTransaction } from "@waitron/db";
+import { locations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { listAdjustmentReasons } from "@waitron/adjustments";
+import { ADJUSTMENTS_PROVISIONING, listAdjustmentReasons } from "@waitron/adjustments";
+import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
 
 const suite = useVenueDb({
@@ -23,6 +25,28 @@ const ENGLISH = [
 ];
 
 describe("seedAdjustmentReasons", () => {
+  it.each([
+    ["es", "es-ES"],
+    ["en", "en-GB"],
+  ] as const)(
+    "does not repeat the cancel reason provisioning gave a %s venue",
+    async (locale, invoiceLocale) => {
+      await seedTenant(suite.db);
+      const [location] = await suite.db
+        .insert(locations)
+        .values({ name: "Venue", invoiceLocales: [invoiceLocale], operationDescription: "Demo" })
+        .returning({ id: locations.id });
+      const locationId = brandLocationId(location!.id);
+      const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
+      const reasons = await withTransaction(suite.db, async (tx) => {
+        await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
+        await seedAdjustmentReasons(tx, { locale });
+        return listAdjustmentReasons(tx, { includeInactive: true });
+      });
+      expect(reasons.map((reason) => reason.names.en)).toEqual(ENGLISH);
+    },
+  );
+
   it("seeds the owner's seven example reasons, in order, named in the seed's language", async () => {
     const reasons = await withTransaction(suite.db, async (tx) => {
       await seedAdjustmentReasons(tx, { locale: "es" });

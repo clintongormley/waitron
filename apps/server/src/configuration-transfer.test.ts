@@ -995,7 +995,7 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
     new Date("2026-09-26T12:00:00Z"),
     versions,
   );
-  expect(transferred.tables.adjustment_reasons).toHaveLength(2);
+  expect(transferred.tables.adjustment_reasons).toHaveLength(3);
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,

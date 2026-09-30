@@ -4,6 +4,7 @@ import {
   ADJUSTMENTS_CLASSIFICATION,
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
   ADJUSTMENTS_PERMISSIONS,
+  ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
 } from "@waitron/adjustments";
 import { CREDENTIALS_CLASSIFICATION } from "@waitron/credentials";
@@ -278,6 +279,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: ADJUSTMENTS_CHANGE_SOURCES,
     routes: ADJUSTMENTS_ROUTES,
     permissions: ADJUSTMENTS_PERMISSIONS,
+    provisioning: ADJUSTMENTS_PROVISIONING,
     configurationTransfer: ADJUSTMENTS_CONFIGURATION_TRANSFER,
   },
 ];

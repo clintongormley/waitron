@@ -76,7 +76,12 @@ describe("provisioning a node that has no SIF registration yet", () => {
     const { nodeId, nif } = await bootstrapTenant();
 
     const seeded = await provisionNode(suite.db, { nodeId }, ALL_MODULES);
-    expect(seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service", "fiscal-verifactu"]);
+    expect(seeded.map((s) => s.module)).toEqual([
+      "catalogue",
+      "venue-service",
+      "fiscal-verifactu",
+      "adjustments",
+    ]);
     expect(seeded[2]!.report).toMatch(/^SIF .* \(installation 1\)$/);
 
     const live = await suite.db.execute<{

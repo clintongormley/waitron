@@ -121,6 +121,7 @@ describe("provisionVenue", () => {
       "catalogue",
       "venue-service",
       "fiscal-verifactu",
+      "adjustments",
     ]);
     const defaults = await db.execute<{ menus: number; zone_menus: number }>(sql`
       select
@@ -148,7 +149,7 @@ describe("provisionVenue", () => {
       { environment: "preproduction", venue: gbVenueRequest(nextNif()) },
     );
 
-    expect(result.seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service"]);
+    expect(result.seeded.map((s) => s.module)).toEqual(["catalogue", "venue-service", "adjustments"]);
     expect(result.seriesIds).toHaveLength(2);
     expect(await fiscalCounts(db)).toEqual({ sif: 0, series: 2, nodes: 1, registros: 0 });
 
