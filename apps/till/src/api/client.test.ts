@@ -777,6 +777,7 @@ describe("TillApi", () => {
         wasStarted: true,
         movedTo: null,
         direction: null,
+        cancelledExtra: null,
         createdAt: "2026-08-17T10:05:00.000Z",
       },
     ];

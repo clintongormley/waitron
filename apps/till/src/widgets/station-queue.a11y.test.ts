@@ -244,7 +244,8 @@ const dietGroups: StationQueueGroup[] = [
 ];
 
 // One notice of each kind, with every optional part shown somewhere: a started void, a changed line
-// with its new note, a weighed quantity, a move naming its new table, and a signed change each way.
+// with its new note, a weighed quantity, a move naming its new table, a signed change each way, and
+// a change naming the extra taken off the dish.
 const baseNotice: KitchenNotice = {
   id: "kn-void",
   stationId: "st-1",
@@ -259,6 +260,7 @@ const baseNotice: KitchenNotice = {
   wasStarted: true,
   movedTo: null,
   direction: null,
+  cancelledExtra: null,
   createdAt: "2026-08-17T10:10:00.000Z",
 };
 const notices: KitchenNotice[] = [
@@ -276,6 +278,8 @@ const notices: KitchenNotice[] = [
   // A HOLD correction's two directions.
   { ...baseNotice, id: "kn-added", kind: "changed", wasStarted: false, direction: "added" },
   { ...baseNotice, id: "kn-removed", kind: "changed", wasStarted: false, direction: "removed" },
+  // An extra taken off the dish.
+  { ...baseNotice, id: "kn-extra", kind: "changed", wasStarted: false, cancelledExtra: "Gherkins" },
 ];
 
 // A seated party's bill: a line with no group, a fired group, a held group (its Fire button under

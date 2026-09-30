@@ -134,6 +134,8 @@ export const en = {
   "station.notice.started": "Started",
   // `{table}` is substituted at the call site.
   "station.notice.moved_to": "Moved to {table}",
+  // `{extra}` is substituted at the call site.
+  "station.notice.cancelled_extra": "Cancel: {extra}",
   "station.notice.acknowledge": "Got it",
   "station.acknowledge_error": "Could not clear the notice, try again",
   // `{time}` and `{ago}` are substituted at the call site, `{n}` by `countText`; `t()` does not
@@ -930,6 +932,7 @@ export const es: Record<StringKey, string> = {
   "station.notice.moved": "Movido",
   "station.notice.started": "Empezado",
   "station.notice.moved_to": "Movido a {table}",
+  "station.notice.cancelled_extra": "Quitar: {extra}",
   "station.notice.acknowledge": "Entendido",
   "station.acknowledge_error": "No se pudo quitar el aviso, inténtalo de nuevo",
   "station.stale": "Sin actualizaciones desde las {time}, {ago}",

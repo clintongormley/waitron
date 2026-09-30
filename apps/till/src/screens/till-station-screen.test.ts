@@ -1021,6 +1021,7 @@ describe("till-station-screen kitchen notices", () => {
     wasStarted: true,
     movedTo: null,
     direction: null,
+    cancelledExtra: null,
     createdAt: "2026-08-17T10:10:00.000Z",
     ...overrides,
   });
@@ -1204,6 +1205,7 @@ describe("till-station-screen 15-second refresh", () => {
         wasStarted: false,
         movedTo: null,
         direction: null,
+        cancelledExtra: null,
         createdAt: "2026-08-17T10:20:00.000Z",
       },
     ],
@@ -1732,6 +1734,7 @@ describe("till-station-screen out-of-date banner", () => {
         wasStarted: false,
         movedTo: null,
         direction: null,
+        cancelledExtra: null,
         createdAt: "2026-08-17T10:20:00.000Z",
       },
     ],
