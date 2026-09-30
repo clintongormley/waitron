@@ -598,6 +598,9 @@ export class PrintersScreen extends LitElement {
   #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
+  /** A retained printer Add again switched on so its calibration can print; closing the wizard
+   * without saving switches it off again. */
+  #readdingId?: string;
 
   @state() private errorKey: string | null = null;
   @state() private refreshErrorKey: string | null = null;
@@ -1066,7 +1069,7 @@ export class PrintersScreen extends LitElement {
   }
 
   /** A Bluetooth device registered to a switched-on printer that no agent reports paired, such as
-   * one whose pairing was forgotten: it is offered Pair, which adds nothing. */
+   * one unpaired on the box outside Waitron: it is offered Pair, which adds nothing. */
   #canPairOnly(device: DiscoveredPrinter): boolean {
     const printer =
       device.transport === "bluetooth"
@@ -1151,6 +1154,7 @@ export class PrintersScreen extends LitElement {
               active: true,
             },
       );
+      if (disabled) this.#readdingId = disabled.id;
       this.calibrationStep = 1;
       await this.#load();
     } catch (error) {
@@ -1453,6 +1457,7 @@ export class PrintersScreen extends LitElement {
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
     await this.#submit(async () => {
       if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
+      if (this.#readdingId === id) this.#readdingId = undefined;
       await this.#closeModal("edit-printer-modal");
     });
   }
@@ -1954,14 +1959,18 @@ export class PrintersScreen extends LitElement {
         @click=${(event: Event) => this.#openPrinter(p, event)}
         >${t("action.edit")}</wt-button
       >
-      <wt-button
-        variant="danger"
-        data-test=${`deactivate-printer-${p.id}`}
-        ?disabled=${!p.active}
-        @click=${() => void this.#deactivatePrinter(p.id)}
-        >${t("printers.disable")}</wt-button
-      >
-      ${this.#forgetAction(p)}
+      ${
+        // Unpair switches the printer off too (the job pull, `apps/server/src/print-api.ts`).
+        this.#pairedReport(p)
+          ? this.#forgetAction(p)
+          : html`<wt-button
+              variant="danger"
+              data-test=${`deactivate-printer-${p.id}`}
+              ?disabled=${!p.active}
+              @click=${() => void this.#deactivatePrinter(p.id)}
+              >${t("printers.disable")}</wt-button
+            >`
+      }
     </dashboard-row-actions>`;
   }
 
@@ -2426,6 +2435,10 @@ export class PrintersScreen extends LitElement {
         this.editingPrinter = null;
         this.#closeTest();
         this.#restoreEditFocus();
+        if (this.#readdingId === p.id) {
+          this.#readdingId = undefined;
+          void this.#deactivatePrinter(p.id);
+        }
       }}
       @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector(this.calibrationStep > 0 && this.calibrationStep < 4 ? "[data-test=calibration-next]" : `[data-test="save-printer-${p.id}"]`))}
     >
