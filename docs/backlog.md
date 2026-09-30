@@ -3443,7 +3443,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/bill-payments.test.ts`, whose ids are
       made to sort against the taking order; each failed on every run with its half of the old
       tie-break restored (3 of 3 runs for refunds, 5 of 5 for payments).
-      **The same random tie-break in four other places — DONE (A136, 2026-09-30).** The review had
+      **The same random tie-break in four other places — DONE (A136, #919, 2026-09-30).** The review had
       found four more reads that broke a same-millisecond tie with a random UUID id (`newId` in
       `packages/db/src/schema/columns.ts`); each now breaks it by `rowid` too. Each guard below
       writes its rows with one timestamp and ids made to sort against the writing order. All four
