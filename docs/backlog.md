@@ -125,7 +125,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 1. **Finish table service and paying a bill in parts** (A4, lane B). Fifteen of the service
    plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
-   the adjustment reports; Task 13, standalone ordering, as #903). Left: the till's Cancel
+   the adjustment reports, as #923; Task 13, standalone ordering, as #903). Left: the till's Cancel
    taking a reason (waits on the owner, see Task 11's entry),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
@@ -3470,7 +3470,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     through unchanged; no request was sent through a route. **Next action:** send such a line through
     `POST` park and the held-order edit route; if it is stored, re-price or refuse client-sent frozen
     selections at the route boundary.
-  - **Task 12 (adjustment reports)** DONE (lane B item B12, 2026-09-30). A Reports screen in the
+  - **Task 12 (adjustment reports)** DONE (#923, main `434b74668`, lane B item B12, 2026-09-30). A Reports screen in the
     adjustments module (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`, under
     `report.view`) shows, for a range of business days, the cancellations, comps and discounts
     overall, per person and for guests: counts and amounts by action, by reason (grouped by reason,
