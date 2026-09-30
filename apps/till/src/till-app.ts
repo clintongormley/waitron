@@ -2281,9 +2281,7 @@ export class TillApp extends LitElement {
     signal?: AbortSignal,
   ): Promise<boolean | undefined> {
     const [order, listed] = await Promise.all([
-      signal === undefined
-        ? this.api.retrieveWorkingOrder(id)
-        : this.api.retrieveWorkingOrder(id, { signal }),
+      this.api.retrieveWorkingOrder(id, { signal }),
       this.#readStoredLines(id, signal),
     ]);
     if (left?.() === true) return undefined;
@@ -2357,9 +2355,7 @@ export class TillApp extends LitElement {
    * controls on every line. */
   async #readStoredLines(orderId: string, signal?: AbortSignal): Promise<StoredLines | null> {
     try {
-      const { lines, revision } = await (signal === undefined
-        ? this.api.getTabLines(orderId)
-        : this.api.getTabLines(orderId, { signal }));
+      const { lines, revision } = await this.api.getTabLines(orderId, { signal });
       return { orderId, revision, lines };
     } catch {
       return null;

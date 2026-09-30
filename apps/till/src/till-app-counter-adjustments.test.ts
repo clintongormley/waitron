@@ -315,7 +315,7 @@ describe("till-app: giving away a dish on a stored counter order", () => {
   it("offers the adjustments once the order's lines are read, Cancel only on what the kitchen has", async () => {
     const el = await retrieved();
 
-    expect(api.getTabLines).toHaveBeenCalledWith("wo-9");
+    expect(api.getTabLines).toHaveBeenCalledWith("wo-9", { signal: undefined });
     expect(inBasket(el, '[data-cancel-line="0"]')).not.toBeNull();
     expect(inBasket(el, '[data-cancel-line="1"]')).toBeNull();
     expect(inBasket(el, '[data-comp-line="1"]')).not.toBeNull();
