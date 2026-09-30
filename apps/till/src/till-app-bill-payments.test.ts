@@ -14,6 +14,8 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillBillPayDialog } from "./widgets/bill-pay-dialog.js";
+import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
+import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   AllocationPreview,
@@ -21,6 +23,8 @@ import type {
   BillPaymentRequest,
   BillPaymentResult,
   BillPaymentView,
+  BillRefundResult,
+  BillRefundView,
   CurrentOrders,
   FloorZone,
   OrderGroup,
@@ -1416,5 +1420,369 @@ describe("till-app: a bill payment on the card reader", () => {
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
     expect(sent()[0]!.entry).toBe("manual");
+  });
+});
+
+describe("till-app: giving back a bill payment", () => {
+  const partly = billOf({ outstanding: "70.00", hasPayments: true });
+  const cashPaid = paymentOf();
+  const keyedCard = paymentOf({
+    method: "card",
+    applied: "50.00",
+    tendered: null,
+    change: null,
+  });
+  const refundOf = (over: Partial<BillRefundView> = {}): BillRefundView => ({
+    id: "r-1",
+    paymentId: "pay-1",
+    submissionId: "rs-1",
+    appliedAmount: "50.00",
+    tipAmount: "0.00",
+    reason: "Charged twice",
+    state: "completed",
+    createdAt: "2026-09-30T20:10:00.000Z",
+    completedAt: "2026-09-30T20:10:00.000Z",
+    ...over,
+  });
+  const holding = (payment: BillPaymentView) =>
+    balanceOf({ received: "50.00", outstanding: "70.00", payments: [payment] });
+  const givenBack = (payment: BillPaymentView, refund: BillRefundView): BillRefundResult => ({
+    refund,
+    balance: balanceOf({ payments: [{ ...payment, refunds: [refund] }] }),
+  });
+  const manager = [{ personId: "m-1", displayName: "Marta" }];
+
+  const refundDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillBillRefundDialog>("till-bill-refund-dialog");
+  const inRefund = (el: TillApp, selector: string) =>
+    refundDialog(el)!.shadowRoot!.querySelector<HTMLElement & { error: string }>(selector);
+  const approval = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>(
+      "till-supervisor-override-dialog[data-refund-approval]",
+    );
+  const refunds = () =>
+    vi
+      .mocked(api.refundBillPayment)
+      .mock.calls.map(([billId, paymentId, request]) => ({ billId, paymentId, request }));
+
+  /** The bill holding `payment`, its dialog open, and a refund of it asked with `reason`. */
+  async function askRefund(
+    overrides: Record<string, unknown>,
+    payment: BillPaymentView,
+    reason = "Charged twice",
+  ): Promise<TillApp> {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn().mockResolvedValue(holding(payment)),
+      listRefundAuthorizers: vi.fn().mockResolvedValue(manager),
+      ...overrides,
+    });
+    await openTable(el);
+    await openDialog(el, "rest");
+    await press(el, `[data-payment-refund="${payment.id}"]`);
+    const input = inRefund(el, 'wt-input[name="reason"]')!.shadowRoot!.querySelector("input")!;
+    input.value = reason;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+    return el;
+  }
+
+  async function pinPad(el: TillApp, digits: string): Promise<void> {
+    const override = approval(el)!;
+    override.shadowRoot!.querySelector<HTMLElement>('[data-person="m-1"]')!.click();
+    await override.updateComplete;
+    for (const digit of digits) {
+      override
+        .shadowRoot!.querySelector("till-numeric-pad")!
+        .shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!
+        .click();
+      await override.updateComplete;
+    }
+    override.shadowRoot!.querySelector<HTMLElement>(".authorize")!.click();
+    await flush(el);
+  }
+
+  it("gives back a cash payment with a manager's PIN, opens no drawer from the till, and shows the bill after it", async () => {
+    const refunded = givenBack(cashPaid, refundOf());
+    let latest = holding(cashPaid);
+    const refundBillPayment = vi.fn(async () => {
+      latest = refunded.balance;
+      return refunded;
+    });
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
+    const openDrawer = vi.fn();
+    const el = await askRefund(
+      { refundBillPayment, getBillBalance: vi.fn(async () => latest), getTabLines, openDrawer },
+      cashPaid,
+    );
+
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
+    expect(approval(el)!.authorizers).toEqual(manager);
+    const readsBefore = getTabLines.mock.calls.length;
+    await pinPad(el, "1234");
+
+    expect(refunds()).toEqual([
+      {
+        billId: "wo-4",
+        paymentId: "pay-1",
+        request: {
+          submissionId: expect.any(String),
+          appliedAmount: "50.00",
+          tipAmount: "0.00",
+          reason: "Charged twice",
+          override: { personId: "m-1", pin: "1234" },
+        },
+      },
+    ]);
+    expect(approval(el)).toBeNull();
+    expect(refundDialog(el)).toBeNull();
+    expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
+      t("bill_refund.done_cash").replace("{amount}", money("50.00")),
+    );
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "0.00", "120.00"));
+    expect(text(inDialog(el, '[data-payment="pay-1"] [data-payment-refunded]'))).toBe(
+      t("bill_pay.refunded").replace("{amount}", money("50.00")),
+    );
+    expect(inDialog(el, "[data-payment-refund]")).toBeNull();
+    expect(getTabLines.mock.calls.length).toBeGreaterThan(readsBefore);
+    expect(openDrawer).not.toHaveBeenCalled();
+  });
+
+  it("gives back a hand-keyed card on its terminal first, then records it with a manager's PIN", async () => {
+    const refundBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "bill.refund_unsupported", status: 422, paymentId: "pay-1" })
+      .mockResolvedValueOnce(givenBack(keyedCard, refundOf()));
+    const el = await askRefund({ refundBillPayment }, keyedCard);
+    await pinPad(el, "1234");
+
+    expect(approval(el)).toBeNull();
+    expect(text(inRefund(el, "[data-refund-terminal]"))).toBe(
+      t("bill_refund.terminal").replace("{amount}", money("50.00")),
+    );
+    inRefund(el, "[data-refund-terminal-done]")!.click();
+    await flush(el);
+    expect(approval(el)).not.toBeNull();
+    await pinPad(el, "1234");
+
+    const [first, confirmed] = refunds();
+    expect(first!.request).not.toHaveProperty("manualConfirmed");
+    expect(confirmed!.request).toEqual({
+      submissionId: expect.any(String),
+      appliedAmount: "50.00",
+      tipAmount: "0.00",
+      reason: "Charged twice",
+      manualConfirmed: true,
+      override: { personId: "m-1", pin: "1234" },
+    });
+    expect(confirmed!.request.submissionId).not.toBe(first!.request.submissionId);
+    expect(api.listRefundAuthorizers).toHaveBeenCalledTimes(2);
+    expect(refundDialog(el)).toBeNull();
+    expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
+      t("bill_refund.done_terminal").replace("{amount}", money("50.00")),
+    );
+  });
+
+  it("keeps the PIN prompt open after a wrong PIN, saying so, and reads the bill again", async () => {
+    const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
+    const el = await askRefund(
+      {
+        getBillBalance,
+        refundBillPayment: vi.fn().mockRejectedValue({ code: "pin.invalid", status: 401 }),
+      },
+      cashPaid,
+    );
+    const readsBefore = getBillBalance.mock.calls.length;
+    await pinPad(el, "0000");
+
+    expect(approval(el)!.error).toBe("pin.invalid");
+    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.invalid"));
+    expect(refundDialog(el)).not.toBeNull();
+    expect(getBillBalance.mock.calls.length).toBeGreaterThan(readsBefore);
+  });
+
+  it("shows a refund the server refused beside the refund's action, and reads the bill and its lines again", async () => {
+    const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
+    const el = await askRefund(
+      {
+        getBillBalance,
+        getTabLines,
+        refundBillPayment: vi
+          .fn()
+          .mockRejectedValue({ code: "bill.refund_in_progress", status: 409 }),
+      },
+      cashPaid,
+    );
+    const reads = [getBillBalance.mock.calls.length, getTabLines.mock.calls.length];
+    await pinPad(el, "1234");
+
+    expect(approval(el)).toBeNull();
+    expect(inRefund(el, "wt-form-actions")!.error).toBe(codeMessage("bill.refund_in_progress"));
+    expect(getBillBalance.mock.calls.length).toBeGreaterThan(reads[0]!);
+    expect(getTabLines.mock.calls.length).toBeGreaterThan(reads[1]!);
+  });
+
+  it("says a card refund is waiting for the card provider", async () => {
+    const readerCard = { ...keyedCard };
+    const el = await askRefund(
+      {
+        refundBillPayment: vi
+          .fn()
+          .mockResolvedValue(
+            givenBack(readerCard, refundOf({ state: "pending", completedAt: null })),
+          ),
+      },
+      readerCard,
+    );
+    await pinPad(el, "1234");
+
+    expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
+      t("bill_refund.pending").replace("{amount}", money("50.00")),
+    );
+  });
+
+  it("sends a refund that got no answer again under the same submission id", async () => {
+    const refundBillPayment = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValueOnce(givenBack(cashPaid, refundOf()));
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+    await pinPad(el, "1234");
+
+    await expect.poll(() => refundBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(2);
+    await expect.poll(() => refundDialog(el)).toBeNull();
+    const [first, again] = refunds();
+    expect(again!.request.submissionId).toBe(first!.request.submissionId);
+  });
+
+  it("says a refund that never got an answer may have been made, and gives the same id to the same refund again", async () => {
+    const refundBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+    await pinPad(el, "1234");
+
+    await expect
+      .poll(() => inRefund(el, "wt-form-actions")?.error, { timeout: 5_000 })
+      .toBe(t("bill_refund.unconfirmed"));
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+    await pinPad(el, "1234");
+    await expect.poll(() => refundBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(6);
+
+    const ids = new Set(refunds().map(({ request }) => request.submissionId));
+    expect(ids.size).toBe(1);
+  });
+
+  it("says who can approve could not be read, beside the refund's action", async () => {
+    const el = await askRefund(
+      { listRefundAuthorizers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) },
+      cashPaid,
+    );
+
+    expect(approval(el)).toBeNull();
+    expect(inRefund(el, "wt-form-actions")!.error).toBe(t("bill_refund.approvers_failed"));
+  });
+
+  it("puts a refusal of the reason under the reason", async () => {
+    const el = await askRefund(
+      {
+        refundBillPayment: vi.fn().mockRejectedValue({
+          code: "management.request_invalid",
+          status: 400,
+          field: "reason",
+        }),
+      },
+      cashPaid,
+    );
+    await pinPad(el, "1234");
+
+    expect(inRefund(el, 'wt-input[name="reason"]')!.error).toBe(
+      codeMessage("management.request_invalid"),
+    );
+  });
+
+  it("asks once who can approve for two presses, and sends once for two approvals", async () => {
+    let approvers: (list: typeof manager) => void = () => {};
+    const listRefundAuthorizers = vi.fn(
+      () => new Promise<typeof manager>((resolve) => (approvers = resolve)),
+    );
+    let refunded: (result: BillRefundResult) => void = () => {};
+    const refundBillPayment = vi.fn(
+      () => new Promise<BillRefundResult>((resolve) => (refunded = resolve)),
+    );
+    const el = await askRefund({ listRefundAuthorizers, refundBillPayment }, cashPaid);
+    const ask = { appliedAmount: "50.00", tipAmount: "0.00", reason: "Charged twice" };
+    emit(refundDialog(el)!, "bill-refund-continue", ask);
+    approvers(manager);
+    await flush(el);
+    expect(listRefundAuthorizers).toHaveBeenCalledOnce();
+
+    const approve = () => emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
+    approve();
+    approve();
+    refunded(givenBack(cashPaid, refundOf()));
+    await flush(el);
+    expect(refundBillPayment).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["who can approve", "approvers", "resolve"],
+    ["a failed read of who can approve", "approvers", "reject"],
+    ["a refund", "refund", "resolve"],
+    ["a refusal", "refund", "reject"],
+  ] as const)(
+    "changes nothing when %s arrives after the operator has logged out",
+    async (_case, request, settle) => {
+      let answer: { resolve: (value: unknown) => void; reject: (error: unknown) => void } = {
+        resolve: () => {},
+        reject: () => {},
+      };
+      const later = () => new Promise((resolve, reject) => (answer = { resolve, reject }));
+      const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
+      const el = await askRefund(
+        request === "approvers"
+          ? { getBillBalance, listRefundAuthorizers: vi.fn(later) }
+          : { getBillBalance, refundBillPayment: vi.fn(later) },
+        cashPaid,
+      );
+      if (request === "refund") {
+        const override = approval(el)!;
+        emit(override, "override-confirm", { personId: "m-1", pin: "1234" });
+        await flush(el);
+      }
+      const reads = getBillBalance.mock.calls.length;
+
+      emit(tableOrder(el), "logout");
+      await flush(el);
+      if (settle === "resolve")
+        answer.resolve(request === "approvers" ? manager : givenBack(cashPaid, refundOf()));
+      else answer.reject({ code: "bill.refund_in_progress" });
+      await flush(el);
+
+      expect(refundDialog(el)).toBeNull();
+      expect(approval(el)).toBeNull();
+      expect(dialog(el)).toBeNull();
+      expect(getBillBalance).toHaveBeenCalledTimes(reads);
+    },
+  );
+
+  it("goes back to the refund when the PIN prompt is cancelled, and closes it on Cancel", async () => {
+    const el = await askRefund({ refundBillPayment: vi.fn() }, cashPaid);
+    approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
+    await flush(el);
+
+    expect(approval(el)).toBeNull();
+    expect(refundDialog(el)).not.toBeNull();
+    inRefund(el, "[data-refund-close]")!.click();
+    await flush(el);
+    expect(refundDialog(el)).toBeNull();
+    expect(dialog(el)).not.toBeNull();
+    expect(api.refundBillPayment).not.toHaveBeenCalled();
   });
 });

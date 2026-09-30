@@ -167,6 +167,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That is more than is left to give back on this card payment. Reload the bill and check the amount",
     es: "Es más de lo que queda por devolver de este pago con tarjeta. Vuelve a cargar la cuenta y revisa el importe",
   },
+  "authorization.not_permitted": {
+    en: "The person who approved this may not do it. Choose someone who can",
+    es: "La persona que lo ha aprobado no tiene permiso para hacerlo. Elige a alguien que pueda",
+  },
   "bill.refund_in_progress": {
     en: "A card refund on this bill is still waiting for the card provider. The bill cannot be changed until it finishes",
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. No se puede cambiar la cuenta hasta que termine",

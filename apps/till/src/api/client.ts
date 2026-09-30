@@ -1849,6 +1849,12 @@ export class TillApi {
     return this.#request<StaffMember[]>("/api/drawer/authorizers", "GET");
   }
 
+  /** Who may approve a bill refund → `GET /api/refund-authorizers`: the active holders of the refund
+   * permission, by id and name. */
+  listRefundAuthorizers(): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>("/api/refund-authorizers", "GET");
+  }
+
   /**
    * Park a working order to pay later → `POST /api/working-orders`. `id` is client-minted so a
    * lost-response retry is idempotent against the primary key; `lines` carry no price.

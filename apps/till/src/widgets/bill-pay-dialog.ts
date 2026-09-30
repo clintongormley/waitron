@@ -23,8 +23,10 @@ import type {
   AllocationChoice,
   AllocationPreview,
   BillBalance,
+  BillPaymentView,
   TillActiveReader,
 } from "../api/client.js";
+import { refundOffered, refundableOf } from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { CardProvider } from "./tender-pay.js";
 
@@ -66,6 +68,15 @@ export interface PayRefusal {
 export interface PayTaken {
   change: string | null;
   pending?: string;
+}
+
+/** What a refund just did: the amount given back, how, and whether it was keyed on a separate card
+ * terminal; a card refund may still be waiting for its provider, or have failed. */
+export interface RefundNotice {
+  state: "completed" | "pending" | "failed";
+  amount: string;
+  method: "cash" | "card";
+  terminal: boolean;
 }
 
 type Field = "lines" | "amount" | "people" | "tendered" | "cardTip" | "tipAmount";
@@ -129,7 +140,7 @@ const TYPED_AMOUNT = /^\d{1,9}([.,]\d{1,2})?$/;
 const PEOPLE = /^[1-9]\d{0,2}$/;
 
 /** A typed amount with a decimal comma read as a point, or null when it is not an amount. */
-function typedAmount(value: string): string | null {
+export function typedAmount(value: string): string | null {
   const typed = value.trim();
   return TYPED_AMOUNT.test(typed) ? typed.replace(",", ".") : null;
 }
@@ -302,6 +313,53 @@ export class TillBillPayDialog extends LitElement {
       .choices .legend {
         font-weight: var(--wt-font-weight-bold);
       }
+
+      .payments {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+      }
+
+      .payments h3 {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+      }
+
+      .payments ol {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .payment {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2) var(--wt-space-4);
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+
+      .payment-text {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .payment-head {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .payment-text p {
+        font-size: var(--wt-font-size-sm);
+      }
     `,
   ];
 
@@ -321,6 +379,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ attribute: false }) refusal: PayRefusal | null = null;
   /** Set after each payment taken: the dialog says so and starts its form again. */
   @property({ attribute: false }) taken: PayTaken | null = null;
+  /** Set after each refund made from the bill's payments list. */
+  @property({ attribute: false }) refunded: RefundNotice | null = null;
   @property({ type: Boolean }) busy = false;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
@@ -537,7 +597,14 @@ export class TillBillPayDialog extends LitElement {
             ? nothing
             : html`<p class="taken" role="status" data-pay-taken>${this.#takenText(this.taken)}</p>`
         }
-        ${this.#step()}
+        ${
+          this.refunded === null
+            ? nothing
+            : html`<p class="taken" role="status" data-pay-refunded>
+                ${this.#refundedText(this.refunded)}
+              </p>`
+        }
+        ${this.#payments()} ${this.#step()}
       </div>
     </wt-dialog>`;
   }
@@ -548,6 +615,99 @@ export class TillBillPayDialog extends LitElement {
     return taken.change === null || compareDecimal(decimal(taken.change), decimal("0")) === 0
       ? t("bill_pay.taken")
       : t("bill_pay.taken_change").replace("{amount}", () => this.#money(taken.change!));
+  }
+
+  #refundedText(refunded: RefundNotice): string {
+    const key: StringKey =
+      refunded.state === "failed"
+        ? "bill_refund.failed"
+        : refunded.state === "pending"
+          ? "bill_refund.pending"
+          : refunded.method === "cash"
+            ? "bill_refund.done_cash"
+            : refunded.terminal
+              ? "bill_refund.done_terminal"
+              : "bill_refund.done_card";
+    return t(key).replace("{amount}", () => this.#money(refunded.amount));
+  }
+
+  /** The bill's payments, oldest first, each with a Refund while it has money to give back. */
+  #payments(): TemplateResult | typeof nothing {
+    const balance = this.balance;
+    if (balance === null || balance.payments.length === 0) return nothing;
+    return html`<section class="payments" data-pay-payments aria-labelledby="payments-heading">
+      <h3 id="payments-heading">${t("bill_pay.payments")}</h3>
+      <ol>
+        ${balance.payments.map((payment, index) =>
+          this.#paymentRow(payment, index + 1, balance.status),
+        )}
+      </ol>
+    </section>`;
+  }
+
+  #paymentRow(payment: BillPaymentView, n: number, status: BillBalance["status"]): TemplateResult {
+    const STATES: Record<BillPaymentView["state"], StringKey> = {
+      received: "bill_pay.state_received",
+      pending: "bill_pay.state_pending",
+      failed: "bill_pay.state_failed",
+      declined: "bill_pay.state_declined",
+    };
+    const REFUNDS: Record<BillPaymentView["refunds"][number]["state"], StringKey> = {
+      completed: "bill_pay.refunded",
+      pending: "bill_pay.refund_waiting",
+      failed: "bill_pay.refund_failed_row",
+    };
+    const method = t(payment.method === "cash" ? "tender.cash" : "tender.card");
+    const left = refundableOf(payment);
+    const leftTotal = toScale(addDecimal(decimal(left.applied), decimal(left.tip)), MONEY_SCALE);
+    return html`<li class="payment" data-payment=${payment.id}>
+      <div class="payment-text">
+        <span class="payment-head">
+          ${t("bill_pay.payment")
+            .replace("{n}", String(n))
+            .replace("{method}", () => method)}
+          · ${t(STATES[payment.state])}
+        </span>
+        <p>
+          ${t("bill_pay.applied")} ${this.#money(payment.applied)} · ${t("bill_pay.tip")}
+          ${this.#money(payment.tip)}
+        </p>
+        ${payment.refunds.map(
+          (refund) =>
+            html`<p class="muted" data-payment-refunded>
+              ${t(REFUNDS[refund.state]).replace("{amount}", () =>
+                this.#money(
+                  toScale(
+                    addDecimal(decimal(refund.appliedAmount), decimal(refund.tipAmount)),
+                    MONEY_SCALE,
+                  ),
+                ),
+              )}
+            </p>`,
+        )}
+        ${
+          payment.state === "pending"
+            ? html`<p class="muted" data-payment-pending>${t("bill_pay.pending_where")}</p>`
+            : nothing
+        }
+      </div>
+      ${
+        refundOffered(payment, status)
+          ? html`<wt-button
+              variant="secondary"
+              size="sm"
+              data-payment-refund=${payment.id}
+              aria-label=${t("bill_pay.refund_label")
+                .replace("{n}", String(n))
+                .replace("{amount}", () => this.#money(leftTotal))}
+              .disabled=${this.busy}
+              @click=${() => this.#emit("bill-refund", { paymentId: payment.id })}
+            >
+              ${t("bill_pay.refund")}
+            </wt-button>`
+          : nothing
+      }
+    </li>`;
   }
 
   /** The form; the server's two ways to pay for items that cost more than is left; or the
@@ -1087,26 +1247,27 @@ export class TillBillPayDialog extends LitElement {
     );
     const bottom = this.#bottomMessage(
       new Map(),
-      options.length === 0 ? codeMessage("order.payment_in_flight") : t("bill_pay.choose_later"),
+      options.length === 0 ? codeMessage("order.payment_in_flight") : undefined,
     );
     return html`<p class="scope" data-pay-scope>${this.#scope()}</p>
       ${
         options.length === 0
           ? nothing
           : html`<div class="choices" role="group" aria-labelledby="choices" data-pay-choices>
-              <p class="legend" id="choices">${t("bill_pay.choice_legend")}</p>
-              ${options.map(
-                (option) =>
-                  html`<wt-button
-                    variant="secondary"
-                    data-pay-choice=${option.choice}
-                    .disabled=${this.busy}
-                    @click=${() => this.#choose(asked, option.choice)}
-                  >
-                    ${this.#choiceLabel(option)}
-                  </wt-button>`,
-              )}
-            </div>`
+                <p class="legend" id="choices">${t("bill_pay.choice_legend")}</p>
+                ${options.map(
+                  (option) =>
+                    html`<wt-button
+                      variant="secondary"
+                      data-pay-choice=${option.choice}
+                      .disabled=${this.busy}
+                      @click=${() => this.#choose(asked, option.choice)}
+                    >
+                      ${this.#choiceLabel(option)}
+                    </wt-button>`,
+                )}
+              </div>
+              <p class="muted" data-pay-choose-note>${t("bill_pay.choose_later")}</p>`
       }
       <wt-form-actions .error=${bottom}>${this.#backButton()}</wt-form-actions>`;
   }

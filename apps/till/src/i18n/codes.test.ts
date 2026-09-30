@@ -322,3 +322,12 @@ it("explains a card reader a bill payment cannot use, in both languages, naming 
     expect(codeMessage(code, "es")).not.toContain(code);
   }
 });
+
+it("explains an approver who may not approve, in both languages, naming no identifier", () => {
+  for (const locale of ["en", "es"] as const) {
+    expect(codeMessage("authorization.not_permitted", locale)).not.toBe(
+      codeMessage("server.internal", locale),
+    );
+    expect(codeMessage("authorization.not_permitted", locale)).not.toContain("authorization");
+  }
+});

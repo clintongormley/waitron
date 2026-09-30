@@ -1,7 +1,10 @@
 import {
   MONEY_SCALE,
+  addDecimal,
+  compareDecimal,
   divideDecimal,
   decimal,
+  subtractDecimal,
   sumDecimals,
   toScale,
   type Decimal,
@@ -10,8 +13,11 @@ import { isNetworkFailure } from "../api/client.js";
 import type {
   AllocationChoice,
   AllocationPreview,
+  BillBalance,
   BillPaymentAsk,
   BillPaymentRequest,
+  BillPaymentView,
+  BillRefundRequest,
   TabLine,
 } from "../api/client.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";
@@ -111,8 +117,60 @@ export function submissionFor(
 
 /** What is left unanswered once a send ends: the submission, when it got no answer at all;
  * nothing, when the server answered, a refusal included. */
-export function unansweredAfter(sent: Submission, error?: unknown): Submission | null {
+export function unansweredAfter<S>(sent: S, error?: unknown): S | null {
   return isNetworkFailure(error) ? sent : null;
+}
+
+/** A refund as confirmed: without its submission id, and without the approver's PIN, which is
+ * never kept. */
+export type RefundAsk = Omit<BillRefundRequest, "submissionId" | "override">;
+
+export interface RefundSubmission {
+  key: string;
+  request: Omit<BillRefundRequest, "override">;
+}
+
+/** As {@link submissionFor}, for a refund of one payment of the bill. */
+export function refundSubmissionFor(
+  billId: string,
+  paymentId: string,
+  ask: RefundAsk,
+  unanswered: RefundSubmission | null,
+  mint: () => string = () => crypto.randomUUID(),
+): RefundSubmission {
+  const key = JSON.stringify([billId, paymentId, ask]);
+  const submissionId =
+    unanswered !== null && unanswered.key === key ? unanswered.request.submissionId : mint();
+  return { key, request: { ...ask, submissionId } };
+}
+
+/** What is left to give back of a payment: what it took less its completed refunds. */
+export function refundableOf(payment: BillPaymentView): { applied: string; tip: string } {
+  const done = payment.refunds.filter((refund) => refund.state === "completed");
+  const less = (amount: string, refunded: string[]) =>
+    toScale(
+      subtractDecimal(decimal(amount), sumDecimals(refunded.map((each) => decimal(each)))),
+      MONEY_SCALE,
+    );
+  return {
+    applied: less(
+      payment.applied,
+      done.map((refund) => refund.appliedAmount),
+    ),
+    tip: less(
+      payment.tip,
+      done.map((refund) => refund.tipAmount),
+    ),
+  };
+}
+
+/** A refund is offered of a received payment of an open bill with something left to give back,
+ * while none of its refunds is still waiting for the card provider. */
+export function refundOffered(payment: BillPaymentView, status: BillBalance["status"]): boolean {
+  if (status !== "open" || payment.state !== "received") return false;
+  if (payment.refunds.some((refund) => refund.state === "pending")) return false;
+  const left = refundableOf(payment);
+  return compareDecimal(addDecimal(decimal(left.applied), decimal(left.tip)), decimal("0")) > 0;
 }
 
 /** The bill's dishes as an item payment offers them, each with its extras, which are paid with it.

@@ -6,6 +6,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import {
   MONEY_SCALE,
+  addDecimal,
   decimal,
   formatMoney,
   resolveActiveLocale,
@@ -82,12 +83,18 @@ import type {
   PayRequest,
   PayTaken,
   PayWay,
+  RefundNotice,
 } from "./widgets/bill-pay-dialog.js";
+import "./widgets/bill-refund-dialog.js";
+import type { RefundRefusal } from "./widgets/bill-refund-dialog.js";
 import {
   confirmationOf,
   paymentAsk,
+  refundSubmissionFor,
   submissionFor,
   unansweredAfter,
+  type RefundAsk,
+  type RefundSubmission,
   type Submission,
 } from "./state/bill-payment.js";
 import "./widgets/basket-refresh-dialog.js";
@@ -110,6 +117,8 @@ import type {
   BillBalance,
   BillParty,
   BillPaymentResult,
+  BillPaymentView,
+  BillRefundResult,
   DeviceStation,
   DraftSubmission,
   FloorZone,
@@ -470,6 +479,21 @@ interface BillPaying {
   preview: AllocationPreview | null;
   refusal: PayRefusal | null;
   taken: PayTaken | null;
+  refunded: RefundNotice | null;
+  busy: boolean;
+}
+
+/** A refund of one payment, opened from the bill payment dialog `payId`: what was asked, and
+ * whether staff are to give a card back on its terminal first. */
+interface BillRefunding {
+  id: number;
+  payId: number;
+  billId: string;
+  visit: number;
+  payment: BillPaymentView;
+  terminal: boolean;
+  asked: RefundAsk | null;
+  refusal: RefundRefusal | null;
   busy: boolean;
 }
 
@@ -1145,6 +1169,14 @@ export class TillApp extends LitElement {
   /** The last bill payment sent that got no answer, which the same confirmation resends under
    * its submission id. */
   #unansweredPayment: Submission | null = null;
+  /** The open refund dialog, over the bill payment dialog. */
+  @state() private billRefunding: BillRefunding | null = null;
+  #billRefunds = 0;
+  /** The people who can approve the refund being confirmed; set, their PIN prompt is open. */
+  @state() private refundApprovers?: StaffMember[];
+  @state() private refundApproverError: string | null = null;
+  /** The last refund sent that got no answer, which the same refund resends under its id. */
+  #unansweredRefund: RefundSubmission | null = null;
   /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder}; a no-op once it
    * has ended, and for a lock taken later. */
   #endReloadLock: () => void = () => {};
@@ -2602,24 +2634,56 @@ export class TillApp extends LitElement {
     const open = this.billPaying;
     if (open === null) return nothing;
     return html`<till-bill-pay-dialog
-      .balance=${open.balance}
-      .lines=${open.lines}
-      .way=${open.way}
-      .amount=${open.amount}
-      .asked=${open.asked}
-      .preview=${open.preview}
-      .refusal=${open.refusal}
-      .taken=${open.taken}
-      .busy=${open.busy}
-      .tipsEnabled=${this.tipsEnabled}
-      .cardReader=${this.handheldMode ? "none" : this.cardProvider}
-      .readers=${this.activeReaders}
-      .defaultReaderId=${this.defaultReaderId}
-      @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
-      @bill-pay-confirm=${() => void this.#onBillPayConfirm()}
-      @bill-pay-edit=${() => this.#onBillPayEdit()}
-      @bill-pay-close=${() => (this.billPaying = null)}
-    ></till-bill-pay-dialog>`;
+        .balance=${open.balance}
+        .lines=${open.lines}
+        .way=${open.way}
+        .amount=${open.amount}
+        .asked=${open.asked}
+        .preview=${open.preview}
+        .refusal=${open.refusal}
+        .taken=${open.taken}
+        .refunded=${open.refunded}
+        .busy=${open.busy}
+        .tipsEnabled=${this.tipsEnabled}
+        .cardReader=${this.handheldMode ? "none" : this.cardProvider}
+        .readers=${this.activeReaders}
+        .defaultReaderId=${this.defaultReaderId}
+        @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
+        @bill-pay-confirm=${() => void this.#onBillPayConfirm()}
+        @bill-pay-edit=${() => this.#onBillPayEdit()}
+        @bill-pay-close=${() => this.#closeBillPaying()}
+        @bill-refund=${(event: Event) => this.#onBillRefund(event)}
+      ></till-bill-pay-dialog>
+      ${this.#renderBillRefunding()}`;
+  }
+
+  /** The refund dialog and, over it, its approver's PIN prompt, whose events stop here so the
+   * drawer's override handlers on the wrapper never see them. */
+  #renderBillRefunding(): TemplateResult | typeof nothing {
+    const open = this.billRefunding;
+    if (open === null) return nothing;
+    return html`<till-bill-refund-dialog
+        .payment=${open.payment}
+        .terminal=${open.terminal}
+        .refusal=${open.refusal}
+        .busy=${open.busy}
+        @bill-refund-continue=${(event: Event) => void this.#onRefundContinue(event)}
+        @bill-refund-close=${() => this.#closeBillRefunding()}
+      ></till-bill-refund-dialog>
+      ${
+        this.refundApprovers === undefined
+          ? nothing
+          : html`<till-supervisor-override-dialog
+              data-refund-approval
+              .authorizers=${this.refundApprovers}
+              .error=${this.refundApproverError}
+              @override-confirm=${(event: Event) => void this.#onRefundApproverConfirm(event)}
+              @override-cancel=${(event: Event) => {
+                event.stopPropagation();
+                this.#closeRefundApprovers();
+              }}
+            ></till-supervisor-override-dialog>`
+      }`;
   }
 
   /** Also the cancel handler. */
@@ -4485,7 +4549,7 @@ export class TillApp extends LitElement {
     // The basket stays as it was, as a cancel leaves it; the next sign-in's offers load checks it.
     this.basketRefresh = undefined;
     this.#closeAdjust();
-    this.billPaying = null;
+    this.#closeBillPaying();
     this.#operatorSession++;
   }
 
@@ -4544,6 +4608,7 @@ export class TillApp extends LitElement {
       preview: null,
       refusal: null,
       taken: null,
+      refunded: null,
       busy: false,
     };
     this.billPaying = open;
@@ -4575,7 +4640,7 @@ export class TillApp extends LitElement {
     // The dialog's events come only while it is open. A press while a request is out is dropped.
     const open = this.billPaying!;
     if (open.busy) return;
-    this.billPaying = { ...open, refusal: null, taken: null, busy: true };
+    this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     try {
       const preview = await this.api.previewBillPayment(
         open.billId,
@@ -4604,7 +4669,7 @@ export class TillApp extends LitElement {
       asked.card,
     );
     const submission = submissionFor(open.billId, confirmation, this.#unansweredPayment);
-    this.billPaying = { ...open, refusal: null, taken: null, busy: true };
+    this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
@@ -4644,7 +4709,7 @@ export class TillApp extends LitElement {
       return;
     }
     if (result.invoice !== undefined) {
-      if (this.#billPayingNow(open.id) !== null) this.billPaying = null;
+      if (this.#billPayingNow(open.id) !== null) this.#closeBillPaying();
       this.result = result.invoice;
       this.#showTicket(open.billId);
       return;
@@ -4718,6 +4783,173 @@ export class TillApp extends LitElement {
 
   #onBillPayEdit(): void {
     this.billPaying = { ...this.billPaying!, asked: null, preview: null, refusal: null };
+  }
+
+  #closeBillPaying(): void {
+    this.billPaying = null;
+    this.#closeBillRefunding();
+  }
+
+  /** Refund pressed on a payment the dialog lists: the refund dialog opens over it. */
+  #onBillRefund(event: Event): void {
+    const { paymentId } = (event as CustomEvent<{ paymentId: string }>).detail;
+    // The dialog offers Refund only on a payment of the balance it shows, and is under the refund
+    // dialog while that is open.
+    const open = this.billPaying!;
+    this.billRefunding = {
+      id: ++this.#billRefunds,
+      payId: open.id,
+      billId: open.billId,
+      visit: open.visit,
+      payment: open.balance!.payments.find((payment) => payment.id === paymentId)!,
+      terminal: false,
+      asked: null,
+      refusal: null,
+      busy: false,
+    };
+  }
+
+  #billRefundingNow(id: number): BillRefunding | null {
+    return this.billRefunding?.id === id ? this.billRefunding : null;
+  }
+
+  #closeBillRefunding(): void {
+    this.billRefunding = null;
+    this.#closeRefundApprovers();
+  }
+
+  #closeRefundApprovers(): void {
+    this.refundApprovers = undefined;
+    this.refundApproverError = null;
+  }
+
+  /** How much and why, confirmed: the people who can approve it are read, and their PIN prompt
+   * opens. Every refund is approved with a PIN, which a card keyed on a separate terminal needs
+   * even from someone allowed to give refunds. */
+  async #onRefundContinue(event: Event): Promise<void> {
+    const asked = (event as CustomEvent<RefundAsk>).detail;
+    // The dialog's events come only while it is open. A press while a request is out is dropped.
+    const open = this.billRefunding!;
+    if (open.busy) return;
+    this.billRefunding = { ...open, asked, refusal: null, busy: true };
+    try {
+      const approvers = await this.api.listRefundAuthorizers();
+      const now = this.#billRefundingNow(open.id);
+      if (now === null) return;
+      this.billRefunding = { ...now, busy: false };
+      this.refundApproverError = null;
+      this.refundApprovers = approvers;
+    } catch {
+      const now = this.#billRefundingNow(open.id);
+      if (now !== null)
+        this.billRefunding = { ...now, refusal: { code: "approvers" }, busy: false };
+    }
+  }
+
+  /** The approver's PIN leaves in the request and is never kept. */
+  async #onRefundApproverConfirm(event: Event): Promise<void> {
+    event.stopPropagation();
+    const override = (event as CustomEvent<{ personId: string; pin: string }>).detail;
+    // The PIN prompt is drawn only over an open refund dialog.
+    const open = this.billRefunding!;
+    if (open.busy) return;
+    this.refundApproverError = null;
+    const submission = refundSubmissionFor(
+      open.billId,
+      open.payment.id,
+      open.asked!,
+      this.#unansweredRefund,
+    );
+    this.billRefunding = { ...open, refusal: null, busy: true };
+    const session = this.#operatorSession;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const result = await resendUnanswered(
+        (signal) =>
+          this.api.refundBillPayment(
+            open.billId,
+            open.payment.id,
+            { ...submission.request, override: { personId: override.personId, pin: override.pin } },
+            { signal },
+          ),
+        limit.signal,
+        () => session === this.#operatorSession,
+      );
+      this.#unansweredRefund = null;
+      await this.#onRefunded(open, result);
+    } catch (error) {
+      this.#unansweredRefund = unansweredAfter(submission, error);
+      await this.#onRefundRefused(open, error);
+    } finally {
+      limit.done();
+    }
+  }
+
+  /** The refund dialog closes; the bill payment dialog says what the refund did and shows the
+   * bill's new balance, and the bill is read again. An answer after the operator has logged out
+   * changes nothing. */
+  async #onRefunded(open: BillRefunding, result: BillRefundResult): Promise<void> {
+    if (this.#billRefundingNow(open.id) === null) return;
+    this.#closeBillRefunding();
+    if (this.activeTabId === open.billId) this.billBalance = result.balance;
+    // Whatever closes the payment dialog closes the refund dialog over it (#closeBillPaying).
+    const paying = this.#billPayingNow(open.payId)!;
+    this.billPaying = {
+      ...paying,
+      balance: result.balance,
+      taken: null,
+      refunded: {
+        state: result.refund.state,
+        amount: toScale(
+          addDecimal(decimal(result.refund.appliedAmount), decimal(result.refund.tipAmount)),
+          MONEY_SCALE,
+        ),
+        method: open.payment.method,
+        terminal: open.asked!.manualConfirmed === true,
+      },
+    };
+    if (!this.#hasLeftOrder(open.billId, open.visit))
+      await this.#rereadAmounts(open.billId, open.visit);
+  }
+
+  /**
+   * A refusal of the approver's PIN shows in the PIN prompt; a card the server cannot give back
+   * itself asks staff to give it back on its terminal first; one naming a field goes under it, and
+   * any other beside the refund's action. The bill is read again after every refusal. A refusal
+   * after the operator has logged out changes nothing.
+   */
+  async #onRefundRefused(open: BillRefunding, error: unknown): Promise<void> {
+    const now = this.#billRefundingNow(open.id);
+    if (now === null) return;
+    const refused = error as { code?: unknown; field?: unknown };
+    const code = typeof refused.code === "string" ? refused.code : "server.internal";
+    if (APPROVER_REFUSALS.has(code)) {
+      this.refundApproverError = code;
+      this.billRefunding = { ...now, busy: false };
+    } else {
+      this.#closeRefundApprovers();
+      if (isNetworkFailure(error)) {
+        this.billRefunding = { ...now, refusal: { code: "network" }, busy: false };
+      } else if (
+        code === "bill.refund_unsupported" &&
+        now.payment.method === "card" &&
+        now.asked!.manualConfirmed !== true
+      ) {
+        this.billRefunding = { ...now, terminal: true, refusal: null, busy: false };
+      } else {
+        this.billRefunding = {
+          ...now,
+          refusal: {
+            code,
+            ...(typeof refused.field === "string" ? { field: refused.field } : {}),
+          },
+          busy: false,
+        };
+      }
+    }
+    await this.#rereadBillPaying(open.payId, open.billId);
+    if (!this.#hasLeftOrder(open.billId, open.visit))
+      await this.#rereadAmounts(open.billId, open.visit);
   }
 
   /**

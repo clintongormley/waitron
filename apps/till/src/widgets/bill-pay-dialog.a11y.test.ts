@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./bill-pay-dialog.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type { AllocationPreview, BillBalance } from "../api/client.js";
+import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));
@@ -203,6 +203,52 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     const { host } = await mount({
       taken: { change: null, pending: "40.00" },
       balance: { ...balance, reserved: "40.00" },
+    });
+    await expectNoA11yViolations(host);
+  });
+  it("has no violations listing the bill's payments, one refunded, one at the reader, one declined, after a refund", async () => {
+    const payment = (over: Partial<BillPaymentView>): BillPaymentView => ({
+      id: "pay-1",
+      submissionId: "sub-1",
+      kind: "contribution",
+      shareOf: null,
+      method: "cash",
+      applied: "50.00",
+      tip: "0.00",
+      tendered: "50.00",
+      change: "0.00",
+      state: "received",
+      createdAt: "2026-09-30T20:00:00.000Z",
+      receivedAt: "2026-09-30T20:00:00.000Z",
+      lines: [],
+      refunds: [],
+      ...over,
+    });
+    const { host } = await mount({
+      refunded: { state: "pending", amount: "10.00", method: "card", terminal: false },
+      balance: {
+        ...balance,
+        payments: [
+          payment({
+            refunds: [
+              {
+                id: "r-1",
+                paymentId: "pay-1",
+                submissionId: "rs-1",
+                appliedAmount: "10.00",
+                tipAmount: "0.00",
+                reason: "Cobrado de más",
+                state: "completed",
+                createdAt: "2026-09-30T20:10:00.000Z",
+                completedAt: "2026-09-30T20:10:00.000Z",
+              },
+            ],
+          }),
+          payment({ id: "pay-2", method: "card", tip: "5.00", tendered: null, change: null }),
+          payment({ id: "pay-3", method: "card", state: "pending", tendered: null, change: null }),
+          payment({ id: "pay-4", method: "card", state: "declined", tendered: null, change: null }),
+        ],
+      },
     });
     await expectNoA11yViolations(host);
   });

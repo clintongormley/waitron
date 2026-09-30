@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type { AllocationPreview, BillBalance } from "../api/client.js";
+import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));
@@ -609,7 +609,9 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
     });
 
     expect(root(el).querySelector("[data-pay-confirm]")).toBeNull();
-    expect(actions(el).error).toBe(t("bill_pay.choose_later"));
+    expect(text(root(el).querySelector("[data-pay-choose-note]"))).toBe(t("bill_pay.choose_later"));
+    expect(root(el).querySelector("[data-pay-choose-note]")!.getAttribute("role")).toBeNull();
+    expect(actions(el).error).toBe("");
   });
 
   it("says a payment was taken and the change to give, and starts the form again", async () => {
@@ -789,9 +791,8 @@ describe("till-bill-pay-dialog: the steak's two choices", () => {
     await el.updateComplete;
 
     expect(choiceButtons(el)).toHaveLength(2);
-    expect(actions(el).error).toBe(
-      `${codeMessage("bill.allocation_changed")} ${t("bill_pay.choose_later")}`,
-    );
+    expect(actions(el).error).toBe(codeMessage("bill.allocation_changed"));
+    expect(text(root(el).querySelector("[data-pay-choose-note]"))).toBe(t("bill_pay.choose_later"));
   });
 });
 
@@ -978,5 +979,192 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
       t("bill_pay.card_pending").replace("{amount}", money("40.00")),
     );
+  });
+});
+
+describe("till-bill-pay-dialog: the bill's payments", () => {
+  function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
+    return {
+      id: "pay-1",
+      submissionId: "sub-1",
+      kind: "contribution",
+      shareOf: null,
+      method: "cash",
+      applied: "50.00",
+      tip: "0.00",
+      tendered: "50.00",
+      change: "0.00",
+      state: "received",
+      createdAt: "2026-09-30T20:00:00.000Z",
+      receivedAt: "2026-09-30T20:00:00.000Z",
+      lines: [],
+      refunds: [],
+      ...over,
+    };
+  }
+  const refundOf = (appliedAmount: string, state: "pending" | "completed" | "failed") => ({
+    id: `r-${state}`,
+    paymentId: "pay-1",
+    submissionId: `s-${state}`,
+    appliedAmount,
+    tipAmount: "0.00",
+    reason: "Mal cobrado",
+    state,
+    createdAt: "2026-09-30T20:10:00.000Z",
+    completedAt: null,
+  });
+  const cashPaid = paymentOf();
+  const cardPaid = paymentOf({
+    id: "pay-2",
+    method: "card",
+    applied: "30.00",
+    tip: "5.00",
+    tendered: null,
+    change: null,
+  });
+  const cardAtReader = paymentOf({
+    id: "pay-3",
+    method: "card",
+    applied: "20.00",
+    tendered: null,
+    change: null,
+    state: "pending",
+    receivedAt: null,
+  });
+  const declined = paymentOf({
+    id: "pay-4",
+    method: "card",
+    applied: "20.00",
+    tendered: null,
+    change: null,
+    state: "declined",
+    receivedAt: null,
+  });
+  const rows = (el: TillBillPayDialog) => [...root(el).querySelectorAll("[data-payment]")];
+  const row = (el: TillBillPayDialog, id: string) =>
+    root(el).querySelector<HTMLElement>(`[data-payment="${id}"]`)!;
+
+  it("lists each payment with how it was paid, what it paid off, its tip and its state", async () => {
+    const el = await mount({
+      balance: balanceOf({ payments: [cashPaid, cardPaid, cardAtReader, declined] }),
+    });
+
+    expect(text(root(el).querySelector("[data-pay-payments] h3"))).toBe(t("bill_pay.payments"));
+    expect(rows(el).map((each) => each.getAttribute("data-payment"))).toEqual([
+      "pay-1",
+      "pay-2",
+      "pay-3",
+      "pay-4",
+    ]);
+    const second = text(row(el, "pay-2"));
+    expect(second).toContain(
+      t("bill_pay.payment").replace("{n}", "2").replace("{method}", t("tender.card")),
+    );
+    expect(second).toContain(`${t("bill_pay.applied")} ${money("30.00")}`);
+    expect(second).toContain(`${t("bill_pay.tip")} ${money("5.00")}`);
+    expect(second).toContain(t("bill_pay.state_received"));
+    expect(text(row(el, "pay-1"))).toContain(t("tender.cash"));
+    expect(text(row(el, "pay-4"))).toContain(t("bill_pay.state_declined"));
+  });
+
+  it("shows a card still at the reader as in progress, and where a manager clears it", async () => {
+    const el = await mount({ balance: balanceOf({ payments: [cardAtReader] }) });
+
+    expect(text(row(el, "pay-3"))).toContain(t("bill_pay.state_pending"));
+    expect(text(row(el, "pay-3").querySelector("[data-payment-pending]"))).toBe(
+      t("bill_pay.pending_where"),
+    );
+    expect(row(el, "pay-3").querySelector("[data-payment-refund]")).toBeNull();
+  });
+
+  it("shows each refund of a payment: given back, waiting for the card provider, or failed", async () => {
+    const el = await mount({
+      balance: balanceOf({
+        payments: [
+          paymentOf({
+            refunds: [
+              refundOf("10.00", "completed"),
+              refundOf("5.00", "failed"),
+              refundOf("5.00", "pending"),
+            ],
+          }),
+        ],
+      }),
+    });
+
+    expect(
+      [...row(el, "pay-1").querySelectorAll("[data-payment-refunded]")].map((each) => text(each)),
+    ).toEqual([
+      t("bill_pay.refunded").replace("{amount}", money("10.00")),
+      t("bill_pay.refund_failed_row").replace("{amount}", money("5.00")),
+      t("bill_pay.refund_waiting").replace("{amount}", money("5.00")),
+    ]);
+  });
+
+  it("offers Refund on each received payment with money left to give back, and says which it is", async () => {
+    const el = await mount({
+      balance: balanceOf({
+        payments: [
+          cashPaid,
+          cardPaid,
+          cardAtReader,
+          declined,
+          paymentOf({ id: "pay-5", refunds: [refundOf("50.00", "completed")] }),
+        ],
+      }),
+    });
+    const offeredOn = [...root(el).querySelectorAll("[data-payment-refund]")].map((each) =>
+      each.getAttribute("data-payment-refund"),
+    );
+    const asked = capture<{ paymentId: string }>(el, "bill-refund");
+
+    await click(el, '[data-payment-refund="pay-2"]');
+
+    expect(offeredOn).toEqual(["pay-1", "pay-2"]);
+    expect(text(button(el, '[data-payment-refund="pay-2"]'))).toBe(t("bill_pay.refund"));
+    expect(button(el, '[data-payment-refund="pay-2"]').getAttribute("aria-label")).toBe(
+      t("bill_pay.refund_label").replace("{n}", "2").replace("{amount}", money("35.00")),
+    );
+    expect(asked).toEqual([{ paymentId: "pay-2" }]);
+  });
+
+  it("offers no refund once the bill is no longer open, nor while the dialog is busy", async () => {
+    const closed = await mount({ balance: balanceOf({ status: "settled", payments: [cashPaid] }) });
+    expect(root(closed).querySelector("[data-payment-refund]")).toBeNull();
+
+    const busy = await mount({ busy: true, balance: balanceOf({ payments: [cashPaid] }) });
+    expect(button(busy, '[data-payment-refund="pay-1"]').disabled).toBe(true);
+  });
+
+  it("lists nothing on a bill with no payments", async () => {
+    const el = await mount();
+    expect(root(el).querySelector("[data-pay-payments]")).toBeNull();
+  });
+
+  it("says what a refund did: cash to hand over, a card, a terminal refund recorded, one waiting, one failed", async () => {
+    const el = await mount({ balance: balanceOf({ payments: [cashPaid] }) });
+    const said = async (refunded: TillBillPayDialog["refunded"]) => {
+      el.refunded = refunded;
+      await el.updateComplete;
+      return text(root(el).querySelector("[data-pay-refunded]"));
+    };
+    const with20 = (key: Parameters<typeof t>[0]) => t(key).replace("{amount}", money("20.00"));
+
+    expect(
+      await said({ state: "completed", amount: "20.00", method: "cash", terminal: false }),
+    ).toBe(with20("bill_refund.done_cash"));
+    expect(
+      await said({ state: "completed", amount: "20.00", method: "card", terminal: false }),
+    ).toBe(with20("bill_refund.done_card"));
+    expect(
+      await said({ state: "completed", amount: "20.00", method: "card", terminal: true }),
+    ).toBe(with20("bill_refund.done_terminal"));
+    expect(await said({ state: "pending", amount: "20.00", method: "card", terminal: false })).toBe(
+      with20("bill_refund.pending"),
+    );
+    expect(await said({ state: "failed", amount: "20.00", method: "card", terminal: false })).toBe(
+      with20("bill_refund.failed"),
+    );
+    expect(await said(null)).toBe("");
   });
 });

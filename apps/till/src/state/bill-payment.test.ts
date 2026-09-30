@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { TabLine } from "../api/client.js";
+import type { BillPaymentView, TabLine } from "../api/client.js";
 import {
   confirmationOf,
   payLines,
   paymentAsk,
+  refundOffered,
+  refundSubmissionFor,
+  refundableOf,
   submissionFor,
   unansweredAfter,
   type Submission,
@@ -244,5 +247,98 @@ describe("payLines", () => {
       { lineNo: 4, name: "Ham", quantity: "0.25", total: "10.00", unitTotal: null },
       { lineNo: 5, name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
     ]);
+  });
+});
+
+describe("a payment's refunds", () => {
+  const payment = (over: Partial<BillPaymentView> = {}): BillPaymentView => ({
+    id: "pay-1",
+    submissionId: "sub-1",
+    kind: "contribution",
+    shareOf: null,
+    method: "card",
+    applied: "40.00",
+    tip: "5.00",
+    tendered: null,
+    change: null,
+    state: "received",
+    createdAt: "2026-09-30T20:00:00.000Z",
+    receivedAt: "2026-09-30T20:00:00.000Z",
+    lines: [],
+    refunds: [],
+    ...over,
+  });
+  const refund = (
+    appliedAmount: string,
+    tipAmount: string,
+    state: "pending" | "completed" | "failed",
+  ) => ({
+    id: `r-${appliedAmount}-${state}`,
+    paymentId: "pay-1",
+    submissionId: `s-${appliedAmount}-${state}`,
+    appliedAmount,
+    tipAmount,
+    reason: "Mal cobrado",
+    state,
+    createdAt: "2026-09-30T20:10:00.000Z",
+    completedAt: null,
+  });
+
+  it("leaves to give back what the payment took less its completed refunds, a failed one given back nothing", () => {
+    const refunded = payment({
+      refunds: [refund("10.00", "0.00", "completed"), refund("5.00", "0.00", "failed")],
+    });
+
+    expect(refundableOf(payment())).toEqual({ applied: "40.00", tip: "5.00" });
+    expect(refundableOf(refunded)).toEqual({ applied: "30.00", tip: "5.00" });
+  });
+
+  it("offers a refund only of a received payment on an open bill with money left on it and no refund waiting", () => {
+    expect(refundOffered(payment(), "open")).toBe(true);
+    expect(refundOffered(payment({ state: "pending" }), "open")).toBe(false);
+    expect(refundOffered(payment({ state: "declined" }), "open")).toBe(false);
+    expect(refundOffered(payment(), "settled")).toBe(false);
+    expect(
+      refundOffered(payment({ refunds: [refund("40.00", "5.00", "completed")] }), "open"),
+    ).toBe(false);
+    expect(refundOffered(payment({ refunds: [refund("10.00", "0.00", "pending")] }), "open")).toBe(
+      false,
+    );
+  });
+
+  it("sends a refund that got no answer again under its submission id, and a new one under a fresh id", () => {
+    const ask = { appliedAmount: "10.00", tipAmount: "0.00", reason: "Mal cobrado" };
+    const mint = (() => {
+      const queue = ["sub-1", "sub-2", "sub-3"];
+      return () => queue.shift()!;
+    })();
+
+    const first = refundSubmissionFor("wo-1", "pay-1", ask, null, mint);
+    const again = refundSubmissionFor(
+      "wo-1",
+      "pay-1",
+      ask,
+      unansweredAfter(first, new TypeError("Failed to fetch")),
+      mint,
+    );
+    const confirmed = refundSubmissionFor(
+      "wo-1",
+      "pay-1",
+      { ...ask, manualConfirmed: true },
+      unansweredAfter(again, new TypeError("Failed to fetch")),
+      mint,
+    );
+    const otherPayment = refundSubmissionFor(
+      "wo-1",
+      "pay-2",
+      ask,
+      unansweredAfter(first, new TypeError("Failed to fetch")),
+      mint,
+    );
+
+    expect(first.request).toEqual({ ...ask, submissionId: "sub-1" });
+    expect(again.request.submissionId).toBe("sub-1");
+    expect(confirmed.request).toEqual({ ...ask, manualConfirmed: true, submissionId: "sub-2" });
+    expect(otherPayment.request.submissionId).toBe("sub-3");
   });
 });

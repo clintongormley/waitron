@@ -332,6 +332,19 @@ describe("TillApi", () => {
     expect(r).toEqual(roster);
   });
 
+  it("listRefundAuthorizers GETs who may approve a bill refund from /api/refund-authorizers", async () => {
+    const roster = [{ personId: "sup-1", displayName: "Responsable" }];
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
+
+    const r = await new TillApi("", fetchStub).listRefundAuthorizers();
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/refund-authorizers",
+      expect.objectContaining({ method: "GET", credentials: "include" }),
+    );
+    expect(r).toEqual(roster);
+  });
+
   it("listProducts GETs the location's menus + products, carrying each product's allergens and menu tag", async () => {
     // Typed as `ProductCatalogue` so `tsc` checks the client shape carries `menus`, `allergens` and
     // `catalogueId`. One product carries a declaration (both presences plus the optional `source`), the
