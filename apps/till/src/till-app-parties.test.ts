@@ -279,9 +279,16 @@ const cancelAnswer = (party: { id: string; revision: number } | null) => ({
 const cancelLine = (el: TillApp, order: TillTableOrderScreen, lineId = "line-1") =>
   cancelThroughDialog(el, order, lineId, () => flush(el));
 
-/** Long enough for a cancel that gets no answer to be sent again until it gives up. */
-const unanswered = () =>
-  new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+/** How long a cancel that gets no answer is given to be sent again until it gives up. The resends
+ * wait real time, which a loaded machine stretches past a fixed sleep; the poll returns once the
+ * message shows. */
+const GIVE_UP_MS = 10_000;
+
+/** Waits for the message a cancel that got no answer leaves once its resends give up. */
+const untilUnconfirmed = (el: TillApp) =>
+  expect
+    .poll(() => banner(el)?.textContent ?? "", { timeout: GIVE_UP_MS })
+    .toContain(t("adjust.unconfirmed"));
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
   for (let i = 0; i < rounds; i++) {
@@ -529,33 +536,37 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
   });
 
-  it("shows the new figures after a cancel that got no answer but reached the server", async () => {
-    const server = { voided: false };
-    const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
-    const { el } = await mountApp({
-      applyAdjustment: vi.fn(async () => {
-        server.voided = true;
-        throw new TypeError("Failed to fetch");
-      }),
-      getPartyBills: vi.fn(async () =>
-        server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
-      ),
-      getTablesState: vi.fn(async () =>
-        server.voided
-          ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), mesa7, mesa9]
-          : [mesa4, mesa7, mesa9],
-      ),
-    });
-    const order = await openMesa(el);
-    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
-    await flush(el);
+  it(
+    "shows the new figures after a cancel that got no answer but reached the server",
+    { timeout: 2 * GIVE_UP_MS },
+    async () => {
+      const server = { voided: false };
+      const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
+      const { el } = await mountApp({
+        applyAdjustment: vi.fn(async () => {
+          server.voided = true;
+          throw new TypeError("Failed to fetch");
+        }),
+        getPartyBills: vi.fn(async () =>
+          server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
+        ),
+        getTablesState: vi.fn(async () =>
+          server.voided
+            ? [seated({ tabTotal: "9.00" }, { revision: 4, outstanding: "39.00" }), mesa7, mesa9]
+            : [mesa4, mesa7, mesa9],
+        ),
+      });
+      const order = await openMesa(el);
+      order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(el);
 
-    await cancelLine(el, order);
-    await unanswered();
-    await flush(el);
+      await cancelLine(el, order);
+      await untilUnconfirmed(el);
+      await flush(el);
 
-    expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
-  });
+      expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
+    },
+  );
 
   it("a refused cancel stays in its dialog, saying why, and reads nothing again", async () => {
     const { el } = await mountApp({
@@ -3798,7 +3809,8 @@ describe("till-app: the order's groups", () => {
     const order = await openMesa(el);
     await ringRound(el, order);
     emit(order, "submit-draft", roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]));
-    // The retries wait real time, which a loaded machine stretches past any fixed allowance.
+    // The retries wait real time, which a loaded machine stretches past a fixed sleep; the poll
+    // returns once the message shows.
     await expect
       .poll(() => banner(el)?.textContent ?? "", { timeout: 10_000 })
       .toContain(t("table.round_unconfirmed"));
@@ -4748,26 +4760,30 @@ describe("till-app: the order's groups", () => {
         };
       }
 
-      it("a round sent after a void that got no answer carries the floor's revision", async () => {
-        const { el } = await mountApp(
-          withGroups({ ...floorMovedBy("applyAdjustment"), submitDraft: submitAt(4) }),
-        );
-        const order = await openMesa(el);
+      it(
+        "a round sent after a void that got no answer carries the floor's revision",
+        { timeout: 2 * GIVE_UP_MS },
+        async () => {
+          const { el } = await mountApp(
+            withGroups({ ...floorMovedBy("applyAdjustment"), submitDraft: submitAt(4) }),
+          );
+          const order = await openMesa(el);
 
-        await cancelLine(el, order);
-        await unanswered();
-        await flush(el);
-        await ringRound(el, tableOrder(el)!);
-        emit(
-          tableOrder(el)!,
-          "submit-draft",
-          roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
-        );
-        await flush(el);
+          await cancelLine(el, order);
+          await untilUnconfirmed(el);
+          await flush(el);
+          await ringRound(el, tableOrder(el)!);
+          emit(
+            tableOrder(el)!,
+            "submit-draft",
+            roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
+          );
+          await flush(el);
 
-        expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedPartyRevision).toBe(4);
-        expect(banner(el)).toBeNull();
-      });
+          expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedPartyRevision).toBe(4);
+          expect(banner(el)).toBeNull();
+        },
+      );
 
       it("a move after a line change that got no answer carries the floor's revision", async () => {
         const { el } = await mountApp(withGroups(floorMovedBy("updateOrderLine")));
@@ -4815,31 +4831,35 @@ describe("till-app: the order's groups", () => {
         };
       }
 
-      it("a void that got no answer, with the floor unread, keeps the revision an earlier void answered", async () => {
-        const { el } = await mountApp(
-          withGroups(
-            offlineAfterOneAnswer("applyAdjustment", cancelAnswer({ id: "v1", revision: 4 })),
-          ),
-        );
-        const order = await openMesa(el);
+      it(
+        "a void that got no answer, with the floor unread, keeps the revision an earlier void answered",
+        { timeout: 2 * GIVE_UP_MS },
+        async () => {
+          const { el } = await mountApp(
+            withGroups(
+              offlineAfterOneAnswer("applyAdjustment", cancelAnswer({ id: "v1", revision: 4 })),
+            ),
+          );
+          const order = await openMesa(el);
 
-        await cancelLine(el, order);
-        await cancelLine(el, tableOrder(el)!, "line-2");
-        await unanswered();
-        await flush(el);
-        emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
-        await flush(el);
+          await cancelLine(el, order);
+          await cancelLine(el, tableOrder(el)!, "line-2");
+          await untilUnconfirmed(el);
+          await flush(el);
+          emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
+          await flush(el);
 
-        // A resend after no answer keeps its cancel's submission id, so two ids are two cancels.
-        const cancels = vi
-          .mocked(api.applyAdjustment)
-          .mock.calls.map(([, command]) => command.submissionId);
-        expect(new Set(cancels).size).toBe(2);
-        expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
-          expectedPartyRevision: 4,
-          otherPartyId: null,
-        });
-      });
+          // A resend after no answer keeps its cancel's submission id, so two ids are two cancels.
+          const cancels = vi
+            .mocked(api.applyAdjustment)
+            .mock.calls.map(([, command]) => command.submissionId);
+          expect(new Set(cancels).size).toBe(2);
+          expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
+            expectedPartyRevision: 4,
+            otherPartyId: null,
+          });
+        },
+      );
 
       it("a round that got no answer, with the floor unread, keeps the revision an earlier round answered", async () => {
         const { el } = await mountApp(
