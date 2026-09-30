@@ -28,8 +28,8 @@ test("a select marked invalid draws its border in the danger colour, and only th
   shadow.innerHTML =
     '<select aria-invalid="true"><option>a</option></select><select aria-invalid="false"><option>a</option></select>';
   const [refused, accepted] = shadow.querySelectorAll("select");
-  expect(getComputedStyle(refused!).borderTopColor).toBe("rgb(4, 5, 6)");
-  expect(getComputedStyle(accepted!).borderTopColor).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(refused!).borderColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(accepted!).borderColor).toBe("rgb(7, 8, 9)");
 });
 
 test("the shared floor tray lays its unplaced tables out as a wrapping row", async () => {

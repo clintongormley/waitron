@@ -585,7 +585,7 @@ describe("setup-venue-screen form errors", () => {
     await el.updateComplete;
     const province = q<HTMLSelectElement>(el, "[data-test=province]")!;
     expect(province.getAttribute("aria-invalid")).toBe("true");
-    expect(getComputedStyle(province).borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(getComputedStyle(province).borderColor).toBe("rgb(4, 5, 6)");
   });
 
   it("re-checks the selects and the language group too, not only the text fields", async () => {
