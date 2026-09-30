@@ -2357,19 +2357,23 @@ export class TillApp extends LitElement {
 
   /** After an adjustment to the stored order in the basket was made, refused or got no answer: the
    * order is loaded into the basket again, unless the basket has moved on by the time it is read.
-   * False when the order or its lines could not be read. */
+   * Until then the basket takes no edit, which the load would otherwise replace. False when the
+   * order or its lines could not be read. */
   async #reloadCounterOrder(orderId: string, session: number): Promise<boolean> {
     const left = () => this.#hasLeftCounterOrder(orderId, session);
-    let read: boolean;
+    let failure: StringKey | undefined;
+    this.#store.sending = true;
     try {
       await this.#loadHeldOrder(orderId, left);
-      read = this.counterLines !== null;
+      if (this.counterLines === null) failure = "held.reread_failed";
     } catch {
-      read = false;
+      failure = "held.stale";
+    } finally {
+      this.#store.sending = false;
     }
-    if (!read && !left()) this.errorKey = "held.reread_failed";
+    if (failure !== undefined && !left()) this.errorKey = failure;
     await this.#refreshHeldOrders();
-    return read;
+    return failure === undefined;
   }
 
   /** A discard already made on another till is a non-fatal `held.stale`; the list refreshes on both paths. */
@@ -3586,6 +3590,7 @@ export class TillApp extends LitElement {
   async #onAdjust(event: Event): Promise<void> {
     const { kind, target, offered, counter } = (event as CustomEvent<AdjustDetail>).detail;
     const surface = counter === true ? "counter" : "table";
+    if (surface === "counter" && this.#counterOrderInFlight()) return;
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
     const revision = surface === "counter" ? this.#store.revision : this.tabRevision;
@@ -3637,10 +3642,9 @@ export class TillApp extends LitElement {
     return true;
   }
 
-  /** The adjusted order's lines as last read. The counter offers an adjustment only on lines it
-   * has read, and reads them again with every load of the basket's order. */
+  /** The adjusted order's lines as last read; none when the counter's could not be read. */
   #adjustedLines(open: Adjusting): readonly TabLine[] {
-    return open.surface === "table" ? this.tabLines : this.counterLines!.lines;
+    return open.surface === "table" ? this.tabLines : (this.counterLines?.lines ?? []);
   }
 
   #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
@@ -4534,6 +4538,11 @@ export class TillApp extends LitElement {
     return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
   }
 
+  /** A pay, place or hold of the counter's basket is out. */
+  #counterOrderInFlight(): boolean {
+    return this.submitting || this.placing || this.parking;
+  }
+
   /** A placed order is not open, so it offers no adjustment. */
   #basketStoredLines(): StoredLines | null {
     return this.stage === "order" ? this.counterLines : null;
@@ -4570,6 +4579,7 @@ export class TillApp extends LitElement {
         .defaultReaderId=${this.defaultReaderId}
         .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
+        .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
     }
     const tableTab = tab.key === this.#tableOrderTabKey();
@@ -4578,6 +4588,7 @@ export class TillApp extends LitElement {
       .tab=${tab}
       .store=${this.#store}
       .storedLines=${this.#basketStoredLines()}
+      .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
       .canConfigureTill=${this.canEdit}
       .products=${tableTab ? this.tableProducts : this.products}

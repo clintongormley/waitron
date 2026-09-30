@@ -281,10 +281,13 @@ export class TillBasket extends LitElement {
 
   @property({ type: Boolean, reflect: true }) stacked = false;
 
-  /** The stored order the basket holds, as the server last listed it; null when not known. A dish
-   * the kitchen has leaves only through Cancel, with a reason, and the adjustments are offered only
+  /** The stored order the basket holds, as the server last listed it; null when not known. While it
+   * is known, a dish the kitchen has shows no × and no `−`, and the adjustments are offered only
    * while the basket is exactly what the listing lists. */
   @property({ attribute: false }) storedLines: StoredLines | null = null;
+
+  /** A pay, place or hold of the basket's order is out, so no adjustment is offered. */
+  @property({ type: Boolean }) orderInFlight = false;
 
   /** The line whose note editor is open, by the line itself rather than its place: other lines move
    * under it (a remove elsewhere, another basket showing the same order), and a note, which can
@@ -586,10 +589,15 @@ export class TillBasket extends LitElement {
       : null;
   }
 
-  /** The listing, while the basket is exactly what it lists: unchanged since, and not being sent. */
+  /** The listing, while the basket is exactly what it lists (unchanged since, and not being sent or
+   * loaded again) and no pay, place or hold of it is out. */
   #adjustable(listing: StoredLines | null): StoredLines | null {
     const store = this.store;
-    return listing !== null && !store.dirty && !store.sending && listing.revision === store.revision
+    return listing !== null &&
+      !this.orderInFlight &&
+      !store.dirty &&
+      !store.sending &&
+      listing.revision === store.revision
       ? listing
       : null;
   }

@@ -3500,17 +3500,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
       (`apps/till/src/widgets/basket.ts`); the basket reads each line's sent state and price before
       an adjustment from `GET /api/working-orders/:id/lines` when it loads the order, and loads the
-      order again after an adjustment is made, refused as out of date, or left unanswered. An
-      unsaved or changed basket offers none of them; a changed one offers them again once it is held
-      and retrieved. Left open:
+      order again after an adjustment is made, refused as out of date, or left unanswered, taking
+      no edit until that load answers. An unsaved or changed basket offers none of them, nor does
+      one whose pay, place or hold is out; a changed one offers them again once it is held and
+      retrieved. Left open:
       - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be
         adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
         already filed its invoice. B16, the counter handover task, was kept clear of. **Next
         action:** decide with B16 whether a placed order can be adjusted before it is collected.
-      - **The server's held-order edit (`PUT /api/working-orders/:id`) still removes a sent dish's
-        dropped quantity without a reason** when a client sends it that way; the till's counter no
-        longer offers it for a sent dish. **Next action:** decide whether the edit should refuse
-        dropping a sent line, as the table's Cancel requires a reason.
+      - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
+        dropped quantity without a reason** when a client sends it that way, the venue allows
+        changes to sent items and the kitchen has not started the dish (otherwise it refuses
+        `ticket.already_fired` or `ticket.already_started`; `applyLineEdits`,
+        `apps/server/src/working-order.ts`). The till's counter hides × and `−` on a sent dish only
+        while it has read the order's lines; when they cannot be read, it shows both on every
+        line. **Next action:** decide whether the edit should refuse dropping a sent line, as the
+        table's Cancel requires a reason.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one

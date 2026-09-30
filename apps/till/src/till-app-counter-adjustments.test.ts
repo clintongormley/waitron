@@ -453,12 +453,12 @@ describe("till-app: a stored counter order changed elsewhere", () => {
     expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
   });
 
-  it("says the order could not be read again when it cannot be, after the change was made", async () => {
+  it("says the order is no longer available when it has gone by the time it is loaded again", async () => {
     const el = await retrieved({
       retrieveWorkingOrder: vi
         .fn()
         .mockResolvedValueOnce(heldOrder(4))
-        .mockRejectedValue(new TypeError("Failed to fetch")),
+        .mockRejectedValue({ code: "working_order.not_found", status: 404 }),
     });
 
     await previewComp(el);
@@ -467,7 +467,7 @@ describe("till-app: a stored counter order changed elsewhere", () => {
     expect(api.applyAdjustment).toHaveBeenCalledOnce();
     expect(dialog(el)).toBeNull();
     expect(counter(el).store.revision).toBe(4);
-    expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
+    expect(banner(el)!.textContent).toBe(t("held.stale"));
   });
 
   it("loads the order again and says the change may have been made when no answer ever comes", async () => {
@@ -570,5 +570,123 @@ describe("till-app: an answer after the basket moved on", () => {
     await flush(el);
 
     expect(dialog(el)).toBeNull();
+  });
+});
+
+describe("till-app: no adjustment while the order is being paid, placed or held", () => {
+  const adjustByHand = (el: TillApp) =>
+    emit(basket(el), "adjust", {
+      kind: "comp",
+      counter: true,
+      target: { lineId: "l-2", name: "Caña", quantity: "1", total: "2.50", unitTotal: null },
+    });
+
+  it("offers none, and opens nothing, while a card payment of the order is out", async () => {
+    const payment = deferred<{ outcome: "declined" }>();
+    const el = await retrieved({ pay: vi.fn(() => payment.promise) });
+
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(offered(el)).toBe(0);
+    expect(inBasket(el, '[data-cancel-line="0"]')).toBeNull();
+    expect(
+      basket(el).shadowRoot!.querySelectorAll(".line")[0]!.querySelector(".remove"),
+    ).toBeNull();
+    adjustByHand(el);
+    await flush(el);
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+
+    payment.resolve({ outcome: "declined" });
+    await flush(el);
+    expect(offered(el)).toBeGreaterThan(0);
+  });
+
+  it("offers none, and opens nothing, while the order is being placed", async () => {
+    const placing = deferred<void>();
+    const el = await retrieved({ placeOrder: vi.fn(() => placing.promise) });
+
+    emit(counter(el), "place-order");
+    await flush(el);
+
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+    expect(offered(el)).toBe(0);
+    adjustByHand(el);
+    await flush(el);
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    placing.resolve();
+    await flush(el);
+  });
+
+  it("opens nothing while a changed order is being saved to be held", async () => {
+    const saving = deferred<{ revision: number }>();
+    const el = await retrieved({ updateWorkingOrder: vi.fn(() => saving.promise) });
+    counter(el).store.setLineQuantity(1, "2");
+    await flush(el);
+
+    emit(counter(el), "park-order", {});
+    await flush(el);
+
+    expect(api.updateWorkingOrder).toHaveBeenCalledOnce();
+    adjustByHand(el);
+    await flush(el);
+    expect(api.listAdjustmentReasons).not.toHaveBeenCalled();
+    saving.resolve({ revision: 5 });
+    await flush(el);
+  });
+});
+
+describe("till-app: the basket while the order is loaded again", () => {
+  const plus = (el: TillApp, index: number) =>
+    basket(el)
+      .shadowRoot!.querySelectorAll<HTMLElement>(".line")
+      [index]!.querySelector<HTMLElement>(".step-inc")!;
+
+  it("takes no edit until the order given away is loaded again, and takes edits after", async () => {
+    const reload = deferred<HeldOrder>();
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementation(() => reload.promise),
+    });
+    await previewComp(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(dialog(el)).toBeNull();
+
+    await press(el, plus(el, 1));
+    expect(counter(el).store.lines[1]!.quantity).toBe("1");
+    expect(counter(el).store.dirty).toBe(false);
+    expect(offered(el)).toBe(0);
+
+    reload.resolve(heldOrder(5, "0.00"));
+    await flush(el);
+    expect(counter(el).store.revision).toBe(5);
+    await press(el, plus(el, 1));
+    expect(counter(el).store.lines[1]!.quantity).toBe("2");
+  });
+
+  it("takes no edit until the order is loaded again after an out-of-date refusal", async () => {
+    const reload = deferred<HeldOrder>();
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementation(() => reload.promise),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),
+    });
+    await previewComp(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(dialog(el)).toBeNull();
+
+    await press(el, plus(el, 1));
+    expect(counter(el).store.dirty).toBe(false);
+
+    reload.resolve(heldOrder(6));
+    await flush(el);
+    expect(counter(el).store.revision).toBe(6);
+    await press(el, plus(el, 1));
+    expect(counter(el).store.dirty).toBe(true);
   });
 });
