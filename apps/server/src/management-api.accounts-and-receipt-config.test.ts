@@ -141,7 +141,7 @@ function mountApp(
       origin: "http://localhost",
       sendAccountEmail,
       passwordThrottle,
-      accountActionCodeKey: ACCOUNT_ACTION_CODE_KEY,
+      credentialKeyRing: { current: { version: 1, key: ACCOUNT_ACTION_CODE_KEY } },
       ...(google === undefined
         ? {}
         : {
@@ -1138,7 +1138,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
         secureCookies: false,
         rpId: "localhost",
         origin: "http://localhost",
-        accountActionCodeKey: ACCOUNT_ACTION_CODE_KEY,
+        credentialKeyRing: { current: { version: 1, key: ACCOUNT_ACTION_CODE_KEY } },
         ...extra,
       },
       log,

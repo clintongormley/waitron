@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { TotpKeyRing } from "@waitron/identity";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
@@ -39,6 +40,8 @@ vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 
 import { mountPromoteApi } from "./promote-api.js";
 
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+
 const fakeDb = {} as Database;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
@@ -49,7 +52,7 @@ function appWith(
   })),
 ): { app: Hono; run: typeof run } {
   const app = new Hono();
-  mountPromoteApi(app, { appDb: fakeDb, nodeId: NODE, run });
+  mountPromoteApi(app, { appDb: fakeDb, nodeId: NODE, run, credentialKeyRing: TOTP_KEY_RING });
   return { app, run };
 }
 

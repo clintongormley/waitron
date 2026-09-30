@@ -10,6 +10,7 @@ import {
   persons,
   startManagementSession,
   webauthnCredentials,
+  type TotpKeyRing,
 } from "@waitron/identity";
 import { shifts } from "@waitron/workforce";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -19,6 +20,8 @@ import { mountMeApi } from "./me-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 /**
  * The cross-person identity property on the me routes: a person may only read or change their own
@@ -200,6 +203,7 @@ function mountApp(): Hono {
       cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
       venueLocale: "es-ES",
       modules: [],
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

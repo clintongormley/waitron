@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { readNodeMembership, withTransaction, writeNodeMembership } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import type { MembershipNode, SignedMembershipDocument } from "@waitron/membership";
@@ -11,6 +11,8 @@ import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 // Exercise route authorization, refusal-to-status mapping and success responses over a migrated
 // venue database. Retirement semantics are covered by retire.test.ts.
@@ -97,6 +99,7 @@ function buildApp(nodeId: string): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

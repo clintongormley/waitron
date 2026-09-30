@@ -26,7 +26,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
+import { hashPassword, hashPin, hashSecret, persons, type TotpKeyRing } from "@waitron/identity";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -47,6 +47,8 @@ import { DEVICE_COOKIE } from "./device-session.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { freePort } from "./testing/free-ports.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 // The promote endpoint end to end over HTTP, each boot on its own venue directory: an admin-login
 // promote restarts the mirror as a primary that sells and chains on its own reserved SIF without
@@ -568,7 +570,12 @@ describe("read-only-gate exemption for the promote POST — proven by deletion",
       readOnlyGate(() => true, exempt),
     );
     // No case here reaches the break-glass check, so the node id is a placeholder.
-    mountPromoteApi(app, { appDb: db.main, nodeId: "gate-only", run: alwaysRun });
+    mountPromoteApi(app, {
+      appDb: db.main,
+      nodeId: "gate-only",
+      run: alwaysRun,
+      credentialKeyRing: TOTP_KEY_RING,
+    });
     return app;
   }
 

@@ -7,7 +7,7 @@ import type { RecordSaleInput } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
-import { hashPassword, loginManager, loginManagerById } from "@waitron/identity";
+import { hashPassword, loginManager, loginManagerById, type TotpKeyRing } from "@waitron/identity";
 import type { TrustedClock } from "@waitron/fiscal";
 import {
   nodeId as brandNodeId,
@@ -17,6 +17,8 @@ import {
 import { createFakeAeat } from "@waitron/verifactu/testing";
 import { planVenue, type VenueRequest } from "./venue-plan.js";
 import { applyVenue } from "./venue-apply.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 /**
  * "Sellable": a venue provisioned by the real `applyVenue` can immediately chain a sale through the
@@ -176,6 +178,7 @@ describe("the provisioned admin authenticates by id with its password", () => {
       return loginManagerById(tx, {
         personId: personId!,
         password: "dashPass123",
+        totpKeyRing: TOTP_KEY_RING,
       });
     });
     expect(session.personId).toBe(personId);
@@ -185,6 +188,7 @@ describe("the provisioned admin authenticates by id with its password", () => {
         return loginManagerById(tx, {
           personId: personId!,
           password: "wrongpass1",
+          totpKeyRing: TOTP_KEY_RING,
         });
       }),
     ).rejects.toMatchObject({ code: "password.invalid" });
@@ -208,6 +212,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
       return loginManager(tx, {
         email: adminEmail,
         password: "dashPass123",
+        totpKeyRing: TOTP_KEY_RING,
       });
     });
     expect(session.personId).toBe(personId);
@@ -217,6 +222,7 @@ describe("the onboarding-provisioned admin authenticates by email", () => {
         return loginManager(tx, {
           email: adminEmail,
           password: "wrongpass1",
+          totpKeyRing: TOTP_KEY_RING,
         });
       }),
     ).rejects.toMatchObject({ code: "password.invalid" });

@@ -5,7 +5,13 @@ import { generateSecret, generateSync } from "otplib";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { codeOf, seedManager, seedPerson, seedPersonWithPassword } from "../test/fixtures.js";
+import {
+  codeOf,
+  seedManager,
+  seedPerson,
+  seedPersonWithPassword,
+  TOTP_KEY_RING,
+} from "../test/fixtures.js";
 import { authorizeManager, loginManager, loginManagerById } from "./manager-login.js";
 import { verifyPassword } from "./verify-password.js";
 import { encryptTotpSecret } from "./mfa.js";
@@ -32,21 +38,35 @@ describe("loginManager", () => {
   it("logs in with a correct email + password (no TOTP enrolled)", async () => {
     const personId = await seedManager(suite.db, { email: "owner-basic@x.com" });
     const session = await run((tx) =>
-      loginManager(tx, { email: "owner-basic@x.com", password: "correct horse" }),
+      loginManager(tx, {
+        email: "owner-basic@x.com",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
     );
     expect(session.personId).toBe(personId);
   });
   it("logs in case-insensitively (email normalised before lookup)", async () => {
     const personId = await seedManager(suite.db, { email: "owner-ci@x.com" });
     const session = await run((tx) =>
-      loginManager(tx, { email: "  OWNER-CI@X.com  ", password: "correct horse" }),
+      loginManager(tx, {
+        email: "  OWNER-CI@X.com  ",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
     );
     expect(session.personId).toBe(personId);
   });
   it("throws password.invalid for an unknown email (no enumeration)", async () => {
     await seedManager(suite.db, { email: "owner-known@x.com" });
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { email: "ghost@x.com", password: "correct horse" })),
+      codeOf(() =>
+        loginManager(tx, {
+          email: "ghost@x.com",
+          password: "correct horse",
+          totpKeyRing: TOTP_KEY_RING,
+        }),
+      ),
     );
     expect(code).toBe("password.invalid");
   });
@@ -55,7 +75,13 @@ describe("loginManager", () => {
     spy.mockClear();
     await seedManager(suite.db, { email: "owner-timing@x.com" });
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { email: "nobody-timing@x.com", password: "some password" })),
+      codeOf(() =>
+        loginManager(tx, {
+          email: "nobody-timing@x.com",
+          password: "some password",
+          totpKeyRing: TOTP_KEY_RING,
+        }),
+      ),
     );
     expect(code).toBe("password.invalid");
     expect(spy).toHaveBeenCalledTimes(1);
@@ -64,7 +90,13 @@ describe("loginManager", () => {
   it("rejects a wrong password with password.invalid", async () => {
     await seedManager(suite.db, { email: "owner-wrongpw@x.com" });
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { email: "owner-wrongpw@x.com", password: "wrong" })),
+      codeOf(() =>
+        loginManager(tx, {
+          email: "owner-wrongpw@x.com",
+          password: "wrong",
+          totpKeyRing: TOTP_KEY_RING,
+        }),
+      ),
     );
     expect(code).toBe("password.invalid");
   });
@@ -77,7 +109,13 @@ describe("loginManager", () => {
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { email: "owner-nopw@x.com", password: "anything" })),
+      codeOf(() =>
+        loginManager(tx, {
+          email: "owner-nopw@x.com",
+          password: "anything",
+          totpKeyRing: TOTP_KEY_RING,
+        }),
+      ),
     );
     expect(code).toBe("password.invalid");
     expect(spy).toHaveBeenCalledTimes(1);
@@ -96,6 +134,7 @@ describe("loginManager", () => {
         loginManager(tx, {
           email: "owner-pending@x.com",
           password: "anything",
+          totpKeyRing: TOTP_KEY_RING,
         }),
       ),
     );
@@ -136,7 +175,13 @@ describe("loginManager", () => {
     const spy = vi.mocked(verifyPassword);
     spy.mockClear();
     const code = await run((tx) =>
-      codeOf(() => loginManager(tx, { email: "owner-suspended@x.com", password: "correct horse" })),
+      codeOf(() =>
+        loginManager(tx, {
+          email: "owner-suspended@x.com",
+          password: "correct horse",
+          totpKeyRing: TOTP_KEY_RING,
+        }),
+      ),
     );
     expect(code).toBe("password.invalid");
     expect(spy).toHaveBeenCalledTimes(1);
@@ -152,7 +197,9 @@ describe("loginManager's timing equalization", () => {
     spy.mockImplementationOnce(() => new Promise<boolean>((resolve) => (finish = resolve)));
     let settled = false;
     const refused = run((tx) =>
-      codeOf(() => loginManager(tx, { email, password: "some password" })),
+      codeOf(() =>
+        loginManager(tx, { email, password: "some password", totpKeyRing: TOTP_KEY_RING }),
+      ),
     ).finally(() => (settled = true));
     await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
     await new Promise((resolve) => setImmediate(resolve));
@@ -191,7 +238,7 @@ describe("loginManagerById", () => {
   it("logs in a low-level fixture by id + password without depending on email", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");
     const session = await run((tx) =>
-      loginManagerById(tx, { personId, password: "correct horse" }),
+      loginManagerById(tx, { personId, password: "correct horse", totpKeyRing: TOTP_KEY_RING }),
     );
     expect(session.personId).toBe(personId);
   });
@@ -201,6 +248,7 @@ describe("loginManagerById", () => {
         loginManagerById(tx, {
           personId: "00000000-0000-0000-0000-000000000000",
           password: "correct horse",
+          totpKeyRing: TOTP_KEY_RING,
         }),
       ),
     );
@@ -209,7 +257,9 @@ describe("loginManagerById", () => {
   it("rejects a wrong password with password.invalid", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");
     const code = await run((tx) =>
-      codeOf(() => loginManagerById(tx, { personId, password: "wrong" })),
+      codeOf(() =>
+        loginManagerById(tx, { personId, password: "wrong", totpKeyRing: TOTP_KEY_RING }),
+      ),
     );
     expect(code).toBe("password.invalid");
   });
@@ -219,7 +269,9 @@ describe("loginManagerById", () => {
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
     );
     const code = await run((tx) =>
-      codeOf(() => loginManagerById(tx, { personId, password: "correct horse" })),
+      codeOf(() =>
+        loginManagerById(tx, { personId, password: "correct horse", totpKeyRing: TOTP_KEY_RING }),
+      ),
     );
     expect(code).toBe("person.suspended");
   });
@@ -232,7 +284,11 @@ describe("authorizeManager", () => {
       role: "manager",
     });
     const session = await run((tx) =>
-      loginManager(tx, { email: "manager@x.com", password: "correct horse" }),
+      loginManager(tx, {
+        email: "manager@x.com",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
     );
     const auth = await run((tx) =>
       authorizeManager(tx, { managementSessionId: session.token, permission: "person.manage" }),
@@ -242,7 +298,11 @@ describe("authorizeManager", () => {
   it("refuses a staff role for person.manage", async () => {
     await seedManager(suite.db, { email: "staff@x.com", role: "staff" });
     const session = await run((tx) =>
-      loginManager(tx, { email: "staff@x.com", password: "correct horse" }),
+      loginManager(tx, {
+        email: "staff@x.com",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
     );
     const code = await run((tx) =>
       codeOf(() =>
@@ -254,7 +314,11 @@ describe("authorizeManager", () => {
   it("leaves last-seen unchanged with touch: false, and still moves it by default", async () => {
     await seedManager(suite.db, { email: "untouched@x.com", role: "manager" });
     const session = await run((tx) =>
-      loginManager(tx, { email: "untouched@x.com", password: "correct horse" }),
+      loginManager(tx, {
+        email: "untouched@x.com",
+        password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
     );
     const aged = new Date(Date.now() - 10 * 60_000).toISOString();
     await run((tx) =>

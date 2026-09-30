@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { kitchenCourses, kitchenStations, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
 import { createCatalogue, createCategory, createProduct } from "@waitron/catalogue";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
@@ -19,6 +19,8 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 /**
  * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
@@ -136,6 +138,7 @@ function mountApp(venue: VenueResult): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

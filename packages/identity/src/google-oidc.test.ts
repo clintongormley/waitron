@@ -11,7 +11,7 @@ import {
   completeGoogleLink,
   loginWithGoogle,
 } from "./google-oidc.js";
-import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
+import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 import { encryptTotpSecret } from "./mfa.js";
 
 const suite = useVenueDb({
@@ -48,6 +48,7 @@ describe("Google OpenID Connect state", () => {
         managementSessionId: owner.token,
         currentPassword: "correct horse",
         ...config,
+        keyRing: TOTP_KEY_RING,
       }),
     );
     const claimed = await run((tx) => claimGoogleState(tx, { state: begun.state }));
@@ -67,6 +68,7 @@ describe("Google OpenID Connect state", () => {
             managementSessionId: owner.token,
             currentPassword: "wrong",
             ...config,
+            keyRing: TOTP_KEY_RING,
           }),
         ),
       ),

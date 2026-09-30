@@ -4,11 +4,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 /**
  * The `/management-api/service-statuses` surface end to end: create, list, edit, deactivate, the
@@ -111,6 +113,7 @@ function mountApp(): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

@@ -9,7 +9,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
 import { envios, FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 // Seeds a due `envios` row and its registro WITHOUT a `fiscal.aeat` credential.
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
@@ -18,6 +18,8 @@ import { createLogger } from "./logger.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountManagementApi } from "./management-api.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 const NOW = new Date("2026-07-26T09:00:00Z");
 const PASSWORD = "correct horse";
@@ -62,6 +64,7 @@ function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

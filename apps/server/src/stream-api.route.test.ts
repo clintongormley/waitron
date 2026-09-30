@@ -12,7 +12,7 @@ import {
 } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
 import {
@@ -27,6 +27,8 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
 import { readStreamSettings, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
+
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 // The route calls `putCredential` itself, so the harness sees the credential write through this
 // pass-through wrapper.
@@ -207,6 +209,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );
