@@ -2774,7 +2774,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `scripts/pinned-actions-column.test.ts`, weaker than its name — it knows a row-menu column only by
   a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`; its
   header lists the rest.
-- **DONE (2026-09-30, A162): the adjustment reasons table's row controls are its last column,
+- **DONE (2026-09-30, A162, #954): the adjustment reasons table's row controls are its last column,
   keyed `actions` and pinned** (the owner chose to move it last and pin it, answering A155's question). Before, the column holding move
   up, move down and ⋮ was second, keyed `manage`, and at 390 px with a reason named "Queja del
   cliente por el tiempo de espera en la terraza" the ⋮'s right edge was 643 px (English) and 584 px
