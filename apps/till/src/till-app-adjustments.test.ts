@@ -1134,6 +1134,21 @@ describe("till-app: cancelling a dish", () => {
       expect(rows[1]!.querySelector(".line-total s")).toBeNull();
     });
 
+    it("cancels an extra of a dish being made as coming off the bill, not as binned", async () => {
+      const { el } = await mountApp({
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [{ ...pair, state: "preparing" }, extra],
+          revision: 6,
+          editSentLines: true,
+        }),
+      });
+      const order = await openMesa4(el);
+      await press(el, cancelButton(order, 2));
+      const shown = dialog(el)!.shadowRoot!.textContent!;
+      expect(shown).toContain(t("table.cancel_sent"));
+      expect(shown).not.toContain(t("table.cancel_started"));
+    });
+
     it("gives away an extra on its own, sending no quantity", async () => {
       const { el } = await mountPair();
       const order = await openMesa4(el);
