@@ -434,9 +434,15 @@ type CounterError =
   | { partyChanged: PartyChange }
   | { lateChange: LateChange; also?: StringKey };
 
+/** When a table action was sent: its operator session, and how many table opens had begun. */
+interface Sent {
+  session: number;
+  opens: number;
+}
+
 /** A read of the party's bills: the party it was for (null when there was none), the bills (null
  * when the read failed), and its generation, current until a later read starts or
- * {@link #leaveTable} closes the finished table. */
+ * {@link #forgetParty} clears the order. */
 interface ReadBills {
   read: number;
   partyId: string | null;
@@ -2540,6 +2546,7 @@ export class TillApp extends LitElement {
         // A table opened after this one has made its own table the active one, so this answer
         // would put this table's order beside that table.
         if (session !== this.#operatorSession || this.#openClaimed > offerRequest) return;
+        this.activeTableId = tableId;
         this.activeTabId = tabId;
         this.orderParty = {
           id: partyId,
@@ -2743,10 +2750,28 @@ export class TillApp extends LitElement {
   /** The order `orderId` is no longer the open one, or {@link #orderVisit} has moved on from `visit`
    * and the waiter has not come back to the order. */
   #hasLeftOrder(orderId: string, visit: number): boolean {
+    return this.activeTabId !== orderId || this.#leftSince(visit);
+  }
+
+  /** Since `sent`, the order's party ({@link orderParty}) is no longer `partyId`, a table open has
+   * begun and one is still under way, or the operator session has ended. A visit to the floor alone
+   * is not leaving the party. */
+  #hasLeftParty(partyId: string | undefined, sent: Sent): boolean {
     return (
-      this.activeTabId !== orderId ||
-      (this.#orderVisit !== visit &&
-        (this.#shownOnVisit !== this.#orderVisit || this.#tableOpensPending > 0))
+      this.orderParty?.id !== partyId ||
+      (sent.opens !== this.#tableOfferRequest && this.#tableOpensPending > 0) ||
+      sent.session !== this.#operatorSession
+    );
+  }
+
+  #sentNow(): Sent {
+    return { session: this.#operatorSession, opens: this.#tableOfferRequest };
+  }
+
+  #leftSince(visit: number): boolean {
+    return (
+      this.#orderVisit !== visit &&
+      (this.#shownOnVisit !== this.#orderVisit || this.#tableOpensPending > 0)
     );
   }
 
@@ -3499,7 +3524,11 @@ export class TillApp extends LitElement {
   /**
    * The guests move off all their tables to the one chosen, which becomes {@link activeTableId}. At a
    * table another party held, they are now that party: the screen follows them to its main bill, or
-   * the bill {@link billToOpen} picks, and says so when bills asked to merge stayed apart.
+   * the bill {@link billToOpen} picks, and says so when bills asked to merge stayed apart. Once the
+   * floor is read again after the answer, none of this happens if the waiter has left the party
+   * ({@link #hasLeftParty}); and nothing is said about bills kept apart, then or later, once the
+   * waiter has left the order and either has not come back to it or a table open is under way
+   * ({@link #leftSince}).
    */
   async #onMoveGuests(event: Event): Promise<void> {
     const { toTableId, bills } = (
@@ -3507,6 +3536,8 @@ export class TillApp extends LitElement {
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
+    const sent = this.#sentNow();
+    const visit = this.#orderVisit;
     this.errorKey = undefined;
     const revisions = this.#tableActionRevisions(party, toTableId);
     let result: TableActionResult;
@@ -3516,14 +3547,21 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
-    this.activeTableId = toTableId;
     await this.#reloadTables();
+    if (this.#hasLeftParty(party.id, sent)) return;
+    this.activeTableId = toTableId;
     this.#rememberOrderParty();
+    const followed = this.orderParty?.id;
     if (result.partyId !== party.id) {
       if (result.mainBillId !== null) this.activeTabId = result.mainBillId;
-      else this.activeTabId = billToOpen((await this.#loadPartyBills()).bills ?? []);
+      else {
+        const { bills: read } = await this.#loadPartyBills();
+        if (this.#hasLeftParty(followed, sent)) return;
+        this.activeTabId = billToOpen(read ?? []);
+      }
     }
     await this.#loadLinesAndBills();
+    if (this.#hasLeftParty(followed, sent) || this.#leftSince(visit)) return;
     this.#sayBillsKeptApart(revisions, bills, result);
   }
 
@@ -3612,13 +3650,19 @@ export class TillApp extends LitElement {
     await this.#refreshAfterWrite("held", "refresh.held_after_move");
   }
 
-  /** The chosen table joins the party; a party seated there joins it with all its tables. */
+  /** The chosen table joins the party; a party seated there joins it with all its tables. If the
+   * waiter has left the party ({@link #hasLeftParty}) by the time the server answers, nothing is
+   * read or said; nothing is said about bills kept apart, then or later, once the waiter has left
+   * the order and either has not come back to it or a table open is under way
+   * ({@link #leftSince}). */
   async #onJoinTables(event: Event): Promise<void> {
     const { tableId, bills } = (
       event as CustomEvent<{ tableId: string; bills: "merge" | "separate" }>
     ).detail;
     const party = this.orderParty;
     if (party === null) return;
+    const sent = this.#sentNow();
+    const visit = this.#orderVisit;
     this.errorKey = undefined;
     const revisions = this.#tableActionRevisions(party, tableId);
     let result: TableActionResult;
@@ -3628,7 +3672,9 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
+    if (this.#hasLeftParty(party.id, sent)) return;
     await this.#reloadOrder();
+    if (this.#hasLeftParty(result.partyId, sent) || this.#leftSince(visit)) return;
     this.#sayBillsKeptApart(revisions, bills, result);
   }
 
@@ -3645,13 +3691,16 @@ export class TillApp extends LitElement {
   /**
    * The table leaves the party with the chosen bill, or none, and a new party starts there. The
    * screen stays with this party: at another of its tables when the open one left, and on its main
-   * bill when the bill on screen left with the table.
+   * bill when the bill on screen left with the table. With no main bill, the party's bills are read
+   * and {@link billToOpen} picks one, unless the waiter has left the party ({@link #hasLeftParty})
+   * by the time they answer.
    */
   async #onSplitTable(event: Event): Promise<void> {
     const { tableId, billId } = (event as CustomEvent<{ tableId: string; billId: string | null }>)
       .detail;
     const party = this.orderParty;
     if (party === null) return;
+    const sent = this.#sentNow();
     this.errorKey = undefined;
     try {
       await this.api.splitTable(party.id, tableId, billId, party.revision);
@@ -3665,7 +3714,12 @@ export class TillApp extends LitElement {
     this.#rememberOrderParty();
     if (billId !== null && this.activeTabId === billId) {
       const main = this.orderParty?.mainBillId ?? null;
-      this.activeTabId = main ?? billToOpen((await this.#loadPartyBills()).bills ?? []);
+      if (main !== null) this.activeTabId = main;
+      else {
+        const { bills: read } = await this.#loadPartyBills();
+        if (this.#hasLeftParty(party.id, sent)) return;
+        this.activeTabId = billToOpen(read ?? []);
+      }
     }
     await this.#loadLinesAndBills();
   }
@@ -3731,14 +3785,18 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
-  /** Put the chosen items on a new bill of the party, and show that bill. */
+  /** Put the chosen items on a new bill of the party, and show that bill unless the waiter has left
+   * the party since ({@link #hasLeftParty}). */
   async #onSplitLines(event: Event): Promise<void> {
     const { transfers } = (event as CustomEvent<{ transfers: TabTransfer[] }>).detail;
     const billId = this.activeTabId;
+    const partyId = this.orderParty?.id;
     if (billId === undefined) return;
+    const sent = this.#sentNow();
     this.errorKey = undefined;
     try {
       const split = await this.api.splitBill(billId, transfers, this.#billRevisions());
+      if (this.#hasLeftParty(partyId, sent)) return;
       this.activeTabId = split.billId;
     } catch (error) {
       const code = (error as { code?: string }).code;
@@ -3750,17 +3808,24 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
-  /** Finish frees the party's tables, or leaves them to clear; either way the floor comes next. A bill
-   * still unpaid is said on the screen, beside the offer to take its payment. */
+  /** Finish frees the party's tables, or leaves them to clear. Unless the order's party has changed
+   * or the operator session has ended (a logout or a server switch) since, the finished party is
+   * closed: the floor comes next, except when the waiter has left the order and either has not come
+   * back to it or a table open is under way ({@link #leftSince}); then the screen stays where it is
+   * and only the floor is read again. A bill still unpaid is said on the screen, beside the offer to
+   * take its payment, unless the waiter has left the party since ({@link #hasLeftParty}). */
   async #onFinishTable(): Promise<void> {
     const party = this.orderParty;
     if (party === null) return;
+    const visit = this.#orderVisit;
+    const sent = this.#sentNow();
     this.errorKey = undefined;
     this.finishRefused = false;
     try {
       await this.api.finishTable(party.id, party.revision);
     } catch (error) {
       if ((error as { code?: string } | undefined)?.code === "party.bill_outstanding") {
+        if (this.#hasLeftParty(party.id, sent)) return;
         this.finishRefused = true;
         await this.#loadPartyBills();
         return;
@@ -3768,11 +3833,27 @@ export class TillApp extends LitElement {
       await this.#onTableRefusal(error);
       return;
     }
-    this.#leaveTable();
+    // Logout and a server switch leave `orderParty` set; a server switch leaves `#orderVisit` too,
+    // so without this `#leaveTable` would unlock the till.
+    // Unlike #hasLeftParty, an open under way does not drop the answer: an open that fails would
+    // leave the finished party on screen.
+    if (sent.session !== this.#operatorSession || this.orderParty?.id !== party.id) return;
+    if (!this.#leftSince(visit)) {
+      this.#leaveTable();
+      return;
+    }
+    this.#forgetParty();
+    await this.#refreshFloor();
   }
 
   /** The finished party's order is closed on every face: a till's drill, or a handheld's order tab. */
   #leaveTable(): void {
+    this.#forgetParty();
+    this.#returnToFloor();
+  }
+
+  /** Clears the open order's bill, table and party without moving the screen. */
+  #forgetParty(): void {
     this.activeTabId = undefined;
     this.activeTableId = undefined;
     this.orderParty = null;
@@ -3786,7 +3867,6 @@ export class TillApp extends LitElement {
     this.reprintSent = [];
     this.#groupsUnread = false;
     this.partyBills = [];
-    this.#returnToFloor();
   }
 
   /** A till's drill goes back to the floor; a card mount selects the canvas's floor tab. */

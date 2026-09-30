@@ -3974,7 +3974,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       beside the field without a request; the server's own refusal (`management.request_invalid`
       `{ field: "name" }`) reopens the dialog with the name sent and the refusal under the field.
       A refusal of the name that arrives after the waiter has left that party's order, or opened a
-      table since, is dropped.
+      table since, is dropped. _(2026-09-30, C81: a late answer to other table actions is checked
+      too, by a different rule from the name's refusal: the answer is dropped once the order's
+      party is another, a table open has begun since it was sent and one is under way, or the
+      operator has logged out or the till has switched server (`#hasLeftParty`,
+      `apps/till/src/till-app.ts`); a visit to the floor alone still applies it.
+      Then Join a table and Split by item change nothing after their answer; Move guests still
+      re-reads the floor, then changes nothing more; Split a table, when the bill on screen left
+      with the table and the party has no main bill, stops once the party's bills read after the
+      answer come back, without picking one; and Finish's refusal for a bill still unpaid is
+      dropped. Move guests and Join a table never say that bills were kept apart, then or later,
+      once the waiter has left the order and either has not come back to it or a table open is
+      under way. Finish's success is dropped only when the order's party has changed, the
+      operator has logged out or the till has switched server; an open under way does not stop
+      it. When the waiter has gone to the floor or another tab and either has not come back or a
+      table open is under way, Finish clears the party and reads the floor again without moving
+      the screen. Before, a late Move put the moved party on the screen of the table opened
+      since. Any other late refusal is still said on the banner. Merge bills, Transfer items and a
+      named party are unchanged: after a successful answer each re-reads the floor and the bill
+      on screen.)_
     - The floor's card and map token show the party's display name when it says more than the
       table's label: a name staff gave, or a joined party's tables ("Mesa 4, 5").
     - Opening a seated table opens its party's main bill, else its first unpaid bill, else its
