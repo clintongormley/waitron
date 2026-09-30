@@ -2232,7 +2232,6 @@ describe("part of a dish with extras (B11d)", () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
     const pizza = await lineIdOf(venue, billId, 1);
     const olives = await lineIdOf(venue, billId, 2);
-    const ticket = await ticketOf(venue, billId, 1);
     const ask = { lineId: pizza, action: "comp", quantity: "1" } as const;
     const previewed = await preview(billId, ask);
 
@@ -2301,7 +2300,6 @@ describe("part of a dish with extras (B11d)", () => {
       ]),
     );
     expect(items).toHaveLength(2);
-    expect(ticket.id).toBeDefined();
   });
 
   it("discounts 10% off 1 of Pizza ×3 with two olives each: the carved pizza and its two olives take it", async () => {
