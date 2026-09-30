@@ -108,8 +108,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
   },
   "working_order.not_open": {
-    en: "This bill is no longer open: it has been paid or discarded",
-    es: "Esta cuenta ya no está abierta: se ha pagado o se ha descartado",
+    en: "This bill is no longer open: it has been presented, paid or discarded",
+    es: "Esta cuenta ya no está abierta: se ha presentado, pagado o descartado",
   },
   "tab.not_open": {
     en: "That bill is no longer open. Choose another bill and send again",
@@ -180,8 +180,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. No se puede cambiar la cuenta hasta que termine",
   },
   "reader.not_found": {
-    en: "This device has no card reader to use. Ask a manager to set one up on the Card payments screen, or take the card on a separate terminal",
-    es: "Este dispositivo no tiene un lector de tarjetas que usar. Pide a un responsable que lo configure en la pantalla Pagos con tarjeta, o cobra la tarjeta en otro datáfono",
+    en: "This device has no card reader it can use. Ask a manager to check its card reader on the Card payments screen",
+    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Pide a un responsable que revise su lector en la pantalla Pagos con tarjeta",
   },
   "reader.provider_disconnected": {
     en: "The card reader's payment provider is not connected. Ask a manager to connect it on the Card payments screen, or take cash",

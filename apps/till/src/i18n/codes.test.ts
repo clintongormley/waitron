@@ -332,11 +332,11 @@ it("explains an approver who may not approve, in both languages, naming no ident
   }
 });
 
-it("says in both languages that a bill paid or discarded is no longer open, naming no identifier", () => {
+it("says in both languages that a bill presented, paid or discarded is no longer open, naming no identifier", () => {
   expect(codeMessage("working_order.not_open", "en")).toBe(
-    "This bill is no longer open: it has been paid or discarded",
+    "This bill is no longer open: it has been presented, paid or discarded",
   );
   expect(codeMessage("working_order.not_open", "es")).toBe(
-    "Esta cuenta ya no está abierta: se ha pagado o se ha descartado",
+    "Esta cuenta ya no está abierta: se ha presentado, pagado o descartado",
   );
 });

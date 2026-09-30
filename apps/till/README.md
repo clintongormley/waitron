@@ -19,7 +19,9 @@ itself:
    widgets, showing the menu offers of the device's default zone, or else the venue's
    counter-default zone (`GET /api/default-service-zone/offers`).
 3. **Pay** — one **cash** tender; the sale is filed by `POST /api/sales`, which re-prices the basket
-   authoritatively (the browser never sends a price).
+   authoritatively (the browser never sends a price). _(2026-09-30, lane B item B15: a bill that
+   already holds a payment, or one the operator splits with Pay items, Contribute or Split equally,
+   is paid in several payments through the bill payment dialog instead.)_
 4. **Ticket** — the filed invoice number, per-rate VAT desglose, change and the AEAT verification QR,
    then "new sale". Logging out keeps the basket for the next operator.
 
@@ -112,6 +114,10 @@ a venue and serves the real till.
 > lifted by 7b and no longer appear in that list: park & retrieve itself, and "one till per server"
 > (the held list is now shared across every register on a node). 7c (prepare & collect) is
 > still out. Built in #61.
+>
+> **2026-09-30 (lane B item B15):** a bill can now be paid in several payments, and the bill payment
+> dialog gives a payment back before the invoice, approved with a supervisor's or manager's PIN. So
+> "No refunds" below no longer covers a bill payment given back before its invoice.
 
 **In scope (slice 1 / 7a):** one walk-up **cash** sale — choose products, weigh or count them, take
 cash, print the filed ticket with its Veri\*Factu QR.

@@ -3945,6 +3945,8 @@ sits.** Read from the code, not run:
   - So until B15 lands, this task shows such a bill's amount still to pay and the sentence
     `bill.pay_with_bill_payments`. It does not offer the single-payment button the server would
     refuse. Once B15 has landed, the button opens B15's screen instead.
+    _(2026-09-30, B15: it now does. On a table the sentence is a button opening the bill payment
+    dialog; on the counter a "Take the rest" button above the pay card opens it.)_
   - Step 0 checks which is true.
 - An **open bill with no payment** keeps today's path (`recordSale`).
 - **Finish is never left refused by a moved bill.**
@@ -4060,7 +4062,8 @@ sits.** Read from the code, not run:
     - a retrieved counter order with `hasPayments: true` shows its `outstanding` and the
       `bill.pay_with_bill_payments` sentence. No `recordSale` call happens when the operator tries
       to pay. Once B15 has landed, it opens B15's payment screen instead; assert whichever Step 0
-      found;
+      found; _(2026-09-30, B15: it now does — the counter shows "{amount} to pay" and a "Take the
+      rest" button above the pay card, which opens the bill payment dialog.)_
     - a retrieved counter order with no payments pays through `recordSale`, as today.
   - **The server half of the same,** in `apps/server/src/till-api.move-bill.test.ts` (Task 7's file):
     - a partly paid bill (a €5.00 cash contribution) moved to the counter:

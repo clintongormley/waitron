@@ -809,6 +809,9 @@ the code refuses merging two bills, or moving items between them, with `bill.pay
 while either has any pending or received payment, one refunded in full included
 (`requireUntouchedPair`, `apps/server/src/bill-actions.ts`). Abandoning still goes through once
 every payment is refunded in full.)_
+_(2026-09-30, lane B item B15: Task 15 kept `/api/sales` and `/api/pay` for a bill with no payment
+on it. The till uses the bill routes once money is on the bill, or when the operator picks Pay
+items, Contribute or Split equally.)_
 
 The helper calls `recordSale` with immediate settlement and the tenders of §2.5, links every card
 bill payment's `payments` row to the sale, settles the order and queues the receipt (which lists

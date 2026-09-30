@@ -189,7 +189,6 @@ export class TillCardGrid extends LitElement {
     </div>`;
   }
 
-  /** No `default`: a card type without a case here is a compile error rather than a dropped card. */
   /** Above the pay card, which {@link payHeld} holds: what the order still owes, and the offer to
    * take it as a bill payment. */
   #payRest(outstanding: string): TemplateResult {
@@ -215,6 +214,7 @@ export class TillCardGrid extends LitElement {
     </section>`;
   }
 
+  /** No `default`: a card type without a case here is a compile error rather than a dropped card. */
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
       case "product-grid": {
