@@ -6585,7 +6585,7 @@ ongoing overhaul listed at the top of Track A.
   each file genuinely needs its own range — and convert the siblings as they are next touched.
 - **`wt-combobox`** (#351): a searchable dropdown in `packages/ui` — pick one option or several
   (`multiple`), and optionally offer to add what was typed when nothing matches. The category form's
-  parent picker (#362) and the product's main-category and labels pickers
+  parent picker (#362) and the product's main-category picker
   (`apps/dashboard/src/widgets/classification-fields.ts`) use it. Left out on purpose, per its
   design: searching on the server, disabling
   single options, taking part in a native `<form>`, and showing chosen options as chips (it shows a

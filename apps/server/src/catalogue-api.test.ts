@@ -829,10 +829,13 @@ describe("mountCatalogueApi — labels", () => {
     for (const [method, path] of [
       ["GET", "/management-api/labels"],
       ["POST", "/management-api/labels"],
+      ["PATCH", "/management-api/labels/11111111-1111-4111-8111-111111111111"],
+      ["DELETE", "/management-api/labels/11111111-1111-4111-8111-111111111111"],
       ["GET", `/management-api/products/${productId}/labels`],
       ["PUT", `/management-api/products/${productId}/labels`],
     ] as const) {
-      const res = await send(app, method, path, method === "GET" ? {} : { body: { name: "X" } });
+      const body = method === "GET" || method === "DELETE" ? {} : { body: { name: "X" } };
+      const res = await send(app, method, path, body);
       expect(res.status, `${method} ${path}`).toBe(404);
     }
   });

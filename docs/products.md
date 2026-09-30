@@ -83,8 +83,8 @@ allergens and the other product details. Apart from the names, each detail you l
 shows the product's value greyed out as a hint, and the variant uses the product's value. The
 description works as one value across all languages: to use the product's description, leave every
 language of the description blank. Once you write the description in one language, the variant uses
-only its own description, and the languages you left blank stay blank. The page has no Modifiers or Variants section, because a variant always uses its product's extras and
-options lists.
+only its own description, and the languages you left blank stay blank. The page has no Modifiers
+or Variants section, because a variant always uses its product's extras and options lists.
 **Open** appears once the variant has been saved, and it waits while the product has unsaved
 changes, because leaving the product would lose them: save the product first.
 

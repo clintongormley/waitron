@@ -798,9 +798,7 @@ record's own value applies and its blank languages show no placeholder hint.
   "fall back": offering both would read as one thing and save as another.
 - **A single-choice `wt-combobox`** (the product editor's main category): its first option has an
   empty value and reads "Same as &lt;fallback value&gt;", and so does its placeholder, which is what
-  it shows while the stored value is null; like a `<select>`, it has no separate hint line. A
-  variant's labels are not a field at all — it carries only its parent's — so they are shown as a
-  hint line alone.
+  it shows while the stored value is null; like a `<select>`, it has no separate hint line.
 - **Any other control** (the allergen and dietary picker, an image): a muted
   hint line beside it reads "Same as &lt;fallback value&gt;" while the stored value is empty, and
   goes away once the record sets its own. An image shows the fallback picture itself under the hint
@@ -1509,7 +1507,7 @@ replacement history for defaults and invalid destinations, and push history for 
 Keep passwords, PINs, pairing codes and unsaved form contents out of the URL.
 
 Module management tabs use `/manage/<section>/view/<key>`; Venue operations uses `status`,
-`departments`, `zones` and `routing`, and Categories uses `categories` and `labels`. The dashboard preserves module-owned `view` segments
+`departments`, `zones` and `routing`. The dashboard preserves module-owned `view` segments
 while the module validates its keys. The Menus screen (`/manage/menus`) puts the menu's id before
 the tab:
 `/manage/menus/menu/<id>/view/<key>`, with `structure`, `prices` and `preview` (`dashboardPath`,
