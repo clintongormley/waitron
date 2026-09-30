@@ -199,7 +199,12 @@ const BUCKET_FIELD_CODES: Record<string, BucketField> = {
   "restore.environment_mismatch": "environment",
 };
 
-const BUCKET_FIELD_PATHS: Record<string, BucketField> = { kit: "kit", environment: "environment" };
+const BUCKET_FIELD_PATHS: Record<string, BucketField> = {
+  kit: "kit",
+  environment: "environment",
+  oldBoxGone: "oldBoxGone",
+  venueConfirmed: "venueConfirmed",
+};
 
 const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
   artifact: "restore.check.backup_file",
@@ -210,6 +215,8 @@ const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
 const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
   kit: "restore_bucket.check.kit",
   environment: "restore_bucket.check.environment",
+  oldBoxGone: "restore_bucket.check.old_box",
+  venueConfirmed: "restore_bucket.check.venue",
 };
 
 function describeThrottle(params: Record<string, unknown> | undefined): Message {

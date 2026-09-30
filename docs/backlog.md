@@ -5501,15 +5501,17 @@ ongoing overhaul listed at the top of Track A.
   `BUCKET_FIELD_CHECKS` in `apps/setup/src/setup-app.ts`; tests in
   `apps/setup/src/setup-app.test.ts`). design-system.md → Forms gained a sentence stating the setup
   wizard's rule ("In the setup wizard the sentence under the field speaks about that field alone").
-  Still OPEN in the setup half (found in C62's review, read and not run): on the bucket-restore
-  screen a `setup.request_invalid` naming `oldBoxGone` or `venueConfirmed` (the two checkboxes;
-  `BUCKET_FIELD_PATHS` places only `kit` and `environment`) still shows `shell.bucket.request_invalid`
-  — "The server rejected the details. Check the kit and the environment, then try again." — in the
-  bottom message, which points at the kit and the environment when those two were accepted; it
-  predates C62 and nothing tests that case. The server refuses those two only when they are the
-  wrong type (`apps/server/src/setup-api.ts`), and the wizard's own request types them `boolean` and
-  `string | null` (`BucketRestoreRequestDetail`, `apps/setup/src/events.ts`; the client leaves out a
-  null `venueConfirmed`), so only a client bug or a request built outside the wizard reaches it; (2) controls with no place for an error keep their refusal in the
+  **DONE (A152, 2026-09-30):** on the bucket-restore screen a `setup.request_invalid` naming
+  `oldBoxGone` or `venueConfirmed` (the two tick boxes) no longer shows "Check the kit and the
+  environment": `BUCKET_FIELD_PATHS` places both, and the sentence speaks about that tick box alone
+  — "Check your answer about the old server." / "Revisa tu respuesta sobre el servidor anterior."
+  and "Check the confirmation that this is your business." / "Revisa la confirmación de que este es
+  tu negocio." It shows under the tick box, which is marked, when the tick box is on the screen; the
+  two appear only once the server has asked, so when it is not, the same sentence shows beside
+  Restore and no field is marked (tests in `apps/setup/src/setup-app.test.ts`). The server refuses
+  those two only when they are the wrong type (`apps/server/src/setup-api.ts`), which the wizard's
+  own request never sends, so only a client bug or a request built outside the wizard reaches it.
+  Still OPEN: (2) controls with no place for an error keep their refusal in the
   bottom message — `wt-switch` (`active` on the ingredient, extras, options and menu-price forms;
   `available` on the product editor), the allergen and dietary-origin pickers on the ingredient
   form, and the purchase form's VAT regime select; (3) refusals naming two fields or a row the refusal does not number stay

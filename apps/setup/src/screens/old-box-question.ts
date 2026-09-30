@@ -29,9 +29,12 @@ export function oldBoxQuestion(opts: {
   checked: boolean;
   /** The owner tried to go on without answering. */
   invalid: boolean;
+  /** The server's refusal of the answer, shown under the checkbox. */
+  refusal?: string;
   onChange: (checked: boolean) => void;
 }): TemplateResult | typeof nothing {
   if (opts.liveSince === undefined && !opts.liveUnknown) return nothing;
+  const error = opts.invalid ? oldBoxProblem() : opts.refusal;
   return html`<p class="error" role="alert" data-test="live-warning">
       ${
         opts.liveSince !== undefined
@@ -46,12 +49,12 @@ export function oldBoxQuestion(opts: {
         type="checkbox"
         required
         data-test="old-box-gone"
-        aria-invalid=${opts.invalid ? "true" : "false"}
-        aria-describedby=${opts.invalid ? "old-box-gone-error" : nothing}
+        aria-invalid=${error === undefined ? "false" : "true"}
+        aria-describedby=${error === undefined ? nothing : "old-box-gone-error"}
         .checked=${opts.checked}
         @change=${(e: Event) => opts.onChange((e.currentTarget as HTMLInputElement).checked)}
       />
       ${t("old_box.gone")}
     </label>
-    ${opts.invalid ? html`<p class="error" id="old-box-gone-error">${oldBoxProblem()}</p>` : nothing}`;
+    ${error === undefined ? nothing : html`<p class="error" id="old-box-gone-error">${error}</p>`}`;
 }
