@@ -1078,11 +1078,12 @@ describe("login-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("password.invalid");
-    const message =
-      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=password]")!.error;
-    expect(message).toContain(codeMessage("password.invalid", "es-ES"));
+    const message = await bottomOf(el);
+    expect(message).toContain(t("login.failed", "es-ES"));
     expect(message).not.toContain("password.invalid");
-    expect(await bottomOf(el)).toBe(t("form.fix_fields"));
+    expect(
+      el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>("wt-input[name=password]")!.error,
+    ).toBe("");
   });
 
   it("reads the email first, then the password chosen as another way", async () => {
@@ -1876,11 +1877,11 @@ describe("login-screen: password and second factor", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("marks a wrong authenticator code beside the code field and keeps the code step", async () => {
+  it("says a refused authenticator code failed the login beside the action and keeps the code step", async () => {
     const login = vi
       .fn()
       .mockRejectedValueOnce({ code: "totp.required" })
-      .mockRejectedValueOnce({ code: "totp.invalid" });
+      .mockRejectedValueOnce({ code: "password.invalid" });
     const { el } = await signInWithPassword({ login });
     input(el, "one-time-code", "000000");
     pressEnter(el, "one-time-code");
@@ -1890,7 +1891,8 @@ describe("login-screen: password and second factor", () => {
       password: "correct horse battery",
       totp: "000000",
     });
-    expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
+    expect(await bottomOf(el)).toBe(t("login.failed"));
+    expect(field(el, "one-time-code").error).toBe("");
     expect(el.shadowRoot!.querySelector("[data-test=submit-factor]")).not.toBeNull();
   });
 
@@ -2582,36 +2584,6 @@ describe("login-screen: errors beside the action, not above the form", () => {
 
   const refusals = [
     {
-      name: "a wrong password",
-      open: async () =>
-        (
-          await signInWithPassword({
-            login: vi.fn().mockRejectedValue({ code: "password.invalid" }),
-          })
-        ).el,
-      field: "password",
-      action: "submit",
-      code: "password.invalid",
-    },
-    {
-      name: "a wrong authenticator code",
-      open: async () => {
-        const { el } = await signInWithPassword({
-          login: vi
-            .fn()
-            .mockRejectedValueOnce({ code: "totp.required" })
-            .mockRejectedValue({ code: "totp.invalid" }),
-        });
-        input(el, "one-time-code", "000000");
-        click(el, "submit-factor");
-        await flush(el);
-        return el;
-      },
-      field: "one-time-code",
-      action: "submit-factor",
-      code: "totp.invalid",
-    },
-    {
       name: "a short new password",
       open: async () => {
         history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
@@ -2709,26 +2681,27 @@ describe("login-screen: errors beside the action, not above the form", () => {
   });
 
   it("keeps the action waiting on a field emptied while a request was out, even when the refusal names it", async () => {
-    const answer = deferred<{ personId: string }>();
-    const { el } = await signInWithPassword({
-      login: vi
-        .fn()
-        .mockRejectedValueOnce({ code: "server.internal" })
-        .mockReturnValue(answer.promise),
+    const answer = deferred<{ personId: string; authenticated: boolean }>();
+    history.replaceState(null, "", "/manage/account?token=token-1&purpose=invitation");
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ completeAccountAction: vi.fn().mockReturnValue(answer.promise) }),
     });
-    click(el, "submit");
-    await el.updateComplete;
-    input(el, "password", "");
-    await el.updateComplete;
-    answer.reject({ code: "password.invalid" });
     await flush(el);
-    expect(field(el, "password").error).toBe(codeMessage("password.invalid"));
-    expect(await nativeDisabled(el, "submit")).toBe(true);
-
-    input(el, "password", "another password");
+    input(el, "new-password", "new password");
+    input(el, "new-pin", "4321");
+    click(el, "complete-account");
     await el.updateComplete;
-    expect(field(el, "password").error).toBe("");
-    expect(await nativeDisabled(el, "submit")).toBe(false);
+    input(el, "new-password", "");
+    await el.updateComplete;
+    answer.reject({ code: "password.too_short" });
+    await flush(el);
+    expect(field(el, "new-password").error).toBe(codeMessage("password.too_short"));
+    expect(await nativeDisabled(el, "complete-account")).toBe(true);
+
+    input(el, "new-password", "another password");
+    await el.updateComplete;
+    expect(field(el, "new-password").error).toBe("");
+    expect(await nativeDisabled(el, "complete-account")).toBe(false);
   });
 
   it.each([
@@ -2814,14 +2787,14 @@ describe("login-screen: errors beside the action, not above the form", () => {
       login: vi
         .fn()
         .mockRejectedValueOnce({ code: "totp.required" })
-        .mockRejectedValueOnce({ code: "totp.invalid" })
+        .mockRejectedValueOnce({ code: "password.invalid" })
         .mockRejectedValueOnce({ code: "totp.required" })
         .mockImplementation(never),
     });
     input(el, "one-time-code", "000000");
     click(el, "submit-factor");
     await flush(el);
-    expect(field(el, "one-time-code").error).toBe(codeMessage("totp.invalid"));
+    expect(await bottomOf(el)).toBe(t("login.failed"));
     click(el, "back-to-password");
     await el.updateComplete;
     expect(await bottomOf(el)).toBe("");
@@ -2830,5 +2803,71 @@ describe("login-screen: errors beside the action, not above the form", () => {
     expect(field(el, "one-time-code").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect(action(el, "submit-factor").disabled).toBe(false);
+  });
+});
+
+describe("login-screen: a refused sign-in says only that the login failed", () => {
+  // Owner rule (C95): a login refusal must not say whether the account exists, so it names no
+  // field; a message under the password or code field would say the earlier details were right.
+  const marked = (el: LoginScreen, name: string) =>
+    field(el, name).shadowRoot!.querySelector("input")!.getAttribute("aria-invalid") === "true";
+  const actionOf = (el: LoginScreen, test: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${test}]`)!;
+
+  it("on the password step, says the login failed beside the action and marks no field", async () => {
+    const { el } = await signInWithPassword({
+      login: vi.fn().mockRejectedValue({ code: "password.invalid" }),
+    });
+    expect(await bottomOf(el)).toBe(t("login.failed"));
+    expect(field(el, "password").error).toBe("");
+    expect(marked(el, "password")).toBe(false);
+    expect(field(el, "password").value).toBe("correct horse battery");
+    expect(actionOf(el, "submit").disabled).toBe(false);
+    await vi.waitFor(() =>
+      expect(field(el, "password").shadowRoot!.activeElement).toBe(
+        field(el, "password").shadowRoot!.querySelector("input"),
+      ),
+    );
+  });
+
+  it("on the code step, says the login failed beside the action, marks no field, and empties the code with the cursor in it", async () => {
+    const login = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "totp.required" })
+      .mockRejectedValueOnce({ code: "password.invalid" })
+      .mockImplementation(never);
+    const { el } = await signInWithPassword({ login });
+    input(el, "one-time-code", "000000");
+    click(el, "submit-factor");
+    await flush(el);
+    expect(await bottomOf(el)).toBe(t("login.failed"));
+    expect(field(el, "one-time-code").error).toBe("");
+    expect(marked(el, "one-time-code")).toBe(false);
+    expect(field(el, "one-time-code").value).toBe("");
+    expect(actionOf(el, "submit-factor").disabled).toBe(false);
+    await vi.waitFor(() =>
+      expect(field(el, "one-time-code").shadowRoot!.activeElement).toBe(
+        field(el, "one-time-code").shadowRoot!.querySelector("input"),
+      ),
+    );
+
+    input(el, "one-time-code", "123456");
+    click(el, "submit-factor");
+    await el.updateComplete;
+    expect(login).toHaveBeenLastCalledWith({
+      email: "clinton@example.com",
+      password: "correct horse battery",
+      totp: "123456",
+    });
+    expect(await bottomOf(el)).toBe("");
+  });
+
+  it("keeps a signed-in password re-check's own wording when adding a passkey after sign-in", async () => {
+    const { el } = await mountPasskeyOffer({
+      passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "password.invalid" }),
+    });
+    click(el, "setup-passkey");
+    await flush(el);
+    expect(await bottomOf(el)).toBe(codeMessage("password.invalid"));
   });
 });
