@@ -3623,7 +3623,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       an extras row on its own, whole only, and that code is retired; the till offers all three on
       an extras row, at a table and in the counter's basket, and Cancel where its dish offers it.)_
       Left open:
-      - _Done by lane B item B11e (2026-09-30):_ a newly set-up venue has one cancel reason,
+      - _Done by lane B item B11e (2026-09-30, #949):_ a newly set-up venue has one cancel reason,
         "Entry error" / "Error al marcar": cancel only, staff apply it alone, no limit, no note.
         Both names are stored; the stored name is the Spanish one when the venue's first invoice
         language is Spanish and the English one otherwise, and the till shows the reason in the
