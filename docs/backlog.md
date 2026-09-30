@@ -5685,8 +5685,28 @@ ongoing overhaul listed at the top of Track A.
   as "n", so "espana" finds "España"; and the box is not pinned, so it scrolls away with a long
   sidebar.
 
+- **A form's message about a failed submission sits at the bottom of the form, on its own line above
+  the buttons (C97, owner 2026-09-30) — DONE (2026-09-30).** The one message a form shows about a
+  failed submission is no longer beside the buttons: it runs full width from the form's left edge,
+  aligned to the start, on its own line just above the button row, at every width. In a dialog it
+  is the last thing in the dialog's scrolling body, below the last field, and is scrolled into view;
+  the pinned footer holds only the buttons. `wt-form-actions` (`packages/ui-core`) draws it above
+  its buttons, and `wt-dialog` and `wt-modal` (`packages/ui`) take the message of a
+  `wt-form-actions` placed directly in their footer and show it in the body. Where a button row
+  shares a line with something else, the screen places the message itself: the dashboard's sign-in
+  steps show it above the list of other ways to sign in and the buttons (`formMessage`, now exported
+  from `@waitron/ui`), and the Add printer dialog's address check lets its button row take the
+  panel's full width while it has a message. A dialog that opened with a message already in its
+  footer threw and never opened on the first version of this change; fixed on the same branch.
+  Browser tests hold the placement on location settings, the setup wizard's connect form, the
+  profile screen's Add passkey dialog, the sign-in passkey step and the address check, at 1280 and
+  390 pixels wide where the width matters. A `wt-form-actions` wrapped in another element inside a
+  dialog's footer would keep its message in the footer; none does today.
+
 - **A form says what went wrong under each field and once beside its action button, never in a
-  box at the top (C47 part 1, #838, owner rule 2026-09-28).** `wt-form-actions` gained an `error`
+  box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-09-30, C97: the message now
+  sits on its own line at the bottom of the form, above the buttons, not beside them; see the entry
+  above.)_ `wt-form-actions` gained an `error`
   message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
   (`packages/ui-core/src/interactive.ts`) moves focus to the first marked field after a failed
   submission. The forms in `apps/dashboard` follow it, and so, since C47m (#839), does the image library's
