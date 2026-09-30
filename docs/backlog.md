@@ -3444,7 +3444,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         (`packages/adjustments/src/configuration-transfer.ts`);
         no migration inserts one. **Next action:** decide whether setup should create a default
         cancel reason.
-    - _Done by lane B item B11b (2026-09-30):_ a venue can set a limit on a bill's TOTAL discount
+    - _Done by lane B item B11b (2026-09-30, #931, main `e511aa831`):_ a venue can set a limit on a bill's TOTAL discount
       (`adjustment_settings.max_bill_discount`, adjustments migration `0002`, set on the dashboard's
       Adjustment reasons screen). The share is measured from the bill's current rows — each row's
       price before adjustments less its price now, leaving out the rows this bill's own comps
@@ -3458,6 +3458,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       - **The adjustment history records who approved, but not whether the bill's discount limit,
         rather than the reason, is why.** Recording it would need a column. **Next action:** decide
         whether to record it.
+      - **The till still lists two approver refusals it can no longer receive:**
+        `APPROVER_REFUSALS` in `apps/till/src/till-app.ts` names `person.not_found` and
+        `person.suspended`, which an approver's PIN check stopped returning when every login
+        failure became `pin.invalid` (C95, #930). **Next action:** drop the two entries.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
