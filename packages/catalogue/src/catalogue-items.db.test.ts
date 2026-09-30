@@ -72,6 +72,24 @@ async function product(id: string) {
 }
 
 describe("moveCatalogueItems", () => {
+  it("checks cycles before moving any product, even before rollback", async () => {
+    let beforeRollback: string | null | undefined;
+    await expect(
+      app(async (tx) => {
+        try {
+          await moveCatalogueItems(tx, { productIds: [cola], categoryIds: [d] }, b);
+        } finally {
+          const [row] = await tx
+            .select({ categoryId: products.categoryId })
+            .from(products)
+            .where(eq(products.id, cola));
+          beforeRollback = row!.categoryId;
+        }
+      }),
+    ).rejects.toMatchObject({ code: "category.parent_cycle" });
+    expect(beforeRollback).toBe(d);
+  });
+
   it("moves products and folders together into a folder and to the top level", async () => {
     await app((tx) => moveCatalogueItems(tx, { productIds: [cola], categoryIds: [b] }, f));
     expect((await product(cola)).categoryId).toBe(f);
@@ -130,6 +148,24 @@ describe("moveCatalogueItems", () => {
 });
 
 describe("deleteCatalogueItems", () => {
+  it("validates every folder before changing products, even before rollback", async () => {
+    const missing = crypto.randomUUID();
+    let beforeRollback: { active: boolean; categoryId: string | null } | undefined;
+    await expect(
+      app(async (tx) => {
+        try {
+          await deleteCatalogueItems(tx, { productIds: [cola], categoryIds: [missing] }, "delete");
+        } finally {
+          [beforeRollback] = await tx
+            .select({ active: products.active, categoryId: products.categoryId })
+            .from(products)
+            .where(eq(products.id, cola));
+        }
+      }),
+    ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
+    expect(beforeRollback).toEqual({ active: true, categoryId: d });
+  });
+
   it("switches selected products off without moving them", async () => {
     await app((tx) => deleteCatalogueItems(tx, { productIds: [cola], categoryIds: [] }, "move_up"));
     expect(await product(cola)).toMatchObject({ active: false, categoryId: d });

@@ -188,7 +188,6 @@ function idList(value: unknown, field: string, kind: string): string[] {
   return value.map((entry: string) => requireUuidParam(entry, kind));
 }
 
-/** A position or index, shape only: the section writes refuse a negative or fractional one. */
 function selectionBody(body: Record<string, unknown>): CatalogueSelection {
   const ids = (field: "productIds" | "categoryIds", kind: string): string[] => {
     const list = idList(body[field], field, kind);
@@ -202,6 +201,7 @@ function selectionBody(body: Record<string, unknown>): CatalogueSelection {
   };
 }
 
+/** A position or index, shape only: the section writes refuse a negative or fractional one. */
 function numberField(value: unknown, field: string): number {
   if (typeof value !== "number") throw new AppError("management.request_invalid", { field });
   return value;
