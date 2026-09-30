@@ -2759,8 +2759,9 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * source's context onto a new order. Every transfer is validated before anything moves. A partial
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
- * the part split, and refused the same when an extra is not a whole count a dish. Returns each ticket item a split made, mapped to the one it was copied from, and
- * each row a split made, keyed by the row it came from, a dish before its extras.
+ * the part split, and refused the same when an extra is not a whole count a dish. Returns each
+ * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
+ * by the row it came from, a dish before its extras.
  */
 export async function carveOffLines(
   tx: Transaction,
