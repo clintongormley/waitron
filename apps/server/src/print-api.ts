@@ -445,9 +445,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
       const pairedBluetooth = screenPairedBluetooth(body.pairedBluetooth);
-      // Settled before this reply's commands are read, so a command stops in the reply to the pull
-      // that carried its outcome.
-      bluetoothCommands.accept(agentId, screenBluetoothOutcomes(body.bluetoothOutcomes));
+      const bluetoothOutcomes = screenBluetoothOutcomes(body.bluetoothOutcomes);
+      const unpaired = bluetoothCommands.unpaired(agentId, bluetoothOutcomes);
 
       const now = Date.now();
       // A visible or scanned report replaces the description, never another kind of report's stamp.
@@ -506,12 +505,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             );
         }
-        // Absent from an agent that predates the field, which then changes nothing.
-        if (bluetoothPrinting === false && pairedBluetooth.length > 0) {
-          // Read here rather than before the transaction, so a report another agent recorded while
-          // this pull waited for the write lock counts.
+        // Read here rather than before the transaction, so a report another agent recorded while
+        // this pull waited for the write lock counts.
+        const printableElsewhere = (): Set<string | undefined> => {
           const checkedAt = Date.now();
-          const printableElsewhere = new Set(
+          return new Set(
             [...discovered.values()]
               .filter(
                 (e) =>
@@ -521,10 +519,27 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               )
               .map((e) => e.localKey),
           );
+        };
+        // An unpaired printer is switched off before the claim, so this pull hands out none of its
+        // jobs; one another box can still print to stays on.
+        if (unpaired.length > 0) {
+          const elsewhere = printableElsewhere();
+          const addresses = unpaired.filter((address) => !elsewhere.has(address));
+          if (addresses.length > 0)
+            await tx
+              .update(printers)
+              .set({ active: false })
+              .where(
+                and(eq(printers.transport, "bluetooth"), inArray(printers.localKey, addresses)),
+              );
+        }
+        // Absent from an agent that predates the field, which then changes nothing.
+        if (bluetoothPrinting === false && pairedBluetooth.length > 0) {
+          const elsewhere = printableElsewhere();
           await failUnprintableBluetoothJobs(
             tx,
             agentId,
-            pairedBluetooth.map((p) => p.localKey).filter((key) => !printableElsewhere.has(key)),
+            pairedBluetooth.map((p) => p.localKey).filter((key) => !elsewhere.has(key)),
           );
         }
         return claimPrintJobs(tx, agentId, {
@@ -532,6 +547,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           visibleKeys,
         });
       });
+      // Settled only once the switch-off has committed, so an agent resends an outcome whose pull
+      // failed, and before this reply's commands are read, so a command stops in the reply to the
+      // pull that carried its outcome.
+      bluetoothCommands.accept(agentId, bluetoothOutcomes);
       // `servers` lets the agent follow the primary across a failover, as the till's pull does.
       const held = await deps.readMembership();
       const networkProbes = printerProbes.current();

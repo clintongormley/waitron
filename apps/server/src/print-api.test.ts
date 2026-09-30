@@ -3401,4 +3401,116 @@ describe("Bluetooth Pair and Forget commands", () => {
     // The mark describes Bluetooth devices only.
     expect(rows.find((r) => r.host === host)).not.toHaveProperty("printerLike");
   });
+  describe("an unpairing switches its printer off", () => {
+    async function registerBluetooth(app: Hono, mac: string): Promise<string> {
+      const created = await send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: { name: `BT ${mac}`, transport: "bluetooth", localKey: mac },
+      });
+      expect(created.status).toBe(201);
+      return ((await created.json()) as { id: string }).id;
+    }
+
+    async function isActive(printerId: string): Promise<boolean> {
+      const { rows } = await suite.db.execute<{ active: number }>(
+        sql`select active from printers where id = ${printerId}`,
+      );
+      return Number(rows[0]!.active) === 1;
+    }
+
+    /** Queues an Unpair for `mac` on the agent and returns its command id. */
+    async function queueUnpair(app: Hono, agentId: string, token: string, mac: string) {
+      await pull(app, token, { pairedBluetooth: [{ localKey: mac }] });
+      const res = await command(app, agentId, "forget", { address: mac });
+      expect(res.status).toBe(202);
+      return ((await res.json()) as { command: { id: string } }).command.id;
+    }
+
+    it("switches off the printer at the address once the agent reports the unpairing succeeded, and that pull hands out none of its jobs", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const bystanderMac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const bystanderId = await registerBluetooth(app, bystanderMac);
+      const jobId = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+      const id = await queueUnpair(app, agentId, token, mac);
+      expect(await isActive(printerId)).toBe(true);
+
+      // Still visible in the same pull, so without the switch-off this pull would claim the job.
+      const reply = await pull(app, token, {
+        visible: [{ transport: "bluetooth", localKey: mac }],
+        bluetoothOutcomes: [{ id, ok: true }],
+      });
+
+      expect(await isActive(printerId)).toBe(false);
+      expect(await isActive(bystanderId)).toBe(true);
+      expect(reply.jobs.map((job) => job.id)).not.toContain(jobId);
+      // As for any switched-off printer, the job waits unclaimed rather than failing.
+      expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, last_error: null });
+      expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
+        bluetoothCommand: { id, kind: "forget", state: "succeeded" },
+      });
+    });
+
+    it("leaves the printer switched on when the unpairing failed", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const id = await queueUnpair(app, agentId, token, mac);
+
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: false, error: "Not available" }] });
+
+      expect(await isActive(printerId)).toBe(true);
+    });
+
+    it("leaves the printer switched on when a succeeded pairing, not an unpairing, is reported", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      await pull(app, token, { scanned: [scannedMac(mac)] });
+      const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
+      const { command: queued } = (await res.json()) as { command: { id: string } };
+
+      await pull(app, token, { bluetoothOutcomes: [{ id: queued.id, ok: true }] });
+
+      expect(await isActive(printerId)).toBe(true);
+    });
+
+    it("leaves the printer switched on while another box reports it can print to it", async () => {
+      const app = mountApp();
+      const holder = await joinAndAccept(app, "Holder");
+      const other = await joinAndAccept(app, "Other");
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const id = await queueUnpair(app, holder.agentId, holder.token, mac);
+      await pull(app, other.token, {
+        visible: [{ transport: "bluetooth", localKey: mac }],
+        pairedBluetooth: [{ localKey: mac }],
+      });
+
+      await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      expect(await isActive(printerId)).toBe(true);
+    });
+
+    it("switches the printer off when the other box's report is older than the discovered list keeps it", async () => {
+      const app = mountApp();
+      const holder = await joinAndAccept(app, "Holder");
+      const other = await joinAndAccept(app, "Other");
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const start = Date.now();
+      vi.spyOn(Date, "now").mockReturnValue(start);
+      await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
+      vi.spyOn(Date, "now").mockReturnValue(start + 15_001);
+      const id = await queueUnpair(app, holder.agentId, holder.token, mac);
+
+      await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      expect(await isActive(printerId)).toBe(false);
+    });
+  });
 });

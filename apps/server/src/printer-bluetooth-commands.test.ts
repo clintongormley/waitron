@@ -380,4 +380,29 @@ describe("printer Bluetooth commands", () => {
       vi.restoreAllMocks();
     }
   });
+
+  it("names the addresses whose pending unpairing the outcomes report succeeded, without settling them", () => {
+    const { commands } = store();
+    const C = address(3);
+    const D = address(4);
+    commands.enqueue("agent-1", "forget", A);
+    commands.enqueue("agent-1", "forget", B);
+    commands.enqueue("agent-1", "pair", C, "0000");
+    commands.enqueue("agent-2", "forget", D);
+    const outcomes = [
+      { id: "c1", ok: true },
+      { id: "c2", ok: false, error: "refused" },
+      { id: "c3", ok: true },
+      { id: "c4", ok: true },
+      { id: "unknown", ok: true },
+    ];
+
+    expect(commands.unpaired("agent-1", outcomes)).toEqual([A]);
+    expect(commands.unpaired("agent-2", outcomes)).toEqual([D]);
+    expect(commands.unpaired("agent-3", outcomes)).toEqual([]);
+    expect(commands.latest("agent-1", A)).toMatchObject({ state: "pending" });
+
+    commands.accept("agent-1", outcomes);
+    expect(commands.unpaired("agent-1", outcomes)).toEqual([]);
+  });
 });

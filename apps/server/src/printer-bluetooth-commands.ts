@@ -66,6 +66,8 @@ export function createPrinterBluetoothCommands(
     pin?: string,
   ): BluetoothCommandStatus;
   current(agentId: string): BluetoothCommand[];
+  /** The addresses whose pending unpairing `outcomes` report succeeded; settles nothing. */
+  unpaired(agentId: string, outcomes: BluetoothCommandOutcome[]): string[];
   accept(agentId: string, outcomes: BluetoothCommandOutcome[]): void;
   latest(agentId: string, address: string): BluetoothCommandStatus | undefined;
   /** How many agents hold entries. */
@@ -120,6 +122,14 @@ export function createPrinterBluetoothCommands(
     current(agentId) {
       const pending = prune(agentId).agent?.pending.values() ?? [];
       return [...pending].map(({ command }) => ({ ...command }));
+    },
+
+    unpaired(agentId, outcomes) {
+      const succeeded = new Set(outcomes.filter(({ ok }) => ok).map(({ id }) => id));
+      const pending = prune(agentId).agent?.pending ?? new Map<string, Pending>();
+      return [...pending]
+        .filter(([, { command }]) => command.kind === "forget" && succeeded.has(command.id))
+        .map(([address]) => address);
     },
 
     accept(agentId, outcomes) {
