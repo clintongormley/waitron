@@ -211,17 +211,13 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Someone with a higher role must approve this with their PIN",
     es: "Alguien con un puesto superior debe aprobarlo con su PIN",
   },
-  "adjustment.partial_with_extras": {
-    en: "A dish with extras can only be given away or discounted whole",
-    es: "Un plato con extras solo se puede invitar o descontar entero",
-  },
-  "adjustment.line_not_adjustable": {
-    en: "Choose the dish itself, not one of its extras",
-    es: "Elige el plato, no uno de sus extras",
+  "adjustment.weighed_partial": {
+    en: "A weighed item can't be split. Give a discount on the whole line instead",
+    es: "Un artículo al peso no se puede partir. Haz un descuento sobre la línea entera",
   },
   "adjustment.quantity_invalid": {
-    en: "That quantity cannot be used on this line. Check how many are on it; a weighed item is done whole",
-    es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un artículo al peso va entero",
+    en: "That quantity cannot be used on this line. Check how many are on it; an extra goes whole, with its dish",
+    es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero, con su plato",
   },
   "adjustment_reason.not_found": {
     en: "That reason no longer exists. Reload and choose another",

@@ -5286,7 +5286,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     });
   });
 
-  it("refuses to cancel a CHILD extras line on its own: it goes with its dish", async () => {
+  it("cancelling a CHILD extras line removes only that line (its dish stays)", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");
@@ -5299,10 +5299,7 @@ describe("a cancel's extras cascade (FIX 2)", () => {
           extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
         },
       ]);
-      await expect(cancelLine(tx, cfg, tabId, 2)).rejects.toMatchObject({
-        code: "adjustment.line_not_adjustable",
-        params: { workingOrderId: tabId, lineNo: 2 },
-      });
+      await cancelLine(tx, cfg, tabId, 2);
       const remaining = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -5311,7 +5308,8 @@ describe("a cancel's extras cascade (FIX 2)", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      expect(remaining.map((r) => r.lineNo)).toEqual([1, 2]);
+      // Only the dish left; the child is the one that went.
+      expect(remaining.map((r) => r.lineNo)).toEqual([1]);
       expect(remaining[0]!.productId).toBe(cafeId);
     });
   });

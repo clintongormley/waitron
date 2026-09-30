@@ -116,8 +116,8 @@ export async function readReasonTotals(
   return { priorReductionOnBill, priorPercentOnLineBp: percent.rows[0]!.total };
 }
 
-/** The rows a bill's own comps priced at zero: the row each part comp split off, and the dish of
- * each whole comp, whose extras rows were comped with it. */
+/** The rows a bill's own comps priced at zero: the rows each part comp split off (a dish and its
+ * extras), and the line of each whole comp, a dish's extras rows comped with it. */
 export interface CompedLines {
   rows: string[];
   dishes: string[];

@@ -392,9 +392,8 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "adjustment.over_limit": 409,
   "adjustment.action_not_allowed": 409,
   "adjustment.reason_inactive": 409,
-  "adjustment.partial_with_extras": 409,
+  "adjustment.weighed_partial": 409,
   "adjustment.note_required": 400,
-  "adjustment.line_not_adjustable": 400,
   "adjustment.quantity_invalid": 400,
 };
 

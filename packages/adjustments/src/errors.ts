@@ -17,13 +17,11 @@ declare module "@waitron/shared" {
     /** The requester is below the reason's `apply_role`, or the bill's discount limit asks for a
      * manager, and no approver at or above `approverRole` was given. */
     "adjustment.approval_required": { approverRole: PersonRoleValue };
-    /** Part of the quantity of a dish that has extras, which a give-away or a discount takes only
-     * whole; a cancel can take part of it. */
-    "adjustment.partial_with_extras": { workingOrderId: string; lineNo: number };
-    /** An extras row named on its own; an adjustment names the dish it belongs to. */
-    "adjustment.line_not_adjustable": { workingOrderId: string; lineNo: number };
-    /** Not a positive quantity in the line's unit, no larger than the line, or part of a weighed
-     * line, which is comped or discounted only whole. */
+    /** Part of a line sold in a unit with decimal places, which a give-away or a discount takes
+     * only whole; a cancel can take part of it. */
+    "adjustment.weighed_partial": { workingOrderId: string; lineNo: number };
+    /** Not a positive quantity in the line's unit, no larger than the line, or part of an extras
+     * row, whose quantity follows its dish. */
     "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
   }
 }

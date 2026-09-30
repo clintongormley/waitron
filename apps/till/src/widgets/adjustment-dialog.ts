@@ -61,7 +61,7 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
     case "adjustment_reason.not_found":
       return "reason";
     case "adjustment.quantity_invalid":
-    case "adjustment.partial_with_extras":
+    case "adjustment.weighed_partial":
       return partial ? "quantity" : null;
     default:
       return null;

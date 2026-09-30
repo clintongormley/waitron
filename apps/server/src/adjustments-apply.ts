@@ -19,6 +19,7 @@ import {
   type BillShare,
   type CompedLines,
   type PricedRow,
+  type ReasonTotals,
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
@@ -72,11 +73,11 @@ export interface AdjustmentAsk {
   orderId: string;
   /** The bill's revision as the caller read it (plan D19). */
   expectedRevision: number;
-  /** The dish the action names; null for a discount on the whole bill. */
+  /** The dish, or the extra, the action names; null for a discount on the whole bill. */
   lineId: string | null;
   reasonId: string;
   action: AdjustmentAction;
-  /** How much of the dish; absent for all of it. */
+  /** How much of the line; absent for all of it. An extra is taken only whole. */
   quantity?: string;
   percentBp?: number;
   amount?: Decimal;
@@ -135,23 +136,32 @@ interface Row {
   firedQuantity: number;
 }
 
-/** New prices for one row: `carve` thousandths are first split off it into the row they apply
- * to, and a second row in `rows` is split off that one in turn. */
+/** New prices for one row, or for the part of it split off with the part of its dish covered when
+ * `carved`; a second row in `rows` is split off that one in turn. */
 interface Change {
   row: Row;
-  carve: number | null;
+  carved: boolean;
   rows: PricedRow[];
   reduction: Decimal;
+}
+
+/** The part of a dish a comp or a discount covers, split off with its extras before the prices
+ * change. */
+interface Carve {
+  lineNo: number;
+  quantity: number;
 }
 
 interface Plan {
   reason: AdjustmentReason;
   reasonName: string;
-  dish: Row | null;
-  /** The part of the dish covered, in thousandths; null on a bill-level discount. */
+  /** The dish or the extra the action names; null on a bill-level discount. */
+  line: Row | null;
+  /** The part of the line covered, in thousandths; null on a bill-level discount. */
   covered: number | null;
   /** A cancel's quantity taken off the dish, null for all of it. */
   removed: number | null;
+  carve: Carve | null;
   changes: Change[];
   reduction: Decimal;
   nominal: Decimal;
@@ -203,39 +213,40 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
 }
 
 /**
- * The quantity, in thousandths, a cancel leaves each row of a dish's family (the dish first, then
- * its extras) when the dish keeps `remaining`: what {@link removeFromLine} stores.
+ * The quantity, in thousandths, each row of a dish's family (the dish first, then its extras) holds
+ * when the dish holds `dishQuantity`: an extra follows its dish, as {@link removeFromLine} and
+ * {@link splitLinesWithinOrder} store it.
  */
-function leftAfterCancel(family: readonly Row[], remaining: number): Map<string, number> {
+function familyAt(family: readonly Row[], dishQuantity: number): Map<string, number> {
   const [dish, ...children] = family;
-  const dishLeft = thousandthsToDecimal(remaining);
+  const quantity = thousandthsToDecimal(dishQuantity);
   const kept = keptExtrasOf(
     children.map((row) => ({ id: row.id, quantity: row.quantity, unitPriceGross: row.unit })),
     dish!.quantity,
   );
   return new Map([
-    [dish!.id, remaining],
+    [dish!.id, dishQuantity],
     ...kept.map(
       ({ child, perDish }) =>
-        [child.id, decimalToThousandths(extraQuantityFor(perDish, dishLeft))] as const,
+        [child.id, decimalToThousandths(extraQuantityFor(perDish, quantity))] as const,
     ),
   ]);
 }
 
-/** The dish as `removeFromLine` takes it, from the row the plan read. */
-function voidTargetOf(dish: Row): VoidTarget {
+/** The line as `removeFromLine` takes it, from the row the plan read. */
+function voidTargetOf(line: Row): VoidTarget {
   return {
-    id: dish.id,
-    parentLineId: dish.parentLineId,
-    groupId: dish.groupId,
-    quantity: dish.quantity,
-    unitPrecision: dish.unitPrecision,
-    unitPriceGross: dish.unit,
-    ticketItemId: dish.ticketItemId,
-    firedAt: dish.ticketFiredAt,
-    stationId: dish.stationId,
-    state: dish.ticketState,
-    firedQuantity: dish.firedQuantity,
+    id: line.id,
+    parentLineId: line.parentLineId,
+    groupId: line.groupId,
+    quantity: line.quantity,
+    unitPrecision: line.unitPrecision,
+    unitPriceGross: line.unit,
+    ticketItemId: line.ticketItemId,
+    firedAt: line.ticketFiredAt,
+    stationId: line.stationId,
+    state: line.ticketState,
+    firedQuantity: line.firedQuantity,
   };
 }
 
@@ -260,19 +271,21 @@ export function reasonNameIn(
   return name === undefined ? reason.name : name;
 }
 
-/** The part of the dish covered, in thousandths, else `adjustment.quantity_invalid`. */
-function coveredQuantity(orderId: string, dish: Row, quantity: string | undefined): number {
-  if (quantity === undefined) return dish.quantity;
-  return quantityOfLine(
-    quantity,
-    dish,
-    () =>
-      new AppError("adjustment.quantity_invalid", {
-        workingOrderId: orderId,
-        lineNo: dish.lineNo,
-        quantity,
-      }),
-  );
+/**
+ * The part of the line covered, in thousandths, else `adjustment.quantity_invalid`: an extra is
+ * covered only whole, because its quantity follows its dish.
+ */
+function coveredQuantity(orderId: string, line: Row, quantity: string | undefined): number {
+  if (quantity === undefined) return line.quantity;
+  const refused = () =>
+    new AppError("adjustment.quantity_invalid", {
+      workingOrderId: orderId,
+      lineNo: line.lineNo,
+      quantity,
+    });
+  const covered = quantityOfLine(quantity, line, refused);
+  if (line.parentLineId !== null && covered < line.quantity) throw refused();
+  return covered;
 }
 
 /** The discount a percentage or an amount asks for off `base`, checked against the action. */
@@ -299,11 +312,17 @@ function requestedDiscount(ask: AdjustmentAsk, base: Decimal): Decimal {
   return base;
 }
 
+/** A row an adjustment prices, `quantity` of it, split off with the part of its dish covered when
+ * `carved`; `exact` as {@link SpreadLine} takes it. */
+interface Subject {
+  row: Row;
+  quantity: number;
+  carved: boolean;
+  exact: boolean;
+}
+
 /** Spread `discount` over `subjects` (plan D4, D15) and keep the rows whose price moves. */
-function spread(
-  subjects: readonly { row: Row; quantity: number; carve: number | null; exact: boolean }[],
-  discount: Decimal,
-): Change[] {
+function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
   const lines: SpreadLine[] = subjects.map(({ row, quantity, exact }) => ({
     lineId: row.id,
     addedOrder: row.lineNo,
@@ -313,23 +332,21 @@ function spread(
     exact,
   }));
   const results = spreadBillDiscount(lines, discount);
-  return subjects.flatMap(({ row, carve }) => {
+  return subjects.flatMap(({ row, carved }) => {
     const result = results.get(row.id)!;
     if (compareDecimal(result.reduction, ZERO) === 0) return [];
-    return [{ row, carve, rows: result.rows, reduction: result.reduction }];
+    return [{ row, carved, rows: result.rows, reduction: result.reduction }];
   });
 }
 
 /** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
  * whose total merely rounds to nothing. */
-function zeroed(
-  subjects: readonly { row: Row; quantity: number; carve: number | null }[],
-): Change[] {
+function zeroed(subjects: readonly Subject[]): Change[] {
   return subjects
     .filter(({ row }) => row.unit !== 0)
-    .map(({ row, quantity, carve }) => ({
+    .map(({ row, quantity, carved }) => ({
       row,
-      carve,
+      carved,
       rows: [{ quantity: thousandthsToDecimal(quantity), unitGross: ZERO }],
       reduction: gross(row.unit, quantity),
     }));
@@ -337,7 +354,9 @@ function zeroed(
 
 /**
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
- * line, the amount, the paid lines and the reason's policy, and the rows it would change.
+ * line, the amount, the paid lines and the reason's policy, and the rows it would change. A dish is
+ * taken with its extras; part of one splits its extras in proportion, the part covered taking the
+ * part of each. An extra is taken on its own, and only whole.
  */
 async function planAdjustment(
   tx: Transaction,
@@ -354,10 +373,11 @@ async function planAdjustment(
   const reason = await findAdjustmentReason(tx, ask.reasonId);
   const rows = await readRows(tx, orderId);
 
-  let dish: Row | null = null;
+  let line: Row | null = null;
   let covered: number | null = null;
   let removed: number | null = null;
-  /** What a cancel leaves each row of the dish's family, in thousandths. */
+  let carve: Carve | null = null;
+  /** What a cancel leaves each row of the line's family, in thousandths. */
   let cancelLeft: Map<string, number> | null = null;
   let changes: Change[] = [];
   let reduction: Decimal;
@@ -372,7 +392,7 @@ async function planAdjustment(
       rows.map((row) => ({
         row,
         quantity: row.quantity,
-        carve: null,
+        carved: false,
         exact: row.parentLineId === null && !families.has(row.id) && (row.unitPrecision ?? 0) === 0,
       })),
       requestedDiscount(ask, before),
@@ -385,24 +405,20 @@ async function planAdjustment(
       changes.map(({ row }) => ({ id: row.id, lineNo: row.lineNo, keeps: 0 })),
     );
   } else {
-    dish = rows.find((row) => row.id === ask.lineId) ?? null;
-    if (dish === null)
+    line = rows.find((row) => row.id === ask.lineId) ?? null;
+    if (line === null)
       throw new AppError("tab.line_not_found", { tabId: orderId, lineId: ask.lineId });
-    if (dish.parentLineId !== null) {
-      throw new AppError("adjustment.line_not_adjustable", {
-        workingOrderId: orderId,
-        lineNo: dish.lineNo,
-      });
-    }
-    const family = [dish, ...rows.filter((row) => row.parentLineId === dish!.id)];
-    covered = coveredQuantity(orderId, dish, ask.quantity);
-    const partial = covered < dish.quantity;
-    const weighed = (dish.unitPrecision ?? 0) > 0;
+    const target = line;
+    // An extra has no extras of its own, so it is a family of one.
+    const family = [target, ...rows.filter((row) => row.parentLineId === target.id)];
+    covered = coveredQuantity(orderId, target, ask.quantity);
+    const partial = covered < target.quantity;
+    const weighed = (target.unitPrecision ?? 0) > 0;
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
       if (ask.amount !== undefined) throw invalid("amount");
       removed = partial ? covered : null;
-      const left = leftAfterCancel(family, dish.quantity - covered);
+      const left = familyAt(family, target.quantity - covered);
       cancelLeft = left;
       reduction = sumDecimals(
         family.map((row) =>
@@ -412,32 +428,35 @@ async function planAdjustment(
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
       before = reduction;
       await refusePaidLines(tx, orderId, [
-        { id: dish.id, lineNo: dish.lineNo, keeps: dish.quantity - covered },
+        { id: target.id, lineNo: target.lineNo, keeps: target.quantity - covered },
       ]);
     } else {
-      if (partial && family.length > 1) {
-        throw new AppError("adjustment.partial_with_extras", {
-          workingOrderId: orderId,
-          lineNo: dish.lineNo,
-        });
-      }
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
       if (partial && weighed) {
-        throw new AppError("adjustment.quantity_invalid", {
+        throw new AppError("adjustment.weighed_partial", {
           workingOrderId: orderId,
-          lineNo: dish.lineNo,
-          quantity: ask.quantity!,
+          lineNo: target.lineNo,
         });
       }
-      const subjects = partial
-        ? [{ row: dish, quantity: covered, carve: covered, exact: true }]
-        : family.map((row) => ({
-            row,
-            quantity: row.quantity,
-            carve: null,
-            exact: family.length === 1 && !weighed,
-          }));
+      let subjects: Subject[];
+      if (partial) {
+        carve = { lineNo: target.lineNo, quantity: covered };
+        const carved = familyAt(family, covered);
+        subjects = family.map((row) => ({
+          row,
+          quantity: carved.get(row.id)!,
+          carved: true,
+          exact: family.length === 1,
+        }));
+      } else {
+        subjects = family.map((row) => ({
+          row,
+          quantity: row.quantity,
+          carved: false,
+          exact: family.length === 1 && target.parentLineId === null && !weighed,
+        }));
+      }
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row.unit, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
@@ -456,11 +475,7 @@ async function planAdjustment(
     .from(persons)
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
-  const priors = await readReasonTotals(tx, {
-    workingOrderId: orderId,
-    reasonId: reason.id,
-    lineId: ask.lineId,
-  });
+  const priors = await priorsOf(tx, orderId, reason.id, line, ask.action, rows);
   const verdict = evaluateAdjustment(reason, {
     action: ask.action,
     reduction,
@@ -484,17 +499,50 @@ async function planAdjustment(
   return {
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
-    dish,
+    line,
     covered,
     removed,
+    carve,
     changes,
     reduction,
     nominal,
     before,
-    stage: dish === null ? null : stageOf(dish),
+    stage: line === null ? null : stageOf(dishOf(line, rows)),
     approverRole,
     overBillDiscountLimit,
   };
+}
+
+/** The line's dish: the line itself, or the dish an extra belongs to, whose stage it shares. */
+function dishOf(line: Row, rows: readonly Row[]): Row {
+  return line.parentLineId === null ? line : rows.find((row) => row.id === line.parentLineId)!;
+}
+
+/**
+ * The reason's earlier reductions on the bill and its earlier percentage on the line
+ * ({@link readReasonTotals}). A percentage taken off a dish was spread over its extras too, so on a
+ * percentage discount an extra's line also counts its dish's, and a dish's line the largest any of
+ * its extras took on its own.
+ */
+async function priorsOf(
+  tx: Transaction,
+  workingOrderId: string,
+  reasonId: string,
+  line: Row | null,
+  action: AdjustmentAction,
+  rows: readonly Row[],
+): Promise<ReasonTotals> {
+  const read = (lineId: string | null) =>
+    readReasonTotals(tx, { workingOrderId, reasonId, lineId });
+  const own = await read(line?.id ?? null);
+  if (line === null || action !== "discount_percent") return own;
+  const related =
+    line.parentLineId === null
+      ? rows.filter((row) => row.parentLineId === line.id).map((row) => row.id)
+      : [line.parentLineId];
+  let most = 0;
+  for (const id of related) most = Math.max(most, (await read(id)).priorPercentOnLineBp);
+  return { ...own, priorPercentOnLineBp: own.priorPercentOnLineBp + most };
 }
 
 /**
@@ -583,8 +631,8 @@ export async function previewAdjustment(
     ask.action === "cancel"
       ? [
           {
-            lineId: plan.dish!.id,
-            lineNo: plan.dish!.lineNo,
+            lineId: plan.line!.id,
+            lineNo: plan.line!.lineNo,
             reduction: money(plan.reduction),
             rows: [],
           },
@@ -639,11 +687,16 @@ async function lineNoOf(tx: Transaction, lineId: string): Promise<number> {
   return row!.lineNo;
 }
 
-/** Writes the plan's new prices; answers each row it split off, with the row it came from. */
+/**
+ * Writes the plan's new prices, first splitting the part `carve` covers off its dish, with its
+ * extras, when a change is to that part; answers each row it split off, with the row it came from,
+ * a carved dish before its extras.
+ */
 async function reprice(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
+  carve: Carve | null,
   changes: readonly Change[],
 ): Promise<AdjustmentSplit[]> {
   const touched = changes.map(({ row }) => row.id);
@@ -654,18 +707,23 @@ async function reprice(
       listUnitPriceGross: sql`coalesce(${workingOrderLines.listUnitPriceGross}, ${workingOrderLines.unitPriceGross})`,
     })
     .where(inArray(workingOrderLines.id, touched));
-  const splits: AdjustmentSplit[] = [];
+  const carved = changes.some((change) => change.carved)
+    ? await splitLinesWithinOrder(
+        tx,
+        cfg,
+        orderId,
+        [{ lineNo: carve!.lineNo, quantity: thousandthsToDecimal(carve!.quantity) }],
+        { splitExtras: true },
+      )
+    : new Map<string, string>();
+  const splits: AdjustmentSplit[] = [...carved].map(([from, to]) => ({ from, to }));
   const subjects: { id: string; lineNo: number; change: Change }[] = [];
   for (const change of changes) {
-    if (change.carve === null) {
+    if (!change.carved) {
       subjects.push({ id: change.row.id, lineNo: change.row.lineNo, change });
       continue;
     }
-    const split = await splitLinesWithinOrder(tx, cfg, orderId, [
-      { lineNo: change.row.lineNo, quantity: thousandthsToDecimal(change.carve) },
-    ]);
-    const id = split.get(change.row.id)!;
-    splits.push({ from: change.row.id, to: id });
+    const id = carved.get(change.row.id)!;
     subjects.push({ id, lineNo: await lineNoOf(tx, id), change });
   }
   const twoRows = subjects.filter(({ change }) => change.rows.length === 2);
@@ -692,7 +750,8 @@ async function reprice(
 /**
  * Apply a cancellation, comp or discount to an open bill, a table's or a counter order, at most once
  * per submission id on the bill (plan D8): a cancel removes the part ({@link removeFromLine}),
- * telling the kitchen; a comp or a discount lowers the prices by plan D4 and D15, and tells the
+ * telling the kitchen about a dish it had (an extra has no kitchen item of its own, so a cancelled
+ * extra tells it nothing); a comp or a discount lowers the prices by plan D4 and D15, and tells the
  * kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
  * adjustment. The PIN never enters the recorded command. `venueLocale` is the venue's display
  * language, which names the reason for an operator with no language of their own.
@@ -719,28 +778,28 @@ export async function applyAdjustment(
           tx,
           cfg,
           args.orderId,
-          voidTargetOf(plan.dish!),
+          voidTargetOf(plan.line!),
           plan.removed,
           args.operatorId,
         );
       } else {
-        splits = await reprice(tx, cfg, args.orderId, plan.changes);
+        splits = await reprice(tx, cfg, args.orderId, plan.carve, plan.changes);
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId);
       }
-      const { dish } = plan;
+      const { line } = plan;
       const id = await recordAdjustment(tx, {
         workingOrderId: args.orderId,
         line:
-          dish === null
+          line === null
             ? null
             : {
-                id: dish.id,
-                name: staffPresentationName(dish),
-                quantity: thousandthsToDecimal(dish.quantity),
-                listUnitPriceGross: centsToDecimal(dish.list ?? dish.unit),
-                creditedTo: dish.creditedTo,
+                id: line.id,
+                name: staffPresentationName(line),
+                quantity: thousandthsToDecimal(line.quantity),
+                listUnitPriceGross: centsToDecimal(line.list ?? line.unit),
+                creditedTo: line.creditedTo,
                 stage: plan.stage!,
               },
         splits,

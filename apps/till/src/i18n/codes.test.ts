@@ -285,8 +285,7 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
-    "adjustment.partial_with_extras",
-    "adjustment.line_not_adjustable",
+    "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
   ]) {
@@ -294,7 +293,7 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     expect(codeMessage(code, "es"), code).not.toBe(generic.es);
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage(code, "es"));
   }
-  expect(codeMessage("adjustment.partial_with_extras", "en")).toBe(
-    "A dish with extras can only be given away or discounted whole",
+  expect(codeMessage("adjustment.weighed_partial", "en")).toBe(
+    "A weighed item can't be split. Give a discount on the whole line instead",
   );
 });

@@ -295,7 +295,10 @@ describe("the route's own rules", () => {
   });
 
   it("maps each refusal to its status", async () => {
-    const { billId } = await billWith(venue, [{ name: "Bottle" }, { name: "Pizza", olives: 1 }]);
+    const { billId } = await billWith(venue, [
+      { name: "Bottle" },
+      { name: "Pizza", quantity: "2", olives: 1 },
+    ]);
     const bottle = await lineIdOf(venue, billId, 1);
     const cases: [Record<string, unknown>, number, string][] = [
       [
@@ -315,9 +318,9 @@ describe("the route's own rules", () => {
       ],
       [{ lineId: bottle, action: "comp", quantity: "2" }, 400, "adjustment.quantity_invalid"],
       [
-        { lineId: await lineIdOf(venue, billId, 3), action: "comp" },
+        { lineId: await lineIdOf(venue, billId, 3), action: "comp", quantity: "1" },
         400,
-        "adjustment.line_not_adjustable",
+        "adjustment.quantity_invalid",
       ],
       [{ lineId: randomUUID(), action: "comp" }, 404, "tab.line_not_found"],
       [
@@ -369,11 +372,11 @@ describe("the route's own rules", () => {
     ]);
   });
 
-  it("maps over_limit, partial_with_extras and reason_inactive to 409", async () => {
+  it("maps over_limit, weighed_partial and reason_inactive to 409", async () => {
     const { billId } = await billWith(venue, [
       { name: "Bottle" },
       { name: "Bottle" },
-      { name: "Pizza", quantity: "2", olives: 1 },
+      { name: "Ham", quantity: "0.333" },
     ]);
     const inactive = await inTx(venue, async (tx) => {
       const reason = await createAdjustmentReason(tx, {
@@ -396,9 +399,9 @@ describe("the route's own rules", () => {
     expect([over.status, over.json.code]).toEqual([409, "adjustment.over_limit"]);
     const partial = await post(
       billId,
-      await comp(3, { reasonId: venue.reasonId.house, quantity: "1" }),
+      await comp(3, { reasonId: venue.reasonId.house, quantity: "0.100" }),
     );
-    expect([partial.status, partial.json.code]).toEqual([409, "adjustment.partial_with_extras"]);
+    expect([partial.status, partial.json.code]).toEqual([409, "adjustment.weighed_partial"]);
     const retired = await post(billId, await comp(2, { reasonId: inactive }));
     expect([retired.status, retired.json.code]).toEqual([409, "adjustment.reason_inactive"]);
   });

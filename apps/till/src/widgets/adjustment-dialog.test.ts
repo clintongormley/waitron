@@ -578,8 +578,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.reason_inactive",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
-    "adjustment.partial_with_extras",
-    "adjustment.line_not_adjustable",
+    "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
     "bill.line_paid",
@@ -620,7 +619,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("adjustment.reason_inactive", "comp", false)).toBe("reason");
     expect(refusalField("adjustment.action_not_allowed", "comp", false)).toBe("reason");
     expect(refusalField("adjustment_reason.not_found", "comp", false)).toBe("reason");
-    expect(refusalField("adjustment.partial_with_extras", "comp", true)).toBe("quantity");
+    expect(refusalField("adjustment.weighed_partial", "discount", true)).toBe("quantity");
     expect(refusalField("adjustment.quantity_invalid", "comp", true)).toBe("quantity");
     expect(refusalField("adjustment.quantity_invalid", "comp", false)).toBeNull();
     expect(refusalField("adjustment.exceeds_amount", "comp", false)).toBeNull();

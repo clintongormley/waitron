@@ -2756,8 +2756,11 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * Carry whole lines and partial splits between two orders, keeping each unit's LOCKED prices and
  * CONSERVING quantity. It makes no open-order check and no service-mode check of its own: the
  * CALLER makes the first, and ensures the second by {@link assertServiceModesMatch} or by copying the
- * source's context onto a new order. Every transfer is validated before anything moves. Returns each
- * ticket item a split made, mapped to the one it was copied from.
+ * source's context onto a new order. Every transfer is validated before anything moves. A partial
+ * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
+ * then each extra is split with it, the part going with the split dish being its count a dish times
+ * the part split. Returns each ticket item a split made, mapped to the one it was copied from, and
+ * each row a split made, keyed by the row it came from, a dish before its extras.
  */
 export async function carveOffLines(
   tx: Transaction,
@@ -2765,7 +2768,7 @@ export async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { refuseHeld: boolean },
+  opts: { refuseHeld: boolean; splitExtras?: boolean },
 ): Promise<{ splitFrom: Map<string, string>; splitLines: Map<string, string> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -2828,7 +2831,8 @@ export async function carveOffLines(
   // A quantity equal to the line's own is a whole-line move: a split would leave a zero-quantity
   // source, which `working_order_lines_quantity_ck` refuses.
   const wholeLineNos: number[] = [];
-  const partials: { line: (typeof sourceLines)[number]; quantity: string }[] = [];
+  type SourceLine = (typeof sourceLines)[number];
+  const partials: { line: SourceLine; quantity: string; children: SourceLine[] }[] = [];
   for (const t of transfers) {
     const line = byLineNo.get(t.lineNo);
     if (line === undefined) {
@@ -2866,12 +2870,14 @@ export async function carveOffLines(
     if (compareDecimal(decimal(t.quantity), decimal(line.quantity)) === 0) {
       wholeLineNos.push(t.lineNo, ...childLineNos);
     } else {
-      // A partial split of a dish with modifiers is refused: the children's quantities would no longer
-      // follow the dish's.
-      if (childLineNos.length > 0) {
+      if (childLineNos.length > 0 && opts.splitExtras !== true) {
         throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
       }
-      partials.push({ line, quantity: t.quantity });
+      partials.push({
+        line,
+        quantity: t.quantity,
+        children: childLineNos.map((childLineNo) => byLineNo.get(childLineNo)!),
+      });
     }
   }
   // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
@@ -2898,60 +2904,76 @@ export async function carveOffLines(
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, toTabId));
-    for (let i = 0; i < partials.length; i++) {
-      const { line, quantity } = partials[i]!;
-      const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
+    let nextLineNo = maxLineNo!;
+    /** Leave `row` holding `remaining`, and add a row of `moved` of it under the next line number;
+     * answers the new row's id. */
+    const splitRow = async (
+      row: SourceLine,
+      remaining: Decimal,
+      moved: Decimal,
+      parentLineId: string | null,
+    ): Promise<string> => {
       await tx
         .update(workingOrderLines)
         .set({
           quantity: decimalToThousandths(remaining),
-          lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, remaining)),
+          lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, remaining)),
         })
-        .where(
-          and(
-            eq(workingOrderLines.workingOrderId, fromTabId),
-            eq(workingOrderLines.lineNo, line.lineNo),
-          ),
-        );
-      await clampServed(tx, [line.id]);
+        .where(eq(workingOrderLines.id, row.id));
+      await clampServed(tx, [row.id]);
       // What was served stays on the source as far as it still holds; the rest goes with the split.
-      const moved = stringToThousandths(quantity);
+      const movedThousandths = decimalToThousandths(moved);
       const splitServed =
-        line.servedQuantity - Math.min(line.servedQuantity, decimalToThousandths(remaining));
-      const splitLineId = randomUUID();
+        row.servedQuantity - Math.min(row.servedQuantity, decimalToThousandths(remaining));
+      const splitRowId = randomUUID();
       await tx.insert(workingOrderLines).values({
-        id: splitLineId,
+        id: splitRowId,
         workingOrderId: toTabId,
-        lineNo: maxLineNo! + i + 1,
-        productId: line.productId,
-        // No `parent_line_id`: only a top-level line with no children can be split.
-        name: line.name,
-        descriptions: line.descriptions,
-        optionSnapshots: line.optionSnapshots ?? [],
-        quantity: stringToThousandths(quantity),
-        unitPriceGross: decimalToCents(line.unitPriceGross),
-        vatClass: line.vatClass,
-        lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, quantity)),
-        category: line.category,
-        unitName: line.unitName,
-        unitPrecision: line.unitPrecision,
-        variantName: line.variantName,
-        variantDescriptions: line.variantDescriptions,
-        variantKitchenName: line.variantKitchenName,
-        kitchenName: line.kitchenName,
-        classification: line.classification,
-        sentAt: line.sentAt,
+        lineNo: ++nextLineNo,
+        productId: row.productId,
+        parentLineId,
+        name: row.name,
+        descriptions: row.descriptions,
+        optionSnapshots: row.optionSnapshots ?? [],
+        quantity: movedThousandths,
+        unitPriceGross: decimalToCents(row.unitPriceGross),
+        vatClass: row.vatClass,
+        lineTotal: decimalToCents(grossLineTotal(row.unitPriceGross, moved)),
+        category: row.category,
+        unitName: row.unitName,
+        unitPrecision: row.unitPrecision,
+        variantName: row.variantName,
+        variantDescriptions: row.variantDescriptions,
+        variantKitchenName: row.variantKitchenName,
+        kitchenName: row.kitchenName,
+        classification: row.classification,
+        sentAt: row.sentAt,
         servedQuantity: splitServed,
-        servedAt: splitServed === moved ? (line.servedAt ?? nowIso()) : null,
-        courseId: line.courseId,
-        note: line.note,
-        extraListId: line.extraListId,
-        groupId: line.groupId,
-        creditedTo: line.creditedTo,
-        listUnitPriceGross: line.listUnitPriceGross,
+        servedAt: splitServed === movedThousandths ? (row.servedAt ?? nowIso()) : null,
+        courseId: row.courseId,
+        note: row.note,
+        extraListId: row.extraListId,
+        groupId: row.groupId,
+        creditedTo: row.creditedTo,
+        listUnitPriceGross: row.listUnitPriceGross,
       });
-      splitLines.set(line.id, splitLineId);
-      await VENUE_SERVICE.copyLineContext(tx, cfg, line.id, splitLineId);
+      splitLines.set(row.id, splitRowId);
+      await VENUE_SERVICE.copyLineContext(tx, cfg, row.id, splitRowId);
+      return splitRowId;
+    };
+    for (const { line, quantity, children } of partials) {
+      const remaining = subtractDecimal(decimal(line.quantity), decimal(quantity));
+      const splitLineId = await splitRow(line, remaining, decimal(quantity), null);
+      // Numbered straight after their dish: a receipt reads a dish's extras from the rows after it.
+      for (const child of children) {
+        const perDish = perDishOptionQuantity(child.quantity, line.quantity);
+        await splitRow(
+          child,
+          extraQuantityFor(perDish, remaining),
+          extraQuantityFor(perDish, decimal(quantity)),
+          splitLineId,
+        );
+      }
       if (line.ticketItemId !== null) {
         const splitTicketId = await splitTicketItem(
           tx,
@@ -3012,16 +3034,19 @@ export async function clearGroups(tx: Transaction, lineIds: readonly string[]): 
 /**
  * Split `quantity` of each of these top-level lines off into a new row of the same order, which
  * keeps its prices, group, credit and a ticket item of its own for the part; returns each new row's
- * id keyed by the id of the line it split. Each `quantity` must be less than its line's.
+ * id keyed by the id of the line it split. Each `quantity` must be less than its line's. A dish with
+ * extras is refused unless `splitExtras` is set, as {@link carveOffLines} describes.
  */
 export async function splitLinesWithinOrder(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   splits: { lineNo: number; quantity: string }[],
+  opts: { splitExtras?: boolean } = {},
 ): Promise<Map<string, string>> {
   const { splitLines } = await carveOffLines(tx, cfg, orderId, orderId, splits, {
     refuseHeld: false,
+    ...opts,
   });
   return splitLines;
 }
