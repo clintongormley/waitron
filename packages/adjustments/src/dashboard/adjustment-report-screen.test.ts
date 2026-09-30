@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
 import type { AdjustmentsApi } from "./client.js";
+import { ADJUSTMENTS_STRINGS } from "./strings.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
 import {
@@ -317,7 +318,9 @@ describe("the adjustment report", () => {
     expect(text(part(el, "by-stage-heading"))).toBe("Ajustes de Alex por momento");
     expect(text(part(el, "by-reason-heading"))).toBe("Ajustes de Alex por motivo");
     await open(el, "guests");
-    expect(text(part(el, "by-action-heading"))).toBe("Ajustes de los clientes por acción");
+    expect(text(part(el, "by-action-heading"))).toBe(
+      ADJUSTMENTS_STRINGS.es["adjustment_report.guests_by_action"],
+    );
   });
 
   it("says so in words when there were no adjustments, and keeps the guests' row", async () => {
