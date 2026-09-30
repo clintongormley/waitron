@@ -42,6 +42,51 @@ describe("AppError", () => {
     expect(Object.isFrozen(error.params)).toBe(true);
   });
 
+  it("carries a log-only reason when one is given", () => {
+    const error = new AppError(
+      "shared.invalid_id",
+      { kind: "TillId", value: "x" },
+      { reason: "r" },
+    );
+    expect(error.reason).toBe("r");
+  });
+
+  it("has no reason property at all when none is given", () => {
+    const error = new AppError("shared.invalid_id", { kind: "TillId", value: "x" });
+    expect(error.reason).toBeUndefined();
+    expect(Object.hasOwn(error, "reason")).toBe(false);
+  });
+
+  it("keeps the reason out of every serialisation that walks its own enumerable keys", () => {
+    const params = { kind: "TillId", value: "x" };
+    const withReason = new AppError("shared.invalid_id", params, { reason: "secret-cause" });
+    const without = new AppError("shared.invalid_id", params);
+    expect(JSON.stringify(withReason)).toBe(JSON.stringify(without));
+    expect(JSON.stringify(withReason)).not.toContain("secret-cause");
+    expect(Object.keys(withReason)).toEqual(Object.keys(without));
+    expect({ ...withReason }).toEqual({ ...without });
+    expect({ ...withReason }).not.toHaveProperty("reason");
+  });
+
+  it("cannot have its reason reassigned", () => {
+    const error = new AppError(
+      "shared.invalid_id",
+      { kind: "TillId", value: "x" },
+      { reason: "r" },
+    );
+    expect(() => {
+      (error as { reason?: string }).reason = "other";
+    }).toThrow(TypeError);
+    expect(error.reason).toBe("r");
+  });
+
+  it("keeps params frozen and unchanged when a reason is given", () => {
+    const params = { kind: "TillId", value: "x" };
+    const error = new AppError("shared.invalid_id", params, { reason: "r" });
+    expect(error.params).toEqual(params);
+    expect(Object.isFrozen(error.params)).toBe(true);
+  });
+
   it("can be constructed without being thrown", () => {
     const warning = new AppError("shared.decimal_overflow", {
       value: "1000000000000.00",

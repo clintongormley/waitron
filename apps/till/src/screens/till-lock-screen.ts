@@ -23,13 +23,10 @@ export interface LoggedInDetail {
   locale: string | null;
 }
 
-/**
- * Only the two codes the operator can act on are spelled out; every other code collapses to the generic
- * `login.error`, never the raw code.
- */
+/** Only `pin.invalid` is spelled out; every other code collapses to the generic `login.error`, never
+ * the raw code. */
 function loginErrorKey(code: string): StringKey {
   if (code === "pin.invalid") return "pin.invalid";
-  if (code === "person.suspended") return "person.suspended";
   return "login.error";
 }
 

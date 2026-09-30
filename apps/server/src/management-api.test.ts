@@ -19,7 +19,8 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
-import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { generateSync } from "otplib";
+import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 
 /**
  * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
@@ -449,6 +450,61 @@ describe("POST /management-api/session (email login)", () => {
     expect(res.status).toBe(401);
     expect(await res.json()).toMatchObject({ error: { code: "password.invalid" } });
     expect(res.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("answers every refused sign-in identically, whatever the cause, and sets no cookie", async () => {
+    const seedManager = (email: string, status: "active" | "suspended") =>
+      withTransaction(suite.db, async (tx) => {
+        const [person] = await tx
+          .insert(persons)
+          .values({
+            displayName: unique("Manager"),
+            email,
+            pinHash: hashPin("1234"),
+            passwordHash: hashPassword(PASSWORD),
+            role: "manager",
+            status,
+          })
+          .returning({ id: persons.id });
+        return person!.id;
+      });
+    const suspendedEmail = `${unique("suspended")}@x.com`;
+    await seedManager(suspendedEmail, "suspended");
+    const twoStepEmail = `${unique("two-step")}@x.com`;
+    const twoStepId = await seedManager(twoStepEmail, "active");
+    const secret = await enrolAuthenticator(suite.db, twoStepId, PASSWORD, TOTP_KEY_RING);
+
+    const causes: Record<string, Record<string, unknown>> = {
+      unknown: { email: `${unique("ghost")}@x.com`, password: PASSWORD },
+      // The suspended manager's own password, so only the suspension can be the cause.
+      suspended: { email: suspendedEmail, password: PASSWORD },
+      wrongPassword: { email: twoStepEmail, password: "wrong", totp: generateSync({ secret }) },
+      wrongCode: { email: twoStepEmail, password: PASSWORD, totp: wrongTotpCode(secret) },
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [cause, body] of Object.entries(causes)) {
+      const res = await app.request("/management-api/session", {
+        method: "POST",
+        headers: json,
+        body: JSON.stringify(body),
+      });
+      answers[cause] = {
+        status: res.status,
+        body: await res.json(),
+        cookie: res.headers.get("set-cookie"),
+      };
+    }
+    const refused = {
+      status: 401,
+      body: { error: { code: "password.invalid", params: {} } },
+      cookie: null,
+    };
+    expect(answers).toEqual({
+      unknown: refused,
+      suspended: refused,
+      wrongPassword: refused,
+      wrongCode: refused,
+    });
   });
 });
 

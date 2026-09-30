@@ -87,7 +87,9 @@ export { hashSecret, verifySecretAsync } from "./secret-hash.js";
 export { hashPin, verifyPin } from "./verify-pin.js";
 export {
   PIN_THROTTLE_FREE_ATTEMPTS,
+  PIN_THROTTLE_FULL_RETRY_SECONDS,
   PIN_THROTTLE_IDLE_MS,
+  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
   PIN_THROTTLE_MAX_WAIT_SECONDS,
   createPinThrottle,
 } from "./pin-throttle.js";

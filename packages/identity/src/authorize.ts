@@ -25,7 +25,7 @@ export interface Authorization {
  * Satisfied EITHER by the session's operator holding `permission`, OR by a supervisor `override` (a
  * second person's PIN, who must hold it). Returns the authorizing person for the caller to record.
  *
- * Throws `session.not_open`, `person.not_found`, `person.suspended`, `pin.invalid`,
+ * Throws `session.not_open`, `pin.invalid` (for any override that cannot sign in),
  * `authorization.not_permitted`.
  */
 export async function authorize(

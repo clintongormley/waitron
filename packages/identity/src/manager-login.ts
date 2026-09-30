@@ -32,8 +32,9 @@ function selectPersonLogin(tx: Transaction) {
 }
 type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
-// The public email entry point screens suspended accounts before reaching this helper; the trusted
-// by-id entry point keeps the distinct suspension result used by its operator flow.
+// Every refusal is `password.invalid` with no params, whatever the cause, except that the email
+// path asks for the authenticator code with `totp.required` once the password is right. The cause
+// travels only as the error's log-only `reason`.
 async function completeManagerLogin(
   tx: Transaction,
   input: {
@@ -42,27 +43,25 @@ async function completeManagerLogin(
     recoveryCode?: string;
     totpKeyRing: TotpKeyRing;
   },
-  person: PersonLoginRow,
-  missingFactorCode: "totp.required" | "totp.invalid",
+  person: PersonLoginRow | undefined,
+  missingFactorCode: "totp.required" | "password.invalid",
 ): Promise<ManagementSession> {
-  if (person.status === "suspended")
-    throw new AppError("person.suspended", { personId: person.id });
-  if (person.status !== "active") {
+  if (person?.status !== "active" || person.passwordHash === null) {
     await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
-    throw new AppError("password.invalid", {});
+    const reason =
+      person === undefined
+        ? "unknown_account"
+        : person.status === "active"
+          ? "no_password"
+          : person.status;
+    throw new AppError("password.invalid", {}, { reason });
   }
-  let passwordOk = false;
-  if (person.passwordHash === null) {
-    // Same KDF work as a wrong password, so an account awaiting password setup does not stand out
-    // by its KDF time.
-    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
-  } else {
-    passwordOk = await verifyPassword(input.password, person.passwordHash);
+  if (!(await verifyPassword(input.password, person.passwordHash))) {
+    throw new AppError("password.invalid", {}, { reason: "wrong_password" });
   }
-  if (!passwordOk) throw new AppError("password.invalid", {});
   if (person.totpSecret !== null) {
     if (input.totp === undefined && input.recoveryCode === undefined) {
-      throw new AppError(missingFactorCode, {});
+      throw new AppError(missingFactorCode, {}, { reason: "missing_code" });
     }
     const secret = decryptTotpSecret(person.totpSecret, input.totpKeyRing);
     const totpOk =
@@ -72,7 +71,14 @@ async function completeManagerLogin(
       input.recoveryCode !== undefined &&
       (await consumeRecoveryCode(tx, person.id, input.recoveryCode));
     if (!totpOk && !recoveryOk) {
-      throw new AppError("totp.invalid", {});
+      // Names the last check that failed: a recovery code is tried only once the code has failed.
+      const reason =
+        input.recoveryCode !== undefined
+          ? "wrong_recovery_code"
+          : secret === null
+            ? "unreadable_secret"
+            : "wrong_code";
+      throw new AppError("password.invalid", {}, { reason });
     }
   }
   return startManagementSession(tx, { personId: person.id });
@@ -92,18 +98,6 @@ export async function loginManager(
   // address that signs in is exactly the one the index treats as taken.
   const email = normalizeEmail(input.email);
   const [person] = await selectPersonLogin(tx).where(eq(loginEmailKey(), foldForUniqueness(email)));
-  // An unknown email gets the same error, after the same KDF work, as a wrong password, so the
-  // response does not say which addresses have accounts.
-  if (person === undefined) {
-    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
-    throw new AppError("password.invalid", {});
-  }
-  // The email login is public, so suspension must not be discoverable by entering somebody else's
-  // address.
-  if (person.status === "suspended") {
-    await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
-    throw new AppError("password.invalid", {});
-  }
   return completeManagerLogin(tx, input, person, "totp.required");
 }
 
@@ -117,11 +111,8 @@ export async function loginManagerById(
     totpKeyRing: TotpKeyRing;
   },
 ): Promise<ManagementSession> {
-  // For trusted server-to-server flows, not a public login form: there is no enumeration surface to
-  // hide here, so an unknown id is a straight `person.not_found`.
   const [person] = await selectPersonLogin(tx).where(eq(persons.id, input.personId));
-  if (person === undefined) throw new AppError("person.not_found", { personId: input.personId });
-  return completeManagerLogin(tx, input, person, "totp.invalid");
+  return completeManagerLogin(tx, input, person, "password.invalid");
 }
 
 export async function authorizeManager(

@@ -14,7 +14,8 @@ declare module "hono" {
 
 /**
  *  - An `AppError` → `{ error: { code, params } }` at the status `status` assigns the code, or 400
- *    when the map omits it, logged at `warn` — a mapped 5xx included.
+ *    when the map omits it, logged at `warn` — a mapped 5xx included. Its log-only `reason`, if
+ *    any, goes to the log as `logReason` and never into the answer.
  *  - Anything else → logged at `error` under `tag` with only `codeOf`'s classification (never its
  *    `.message`), and answered with an opaque `server.internal` 500.
  */
@@ -30,7 +31,9 @@ export function createErrorBoundary(
       const requestId = c.get("requestId");
       if (isAppError(cause)) {
         const httpStatus = status[cause.code] ?? 400;
-        log("warn", cause.code, { ...cause.params, requestId });
+        // `logReason`, not `reason`: several codes carry a param named `reason`, which it would hide.
+        const logReason = cause.reason === undefined ? {} : { logReason: cause.reason };
+        log("warn", cause.code, { ...cause.params, requestId, ...logReason });
         return c.json({ error: { code: cause.code, params: cause.params } }, httpStatus);
       }
       log("error", tag, { errorCode: codeOf(cause), requestId });

@@ -52,14 +52,22 @@ export type ErrorCode = keyof ErrorParams;
 export class AppError<C extends ErrorCode = ErrorCode> extends Error {
   readonly code: C;
   readonly params: Readonly<ErrorParams[C]>;
+  /**
+   * For the server log only, never the answer: not enumerable, so `JSON.stringify` and a spread
+   * leave it out. It lets a refusal that must look the same whatever its cause keep that cause.
+   */
+  declare readonly reason?: string;
 
-  constructor(code: C, params: ErrorParams[C]) {
+  constructor(code: C, params: ErrorParams[C], options?: { reason?: string }) {
     super(code);
     this.name = "AppError";
     this.code = code;
     // Frozen: an AppError is often carried across an async boundary before display, and a caller
     // mutating params in passing would change what a later reader believes happened.
     this.params = Object.freeze({ ...params });
+    if (options?.reason !== undefined) {
+      Object.defineProperty(this, "reason", { value: options.reason, enumerable: false });
+    }
   }
 }
 

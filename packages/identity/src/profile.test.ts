@@ -455,7 +455,7 @@ describe("your profile", () => {
           totpKeyRing: keyRing,
         }),
       ),
-    ).rejects.toMatchObject({ code: "totp.invalid" });
+    ).rejects.toMatchObject({ code: "password.invalid" });
 
     const replacement = await withTransaction(suite.db, (tx) =>
       regenerateOwnRecoveryCodes(tx, {

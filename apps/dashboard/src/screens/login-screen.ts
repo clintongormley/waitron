@@ -339,7 +339,11 @@ export class LoginScreen extends LitElement {
       else messages.push(message);
     }
     if (this.errorKey !== null && this.refusalField === null)
-      messages.unshift(codeMessage(this.errorKey));
+      messages.unshift(
+        this.errorKey === "password.invalid" && (this.step === "password" || this.step === "factor")
+          ? t("login.failed")
+          : codeMessage(this.errorKey),
+      );
     const marked = Object.keys(fields).length > 0;
     const invalid = this.attempted ? Object.keys(this.#validate()) : [];
     return {
@@ -358,7 +362,7 @@ export class LoginScreen extends LitElement {
   #onPasswordChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.password = event.detail.value;
-    this.#dismissRefusal(this.token === null ? "password" : "new-password");
+    this.#dismissRefusal("new-password");
   }
 
   #onSecondFactorChange(event: CustomEvent<{ value: string }>): void {
@@ -508,23 +512,34 @@ export class LoginScreen extends LitElement {
       if (code === "totp.required") {
         this.step = "factor";
         this.#focusField("one-time-code");
-      } else if (code === "password.invalid") this.#refuse(code, "password");
-      else if (code === "totp.invalid") this.#refuse(code, "one-time-code");
+      } else if (code === "password.invalid") this.#loginFailed();
       else this.errorKey = code;
     } finally {
       this.busy = false;
     }
   }
 
+  /** A refused sign-in marks no field: a message under the password or the code would say the
+   * details before it were right, and so that the account exists (owner rule, C95). */
+  #loginFailed(): void {
+    this.errorKey = "password.invalid";
+    if (this.step === "factor") {
+      this.secondFactor = "";
+      // The emptied code is not an error the operator made, so it waits for the next Log in.
+      this.attempted = false;
+      this.#focusField("one-time-code");
+    } else this.#focusField("password");
+  }
+
   async #requestPasswordReset(): Promise<void> {
     if (this.busy) return;
+    this.errorKey = null;
     this.#updateResetCountdown();
     if (this.resetSeconds > 0) {
       this.step = "reset-sent";
       return;
     }
     this.busy = true;
-    this.errorKey = null;
     try {
       await this.api.requestPasswordReset(this.email);
       this.resetDeadlines.set(this.email.trim().toLowerCase(), Date.now() + 60_000);
@@ -1218,6 +1233,7 @@ export class LoginScreen extends LitElement {
                               ?disabled=${this.busy}
                               @click=${() => {
                                 this.secondFactor = "";
+                                this.errorKey = null;
                                 this.step = "password";
                               }}
                               >${t("action.back")}</wt-button
@@ -1242,7 +1258,6 @@ export class LoginScreen extends LitElement {
                                     this.factorMode === "totp" ? "recovery" : "totp";
                                   this.secondFactor = "";
                                   this.attempted = false;
-                                  this.#dismissRefusal("one-time-code");
                                 },
                               )}
                             </li>

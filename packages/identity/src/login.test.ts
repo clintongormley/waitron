@@ -2,11 +2,18 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { endSession, loginWithPin } from "./login.js";
-import { codeOf, seedPerson, seedTill } from "../test/fixtures.js";
+import { codeOf, refusalOf, seedPerson, seedTill } from "../test/fixtures.js";
 import { hashSessionToken } from "./session-token.js";
+import { verifyPin } from "./verify-pin.js";
+
+// Spy on verifyPin while delegating to the real hash check, so the equalising check is observable.
+vi.mock("./verify-pin.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./verify-pin.js")>();
+  return { ...actual, verifyPin: vi.fn(actual.verifyPin) };
+});
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -76,23 +83,98 @@ describe("loginWithPin", () => {
     expect(rows.rows[0]!.n).toBe(0);
   });
 
-  it("throws person.not_found for an unknown personId", async () => {
+  it("refuses an unknown personId with pin.invalid, opening no session", async () => {
     const tillId = await seedTill(suite.db);
+    const personId = crypto.randomUUID();
 
     const code = await codeOf(() =>
-      run((tx) => loginWithPin(tx, { tillId, personId: crypto.randomUUID(), pin: "1234" })),
+      run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" })),
     );
-    expect(code).toBe("person.not_found");
+    expect(code).toBe("pin.invalid");
+    expect(await sessionCount(personId)).toBe(0);
   });
 
-  it("throws person.suspended for a suspended person, even with the right PIN", async () => {
+  it("refuses a suspended person with pin.invalid, even with the right PIN, opening no session", async () => {
     const tillId = await seedTill(suite.db);
     const personId = await seedPerson(suite.db, "staff", "suspended");
 
     const code = await codeOf(() =>
       run((tx) => loginWithPin(tx, { tillId, personId, pin: "1234" })),
     );
-    expect(code).toBe("person.suspended");
+    expect(code).toBe("pin.invalid");
+    expect(await sessionCount(personId)).toBe(0);
+  });
+});
+
+async function sessionCount(personId: string): Promise<number> {
+  const rows = await suite.db.execute<{ n: number }>(
+    sql`select count(*) as n from sessions where person_id = ${personId}`,
+  );
+  return rows.rows[0]!.n;
+}
+
+// Each refusal cause, with the right PIN wherever the account has one, so only the cause differs.
+async function refusalCauses(): Promise<Record<string, { personId: string; pin: string }>> {
+  const noPin = await seedPerson(suite.db);
+  const suspendedNoPin = await seedPerson(suite.db, "staff", "suspended");
+  await run((tx) =>
+    tx.execute(sql`update persons set pin_hash = null where id in (${noPin}, ${suspendedNoPin})`),
+  );
+  return {
+    unknown: { personId: crypto.randomUUID(), pin: "1234" },
+    suspended: { personId: await seedPerson(suite.db, "staff", "suspended"), pin: "1234" },
+    pending: { personId: await seedPerson(suite.db, "staff", "pending"), pin: "1234" },
+    noPin: { personId: noPin, pin: "1234" },
+    suspendedNoPin: { personId: suspendedNoPin, pin: "1234" },
+    wrongPin: { personId: await seedPerson(suite.db), pin: "9999" },
+  };
+}
+
+describe("loginWithPin's refusals", () => {
+  it("are one answer whatever the cause", async () => {
+    const tillId = await seedTill(suite.db);
+    const refusals: Record<string, unknown> = {};
+    for (const [cause, input] of Object.entries(await refusalCauses())) {
+      refusals[cause] = await refusalOf(() => run((tx) => loginWithPin(tx, { tillId, ...input })));
+    }
+    // The same answer for every cause; only the log-only reason tells them apart.
+    const refused = (reason: string) => ({ code: "pin.invalid", params: {}, reason });
+    expect(refusals).toEqual({
+      unknown: refused("unknown_person"),
+      suspended: refused("suspended"),
+      pending: refused("pending"),
+      noPin: refused("no_pin"),
+      suspendedNoPin: refused("suspended"),
+      wrongPin: refused("wrong_pin"),
+    });
+  });
+
+  // A refusal that settled before its PIN check finished would be told apart from a wrong PIN by
+  // its time.
+  it("each wait for one PIN check before refusing", async () => {
+    const tillId = await seedTill(suite.db);
+    const spy = vi.mocked(verifyPin);
+    for (const [cause, input] of Object.entries(await refusalCauses())) {
+      spy.mockClear();
+      let finish: ((matched: boolean) => void) | undefined;
+      spy.mockImplementationOnce(() => new Promise<boolean>((resolve) => (finish = resolve)));
+      let settled = false;
+      const refused = codeOf(() => run((tx) => loginWithPin(tx, { tillId, ...input }))).finally(
+        () => (settled = true),
+      );
+      try {
+        await vi.waitFor(() => expect(finish, cause).toBeTypeOf("function"));
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(settled, cause).toBe(false);
+      } finally {
+        // Release the held check, or drop it unused, so no later login waits on it.
+        if (finish === undefined) spy.mockReset();
+        else finish(false);
+      }
+      expect(await refused, cause).toBe("pin.invalid");
+      expect(spy, cause).toHaveBeenCalledTimes(1);
+      expect(spy, cause).toHaveBeenCalledWith(input.pin, expect.any(String));
+    }
   });
 });
 

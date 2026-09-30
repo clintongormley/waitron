@@ -40,14 +40,10 @@ export interface PromoteApiDeps {
   run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
-// `person.not_found` is a 404: this server-to-server path has no enumeration surface to hide.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
-  "totp.invalid": 401,
   "promotion.break_glass_invalid": 401,
-  "person.suspended": 403,
   "authorization.not_permitted": 403,
-  "person.not_found": 404,
   "promotion.fence_not_attested": 400,
   "promotion.node_fenced": 409,
   "promotion.membership_superseded": 409,

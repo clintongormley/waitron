@@ -21,6 +21,7 @@ import { departments, preparationRoutes } from "@waitron/venue-service";
 import {
   createPinThrottle,
   endSession,
+  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
   hashPin,
   hashSessionToken,
   loginWithPin,
@@ -754,6 +755,38 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(await abelOk.json()).toMatchObject({ personId: abel.id });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${abel.id}`);
+  });
+
+  it("one device filling its share of the throttle with made-up ids does not refuse another till's correct PIN", async () => {
+    const now = 4_000_000;
+    const pinThrottle = createPinThrottle({ now: () => now });
+    const app = new Hono();
+    mountTillApi(app, { ...deps(suite.db), pinThrottle }, collect([]));
+    const flooder = await enrolTillDeviceCookie(suite.db);
+    const other = await enrolTillDeviceCookie(suite.db);
+    const post = (cookie: string, personId: string, pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ personId, pin }),
+      });
+
+    // Filled through the route's own throttle rather than thousands of requests; "counts an unknown
+    // person's wrong attempts" below shows the route records exactly this failure for a made-up id.
+    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_DEVICE; i++) {
+      pinThrottle.recordFailure(deviceIdOf(flooder), randomUUID());
+    }
+    const refused = await post(flooder, randomUUID(), "0000");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({
+      error: { code: "pin.throttled", params: { retryAfterSeconds: 60 } },
+    });
+
+    const ok = await post(other, ana.id, "5555");
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ personId: ana.id });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${ana.id}`);
   });
 });
 
@@ -1732,28 +1765,43 @@ describe("POST /api/pay (session-guarded integrated card pay)", () => {
   });
 });
 
-describe("POST /api/session refusals that never reach the PIN check", () => {
-  it("refuses a personId that is no UUID in any spelling, or not a string, as person.not_found", async () => {
+describe("POST /api/session refusals say nothing about the account", () => {
+  it("answers an unknown person, a suspended one, a wrong PIN and an id that is no UUID identically", async () => {
     const app = new Hono();
     mountTillApi(app, deps(suite.db), collect([]));
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
-    for (const [personId, named] of [
-      ["ana", "ana"],
-      [42, "42"],
-    ] as const) {
+    const [zoe] = await suite.db
+      .select({ id: persons.id })
+      .from(persons)
+      .where(sql`display_name = 'Zoe'`);
+    const causes: Record<string, { personId: unknown; pin: string }> = {
+      unknown: { personId: randomUUID(), pin: "5555" },
+      // Zoe's own PIN, so only her suspension can be the cause.
+      suspended: { personId: zoe!.id, pin: "2222" },
+      wrongPin: { personId: ana.id, pin: "0000" },
+      notAUuid: { personId: "ana", pin: "5555" },
+      notAString: { personId: 42, pin: "5555" },
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [cause, body] of Object.entries(causes)) {
       const res = await app.request("/api/session", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: deviceCookie },
-        body: JSON.stringify({ personId, pin: "5555" }),
+        body: JSON.stringify(body),
       });
-      expect(res.status).toBe(401);
-      expect(await res.json()).toMatchObject({
-        error: { code: "person.not_found", params: { personId: named } },
-      });
+      answers[cause] = { status: res.status, body: await res.json() };
     }
+    const refused = { status: 401, body: { error: { code: "pin.invalid", params: {} } } };
+    expect(answers).toEqual({
+      unknown: refused,
+      suspended: refused,
+      wrongPin: refused,
+      notAUuid: refused,
+      notAString: refused,
+    });
   });
 
-  it("does not count an unknown person's attempts toward the wrong-PIN back-off", async () => {
+  it("counts an unknown person's wrong attempts toward the back-off exactly as a known person's", async () => {
     const now = 7_000_000;
     const app = new Hono();
     mountTillApi(
@@ -1763,16 +1811,23 @@ describe("POST /api/session refusals that never reach the PIN check", () => {
     );
     const deviceCookie = await enrolTillDeviceCookie(suite.db);
     const nobody = randomUUID();
-    // Past the three free failures a wrong PIN would open the wait window; an unknown person must not.
-    for (let i = 0; i < 5; i++) {
-      const res = await app.request("/api/session", {
+    const post = () =>
+      app.request("/api/session", {
         method: "POST",
         headers: { "content-type": "application/json", cookie: deviceCookie },
         body: JSON.stringify({ personId: nobody, pin: "0000" }),
       });
+    // The same sequence the known-person throttle case sees: four plain refusals, then the wait.
+    for (let i = 0; i < 4; i++) {
+      const res = await post();
       expect(res.status).toBe(401);
-      expect(await res.json()).toMatchObject({ error: { code: "person.not_found" } });
+      expect(await res.json()).toEqual({ error: { code: "pin.invalid", params: {} } });
     }
+    const throttled = await post();
+    expect(throttled.status).toBe(429);
+    expect(await throttled.json()).toEqual({
+      error: { code: "pin.throttled", params: { retryAfterSeconds: 2 } },
+    });
   });
 });
 

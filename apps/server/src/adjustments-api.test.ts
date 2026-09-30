@@ -433,7 +433,7 @@ describe("the route's own rules", () => {
       action: "comp",
       approver: { personId: "x", pin: "1" },
     });
-    expect(badApprover.json.code).toBe("person.not_found");
+    expect(badApprover.json.code).toBe("pin.invalid");
     expect(await recordedOn(billId)).toEqual([]);
   });
 

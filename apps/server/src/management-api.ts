@@ -588,11 +588,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           };
         });
       } catch (error) {
-        finishAttempt(
-          isAppError(error) && (error.code === "password.invalid" || error.code === "totp.invalid")
-            ? "invalid"
-            : "error",
-        );
+        finishAttempt(isAppError(error) && error.code === "password.invalid" ? "invalid" : "error");
         throw error;
       }
       finishAttempt("success");

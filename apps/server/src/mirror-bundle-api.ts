@@ -43,14 +43,9 @@ export interface MirrorBundleApiDeps {
   credentialKeyRing: TotpKeyRing;
 }
 
-// `person.not_found` is a 404, unlike the email login, which folds an unknown person into
-// `password.invalid`: this server-to-server path has no enumeration surface to hide.
 // `membership.write_contended` is transient, so the caller retries.
 const STATUS: Record<string, ContentfulStatusCode> = {
   "password.invalid": 401,
-  "totp.invalid": 401,
-  "person.suspended": 403,
-  "person.not_found": 404,
   "authorization.not_permitted": 403,
   "mirror.no_relay": 400,
   "mirror.standby_invalid": 400,

@@ -44,6 +44,8 @@ export const shellEn = {
     "Couldn't join the primary server: it couldn't be reached, it refused the login, or its reply couldn't be used. Check that the address is your restaurant's primary Waitron server and that the login is correct, then try again.",
   "shell.adopt.request_invalid":
     "The server rejected the details. Check the address and login, then try again.",
+  "shell.adopt.login_failed":
+    "The login failed. Check the admin person ID, password and authenticator code, then try again.",
   "shell.adopt.generic":
     "Couldn't connect to the primary. Check the address and login, then try again.",
   "shell.adopt.incomplete":
@@ -162,6 +164,8 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido unir al servidor principal: no se ha podido contactar con él, ha rechazado el inicio de sesión o su respuesta no se ha podido usar. Comprueba que la dirección es la del servidor principal de Waitron de tu restaurante y que el inicio de sesión es correcto, e inténtalo de nuevo.",
   "shell.adopt.request_invalid":
     "El servidor ha rechazado los datos. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
+  "shell.adopt.login_failed":
+    "No se ha podido iniciar sesión. Revisa el ID de persona, la contraseña y el código del autenticador del administrador, e inténtalo de nuevo.",
   "shell.adopt.generic":
     "No se ha podido conectar con el servidor principal. Revisa la dirección y el inicio de sesión, e inténtalo de nuevo.",
   "shell.adopt.incomplete":
