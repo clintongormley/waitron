@@ -849,8 +849,10 @@ open). A group header can also carry an `icon` (a registered `wt-icon` name) —
 where it's as unambiguous as Settings' gear; most groups have none.
 
 The sidebar and the content column both scroll independently, bounded to the space below the
-banner (`.shell { height: 100vh }`, `.sidebar`/`.main` both `max-height: 100%; overflow-y: auto`) —
-the page itself never scrolls. Before this, only `.sidebar` was self-contained
+banner (`.shell { height: 100%; max-height: 100vh }` filling `apps/dashboard/index.html`'s body,
+which is one window tall with its padding inside, and `.sidebar`/`.main` both `max-height: 100%;
+overflow-y: auto`) — the page itself never scrolls, and the language footer at the end of `.main`
+stays inside the window. Before this, only `.sidebar` was self-contained
 (`max-height: 100vh`); `.main` just grew with its content and pushed the whole page taller, so once
 a screen exceeded one viewport the sidebar — capped to one screen — visibly stopped short of where
 the page actually ended. Both panes now share the same bound, so they always end at the same line.

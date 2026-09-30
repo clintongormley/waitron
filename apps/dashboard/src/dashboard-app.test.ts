@@ -1,5 +1,5 @@
 import { page, userEvent } from "vitest/browser";
-import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
+import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -7,6 +7,7 @@ import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { DashboardApp } from "./dashboard-app.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
 import { diag } from "./diagnostics.js";
+import indexHtml from "../index.html?raw";
 
 /**
  * Stubs `window.matchMedia` for the drawer breakpoint only; every other query delegates to the real
@@ -3155,6 +3156,141 @@ describe("dashboard URL navigation", () => {
     await flush(el);
     expect(login(el)).not.toBeNull();
   });
+});
+
+/**
+ * Mounts the app the way the real page does: inside `#app`, under `index.html`'s own page style, so a
+ * layout test sees the body padding and sizing the browser applies.
+ */
+async function mountInRealPage(
+  api: DashboardApi,
+  width: number,
+  height: number,
+): Promise<{ el: DashboardApp; unmount: () => Promise<void> }> {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  const style = document.createElement("style");
+  style.textContent = /<style>([\s\S]*?)<\/style>/.exec(indexHtml)![1]!;
+  document.head.append(style);
+  const app = document.createElement("div");
+  app.id = "app";
+  applyTokens(app);
+  document.body.append(app);
+  await page.viewport(width, height);
+  const el = document.createElement("dashboard-app") as DashboardApp;
+  el.api = api;
+  app.append(el);
+  await flush(el);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  return {
+    el,
+    unmount: async () => {
+      app.remove();
+      style.remove();
+      document.scrollingElement!.scrollTop = 0;
+      await page.viewport(before.width, before.height);
+    },
+  };
+}
+
+const footerTrigger = (host: Element) =>
+  host
+    .shadowRoot!.querySelector("wt-language-footer")!
+    .shadowRoot!.querySelector("[data-test=lang-trigger]")!
+    .getBoundingClientRect();
+
+it.each([
+  [1280, 844],
+  [390, 844],
+])(
+  "fits the signed-in page in a %ix%i window, footer and all, and scrolls long content inside the column",
+  async (width, height) => {
+    const { el, unmount } = await mountInRealPage(
+      stubApi({
+        listStaff: vi.fn().mockResolvedValue(
+          Array.from({ length: 30 }, (_, i) => ({
+            ...people[0]!,
+            personId: `p${i}`,
+            displayName: `Person ${i}`,
+          })),
+        ),
+      }),
+      width,
+      height,
+    );
+    try {
+      if (width < 768) {
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+        await flush(el);
+      }
+      el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-staff"]')!.click();
+      await flush(el);
+      const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+      main.scrollTo(0, main.scrollHeight);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(footerTrigger(el).bottom).toBeLessThanOrEqual(window.innerHeight);
+      expect(main.scrollHeight).toBeGreaterThan(main.clientHeight);
+      expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+    } finally {
+      await unmount();
+    }
+  },
+);
+
+it("keeps the phone drawer within the window inside the real page", async () => {
+  const { el, unmount } = await mountInRealPage(stubApi(), 390, 844);
+  try {
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-toggle]")!.click();
+    await flush(el);
+    const sidebar = el.shadowRoot!.querySelector<HTMLElement>(".sidebar")!.getBoundingClientRect();
+    expect(sidebar.top).toBeGreaterThanOrEqual(
+      el.shadowRoot!.querySelector("[data-test=brand-banner]")!.getBoundingClientRect().bottom - 1,
+    );
+    expect(sidebar.bottom).toBeLessThanOrEqual(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+it("puts the sign-in view's language footer at the foot of a window taller than the form", async () => {
+  const { el, unmount } = await mountInRealPage(
+    stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    1280,
+    1200,
+  );
+  try {
+    const screen = login(el)!;
+    await (screen as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const footer = screen.shadowRoot!.querySelector("wt-language-footer")!.getBoundingClientRect();
+    const column = screen.parentElement!;
+    const columnEnd =
+      column.getBoundingClientRect().bottom - parseFloat(getComputedStyle(column).paddingBottom);
+    const pageEnd = window.innerHeight - parseFloat(getComputedStyle(document.body).paddingBottom);
+    expect(Math.abs(footer.bottom - columnEnd)).toBeLessThan(1);
+    expect(Math.abs(column.getBoundingClientRect().bottom - pageEnd)).toBeLessThan(1);
+    const form = screen.shadowRoot!.querySelector("wt-form-actions")!.getBoundingClientRect();
+    expect(footer.top).toBeGreaterThan(form.bottom + 100);
+    expect(document.scrollingElement!.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+  } finally {
+    await unmount();
+  }
+});
+
+it("puts the sign-in view's language footer after the form when the window is shorter than it", async () => {
+  const { el, unmount } = await mountInRealPage(
+    stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    390,
+    300,
+  );
+  try {
+    const screen = login(el)!;
+    await (screen as unknown as { updateComplete: Promise<unknown> }).updateComplete;
+    const footer = screen.shadowRoot!.querySelector("wt-language-footer")!.getBoundingClientRect();
+    const form = screen.shadowRoot!.querySelector("wt-form-actions")!.getBoundingClientRect();
+    expect(footer.top).toBeGreaterThanOrEqual(form.bottom);
+    expect(footer.bottom).toBeGreaterThan(window.innerHeight);
+  } finally {
+    await unmount();
+  }
 });
 
 it("ends the content column with the language footer, at the column's foot when the screen is short", async () => {
