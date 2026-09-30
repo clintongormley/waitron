@@ -563,6 +563,7 @@ export const en = {
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
+  "pin.throttled": "Too many wrong PINs. Wait a moment, then try again",
   "sale.error": "Could not complete the sale, try again",
   // A PERMANENT refusal, unlike `sale.error`: retrying cannot work. It must never say nothing was
   // charged, because a settle path can reach it after a card was already charged on a terminal.
@@ -1215,6 +1216,7 @@ export const es: Record<StringKey, string> = {
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
+  "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
   "sale.refused":
     "Esta venta no se puede registrar en Hacienda. La caja no ha registrado nada y reintentar no servirá de nada: hay que corregir los datos de facturación del local, así que avisa a quien configuró esta caja. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",

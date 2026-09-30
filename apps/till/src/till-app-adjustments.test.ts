@@ -462,6 +462,27 @@ describe("till-app: an adjustment someone must approve", () => {
     expect(dialog(el)).not.toBeNull();
   });
 
+  it("keeps the PIN prompt open after too many wrong PINs, saying to wait", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+      applyAdjustment: vi.fn().mockRejectedValue({
+        code: "pin.throttled",
+        params: { retryAfterSeconds: 2 },
+        status: 429,
+      }),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    await pinPad(el, "7777");
+
+    expect(approval(el)).not.toBeNull();
+    expect(approval(el)!.error).toBe("pin.throttled");
+    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.throttled"));
+    expect(dialog(el)).not.toBeNull();
+  });
+
   it("goes back to the confirm step when the approver prompt is cancelled", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),

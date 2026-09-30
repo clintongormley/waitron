@@ -137,6 +137,16 @@ describe("till-supervisor-override-dialog", () => {
     expect(alert!.textContent).toContain(t("pin.invalid"));
   });
 
+  it("shows the wait-then-retry copy when the parent passes pin.throttled", async () => {
+    const { el } = await mount();
+    await pick(el, "sup-1");
+    el.error = "pin.throttled";
+    await el.updateComplete;
+    const alert = root(el).querySelector('[role="alert"]');
+    expect(alert!.textContent).toContain(t("pin.throttled"));
+    expect(alert!.textContent).not.toContain(t("override.error"));
+  });
+
   it("dismisses a shown error as soon as the operator starts retyping", async () => {
     const { el } = await mount({ error: "pin.invalid" });
     await pick(el, "sup-1");
