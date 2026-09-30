@@ -3687,8 +3687,8 @@ export class TillApp extends LitElement {
   }
 
   /** The order the dialog adjusts, read again after an answer: the table's bill with its party and
-   * what it owes, or the counter's stored order into the basket. False when the counter's could not
-   * be read, which has been said. */
+   * what it owes, or the counter's stored order into the basket. False when the counter's was not
+   * loaded again with its lines; why has been said, unless the basket had moved on. */
   async #rereadAdjusted(open: Adjusting): Promise<boolean> {
     if (open.surface === "counter") return this.#reloadCounterOrder(open.orderId, open.visit);
     await this.#rereadAmounts(open.orderId, open.visit);
@@ -3832,8 +3832,8 @@ export class TillApp extends LitElement {
     }
     if ((stage === "apply" || stage === "approved") && isNetworkFailure(error)) {
       this.#closeAdjust();
-      await this.#rereadAdjusted(open);
-      if (!this.#hasLeftAdjusted(open)) this.errorKey = "adjust.unconfirmed";
+      const read = await this.#rereadAdjusted(open);
+      if (read && !this.#hasLeftAdjusted(open)) this.errorKey = "adjust.unconfirmed";
       return;
     }
     const refusal = code ?? "server.internal";
