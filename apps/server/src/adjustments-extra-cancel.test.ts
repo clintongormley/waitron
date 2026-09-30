@@ -3,11 +3,20 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { printJobs, printers, products, workingOrders } from "@waitron/db";
+import {
+  drawerOpens,
+  printJobs,
+  printers,
+  products,
+  tills,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { DRAWER_KICK } from "./receipt-print.js";
 import { placeGroups } from "./order-groups.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./tables.js";
@@ -69,11 +78,11 @@ useVenueDb({
           customerName: null,
           kitchenName: null,
           minPicks: 0,
-          maxPicks: 3,
+          maxPicks: 4,
           active: true,
           items: [fries.id, salad!.id, gherkins.id].map((productId) => ({
             productId,
-            maxQuantity: 1,
+            maxQuantity: productId === gherkins.id ? 2 : 1,
             preselected: false,
             price: "1.00",
           })),
@@ -99,25 +108,37 @@ useVenueDb({
 
 const english: () => TillConfig = () => ({ ...venue.cfg, locale: "en-GB" });
 
-/** One `dish` with fries, salad and gherkins, as the till sends it. */
-function withSides(menuItemId: string) {
+/** How many of the dish, and how many gherkins each carries. */
+interface Portions {
+  dishes: string;
+  gherkinsEach: number;
+}
+
+/** `dishes` of one dish with fries, salad and gherkins, as the till sends it. */
+function withSides(menuItemId: string, { dishes, gherkinsEach }: Portions = ONE) {
   return {
     menuItemId,
-    quantity: "1",
+    quantity: dishes,
     extras: [
       {
         listId: extras.listId,
         picks: [extras.fries, extras.salad, extras.gherkins].map((productId) => ({
           productId,
-          quantity: 1,
+          quantity: productId === extras.gherkins ? gherkinsEach : 1,
         })),
       },
     ],
   };
 }
 
+const ONE: Portions = { dishes: "1", gherkinsEach: 1 };
+
 /** A party at a fresh table with the dish on its bill, fired or held; answers the bill. */
-async function billOf(dish: "hamburger" | "toastie", release: "fire" | "hold"): Promise<string> {
+async function billOf(
+  dish: "hamburger" | "toastie",
+  release: "fire" | "hold",
+  portions: Portions = ONE,
+): Promise<string> {
   return inTx(venue, async (tx) => {
     const table = await createTable(tx, venue.cfg, {
       label: `M-${randomUUID().slice(0, 8)}`,
@@ -129,7 +150,7 @@ async function billOf(dish: "hamburger" | "toastie", release: "fire" | "hold"): 
       operatorId: venue.staffId,
     });
     await placeGroups(tx, venue.cfg, seated.partyId, {
-      groups: [{ lines: [withSides(offer[dish])], release }],
+      groups: [{ lines: [withSides(offer[dish], portions)], release }],
       operatorId: venue.staffId,
       billId: seated.tabId,
     });
@@ -145,26 +166,30 @@ async function revisionOf(tx: Transaction, billId: string): Promise<number> {
   return order!.revision;
 }
 
-/** Cancel the gherkins, line 4 of the bill (the dish is 1, its extras 2 to 4 in the order picked). */
+type Command = Parameters<typeof applyAdjustment>[2];
+
+/** Cancelling the gherkins, line 4 of the bill (the dish is 1, its extras 2 to 4 in the order picked). */
+async function gherkinsCancel(billId: string): Promise<Command> {
+  const lineId = await lineIdOf(venue, billId, 4);
+  return inTx(venue, async (tx) => ({
+    orderId: billId,
+    submissionId: randomUUID(),
+    expectedRevision: await revisionOf(tx, billId),
+    lineId,
+    action: "cancel" as const,
+    reasonId: venue.reasonId.house,
+    note: null,
+    operatorId: venue.staffId,
+  }));
+}
+
+function apply(tx: Transaction, command: Command, cfg: TillConfig = english()) {
+  return applyAdjustment(tx, cfg, command, venue.venueLocale);
+}
+
 async function cancelGherkins(billId: string, cfg: TillConfig = english()): Promise<void> {
-  const gherkins = await lineIdOf(venue, billId, 4);
-  await inTx(venue, async (tx) =>
-    applyAdjustment(
-      tx,
-      cfg,
-      {
-        orderId: billId,
-        submissionId: randomUUID(),
-        expectedRevision: await revisionOf(tx, billId),
-        lineId: gherkins,
-        action: "cancel",
-        reasonId: venue.reasonId.house,
-        note: null,
-        operatorId: venue.staffId,
-      },
-      venue.venueLocale,
-    ),
-  );
+  const command = await gherkinsCancel(billId);
+  await inTx(venue, (tx) => apply(tx, command, cfg));
 }
 
 async function jobs() {
@@ -301,6 +326,136 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     await cancelGherkins(billId);
 
     expect(await dishRow()).toEqual(["Patatas fritas", "Ensalada de la casa"]);
+  });
+
+  it("prints one slip and records one notice when the same cancel arrives twice", async () => {
+    const billId = await billOf("hamburger", "fire");
+    const command = await gherkinsCancel(billId);
+    let recorded: Awaited<ReturnType<typeof notices>> = [];
+
+    const printed = await jobsDuring(async () => {
+      recorded = await noticesDuring(async () => {
+        const first = await inTx(venue, (tx) => apply(tx, command));
+        const replayed = await inTx(venue, (tx) => apply(tx, command));
+        expect(replayed).toEqual(first);
+      });
+    });
+
+    expect(printed).toHaveLength(1);
+    expect(recorded).toHaveLength(1);
+  });
+
+  it("names how many of the extra each dish carried, and asks about every dish", async () => {
+    const billId = await billOf("hamburger", "fire", { dishes: "2", gherkinsEach: 2 });
+    let recorded: Awaited<ReturnType<typeof notices>> = [];
+
+    const printed = await jobsDuring(async () => {
+      recorded = await noticesDuring(() => cancelGherkins(billId));
+    });
+
+    expect(printed).toHaveLength(1);
+    expect(printed[0]!.lines).toContain("2.000 x HAMB");
+    expect(printed[0]!.lines).toContain("  CANCEL: Gherkins x2");
+    expect(recorded).toEqual([
+      expect.objectContaining({ quantity: "2.000", cancelledExtra: "Gherkins x2" }),
+    ]);
+  });
+
+  it("asks about the dishes the kitchen was asked for, not every dish on the bill", async () => {
+    const billId = await billOf("hamburger", "fire", { dishes: "3", gherkinsEach: 2 });
+    // Set on the ticket item directly: the kitchen was asked for one of the three.
+    await inTx(venue, async (tx) => {
+      await tx.run(sql`
+        update ticket_items set quantity = 1000
+        where working_order_line_id = (select id from working_order_lines
+          where working_order_id = ${billId} and line_no = 1)`);
+    });
+    let recorded: Awaited<ReturnType<typeof notices>> = [];
+
+    const printed = await jobsDuring(async () => {
+      recorded = await noticesDuring(() => cancelGherkins(billId));
+    });
+
+    expect(printed).toHaveLength(1);
+    expect(printed[0]!.lines).toContain("1.000 x HAMB");
+    expect(printed[0]!.lines).toContain("  CANCEL: Gherkins x2");
+    expect(recorded).toEqual([
+      expect.objectContaining({ quantity: "1.000", cancelledExtra: "Gherkins x2" }),
+    ]);
+  });
+
+  it("leaves no slip and no notice when the cancel's transaction rolls back", async () => {
+    const billId = await billOf("hamburger", "fire");
+    const gherkinsId = await lineIdOf(venue, billId, 4);
+    const command = await gherkinsCancel(billId);
+    let recorded: Awaited<ReturnType<typeof notices>> = [];
+
+    const printed = await jobsDuring(async () => {
+      recorded = await noticesDuring(async () => {
+        await expect(
+          inTx(venue, async (tx) => {
+            await apply(tx, command);
+            throw new Error("a later step of the request fails");
+          }),
+        ).rejects.toThrow("a later step of the request fails");
+      });
+    });
+
+    expect(printed).toEqual([]);
+    expect(recorded).toEqual([]);
+    const [gherkins] = await inTx(venue, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, gherkinsId)),
+    );
+    expect(gherkins).toBeDefined();
+  });
+
+  it("never opens a cash drawer, even when the till's receipt printer has one", async () => {
+    const billId = await billOf("hamburger", "fire");
+    const [till] = await inTx(venue, (tx) =>
+      tx
+        .select({ receiptPrinterId: tills.receiptPrinterId })
+        .from(tills)
+        .where(eq(tills.id, venue.cfg.tillId)),
+    );
+    // The kitchen's printer is also the till's receipt printer, with a drawer attached.
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(tills)
+        .set({ receiptPrinterId: venue.printerId })
+        .where(eq(tills.id, venue.cfg.tillId));
+      await tx
+        .update(printers)
+        .set({ hasCashDrawer: true })
+        .where(eq(printers.id, venue.printerId));
+    });
+    try {
+      const drawerOpensBefore = (await inTx(venue, (tx) => tx.select().from(drawerOpens))).length;
+      const before = (await jobs()).length;
+
+      await cancelGherkins(billId, { ...english(), allowCashDrawer: true });
+
+      const enqueued = (await jobs()).slice(before);
+      expect(enqueued.map((job) => job.kind)).toEqual(["document"]);
+      const kick = Buffer.from(DRAWER_KICK);
+      expect(enqueued.some((job) => Buffer.from(job.payload).includes(kick))).toBe(false);
+      expect((await inTx(venue, (tx) => tx.select().from(drawerOpens))).length).toBe(
+        drawerOpensBefore,
+      );
+    } finally {
+      await inTx(venue, async (tx) => {
+        await tx
+          .update(tills)
+          .set({ receiptPrinterId: till!.receiptPrinterId })
+          .where(eq(tills.id, venue.cfg.tillId));
+        await tx
+          .update(printers)
+          .set({ hasCashDrawer: false })
+          .where(eq(printers.id, venue.printerId));
+      });
+    }
   });
 });
 
