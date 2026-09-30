@@ -3861,7 +3861,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         already corrected below zero, with the domain code, and leaves it open" in
         `apps/server/src/collect-by-invoice.test.ts` inserts a -20.00 corrective row straight into
         `sales`, and failed with that check deleted.
-        **DONE (C67, 2026-09-30): the card-reader path closes a bill that owes nothing without
+        **DONE (C67, #925, 2026-09-30): the card-reader path closes a bill that owes nothing without
         asking the reader.** `payWorkingOrderIntegrated` (`apps/server/src/till-sale.ts`) now
         settles a bill with a sale whose corrections leave nothing owed the way `collectOrder` does,
         through one shared step (`settleOwingNothing`): no tender, no `payments` row, the bill
