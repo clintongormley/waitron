@@ -1,5 +1,12 @@
 import { compareDecimal, decimal } from "@waitron/shared";
-import type { Draft, DraftLine, DraftLineInput, TillApi, TillProduct } from "../api/client.js";
+import {
+  isNetworkFailure,
+  type Draft,
+  type DraftLine,
+  type DraftLineInput,
+  type TillApi,
+  type TillProduct,
+} from "../api/client.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import { WorkingOrderStore, type LineSelection, type OrderLine } from "./working-order.js";
 
@@ -89,6 +96,32 @@ export function pause(signal: AbortSignal, ms?: number): Promise<void> {
       { once: true },
     );
   });
+}
+
+/** How many times a submission that got no answer is sent again under the same submission id,
+ * within the wait its caller's signal bounds; the server answers a repeat as it answered the first
+ * (D8). A send cut off by that signal is not sent again. */
+export const SUBMIT_RETRIES = 2;
+
+/** The wait before a submission that got no answer is sent again. */
+export const SUBMIT_RETRY_PAUSE_MS = 500;
+
+/** A request that got no answer is sent again unchanged after a pause, until `signal` ends the wait
+ * or `live` turns false: the operator's session may have ended and the next person signed in. */
+export async function resendUnanswered<T>(
+  send: (signal: AbortSignal) => Promise<T>,
+  signal: AbortSignal,
+  live: () => boolean,
+): Promise<T> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await send(signal);
+    } catch (error) {
+      if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
+      await pause(signal, SUBMIT_RETRY_PAUSE_MS);
+      if (signal.aborted || !live()) throw error;
+    }
+  }
 }
 
 /** A coded refusal, with the new owner's name when it carries one; undefined for no answer. */

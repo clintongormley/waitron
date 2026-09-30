@@ -1308,9 +1308,11 @@ export interface TableState {
   readyToServe: number;
   enRoute: number;
   /**
-   * The worst age band across the open tab's UNSERVED lines; `"fresh"` for a free table. Only the
-   * REDUCED band is sent, not the per-line ages and thresholds, so the floor cannot re-derive it
-   * locally: it is fixed until the next `getTablesState` fetch.
+   * The worst age band across the unserved lines that have a ticket item, held ones included, of
+   * every bill of the party's family that is not abandoned, paid ones included; `"fresh"` for a free
+   * table. Only the REDUCED band is sent, not
+   * the per-line ages and thresholds, so the floor cannot re-derive it locally: it is fixed until the
+   * next `getTablesState` fetch.
    */
   timingBand: TimingBand;
   status: { id: string; label: string; color: string } | null;
@@ -2120,8 +2122,9 @@ export class TillApi {
   requestBill(
     partyId: string,
     command: BillRequestCommand,
+    options: ReadOptions = {},
   ): Promise<{ revision: number; billRequestedAt: string | null }> {
-    return this.#request(`/api/parties/${partyId}/bill-request`, "POST", command);
+    return this.#request(`/api/parties/${partyId}/bill-request`, "POST", command, options.signal);
   }
 
   /** A party's Current orders → `GET /api/parties/:partyId/current-orders`. */

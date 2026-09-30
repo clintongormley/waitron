@@ -2515,6 +2515,21 @@ describe("TillApi: a seated party", () => {
     );
   });
 
+  it("requestBill passes the caller's abort signal", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ revision: 4, billRequestedAt: null }));
+    const signal = new AbortController().signal;
+    const command = { submissionId: "sub-9", expectedPartyRevision: 4, requested: false };
+
+    await new TillApi("", fetchStub).requestBill("v1", command, { signal });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/parties/v1/bill-request",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(command), signal }),
+    );
+  });
+
   it("readCurrentOrders GETs the party's Current orders", async () => {
     const answer = {
       revision: 6,

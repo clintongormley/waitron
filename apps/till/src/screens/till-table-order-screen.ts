@@ -5,7 +5,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, renderFloorChips } from "@waitron/ui";
 import "../widgets/fired-ago.js";
 import {
   addDecimal,
@@ -93,7 +93,7 @@ import {
   type DraftPreview,
 } from "../state/draft-groups.js";
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
-import { signalChipStyles } from "../widgets/signal-chips.js";
+import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 
 export type { TableServiceStatus };
@@ -2806,15 +2806,13 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Whether the party has asked for the bill is read from the floor, which carries it. */
   #billRequest(party: TableParty): TemplateResult {
-    const requested = billRequestOf(this.tables, party.id) !== undefined;
+    const request = billRequestOf(this.tables, party.id);
     const scope = (key: "table.request_bill" | "table.cancel_bill_request") =>
       t(key).replace("{party}", () => party.displayName);
     return html`<div class="bill-request">
       ${
-        requested
-          ? html`<span class="chip tone-primary-filled" data-bill-requested
-                >${t("signal.bill_requested")}</span
-              >
+        request !== undefined
+          ? html`${renderFloorChips(signalChips([request]))}
               <wt-button
                 variant="secondary"
                 data-cancel-bill-request

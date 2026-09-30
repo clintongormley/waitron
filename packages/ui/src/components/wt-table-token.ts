@@ -2,6 +2,7 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import type { FloorTable } from "../floor.js";
+import { floorChipStyles, renderFloorChips } from "../floor-chips.js";
 import type { TimingBand } from "@waitron/shared";
 
 /** Localised words the token puts beside its data; this package carries no copy of its own. */
@@ -26,6 +27,7 @@ export interface TableTokenLabels {
 export class WtTableToken extends LitElement {
   static override styles = [
     baseStyles,
+    floorChipStyles,
     css`
       :host {
         display: block;
@@ -207,11 +209,9 @@ export class WtTableToken extends LitElement {
         color: var(--wt-color-text);
       }
 
-      /* "Reserved HH:MM" (Bookings-1 §4) — the table's imminent booking. Distinguished from the service
-         hints by a PRIMARY border on a neutral chip (theme text on a neutral fill, so the token-fixed
-         contrast holds and no arbitrary colour is involved): distinct from the ready chip's success
-         border and the status chip's neutral border. It is an independent signal — it sits beside the
-         one service hint and the manual status, never in their place. */
+      /* "Reserved HH:MM" (Bookings-1 §4) — the table's imminent booking: a PRIMARY border on a neutral
+         chip (theme text on a neutral fill, so the token-fixed contrast holds and no arbitrary colour is
+         involved). */
       .badge.reserved {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -222,36 +222,6 @@ export class WtTableToken extends LitElement {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
         border: 1px solid var(--wt-color-warning);
-      }
-
-      /* A consumer's signal chip: theme text on the neutral chip, its tone as the border, except the
-         filled tone, which is the primary/on-primary pair. */
-      .badge.chip {
-        border: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-      }
-
-      .badge.chip.tone-success {
-        border-color: var(--wt-color-success);
-      }
-
-      .badge.chip.tone-primary {
-        border-color: var(--wt-color-primary);
-      }
-
-      .badge.chip.tone-warning {
-        border-color: var(--wt-color-warning);
-      }
-
-      .badge.chip.tone-danger {
-        border-color: var(--wt-color-danger);
-      }
-
-      .badge.chip.tone-primary-filled {
-        border-color: var(--wt-color-primary);
-        background: var(--wt-color-primary);
-        color: var(--wt-color-on-primary);
       }
 
       /* The manual-status chip: text in the theme colour on a neutral chip, with the DATA-driven status
@@ -340,13 +310,7 @@ export class WtTableToken extends LitElement {
                 >`
               : nothing
           }
-          ${this.#fireDueChip(t)}
-          ${(t.chips ?? []).map(
-            (chip) =>
-              html`<span class="badge chip tone-${chip.tone}" data-chip=${chip.key}
-                >${chip.text}</span
-              >`,
-          )}
+          ${this.#fireDueChip(t)} ${renderFloorChips(t.chips ?? [])}
           ${
             t.status != null
               ? html`<span class="badge status" data-status style="border-color: ${t.status.color}">

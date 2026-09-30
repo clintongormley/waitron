@@ -1,6 +1,7 @@
 export { applyTokens } from "./tokens/index.js";
 export { TickingClock } from "./ticking-clock.js";
 export { baseStyles, disabledStyles, floorTrayStyles, selectStyles } from "./base-styles.js";
+export { floorChipStyles, renderFloorChips } from "./floor-chips.js";
 export {
   delegatesFocusShadowRootOptions,
   dispatchWtChange,

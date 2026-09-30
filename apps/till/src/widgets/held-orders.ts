@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, renderFloorChips } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
@@ -13,7 +13,7 @@ import {
   type SeatedRead,
 } from "./table-targets.js";
 import { paidInPart } from "../state/bill-state.js";
-import { renderChips, signalChipStyles, signalChips } from "./signal-chips.js";
+import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
 import type { BillChoiceDetail } from "./bill-choice-dialog.js";
 import type { HeldOrderSummary, TableState } from "../api/client.js";
@@ -176,7 +176,9 @@ export class TillHeldOrders extends LitElement {
 
   #signals(order: HeldOrderSummary): TemplateResult | typeof nothing {
     const chips = signalChips(order.signals);
-    return chips.length === 0 ? nothing : html`<span class="signals">${renderChips(chips)}</span>`;
+    return chips.length === 0
+      ? nothing
+      : html`<span class="signals">${renderFloorChips(chips)}</span>`;
   }
 
   #row(order: HeldOrderSummary): TemplateResult {

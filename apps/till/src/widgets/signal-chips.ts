@@ -1,5 +1,5 @@
-import { css, html, type TemplateResult } from "lit";
-import type { FloorChip, FloorChipTone } from "@waitron/ui";
+import { css } from "lit";
+import { floorChipStyles, type FloorChip, type FloorChipTone } from "@waitron/ui";
 import type { TableSignal } from "@waitron/shared";
 import { countText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -59,46 +59,12 @@ export function signalChips(
   });
 }
 
-export const signalChipStyles = css`
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    max-width: 100%;
-    padding: var(--wt-space-1) var(--wt-space-2);
-    border: 1px solid var(--wt-color-border);
-    border-radius: var(--wt-radius-sm);
-    background: var(--wt-color-surface-raised);
-    color: var(--wt-color-text);
-    font-size: var(--wt-font-size-sm);
-    font-weight: var(--wt-font-weight-bold);
-    overflow-wrap: anywhere;
-  }
-
-  .chip.tone-success {
-    border-color: var(--wt-color-success);
-  }
-
-  .chip.tone-primary {
-    border-color: var(--wt-color-primary);
-  }
-
-  .chip.tone-warning {
-    border-color: var(--wt-color-warning);
-  }
-
-  .chip.tone-danger {
-    border-color: var(--wt-color-danger);
-  }
-
-  .chip.tone-primary-filled {
-    border-color: var(--wt-color-primary);
-    background: var(--wt-color-primary);
-    color: var(--wt-color-on-primary);
-  }
-`;
-
-export function renderChips(chips: readonly FloorChip[]): TemplateResult[] {
-  return chips.map(
-    (chip) => html`<span class="chip tone-${chip.tone}" data-chip=${chip.key}>${chip.text}</span>`,
-  );
-}
+export const signalChipStyles = [
+  floorChipStyles,
+  css`
+    .chip {
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+  `,
+];

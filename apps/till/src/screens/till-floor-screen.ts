@@ -12,6 +12,7 @@ import {
   defaultTraySlot,
   floorTrayStyles,
   isTableZoneless,
+  renderFloorChips,
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
@@ -29,7 +30,7 @@ import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
-import { renderChips, signalChipStyles, signalChips } from "../widgets/signal-chips.js";
+import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -294,11 +295,8 @@ export class TillFloorScreen extends LitElement {
       }
 
       /* "Reserved HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
-         chip (theme text on a neutral fill, so contrast stays token-fixed): distinct from the ready
-         chip's success border, the status chip's neutral border, and the en-route chip's filled primary.
-         An independent signal that sits beside the one service hint and the manual status, never in their
-         place. Mirrors @waitron/ui's wt-table-token .badge.reserved so the list card and the map token
-         match. */
+         chip (theme text on a neutral fill, so contrast stays token-fixed). Mirrors @waitron/ui's
+         wt-table-token .badge.reserved so the list card and the map token match. */
       .badge.reserved {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -896,7 +894,7 @@ export class TillFloorScreen extends LitElement {
             ? html`<span class="badge fire-due" data-fire-due>${t("floor.fire_due")}</span>`
             : nothing
         }
-        ${renderChips(tableChips(table))}
+        ${renderFloorChips(tableChips(table))}
         ${
           table.status !== null
             ? html`<span

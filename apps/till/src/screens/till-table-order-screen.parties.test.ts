@@ -290,7 +290,7 @@ describe("till-table-order-screen: the bill request", () => {
 
     const action = bills(el).querySelector<HTMLElement>("[data-request-bill]")!;
     expect(action.textContent!.trim()).toBe("Mark bill requested for Ana");
-    expect(bills(el).querySelector("[data-bill-requested]")).toBeNull();
+    expect(bills(el).querySelector("[data-chip='bill-requested']")).toBeNull();
     expect(bills(el).querySelector("[data-cancel-bill-request]")).toBeNull();
     action.click();
 
@@ -301,7 +301,7 @@ describe("till-table-order-screen: the bill request", () => {
     const el = await mountScreen({ tables: [floorRow(true)] });
     const asked = capture(el, "request-bill");
 
-    expect(bills(el).querySelector("[data-bill-requested]")!.textContent!.trim()).toBe(
+    expect(bills(el).querySelector("[data-chip='bill-requested']")!.textContent!.trim()).toBe(
       "Bill requested",
     );
     expect(bills(el).querySelector("[data-request-bill]")).toBeNull();
@@ -330,9 +330,9 @@ describe("till-table-order-screen: the bill request", () => {
     expect(bills(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
       "Marcar cuenta pedida para Ana",
     );
-    expect(bills(cancelling).querySelector("[data-bill-requested]")!.textContent!.trim()).toBe(
-      "Cuenta pedida",
-    );
+    expect(
+      bills(cancelling).querySelector("[data-chip='bill-requested']")!.textContent!.trim(),
+    ).toBe("Cuenta pedida");
     expect(bills(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
       "Anular la petición de cuenta de Ana",
     );

@@ -32,7 +32,7 @@ import {
   DraftSync,
   asRefusal,
   limited,
-  pause,
+  resendUnanswered,
   type DraftRefused,
 } from "./state/draft-sync.js";
 import { fromDraftLine, rebuildReturned } from "./state/draft-lines.js";
@@ -76,7 +76,6 @@ import type { MoveHeldOrderDetail } from "./widgets/held-orders.js";
 import type { SeatedRead } from "./widgets/table-targets.js";
 import type { MoveBillDetail } from "./screens/till-table-order-screen.js";
 import { owing, paidInPart } from "./state/bill-state.js";
-import { sendBillRequest } from "./state/bill-request.js";
 import { billRequestOf } from "./state/table-signals.js";
 import type { BumpMode, FireControlMode } from "./widgets/station-queue.js";
 import type {
@@ -153,6 +152,8 @@ import type {
 
 import { setContentLanguages } from "@waitron/ui";
 
+export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
+
 /**
  * `"lock"` (or a boot failure) renders the lock screen; every other value renders the canvas tab shell
  * and names the surface a nav action moved to, not a separately rendered screen.
@@ -182,21 +183,13 @@ const REFRESH_RETRY_SECONDS = [5, 10, 30] as const;
 registerIcons({ close: CROSS_ICON_PATH });
 
 /**
- * How long the till waits on a re-read of the table's offers, a draft read, save or take-over, or a
- * submission (from the save before it to its last retry) before cancelling it. It is above the
- * server watchdog's kill bound (`WATCHDOG_KILL_MS` plus `STACK_CAPTURE_MS`,
- * `packages/store/src/venue-liveness.ts`), so a server whose main thread had stopped when the wait
- * began is killed before the till gives up.
+ * How long the till waits on a re-read of the table's offers, a draft read, save or take-over, a
+ * submission (from the save before it to its last retry), or a bill request (to its last retry)
+ * before cancelling it. It is above the server watchdog's kill bound (`WATCHDOG_KILL_MS` plus
+ * `STACK_CAPTURE_MS`, `packages/store/src/venue-liveness.ts`), so a server whose main thread had
+ * stopped when the wait began is killed before the till gives up.
  */
 const TABLE_REQUEST_LIMIT_MS = 150_000;
-
-/** How many times a draft submission that got no answer is sent again under the same submission id,
- * within {@link TABLE_REQUEST_LIMIT_MS}; the server answers a repeat as it answered the first (D8). A
- * send cut off by that limit is not sent again. */
-const SUBMIT_RETRIES = 2;
-
-/** The wait before a submission that got no answer is sent again. */
-export const SUBMIT_RETRY_PAUSE_MS = 500;
 
 /**
  * What a draft's submission leaves to do once the draft is open for edits again. `find-tab`, after a
@@ -3028,9 +3021,9 @@ export class TillApp extends LitElement {
   }
 
   /** Every command on a party's tables or bills ends here when refused. */
-  async #onTableRefusal(error: unknown): Promise<void> {
+  async #onTableRefusal(error: unknown, live?: () => boolean): Promise<void> {
     if (isPartyOutOfDate(error)) {
-      await this.#onPartyOutOfDate(error);
+      await this.#onPartyOutOfDate(error, live);
       return;
     }
     this.errorKey = tableWriteError(error);
@@ -3159,7 +3152,12 @@ export class TillApp extends LitElement {
         ...(joinGroupId === undefined ? {} : { joinGroupId }),
         ...(billId === undefined ? {} : { billId }),
       };
-      submitted = await this.#sendDraft(party.id, sync.draftId, command, send.signal, live);
+      const draftId = sync.draftId;
+      submitted = await resendUnanswered(
+        (signal) => this.api.submitDraft(party.id, draftId, command, { signal }),
+        send.signal,
+        live,
+      );
     } catch (error) {
       if (!live()) return;
       if (isVersionRefusal(error)) {
@@ -3206,26 +3204,6 @@ export class TillApp extends LitElement {
     if (!live()) return;
     sync.submitted(submitted.draft, sent);
     return submitted.tabId === tabId ? "read-tab" : { landedOn: submitted.tabId };
-  }
-
-  /** A request that got no answer is sent again unchanged after a pause, until the time limit ends
-   * the wait or the session it was first sent in ends: the next person may have signed in by then. */
-  async #sendDraft(
-    partyId: string,
-    draftId: string,
-    command: DraftSubmission,
-    signal: AbortSignal,
-    live: () => boolean,
-  ): Promise<SubmittedDraft> {
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        return await this.api.submitDraft(partyId, draftId, command, { signal });
-      } catch (error) {
-        if (!isNetworkFailure(error) || signal.aborted || attempt === SUBMIT_RETRIES) throw error;
-        await pause(signal, SUBMIT_RETRY_PAUSE_MS);
-        if (signal.aborted || !live()) throw error;
-      }
-    }
   }
 
   /** Moves the screen from the tab a draft was sent to onto the tab it went to, only while the
@@ -3343,21 +3321,36 @@ export class TillApp extends LitElement {
   }
 
   /** Records or takes back the party's bill request, then reads the floor, which carries it. A
-   * request that got no answer is sent again under its submission id before the floor is read. */
+   * request that got no answer is sent again under its submission id before the floor is read. Once
+   * the waiter has left the party ({@link #hasLeftParty}), the answer is neither read nor said. */
   async #onRequestBill(event: Event): Promise<void> {
     const { requested } = (event as CustomEvent<{ requested: boolean }>).detail;
     const party = this.orderParty;
     if (party === null || this.groupCommandBusy) return;
+    const sent = this.#sentNow();
+    const live = () => sent.session === this.#operatorSession;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     this.groupCommandBusy = true;
     this.errorKey = undefined;
     try {
-      const answer = await sendBillRequest(this.api, party.id, requested, party.revision);
-      this.#notePartyRevision(party.id, answer.revision);
+      await this.#partyRequest(party, party.revision, (command) =>
+        resendUnanswered(
+          (signal) => this.api.requestBill(party.id, { ...command, requested }, { signal }),
+          limit.signal,
+          live,
+        ),
+      );
+      if (this.#hasLeftParty(party.id, sent)) return;
       await this.#retakePartyFromFloor();
     } catch (error) {
-      if (isNetworkFailure(error)) await this.#retakePartyFromFloor();
-      await this.#onTableRefusal(error);
+      if (this.#hasLeftParty(party.id, sent)) return;
+      if (isNetworkFailure(error)) {
+        await this.#retakePartyFromFloor();
+        if (this.#hasLeftParty(party.id, sent)) return;
+      }
+      await this.#onTableRefusal(error, live);
     } finally {
+      limit.done();
       this.groupCommandBusy = false;
     }
   }

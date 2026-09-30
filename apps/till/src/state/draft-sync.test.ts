@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { draftServer, type DraftServer } from "../widgets/test-helpers.js";
-import { DRAFT_SAVE_DELAY_MS, DraftSync, pause } from "./draft-sync.js";
+import {
+  DRAFT_SAVE_DELAY_MS,
+  DraftSync,
+  SUBMIT_RETRIES,
+  SUBMIT_RETRY_PAUSE_MS,
+  pause,
+  resendUnanswered,
+} from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
 import type { Draft, DraftLine, TillProduct } from "../api/client.js";
 
@@ -905,5 +912,56 @@ describe("pause", () => {
     await vi.advanceTimersByTimeAsync(1);
 
     expect(timed).toHaveBeenCalledOnce();
+  });
+});
+
+describe("resendUnanswered", () => {
+  const noAnswer = new TypeError("Failed to fetch");
+  const unanswered = () =>
+    vi.fn<(signal: AbortSignal) => Promise<string>>(() => Promise.reject(noAnswer));
+  const outcome = (sent: Promise<string>) => sent.catch((error: unknown) => error);
+
+  it("sends again after each pause while there is no answer, up to its retries, then gives up", async () => {
+    const send = unanswered();
+    const settled = outcome(resendUnanswered(send, new AbortController().signal, () => true));
+
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS - 1);
+    expect(send).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(send).toHaveBeenCalledTimes(SUBMIT_RETRIES + 1);
+    expect(await settled).toBe(noAnswer);
+  });
+
+  it("sends nothing more once the session it was sent for has ended", async () => {
+    const send = unanswered();
+    let live = true;
+    const settled = outcome(resendUnanswered(send, new AbortController().signal, () => live));
+
+    live = false;
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(await settled).toBe(noAnswer);
+  });
+
+  it("sends nothing more once its signal ends the wait", async () => {
+    const send = unanswered();
+    const limit = new AbortController();
+    const settled = outcome(resendUnanswered(send, limit.signal, () => true));
+
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRY_PAUSE_MS - 1);
+    limit.abort();
+    await vi.advanceTimersByTimeAsync(SUBMIT_RETRIES * SUBMIT_RETRY_PAUSE_MS);
+
+    expect(send).toHaveBeenCalledOnce();
+    expect(await settled).toBe(noAnswer);
+  });
+
+  it("returns the first answer without sending again", async () => {
+    const send = vi.fn<(signal: AbortSignal) => Promise<string>>(() => Promise.resolve("answered"));
+
+    expect(await resendUnanswered(send, new AbortController().signal, () => true)).toBe("answered");
+    expect(send).toHaveBeenCalledOnce();
   });
 });

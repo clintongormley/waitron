@@ -56,7 +56,7 @@ export interface FloorTable {
   partyName?: string;
   /** The seated party's release reminder has fallen due. */
   fireDue?: boolean;
-  /** What wants attention at the table, several at once, shown after the other badges. */
+  /** What wants attention at the table, several at once. */
   chips?: readonly FloorChip[];
 }
 
