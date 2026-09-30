@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "d3fffb74-f860-4a71-adc2-aca6eded2c11",
+  "id": "126ed66b-9997-43ae-a318-10b2f03554ed",
   "prevId": "67d6aa98-7798-4999-b663-56d4e03349fd",
   "tables": {
     "adjustment_reasons": {
@@ -328,19 +328,6 @@
           "tableTo": "working_orders",
           "columnsFrom": [
             "working_order_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "adjustments_reason_fk": {
-          "name": "adjustments_reason_fk",
-          "tableFrom": "adjustments",
-          "tableTo": "adjustment_reasons",
-          "columnsFrom": [
-            "reason_id"
           ],
           "columnsTo": [
             "id"

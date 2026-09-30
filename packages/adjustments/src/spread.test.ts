@@ -57,6 +57,11 @@ describe("percentReduction", () => {
     expect(percentReduction(d("30.00"), 10000)).toBe("30.00");
   });
 
+  it("rounds an exact half cent up, never to the even cent", () => {
+    // 50% of €0.25 is €0.125: half up gives €0.13, half-to-even €0.12.
+    expect(percentReduction(d("0.25"), 5000)).toBe("0.13");
+  });
+
   it("refuses a percentage outside 1..10000 basis points", () => {
     expect(() => percentReduction(d("9.99"), 0)).toThrow(RangeError);
     expect(() => percentReduction(d("9.99"), 10001)).toThrow(RangeError);

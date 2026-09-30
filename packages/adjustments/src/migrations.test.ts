@@ -293,15 +293,21 @@ describe("the adjustments table", () => {
     await adjustmentRefused({ ...BILL_LEVEL, action: "comp" }, "adjustments_bill_level_ck");
   });
 
-  it("refuses a working order or a reason that does not exist", async () => {
+  it("refuses a working order that does not exist", async () => {
     const order = await captureError(async () =>
       insertAdjustment(await adjustmentRow({ working_order_id: randomUUID() })),
     );
     expect(isRefusal(order, FOREIGN_KEY_VIOLATION)).toBe(true);
-    const reason = await captureError(async () =>
-      insertAdjustment(await adjustmentRow({ reason_id: randomUUID() })),
+  });
+
+  it("holds no key to its reason, so deleting every reason leaves the history", async () => {
+    const row = await adjustmentRow();
+    await insertAdjustment(row);
+    await db.execute(sql`delete from adjustment_reasons`);
+    const kept = await db.execute<{ reason_name: string }>(
+      sql`select reason_name from adjustments where id = ${row.id as string}`,
     );
-    expect(isRefusal(reason, FOREIGN_KEY_VIOLATION)).toBe(true);
+    expect(kept.rows).toEqual([{ reason_name: "Complaint" }]);
   });
 
   it("is append-only: an update and a delete are both refused", async () => {

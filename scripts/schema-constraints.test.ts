@@ -37,7 +37,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["absences", ["decided_by_person_id"], "persons"],
   ["absences", ["person_id"], "persons"],
   ["acks", ["registro_id"], "registros_facturacion"],
-  ["adjustments", ["reason_id"], "adjustment_reasons"],
   ["adjustments", ["working_order_id"], "working_orders"],
   ["availability", ["person_id"], "persons"],
   ["bill_payment_lines", ["bill_payment_id"], "bill_payments"],

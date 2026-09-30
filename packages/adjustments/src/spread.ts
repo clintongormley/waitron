@@ -18,8 +18,8 @@ import "./errors.js";
 /**
  * The arithmetic of taking money off lines whose amount is a whole-cent unit price times the
  * quantity, rounded half away from zero to the cent, as `grossRows` in
- * `packages/catalogue/src/pricing.ts` prices a line. Everything here is counted in whole cents and
- * whole thousandths of a unit, in BigInt, so no amount passes through a float.
+ * `packages/catalogue/src/pricing.ts` prices a line. All arithmetic is in whole-cent and
+ * whole-thousandth BigInt counts.
  */
 
 /** One row of a line after an adjustment: `quantity` units at `unitGross` each. */

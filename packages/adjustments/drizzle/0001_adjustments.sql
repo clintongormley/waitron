@@ -24,7 +24,6 @@ CREATE TABLE `adjustments` (
 	`by_guest` integer DEFAULT false NOT NULL,
 	`created_at` text NOT NULL,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
-	FOREIGN KEY (`reason_id`) REFERENCES `adjustment_reasons`(`id`) ON UPDATE no action ON DELETE restrict,
 	CONSTRAINT "adjustments_action_ck" CHECK("adjustments"."action" in ('cancel', 'comp', 'discount_percent', 'discount_amount')),
 	CONSTRAINT "adjustments_stage_ck" CHECK("adjustments"."stage" in ('unsent', 'held', 'fired', 'served')),
 	CONSTRAINT "adjustments_reason_name_ck" CHECK(length(trim("adjustments"."reason_name")) > 0),

@@ -17,7 +17,6 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { ADJUSTMENT_ACTIONS, type AdjustmentPolicySnapshot } from "../policy.js";
-import { adjustmentReasons } from "./reasons.js";
 
 const adjustmentAction = enumType(ADJUSTMENT_ACTIONS);
 
@@ -48,6 +47,8 @@ export const adjustments = table(
     // No foreign key: `persons` is in @waitron/identity's migration set, which this set does not
     // require. The same holds for `requested_by` and `approved_by`.
     creditedTo: id("credited_to"),
+    // No foreign key: the configuration import deletes every reason; `reason_name` and
+    // `policy_snapshot` keep the history, and this id only groups rows.
     reasonId: id("reason_id").notNull(),
     reasonName: label("reason_name").notNull(),
     policySnapshot: json<AdjustmentPolicySnapshot>("policy_snapshot").notNull(),
@@ -73,11 +74,6 @@ export const adjustments = table(
       columns: [t.workingOrderId],
       foreignColumns: [workingOrders.id],
       name: "adjustments_working_order_fk",
-    }).onDelete("restrict"),
-    foreignKey({
-      columns: [t.reasonId],
-      foreignColumns: [adjustmentReasons.id],
-      name: "adjustments_reason_fk",
     }).onDelete("restrict"),
     index("adjustments_order_reason_idx").on(t.workingOrderId, t.reasonId),
     check("adjustments_action_ck", enumCheck(t.action)),
