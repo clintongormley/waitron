@@ -449,7 +449,7 @@ export class CategoriesScreen extends LitElement {
     // visible; the table reports that through the cell's `ancestorOnly` context. Mute those so
     // the match itself stands out.
     const muted = this.mode === "tree" && ancestorOnly;
-    return html`<span part="name-cell">
+    return html`<span>
       ${
         category.image
           ? html`<img
