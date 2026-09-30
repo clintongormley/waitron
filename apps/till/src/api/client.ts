@@ -657,6 +657,62 @@ export interface UnsentDraft {
  * bill with no party. */
 export type BillParty = { id: string; revision: number } | null;
 
+/** What an adjustment does to a bill (service plan Task 11, spec §7). */
+export type AdjustmentAction = "cancel" | "comp" | "discount_percent" | "discount_amount";
+
+/** A person's role, lowest first. */
+export type PersonRole = "staff" | "supervisor" | "manager" | "admin";
+
+/** One active reason from `GET /api/adjustment-reasons`, named in the operator's language. */
+export interface AdjustmentReason {
+  id: string;
+  name: string;
+  /** The actions the reason may be used for. */
+  actions: AdjustmentAction[];
+  noteRequired: boolean;
+  maxPercentBp: number | null;
+  maxAmount: string | null;
+  applyRole: PersonRole;
+  approverRole: PersonRole;
+}
+
+/** An adjustment of one bill, as a preview and an apply share it. `lineId` names the dish; null is a
+ * discount on the whole bill. `quantity` absent covers the whole dish. */
+export interface AdjustmentAsk {
+  /** The bill's revision as the till last read it. */
+  expectedRevision: number;
+  lineId: string | null;
+  reasonId: string;
+  action: AdjustmentAction;
+  quantity?: string;
+  percentBp?: number;
+  /** A money string, such as "2.50". */
+  amount?: string;
+  note: string | null;
+}
+
+/** An adjustment to apply: made once per person's confirmation, and sent again unchanged only when
+ * a request got no answer. `approver` is someone at or above the reason's approver role. */
+export interface AdjustmentCommand extends AdjustmentAsk {
+  submissionId: string;
+  approver?: { personId: string; pin: string };
+}
+
+/** What an adjustment would do, read before it is confirmed. `reduction` is what the bill actually
+ * loses, which can differ from a discount asked for on a weighed line. */
+export interface AdjustmentPreview {
+  reduction: string;
+  nominalValue: string;
+  /** The role that must approve it, or null when the operator may apply it alone. */
+  needsApproval: PersonRole | null;
+  lines: {
+    lineId: string;
+    lineNo: number;
+    reduction: string;
+    rows: { quantity: string; unitGross: string }[];
+  }[];
+}
+
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
 export interface CashTender {
   method: "cash";
@@ -691,6 +747,8 @@ export interface TillSaleLine {
   unitPrecision?: number | null;
   quantity: string;
   gross: string;
+  /** The line's total before a comp or a discount changed it; absent when nothing did. */
+  listGross?: string;
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else null/absent.
    *  Presentation only — never hashed, never a fiscal figure. */
   parentLineNo?: number | null;
@@ -1413,6 +1471,9 @@ export interface TabLine {
    * the variant, which is not one of the till's products. Absent reads as three places. */
   unitPrecision?: number | null;
   unitPriceGross: string;
+  /** The unit price the line had before a comp or a discount changed it; absent on a line no
+   * adjustment has touched. */
+  listUnitPriceGross?: string;
   servedAt: string | null;
   /** The line's RESOLVED kitchen course, or null when it has none. */
   courseId: string | null;
@@ -2216,6 +2277,45 @@ export class TillApi {
   voidLine(orderId: string, lineNo: number, quantity?: string): Promise<{ party: BillParty }> {
     const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;
     return this.#request(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
+  }
+
+  /** The active reasons a cancel, a give-away or a discount can be made under →
+   * `GET /api/adjustment-reasons`. */
+  listAdjustmentReasons(): Promise<AdjustmentReason[]> {
+    return this.#request<AdjustmentReason[]>("/api/adjustment-reasons", "GET");
+  }
+
+  /** The active people at or above `role`, who can approve an adjustment with their PIN →
+   * `GET /api/adjustment-approvers?role=`. */
+  listAdjustmentApprovers(role: PersonRole): Promise<StaffMember[]> {
+    return this.#request<StaffMember[]>(
+      `/api/adjustment-approvers?role=${encodeURIComponent(role)}`,
+      "GET",
+    );
+  }
+
+  /** What an adjustment would take off the bill, and whether it needs approval, writing nothing →
+   * `POST /api/working-orders/:orderId/adjustments/preview`. Refuses as the apply would, and
+   * `working_order.out_of_date` when the bill changed since `expectedRevision`. */
+  previewAdjustment(orderId: string, ask: AdjustmentAsk): Promise<AdjustmentPreview> {
+    return this.#request(`/api/working-orders/${orderId}/adjustments/preview`, "POST", ask);
+  }
+
+  /** Cancels, gives away or discounts → `POST /api/working-orders/:orderId/adjustments`. Answers the
+   * bill's new revision and its party. A resend with the same submission id is answered as the
+   * first was. Refuses, among others, `working_order.out_of_date`, `adjustment.approval_required`
+   * (naming `approverRole`), `pin.invalid` and the `adjustment.*` codes. */
+  applyAdjustment(
+    orderId: string,
+    command: AdjustmentCommand,
+    options: ReadOptions = {},
+  ): Promise<{ adjustmentIds: string[]; revision: number; party: BillParty }> {
+    return this.#request(
+      `/api/working-orders/${orderId}/adjustments`,
+      "POST",
+      command,
+      options.signal,
+    );
   }
 
   /**

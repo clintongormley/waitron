@@ -1577,6 +1577,98 @@ describe("TillApi", () => {
     expect(init.headers).toBeUndefined();
   });
 
+  describe("adjustments (service plan Task 11)", () => {
+    const ask = {
+      expectedRevision: 7,
+      lineId: "line-1",
+      reasonId: "reason-1",
+      action: "discount_percent" as const,
+      percentBp: 1000,
+      note: null,
+    };
+
+    it("listAdjustmentReasons GETs the active reasons", async () => {
+      const reasons = [
+        {
+          id: "reason-1",
+          name: "Complaint",
+          actions: ["comp"],
+          noteRequired: false,
+          maxPercentBp: null,
+          maxAmount: "30.00",
+          applyRole: "supervisor",
+          approverRole: "manager",
+        },
+      ];
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse(reasons));
+
+      await expect(new TillApi("", fetchStub).listAdjustmentReasons()).resolves.toEqual(reasons);
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/adjustment-reasons",
+        expect.objectContaining({ method: "GET", credentials: "include" }),
+      );
+    });
+
+    it("listAdjustmentApprovers GETs the people at or above a role", async () => {
+      const roster = [{ personId: "m-1", displayName: "Marta" }];
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse(roster));
+
+      await expect(new TillApi("", fetchStub).listAdjustmentApprovers("manager")).resolves.toEqual(
+        roster,
+      );
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/adjustment-approvers?role=manager",
+        expect.objectContaining({ method: "GET", credentials: "include" }),
+      );
+    });
+
+    it("previewAdjustment POSTs the ask to the bill's preview route", async () => {
+      const preview = { reduction: "3.00", nominalValue: "30.00", needsApproval: null, lines: [] };
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
+
+      await expect(new TillApi("", fetchStub).previewAdjustment("wo-1", ask)).resolves.toEqual(
+        preview,
+      );
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/working-orders/wo-1/adjustments/preview",
+        expect.objectContaining({ method: "POST", body: JSON.stringify(ask) }),
+      );
+    });
+
+    it("applyAdjustment POSTs the command under the caller's signal, and surfaces a refusal's params", async () => {
+      const command = {
+        ...ask,
+        submissionId: "sub-1",
+        approver: { personId: "m-1", pin: "7777" },
+      };
+      const answer = { adjustmentIds: ["a-1"], revision: 8, party: { id: "v1", revision: 5 } };
+      const fetchStub = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse(answer))
+        .mockResolvedValueOnce(
+          jsonResponse(
+            {
+              error: { code: "adjustment.approval_required", params: { approverRole: "manager" } },
+            },
+            403,
+          ),
+        );
+      const api = new TillApi("", fetchStub);
+      const signal = new AbortController().signal;
+
+      await expect(api.applyAdjustment("wo-1", command, { signal })).resolves.toEqual(answer);
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/working-orders/wo-1/adjustments",
+        expect.objectContaining({ method: "POST", body: JSON.stringify(command), signal }),
+      );
+      await expect(api.applyAdjustment("wo-1", command)).rejects.toEqual({
+        code: "adjustment.approval_required",
+        approverRole: "manager",
+        status: 403,
+      });
+    });
+  });
+
   it("voidLine with a quantity voids that part only, as a query parameter", async () => {
     const fetchStub = vi
       .fn()
