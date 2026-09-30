@@ -13,6 +13,7 @@ import type { OrderLine } from "./working-order.js";
 /** Why a basket line cannot be paid as it stands (D9). */
 export type BlockReason =
   | "removed"
+  | "not_sold_separately"
   | "unavailable"
   | "variant_removed"
   | "extra_removed"
@@ -102,6 +103,7 @@ export function lineBlock(
 ): LineBlock | undefined {
   const name = lineProductName(line.product);
   if (offer === undefined) return { reason: "removed", name };
+  if (offer.ordering === "not_sold_separately") return { reason: "not_sold_separately", name };
   if (!offer.available) return { reason: "unavailable", name };
   let variant: TillMenuOffer["variants"][number] | undefined;
   if (line.product.variantId !== undefined) {

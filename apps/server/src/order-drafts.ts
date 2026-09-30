@@ -100,6 +100,19 @@ export async function saveDraft(
   const lines = parseDraftLines(input.lines);
   await requireOpenParty(tx, partyId);
   await requireCourses(tx, cfg, lines);
+  // The lines replace the draft's, so these are every offer the read at the end needs.
+  const offers = await offersFor(
+    tx,
+    cfg,
+    partyId,
+    lines.map((line) => line.menuItemId),
+  );
+  for (const line of lines) {
+    const offer = offers.get(line.menuItemId);
+    if (offer?.ordering === "not_sold_separately") {
+      throw new AppError("product.not_sold_separately", { productId: offer.productId });
+    }
+  }
   let draftId: string;
   if (input.draftId === null) {
     const [held] = await openDraftsOn(tx, partyId, operatorId);
@@ -131,7 +144,7 @@ export async function saveDraft(
     draftId,
     normaliseDraftLines(lines.map((line) => ({ ...line, id: newId(), unavailable: false }))),
   );
-  return readOpenDraft(tx, cfg, partyId, draftId);
+  return readOpenDraft(tx, cfg, partyId, draftId, offers);
 }
 
 /**
@@ -628,15 +641,18 @@ async function readOpenDraft(
   cfg: TillConfig,
   partyId: string,
   draftId: string,
+  offers?: Map<string, ZoneMenuOffer>,
 ): Promise<Draft> {
-  return (await readOpenDrafts(tx, cfg, partyId, draftId))[0]!;
+  return (await readOpenDrafts(tx, cfg, partyId, draftId, offers))[0]!;
 }
 
+/** `known` is the offers of every line the drafts hold, when the caller has already read them. */
 async function readOpenDrafts(
   tx: Transaction,
   cfg: TillConfig,
   partyId: string,
   draftId?: string,
+  known?: Map<string, ZoneMenuOffer>,
 ): Promise<Draft[]> {
   const drafts = await tx
     .select({
@@ -661,12 +677,14 @@ async function readOpenDrafts(
     tx,
     drafts.map((draft) => draft.id),
   );
-  const offers = await offersFor(
-    tx,
-    cfg,
-    partyId,
-    lines.map(({ line }) => line.menuItemId),
-  );
+  const offers =
+    known ??
+    (await offersFor(
+      tx,
+      cfg,
+      partyId,
+      lines.map(({ line }) => line.menuItemId),
+    ));
   const takenFrom = await takenOverFrom(
     tx,
     drafts.map((draft) => draft.id),
@@ -731,13 +749,15 @@ async function offersFor(
 }
 
 /**
- * True when the line's menu item has no offer; the dish cannot be sold; its variant is not offered
- * or cannot be sold; an extras pick is not an available item of that extras list on the offer; or
- * an option answer is not an available label of that options list on the offer. Each of those is
- * refused when the line is priced. An options list the line leaves unanswered is not checked.
+ * True when the line's menu item has no offer; the dish cannot be sold, or is not sold on its own;
+ * its variant is not offered or cannot be sold; an extras pick is not an available item of that
+ * extras list on the offer; or an option answer is not an available label of that options list on
+ * the offer. Each of those is refused when the line is priced. An options list the line leaves
+ * unanswered is not checked.
  */
 function unavailable(line: DraftLine, offer: ZoneMenuOffer | undefined): boolean {
-  if (offer === undefined || !offer.available) return true;
+  if (offer === undefined || !offer.available || offer.ordering === "not_sold_separately")
+    return true;
   if (
     line.variantId !== null &&
     !offer.variants.find((variant) => variant.id === line.variantId)?.available

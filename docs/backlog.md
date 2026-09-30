@@ -124,9 +124,10 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 1. **Finish table service and paying a bill in parts** (A4, lane B). Eleven of the service plan's
    eighteen tasks have landed (0–9 and 14; Task 9, marking dishes served, as #814). Left: the
-   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12), standalone
-   ordering (13), several payments on the till (15 — the server side landed as #721 and nothing on
-   the till calls it yet), counter handover (16) and a table that leaves without paying (17).
+   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12),
+   several payments on the till (15 — the server side landed as #721 and nothing on
+   the till calls it yet), counter handover (16) and a table that leaves without paying (17). Task 13,
+   standalone ordering, is done on the branch `feat/service-standalone-ordering`.
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -726,7 +727,8 @@ when every product in it is switched off on the menu (Task 9's choice, pinned by
 fails the filter, because the card grid hands the browser only the products the filter keeps
 (`apps/till/src/widgets/card-grid.ts`; pinned for the structure only by "hides a product the diet
 lens rejects, and a section it leaves with nothing" in `apps/till/src/widgets/card-grid.test.ts`) — as a dish the
-filter rejects already disappears. A section whose products are all sold out keeps its place, and its tile is not greyed;
+filter rejects already disappears. It also happens when every product in it is published as not
+sold separately, because `indexMenu` leaves such products out of the offers it indexes (pinned by "leaves a product not sold separately out of the tiles, the structure, its section and the search, and a section left empty goes too" in `apps/till/src/widgets/menu-browser.test.ts`). A section whose products are all sold out keeps its place, and its tile is not greyed;
 the products inside it are. Spec §5 wants buttons in predictable positions during service. **Next
 action:** the owner decides whether either kind of empty section should keep its place, for example
 greyed.
@@ -2905,7 +2907,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/till/src/state/draft-sync.ts`), keeps the edits unsaved to send again, and shows one
       message for the whole draft, so it still names no line. A Send refused
       `product.unavailable` reads the table's offers again and marks the draft's lines against
-      them (`#markSoldOut`, `apps/till/src/till-app.ts`).)_
+      them (`#markSoldOut`, `apps/till/src/till-app.ts`).)_ _(2026-09-30, B13: now `#markUnsellable`,
+      which also handles `product.not_sold_separately`.)_
     - A merge that names no operator records the draft's owner as the one who discarded it; the one
       product caller, the merge route, always names one.
     - Three rulings made on the branch for the owner to confirm:
@@ -3161,6 +3164,41 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         is waiting on, so a moved group is cleared once it becomes the waiting one; the reminder then
         falls due as if it had never been snoozed. Clearing a group with no snooze is accepted and
         changes nothing but the party's revision.
+  - **Task 13 (standalone ordering) DONE on this branch** (lane B item B13,
+    `feat/service-standalone-ordering`, 2026-09-30; no pull request number yet). A product's
+    `ordering` is Public, Staff only or Not sold separately (`products.ordering`, core migrations
+    `0046`–`0048`; `products.sold_alone` is dropped). The published menu carries it, the server
+    refuses a standalone line for a dish the live version publishes as Not sold separately
+    (`product.not_sold_separately`, 409), and being offered as an extra ignores it. The till's home
+    page and search leave such a dish out, and mark a draft line or an unsaved counter line holding
+    one; the product editor has the three-way choice and the products list a three-way column and
+    filter. Staff only
+    behaves exactly as Public until guest ordering exists. **Upgrading a venue sets every product to
+    Public** (no data is carried across before production), so a venue must set again any product it
+    had as not sold on its own. **After the upgrade every published menu shows as changed**, listing
+    each product's "how it is sold", until it is published again: documents published before the
+    change carry no setting (measured on a seeded scratch venue, 2026-09-30). A standalone line
+    already stored on a held order or tab still sends and pays after a publish makes its dish Not
+    sold separately, because it was already ordered (`apps/server/src/till-api.sell-published.test.ts`:
+    "pays and sends a held order's standalone line after a publish makes it not sold separately",
+    and "fires and pays a table's held standalone line after a publish makes it not sold
+    separately"); the same line in a draft is refused when the draft is sent or saved, and the till
+    marks it for removal.
+  - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). Each
+    sleeps `2 * SUBMIT_RETRY_PAUSE_MS + 50` ms while the retries pause on real time; one more test of
+    that shape, "takes the party's revision from the floor read after a round that got no answer"
+    (`apps/till/src/till-app-parties.test.ts`), failed once during a till coverage run beside the
+    dashboard's and now waits for the "round unconfirmed" message instead (B13 branch). The eight,
+    not changed: in `apps/till/src/till-app-drafts.test.ts` "sends the same request again when no
+    answer comes, and takes the answer it then gets", "gives up after two more tries, reads the draft
+    again and says to check the tab", "shows the draft as the server holds it after a reply that
+    never came", "does not send again as the next person a Send whose reply was lost after sign-out"
+    and "says nothing to the next person when the read after a lost reply answers after sign-out"; in
+    `apps/till/src/till-app-menu-refresh.test.ts` "reads the table's party again and shows the tab the
+    table now points at" and "does not follow the table onto a new party's tab"; in
+    `apps/till/src/till-app-parties.test.ts` "shows the chosen bill when a send to it got no answer".
+    None of the eight failed in this branch's runs. **Next action:** wait for what each asserts on instead
+    of a fixed time.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -3247,9 +3285,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     recording which element has focus just before the Escape; then press a real Escape during a save
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
-  - **Tasks left: 7 to 13 and 15 to 17.** The menus tasks that change the same order and till code
+  - **Tasks left: 10 to 12 and 15 to 17.** The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
-    plan's order: 7 then 8; 10 after 8 and 9; 12 after 11; 16 after 10. Task 15 is the till side of
+    plan's order among them: 12 after 11; 16 after 10. Task 15 is the till side of
     Task 14 — no till code calls the bill-payment routes yet.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
@@ -6946,7 +6984,9 @@ reading unless marked run:
   in each (2026-09-29).
   **DONE (C74, #878, 2026-09-29):** the category form's `wt-close` handler checks `this.open` too; its
   new test in `category-form.test.ts` counted two cancels without the check and one with it. The
-  variant form stays OPEN, for lane B's B13 reason above.
+  variant form stays OPEN, for lane B's B13 reason above. _(2026-09-30: B13 is done on
+  `feat/service-standalone-ordering` and did not touch the variant form, so its fix no longer waits
+  on B13.)_
 - Pressing Escape in the Unit form opened from the product editor on the Catalogue screen
   (`apps/dashboard/src/screens/catalogue-screen.ts` mounts it at about line 711) also closes the
   product editor behind it; in the same test the Unit form sent exactly one cancel. Measured
@@ -9257,7 +9297,7 @@ while it holds decisions still open.
 | [SQLite + Litestream topologies](superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md) | slices 1 and 2 built; 3 to 5 not started | *Afterwards* |
 | [Handheld and till hardware decisions](superpowers/specs/2026-09-18-handheld-and-till-hardware-decisions.md) | decisions; the reader dropdown exists | A6 (Slice 2) |
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
-| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 10 of 18 tasks landed | A4 |
+| [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 11 of 18 tasks landed; Task 13 done on a branch | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
 | [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |

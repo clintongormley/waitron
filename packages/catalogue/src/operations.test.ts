@@ -662,6 +662,56 @@ describe("catalogue operations", () => {
     });
   });
 
+  it("creates a product with the ordering it is given, public when it is given none", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const base = {
+        catalogueId: cat.id,
+        categoryId: null,
+        unitId: eachUnitId,
+        unitPrice: "1.50",
+        vatClass: "general" as const,
+      };
+      const bacon = await createProduct(tx, {
+        ...base,
+        name: "bacon",
+        ordering: "not_sold_separately",
+      });
+      const staff = await createProduct(tx, {
+        ...base,
+        name: "staff meal",
+        ordering: "staff_only",
+      });
+      const water = await createProduct(tx, { ...base, name: "water" });
+      expect([bacon.ordering, staff.ordering, water.ordering]).toEqual([
+        "not_sold_separately",
+        "staff_only",
+        "public",
+      ]);
+      const listed = await listProducts(tx, cat.id);
+      expect(listed.find((p) => p.id === bacon.id)!.ordering).toBe("not_sold_separately");
+      expect(listed.find((p) => p.id === water.id)!.ordering).toBe("public");
+    });
+  });
+
+  it("changes a product's ordering through updateProduct and leaves it alone when not named", async () => {
+    await asTenant(async (tx) => {
+      const cat = await createCatalogue(tx, { name: "Deli" });
+      const p = await createProduct(tx, {
+        catalogueId: cat.id,
+        categoryId: null,
+        name: "bacon",
+        unitId: eachUnitId,
+        unitPrice: "1.50",
+        vatClass: "general",
+      });
+      await updateProduct(tx, p.id, { ordering: "not_sold_separately" });
+      await updateProduct(tx, p.id, { name: "streaky bacon" });
+      const listed = (await listProducts(tx, cat.id)).find((x) => x.id === p.id)!;
+      expect(listed.ordering).toBe("not_sold_separately");
+    });
+  });
+
   it("round-trips a product's allergens", async () => {
     await asTenant(async (tx) => {
       const cat = await createCatalogue(tx, { name: "Deli" });

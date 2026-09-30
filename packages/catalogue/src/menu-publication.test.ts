@@ -647,6 +647,38 @@ describe("menuStatus", () => {
         ]);
     });
 
+    // The published menu carries the setting (spec §9): a change flags the menu, and what is live
+    // keeps the old setting until the menu is published again.
+    it("flags Lunch alone for Soup's ordering, and publishing freezes the new setting", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.soup, { ordering: "not_sold_separately" }));
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
+      expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
+        {
+          kind: "product_changed",
+          productId: f.soup,
+          name: "Soup",
+          fields: ["ordering"],
+          source: "shared_product",
+        },
+      ]);
+      const soupOffer = await app((tx) => offerOf(tx, f.lunch, f.soup));
+      const liveOrdering = async () =>
+        (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document.offers[
+          soupOffer
+        ]!.ordering;
+      expect(await liveOrdering()).toBe("public");
+      await publish(f.lunch);
+      expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+      expect(await liveOrdering()).toBe("not_sold_separately");
+    });
+
+    it("flags neither for Extra lemon's ordering, used only as an extra", async () => {
+      const f = await published();
+      await app((tx) => updateProduct(tx, f.extraLemon, { ordering: "not_sold_separately" }));
+      expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
+    });
+
     it("flags neither for Lemonade made unavailable", async () => {
       const f = await published();
       await app((tx) => updateProduct(tx, f.lemonade, { available: false }));

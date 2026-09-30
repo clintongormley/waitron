@@ -93,6 +93,9 @@ declare module "@waitron/shared" {
     "product.variant_not_found": { variantId: string };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
+    /** A line ordered a product on its own whose published offer is `not_sold_separately`. It
+     * still sells as an extra on another dish. */
+    "product.not_sold_separately": { productId: string };
     /** A product with Active variants was sold as itself: a dish line from a menu offer that named
      * no variant, a dish line on the plain `productId` path or an extras pick (neither can name a
      * variant), or a raised quantity on a held line whose product has gained one since. */

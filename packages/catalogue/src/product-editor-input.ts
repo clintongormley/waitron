@@ -3,6 +3,7 @@ import { validateAllergens } from "./allergens.js";
 import { isProductPrice } from "./modifier-limits.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { nonBlankTranslations } from "./product-presentation.js";
+import { isProductOrdering, type ProductOrdering } from "./product-ordering.js";
 import { isModifierListKind } from "./product-modifiers.js";
 import type { ProductVariantInput } from "./variants.js";
 import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
@@ -72,6 +73,10 @@ function price(value: unknown, field: string): string {
   if (typeof value !== "string" || !isProductPrice(value)) invalid(field);
   return toScale(decimal(value), 2);
 }
+function ordering(value: unknown, field: string): ProductOrdering {
+  if (!isProductOrdering(value)) invalid(field);
+  return value;
+}
 function boolean(value: unknown, field: string): boolean {
   if (typeof value !== "boolean") invalid(field);
   return value;
@@ -123,7 +128,10 @@ export function parseProductEditorInput(
     body.parentId === undefined ? {} : { parentId: nullableId(body.parentId, "parentId") };
   const name = requiredText(body.name, "name");
   const customerName = nullableTranslations(body.customerName, "customerName");
-  const soldAlone = boolean(body.soldAlone, "soldAlone");
+  // `ordering` replaced it. Refused rather than ignored, so a caller still sending it is not told
+  // its setting was saved.
+  if (body.soldAlone !== undefined) invalid("soldAlone");
+  const orderingValue = ordering(body.ordering, "ordering");
   const description =
     body.description === null ? null : translations(body.description, "description");
   const unitId = nullableId(body.unitId, "unitId");
@@ -180,7 +188,7 @@ export function parseProductEditorInput(
     ...parentId,
     name,
     customerName,
-    soldAlone,
+    ordering: orderingValue,
     description: nonBlankTranslations(description),
     kitchenName: nullableText(body.kitchenName, "kitchenName"),
     image: nullableText(body.image, "image"),

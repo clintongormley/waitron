@@ -195,6 +195,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "An item on this order has sold out. Remove it and try again",
     es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",
   },
+  "product.not_sold_separately": {
+    en: "An item on this order can only be added as an extra to another dish. Remove it and try again",
+    es: "Un artículo de este pedido solo se puede añadir como extra de otro plato. Quítalo e inténtalo de nuevo",
+  },
   "menu.version_changed": {
     en: "The menu has changed since this order was started. Check the order and try again",
     es: "La carta ha cambiado desde que se empezó este pedido. Revisa el pedido e inténtalo de nuevo",

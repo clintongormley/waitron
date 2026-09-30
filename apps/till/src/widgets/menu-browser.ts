@@ -32,10 +32,15 @@ interface MenuIndex {
 
 /**
  * A product member whose offer is not among `products` is left out (switched off on this menu, D5),
- * and so is a section left with nothing to order.
+ * and so is one not sold separately, which is ordered only as an extra on another dish, and a
+ * section left with nothing to order. Staff only is shown: every till screen is staff's.
  */
 function indexMenu(menu: TillZoneMenu, products: TillProduct[]): MenuIndex {
-  const offers = new Map(products.map((product) => [product.menuItemId, product]));
+  const offers = new Map(
+    products
+      .filter((product) => product.ordering !== "not_sold_separately")
+      .map((product) => [product.menuItemId, product]),
+  );
   const index: MenuIndex = { sections: new Map(), products: new Map() };
   const walk = (members: DocumentMember[]): boolean => {
     let holdsSomething = false;

@@ -79,9 +79,15 @@ export const products = table(
     // true. `available` is never inherited by a variant.
     active: flag("active").notNull().default(true),
     available: flag("available").notNull().default(true),
-    // `sold_alone = false` marks a full product intended only to be referenced from elsewhere
-    // rather than offered standalone.
-    soldAlone: flag("sold_alone").notNull().default(true),
+    // Who may order the product on its own: `public`, `staff_only` or `not_sold_separately`. No
+    // CHECK, because adding one makes drizzle rebuild this table, whose children a rebuild deletes
+    // or refuses; the `products_ordering_check_*` triggers (0047_product_ordering_check.sql) refuse
+    // any other value. Being offered as an extra does not read it. The union is a local copy of
+    // `@waitron/catalogue`'s `PRODUCT_ORDERINGS`, which depends on THIS package, and must match it.
+    ordering: label("ordering")
+      .$type<"public" | "staff_only" | "not_sold_separately">()
+      .notNull()
+      .default("public"),
     // A content-addressed `<sha256>.<ext>` filename served by apps/server's /media route, never
     // bytes. Null just means "no picture" — unlike `allergens`' null, which is a PENDING state the
     // till surfaces.

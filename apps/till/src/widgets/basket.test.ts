@@ -615,6 +615,19 @@ describe("till-basket", () => {
     ]);
   });
 
+  it("marks a line whose dish is sold only as an extra, in English and in Spanish", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct({ ...cafe, id: "bacon", name: "Bacon" }, "1");
+    store.setBlocked(["not_sold_separately"]);
+    const said = async (locale: string) => {
+      setLocale(locale);
+      const { el } = await mountWidget<TillBasket>("till-basket", { store });
+      return el.shadowRoot!.querySelector(".line > .name .not-offered")!.textContent!.trim();
+    };
+    expect(await said("en-GB")).toBe("Only sold as an extra");
+    expect(await said("es-ES")).toBe("Solo se vende como extra");
+  });
+
   // ── As-served diet & contains badges (dietary-classification) ────────────────────────────────
 
   it("shows a vegan badge for a plant-only reviewed dish", async () => {

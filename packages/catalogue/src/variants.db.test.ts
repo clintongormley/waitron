@@ -93,7 +93,7 @@ async function fixture() {
 /** The variant rows of `parentId` as the table stores them, flags as the 0/1 this engine keeps. */
 async function storedVariants(parentId: string) {
   const { rows } = await suite.db.execute<Record<string, unknown>>(sql`
-    select id, parent_id, catalogue_id, variant_order, active, available, sold_alone, unit_price,
+    select id, parent_id, catalogue_id, variant_order, active, available, ordering, unit_price,
       vat_class, pricing_unit, dietary_declarations, diet, description, category_id, station_id,
       course_id, image, allergens, manual_allergens, recipe_derivation, diet_derivation,
       diet_override
@@ -134,7 +134,7 @@ describe("setProductVariants stores each variant as a product under its parent",
       catalogue_id: f.catalogueId,
       active: 1,
       available: 1,
-      sold_alone: 1,
+      ordering: "public",
       ...INHERITING,
     };
     expect(await storedVariants(f.parentId)).toEqual([

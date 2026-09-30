@@ -102,6 +102,9 @@ export interface ZoneMenuOffer {
   /** The product's customer-facing text, locale -> text; `null` or blank falls back to `name`. */
   readonly customerName: Readonly<Record<string, string>> | null;
   readonly kitchenName: string | null;
+  /** Who may order the product on its own, as the live version published it. A version published
+   * before the setting existed carries none. */
+  readonly ordering?: "public" | "staff_only" | "not_sold_separately";
   readonly unit: {
     readonly id: string;
     readonly name: Readonly<Record<string, string>>;

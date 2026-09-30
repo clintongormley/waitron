@@ -2762,7 +2762,10 @@ describe("till-app: the order's groups", () => {
     const order = await openMesa(el);
     await ringRound(el, order);
     emit(order, "submit-draft", roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]));
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    // The retries wait real time, which a loaded machine stretches past any fixed allowance.
+    await expect
+      .poll(() => banner(el)?.textContent ?? "", { timeout: 10_000 })
+      .toContain(t("table.round_unconfirmed"));
     await flush(el);
 
     emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });

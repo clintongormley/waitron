@@ -1,4 +1,4 @@
-import { nonBlankTranslations } from "@waitron/catalogue";
+import { isProductOrdering, nonBlankTranslations } from "@waitron/catalogue";
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -384,15 +384,15 @@ function parseProductModifiers(value: unknown): ProductModifierRef[] | undefined
 }
 
 /**
- * Refuse a product body still carrying one of the two fields the ordered `modifiers` list replaced.
- * Ignoring it would save a product with NO attachments and answer success. No first-party client
- * sends either field; this catches a client that predates the change, such as a dashboard tab left
- * open across the deploy.
+ * Refuse a product body still carrying a retired field: `modifierIds` or `optionGroupIds`, which the
+ * ordered `modifiers` list replaced, or `soldAlone`, which `ordering` replaced. Ignoring one would
+ * answer success without saving what it asked for. No first-party client sends any of them; this
+ * catches a client that predates the change, such as a dashboard tab left open across the deploy.
  */
-function refuseLegacyAttachFields(body: Record<string, unknown>): void {
-  for (const legacy of ["modifierIds", "optionGroupIds"])
-    if (body[legacy] !== undefined)
-      throw new AppError("management.request_invalid", { field: legacy });
+function refuseRetiredFields(body: Record<string, unknown>): void {
+  for (const retired of ["modifierIds", "optionGroupIds", "soldAlone"])
+    if (body[retired] !== undefined)
+      throw new AppError("management.request_invalid", { field: retired });
 }
 
 /**
@@ -1302,9 +1302,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         available?: unknown;
-        soldAlone?: unknown;
+        ordering?: unknown;
         modifiers?: unknown;
-        // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
+        // Retired fields, declared so `refuseRetiredFields` can see them.
+        soldAlone?: unknown;
         modifierIds?: unknown;
         optionGroupIds?: unknown;
       }>(c);
@@ -1343,12 +1344,12 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       if (body.available !== undefined && typeof body.available !== "boolean") {
         throw new AppError("management.request_invalid", { field: "available" });
       }
-      if (body.soldAlone !== undefined && typeof body.soldAlone !== "boolean") {
-        throw new AppError("management.request_invalid", { field: "soldAlone" });
+      if (body.ordering !== undefined && !isProductOrdering(body.ordering)) {
+        throw new AppError("management.request_invalid", { field: "ordering" });
       }
       screenDietOverride(body.dietOverride);
       // Applied in the SAME transaction as the create, so a product and its lists land atomically.
-      refuseLegacyAttachFields(body);
+      refuseRetiredFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
       const input = {
         catalogueId: body.catalogueId,
@@ -1367,7 +1368,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         ...(body.image === undefined ? {} : { image: body.image }),
         ...(body.active === undefined ? {} : { active: body.active }),
         ...(body.available === undefined ? {} : { available: body.available }),
-        ...(body.soldAlone === undefined ? {} : { soldAlone: body.soldAlone }),
+        ...(body.ordering === undefined ? {} : { ordering: body.ordering }),
       };
       const created = await gated(sessionId, async (tx) => {
         if (customerName !== null) {
@@ -1402,9 +1403,10 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         image?: unknown;
         active?: unknown;
         available?: unknown;
-        soldAlone?: unknown;
+        ordering?: unknown;
         modifiers?: unknown;
-        // The two fields `modifiers` replaced, declared so `refuseLegacyAttachFields` can see them.
+        // Retired fields, declared so `refuseRetiredFields` can see them.
+        soldAlone?: unknown;
         modifierIds?: unknown;
         optionGroupIds?: unknown;
       }>(c);
@@ -1467,11 +1469,11 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
         }
         patch.available = body.available;
       }
-      if (body.soldAlone !== undefined) {
-        if (typeof body.soldAlone !== "boolean") {
-          throw new AppError("management.request_invalid", { field: "soldAlone" });
+      if (body.ordering !== undefined) {
+        if (!isProductOrdering(body.ordering)) {
+          throw new AppError("management.request_invalid", { field: "ordering" });
         }
-        patch.soldAlone = body.soldAlone;
+        patch.ordering = body.ordering;
       }
       if (body.allergens !== undefined) {
         patch.allergens = body.allergens as ProductAllergens | null;
@@ -1482,7 +1484,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       }
       // A full replace when present; `[]` detaches them all. An empty `patch` is fine: `updateProduct`
       // always bumps `updatedAt`, so its `.set()` is never empty.
-      refuseLegacyAttachFields(body);
+      refuseRetiredFields(body);
       const modifiers = parseProductModifiers(body.modifiers);
       await gated(sessionId, async (tx) => {
         await assertOwned(tx, productId);

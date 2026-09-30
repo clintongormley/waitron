@@ -285,6 +285,19 @@ describe("lineBlock", () => {
     });
   });
 
+  it("names the dish when its offer is sold only as an extra, and not when it is staff only", () => {
+    const line = lineOf(burger, "v1");
+    expect(lineBlock(line, { ...burger, ordering: "not_sold_separately" })).toEqual({
+      reason: "not_sold_separately",
+      name: "burger",
+    });
+    expect(
+      lineBlock(line, { ...burger, available: false, ordering: "not_sold_separately" }),
+    ).toEqual({ reason: "not_sold_separately", name: "burger" });
+    expect(lineBlock(line, { ...burger, ordering: "staff_only" })).toBeUndefined();
+    expect(lineBlock(line, { ...burger, ordering: "public" })).toBeUndefined();
+  });
+
   it("names the variant when the menu stopped offering it or it cannot be sold", () => {
     const bottle = menuOfferToTillProduct(wine, "v1");
     const line: OrderLine = {

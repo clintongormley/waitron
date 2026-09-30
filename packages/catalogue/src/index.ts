@@ -1,5 +1,6 @@
 export * from "./pricing.js";
 export * from "./vat-rates.js";
+export * from "./product-ordering.js";
 export * from "./units.js";
 export * from "./operations.js";
 export * from "./content-languages.js";

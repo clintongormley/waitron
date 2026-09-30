@@ -3305,6 +3305,47 @@ describe("menuOfferToTillProduct", () => {
     expect(menuOfferToTillProduct(offer)).not.toHaveProperty("menuVersionId");
   });
 
+  // The menu browser hides a product by this value, so each of the three must arrive as sent, and a
+  // version published before the setting existed must arrive with none.
+  it("carries who may order the offer on its own, and nothing when the version carries none", () => {
+    const offer: TillMenuOffer = {
+      id: "offer-bacon",
+      menuId: "menu-1",
+      productId: "bacon",
+      grossPrice: null,
+      unitPrice: "1.50",
+      active: true,
+      available: true,
+      image: null,
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Bacon",
+      customerName: { es: "Beicon crujiente" },
+      kitchenName: "BCN",
+      unit: {
+        id: "unit-each",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+        precision: 0,
+        hardwareUnit: null,
+      },
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      diet: null,
+      dietDerivation: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      courseId: null,
+      offeredModifiers: [],
+      variants: [],
+    };
+    for (const ordering of ["public", "staff_only", "not_sold_separately"] as const)
+      expect(menuOfferToTillProduct({ ...offer, ordering }).ordering).toBe(ordering);
+    expect(menuOfferToTillProduct(offer)).not.toHaveProperty("ordering");
+  });
+
   it("offers the picker only the extras items and option labels that can be sold now", () => {
     const item = (productId: string, available: boolean) => ({
       productId,

@@ -14,7 +14,7 @@ import { productUnits } from "./schema/units.js";
  * which a variant never has of its own — see the owner joins at the end. The three names are never
  * inherited — a blank customer or kitchen name falls back to the variant's OWN staff name — nor is
  * anything that says what the row is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether
- * it is sold (`active`, `available`, `sold_alone`), or when it was written.
+ * it is sold (`active`, `available`, `ordering`), or when it was written.
  *
  * The nullability of the four columns a variant may leave blank (`vat_class`, `pricing_unit`,
  * `unit_price`, `dietary_declarations`) stops here for reads that go through

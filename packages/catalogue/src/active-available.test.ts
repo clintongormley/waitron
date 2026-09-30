@@ -37,7 +37,7 @@ beforeEach(async () => {
     body = {
       name: "Tortilla",
       customerName: null,
-      soldAlone: true,
+      ordering: "public",
       description: null,
       kitchenName: null,
       image: null,
@@ -140,13 +140,13 @@ describe("Active and Available", () => {
     });
   });
 
-  // Every Active, Available product on a menu is offered to the till, sold alone or not.
-  it("offers an Active, Available product the till whether or not it is sold alone", async () => {
-    for (const soldAlone of [true, false]) {
-      await run((tx) =>
-        saveProductEditor(tx, productId, catalogueId, { ...body, soldAlone }, "en"),
-      );
+  // Every Active, Available product on a menu is offered to the till, whatever its ordering: the
+  // offer carries the setting, and the till and the order path act on it.
+  it("offers an Active, Available product the till whatever its ordering, and says which", async () => {
+    for (const ordering of ["public", "staff_only", "not_sold_separately"] as const) {
+      await run((tx) => saveProductEditor(tx, productId, catalogueId, { ...body, ordering }, "en"));
       const offers = await run((tx) => listMenuOffers(tx, [catalogueId]));
+      expect(offers.map((offer) => offer.ordering)).toEqual([ordering]);
       expect(offers.map((offer) => offer.productId)).toEqual([productId]);
     }
   });

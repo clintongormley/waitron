@@ -641,6 +641,7 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "allergens",
   "diet",
   "vat",
+  "ordering",
   "variants",
   "extras",
   "options",
@@ -701,6 +702,7 @@ function productFields(
   const menu = new Set<ProductChangeField>();
   changedFacts(PRODUCT_FACTS, a, b, shared);
   if (!same(a.description, b.description)) shared.add("description");
+  if (a.ordering !== b.ordering) shared.add("ordering");
   if (
     !same(
       a.variants.map((variant) => variant.id),

@@ -9,7 +9,8 @@ const labelId = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const input: ProductEditorInput = {
   name: "Coffee",
   customerName: { en: "Coffee", es: "Café" },
-  soldAlone: true,
+  // Not the column default, so a parser that dropped the field and let storage default it fails.
+  ordering: "staff_only",
   description: null,
   kitchenName: null,
   image: null,
@@ -113,15 +114,32 @@ it("preserves explicit zero tax, unavailable and unreviewed rather than choosing
   expect(parse(input)).toEqual(input);
   expect(parseVariant(input)).toEqual(input);
 });
-it("carries soldAlone through but requires it in the body, exactly like available", () => {
-  expect(parse({ ...input, soldAlone: false }).soldAlone).toBe(false);
-  // An absent soldAlone is refused rather than defaulted, mirroring the available-absent case below.
-  const noFlag: Record<string, unknown> = { ...input };
-  delete noFlag.soldAlone;
-  expect(() => parse(noFlag)).toThrow(
-    expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
+it.each(["public", "staff_only", "not_sold_separately"] as const)(
+  "carries the ordering %s through",
+  (ordering) => {
+    expect(parse({ ...input, ordering }).ordering).toBe(ordering);
+  },
+);
+it("requires the ordering in the body, exactly like available", () => {
+  const noOrdering: Record<string, unknown> = { ...input };
+  delete noOrdering.ordering;
+  expect(() => parse(noOrdering)).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "ordering" } }),
   );
 });
+it.each(["secret", "Public", "", true, 1, null])("refuses the ordering %j", (ordering) => {
+  expect(() => parse({ ...input, ordering })).toThrow(
+    expect.objectContaining({ code: "product.invalid", params: { field: "ordering" } }),
+  );
+});
+it.each([true, false])(
+  "refuses the retired soldAlone field (%j) rather than silently ignoring it",
+  (soldAlone) => {
+    expect(() => parse({ ...input, soldAlone })).toThrow(
+      expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
+    );
+  },
+);
 it("refuses an absent available, the sibling required boolean", () => {
   const noAvailable: Record<string, unknown> = { ...input };
   delete noAvailable.available;
@@ -142,11 +160,6 @@ it("carries active through apart from available, and requires it in the body", (
   );
   expect(() => parse({ ...input, active: "yes" })).toThrow(
     expect.objectContaining({ code: "product.invalid", params: { field: "active" } }),
-  );
-});
-it("rejects a non-boolean soldAlone", () => {
-  expect(() => parse({ ...input, soldAlone: 1 })).toThrow(
-    expect.objectContaining({ code: "product.invalid", params: { field: "soldAlone" } }),
   );
 });
 it("parses an explicit null unit as null (the Each option)", () => {

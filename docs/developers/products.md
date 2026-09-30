@@ -276,10 +276,19 @@ read from the current rows, as is whether each product and variant is Active and
 
 Each product placed in a menu's published structure, and offered by it, gets a button in the till's
 menu browser (`apps/till/src/widgets/menu-browser.ts`): where the structure places it, in the search
-results, and wherever the device's home layout places it, whether or not it is marked as sold alone.
-A diet filter that staff turn on hides the dishes it rejects. One that cannot be sold now keeps its
-button, greyed, and a tap on it does nothing (`hasSomethingToSell`,
-`apps/till/src/widgets/product-pick.ts`), so the buttons around it do not move; the till's
+results, and wherever the device's home layout places it. The exception is a product whose
+standalone ordering the menu published as Not sold separately (`LiveOffer.ordering`): it has no
+button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
+extras list still offers it. Staff only gets a button like Public, because there is no guest
+ordering yet. A draft line, or a counter basket line not yet saved, that holds a dish now sold only
+as an extra is marked "Only sold as an extra" (`lineBlock`, `apps/till/src/state/menu-refresh.ts`):
+a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
+is removed. A line already stored on a held order or tab is not marked, and still sends and pays,
+because it was already ordered. The server refuses a new standalone line for such a dish with
+`product.not_sold_separately`, by the same published setting. A diet filter that staff turn on
+hides the dishes it rejects. One that cannot be sold now keeps its button, greyed, and a tap on it
+does nothing (`hasSomethingToSell`, `apps/till/src/widgets/product-pick.ts`), so the buttons around
+it do not move; the till's
 menu-state poll greys and restores it without reloading the offers (`apps/till/src/till-app.ts`). A
 variant never has a button: it is listed only nested under its parent's offer
 (`LiveOffer.variants`). The till reads its offers from the zone
@@ -342,6 +351,11 @@ froze (`TabLine.unitPrecision`), since a variant is not one of the till's produc
 
 ### In the product editor
 
+Under Available, **Standalone ordering** offers three choices: Public, Staff only and Not sold
+separately (`products.ordering`). A variant's own page does not offer it, because the till and the
+server read the dish's setting and a variant is only ever ordered under its dish. The products list
+shows the same setting as a column with a filter (`apps/dashboard/src/widgets/product-list.ts`).
+
 The editor allows any number of variants, one included (`apps/dashboard/src/widgets/product-editor.ts`):
 
 - **Add variant** opens the Add window for one variant, and saving that window adds one row.
@@ -403,11 +417,12 @@ migration, whose hash changed although the count did not", `packages/provisionin
 `dashboard-product-editor` (`apps/dashboard/src/widgets/product-editor.ts`) is one short form. The
 fields that change often are always visible; everything else is folded into a `wt-disclosure`
 section that shows a one-line summary of what is inside it, so nothing filled in is invisible while
-collapsed. Top to bottom: Name, Category and labels, Available, ▸ Kitchen, ▸ Descriptors,
+collapsed. Top to bottom: Name, Category and labels, Available, Standalone ordering (absent on a
+variant's page), ▸ Kitchen, ▸ Descriptors,
 ▸ Nutritional info, Price (and the variants table, if there are variants), Modifiers, then Cancel and
 Save. An Inactive product's editor also opens with a line saying so, and offers Restore beside
-Save. Opened on a variant, the same form is the variant's own page: it has no Modifiers or Variants
-section, and each field the variant may leave blank to take the parent's value shows that value as
+Save. Opened on a variant, the same form is the variant's own page: it has no Standalone ordering, Modifiers or
+Variants section, and each field the variant may leave blank to take the parent's value shows that value as
 its hint.
 
 The form's Modifiers section is one ordered list mixing extras lists and options lists, reordered by
@@ -436,7 +451,8 @@ The product write body carries `name` (required, plain text), `customerName` (a 
 `null`), `description`, `kitchenName`, `image`, the price and tax fields, `primaryCategoryId` (the
 main reporting category), `labelIds`, `modifiers` (the ordered attachment list, each entry a `kind` of `extras` or
 `options` and a list id — it replaced the flat `modifierIds` on 2026-09-19), the allergen and
-dietary declarations, the two required state flags `active` and `available` (below), and `variants`
+dietary declarations, the two required state flags `active` and `available` (below), the required
+`ordering` (a body carrying the retired `soldAlone` is refused), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
 a required `active`, plus `id` when it already exists. Each variant's `active` is written as sent,
 and a saved variant left out of the body is made Inactive (`setProductVariants`,

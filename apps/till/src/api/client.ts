@@ -32,6 +32,7 @@ import type {
   TimingBand,
 } from "@waitron/shared";
 import type { AccessibleCatalogue, OfferedModifier } from "@waitron/catalogue/src/menu-types.js";
+import type { ProductOrdering } from "@waitron/catalogue/src/product-ordering.js";
 import type {
   LiveOffer,
   MenuState,
@@ -239,6 +240,9 @@ export interface TillProduct {
   menuVersionId?: string;
   /** False when it cannot be sold now; absent on a retrieved held line. */
   available?: boolean;
+  /** Who may order it on its own, as its menu version published it; absent on a retrieved held line
+   * and from a version published before the setting existed. */
+  ordering?: ProductOrdering;
   variantId?: string;
   /** The selected variant's staff-facing name; a line naming a variant is shown under it alone. */
   variantName?: string;
@@ -400,6 +404,7 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     menuItemId: offer.id,
     ...(menuVersionId === undefined ? {} : { menuVersionId }),
     available: offer.available,
+    ...(offer.ordering === undefined ? {} : { ordering: offer.ordering }),
     name: offer.name,
     customerName: offer.customerName,
     kitchenName: offer.kitchenName,

@@ -1111,7 +1111,7 @@ describe("mountCatalogueApi — products", () => {
       unitPrice: "2.00",
       active: true,
       available: true,
-      soldAlone: true,
+      ordering: "public",
       vatClass: "general",
       variants: [
         {
@@ -1243,7 +1243,7 @@ describe("mountCatalogueApi — products", () => {
       unitPrice: "2.00",
       active: true,
       available: true,
-      soldAlone: true,
+      ordering: "public",
       vatClass: "general",
       variants: [],
       labelIds: [],
@@ -2063,10 +2063,9 @@ describe("mountCatalogueApi — products", () => {
     expect((await omitted.json()) as { active: boolean }).toMatchObject({ active: true });
   });
 
-  it("POST/PATCH /management-api/products carries soldAlone, defaulting to true and round-tripping", async () => {
+  it("POST/PATCH /management-api/products carries ordering, defaulting to public and round-tripping", async () => {
     const app = mountApp();
-    const catalogueId = await createCatalogueVia(app, "Sold-alone catalogue");
-    // Explicit false is created as a referenced-only product and reads back false.
+    const catalogueId = await createCatalogueVia(app, "Ordering catalogue");
     const referenced = await send(app, "POST", "/management-api/products", {
       body: {
         catalogueId,
@@ -2075,14 +2074,14 @@ describe("mountCatalogueApi — products", () => {
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "general",
-        soldAlone: false,
+        ordering: "not_sold_separately",
       },
     });
     expect(referenced.status).toBe(201);
-    const referencedBody = (await referenced.json()) as { id: string; soldAlone: boolean };
-    expect(referencedBody).toMatchObject({ soldAlone: false });
+    const referencedBody = (await referenced.json()) as { id: string; ordering: string };
+    expect(referencedBody).toMatchObject({ ordering: "not_sold_separately" });
     const referencedId = referencedBody.id;
-    // Omitting soldAlone preserves the column default: a standalone product.
+    // Omitting ordering preserves the column default.
     const omitted = await send(app, "POST", "/management-api/products", {
       body: {
         catalogueId,
@@ -2094,27 +2093,25 @@ describe("mountCatalogueApi — products", () => {
       },
     });
     expect(omitted.status).toBe(201);
-    expect((await omitted.json()) as { soldAlone: boolean }).toMatchObject({ soldAlone: true });
-    // PATCH flips it back on and the change lands.
+    expect((await omitted.json()) as { ordering: string }).toMatchObject({ ordering: "public" });
     const patched = await send(app, "PATCH", `/management-api/products/${referencedId}`, {
-      body: { soldAlone: true },
+      body: { ordering: "staff_only" },
     });
     expect(patched.status).toBe(204);
     const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
-    const row = ((await list.json()) as { id: string; soldAlone: boolean }[]).find(
+    const row = ((await list.json()) as { id: string; ordering: string }[]).find(
       (r) => r.id === referencedId,
     )!;
-    expect(row).toMatchObject({ soldAlone: true });
+    expect(row).toMatchObject({ ordering: "staff_only" });
   });
 
-  it.each([
+  describe.each([
     ["POST", "/management-api/products"],
     ["PATCH", "/management-api/products/:id"],
-  ] as const)(
-    "%s /management-api/products rejects a non-boolean soldAlone → management.request_invalid 400",
-    async (method, template) => {
+  ] as const)("%s /management-api/products", (method, template) => {
+    async function sendOrdering(fields: Record<string, unknown>) {
       const app = mountApp();
-      const catalogueId = await createCatalogueVia(app, `Bad-soldAlone ${method} catalogue`);
+      const catalogueId = await createCatalogueVia(app, `Bad-ordering ${method} catalogue`);
       const created = await send(app, "POST", "/management-api/products", {
         body: {
           catalogueId,
@@ -2136,18 +2133,44 @@ describe("mountCatalogueApi — products", () => {
               pricingUnit: "each",
               unitPrice: "1.00",
               vatClass: "general",
-              soldAlone: 1,
+              ...fields,
             }
-          : { soldAlone: 1 };
+          : fields;
       const res = await send(app, method, path, { body });
-      expect(res.status).toBe(400);
-      expect(
-        (await res.json()) as { error: { code: string; params: { field: string } } },
-      ).toMatchObject({
-        error: { code: "management.request_invalid", params: { field: "soldAlone" } },
-      });
-    },
-  );
+      const list = await send(app, "GET", `/management-api/catalogues/${catalogueId}/products`);
+      return { res, products: (await list.json()) as { name: string; ordering: string }[] };
+    }
+
+    it.each(["secret", "Public", "", true, null, 1])(
+      "rejects the ordering %j → management.request_invalid 400, writing nothing",
+      async (ordering) => {
+        const { res, products } = await sendOrdering({ ordering });
+        expect(res.status).toBe(400);
+        expect(
+          (await res.json()) as { error: { code: string; params: { field: string } } },
+        ).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "ordering" } },
+        });
+        expect(products.map(({ name, ordering }) => ({ name, ordering }))).toEqual([
+          { name: "Base", ordering: "public" },
+        ]);
+      },
+    );
+
+    // `ordering` replaced it; ignoring it would tell a caller still sending it that it was saved.
+    it.each([true, false])(
+      "rejects the retired soldAlone (%j) → management.request_invalid 400",
+      async (soldAlone) => {
+        const { res } = await sendOrdering({ soldAlone });
+        expect(res.status).toBe(400);
+        expect(
+          (await res.json()) as { error: { code: string; params: { field: string } } },
+        ).toMatchObject({
+          error: { code: "management.request_invalid", params: { field: "soldAlone" } },
+        });
+      },
+    );
+  });
 
   it("POST /management-api/products with a missing required field → management.request_invalid 400", async () => {
     const app = mountApp();
@@ -4183,7 +4206,7 @@ describe("catalogue routes that already refused a negative price", () => {
       unitPrice: "2.00",
       active: true,
       available: true,
-      soldAlone: true,
+      ordering: "public",
       vatClass: "general",
       variants: [variant("A", "2.00"), variant("B", "3.00")],
       labelIds: [],

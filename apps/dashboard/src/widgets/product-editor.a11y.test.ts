@@ -23,7 +23,7 @@ const coffee: ProductEditorDraft = {
   vatClass: "reduced",
   active: true,
   available: true,
-  soldAlone: true,
+  ordering: "public",
   variants: [],
   allergens: { milk: { presence: "may_contain" } },
   dietaryDeclarations: ["vegan"],
@@ -137,6 +137,8 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     "variant-window",
     "inactive",
     "variant-page",
+    "ordering",
+    "ordering-refused",
   ])("renders %s", async (state) => {
     const { el, host } = await mountWidget<ProductEditor>(
       "dashboard-product-editor",
@@ -158,7 +160,9 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                     ? variantPage
                     : state === "categories"
                       ? { ...coffee, labelIds: ["alcoholic", "happy"] }
-                      : coffee,
+                      : state === "ordering"
+                        ? { ...coffee, ordering: "staff_only" }
+                        : coffee,
         extraLists,
         optionLists,
         categories: [
@@ -171,9 +175,21 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         ],
         stations: [{ id: "bar", name: "Bar" }],
         courses: [{ id: "starters", name: "Starters" }],
+        fieldErrors:
+          state === "ordering-refused" ? { ordering: "The server rejected this value." } : {},
       },
       theme,
     );
+    if (state === "ordering" || state === "ordering-refused") {
+      // Without these the scan could pass on an editor that drew no choices, no help and no refusal.
+      const radios = el.shadowRoot!.querySelectorAll<HTMLInputElement>("input[name=ordering]");
+      expect([...radios].map((radio) => radio.checked)).toEqual(
+        state === "ordering" ? [false, true, false] : [true, false, false],
+      );
+      expect(el.shadowRoot!.getElementById("ordering-staff_only-hint")!.textContent).not.toBe("");
+      if (state === "ordering-refused")
+        expect(el.shadowRoot!.getElementById("ordering-error")!.textContent).not.toBe("");
+    }
     if (state === "errors") el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     if (state === "categories") {
       // Without this the scan could pass on an editor that drew no chosen labels.

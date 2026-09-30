@@ -72,6 +72,10 @@ export const VARIANT_PARENT_FIXED_REFUSAL = "a variant's parent is fixed when it
 /** `products_id_fixed_update`: a product's `id` changed after insert. */
 export const PRODUCT_ID_FIXED_REFUSAL = "a product's id never changes";
 
+/** `products_ordering_check_*`: `ordering` is not one of its three values. */
+export const PRODUCT_ORDERING_REFUSAL =
+  "a product's ordering must be public, staff_only or not_sold_separately";
+
 /** `bill_payments_guard_update`: a fixed column changed, or the state moved another way. */
 export const BILL_PAYMENT_CHANGE_REFUSAL = "bill payment cannot make that change";
 

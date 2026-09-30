@@ -8172,15 +8172,19 @@ describe("a failed list refresh after a successful write", () => {
 });
 
 describe("a counter pay, place or hold refused for a reason the operator can act on", () => {
-  // Each of these refusals names what to do (wait for the card, remove the sold-out item); the
-  // generic "try again" would send the operator round the same refusal.
+  // Each of these refusals names what to do (wait for the card, remove the sold-out item or the one
+  // sold only as an extra); the generic "try again" would send the operator round the same refusal.
   const actions = [
     ["confirm-payment", { method: "cash", amount: "5" }, "recordSale", undefined, "sale.error"],
     ["collect-card", {}, "pay", undefined, "sale.error"],
     ["place-order", undefined, "placeOrder", "invoice_first", "place.error"],
   ] as const;
 
-  for (const code of ["order.payment_in_flight", "product.unavailable"]) {
+  for (const code of [
+    "order.payment_in_flight",
+    "product.unavailable",
+    "product.not_sold_separately",
+  ]) {
     it.each(actions)(
       `${code}: %s shows the code's own message, not the generic one`,
       async (type, detail, method, orderFlow, generic) => {

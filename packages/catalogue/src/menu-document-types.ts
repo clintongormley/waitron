@@ -27,17 +27,22 @@ export type FrozenOfferedModifier =
 
 export type FrozenOfferVariant = Omit<MenuOfferVariant, OverlayOfferField>;
 
+/** Absent from a document published before the setting existed: a published version is never
+ * rewritten. */
+type PublishedOrdering = { ordering?: MenuOffer["ordering"] };
+
 export type FrozenOffer = Omit<
   MenuOffer,
-  OverlayOfferField | "placements" | "offeredModifiers" | "variants"
-> & {
-  /** The dish's own photo and description, which `MenuOffer` does not carry. */
-  image: string | null;
-  description: Record<string, string> | null;
-  variants: FrozenOfferVariant[];
-  placements: string[][];
-  offeredModifiers: FrozenOfferedModifier[];
-};
+  OverlayOfferField | "placements" | "offeredModifiers" | "variants" | "ordering"
+> &
+  PublishedOrdering & {
+    /** The dish's own photo and description, which `MenuOffer` does not carry. */
+    image: string | null;
+    description: Record<string, string> | null;
+    variants: FrozenOfferVariant[];
+    placements: string[][];
+    offeredModifiers: FrozenOfferedModifier[];
+  };
 
 export type DocumentMember =
   | { kind: "product"; menuItemId: string; productId: string }
@@ -104,7 +109,7 @@ export type LiveOfferedModifier =
  * A published offer with the live fields put back from the current rows. Every variant, extras item
  * and option label the document holds is present, each marked with whether it can be sold now.
  */
-export interface LiveOffer extends MenuOffer {
+export interface LiveOffer extends Omit<MenuOffer, "ordering">, PublishedOrdering {
   available: boolean;
   image: string | null;
   description: Record<string, string> | null;
@@ -151,6 +156,7 @@ export type ProductChangeField =
   | "allergens"
   | "diet"
   | "vat"
+  | "ordering"
   | "variants"
   | "extras"
   | "options";

@@ -32,6 +32,7 @@ import {
   createOptionList,
   createProduct,
   units,
+  updateProduct,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { createPrinter, updatePrinter } from "@waitron/printing";
@@ -46,6 +47,7 @@ import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { createTable } from "./tables.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { republishMenus } from "./testing/publish-menu.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -2440,6 +2442,23 @@ describe("edits inside groups (D19)", () => {
     });
     expect(await groupRow(added.id)).toMatchObject({ submittedBy: MIA, firedBy: MIA });
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
+  });
+
+  it("refuses raising a FIRED line's quantity once a publish makes its dish not sold separately, writing nothing", async () => {
+    const v = await setupVenue();
+    const s = await specExample(v);
+    const [beer] = await linesIn(s.partyId, s.drinks);
+    await inTx(async (tx) => {
+      await updateProduct(tx, v.productId.beer, { ordering: "not_sold_separately" });
+      await republishMenus(tx);
+    });
+
+    await expectRefusedWithNothingWritten(
+      v,
+      s.partyId,
+      () => changeLine(v, s.tabId, beer!.lineNo, { quantity: "3" }, MIA),
+      { code: "product.not_sold_separately", params: { productId: v.productId.beer } },
+    );
   });
 
   it("changes a HELD line's quantity in place, in its group, and moves the party on", async () => {

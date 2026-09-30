@@ -3,6 +3,7 @@ import type { VatClass } from "./vat-rates.js";
 import type { ProductAllergens } from "./allergens.js";
 import type { DietOverride } from "./dietary.js";
 import type { DietaryLabel } from "./dietary-declarations.js";
+import type { ProductOrdering } from "./product-ordering.js";
 
 /**
  * The product wire shapes — the JSON the catalogue read/write paths hand across the HTTP boundary, so
@@ -102,9 +103,8 @@ export interface Product {
   /** The translated name a guest reads (locale → text), or null when the product has none. A blank
    * customer name falls back to `name`; `product-presentation.ts` owns that fallback. */
   customerName: Record<string, string> | null;
-  /** Whether this product may be sold on its own. `false` marks a full product intended only to be
-   * referenced from elsewhere rather than offered standalone. */
-  soldAlone: boolean;
+  /** Who may order the product on its own (`product-ordering.ts`). */
+  ordering: ProductOrdering;
   unitId: string;
   unit: Unit;
   description: Record<string, string> | null;
@@ -149,9 +149,9 @@ export interface ProductEditorInput {
   parentId?: string | null;
   name: string;
   customerName: Record<string, string> | null;
-  /** Whether the product may be sold on its own. Required in the editor body, like `available` — the
+  /** Who may order the product on its own. Required in the editor body, like `available` — the
    * parser refuses a body that omits it rather than defaulting. */
-  soldAlone: boolean;
+  ordering: ProductOrdering;
   description: Record<string, string> | null;
   kitchenName: string | null;
   image: string | null;

@@ -16,12 +16,20 @@ import {
   type ModifierListChoice,
 } from "./product-editor-model.js";
 import type { CategorySummary, Label, Product } from "../api/client.js";
+import {
+  PRODUCT_ORDERINGS,
+  type ProductOrdering,
+} from "@waitron/catalogue/src/product-ordering.js";
 
 interface ProductRow {
   key: string;
   parentKey: string | null;
   product: Product;
   variant: Product["variants"][number] | null;
+}
+
+function orderingName(ordering: ProductOrdering): string {
+  return t(`product.ordering_${ordering}`);
 }
 
 /** The till sells a variant only while it AND its product are Active, so that is its status. */
@@ -239,37 +247,30 @@ export class ProductList extends LitElement {
         searchValue: ({ product, variant }) => (variant ? "" : this.#modifierNames(product)),
       },
       {
-        key: "sold-alone",
+        key: "ordering",
         choosable: "shown",
-        label: t("product.sold_alone"),
+        label: t("product.ordering"),
         // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
         // every row and a variant is shown or hidden together with its product.
         cell: ({ product, variant }) => {
           if (variant) return html`<span part="variant-muted">—</span>`;
           return html`<span
             part="badge"
-            data-test="sold-alone-badge"
-            data-sold-alone=${product.soldAlone ? "true" : "false"}
-            >${
-              product.soldAlone ? t("product.sold_alone_badge") : t("product.not_sold_alone_badge")
-            }</span
+            data-test="ordering-badge"
+            data-ordering=${product.ordering}
+            >${orderingName(product.ordering)}</span
           >`;
         },
-        searchValue: ({ product, variant }) =>
-          variant
-            ? ""
-            : product.soldAlone
-              ? t("product.sold_alone_badge")
-              : t("product.not_sold_alone_badge"),
-        sortValue: ({ product }) => (product.soldAlone ? 0 : 1),
+        searchValue: ({ product, variant }) => (variant ? "" : orderingName(product.ordering)),
+        sortValue: ({ product }) => PRODUCT_ORDERINGS.indexOf(product.ordering),
         filter: {
-          label: t("product.sold_alone"),
-          allLabel: t("product.filter_sold_alone_all"),
-          value: ({ product }) => (product.soldAlone ? "true" : "false"),
-          options: [
-            { value: "true", label: t("product.sold_alone_badge") },
-            { value: "false", label: t("product.not_sold_alone_badge") },
-          ],
+          label: t("product.ordering"),
+          allLabel: t("product.filter_ordering_all"),
+          value: ({ product }) => product.ordering,
+          options: PRODUCT_ORDERINGS.map((ordering) => ({
+            value: ordering,
+            label: orderingName(ordering),
+          })),
         },
       },
       {
