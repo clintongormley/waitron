@@ -2759,7 +2759,7 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * source's context onto a new order. Every transfer is validated before anything moves. A partial
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
- * the part split. Returns each ticket item a split made, mapped to the one it was copied from, and
+ * the part split, and refused the same when an extra is not a whole count a dish. Returns each ticket item a split made, mapped to the one it was copied from, and
  * each row a split made, keyed by the row it came from, a dish before its extras.
  */
 export async function carveOffLines(
@@ -2832,7 +2832,9 @@ export async function carveOffLines(
   // source, which `working_order_lines_quantity_ck` refuses.
   const wholeLineNos: number[] = [];
   type SourceLine = (typeof sourceLines)[number];
-  const partials: { line: SourceLine; quantity: string; children: SourceLine[] }[] = [];
+  /** An extra split with its dish: what stays on its row and what goes to the new one. */
+  type ExtraPart = { row: SourceLine; remaining: Decimal; moved: Decimal };
+  const partials: { line: SourceLine; quantity: string; children: ExtraPart[] }[] = [];
   for (const t of transfers) {
     const line = byLineNo.get(t.lineNo);
     if (line === undefined) {
@@ -2873,11 +2875,28 @@ export async function carveOffLines(
       if (childLineNos.length > 0 && opts.splitExtras !== true) {
         throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
       }
-      partials.push({
-        line,
-        quantity: t.quantity,
-        children: childLineNos.map((childLineNo) => byLineNo.get(childLineNo)!),
+      const moved = decimal(t.quantity);
+      const remaining = subtractDecimal(decimal(line.quantity), moved);
+      const children = childLineNos.map((childLineNo) => {
+        const row = byLineNo.get(childLineNo)!;
+        const perDish = perDishOptionQuantity(row.quantity, line.quantity);
+        return {
+          row,
+          remaining: extraQuantityFor(perDish, remaining),
+          moved: extraQuantityFor(perDish, moved),
+        };
       });
+      // An extra that is not a whole count a dish would split into parts that do not add up to it,
+      // and the bill would drift.
+      if (
+        children.some(
+          (child) =>
+            compareDecimal(sumDecimals([child.remaining, child.moved]), child.row.quantity) !== 0,
+        )
+      ) {
+        throw new AppError("tab.transfer_modifier_line", { tabId: fromTabId, lineNo: t.lineNo });
+      }
+      partials.push({ line, quantity: t.quantity, children });
     }
   }
   // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
@@ -2967,13 +2986,7 @@ export async function carveOffLines(
       const splitLineId = await splitRow(line, remaining, decimal(quantity), null);
       // Numbered straight after their dish: a receipt reads a dish's extras from the rows after it.
       for (const child of children) {
-        const perDish = perDishOptionQuantity(child.quantity, line.quantity);
-        await splitRow(
-          child,
-          extraQuantityFor(perDish, remaining),
-          extraQuantityFor(perDish, decimal(quantity)),
-          splitLineId,
-        );
+        await splitRow(child.row, child.remaining, child.moved, splitLineId);
       }
       if (line.ticketItemId !== null) {
         const splitTicketId = await splitTicketItem(

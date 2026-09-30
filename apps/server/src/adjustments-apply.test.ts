@@ -2370,6 +2370,30 @@ describe("part of a dish with extras (B11d)", () => {
     },
   );
 
+  it("refuses part of a dish whose extra is not a whole count a dish, rather than let the bill drift", async () => {
+    const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
+    // Written by hand: no product path is known to store an extra that is not a whole count a dish.
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ quantity: 2000, lineTotal: 300 })
+        .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 2))),
+    );
+    expect(total(await rowsOf(venue, billId))).toBe("30.00");
+
+    await refusedWith(
+      billId,
+      {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "discount_percent",
+        percentBp: 1000,
+        quantity: "1",
+      },
+      "tab.transfer_modifier_line",
+      { tabId: billId, lineNo: 1 },
+    );
+  });
+
   it("prints the carved pizza's olives on the VOID slip when the carved pizza is cancelled", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
     await adjust(billId, {
