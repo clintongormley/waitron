@@ -329,6 +329,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
   action: navigation, refresh, logout and session expiry never open one. Save the authenticated email
   and the successful method only with Remember selected, never in tab storage.
+- **A login's refusal never says whether the account exists** (owner, 2026-09-30): unknown,
+  suspended, pending, wrong password or PIN and wrong code all answer one code (`password.invalid`
+  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause that marks
+  no field; the real cause goes to the log only, as an `AppError`'s `reason`. Guards: each login
+  route's one-answer case — a new sign-in route is seen by none of them. See
+  [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the

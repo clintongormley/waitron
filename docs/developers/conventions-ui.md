@@ -180,6 +180,25 @@ shortcut and current attempt. Recovery uses one public entry for pending-account
 active-account reset, with the same acknowledgement for every address. Owner decision, built in
 #317.
 
+## A login's refusal never says whether the account exists
+
+The owner's rule (2026-09-30): "reasons for login shouldn't expose the existence or non existence
+of a user. so any failure should just report that the login failed." Every sign-in answers an
+unknown account, a suspended or pending one, one with no credential set, a wrong password or PIN
+and a wrong authenticator or recovery code with ONE code, the same params and the same status —
+`password.invalid` for a password login, `pin.invalid` for a PIN — each after the same hashing
+work, and a screen shows it as one sentence for every cause, marking no field — "the login failed"
+beside the action on the dashboard and the setup wizard, "Wrong PIN" on the till, where the PIN is
+the only thing typed.
+The real cause goes to the server log only: throw with `new AppError(code, {}, { reason })`, which
+the route error boundary logs as `logReason` and never answers. Validation that does not depend on
+the account (an empty required field, a malformed code) may still sit under its field; a signed-in
+person re-checking their OWN password or code may be told which one was wrong. Two answers are
+reachable only after a credential was proved and stay: `totp.required` and
+`google.second_factor_required`. Guards: the one-answer cases in
+`packages/identity/src/manager-login.test.ts` and `packages/identity/src/login.test.ts`, and in each
+login route's suite — a new sign-in route is seen by none of them. Built in C95.
+
 **UI primitives in `packages/ui`**
 
 [design-system.md](design-system.md) is the DESIGN authority for the rules in this group and states
