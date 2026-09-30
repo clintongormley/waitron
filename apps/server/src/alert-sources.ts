@@ -2,7 +2,7 @@
 // polls. The registry stamps each returned alert's `kind` and `area`; a source only supplies the
 // per-alert facts.
 
-import { and, count, eq, lt, min } from "drizzle-orm";
+import { and, count, eq, isNull, lt, min, ne, or } from "drizzle-orm";
 import { printAgents, printJobs, printers } from "@waitron/db";
 import type { AlertSource, OngoingAlert } from "@waitron/module";
 import {
@@ -11,6 +11,7 @@ import {
   type CardProviderRuntimeDeps,
   cardReaders,
 } from "@waitron/payments";
+import { PRINTER_UNPAIRED } from "@waitron/printing";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
 import type { AwaitingCertStatus } from "./pass.js";
@@ -287,7 +288,14 @@ export function printingAlertSource(): AlertSource {
         })
         .from(printers)
         .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
-        .where(and(eq(printers.active, true), printJobInTrouble(now)))
+        .where(
+          and(
+            eq(printers.active, true),
+            printJobInTrouble(now),
+            // Ended on purpose, and a resend makes a new job, so these would hold the alert for ever.
+            or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
+          ),
+        )
         .groupBy(printers.id, printers.name);
       for (const r of rows) {
         // A group only forms when a job matched, and `created_at` is notNull, so `oldest` is present.
