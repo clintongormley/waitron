@@ -32,6 +32,7 @@ import type { SettleSaleTender } from "@waitron/core";
 import {
   associatePaymentWithSale,
   findPaymentsByBillPayments,
+  MANUAL_PROVIDER,
   recordManualCardPayment,
 } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
@@ -134,6 +135,8 @@ export interface BillPaymentView {
   kind: "items" | "contribution" | "share";
   shareOf: number | null;
   method: "cash" | "card";
+  /** A card's: keyed on a separate terminal (`manual`), or taken at a reader; `null` for cash. */
+  entry: "manual" | "reader" | null;
   applied: Decimal;
   tip: Decimal;
   tendered: Decimal | null;
@@ -429,8 +432,8 @@ function holdsMoney(payments: readonly PaymentMoney[]): boolean {
 
 /**
  * Refuse `bill.payments_received` for the first of these bills that holds money taken before its
- * invoice (design §4.5): abandoning it, or merging it into another bill, would lose that money from
- * the records.
+ * invoice (design §4.5): discarding it (`abandonHeldOrder`), or discarding it as an emptied bill
+ * when its table is finished (`finishTable`), would lose that money from the records.
  */
 export async function refuseBillHoldingMoney(
   tx: Transaction,
@@ -525,6 +528,7 @@ function toView(
   lines: readonly PaymentLineRow[],
   refunds: readonly RefundRow[],
   lineNos: ReadonlyMap<string, number>,
+  manualCards: ReadonlySet<string>,
 ): BillPaymentView {
   return {
     id: payment.id,
@@ -532,6 +536,7 @@ function toView(
     kind: payment.kind,
     shareOf: payment.shareOf,
     method: payment.method,
+    entry: payment.method === "cash" ? null : manualCards.has(payment.id) ? "manual" : "reader",
     applied: centsToDecimal(payment.applied),
     tip: centsToDecimal(payment.tip),
     tendered: payment.tendered === null ? null : centsToDecimal(payment.tendered),
@@ -550,6 +555,18 @@ function toView(
       })),
     refunds: refunds.filter((refund) => refund.billPaymentId === payment.id).map(toRefundView),
   };
+}
+
+/** The card payments keyed on a separate terminal: their provider row is the manual one, written in
+ * the payment's own transaction (`takeBillPayment`). */
+async function manualCardsOf(tx: Transaction, rows: readonly PaymentRow[]): Promise<Set<string>> {
+  const provided = await findPaymentsByBillPayments(
+    tx,
+    rows.filter((row) => row.method === "card").map((row) => row.id),
+  );
+  return new Set(
+    [...provided].filter(([, card]) => card.provider === MANUAL_PROVIDER).map(([id]) => id),
+  );
 }
 
 /**
@@ -572,6 +589,7 @@ export async function readBillBalance(
   const held = moneyOf(rows, refunds);
   const lines = await readPaymentLines(tx, held);
   const lineNos = await readLineNos(tx, workingOrderId);
+  const manualCards = await manualCardsOf(tx, rows);
   const funds = fundsOf(
     workingOrderId,
     total ?? (lineNos.size === 0 ? ZERO : (await priceStoredOrder(tx, workingOrderId)).total),
@@ -588,7 +606,7 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map(({ row }) => toView(row, lines, refunds, lineNos)),
+    payments: held.map(({ row }) => toView(row, lines, refunds, lineNos, manualCards)),
     paidLines: [...paidQuantitiesOf(held, lines)]
       .flatMap(([lineId, quantity]) => {
         const lineNo = lineNos.get(lineId);

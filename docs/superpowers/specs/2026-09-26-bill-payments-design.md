@@ -574,7 +574,10 @@ A pending bill payment is resolved from the provider's row, never from its age:
   applied; or, when the payer asks for the whole payment back, its net applied plus its net tip.
   It needs the existing `sale.refund` permission (`packages/identity/src/permissions.ts:7`),
   approved on the operator's device with the manager PIN override that keeps the waiter signed in
-  (`authorize`). A cash refund opens the drawer through an audited drawer job (`bill_refund`); a
+  (`authorize`). _(2026-09-30, B15: the override is needed only when the operator may not give
+  refunds. The till sends a cash or card-reader refund in the operator's own name first, and opens
+  the PIN prompt only on `authorization.not_permitted`; a card keyed on a separate terminal always
+  takes one PIN, `apps/server/src/bill-refunds.ts`.)_ A cash refund opens the drawer through an audited drawer job (`bill_refund`); a
   card refund goes through §6b's durable path, which asks the provider for the EXACT amount, never
   the whole capture (`refund` returns the whole capture, tip included,
   `packages/payments/src/provider.ts:124-125`). Every provider declares `partialRefund: true` on
@@ -803,6 +806,15 @@ order refuse `bill.payments_received` for a bill holding ANY pending or received
 including one refunded in full (`refuseBillWithPayments`, `apps/server/src/bill-payments.ts`).
 Abandoning a bill and merging it into another still go through once every payment is refunded in
 full (§4.5; `refuseBillHoldingMoney`, the same file).)_
+_(2026-09-30: no longer true of merging. The table-actions design's decision 5 (owner, 2026-09-28,
+`docs/superpowers/specs/2026-09-28-table-actions-design.md`) lets only an untouched bill merge, and
+the code refuses merging two bills, or moving items between them, with `bill.payments_received`
+while either has any pending or received payment, one refunded in full included
+(`requireUntouchedPair`, `apps/server/src/bill-actions.ts`). Abandoning still goes through once
+every payment is refunded in full.)_
+_(2026-09-30, lane B item B15: Task 15 kept `/api/sales` and `/api/pay` for a bill with no payment
+on it. The till uses the bill routes once money is on the bill, or when the operator picks Pay
+items, Contribute or Split equally.)_
 
 The helper calls `recordSale` with immediate settlement and the tenders of §2.5, links every card
 bill payment's `payments` row to the sale, settles the order and queues the receipt (which lists

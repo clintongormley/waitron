@@ -7,12 +7,18 @@ import {
   addDecimal,
   decimal,
   formatMoney,
+  negateDecimal,
   perDishOptionQuantity,
   resolveSnapshotText,
 } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
-import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "../api/client.js";
+import type {
+  BillTenderLine,
+  ReceiptAdjustment,
+  TillSaleLine,
+  TillSaleResult,
+} from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -51,6 +57,7 @@ const LABEL = {
   card: "Tarjeta",
   tip: "Propina",
   charged: "Cobrado",
+  refund: "Devolución",
   comp: "Invitación",
   discount: "Descuento",
 } as const;
@@ -125,9 +132,51 @@ function issueDate(iso: string, locale: string): string {
   }).format(new Date(iso));
 }
 
+function tenderRow(label: string, amount: string, locale: string) {
+  return html`<div class="tender-row">
+    <span>${label}</span>
+    <span>${formatMoney(amount, locale)}</span>
+  </div>`;
+}
+
+/** One payment of a bill paid in parts, as the printed receipt (`apps/server/src/receipt-ticket.ts`)
+ * lists it. */
+function renderBillPayment(payment: BillTenderLine, locale: string) {
+  const given = (refund: { amount: string; tip: string }) =>
+    addDecimal(decimal(refund.amount), decimal(refund.tip));
+  const paid =
+    payment.method === "cash"
+      ? html`${tenderRow(LABEL.cash, payment.tendered, locale)}
+        ${payment.change !== "0.00" ? tenderRow(LABEL.change, payment.change, locale) : nothing}`
+      : html`${tenderRow(
+          LABEL.card,
+          // A card's amount is net of its refunds, which are listed beneath it: show the original
+          // charge.
+          payment.refunds.reduce(
+            (sum, refund) => addDecimal(sum, given(refund)),
+            decimal(payment.amount),
+          ),
+          locale,
+        )}
+        ${
+          payment.reference !== null
+            ? html`<div class="tender-row"><span>Ref. ${payment.reference}</span></div>`
+            : nothing
+        }`;
+  return html`
+    ${paid} ${payment.tip !== "0.00" ? tenderRow(LABEL.tip, payment.tip, locale) : nothing}
+    ${payment.refunds.map((refund) =>
+      tenderRow(LABEL.refund, negateDecimal(given(refund)), locale),
+    )}
+  `;
+}
+
 /** An allowed operational extra alongside `result.total`. Card-present identity lives on the separate
  * payment slip. */
 function renderTender(result: TillSaleResult, locale: string) {
+  if (result.payments !== undefined && result.payments.length > 0) {
+    return result.payments.map((payment) => renderBillPayment(payment, locale));
+  }
   const t = result.tender;
   if (t.method === "unpaid") return nothing;
   if (t.method === "cash") {

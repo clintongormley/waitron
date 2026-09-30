@@ -480,6 +480,51 @@ describe("the balance", () => {
     });
   });
 
+  it("says how each card was taken: keyed on a separate terminal, or at a reader; cash says neither", async () => {
+    const billId = await bill120();
+    const cash = await contribute(billId, "10.00");
+    const keyed = await pay(billId, {
+      kind: "contribution",
+      amount: "20.00",
+      method: "card",
+      entry: "manual",
+      applied: "20.00",
+      tip: "0.00",
+    });
+    const read = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "30.00",
+      method: "card",
+      entry: "reader",
+      applied: "30.00",
+      tip: "0.00",
+      simulationOutcome: "captured",
+    });
+    const declined = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "5.00",
+      method: "card",
+      entry: "reader",
+      applied: "5.00",
+      tip: "0.00",
+      simulationOutcome: "declined",
+    });
+
+    expect(keyed.json).toMatchObject({ payment: { entry: "manual" } });
+    expect(read.json).toMatchObject({ payment: { entry: "reader" } });
+    const { json } = await balance(billId);
+    const entryOf = (result: { json: Record<string, unknown> }) =>
+      (json.payments as { id: string; entry: unknown }[]).find(
+        (payment) => payment.id === (result.json.payment as { id: string }).id,
+      )!.entry;
+    expect(entryOf(cash)).toBeNull();
+    expect(entryOf(keyed)).toBe("manual");
+    expect(entryOf(read)).toBe("reader");
+    expect(entryOf(declined)).toBe("reader");
+  });
+
   it("answers an unknown bill as not found", async () => {
     const { status, json } = await balance(randomUUID());
     expect(status).toBe(404);
@@ -976,6 +1021,85 @@ describe("an item already paid for (design §8 test 5)", () => {
     ]);
   });
 
+  it("sends a held dish one guest paid for to the kitchen when it is fired, and charges it to nobody else", async () => {
+    const table = await inTx((tx) =>
+      createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.offers.zoneId,
+      }),
+    );
+    const seated = await request("POST", `/api/tables/${table.id}/seat`, {});
+    const {
+      tabId: billId,
+      partyId,
+      revision,
+    } = seated.json as { tabId: string; partyId: string; revision: number };
+    const round = await request("POST", `/api/parties/${partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revision,
+      groups: [
+        { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
+      ],
+    });
+    expect(round.status).toBe(200);
+    const tartaLine = async () =>
+      (
+        (await request("GET", `/api/working-orders/${billId}/lines`)).json.lines as {
+          lineNo: number;
+          name: string;
+          sentAt: string | null;
+          firedAt: string | null;
+        }[]
+      ).find((line) => line.name === "Tarta")!;
+    const tarta = await tartaLine();
+    const leaving = await pay(billId, {
+      kind: "items",
+      lines: [{ lineNo: tarta.lineNo }],
+      method: "cash",
+      tendered: "18.00",
+      applied: "18.00",
+      tip: "0.00",
+    });
+    expect(leaving.status).toBe(200);
+    const groups = await request("GET", `/api/parties/${partyId}/groups`);
+    const held = (groups.json.groups as { id: string; state: string }[]).find(
+      (group) => group.state === "held",
+    )!;
+
+    const fired = await request("POST", `/api/parties/${partyId}/groups/${held.id}/fire`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: groups.json.revision,
+    });
+    const again = await pay(billId, {
+      kind: "items",
+      lines: [{ lineNo: tarta.lineNo }],
+      method: "cash",
+      tendered: "18.00",
+      applied: "18.00",
+      tip: "0.00",
+    });
+    const rest = await request("POST", `/api/working-orders/${billId}/payments/preview`, {
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+    });
+
+    expect(fired.status).toBe(200);
+    const sent = await tartaLine();
+    expect(sent.sentAt).not.toBeNull();
+    expect(sent.firedAt).not.toBeNull();
+    expect(again.status).toBe(409);
+    expect(again.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: tarta.lineNo } });
+    expect((await balance(billId)).json).toMatchObject({
+      total: "53.00",
+      received: "18.00",
+      outstanding: "35.00",
+      paidLines: [{ lineNo: tarta.lineNo, paidQuantity: "1.000" }],
+    });
+    expect(rest.json).toMatchObject({ kind: "allocated", applied: "35.00", tip: "0.00" });
+  });
+
   it("refuses an item payment naming a line the bill does not have", async () => {
     const billId = await tabWith("Paella");
 
@@ -1260,6 +1384,43 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(2500);
     expect(registroCount(billId)).toBe(1);
+  });
+
+  it("refuses product.unavailable, changing nothing, for a void that would issue the invoice while an unsent line's product is off sale", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+    const steakId = venue.productIds.get("Chuletón")!;
+    const snapshot = () => ({
+      order: suite.db.all(sql`select * from working_orders where id = ${billId}`),
+      lines: suite.db.all(
+        sql`select * from working_order_lines where working_order_id = ${billId} order by line_no`,
+      ),
+      payments: suite.db.all(sql`select * from bill_payments where working_order_id = ${billId}`),
+      adjustments: suite.db.all(sql`select * from adjustments where working_order_id = ${billId}`),
+    });
+    const body = await cancelBody(suite.db, billId, 2);
+    const before = snapshot();
+    expect(before.lines.map((line) => (line as { sent_at: unknown }).sent_at)).toEqual([
+      null,
+      null,
+    ]);
+
+    suite.db.run(sql`update products set available = 0 where id = ${steakId}`);
+    try {
+      const refused = await request("POST", `/api/working-orders/${billId}/adjustments`, body);
+
+      expect(refused.status).toBe(409);
+      expect(refused.json).toMatchObject({
+        code: "product.unavailable",
+        params: { productId: steakId },
+      });
+      expect(snapshot()).toEqual(before);
+      expect(await statusOf(billId)).toBe("open");
+      expect(await saleOf(billId)).toEqual([]);
+      expect(registroCount(billId)).toBe(0);
+    } finally {
+      suite.db.run(sql`update products set available = 1 where id = ${steakId}`);
+    }
   });
 });
 
@@ -1696,6 +1857,62 @@ async function insertBillPayment(
   );
   return inserted!.id;
 }
+
+describe("who can approve a refund (GET /api/refund-authorizers)", () => {
+  async function addPerson(role: "staff" | "supervisor" | "manager", status = "active") {
+    const [person] = await inTx((tx) =>
+      tx
+        .insert(persons)
+        .values({
+          displayName: `${role}-${randomUUID().slice(0, 8)}`,
+          pinHash: hashPin("5555"),
+          role,
+          status: status as "active" | "suspended",
+        })
+        .returning({ id: persons.id }),
+    );
+    return person!.id;
+  }
+
+  function idsOf(listed: { json: unknown }): string[] {
+    return (listed.json as { personId: string }[]).map((person) => person.personId);
+  }
+
+  it("lists the active holders of the refund permission, and no one else, by id and name only", async () => {
+    const supervisorId = await addPerson("supervisor");
+    const staffId = await addPerson("staff");
+
+    const listed = await request("GET", "/api/refund-authorizers");
+
+    expect(listed.status).toBe(200);
+    expect(idsOf(listed)).toEqual(expect.arrayContaining([venue.adminId, supervisorId]));
+    expect(idsOf(listed)).not.toContain(staffId);
+    expect(idsOf(listed)).not.toContain(venue.staffId);
+    for (const person of listed.json as unknown as Record<string, unknown>[])
+      expect(Object.keys(person)).toEqual(["personId", "displayName"]);
+  });
+
+  it("leaves a suspended holder out, as the drawer's list does", async () => {
+    const suspendedId = await addPerson("manager", "suspended");
+
+    const refunds = await request("GET", "/api/refund-authorizers");
+    const drawer = await request("GET", "/api/drawer/authorizers");
+
+    expect(idsOf(refunds)).not.toContain(suspendedId);
+    expect(idsOf(drawer)).not.toContain(suspendedId);
+  });
+
+  it("answers a caller with no session, and one with no device, as the drawer's list does", async () => {
+    for (const cookie of ["", venue.sessionCookie]) {
+      const refunds = await request("GET", "/api/refund-authorizers", undefined, cookie);
+      const drawer = await request("GET", "/api/drawer/authorizers", undefined, cookie);
+      expect(refunds.status).toBe(drawer.status);
+      if (drawer.status !== 200) expect(refunds.json).toEqual(drawer.json);
+    }
+    const anonymous = await request("GET", "/api/refund-authorizers", undefined, "");
+    expect(anonymous).toMatchObject({ status: 401, json: { code: "session.required" } });
+  });
+});
 
 describe("a cash refund before the invoice (design §6)", () => {
   it("gives the money back with a manager's PIN, recording who asked, who authorised it and the till", async () => {

@@ -107,6 +107,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has been presented, so it cannot be changed",
     es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
   },
+  "working_order.not_open": {
+    en: "This bill is no longer open: it has been presented, paid or discarded",
+    es: "Esta cuenta ya no está abierta: se ha presentado, pagado o descartado",
+  },
   "tab.not_open": {
     en: "That bill is no longer open. Choose another bill and send again",
     es: "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",
@@ -167,9 +171,21 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That is more than is left to give back on this card payment. Reload the bill and check the amount",
     es: "Es más de lo que queda por devolver de este pago con tarjeta. Vuelve a cargar la cuenta y revisa el importe",
   },
+  "authorization.not_permitted": {
+    en: "The person who approved this may not do it. Choose someone who can",
+    es: "La persona que lo ha aprobado no tiene permiso para hacerlo. Elige a alguien que pueda",
+  },
   "bill.refund_in_progress": {
     en: "A card refund on this bill is still waiting for the card provider. The bill cannot be changed until it finishes",
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. No se puede cambiar la cuenta hasta que termine",
+  },
+  "reader.not_found": {
+    en: "This device has no card reader it can use. Ask a manager to check its card reader on the Card payments screen",
+    es: "Este dispositivo no tiene un lector de tarjetas que pueda usar. Pide a un responsable que revise su lector en la pantalla Pagos con tarjeta",
+  },
+  "reader.provider_disconnected": {
+    en: "The card reader's payment provider is not connected. Ask a manager to connect it on the Card payments screen, or take cash",
+    es: "El proveedor de pagos del lector no está conectado. Pide a un responsable que lo conecte en la pantalla Pagos con tarjeta, o cobra en efectivo",
   },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",

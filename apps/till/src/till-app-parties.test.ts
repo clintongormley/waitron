@@ -3905,7 +3905,14 @@ describe("till-app: the order's groups", () => {
       ...roundDetail(order, [{ release: "fire", lineIndexes: [0, 1] }]),
       billId: "wo-check",
     });
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    // Two pauses between the three tries run on real time; wait for the message they end in.
+    await vi.waitFor(
+      () => expect(banner(el)?.textContent).toContain(t("table.round_unconfirmed")),
+      {
+        timeout: 4000,
+        interval: 50,
+      },
+    );
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledTimes(3);
@@ -3931,7 +3938,14 @@ describe("till-app: the order's groups", () => {
       "submit-draft",
       roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
     );
-    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    // Two pauses between the three tries run on real time; wait for the message they end in.
+    await vi.waitFor(
+      () => expect(banner(el)?.textContent).toContain(t("table.round_unconfirmed")),
+      {
+        timeout: 4000,
+        interval: 50,
+      },
+    );
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledTimes(3);

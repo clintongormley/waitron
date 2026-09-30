@@ -123,6 +123,8 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) busy = false;
   /** Holds payment: a basket line must be resolved first, or the retrieved order has a payment on it. */
   @property({ type: Boolean }) payHeld = false;
+  /** See the card grid's `payRest`. */
+  @property() payRest: string | null = null;
   /** When undefined the grid renders nothing. */
   @property({ attribute: false }) counterTab?: TabDef;
   @property() cardProvider: CardProvider = "none";
@@ -271,6 +273,7 @@ export class TillCounterScreen extends LitElement {
         .defaultStationId=${this.defaultStationId}
         .busy=${this.busy}
         .payHeld=${this.payHeld}
+        .payRest=${this.payRest}
         .orderFlow=${this.orderFlow}
         .stage=${this.stage}
         .cardProvider=${this.cardProvider}

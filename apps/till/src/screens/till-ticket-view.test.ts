@@ -334,6 +334,98 @@ describe("till-ticket-view", () => {
     expect(captured!.bubbles).toBe(true);
   });
 
+  describe("a bill paid in parts before its invoice", () => {
+    const tenderRows = (el: TillTicketView): string[] =>
+      [...el.shadowRoot!.querySelectorAll(".tender .tender-row")].map((row) =>
+        norm(row.textContent ?? "")
+          .replace(/\s+/g, " ")
+          .trim(),
+      );
+
+    // The bottle: €30.00 paid by three people at €10.00 each — cash from a €20.00 note, a hand-keyed
+    // card with a €1.00 tip on top, and exact cash.
+    it("lists every payment with what was handed over, its change and its tip, not only the first", async () => {
+      const { el } = await mount({
+        total: "30.00",
+        tender: { method: "cash", change: "10.00" },
+        payments: [
+          {
+            method: "cash",
+            amount: "10.00",
+            tip: "0.00",
+            tendered: "20.00",
+            change: "10.00",
+            refunds: [],
+          },
+          { method: "card", amount: "11.00", tip: "1.00", reference: "OP-9", refunds: [] },
+          {
+            method: "cash",
+            amount: "10.00",
+            tip: "0.00",
+            tendered: "10.00",
+            change: "0.00",
+            refunds: [],
+          },
+        ],
+      });
+
+      expect(tenderRows(el)).toEqual([
+        "Efectivo 20,00 €",
+        "Cambio 10,00 €",
+        "Tarjeta 11,00 €",
+        "Ref. OP-9",
+        "Propina 1,00 €",
+        "Efectivo 10,00 €",
+      ]);
+    });
+
+    // €20.00 charged, €5.00 given back: the card's amount is already net of the refund, so the row
+    // shows the original charge and the refund beneath it, as the printed receipt does.
+    it("shows a card payment's original charge and each refund given back from it", async () => {
+      const { el } = await mount({
+        total: "15.00",
+        tender: { method: "card", charged: "15.00", tip: "0.00", reference: null },
+        payments: [
+          {
+            method: "card",
+            amount: "15.00",
+            tip: "0.00",
+            reference: null,
+            refunds: [
+              { amount: "4.00", tip: "0.00" },
+              { amount: "1.00", tip: "0.00" },
+            ],
+          },
+        ],
+      });
+
+      expect(tenderRows(el)).toEqual([
+        "Tarjeta 20,00 €",
+        "Devolución -4,00 €",
+        "Devolución -1,00 €",
+      ]);
+    });
+
+    it("shows cash handed over, not the total plus the first payment's change", async () => {
+      const { el } = await mount({
+        total: "40.00",
+        tender: { method: "cash", change: "0.00" },
+        payments: [
+          {
+            method: "cash",
+            amount: "40.00",
+            tip: "0.00",
+            tendered: "50.00",
+            change: "0.00",
+            refunds: [{ amount: "10.00", tip: "0.00" }],
+          },
+        ],
+      });
+
+      expect(tenderRows(el)).toEqual(["Efectivo 50,00 €", "Devolución -10,00 €"]);
+    });
+  });
+
   it("offers a separate payment slip action only for card tenders", async () => {
     const { el: cash } = await mount();
     expect(cash.shadowRoot!.querySelector("[data-test=payment-slip]")).toBeNull();

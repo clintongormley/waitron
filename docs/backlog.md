@@ -122,13 +122,13 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Fifteen of the service
+1. **Finish table service and paying a bill in parts** (A4, lane B). Sixteen of the service
    plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
-   the adjustment reports, as #923; Task 13, standalone ordering, as #903), and the till's Cancel
-   taking a reason is done by lane B item B11a. Left:
-   several payments on the till (15 — the server side landed as #721 and nothing on
-   the till calls it yet), counter handover (16) and a table that leaves without paying (17).
+   the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
+   taking a reason is done by lane B item B11a, and Task 15, several payments on the till, is
+   built by lane B item B15 (#956; the server side landed as #721). Left:
+   counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -373,7 +373,7 @@ older copy is refused; and a second device cannot change an order while a card p
 (D22). Owner decisions applied:
 a partial split takes its own copy of the kitchen ticket and a started line may be split (D10 and
 Review Focus 6 overturned); moving sent work to another table prints a MOVED slip and records a
-`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`) — decided by the owner 2026-09-26 as the safe behaviour until the service plan's Tasks 14 and 15 (lane B's B14/B15) let a guest pay for one held item against the table's bill. The core
+`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`) — decided by the owner 2026-09-26 as the safe behaviour until the service plan's Tasks 14 and 15 (lane B's B14/B15) let a guest pay for one held item against the table's bill. _(2026-09-30, B15: a guest can now pay for one held item — the till's Pay items takes it, and the server case "sends a held dish one guest paid for to the kitchen when it is fired, and charges it to nobody else" (`apps/server/src/bill-payments-api.test.ts`) holds it. B15 left `tab.split_held_line` unchanged, so splitting a held item onto a check is still refused. **Owner decision:** whether that refusal stays now that its stated reason is gone.)_ The core
 migrations add five columns and replace the `working_orders_enforce_transition` trigger, and
 venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeeds, but
 rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
@@ -3894,7 +3894,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on a reader), issues the invoice in the same transaction that leaves the bill fully paid, gives
     money back before the invoice (a card refund keeps its record through an interrupted call), and
     the cash-up counts each payment and refund on the day and at the till where the money moved.
-    No till screen calls these routes yet; Task 15 builds them. The questions it raised, and how
+    No till screen calls these routes yet; Task 15 builds them. _(2026-09-30: lane B item B15 builds
+    them; see the B15 entry below.)_ The questions it raised, and how
     each was ruled, are in lane B's questions log. With M7v landed (#720), the invoice issued at a
     bill's last payment files each line at the VAT rate recorded on it, however long the payments
     took. _(2026-09-27, A68: the line records its class, and that invoice takes the rate in force on
@@ -3908,6 +3909,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       confirm the completed refund with a manager's PIN. The server records it on the bill and the
       manual payment in one transaction. Task 15 must put the terminal-refund instruction beside
       the manager-PIN confirmation on the till; the till has no bill-refund action yet.
+      _(2026-09-30, B15: done — the till's refund of a hand-keyed card tells staff to give it back
+      on the terminal first, then confirm with one supervisor's or manager's PIN.)_
     - **A bill receipt's payments keep the order they were taken in — DONE (A123, #886, 2026-09-29).**
       `bill-refunds.card.test.ts`'s invoice case ("design §8 test 23") printed the cash tender
       before the earlier card tender now and then (on B14a, and again on lane B's T5, #852).
@@ -3956,7 +3959,43 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome
       with a note and their PIN. The screen has English and Spanish text and browser accessibility
-      cases. Task 15 can build the till flow that creates bill payments.
+      cases. Task 15 can build the till flow that creates bill payments. _(2026-09-30: lane B item
+      B15 builds it.)_
+  - **Task 15, several payments on the till, is built by lane B item B15** (2026-09-30, B15's pull
+    request, not yet landed). A table's bill, or a retrieved counter order's, can be paid in parts:
+    by items, an amount or an equal share, in cash (change or tip) or by card (keyed on a separate
+    terminal, or on a card reader). The bill payment dialog lists the bill's payments and gives one
+    back: given back by someone who may give refunds, or approved with a supervisor's or manager's
+    PIN; a card keyed on a separate terminal always takes one PIN. A partly paid table bill shows
+    what it still owes, "Paid so far" and a button opening the dialog; the counter shows "{amount}
+    to pay" and "Take the rest" above the pay card. The ticket lists every payment. Server: `GET
+    /api/refund-authorizers` and `BillPaymentView.entry`. Open:
+    - **OPEN, owner decision — the till tells staff to give the money back before a merge, and a
+      merge is refused even then.** The till's `bill.payments_received` message says "To discard or
+      merge the bill, give that money back first", but `refuseBillWithPayments`
+      (`apps/server/src/bill-actions.ts`) refuses a merge of any bill that has ever held a pending
+      or received payment, one given back in full included. Run 2026-09-30: a full refund and then
+      a merge still answered 409 `bill.payments_received`. The wording is pinned by a test on
+      `main` (`apps/till/src/i18n/codes.test.ts`), so B15 left it. **Next action:** the owner
+      decides whether the message drops "or merge" or the server lets a fully refunded bill merge.
+    - **OPEN — the generic "received more than the bill" text also answers a comp or discount.**
+      The till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer
+      items, or refund the difference first") is on `main`, and the adjustment dialog shows it
+      when a comp or discount is refused for that code
+      (`apps/till/src/widgets/adjustment-dialog.test.ts`, "shows %s in its own words"), where
+      nothing is being moved. B15 gave a move and a line change their own texts
+      (`bill.received_exceeds_total_excess`, `bill.received_exceeds_total_line_excess`) and left
+      this one. No assertion on `main` pins its wording: at `3f013dd40` a `git grep` for its
+      English and Spanish sentences finds them only in `codes.ts`, and the two till suites that name
+      the code (`codes.test.ts`, `adjustment-dialog.test.ts`) check only that it differs from the
+      generic server text, that it names no identifier, and that the dialog shows what
+      `codeMessage` gives. **Next action:** word it so it
+      also fits a comp or discount.
+    - **OPEN, owner call on wording:** the table's button is labelled with the whole sentence "Part
+      of this bill is already paid: take the rest as a bill payment", while the counter's says
+      "Take the rest". Left as it is.
+    - Giving money back after the invoice stays out of scope for `BillPaymentView` (bill payments
+      design §6).
   - **A keydown guard that cancels Escape while a save runs did not keep one dialog open.** Measured
     on Task 1's reasons screen (`packages/adjustments/src/dashboard/reasons-screen.ts`): a real
     Escape pressed with Vitest's `userEvent` during a save closed the editor, although the screen's
@@ -3994,10 +4033,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     recording which element has focus just before the Escape; then press a real Escape during a save
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
-  - **Tasks left: 15 to 17** (2026-09-30; 10 to 12 have landed). The menus tasks that change the same order and till code
+  - **Tasks left: 16 and 17** (2026-09-30; 10 to 14 have landed, and Task 15, the till side of
+    Task 14, is built by lane B item B15). The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
-    plan's order among them: 16 after 10. Task 15 is the till side of
-    Task 14 — no till code calls the bill-payment routes yet.
+    plan's order among them: 16 after 10.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
     [Q27](compliance/asesor-questions.md#q27-money-taken-against-a-bill-before-its-invoice-exists-then-a-split-added-2026-09-26)
@@ -4965,7 +5004,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       this bill is already paid: take the rest as a bill payment", and the counter's pay buttons
       are disabled for it. A single payment refused `bill.payments_received` says the same. Any
       other bill pays as before. There is still no bill-payment screen (the service plan's Task
-      15, lane B's B15); once it lands, that sentence should open it.
+      15, lane B's B15); once it lands, that sentence should open it. _(2026-09-30, B15: on a
+      table, that sentence is now a button opening the bill payment dialog, with "Paid so far"
+      above it and Pay items, Contribute and Split equally below it. On the counter the pay card
+      stays held, and "{amount} to pay" with a "Take the rest" button sits above it.)_
     - The held list shows what an order holding a payment, a pending one included,
       still owes.
     - Merge and transfer offer only the party's other open bills with no payment on them (the
@@ -10658,7 +10700,7 @@ while it holds decisions still open.
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 11 of 18 tasks landed; Task 13 done on a branch | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
-| [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till is service Task 15 | A4 |
+| [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till side built by lane B item B15 (#956) | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and

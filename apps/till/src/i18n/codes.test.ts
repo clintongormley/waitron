@@ -313,3 +313,30 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero",
   );
 });
+
+it("explains a card reader a bill payment cannot use, in both languages, naming no identifier", () => {
+  for (const code of ["reader.not_found", "reader.provider_disconnected"]) {
+    expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
+    expect(codeMessage(code, "en")).not.toContain(code);
+    expect(codeMessage(code, "es")).not.toContain(code);
+  }
+});
+
+it("explains an approver who may not approve, in both languages, naming no identifier", () => {
+  for (const locale of ["en", "es"] as const) {
+    expect(codeMessage("authorization.not_permitted", locale)).not.toBe(
+      codeMessage("server.internal", locale),
+    );
+    expect(codeMessage("authorization.not_permitted", locale)).not.toContain("authorization");
+  }
+});
+
+it("says in both languages that a bill presented, paid or discarded is no longer open, naming no identifier", () => {
+  expect(codeMessage("working_order.not_open", "en")).toBe(
+    "This bill is no longer open: it has been presented, paid or discarded",
+  );
+  expect(codeMessage("working_order.not_open", "es")).toBe(
+    "Esta cuenta ya no está abierta: se ha presentado, pagado o descartado",
+  );
+});

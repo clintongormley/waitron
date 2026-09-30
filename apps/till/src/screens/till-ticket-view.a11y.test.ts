@@ -38,6 +38,31 @@ describe.each(["light", "dark"] as const)("till-ticket-view a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations with a bill paid in parts, a card tip and a refund on their own rows", async () => {
+    const { host } = await mountWidget<TillTicketView>(
+      "till-ticket-view",
+      {
+        result: {
+          ...result,
+          payments: [
+            {
+              method: "cash",
+              amount: "5.00",
+              tip: "0.00",
+              tendered: "10.00",
+              change: "5.00",
+              refunds: [{ amount: "1.00", tip: "0.00" }],
+            },
+            { method: "card", amount: "6.40", tip: "1.00", reference: "OP-9", refunds: [] },
+          ],
+        },
+        issuer,
+      },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with a given-away and a discounted line and a bill discount on their own lines", async () => {
     const { host } = await mountWidget<TillTicketView>(
       "till-ticket-view",

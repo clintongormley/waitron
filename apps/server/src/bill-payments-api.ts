@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
-import type { PinThrottle } from "@waitron/identity";
+import { withTransaction } from "@waitron/db";
+import { listActivePersonsWithPermission, type PinThrottle } from "@waitron/identity";
 import { kindOfFormFactor } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
@@ -288,6 +289,16 @@ export function mountBillPaymentsApi(
           request,
           personId,
         ),
+      );
+    }),
+  );
+
+  // Like the drawer's list: any operator may see who could approve their refund.
+  app.get("/api/refund-authorizers", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      return c.json(
+        await withTransaction(deps.db, (tx) => listActivePersonsWithPermission(tx, "sale.refund")),
       );
     }),
   );
