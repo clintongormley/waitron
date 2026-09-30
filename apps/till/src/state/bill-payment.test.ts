@@ -1,0 +1,201 @@
+import { describe, expect, it } from "vitest";
+import {
+  confirmationOf,
+  paymentAsk,
+  submissionFor,
+  unansweredAfter,
+  type Submission,
+} from "./bill-payment.js";
+
+describe("paymentAsk", () => {
+  it("asks for whole lines without a quantity, and for units of a line as a whole-number quantity", () => {
+    expect(
+      paymentAsk(
+        {
+          kind: "items",
+          picks: [{ lineNo: 1 }, { lineNo: 3, units: 2 }],
+        },
+        { method: "card" },
+      ),
+    ).toEqual({
+      kind: "items",
+      lines: [{ lineNo: 1 }, { lineNo: 3, quantity: "2" }],
+      method: "card",
+    });
+  });
+
+  it("asks for a contribution with the cash handed over", () => {
+    expect(
+      paymentAsk({ kind: "contribution", amount: "25.00" }, { method: "cash", tendered: "50.00" }),
+    ).toEqual({ kind: "contribution", amount: "25.00", method: "cash", tendered: "50.00" });
+  });
+
+  it("asks for an equal share by how many people are still to pay, leaving the share to the server", () => {
+    expect(paymentAsk({ kind: "share", shareOf: 3 }, { method: "card" })).toEqual({
+      kind: "share",
+      shareOf: 3,
+      method: "card",
+    });
+  });
+
+  it("carries a tip the payer adds, on cash and on a card", () => {
+    expect(
+      paymentAsk(
+        { kind: "contribution", amount: "40.00" },
+        { method: "cash", tendered: "50.00", addedTip: "10.00" },
+      ),
+    ).toEqual({
+      kind: "contribution",
+      amount: "40.00",
+      method: "cash",
+      tendered: "50.00",
+      addedTip: "10.00",
+    });
+    expect(
+      paymentAsk({ kind: "items", picks: [{ lineNo: 2 }] }, { method: "card", addedTip: "10.00" }),
+    ).toEqual({ kind: "items", lines: [{ lineNo: 2 }], method: "card", addedTip: "10.00" });
+  });
+});
+
+describe("confirmationOf", () => {
+  const ask = paymentAsk({ kind: "items", picks: [{ lineNo: 1 }] }, { method: "card" });
+
+  it("sends the applied amount and tip the operator was shown", () => {
+    expect(
+      confirmationOf(
+        ask,
+        {
+          kind: "allocated",
+          choice: null,
+          applied: "40.00",
+          tip: "0.00",
+          change: null,
+          charged: "40.00",
+        },
+        { entry: "manual" },
+      ),
+    ).toEqual({ ...ask, applied: "40.00", tip: "0.00", entry: "manual" });
+  });
+
+  // The steak: €25.00 of lines against €15.00 left. The operator picks one of the two offered.
+  it("names the choice the operator picked and sends that option's amounts", () => {
+    expect(
+      confirmationOf(
+        ask,
+        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
+        { entry: "reader", readerId: "rd-1" },
+      ),
+    ).toEqual({
+      ...ask,
+      choice: "full_with_tip",
+      applied: "15.00",
+      tip: "10.00",
+      entry: "reader",
+      readerId: "rd-1",
+    });
+  });
+
+  it("sends cash with no card entry", () => {
+    const cash = paymentAsk({ kind: "share", shareOf: 2 }, { method: "cash", tendered: "20.00" });
+
+    expect(
+      confirmationOf(cash, {
+        kind: "allocated",
+        choice: null,
+        applied: "15.00",
+        tip: "0.00",
+        change: "5.00",
+        charged: null,
+      }),
+    ).toEqual({ ...cash, applied: "15.00", tip: "0.00" });
+  });
+});
+
+describe("the submission id of a confirmation", () => {
+  const tenEuros = confirmationOf(
+    paymentAsk({ kind: "contribution", amount: "10.00" }, { method: "cash", tendered: "10.00" }),
+    {
+      kind: "allocated",
+      choice: null,
+      applied: "10.00",
+      tip: "0.00",
+      change: "0.00",
+      charged: null,
+    },
+  );
+  const ids = (...values: string[]) => {
+    const queue = [...values];
+    return () => queue.shift()!;
+  };
+  const noAnswer = new TypeError("Failed to fetch");
+
+  it("is fresh for a first confirmation, and travels with it", () => {
+    const sent = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+
+    expect(sent.request).toEqual({ ...tenEuros, submissionId: "sub-1" });
+  });
+
+  it("is reused when the same confirmation is sent again after it got no answer", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1", "sub-2"));
+    const unanswered = unansweredAfter(first, noAnswer);
+
+    expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-1",
+    );
+  });
+
+  // The bottle: three people each hand over €10.00 for the same bill, and each is its own payment.
+  it("is fresh for each of three identical payments that were answered", () => {
+    const mint = ids("sub-1", "sub-2", "sub-3");
+    let unanswered: Submission | null = null;
+    const sentIds: string[] = [];
+    for (let payer = 0; payer < 3; payer += 1) {
+      const sent = submissionFor("wo-1", tenEuros, unanswered, mint);
+      sentIds.push(sent.request.submissionId);
+      unanswered = unansweredAfter(sent);
+    }
+
+    expect(sentIds).toEqual(["sub-1", "sub-2", "sub-3"]);
+  });
+
+  it("is fresh after a refusal, which is an answer", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, { code: "bill.allocation_changed", status: 409 });
+
+    expect(unanswered).toBeNull();
+    expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-2",
+    );
+  });
+
+  it("is fresh for a different confirmation, even while an earlier one is unanswered", () => {
+    const unanswered = unansweredAfter(
+      submissionFor("wo-1", tenEuros, null, ids("sub-1")),
+      noAnswer,
+    );
+    const moreCash = { ...tenEuros, tendered: "20.00" };
+
+    expect(submissionFor("wo-1", moreCash, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-2",
+    );
+  });
+
+  it("is fresh for the same confirmation on another bill", () => {
+    const unanswered = unansweredAfter(
+      submissionFor("wo-1", tenEuros, null, ids("sub-1")),
+      noAnswer,
+    );
+
+    expect(submissionFor("wo-2", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(
+      "sub-2",
+    );
+  });
+
+  it("is a new random id each time when no minting is given", () => {
+    const first = submissionFor("wo-1", tenEuros, null).request.submissionId;
+    const second = submissionFor("wo-1", tenEuros, null).request.submissionId;
+
+    expect(first).toMatch(/^[0-9a-f-]{36}$/);
+    expect(second).not.toBe(first);
+  });
+});

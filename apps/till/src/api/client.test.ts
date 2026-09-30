@@ -3,6 +3,14 @@ import {
   TillApi,
   isNetworkFailure,
   menuOfferToTillProduct,
+  type AllocationPreview,
+  type BillBalance,
+  type BillPaymentAsk,
+  type BillPaymentRequest,
+  type BillPaymentResult,
+  type BillPaymentView,
+  type BillRefundRequest,
+  type BillRefundResult,
   type FloorZone,
   type MyAbsence,
   type MyShift,
@@ -3523,5 +3531,196 @@ describe("menuOfferToTillProduct", () => {
     expect(options!.kind === "options" && options!.labels.map((l) => l.id)).toEqual([
       "label-medium",
     ]);
+  });
+});
+
+describe("TillApi: a bill's payments", () => {
+  const post = (body: unknown) =>
+    expect.objectContaining({
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  // A €30.00 bill with one €10.00 cash payment from a €20.00 note, as `GET …/payments` answers it.
+  const cashPayment: BillPaymentView = {
+    id: "pay-1",
+    submissionId: "sub-1",
+    kind: "contribution",
+    shareOf: null,
+    method: "cash",
+    applied: "10.00",
+    tip: "0.00",
+    tendered: "20.00",
+    change: "10.00",
+    state: "received",
+    createdAt: "2026-09-30T20:00:00.000Z",
+    receivedAt: "2026-09-30T20:00:00.000Z",
+    lines: [],
+    refunds: [],
+  };
+  const balance: BillBalance = {
+    workingOrderId: "wo-1",
+    status: "open",
+    total: "30.00",
+    received: "10.00",
+    reserved: "0.00",
+    outstanding: "20.00",
+    tips: "0.00",
+    payments: [cashPayment],
+    paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "1.000" }],
+  };
+
+  it("getBillBalance GETs the bill's payments and answers its balance", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(balance));
+    const signal = new AbortController().signal;
+
+    await expect(new TillApi("", fetchStub).getBillBalance("wo-1", { signal })).resolves.toEqual(
+      balance,
+    );
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/payments",
+      expect.objectContaining({ method: "GET", credentials: "include", signal }),
+    );
+  });
+
+  it("previewBillPayment POSTs the ask to the preview route and answers the choices the server offers", async () => {
+    const ask: BillPaymentAsk = { kind: "items", lines: [{ lineNo: 1 }], method: "card" };
+    const preview: AllocationPreview = {
+      kind: "choose",
+      options: [
+        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
+        { choice: "use_pool", applied: "15.00", tip: "0.00" },
+      ],
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
+
+    await expect(new TillApi("", fetchStub).previewBillPayment("wo-1", ask)).resolves.toEqual(
+      preview,
+    );
+    expect(fetchStub).toHaveBeenCalledWith("/api/working-orders/wo-1/payments/preview", post(ask));
+  });
+
+  it("takeBillPayment POSTs the request under the caller's signal and answers the outcome, balance and invoice", async () => {
+    const request: BillPaymentRequest = {
+      kind: "share",
+      shareOf: 2,
+      method: "card",
+      entry: "manual",
+      externalRef: "OP-9",
+      submissionId: "sub-2",
+      applied: "10.00",
+      tip: "0.00",
+    };
+    const answer: BillPaymentResult = {
+      outcome: "received",
+      payment: { ...cashPayment, id: "pay-2", method: "card", tendered: null, change: null },
+      balance: { ...balance, received: "20.00", outstanding: "10.00" },
+      invoice: {
+        orderLabel: "Mesa 4",
+        orderNumber: 7,
+        invoiceNumber: "A/9",
+        issuedAt: "2026-09-30T20:01:00.000Z",
+        total: "30.00",
+        vatBreakdown: [],
+        lines: [],
+        tender: { method: "cash", change: "10.00" },
+        payments: [
+          {
+            method: "cash",
+            amount: "10.00",
+            tip: "0.00",
+            tendered: "20.00",
+            change: "10.00",
+            refunds: [],
+          },
+          { method: "card", amount: "10.00", tip: "0.00", reference: "OP-9", refunds: [] },
+        ],
+        qr: "x",
+      },
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const signal = new AbortController().signal;
+
+    await expect(
+      new TillApi("", fetchStub).takeBillPayment("wo-1", request, { signal }),
+    ).resolves.toEqual(answer);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/payments",
+      expect.objectContaining({ method: "POST", body: JSON.stringify(request), signal }),
+    );
+  });
+
+  it("takeBillPayment surfaces a stale allocation's fresh preview on the refusal", async () => {
+    const fresh = {
+      kind: "allocated",
+      choice: null,
+      applied: "25.00",
+      tip: "0.00",
+      change: "5.00",
+      charged: null,
+    };
+    const fetchStub = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          error: {
+            code: "bill.allocation_changed",
+            params: { workingOrderId: "wo-1", preview: fresh },
+          },
+        },
+        409,
+      ),
+    );
+
+    await expect(
+      new TillApi("", fetchStub).takeBillPayment("wo-1", {
+        kind: "contribution",
+        amount: "30.00",
+        method: "cash",
+        tendered: "30.00",
+        submissionId: "sub-3",
+        applied: "30.00",
+        tip: "0.00",
+      }),
+    ).rejects.toEqual({
+      code: "bill.allocation_changed",
+      workingOrderId: "wo-1",
+      preview: fresh,
+      status: 409,
+    });
+  });
+
+  it("refundBillPayment POSTs the refund to the payment's refunds route and answers the refund and balance", async () => {
+    const refund: BillRefundRequest = {
+      submissionId: "sub-4",
+      appliedAmount: "10.00",
+      tipAmount: "0.00",
+      reason: "Wrong table",
+      override: { personId: "m-1", pin: "7777" },
+    };
+    const answer: BillRefundResult = {
+      refund: {
+        id: "ref-1",
+        paymentId: "pay-1",
+        submissionId: "sub-4",
+        appliedAmount: "10.00",
+        tipAmount: "0.00",
+        reason: "Wrong table",
+        state: "completed",
+        createdAt: "2026-09-30T20:05:00.000Z",
+        completedAt: "2026-09-30T20:05:00.000Z",
+      },
+      balance: { ...balance, received: "0.00", outstanding: "30.00" },
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
+
+    await expect(
+      new TillApi("", fetchStub).refundBillPayment("wo-1", "pay-1", refund),
+    ).resolves.toEqual(answer);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/working-orders/wo-1/payments/pay-1/refunds",
+      post(refund),
+    );
   });
 });
