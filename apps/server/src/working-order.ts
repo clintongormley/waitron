@@ -3712,8 +3712,8 @@ async function assertProductsSellable(
  * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket where the
  * venue prints held work in advance; the units added to a comped or discounted line the kitchen has
  * not fired go on a new line, priced now, in that line's group and kitchen state (ruling R12), a
- * held one correcting its group's HOLD ticket; a held group the edit empties is removed;
- * the party's revision moves on.
+ * held one correcting its group's HOLD ticket where one was queued; a held group the edit empties
+ * is removed; the party's revision moves on.
  */
 async function applyLineEdits(
   tx: Transaction,
@@ -3958,8 +3958,9 @@ async function applyLineEdits(
     groups[groups.length - 1]!.contexts.push(priced.lineContexts[index]!);
   });
 
-  // On a party, what the edit adds for the kitchen goes in a new group at the end of the sequence:
-  // one fired now, one held, as the lines' `kitchen` says. Its lines are credited to the editor.
+  // On a party, what the edit adds for the kitchen goes in a new group at the end of the sequence,
+  // one fired now, one held, as the lines' `kitchen` says, except units added beside an adjusted
+  // line, which join that line's group. Its lines are credited to the editor.
   const newGroups = new Map<string, string>();
   if (order.partyId !== null) {
     for (const as of pricedAs) {
