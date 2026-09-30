@@ -2660,7 +2660,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     minutes after (B6, "While Add a printer is open, print jobs wait behind each scan pass").
     _(2026-09-30: done in C117, #955 — the scan now runs beside the job pull.)_
 - **Bluetooth printer rows: details at the top, buttons side by side, Unpair on one press, messages
-  that fade, and "Pairing…" beside the buttons (C103, owner 2026-09-30) — DONE (2026-09-30).** The
+  that fade, and "Pairing…" beside the buttons (C103, owner 2026-09-30) — DONE (2026-09-30, #957).** The
   owner: _"The printer name and details should be vertically aligned to the top. the action buttons
   can be side by side. Forget pairing -> Unpair. We don't need a confirm button when unpairing, it
   is easy to re-pair. We don't need the dismiss button - show the notification for a few seconds
@@ -6715,6 +6715,13 @@ approved.
   unhandled rejection Vitest reports. Left open: the office-printer
   check and the check of addresses typed into the dashboard still run inside the poll, so the job
   pull still waits for them (see "A sweep in flight keeps connecting" below).
+- **Unpair can come back for a short while after a successful unpairing** (found in C103's review,
+  read, not run). The server calls a Bluetooth device paired while the agent's last "paired" report
+  is fresh (`isListed(pairedAt)`, `apps/server/src/print-api.ts`: 45 seconds while a discovery
+  window is open, 15 otherwise), and a later report that the device is no longer paired keeps the
+  old `pairedAt`. So for up to that long after an Unpair a device can read as paired again. Clearing
+  `pairedAt` when the agent reports a successful unpair, or reports the device unpaired, would end
+  it; the owner was asked (questions.md, C103).
 - **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
   run). `discoveryUntil` is a time on the server's clock, and the agent checks it against
   `host.now()` (`packages/print-agent/src/agent.ts`), where a network probe's deadline is sent as a
