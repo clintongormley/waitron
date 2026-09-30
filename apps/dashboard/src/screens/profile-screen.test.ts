@@ -1274,3 +1274,65 @@ describe("your profile — errors beside Save, not above the form", () => {
     expect(save(el).disabled).toBe(false);
   });
 });
+
+describe("your profile — the signed-in email is named as the username beside the current-password field", () => {
+  function expectSavedUsernameBeside(el: ProfileScreen, email: string) {
+    const root = el.shadowRoot!;
+    const username = root.querySelector<HTMLInputElement>("input[autocomplete=username]");
+    expect(username, "a username field beside the current password").not.toBeNull();
+    expect(username!.value).toBe(email);
+    expect(username!.type).toBe("email");
+    expect(username!.readOnly).toBe(true);
+    expect(username!.tabIndex).toBe(-1);
+    expect(username!.getAttribute("aria-hidden")).toBe("true");
+    const password = root.querySelector<HTMLElement>("wt-input[name=currentPassword]")!;
+    expect(password.shadowRoot!.querySelector("input")!.autocomplete).toBe("current-password");
+    expect(username!.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
+      0,
+    );
+    const box = username!.getBoundingClientRect();
+    expect(box.width).toBeLessThanOrEqual(1);
+    expect(box.height).toBeLessThanOrEqual(1);
+  }
+
+  it("on every step that asks for the current password", async () => {
+    const { el } = await mount();
+    for (const action of [
+      "change-password",
+      "change-pin",
+      "add-passkey",
+      "remove-passkey",
+      "setup-authenticator",
+      "setup-google",
+    ]) {
+      await click(el, action);
+      expectSavedUsernameBeside(el, "alex@example.com");
+      await click(el, "cancel");
+    }
+    await editDetails(el);
+    input(el, "email", "new@example.com");
+    await flush(el);
+    expectSavedUsernameBeside(el, "alex@example.com");
+  });
+
+  it("on the steps an authenticator and a linked Google account add", async () => {
+    const profile = { ...(await apiStub().getProfile()), hasTotp: true, hasGoogle: true };
+    const { el } = await mount({ getProfile: vi.fn().mockResolvedValue(profile) });
+    for (const action of ["recovery-codes", "disable-authenticator", "unlink-google"]) {
+      await click(el, action);
+      expectSavedUsernameBeside(el, "alex@example.com");
+      await click(el, "cancel");
+    }
+  });
+
+  it("names no username for an account with no email, and none on a step that asks no password", async () => {
+    const { el } = await mount();
+    await editDetails(el);
+    expect(el.shadowRoot!.querySelector("input[autocomplete=username]")).toBeNull();
+    await click(el, "cancel");
+    const profile = { ...(await apiStub().getProfile()), email: null };
+    const { el: noEmail } = await mount({ getProfile: vi.fn().mockResolvedValue(profile) });
+    expect(noEmail.shadowRoot!.querySelector("wt-input[name=currentPassword]")).not.toBeNull();
+    expect(noEmail.shadowRoot!.querySelector("input[autocomplete=username]")).toBeNull();
+  });
+});

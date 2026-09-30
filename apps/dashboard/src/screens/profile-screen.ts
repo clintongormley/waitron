@@ -17,6 +17,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
+import { autofillUsername, autofillUsernameStyles } from "../widgets/autofill-username.js";
 
 type Mode =
   | "view"
@@ -68,6 +69,7 @@ const emptyFields = (): Record<Field, string> => ({
 export class ProfileScreen extends LitElement {
   static override styles = [
     baseStyles,
+    autofillUsernameStyles,
     css`
       :host {
         display: block;
@@ -931,7 +933,7 @@ export class ProfileScreen extends LitElement {
       ${
         this.needsCredentials
           ? html`<p class="hint">${t("profile.confirm_identity")}</p>
-              ${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
+              ${autofillUsername(p.email)}${this.#input("currentPassword", "profile.current_password", "password", "current-password")}${p.hasTotp ? this.#input("totp", "profile.totp", "text", "one-time-code") : nothing}`
           : nothing
       }
       ${this.mode === "passkey" ? this.#input("passkeyName", "profile.passkey_name", "text", "off", false) : nothing}
