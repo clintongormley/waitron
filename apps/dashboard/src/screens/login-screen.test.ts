@@ -1683,12 +1683,10 @@ describe("login-screen: language chooser", () => {
     history.replaceState(null, "", url);
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
     await flush(el);
-    const screen = el.shadowRoot!.querySelector(".screen")!;
-    expect(screen.lastElementChild!.localName).toBe("wt-language-footer");
-    const privacy = screen.querySelector("a[href='https://restaurant.example/privacy']")!;
-    expect(
-      privacy.compareDocumentPosition(screen.lastElementChild!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    const last = el.shadowRoot!.lastElementChild!;
+    expect(last.localName).toBe("wt-language-footer");
+    const privacy = el.shadowRoot!.querySelector("a[href='https://restaurant.example/privacy']")!;
+    expect(privacy.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("names the page's language on the footer, and follows a switch", async () => {

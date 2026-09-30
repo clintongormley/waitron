@@ -664,6 +664,8 @@ export class DashboardApp extends LitElement {
       this.contentLanguageError = codeOf(error);
     },
   );
+  /** A stable field, so the footer's `loadLocales` property does not change on every render. */
+  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
   @state() private alerts: AlertView[] = [];
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
@@ -1243,7 +1245,7 @@ export class DashboardApp extends LitElement {
             </div>
             <wt-language-footer
               .active=${currentLocale()}
-              .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+              .loadLocales=${this.#loadLocales}
             ></wt-language-footer>
           </div>
         </div>

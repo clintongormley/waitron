@@ -56,17 +56,15 @@ export class LoginScreen extends LitElement {
         display: block;
       }
 
-      /* A column, so where the app gives the screen the page's height the footer sits at its foot. */
-      .screen {
-        display: flex;
-        flex-direction: column;
-        flex: 1 0 auto;
+      .screen,
+      wt-language-footer {
         width: 100%;
         max-width: 30rem;
         margin-inline: auto;
       }
 
-      .screen > wt-language-footer {
+      /* Where the app makes the host a page-tall column, this keeps the footer at its foot. */
+      wt-language-footer {
         margin-top: auto;
       }
 
@@ -866,10 +864,13 @@ export class LoginScreen extends LitElement {
     </ul>`;
   }
 
+  /** A stable field, so the footer's `loadLocales` property does not change on every render. */
+  readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
+
   #languageFooter() {
     return html`<wt-language-footer
       .active=${currentLocale()}
-      .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
+      .loadLocales=${this.#loadLocales}
     ></wt-language-footer>`;
   }
 
@@ -914,251 +915,302 @@ export class LoginScreen extends LitElement {
     if (this.token !== null) {
       return html`
         <div class="screen">
-          <div class="content">
-            <h1>
-              ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
-            </h1>
-            ${this.actionValidated ? this.#renderLoginContext(false) : nothing}
-            <input
-              class="autofill-username"
-              data-autofill-username
-              name="email"
-              type="email"
-              autocomplete="username"
-              .value=${this.email}
-              tabindex="-1"
-              aria-hidden="true"
-              readonly
-            />
-            ${
-              !this.actionValidated
-                ? html`
-                    <p role="status">${t("account.validating_link")}</p>
-                    ${this.actionResent ? html`<p role="status">${t("account.link_resent")}</p>` : nothing}
-                    <wt-form-actions .error=${form.bottom}>
-                      <wt-button
-                        slot="cancel"
-                        variant="secondary"
-                        data-test="cancel-account-action"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#cancelAccountAction()}
-                        >${t("action.cancel")}</wt-button
-                      >
-                    </wt-form-actions>
-                    ${
-                      this.errorKey === "account_action.invalid" || this.actionResent
-                        ? html`<wt-button
-                            variant="ghost"
-                            data-test="resend-account-link"
-                            ?disabled=${this.busy}
-                            @click=${() => void this.#requestAccountLink()}
-                            >${t("account.resend_link")}</wt-button
-                          >`
-                        : nothing
-                    }
-                  `
-                : html`
-                    <wt-input
-                      class="field"
-                      name="new-password"
-                      autocomplete="new-password"
-                      required
-                      label=${t("account.new_password")}
-                      type=${this.newPasswordVisible ? "text" : "password"}
-                      error=${fieldError("new-password")}
-                      .value=${this.password}
-                      @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
-                      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
-                    >
-                      <wt-button
-                        class="password-toggle"
-                        slot="end"
-                        variant="ghost"
-                        data-test="toggle-new-password"
-                        aria-label=${this.newPasswordVisible ? t("account.hide_new_password") : t("account.show_new_password")}
-                        ?disabled=${this.busy}
-                        @click=${() => (this.newPasswordVisible = !this.newPasswordVisible)}
-                        >${this.#renderPasswordIcon(this.newPasswordVisible)}</wt-button
-                      >
-                    </wt-input>
-                    ${
-                      this.actionPurpose === "invitation"
-                        ? html`
-                            <wt-input
-                              class="field"
-                              name="new-pin"
-                              autocomplete="off"
-                              required
-                              label=${t("account.new_pin")}
-                              type=${this.pinVisible ? "text" : "password"}
-                              error=${fieldError("new-pin")}
-                              .value=${this.pin}
-                              @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
-                              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
-                            >
-                              <wt-button
-                                class="password-toggle"
-                                slot="end"
-                                variant="ghost"
-                                data-test="toggle-new-pin"
-                                aria-label=${this.pinVisible ? t("account.hide_new_pin") : t("account.show_new_pin")}
-                                ?disabled=${this.busy}
-                                @click=${() => (this.pinVisible = !this.pinVisible)}
-                                >${this.#renderPasswordIcon(this.pinVisible)}</wt-button
-                              >
-                            </wt-input>
-                          `
-                        : nothing
-                    }
-                    <wt-form-actions .error=${form.bottom}>
-                      <wt-button
-                        slot="cancel"
-                        variant="secondary"
-                        data-test="cancel-account-action"
-                        ?disabled=${this.busy}
-                        @click=${() => this.#cancelAccountAction()}
-                        >${t("action.cancel")}</wt-button
-                      >
-                      <wt-button
-                        variant="primary"
-                        data-test="complete-account"
-                        ?disabled=${this.busy || form.blocked}
-                        @click=${() => void this.#completeAccount()}
-                        >${t("action.set_password")}</wt-button
-                      >
-                    </wt-form-actions>
-                  `
-            }
-            ${this.#privacyLink()}
-          </div>
-          ${this.#languageFooter()}
-        </div>
-      `;
-    }
-    const submitTarget =
-      this.step === "email" ? "continue" : this.step === "factor" ? "submit-factor" : "submit";
-    return html`
-      <div class="screen">
-        <div class="content">
-          ${this.noticeCode && this.noticeCode !== "management_session.required" ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
+          <h1>
+            ${this.actionPurpose === "password_reset" ? t("account.reset_title") : t("account.setup_title")}
+          </h1>
+          ${this.actionValidated ? this.#renderLoginContext(false) : nothing}
+          <input
+            class="autofill-username"
+            data-autofill-username
+            name="email"
+            type="email"
+            autocomplete="username"
+            .value=${this.email}
+            tabindex="-1"
+            aria-hidden="true"
+            readonly
+          />
           ${
-            this.step === "setup-passkey"
+            !this.actionValidated
               ? html`
-                  <h1>${t("account.offer_passkey")}</h1>
-                  ${this.#renderLoginContext(false)}
-                  <p>${t("account.passkey_optional")}</p>
+                  <p role="status">${t("account.validating_link")}</p>
+                  ${this.actionResent ? html`<p role="status">${t("account.link_resent")}</p>` : nothing}
+                  <wt-form-actions .error=${form.bottom}>
+                    <wt-button
+                      slot="cancel"
+                      variant="secondary"
+                      data-test="cancel-account-action"
+                      ?disabled=${this.busy}
+                      @click=${() => this.#cancelAccountAction()}
+                      >${t("action.cancel")}</wt-button
+                    >
+                  </wt-form-actions>
+                  ${
+                    this.errorKey === "account_action.invalid" || this.actionResent
+                      ? html`<wt-button
+                          variant="ghost"
+                          data-test="resend-account-link"
+                          ?disabled=${this.busy}
+                          @click=${() => void this.#requestAccountLink()}
+                          >${t("account.resend_link")}</wt-button
+                        >`
+                      : nothing
+                  }
+                `
+              : html`
                   <wt-input
                     class="field"
-                    name="passkey-name"
-                    autocomplete="off"
-                    label=${t("profile.passkey_name")}
-                    .value=${this.passkeyName}
-                    error=${fieldError("passkey-name")}
-                    @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                      event.stopPropagation();
-                      this.passkeyName = event.detail.value;
-                      this.#dismissRefusal("passkey-name");
-                    }}
-                    @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
-                  ></wt-input>
+                    name="new-password"
+                    autocomplete="new-password"
+                    required
+                    label=${t("account.new_password")}
+                    type=${this.newPasswordVisible ? "text" : "password"}
+                    error=${fieldError("new-password")}
+                    .value=${this.password}
+                    @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
+                  >
+                    <wt-button
+                      class="password-toggle"
+                      slot="end"
+                      variant="ghost"
+                      data-test="toggle-new-password"
+                      aria-label=${this.newPasswordVisible ? t("account.hide_new_password") : t("account.show_new_password")}
+                      ?disabled=${this.busy}
+                      @click=${() => (this.newPasswordVisible = !this.newPasswordVisible)}
+                      >${this.#renderPasswordIcon(this.newPasswordVisible)}</wt-button
+                    >
+                  </wt-input>
                   ${
-                    this.passkeyFactorRequired
-                      ? html`<wt-input
-                          class="field"
-                          name="one-time-code"
-                          autocomplete="one-time-code"
-                          required
-                          label=${t("login.authenticator_code")}
-                          .value=${this.secondFactor}
-                          error=${fieldError("one-time-code")}
-                          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(event)}
-                          @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
-                        ></wt-input>`
+                    this.actionPurpose === "invitation"
+                      ? html`
+                          <wt-input
+                            class="field"
+                            name="new-pin"
+                            autocomplete="off"
+                            required
+                            label=${t("account.new_pin")}
+                            type=${this.pinVisible ? "text" : "password"}
+                            error=${fieldError("new-pin")}
+                            .value=${this.pin}
+                            @keydown=${(e: KeyboardEvent) => this.#submitAccountOnEnter(e)}
+                            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPinChange(e)}
+                          >
+                            <wt-button
+                              class="password-toggle"
+                              slot="end"
+                              variant="ghost"
+                              data-test="toggle-new-pin"
+                              aria-label=${this.pinVisible ? t("account.hide_new_pin") : t("account.show_new_pin")}
+                              ?disabled=${this.busy}
+                              @click=${() => (this.pinVisible = !this.pinVisible)}
+                              >${this.#renderPasswordIcon(this.pinVisible)}</wt-button
+                            >
+                          </wt-input>
+                        `
                       : nothing
                   }
                   <wt-form-actions .error=${form.bottom}>
                     <wt-button
                       slot="cancel"
                       variant="secondary"
-                      data-test="skip-passkey"
+                      data-test="cancel-account-action"
                       ?disabled=${this.busy}
-                      @click=${() => {
-                        if (!this.busy && this.completedLogin !== null)
-                          void this.#resolvePasskeyOffer(this.completedLogin);
-                      }}
-                      >${t("account.skip_passkey")}</wt-button
+                      @click=${() => this.#cancelAccountAction()}
+                      >${t("action.cancel")}</wt-button
                     >
                     <wt-button
                       variant="primary"
-                      data-test="setup-passkey"
+                      data-test="complete-account"
                       ?disabled=${this.busy || form.blocked}
-                      @click=${() => void this.#setupPasskey()}
-                      >${t("staff.add_passkey")}</wt-button
+                      @click=${() => void this.#completeAccount()}
+                      >${t("action.set_password")}</wt-button
                     >
                   </wt-form-actions>
                 `
-              : this.step === "email"
+          }
+          ${this.#privacyLink()}
+        </div>
+        ${this.#languageFooter()}
+      `;
+    }
+    const submitTarget =
+      this.step === "email" ? "continue" : this.step === "factor" ? "submit-factor" : "submit";
+    return html`
+      <div class="screen">
+        ${this.noticeCode && this.noticeCode !== "management_session.required" ? html`<p class="notice" role="status">${codeMessage(this.noticeCode)}</p>` : nothing}
+        ${
+          this.step === "setup-passkey"
+            ? html`
+                <h1>${t("account.offer_passkey")}</h1>
+                ${this.#renderLoginContext(false)}
+                <p>${t("account.passkey_optional")}</p>
+                <wt-input
+                  class="field"
+                  name="passkey-name"
+                  autocomplete="off"
+                  label=${t("profile.passkey_name")}
+                  .value=${this.passkeyName}
+                  error=${fieldError("passkey-name")}
+                  @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                    event.stopPropagation();
+                    this.passkeyName = event.detail.value;
+                    this.#dismissRefusal("passkey-name");
+                  }}
+                  @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
+                ></wt-input>
+                ${
+                  this.passkeyFactorRequired
+                    ? html`<wt-input
+                        class="field"
+                        name="one-time-code"
+                        autocomplete="one-time-code"
+                        required
+                        label=${t("login.authenticator_code")}
+                        .value=${this.secondFactor}
+                        error=${fieldError("one-time-code")}
+                        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(event)}
+                        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=setup-passkey]"))}
+                      ></wt-input>`
+                    : nothing
+                }
+                <wt-form-actions .error=${form.bottom}>
+                  <wt-button
+                    slot="cancel"
+                    variant="secondary"
+                    data-test="skip-passkey"
+                    ?disabled=${this.busy}
+                    @click=${() => {
+                      if (!this.busy && this.completedLogin !== null)
+                        void this.#resolvePasskeyOffer(this.completedLogin);
+                    }}
+                    >${t("account.skip_passkey")}</wt-button
+                  >
+                  <wt-button
+                    variant="primary"
+                    data-test="setup-passkey"
+                    ?disabled=${this.busy || form.blocked}
+                    @click=${() => void this.#setupPasskey()}
+                    >${t("staff.add_passkey")}</wt-button
+                  >
+                </wt-form-actions>
+              `
+            : this.step === "email"
+              ? html`
+                  <h1>${t("login.heading")}</h1>
+                  <wt-input
+                    @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
+                    class="field"
+                    name="email"
+                    autocomplete="username webauthn"
+                    required
+                    label=${t("login.email")}
+                    type="email"
+                    error=${fieldError("email")}
+                    .value=${this.email}
+                    @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
+                  ></wt-input>
+                  ${this.#rememberChoice()}
+                  <wt-form-actions .error=${form.bottom}>
+                    <wt-button
+                      variant="primary"
+                      data-test="continue"
+                      ?disabled=${form.blocked}
+                      @click=${() => this.#continue()}
+                      >${t("action.continue")}</wt-button
+                    >
+                  </wt-form-actions>
+                `
+              : this.step === "google"
                 ? html`
-                    <h1>${t("login.heading")}</h1>
-                    <wt-input
-                      @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
-                      class="field"
-                      name="email"
-                      autocomplete="username webauthn"
-                      required
-                      label=${t("login.email")}
-                      type="email"
-                      error=${fieldError("email")}
-                      .value=${this.email}
-                      @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onEmailChange(e)}
-                    ></wt-input>
-                    ${this.#rememberChoice()}
-                    <wt-form-actions .error=${form.bottom}>
-                      <wt-button
+                    <h1>${t("login.google_heading")}</h1>
+                    ${this.#renderLoginContext()}
+                    <p class="alternative-hint">${t("login.google_hint")}</p>
+                    <wt-form-actions .error=${form.bottom}
+                      ><wt-button
                         variant="primary"
-                        data-test="continue"
-                        ?disabled=${form.blocked}
-                        @click=${() => this.#continue()}
-                        >${t("action.continue")}</wt-button
-                      >
-                    </wt-form-actions>
+                        data-test="google-login"
+                        ?disabled=${this.busy || !this.googleConfigured}
+                        @click=${() => void this.#googleLogin()}
+                        >${t("login.with_google")}</wt-button
+                      ></wt-form-actions
+                    >
+                    ${this.#alternatives()}
                   `
-                : this.step === "google"
+                : this.step === "passkey"
                   ? html`
-                      <h1>${t("login.google_heading")}</h1>
+                      <h1>${t("login.use_passkey_heading")}</h1>
                       ${this.#renderLoginContext()}
-                      <p class="alternative-hint">${t("login.google_hint")}</p>
-                      <wt-form-actions .error=${form.bottom}
-                        ><wt-button
+                      <p class="alternative-hint">${t("login.passkey_hint")}</p>
+                      <wt-form-actions .error=${form.bottom}>
+                        <wt-button
                           variant="primary"
-                          data-test="google-login"
-                          ?disabled=${this.busy || !this.googleConfigured}
-                          @click=${() => void this.#googleLogin()}
-                          >${t("login.with_google")}</wt-button
-                        ></wt-form-actions
-                      >
+                          data-test="passkey-login"
+                          ?disabled=${this.busy}
+                          @click=${() => void this.#passkeyLogin()}
+                          >${t("login.with_passkey")}</wt-button
+                        >
+                      </wt-form-actions>
                       ${this.#alternatives()}
                     `
-                  : this.step === "passkey"
+                  : this.step === "password"
                     ? html`
-                        <h1>${t("login.use_passkey_heading")}</h1>
+                        <h1>${t("login.password_heading")}</h1>
                         ${this.#renderLoginContext()}
-                        <p class="alternative-hint">${t("login.passkey_hint")}</p>
+                        <input
+                          class="autofill-username"
+                          data-autofill-username
+                          name="email"
+                          type="email"
+                          autocomplete="username"
+                          .value=${this.email}
+                          tabindex="-1"
+                          aria-hidden="true"
+                          readonly
+                        />
+                        <wt-input
+                          @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
+                          class="field"
+                          name="password"
+                          autocomplete="current-password"
+                          required
+                          label=${t("login.password")}
+                          type=${this.passwordVisible ? "text" : "password"}
+                          error=${fieldError("password")}
+                          .value=${this.password}
+                          @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
+                        >
+                          <wt-button
+                            class="password-toggle"
+                            slot="end"
+                            variant="ghost"
+                            data-test="toggle-password"
+                            aria-label=${
+                              this.passwordVisible
+                                ? t("login.hide_password")
+                                : t("login.show_password")
+                            }
+                            ?disabled=${this.busy}
+                            @click=${() => (this.passwordVisible = !this.passwordVisible)}
+                            >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
+                          >
+                        </wt-input>
+                        ${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}
                         <wt-form-actions .error=${form.bottom}>
                           <wt-button
                             variant="primary"
-                            data-test="passkey-login"
-                            ?disabled=${this.busy}
-                            @click=${() => void this.#passkeyLogin()}
-                            >${t("login.with_passkey")}</wt-button
+                            data-test="submit"
+                            ?disabled=${this.busy || form.blocked}
+                            @click=${() => void this.#submit()}
+                            >${t("action.login")}</wt-button
                           >
                         </wt-form-actions>
                         ${this.#alternatives()}
                       `
-                    : this.step === "password"
+                    : this.step === "factor"
                       ? html`
-                          <h1>${t("login.password_heading")}</h1>
                           ${this.#renderLoginContext()}
+                          <h1>${t("login.factor_heading")}</h1>
                           <input
                             class="autofill-username"
                             data-autofill-username
@@ -1171,136 +1223,81 @@ export class LoginScreen extends LitElement {
                             readonly
                           />
                           <wt-input
-                            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>(`[data-test=${submitTarget}]`))}
                             class="field"
-                            name="password"
-                            autocomplete="current-password"
+                            name="one-time-code"
+                            autocomplete="one-time-code"
                             required
-                            label=${t("login.password")}
-                            type=${this.passwordVisible ? "text" : "password"}
-                            error=${fieldError("password")}
-                            .value=${this.password}
-                            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPasswordChange(e)}
-                          >
-                            <wt-button
-                              class="password-toggle"
-                              slot="end"
-                              variant="ghost"
-                              data-test="toggle-password"
-                              aria-label=${
-                                this.passwordVisible
-                                  ? t("login.hide_password")
-                                  : t("login.show_password")
-                              }
-                              ?disabled=${this.busy}
-                              @click=${() => (this.passwordVisible = !this.passwordVisible)}
-                              >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
-                            >
-                          </wt-input>
-                          ${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}
+                            label=${
+                              this.factorMode === "totp"
+                                ? t("login.authenticator_code")
+                                : t("login.recovery_code")
+                            }
+                            error=${fieldError("one-time-code")}
+                            .value=${this.secondFactor}
+                            @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
+                            @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
+                          ></wt-input>
                           <wt-form-actions .error=${form.bottom}>
                             <wt-button
+                              slot="cancel"
+                              variant="secondary"
+                              data-test="back-to-password"
+                              ?disabled=${this.busy}
+                              @click=${() => {
+                                this.secondFactor = "";
+                                this.errorKey = null;
+                                this.step = "password";
+                              }}
+                              >${t("action.back")}</wt-button
+                            >
+                            <wt-button
                               variant="primary"
-                              data-test="submit"
+                              data-test="submit-factor"
                               ?disabled=${this.busy || form.blocked}
                               @click=${() => void this.#submit()}
                               >${t("action.login")}</wt-button
                             >
                           </wt-form-actions>
-                          ${this.#alternatives()}
-                        `
-                      : this.step === "factor"
-                        ? html`
-                            ${this.#renderLoginContext()}
-                            <h1>${t("login.factor_heading")}</h1>
-                            <input
-                              class="autofill-username"
-                              data-autofill-username
-                              name="email"
-                              type="email"
-                              autocomplete="username"
-                              .value=${this.email}
-                              tabindex="-1"
-                              aria-hidden="true"
-                              readonly
-                            />
-                            <wt-input
-                              class="field"
-                              name="one-time-code"
-                              autocomplete="one-time-code"
-                              required
-                              label=${
+                          <ul class="alternative-list">
+                            <li>
+                              ${this.#methodLink(
+                                "switch-factor",
                                 this.factorMode === "totp"
-                                  ? t("login.authenticator_code")
-                                  : t("login.recovery_code")
-                              }
-                              error=${fieldError("one-time-code")}
-                              .value=${this.secondFactor}
-                              @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
-                              @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
-                            ></wt-input>
+                                  ? t("login.use_recovery_code")
+                                  : t("login.use_authenticator_code"),
+                                () => {
+                                  this.factorMode =
+                                    this.factorMode === "totp" ? "recovery" : "totp";
+                                  this.secondFactor = "";
+                                  this.attempted = false;
+                                },
+                              )}
+                            </li>
+                          </ul>
+                        `
+                      : this.step === "reset-sent"
+                        ? html`
+                            <h1>${t("login.check_email")}</h1>
+                            ${this.#renderLoginContext()}
+                            <p data-test="reset-sent" role="status">
+                              ${t("login.reset_sent").replace("{email}", this.email)}
+                            </p>
+                            <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
                             <wt-form-actions .error=${form.bottom}>
                               <wt-button
-                                slot="cancel"
-                                variant="secondary"
-                                data-test="back-to-password"
-                                ?disabled=${this.busy}
-                                @click=${() => {
-                                  this.secondFactor = "";
-                                  this.errorKey = null;
-                                  this.step = "password";
-                                }}
-                                >${t("action.back")}</wt-button
-                              >
-                              <wt-button
                                 variant="primary"
-                                data-test="submit-factor"
-                                ?disabled=${this.busy || form.blocked}
-                                @click=${() => void this.#submit()}
-                                >${t("action.login")}</wt-button
+                                data-test="resend-reset"
+                                ?disabled=${this.busy || this.resetSeconds > 0}
+                                @click=${() => void this.#requestPasswordReset()}
+                                >${this.resetSeconds > 0 ? t("login.resend_countdown").replace("{seconds}", String(this.resetSeconds)) : t("login.resend_link")}</wt-button
                               >
                             </wt-form-actions>
-                            <ul class="alternative-list">
-                              <li>
-                                ${this.#methodLink(
-                                  "switch-factor",
-                                  this.factorMode === "totp"
-                                    ? t("login.use_recovery_code")
-                                    : t("login.use_authenticator_code"),
-                                  () => {
-                                    this.factorMode =
-                                      this.factorMode === "totp" ? "recovery" : "totp";
-                                    this.secondFactor = "";
-                                    this.attempted = false;
-                                  },
-                                )}
-                              </li>
-                            </ul>
                           `
-                        : this.step === "reset-sent"
-                          ? html`
-                              <h1>${t("login.check_email")}</h1>
-                              ${this.#renderLoginContext()}
-                              <p data-test="reset-sent" role="status">
-                                ${t("login.reset_sent").replace("{email}", this.email)}
-                              </p>
-                              <p class="alternative-hint">${t("login.reset_delivery_hint")}</p>
-                              <wt-form-actions .error=${form.bottom}>
-                                <wt-button
-                                  variant="primary"
-                                  data-test="resend-reset"
-                                  ?disabled=${this.busy || this.resetSeconds > 0}
-                                  @click=${() => void this.#requestPasswordReset()}
-                                  >${this.resetSeconds > 0 ? t("login.resend_countdown").replace("{seconds}", String(this.resetSeconds)) : t("login.resend_link")}</wt-button
-                                >
-                              </wt-form-actions>
-                            `
-                          : nothing
-          }
-          ${this.#privacyLink()}
-        </div>
-        ${this.#languageFooter()}
+                        : nothing
+        }
+        ${this.#privacyLink()}
       </div>
+      ${this.#languageFooter()}
     `;
   }
 }
