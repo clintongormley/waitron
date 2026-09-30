@@ -66,11 +66,17 @@ describe("management session lifecycle", () => {
         sql`select id from management_sessions where person_id = ${personId}`,
       )
     ).rows;
+    const [person] = (
+      await suite.db.execute<{ display_name: string }>(
+        sql`select display_name from persons where id = ${personId}`,
+      )
+    ).rows;
     expect(resolved).toEqual({
       sessionRowId: row!.id,
       personId,
       role: "manager",
       email: null,
+      displayName: person!.display_name,
       locale: null,
       expiresAt: expect.any(String),
     });

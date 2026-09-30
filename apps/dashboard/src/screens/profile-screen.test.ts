@@ -1,5 +1,5 @@
 import { LiveData } from "@waitron/dashboard-kit";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -23,6 +23,17 @@ beforeEach(() => {
     toJSON: vi.fn(),
   } as PublicKeyCredential);
 });
+let signalAll: MockInstance<typeof PublicKeyCredential.signalAllAcceptedCredentials>;
+let signalDetails: MockInstance<typeof PublicKeyCredential.signalCurrentUserDetails>;
+// The browser's own methods, replaced so no real password manager is told anything.
+beforeEach(() => {
+  signalAll = vi
+    .spyOn(PublicKeyCredential, "signalAllAcceptedCredentials")
+    .mockResolvedValue(undefined);
+  signalDetails = vi
+    .spyOn(PublicKeyCredential, "signalCurrentUserDetails")
+    .mockResolvedValue(undefined);
+});
 afterEach(cleanupWidgets);
 afterEach(() => vi.restoreAllMocks());
 
@@ -31,6 +42,13 @@ const registrationOptions = {
   rp: { name: "Waitron", id: "localhost" },
   user: { id: "BAUG", name: "alex@example.com", displayName: "Alex" },
   pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+};
+const PASSKEY_SIGNALS = {
+  rpId: "localhost",
+  userId: "BAUG",
+  credentialIds: ["credential", "new-credential"],
+  name: "alex@example.com",
+  displayName: "Alex",
 };
 function apiStub(overrides: Record<string, unknown> = {}) {
   return {
@@ -88,6 +106,7 @@ function apiStub(overrides: Record<string, unknown> = {}) {
       .fn()
       .mockResolvedValue({ challengeHandle: "handle", options: registrationOptions }),
     passkeyRegisterVerify: vi.fn().mockResolvedValue({ credentialId: "new-credential" }),
+    passkeySignals: vi.fn().mockResolvedValue(PASSKEY_SIGNALS),
     disableTotp: vi.fn().mockResolvedValue(undefined),
     unlinkGoogle: vi.fn().mockResolvedValue(undefined),
     ...overrides,
@@ -543,6 +562,50 @@ describe("your profile", () => {
     input(el, "currentPassword", "current");
     await click(el, "save");
     expect(api.removePasskey).toHaveBeenCalledWith("credential", { currentPassword: "current" });
+  });
+  it("tells the browser's password manager which passkeys are accepted after adding one and after removing one", async () => {
+    const { el, api } = await mount();
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    await flush(el);
+    expect(api.passkeySignals).toHaveBeenCalledOnce();
+    expect(signalAll).toHaveBeenCalledExactlyOnceWith({
+      rpId: "localhost",
+      userId: "BAUG",
+      allAcceptedCredentialIds: ["credential", "new-credential"],
+    });
+    expect(signalDetails).toHaveBeenCalledExactlyOnceWith({
+      rpId: "localhost",
+      userId: "BAUG",
+      name: "alex@example.com",
+      displayName: "Alex",
+    });
+    await click(el, "remove-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    await flush(el);
+    expect(api.passkeySignals).toHaveBeenCalledTimes(2);
+    expect(signalAll).toHaveBeenCalledTimes(2);
+  });
+  it("tells the password manager nothing when adding a passkey fails or another setting changes", async () => {
+    const { el, api } = await mount({
+      passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    await click(el, "add-passkey");
+    input(el, "currentPassword", "current");
+    await click(el, "save");
+    await click(el, "cancel");
+    await click(el, "change-pin");
+    input(el, "currentPassword", "current");
+    input(el, "pin", "4321");
+    input(el, "confirmPin", "4321");
+    await click(el, "save");
+    await flush(el);
+    expect(api.changePin).toHaveBeenCalledOnce();
+    expect(api.passkeySignals).not.toHaveBeenCalled();
+    expect(signalAll).not.toHaveBeenCalled();
+    expect(signalDetails).not.toHaveBeenCalled();
   });
   it("sets up an authenticator and shows recovery codes once", async () => {
     const { el, api } = await mount();

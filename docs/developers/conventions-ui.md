@@ -192,10 +192,23 @@ beside the action on the dashboard and the setup wizard's Connect, "Wrong PIN" o
 the PIN is the only thing typed. It marks no field, with one exception: the setup wizard's Reset
 form marks its person-ID and password fields together (`apps/setup/src/screens/reset-screen.ts`),
 naming neither as the wrong one.
-Passkey and Google sign-in keep their own codes, each one answer for an unknown account and a
-non-active one: `passkey.verification_failed` for a credential nobody holds or whose owner is not
-active (`packages/identity/src/passkey.ts`), `google.invalid` for a Google account linked to nobody
-or to a person who is not active (`loginWithGoogle`, `packages/identity/src/google-oidc.ts`).
+Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey whose
+owner is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
+`google.invalid` for a Google account linked to nobody or to a person who is not active
+(`loginWithGoogle`, `packages/identity/src/google-oidc.ts`). **One exception, owner-approved
+(2026-09-30, C101): a passkey Waitron holds no row for answers `passkey.not_registered`**, and the
+dashboard asks the browser to forget it (`signalUnknownCredential`, `apps/dashboard/src/passkey-signals.ts`)
+and says so. The answer says only whether that credential id has a row, and it is given before any
+signature check, so the id plus a challenge, which anyone can fetch without signing in
+(`POST /management-api/passkey/auth/options`), is enough to ask. A credential row has no status of
+its own (`webauthn_credentials` in `packages/identity/src/schema/webauthn.ts`) and suspension keeps
+it, so a suspended owner's passkey stays the generic answer. A manager's login reset and a reactivation do delete the person's
+passkeys (`resetPersonLogin`, `reactivatePersonForInvitation`, `packages/identity/src/staff.ts`),
+so after either, an old passkey answers `passkey.not_registered` like one the person removed.
+Guards: the unknown, wiped-install, login-reset and suspended cases in
+`packages/identity/src/passkey.test.ts` (the wiped-install case runs the same lookup as the unknown
+one, since the lookup never reads the user handle), and the unknown and suspended route cases in
+`apps/server/src/management-api-passkey.test.ts`.
 Identity's password and PIN refusals carry the real cause for the server log only:
 `new AppError(code, {}, { reason })`, whose `reason` a route using `createErrorBoundary`
 (`packages/server-kit/src/error-boundary.ts`) logs as `logReason` and never answers. No reason is

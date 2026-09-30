@@ -18,6 +18,7 @@ import { codeOf, codeMessage } from "./i18n/codes.js";
 import { setContentLanguages } from "@waitron/ui";
 import { DashboardQueries } from "./api/query-controller.js";
 import { diag } from "./diagnostics.js";
+import { signalAcceptedPasskeys } from "./passkey-signals.js";
 import type { StringKey } from "./i18n/strings.js";
 // Modules are mounted generically from the browser-safe registry, never named here. `tKit` is the
 // kit's untyped resolver: a module's label keys are not in the app's `StringKey` union.
@@ -785,6 +786,7 @@ export class DashboardApp extends LitElement {
       return;
     }
     await this.#probeSession(preference);
+    if (googleCallback && this.sessionRole !== undefined) void signalAcceptedPasskeys(this.api);
     if (this.screen === "login") await this.#seedLocale();
   }
 
@@ -1106,6 +1108,7 @@ export class DashboardApp extends LitElement {
           rememberedEmail: detail?.rememberedEmail,
         };
     await this.#probeSession(preference);
+    if (this.sessionRole !== undefined && this.isConnected) void signalAcceptedPasskeys(this.api);
     if (accountSetup && this.sessionRole !== undefined && this.isConnected) {
       this.#openProfile();
     }

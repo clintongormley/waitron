@@ -225,8 +225,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el código del autenticador o un código de recuperación",
   },
   "passkey.not_registered": {
-    en: "No passkey is registered for this account",
-    es: "No hay ninguna passkey registrada para esta cuenta",
+    en: "This passkey is no longer registered with Waitron",
+    es: "Esta passkey ya no está registrada en Waitron",
   },
   "passkey.verification_failed": {
     en: "Could not verify the passkey, try again",

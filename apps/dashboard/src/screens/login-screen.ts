@@ -7,7 +7,10 @@ import {
   type PublicKeyCredentialCreationOptionsJSON,
   WebAuthnAbortService,
 } from "@simplewebauthn/browser";
-import type { PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
+import type {
+  AuthenticationResponseJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/browser";
 import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -16,7 +19,8 @@ import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, PasskeyOptions } from "../api/client.js";
+import { signalUnknownPasskey } from "../passkey-signals.js";
 import {
   forgetLoginPreference,
   readLoginPreference,
@@ -219,6 +223,7 @@ export class LoginScreen extends LitElement {
   private resetTimer?: ReturnType<typeof setInterval>;
   private passkeyAttempt = 0;
   @state() private errorKey: string | null = null;
+  @state() private passkeyForgotten = false;
   /** The shown field `errorKey`'s refusal names, if any; the refusal shows under that field. */
   @state() private refusalField: string | null = null;
   @state() private attempted = false;
@@ -388,7 +393,9 @@ export class LoginScreen extends LitElement {
       messages.unshift(
         this.errorKey === "password.invalid" && (this.step === "password" || this.step === "factor")
           ? t("login.failed")
-          : codeMessage(this.errorKey),
+          : this.errorKey === "passkey.not_registered"
+            ? t(this.passkeyForgotten ? "login.passkey_forgotten" : "login.passkey_unknown")
+            : codeMessage(this.errorKey),
       );
     const marked = Object.keys(fields).length > 0;
     const invalid = this.attempted ? Object.keys(this.#validate()) : [];
@@ -753,8 +760,8 @@ export class LoginScreen extends LitElement {
         optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
       });
       if (!this.isConnected || attempt !== this.passkeyAttempt) return;
-      const out = await this.api.passkeyAuthVerify({ challengeHandle, response });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      const out = await this.#verifyPasskey(challengeHandle, options, response, attempt);
+      if (out === null) return;
       this.dispatchEvent(
         new CustomEvent("logged-in", {
           detail: {
@@ -782,6 +789,33 @@ export class LoginScreen extends LitElement {
     } finally {
       if (attempt === this.passkeyAttempt) this.busy = false;
     }
+  }
+
+  /**
+   * Null when the attempt was superseded or a passkey Waitron does not hold was refused, which is
+   * shown here after the browser is asked to forget it.
+   */
+  async #verifyPasskey(
+    challengeHandle: string,
+    options: PasskeyOptions,
+    response: AuthenticationResponseJSON,
+    attempt: number,
+  ): Promise<{ personId: string } | null> {
+    let out: { personId: string };
+    try {
+      out = await this.api.passkeyAuthVerify({ challengeHandle, response });
+    } catch (error) {
+      if (codeOf(error) !== "passkey.not_registered") throw error;
+      const forgotten = await signalUnknownPasskey(
+        typeof options.rpId === "string" ? options.rpId : undefined,
+        response.id,
+      );
+      if (!this.isConnected || attempt !== this.passkeyAttempt) return null;
+      this.passkeyForgotten = forgotten;
+      this.errorKey = "passkey.not_registered";
+      return null;
+    }
+    return this.isConnected && attempt === this.passkeyAttempt ? out : null;
   }
 
   async #conditionalPasskeyLogin(): Promise<void> {
@@ -813,8 +847,8 @@ export class LoginScreen extends LitElement {
         verifyBrowserAutofillInput: false,
       }).catch(() => null);
       if (response === null || !this.isConnected || attempt !== this.passkeyAttempt) return;
-      const out = await this.api.passkeyAuthVerify({ challengeHandle, response });
-      if (!this.isConnected || attempt !== this.passkeyAttempt) return;
+      const out = await this.#verifyPasskey(challengeHandle, options, response, attempt);
+      if (out === null) return;
       this.dispatchEvent(
         new CustomEvent("logged-in", {
           detail: { ...out, loginMethod: "passkey", ...this.#preferenceDetail() },

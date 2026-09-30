@@ -3093,3 +3093,99 @@ describe("login-screen: a step's links are one bulleted list with its buttons on
     },
   );
 });
+
+describe("login-screen: a passkey Waitron no longer holds", () => {
+  const OPTIONS = { challengeHandle: "h1", options: { challenge: "AQID", rpId: "localhost" } };
+  function browserWithUnknownSignal(unknown?: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal(
+      "PublicKeyCredential",
+      unknown === undefined
+        ? class {
+            static isConditionalMediationAvailable = conditionalMediationAvailable;
+          }
+        : class {
+            static isConditionalMediationAvailable = conditionalMediationAvailable;
+            static signalUnknownCredential = unknown;
+          },
+    );
+  }
+  const refusing = (code: string) =>
+    stubApi({
+      passkeyAuthOptions: vi.fn().mockResolvedValue(OPTIONS),
+      passkeyAuthVerify: vi.fn().mockRejectedValue({ code }),
+    });
+
+  it("asks the browser to forget the passkey it offered and says so", async () => {
+    const unknown = vi.fn().mockResolvedValue(undefined);
+    browserWithUnknownSignal(unknown);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: refusing("passkey.not_registered"),
+    });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await vi.waitFor(() => expect(unknown).toHaveBeenCalled());
+    await flush(el);
+    expect(unknown).toHaveBeenCalledExactlyOnceWith({
+      rpId: "localhost",
+      credentialId: "cred-abc",
+    });
+    expect(await bottomOf(el)).toBe(t("login.passkey_forgotten"));
+  });
+
+  it("says only that the passkey is no longer registered when the browser cannot be asked", async () => {
+    browserWithUnknownSignal();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: refusing("passkey.not_registered"),
+    });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await flush(el);
+    await flush(el);
+    expect(await bottomOf(el)).toBe(t("login.passkey_unknown"));
+  });
+
+  it("says only that the passkey is no longer registered when the browser refuses to be asked", async () => {
+    browserWithUnknownSignal(vi.fn().mockRejectedValue(new TypeError("not base64url")));
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: refusing("passkey.not_registered"),
+    });
+    await openPasskey(el);
+    click(el, "passkey-login");
+    await flush(el);
+    await flush(el);
+    expect(await bottomOf(el)).toBe(t("login.passkey_unknown"));
+  });
+
+  it("asks the browser to forget a passkey offered in the email field too", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const unknown = vi.fn().mockResolvedValue(undefined);
+    browserWithUnknownSignal(unknown);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: refusing("passkey.not_registered"),
+    });
+    await vi.waitFor(() => expect(unknown).toHaveBeenCalled());
+    await flush(el);
+    expect(unknown).toHaveBeenCalledExactlyOnceWith({
+      rpId: "localhost",
+      credentialId: "cred-abc",
+    });
+    expect(await bottomOf(el)).toBe(t("login.passkey_forgotten"));
+  });
+
+  it.each(["passkey.verification_failed", "passkey.challenge_expired"])(
+    "asks the browser nothing on %s",
+    async (code) => {
+      const unknown = vi.fn().mockResolvedValue(undefined);
+      browserWithUnknownSignal(unknown);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+        api: refusing(code),
+      });
+      await openPasskey(el);
+      click(el, "passkey-login");
+      await flush(el);
+      await flush(el);
+      expect(await bottomOf(el)).toBe(codeMessage(code));
+      expect(unknown).not.toHaveBeenCalled();
+    },
+  );
+});

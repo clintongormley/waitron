@@ -10,6 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
+import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
@@ -30,6 +31,7 @@ import {
   CHALLENGE_TTL_MS,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
+  readPasskeySignals,
 } from "./passkey.js";
 
 const mockVerify = vi.mocked(verifyRegistrationResponse);
@@ -582,12 +584,34 @@ describe("passkey authentication", () => {
     );
   });
 
-  it("uses the generic verification failure when no credential matches the returned id", async () => {
+  it("answers passkey.not_registered when no credential matches the returned id", async () => {
     const begun = await beginAuth();
     expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-unknown"))).toBe(
-      "passkey.verification_failed",
+      "passkey.not_registered",
     );
     expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("answers passkey.not_registered for a passkey left behind by a wiped database, under a user handle this database never issued", async () => {
+    await seedPerson(suite.db, "admin");
+    const sessionsBefore = (await run((tx) => tx.select().from(managementSessions))).length;
+    const begun = await beginAuth();
+    const code = await codeOf(() =>
+      run((tx) =>
+        finishPasskeyAuthentication(tx, {
+          challengeHandle: begun.challengeHandle,
+          response: {
+            id: "cred-from-the-old-install",
+            response: { userHandle: Buffer.from(crypto.randomUUID()).toString("base64url") },
+          } as never,
+          rpId: "localhost",
+          origin: "http://localhost",
+        }),
+      ),
+    );
+    expect(code).toBe("passkey.not_registered");
+    const opened = await run((tx) => tx.select().from(managementSessions));
+    expect(opened).toHaveLength(sessionsBefore);
   });
 
   it("throws passkey.verification_failed when the assertion does not verify, leaving counter and challenge intact", async () => {
@@ -664,6 +688,32 @@ describe("passkey authentication", () => {
     expect(opened).toHaveLength(0);
   });
 
+  it("answers passkey.not_registered for a passkey a manager's login reset removed", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const personId = await seedPerson(suite.db, "manager");
+    await seedCredential(personId, "cred-abc", 0);
+    await run((tx) => resetPersonLogin(tx, { managementSessionId: token, personId }));
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const begun = await beginAuth();
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.not_registered",
+    );
+  });
+
+  it("keeps a suspended person's passkey, so it still answers the generic refusal", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const personId = await seedPerson(suite.db, "manager");
+    await seedCredential(personId, "cred-abc", 0);
+    await run((tx) => deactivatePerson(tx, { managementSessionId: token, personId }));
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const begun = await beginAuth();
+    expect(await codeOf(() => authenticate(begun.challengeHandle, "cred-abc"))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
   it("maps a THROW from the library to passkey.verification_failed (not an opaque 500)", async () => {
     const personId = await seedPerson(suite.db, "admin");
     const credRowId = await seedCredential(personId, "cred-abc", 4);
@@ -701,5 +751,57 @@ describe("passkey authentication", () => {
     expect(await call({ id: 123 })).toBe("passkey.not_registered");
     expect(await call(undefined)).toBe("passkey.not_registered");
     expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+});
+
+describe("what the browser's password manager is told about a signed-in person's passkeys", () => {
+  const signals = (token: string) =>
+    run((tx) => readPasskeySignals(tx, { managementSessionId: token }));
+
+  it("names the same user handle, username and display name that registration gave the browser", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    const begun = await begin(token);
+    const out = await signals(token);
+    expect(out.userId).toBe(begun.options.user.id);
+    expect(out.name).toBe(begun.options.user.name);
+    expect(out.displayName).toBe(begun.options.user.displayName);
+  });
+
+  it("lists every passkey the person holds and no one else's", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const other = await seedPerson(suite.db, "admin");
+    await seedCredential(personId, "cred-mine-1");
+    await seedCredential(personId, "cred-mine-2");
+    await seedCredential(other, "cred-theirs");
+    const out = await signals(token);
+    expect([...out.credentialIds].sort()).toEqual(["cred-mine-1", "cred-mine-2"]);
+  });
+
+  it("lists nothing for a person who holds no passkey", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    expect((await signals(token)).credentialIds).toEqual([]);
+  });
+
+  it("refuses without a valid management session", async () => {
+    expect(await codeOf(() => signals("not-a-session"))).toBe("management_session.required");
+  });
+
+  it("leaves the session's last-seen time where it was", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const aged = new Date(Date.now() - 10 * 60_000).toISOString();
+    await run((tx) =>
+      tx
+        .update(managementSessions)
+        .set({ lastSeenAt: aged })
+        .where(eq(managementSessions.personId, personId)),
+    );
+    await signals(token);
+    const [row] = await run((tx) =>
+      tx
+        .select({ lastSeenAt: managementSessions.lastSeenAt })
+        .from(managementSessions)
+        .where(eq(managementSessions.personId, personId)),
+    );
+    expect(row!.lastSeenAt).toBe(aged);
   });
 });

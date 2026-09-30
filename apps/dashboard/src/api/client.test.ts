@@ -381,6 +381,23 @@ describe("DashboardApi", () => {
     });
   });
 
+  it("passkeySignals GETs what the password manager is told about the signed-in person", async () => {
+    const payload = {
+      rpId: "waitron.local",
+      userId: "dXNlcg",
+      credentialIds: ["cred-1"],
+      name: "ana@example.com",
+      displayName: "Ana",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.passkeySignals()).toEqual(payload);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/passkey/signals", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
   it("passkeyAuthOptions POSTs the auth/options route with credentials and no body", async () => {
     const payload = { challengeHandle: "ch-2", options: { challenge: "def" } };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(payload));

@@ -530,6 +530,10 @@ export const en = {
   "login.with_google": "Continue with Google",
   "login.google_hint": "Use a Google account you have already linked in your profile.",
   "login.passkey_hint": "Use a passkey saved on this device or another nearby device.",
+  "login.passkey_unknown":
+    "This passkey is no longer registered with Waitron. Use another way to log in.",
+  "login.passkey_forgotten":
+    "This passkey is no longer registered with Waitron, so this browser has been asked to remove it. Use another way to log in.",
   "login.reset_by_email": "I’ve forgotten my password",
   "login.reset_by_email_hint": "Get an email with a link to choose a new password.",
   "login.check_email": "Check your email",
@@ -2470,6 +2474,10 @@ export const es: Record<StringKey, string> = {
   "login.with_google": "Continuar con Google",
   "login.google_hint": "Usa una cuenta de Google que ya hayas vinculado en tu perfil.",
   "login.passkey_hint": "Usa una passkey guardada en este dispositivo o en otro cercano.",
+  "login.passkey_unknown":
+    "Esta passkey ya no está registrada en Waitron. Inicia sesión de otra forma.",
+  "login.passkey_forgotten":
+    "Esta passkey ya no está registrada en Waitron, así que se ha pedido a este navegador que la elimine. Inicia sesión de otra forma.",
   "login.reset_by_email": "¿Has olvidado tu contraseña?",
   "login.reset_by_email_hint": "Recibe un correo con un enlace para elegir una contraseña nueva.",
   "login.check_email": "Revisa tu correo",

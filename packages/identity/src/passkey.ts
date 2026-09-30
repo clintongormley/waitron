@@ -27,9 +27,10 @@ import {
 /**
  * Passkey (WebAuthn) registration and discoverable login. A passkey is always enrolled against the
  * person behind the management session, never a client-supplied id. The server only ever holds the
- * credential's public key, so there is no secret to hash. Unknown credentials and non-active owners
- * both return `passkey.verification_failed`, so this public endpoint does not expose whether the
- * credential exists or its owner's account state.
+ * credential's public key, so there is no secret to hash. A credential id with no row answers
+ * `passkey.not_registered`, so the browser can be told to forget it; that says only whether that
+ * credential id has a row. A non-active owner answers `passkey.verification_failed`, so this
+ * public endpoint does not expose an account's state.
  */
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
@@ -87,15 +88,43 @@ async function consumeChallenge(tx: Transaction, challengeHandle: string): Promi
   return challenge.challenge;
 }
 
+/** WebAuthn's `user.name` is what a password manager lists the passkey under; the dashboard signs
+ * in by email. */
+function passkeyUser(person: { email: string | null; displayName: string }): {
+  name: string;
+  displayName: string;
+} {
+  return { name: person.email ?? person.displayName, displayName: person.displayName };
+}
+
+/**
+ * The signed-in person's user handle as registration gave it, the id of every passkey they hold, and
+ * the names registration would give a new passkey today.
+ */
+export async function readPasskeySignals(
+  tx: Transaction,
+  input: { managementSessionId: string },
+): Promise<{ userId: string; credentialIds: string[]; name: string; displayName: string }> {
+  const session = await resolveManagementSession(tx, input.managementSessionId, { touch: false });
+  const { personId } = session;
+  const rows = await tx
+    .select({ credentialId: webauthnCredentials.credentialId })
+    .from(webauthnCredentials)
+    .where(eq(webauthnCredentials.personId, personId));
+  return {
+    userId: b64url(textToBytes(personId)),
+    credentialIds: rows.map((r) => r.credentialId),
+    ...passkeyUser(session),
+  };
+}
+
 export async function beginPasskeyRegistration(
   tx: Transaction,
   input: { managementSessionId: string; rpId: string; rpName: string },
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialCreationOptionsJSON }> {
-  const { personId } = await resolveManagementSession(tx, input.managementSessionId);
-  const [person] = await tx
-    .select({ displayName: persons.displayName, email: persons.email })
-    .from(persons)
-    .where(eq(persons.id, personId));
+  const session = await resolveManagementSession(tx, input.managementSessionId);
+  const { personId } = session;
+  const user = passkeyUser(session);
   // Exclude the person's existing passkeys so the authenticator refuses to enroll a duplicate.
   const existing = await tx
     .select({
@@ -108,10 +137,8 @@ export async function beginPasskeyRegistration(
     rpID: input.rpId,
     rpName: input.rpName,
     userID: textToBytes(personId),
-    // WebAuthn's `user.name` is what a password manager lists the passkey under; the dashboard
-    // signs in by email.
-    userName: person!.email ?? person!.displayName,
-    userDisplayName: person!.displayName,
+    userName: user.name,
+    userDisplayName: user.displayName,
     excludeCredentials: existing.map((c) => ({
       id: c.credentialId,
       transports: parseTransports(c.transports),
@@ -236,7 +263,7 @@ export async function finishPasskeyAuthentication(
     .from(webauthnCredentials)
     .innerJoin(persons, eq(persons.id, webauthnCredentials.personId))
     .where(eq(webauthnCredentials.credentialId, input.response.id));
-  if (cred === undefined) throw new AppError("passkey.verification_failed", {});
+  if (cred === undefined) throw new AppError("passkey.not_registered", {});
   // This public endpoint must not reveal that the returned credential belongs to a suspended or
   // pending account. No session is minted for any non-active owner.
   if (cred.status !== "active") throw new AppError("passkey.verification_failed", {});

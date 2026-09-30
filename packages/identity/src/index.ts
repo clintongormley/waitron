@@ -23,6 +23,7 @@ export {
   beginPasskeyRegistration,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
+  readPasskeySignals,
 } from "./passkey.js";
 export { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 export {

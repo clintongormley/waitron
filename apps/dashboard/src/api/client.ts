@@ -177,6 +177,17 @@ export interface PasskeyChallenge {
   options: PasskeyOptions;
 }
 
+/** What the browser's password manager is told about the signed-in person's passkeys. */
+export interface PasskeySignals {
+  rpId: string;
+  /** base64url, the user handle the person's passkeys were registered under. */
+  userId: string;
+  /** base64url credential ids. */
+  credentialIds: string[];
+  name: string;
+  displayName: string;
+}
+
 export interface PasskeyVerification {
   challengeHandle: string;
   response: unknown;
@@ -1530,6 +1541,10 @@ export class DashboardApi {
       "POST",
       body,
     );
+  }
+
+  passkeySignals(): Promise<PasskeySignals> {
+    return this.#request<PasskeySignals>("/management-api/passkey/signals", "GET");
   }
 
   passkeyAuthOptions(): Promise<PasskeyChallenge> {
