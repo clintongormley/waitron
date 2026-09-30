@@ -3902,7 +3902,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the order's own label failed the slow-orders suites (`packages/reporting` and
     `apps/server/src/report-api.overdue-orders.test.ts`), the kitchen-slip suite and the receipt
     suites, but no case reading the pass, so one pass case was added to
-    `apps/server/src/working-order.test.ts` (red under that probe). No existing assertion changed.
+    `apps/server/src/working-order.test.ts` (red under that probe). No existing assertion changed. (#906, main `4e8136b01`.)
+    Left open by #906's review: `computeOverdueOrders` is the one report function that reads its
+    own node's location rather than being handed one (adding `locationId` to `OverdueOrdersInput`
+    and passing `cfg.locationId` from `apps/server/src/report-api.ts` was suggested, not done); no
+    case pins what a MOVED slip's "from" line or a correction slip prints for a counter order
+    delivered to a table (only the shared function's own cases would fail if the rule changed); and
+    Codex found that a database built on purpose with a delivery table in another location now
+    names the order by its own label where the slow-orders list and receipts named the table —
+    no product path creates that state, and whether every existing venue database is free of it
+    was not checked.
     **Still open:** `partyFamilies`, the reverse lookup of
     `partySurvivors`, stayed in `apps/server/src/parties.ts`, so the two merge-chain queries now
     live in different packages. And `party.main_bill_stays`'s till wording says
