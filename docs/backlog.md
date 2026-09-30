@@ -5112,10 +5112,11 @@ ongoing overhaul listed at the top of Track A.
   in this tab's memory only, and hands it back to the rebuilt form (`connectRequest` in
   `apps/setup/src/setup-app.ts`, the screen's `request`), as the restore screens already did; leaving
   the screen or a successful Connect drops it. Tests: "what the operator typed on the connect form"
-  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case. **DONE (C87,
-  owner decision 2026-09-30):** the refilled form leaves the one-time code empty and keeps every
-  other field; a refusal naming the code (`credential.totp`) puts its sentence under the empty field
-  and focuses it (the screen's `request` in `apps/setup/src/screens/connect-screen.ts`; tests:
+  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case.
+  **DONE (C87, #918, owner decision 2026-09-30):** the refilled form leaves the one-time code empty
+  and keeps every other field; a refusal naming the code (`credential.totp`) puts its sentence
+  under the empty field and focuses it (the screen's `request` in
+  `apps/setup/src/screens/connect-screen.ts`; tests:
   "leaves the one-time code blank when the request the shell hands back carries one" in its suite,
   and "shows a refusal of the one-time code under that field, empty and focused" in
   `apps/setup/src/setup-app.test.ts`). A refused code is not such a refusal: the primary refuses it
