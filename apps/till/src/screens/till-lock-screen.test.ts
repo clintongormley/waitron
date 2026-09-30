@@ -427,7 +427,7 @@ describe("till-lock-screen", () => {
     }
   });
 
-  it("shows a sensible localised message for a suspended account", async () => {
+  it("says nothing about a suspended account, only the generic message", async () => {
     const login = vi.fn().mockRejectedValue({ code: "person.suspended" });
     const api = stubApi({ login });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
@@ -437,7 +437,7 @@ describe("till-lock-screen", () => {
     await type(el, "1234");
     click(el, ".submit");
     await flush(el);
-    expect(query(el, ".error")!.textContent).toContain(t("person.suspended"));
+    expect(query(el, ".error")!.textContent!.trim()).toBe(t("login.error"));
   });
 
   it("never leaks the raw code for an unrecognised login error", async () => {

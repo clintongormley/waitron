@@ -38,20 +38,6 @@ describe("the permanent-refusal messages", () => {
   });
 });
 
-describe("the suspended-account message matches the dashboard's wording", () => {
-  // Owner decision: the same words as the dashboard's `person.suspended`
-  // (apps/dashboard/src/i18n/codes.ts). Weaker than its name: this pins a HARDCODED copy and never
-  // reads the dashboard's file, so a dashboard-side change leaves it green.
-  it("uses the dashboard's English and Spanish text", () => {
-    expect(catalogues["en-GB"]?.["person.suspended"]).toBe(
-      "This account is disabled — ask a manager",
-    );
-    expect(catalogues["es-ES"]?.["person.suspended"]).toBe(
-      "Esta cuenta está desactivada. Avisa a un responsable",
-    );
-  });
-});
-
 describe("the Spanish strings call a restaurant menu a carta", () => {
   // Every "menu" the till's catalogue strings mean is a restaurant menu: no string here calls a
   // popover a menu, which in the dashboard keeps "menú". Weaker than its name: only the catalogue in
