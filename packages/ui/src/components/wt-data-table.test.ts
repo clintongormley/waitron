@@ -1,7 +1,9 @@
 import { html } from "lit";
-import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
+import { commands, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+// For its `parkPointer` command type only.
+import type {} from "../a11y-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 
@@ -2338,4 +2340,156 @@ test("the chooser's button and boxes draw the focus ring when focused", async ()
     expect(getComputedStyle(control).outlineColor).toBe("rgb(4, 5, 6)");
     expect(getComputedStyle(control).outlineStyle).toBe("solid");
   }
+});
+
+const wide = "A long cell that keeps its table wider than the box around it";
+const pinnedColumns = (pinned?: "end"): DataTableColumn<Row>[] => [
+  { key: "name", label: "Name", cell: (row) => `${row.name}: ${wide}` },
+  { key: "count", label: "Count", cell: (row) => `${row.count}: ${wide}` },
+  {
+    key: "action",
+    label: "Actions",
+    pinned,
+    cell: (row) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+  },
+];
+
+async function narrowTable(pinned?: "end", props: Partial<WtDataTable<Row>> = {}) {
+  const el = await table({ columns: pinnedColumns(pinned), ...props });
+  el.style.width = "240px";
+  await el.updateComplete;
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+  return { el, scroll };
+}
+
+async function scrollTo(scroll: HTMLElement, left: number): Promise<void> {
+  scroll.scrollLeft = left;
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+test("a pinned last column stays inside the box, uncovered, at both ends of a sideways scroll", async () => {
+  const { el, scroll } = await narrowTable("end");
+  for (const left of [0, scroll.scrollWidth]) {
+    await scrollTo(scroll, left);
+    const box = scroll.getBoundingClientRect();
+    for (const name of ["Bea", "Ada"]) {
+      const edit = el.shadowRoot!.querySelector(`button[aria-label="Edit ${name}"]`)!;
+      const cell = edit.closest("td")!.getBoundingClientRect();
+      expect(cell.right, `${name} at scrollLeft ${left}`).toBeLessThanOrEqual(box.right);
+      expect(cell.left, `${name} at scrollLeft ${left}`).toBeGreaterThanOrEqual(box.left);
+      const at = edit.getBoundingClientRect();
+      expect(el.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2)).toBe(edit);
+    }
+  }
+  // Unscrolled, the column before it runs on under the pinned one, so the hit test above is the
+  // pinned cell winning, not an empty space.
+  await scrollTo(scroll, 0);
+  const count = el.shadowRoot!.querySelector("tbody td:nth-child(2)")!.getBoundingClientRect();
+  const pinned = el.shadowRoot!.querySelector("tbody td:nth-child(3)")!.getBoundingClientRect();
+  expect(count.right).toBeGreaterThan(pinned.left);
+});
+
+test("an unpinned last column is off the box until the table is scrolled", async () => {
+  const { el, scroll } = await narrowTable();
+  const edit = el.shadowRoot!.querySelector('button[aria-label="Edit Bea"]')!;
+  expect(edit.closest("td")!.getBoundingClientRect().left).toBeGreaterThan(
+    scroll.getBoundingClientRect().right,
+  );
+});
+
+test("a table with no pinned column marks no cell", async () => {
+  const el = await table();
+  expect(el.shadowRoot!.querySelectorAll("th, td")).not.toHaveLength(0);
+  expect(el.shadowRoot!.querySelectorAll("[data-pinned]")).toHaveLength(0);
+});
+
+test("a tree table keeps its pinned column inside the box", async () => {
+  const el = await treeTable({
+    columns: [
+      { key: "name", label: "Name", cell: (r) => `${r.name}: ${wide}` },
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (r) => html`<button aria-label=${`Edit ${r.name}`}>Edit</button>`,
+      },
+    ],
+  });
+  el.style.width = "240px";
+  await el.updateComplete;
+  const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+  const box = scroll.getBoundingClientRect();
+  for (const cell of el.shadowRoot!.querySelectorAll("th:last-child, td:last-child"))
+    expect(cell.getBoundingClientRect().right).toBeLessThanOrEqual(box.right);
+});
+
+test("a pinned column paints the row's background at rest and on hover, and draws its edge from tokens", async () => {
+  const { el } = await narrowTable("end");
+  host.style.setProperty("--wt-color-surface", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  const header = el.shadowRoot!.querySelector("th:last-child")!;
+  const row = el.shadowRoot!.querySelector("tbody tr")!;
+  const cell = row.querySelector("td:last-child")!;
+  for (const pinned of [header, cell]) {
+    expect(getComputedStyle(pinned).backgroundColor).toBe("rgb(7, 8, 9)");
+    expect(getComputedStyle(pinned, "::before").borderInlineStartColor).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(pinned, "::before").borderInlineStartStyle).toBe("solid");
+  }
+  await userEvent.hover(row.querySelector("td")!);
+  onTestFinished(() => commands.parkPointer());
+  expect(getComputedStyle(row).backgroundColor).toBe("rgb(30, 40, 50)");
+  expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+});
+
+test("a pinned column in a clickable row paints the row's hover and focus background", async () => {
+  const { el } = await narrowTable("end", { rowClick: (row: Row) => row.id });
+  host.style.setProperty("--wt-color-surface-raised", "rgb(30, 40, 50)");
+  const cell = el.shadowRoot!.querySelector("tbody tr td:last-child")!;
+  await userEvent.hover(el.shadowRoot!.querySelector("tbody td")!);
+  onTestFinished(() => commands.parkPointer());
+  expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+  await commands.parkPointer();
+  expect(getComputedStyle(cell).backgroundColor).not.toBe("rgb(30, 40, 50)");
+  el.shadowRoot!.querySelector<HTMLButtonElement>(".row-activate")!.focus();
+  expect(getComputedStyle(cell).backgroundColor).toBe("rgb(30, 40, 50)");
+});
+
+test.each(["light", "dark"] as const)(
+  "a pinned column paints its theme's row background, at rest and on hover (%s theme)",
+  async (theme) => {
+    const { el } = await narrowTable("end");
+    host.setAttribute("data-theme", theme);
+    const table = el.shadowRoot!.querySelector("table")!;
+    const row = el.shadowRoot!.querySelector("tbody tr")!;
+    const cell = row.querySelector("td:last-child")!;
+    const surface = getComputedStyle(table).backgroundColor;
+    expect(getComputedStyle(el.shadowRoot!.querySelector("th:last-child")!).backgroundColor).toBe(
+      surface,
+    );
+    expect(getComputedStyle(cell).backgroundColor).toBe(surface);
+    await userEvent.hover(row.querySelector("td")!);
+    onTestFinished(() => commands.parkPointer());
+    expect(getComputedStyle(cell).backgroundColor).toBe(getComputedStyle(row).backgroundColor);
+  },
+);
+
+test("a clickable row's lifted controls pass under a pinned column, not over it", async () => {
+  const el = await table({
+    rowClick: (row: Row) => row.id,
+    columns: [
+      { key: "name", label: "Name", cell: (row) => row.name },
+      { key: "count", label: "Count", cell: (row) => html`<button>${row.count}: ${wide}</button>` },
+      pinnedColumns("end")[2]!,
+    ],
+  });
+  el.style.width = "240px";
+  await el.updateComplete;
+  const edit = el.shadowRoot!.querySelector('button[aria-label="Edit Bea"]')!;
+  const passing = edit.closest("tr")!.querySelector("td:nth-child(2) button")!;
+  const at = edit.getBoundingClientRect();
+  expect(passing.getBoundingClientRect().right).toBeGreaterThan(at.right);
+  expect(el.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2)).toBe(edit);
 });

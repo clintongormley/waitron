@@ -2120,7 +2120,12 @@ export class PrintersScreen extends LitElement {
         sortValue: (p) => p.lastPrintAt,
         cell: (p) => this.#timestamp(p.lastPrintAt),
       },
-      { key: "actions", label: t("printers.actions"), cell: (p) => this.#printerActions(p) },
+      {
+        key: "actions",
+        label: t("printers.actions"),
+        pinned: "end",
+        cell: (p) => this.#printerActions(p),
+      },
     ];
     return html`<section>
       <wt-data-table

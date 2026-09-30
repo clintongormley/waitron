@@ -2547,8 +2547,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   that is dismissed or Add a printer closes, and Forget pairing is back in the printer's row menu.
   On a phone-width screen the Actions column starts off the right-hand edge, so the table has to be scrolled sideways to reach the three dots (observed 2026-09-30 in screenshots taken
   during the A141 work, not kept; the A141 finish-branch run-it review (Codex) reported the same at
-  390 px). Left open below. In Spanish the
-  action is now "Desvincular" ("¿Desvincular?" to confirm; `printers.bluetooth_forget` and its
+  390 px). _(2026-09-30: A145, below, pins the Actions column so the menu stays on screen.)_ In
+  Spanish the action is now "Desvincular" ("¿Desvincular?" to confirm; `printers.bluetooth_forget` and its
   siblings in `apps/dashboard/src/i18n/strings.ts`). The suspect that was ruled out: the agent's
   paired listing does not drop paired devices. `pairedBluetooth()` in
   `apps/print-agent/src/linux-devices.ts` never asks for a device path, and the test "lists every
@@ -2617,19 +2617,38 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `jobReason` in the jobs list and in the calibration dialog's "Not printed: <reason>"
   (`apps/dashboard/src/screens/printers-screen.ts`); A140 decides whether jobs ended before it keep
   that reason text. Not run on the box.
-- **On a phone, a printer's row menu on the Printers tab starts off the right-hand edge.** At
-  390 px wide the Actions column is past the edge of the screen, so the three-dot button (⋮) that
-  holds Edit, Disable and Forget pairing is reached only by scrolling the table sideways — which
-  works against A141's aim of making Forget pairing easy to find (observed 2026-09-30 in
-  screenshots taken during the A141 work, not kept; the A141 finish-branch run-it review (Codex)
-  reported the same at 390 px; both before A139's note under a Bluetooth printer's name landed, and
-  A140 (below) has since removed that note). The cause is not investigated. The product editor's variants table
-  keeps its row menu on screen at phone width with its own layout rule for a narrow table, and the
-  phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts` check that each row menu
-  ends inside the frame ([design-system.md](developers/design-system.md), under
-  `--wt-cell-name-max-width`). In `apps/dashboard/src/screens/printers-screen.a11y.test.ts`, the
-  390 px case for the Printers tab's list runs only the accessibility check; the one check that
-  the screen does not scroll sideways is on a printer's status view (read, not run).
+- **DONE (2026-09-30, A145): on a phone, a printer's row menu on the Printers tab stays on
+  screen.** The Printers tab's Actions column is pinned to the right-hand edge of the table's box
+  with `wt-data-table`'s new opt-in `pinned: "end"` column option, so the three-dot button (⋮)
+  holding Edit, Disable and Forget pairing is in view without scrolling; the other columns still
+  scroll sideways under it. Measured 2026-09-30 in headless Chromium, with a long printer name and
+  a long agent name: before the change the table was 1175 px (English) to 1402 px (Spanish in
+  Verdana) wide in a 388 px box at 390 px (a review re-run the same day measured 1192 to 1443 px),
+  and with every cell emptied its column headings alone
+  still needed 579 to 821 px. The headings are inside the table's shadow root with no `part=`, and
+  the table is at least as wide as its unwrapped content, so a screen's own styles cannot narrow
+  them short of shrinking the text. Guards: the phone-width cases in
+  `apps/dashboard/src/screens/printers-screen.test.ts` (390, 360 and 320 px, English and Spanish,
+  normal and larger text, the default font and Verdana), which check that the table is wider than
+  its box, that each row's ⋮ ends inside the box and the window with the table unscrolled, and that
+  nothing is painted over it; the pinned cases in
+  `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`.
+- **The Printers screen's Agents tab still puts its row menu off a phone's screen, and the other
+  unpinned tables, bar the menus list, are unchecked at phone width.** Measured 2026-09-30 in headless Chromium at 390 px (a 388 px
+  box), with an agent named "Raspberry Pi de la cocina caliente": the Agents tab table was 683 px
+  (English) to 775 px (Spanish in Verdana) wide. Only the Printers tab pins its Actions column
+  (A145); every other table with an `actions` column is unpinned — `git grep 'key: "actions"'`
+  outside the tests lists them, among them the Agents tab, the categories, units, menus, sections,
+  servers, payments, alerts, modifiers and labels screens, the product and staff lists, and the
+  adjustments and venue operations modules. The menus screen's list has a 390 px case holding that
+  it does not scroll sideways (`apps/dashboard/src/screens/menus-screen.test.ts`); none of the
+  others, the Agents tab included, has a case that checks where its row menu sits at phone width —
+  the Agents tab's figures above are a measurement, not a test.
+  Whether to pin them all is an owner decision. A pinned column in a table with `rowClick` has one
+  cost: a click on the pinned cell's empty space lands on the cell rather than the row's activator,
+  so it does not open the row (2026-09-30: an `elementFromPoint` hit test, and a click probe in
+  review that called `rowClick` zero times from the pinned cell's padding and once from an ordinary
+  cell's; no test holds it).
 - **Printing to a paired Bluetooth printer over its serial channel (A140, owner 2026-09-29: the
   calibration print _"nothing printed"_) — BUILT where the tests and CI reach (#909, 2026-09-30); no real
   printer has printed through it yet.** The box's agent sends a Bluetooth job's bytes over RFCOMM

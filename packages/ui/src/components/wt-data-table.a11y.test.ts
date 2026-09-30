@@ -166,6 +166,36 @@ describe.each(["light", "dark"] as const)("wt-data-table a11y (%s theme)", (them
     await expectNoA11yViolations(host);
   });
 
+  test.each([
+    ["unscrolled", false],
+    ["scrolled to the end", true],
+  ])("a pinned action column over rows that scroll sideways, %s", async (_, scrolled) => {
+    const el = (await mountThemed(
+      '<wt-data-table aria-label="Users"></wt-data-table>',
+      theme,
+    )) as WtDataTable<Row>;
+    const wide = "a status long enough to scroll the table sideways";
+    el.columns = [
+      { key: "name", label: "Name", cell: (row) => row.name, sortValue: (row) => row.name },
+      { key: "status", label: "Status", cell: (row) => `${row.status}, ${wide}` },
+      {
+        key: "action",
+        label: "Actions",
+        pinned: "end",
+        cell: (row) => html`<button aria-label=${`Edit ${row.name}`}>Edit</button>`,
+      },
+    ] satisfies DataTableColumn<Row>[];
+    el.rows = [{ id: "1", name: "Ada", status: "Active" }];
+    el.rowKey = (row) => row.id;
+    el.style.width = "240px";
+    await el.updateComplete;
+    const scroll = el.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+    expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
+    if (scrolled) scroll.scrollLeft = scroll.scrollWidth;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await expectNoA11yViolations(host);
+  });
+
   async function chooserTable(): Promise<WtDataTable<Row>> {
     const el = (await mountThemed(
       '<wt-data-table aria-label="Users"></wt-data-table>',
