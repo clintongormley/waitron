@@ -11,6 +11,34 @@ import {
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { TabLine } from "../api/client.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
+import type { StoredLines } from "../widgets/basket.js";
+import type { WorkingOrderStore } from "./working-order.js";
+
+/** The listing, when it is of the stored order `store` holds. */
+export function storedListing(
+  store: WorkingOrderStore,
+  listing: StoredLines | null,
+): StoredLines | null {
+  return listing !== null && store.persisted && listing.orderId === store.id ? listing : null;
+}
+
+/** The listing, while the basket is exactly what it lists (unchanged since, and not being sent or
+ * loaded again) and no pay, place or hold of it is out (`inFlight`). */
+export function adjustableListing(
+  store: WorkingOrderStore,
+  listing: StoredLines | null,
+  inFlight: boolean,
+): StoredLines | null {
+  const own = storedListing(store, listing);
+  return own !== null &&
+    !inFlight &&
+    !store.dirty &&
+    !store.sending &&
+    !store.editsLocked &&
+    own.revision === store.revision
+    ? own
+    : null;
+}
 
 /** The kitchen is making the line, or has made it. */
 export function isStarted(line: TabLine): boolean {

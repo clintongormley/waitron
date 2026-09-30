@@ -23,7 +23,12 @@ import type { BlockReason } from "../state/menu-refresh.js";
 import type { StringKey } from "../i18n/strings.js";
 import { lineProductName, productUnit } from "./product-name.js";
 import { lineTotal, priceWasStyles } from "./price-was.js";
-import { lineAdjustTarget, tabLineGross } from "../state/adjust-target.js";
+import {
+  adjustableListing,
+  lineAdjustTarget,
+  storedListing,
+  tabLineGross,
+} from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
 import type { TabLine } from "../api/client.js";
@@ -389,8 +394,8 @@ export class TillBasket extends LitElement {
       const line = lines[index];
       return line === undefined ? [] : [[line, index] as const];
     });
-    const listing = this.#listing();
-    const adjustable = this.#adjustable(listing);
+    const listing = storedListing(this.store, this.storedLines);
+    const adjustable = adjustableListing(this.store, listing, this.orderInFlight);
     return html`
       ${shown.map(([line, index]) => {
         const listed = this.#listed(line, listing);
@@ -579,28 +584,6 @@ export class TillBasket extends LitElement {
         </wt-button>
       </span>
     `;
-  }
-
-  /** The listing, when it is of the stored order this basket holds. */
-  #listing(): StoredLines | null {
-    const listing = this.storedLines;
-    return listing !== null && this.store.persisted && listing.orderId === this.store.id
-      ? listing
-      : null;
-  }
-
-  /** The listing, while the basket is exactly what it lists (unchanged since, and not being sent or
-   * loaded again) and no pay, place or hold of it is out. */
-  #adjustable(listing: StoredLines | null): StoredLines | null {
-    const store = this.store;
-    return listing !== null &&
-      !this.orderInFlight &&
-      !store.dirty &&
-      !store.sending &&
-      !store.editsLocked &&
-      listing.revision === store.revision
-      ? listing
-      : null;
   }
 
   /** The dish as listed, by the stored line it came from. */

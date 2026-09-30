@@ -3505,7 +3505,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       order included), the operator signs out, or the till's request limit (150 s) passes, after
       which a late answer is dropped. An unsaved or changed basket offers none of them, nor does
       one whose pay, place or hold is out; a changed one offers them again once it is held and
-      retrieved. Left open:
+      retrieved. The same is checked again once the reasons are read, before the dialog opens, and
+      before the adjustment is sent: when the basket changed while the dialog was open, the
+      adjustment is not sent, the dialog closes and the till says why. Left open:
       - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be
         adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
         already filed its invoice. B16, the counter handover task, was kept clear of. **Next

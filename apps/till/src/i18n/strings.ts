@@ -418,6 +418,7 @@ export const en = {
   "adjust.reasons_error": "Could not load the reasons, try again",
   "adjust.unconfirmed":
     "No answer from the server. The bill has been read again: check whether the change was made before trying again.",
+  "adjust.basket_changed": "The order changed while this was open, so nothing was sent.",
   "adjust.changed_bill":
     "This bill was changed on another device. It has been read again: check it and try again.",
   "adjust.changed_line":
@@ -1067,6 +1068,8 @@ export const es: Record<StringKey, string> = {
   "adjust.reasons_error": "No se pudieron cargar los motivos, inténtalo de nuevo",
   "adjust.unconfirmed":
     "El servidor no ha respondido. Se ha vuelto a leer la cuenta: comprueba si se hizo el cambio antes de volver a intentarlo.",
+  "adjust.basket_changed":
+    "El pedido cambió mientras esto estaba abierto, así que no se envió nada.",
   "adjust.changed_bill":
     "Esta cuenta se ha cambiado en otro dispositivo. Se ha vuelto a leer: revísala e inténtalo de nuevo.",
   "adjust.changed_line":

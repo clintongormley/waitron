@@ -581,6 +581,81 @@ describe("till-app: no adjustment while the order is being paid, placed or held"
       target: { lineId: "l-2", name: "Caña", quantity: "1", total: "2.50", unitTotal: null },
     });
 
+  /** Presses Give away on the caña and holds the reasons' answer until `reasons` resolves. */
+  async function pressedWhileReasonsLoad(
+    overrides: Record<string, unknown>,
+  ): Promise<{ el: TillApp; reasons: ReturnType<typeof deferred<AdjustmentReason[]>> }> {
+    const reasons = deferred<AdjustmentReason[]>();
+    const el = await retrieved({
+      listAdjustmentReasons: vi.fn(() => reasons.promise),
+      ...overrides,
+    });
+    await press(el, inBasket(el, '[data-comp-line="1"]')!);
+    expect(api.listAdjustmentReasons).toHaveBeenCalledOnce();
+    return { el, reasons };
+  }
+
+  it("opens nothing when a card payment of the order starts while the reasons are read", async () => {
+    const payment = deferred<{ outcome: "declined" }>();
+    const { el, reasons } = await pressedWhileReasonsLoad({ pay: vi.fn(() => payment.promise) });
+
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+    expect(api.pay).toHaveBeenCalledOnce();
+    reasons.resolve([complaint]);
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    payment.resolve({ outcome: "declined" });
+    await flush(el);
+  });
+
+  it("opens nothing when the order is placed while the reasons are read", async () => {
+    const placing = deferred<void>();
+    const { el, reasons } = await pressedWhileReasonsLoad({
+      placeOrder: vi.fn(() => placing.promise),
+    });
+
+    emit(counter(el), "place-order");
+    await flush(el);
+    expect(api.placeOrder).toHaveBeenCalledOnce();
+    reasons.resolve([complaint]);
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    placing.resolve();
+    await flush(el);
+  });
+
+  it("opens nothing when the basket is changed while the reasons are read", async () => {
+    const { el, reasons } = await pressedWhileReasonsLoad({});
+
+    counter(el).store.setLineQuantity(1, "2");
+    await flush(el);
+    reasons.resolve([complaint]);
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(counter(el).store.lines[1]!.quantity).toBe("2");
+  });
+
+  it("sends nothing, and says so, when the basket changed while the dialog was open", async () => {
+    const el = await retrieved();
+    await previewComp(el);
+    const store = counter(el).store;
+
+    // A menu check adopts a dish's new version into the basket without asking, dialog or not.
+    store.adoptLines(new Map([[1, { ...store.lines[1]! }]]));
+    await flush(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+    expect(store.dirty).toBe(true);
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toBe(t("adjust.basket_changed"));
+  });
+
   it("offers none, and opens nothing, while a card payment of the order is out", async () => {
     const payment = deferred<{ outcome: "declined" }>();
     const el = await retrieved({ pay: vi.fn(() => payment.promise) });

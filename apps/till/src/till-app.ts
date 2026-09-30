@@ -153,6 +153,7 @@ import {
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
 import type { StoredLines } from "./widgets/basket.js";
+import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { DevDeviceList } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
@@ -423,6 +424,9 @@ interface Adjusting {
   orderId: string;
   revision: number;
   visit: number;
+  /** On the counter, the basket's {@link WorkingOrderStore.loadGeneration} when it opened; unused
+   * on a table. */
+  load: number;
   kind: AdjustKind;
   target: AdjustTarget;
   reasons: AdjustmentReason[];
@@ -3616,12 +3620,17 @@ export class TillApp extends LitElement {
   async #onAdjust(event: Event): Promise<void> {
     const { kind, target, offered, counter } = (event as CustomEvent<AdjustDetail>).detail;
     const surface = counter === true ? "counter" : "table";
-    if (surface === "counter" && this.#counterOrderInFlight()) return;
     const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
-    const revision = surface === "counter" ? this.#store.revision : this.tabRevision;
     const session = this.#operatorSession;
-    const visit = surface === "counter" ? session : this.#orderVisit;
+    const opened = {
+      surface,
+      orderId,
+      revision: surface === "counter" ? this.#store.revision : this.tabRevision,
+      visit: surface === "counter" ? session : this.#orderVisit,
+      load: this.#store.loadGeneration,
+    } as const;
+    if (surface === "counter" && !this.#counterStillAdjustable(opened)) return;
     if (offered !== true) this.errorKey = undefined;
     const offer = offered === true ? this.errorKey : undefined;
     this.#adjustOpening = true;
@@ -3634,14 +3643,15 @@ export class TillApp extends LitElement {
     } finally {
       this.#adjustOpening = false;
     }
-    if (session !== this.#operatorSession || this.#hasLeftAdjusted({ surface, orderId, visit }))
+    if (
+      session !== this.#operatorSession ||
+      this.#hasLeftAdjusted(opened) ||
+      (surface === "counter" && !this.#counterStillAdjustable(opened))
+    )
       return;
     this.adjusting = {
       id: ++this.#adjustments,
-      surface,
-      orderId,
-      revision,
-      visit,
+      ...opened,
       kind,
       target,
       reasons,
@@ -3651,6 +3661,23 @@ export class TillApp extends LitElement {
       busy: false,
       offer,
     };
+  }
+
+  /** The counter's basket still holds the stored order it held when `open` was opened, as then
+   * loaded and at the same revision, and still as the basket requires to offer an adjustment:
+   * unchanged, and with no pay, place or hold of it out. */
+  #counterStillAdjustable(open: Pick<Adjusting, "orderId" | "revision" | "load">): boolean {
+    const listing = adjustableListing(
+      this.#store,
+      this.#basketStoredLines(),
+      this.#counterOrderInFlight(),
+    );
+    return (
+      listing !== null &&
+      listing.orderId === open.orderId &&
+      listing.revision === open.revision &&
+      this.#store.loadGeneration === open.load
+    );
   }
 
   #hasLeftAdjusted(open: Pick<Adjusting, "surface" | "orderId" | "visit">): boolean {
@@ -3738,12 +3765,18 @@ export class TillApp extends LitElement {
    * is read again too, and the message says the change may have been made unless the waiter has
    * left the order by then. Once the dialog is gone, no answer on a table's bill only reads the
    * floor again and takes the party from it ({@link #retakePartyFromFloor}) while the operator
-   * session that sent it lasts, and a refusal changes nothing.
+   * session that sent it lasts, and a refusal changes nothing. On the counter nothing is sent once
+   * the basket no longer holds the order as the dialog opened on it: the dialog closes and says so.
    */
   async #applyAdjustment(
     open: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
+    if (open.surface === "counter" && !this.#counterStillAdjustable(open)) {
+      this.#closeAdjust();
+      this.errorKey = "adjust.basket_changed";
+      return;
+    }
     const command: AdjustmentCommand = {
       ...this.#adjustAsk(open, open.choice!),
       submissionId: crypto.randomUUID(),
