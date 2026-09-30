@@ -895,6 +895,8 @@ export interface BillPaymentView {
   kind: "items" | "contribution" | "share";
   shareOf: number | null;
   method: "cash" | "card";
+  /** A card's: keyed on a separate terminal (`manual`), or taken at a reader; null for cash. */
+  entry: "manual" | "reader" | null;
   applied: string;
   tip: string;
   tendered: string | null;

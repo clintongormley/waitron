@@ -630,6 +630,10 @@ export const en = {
   "counter.moved_to_table": "Moved to {table}",
   "bill.pay_with_bill_payments":
     "Part of this bill is already paid: take the rest as a bill payment",
+  "bill.received_exceeds_total_excess":
+    "Moving these items would leave this bill owing {amount} less than has already been paid on it. Move fewer items, or give {amount} back first.",
+  "bill.refund_excess": "Give back {amount}",
+  "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
   "bill_pay.title": "Pay part of the bill",
   "bill_pay.balance": "This bill",
@@ -723,8 +727,10 @@ export const en = {
   "bill_refund.reason_long": "Keep the reason to 500 characters or fewer",
   "bill_refund.continue": "Give back {amount}",
   "bill_refund.approval_next": "A supervisor or manager approves it with their PIN next.",
+  "bill_refund.terminal_next":
+    "Next, give it back on the separate card terminal it was keyed on. A supervisor or manager then approves it with their PIN.",
   "bill_refund.terminal":
-    "Waitron cannot give this card payment back itself. If it was keyed on a separate card terminal, give back {amount} on that terminal first, then confirm it here. A supervisor or manager approves it with their PIN.",
+    "This card was keyed on a separate card terminal, so Waitron cannot give it back itself. Give back {amount} on that terminal first, then confirm it here. A supervisor or manager approves it with their PIN.",
   "bill_refund.terminal_done": "Given back on the terminal",
   "bill_refund.approvers_failed": "Could not read who can approve this. Try again.",
   "bill_refund.unconfirmed":
@@ -1386,6 +1392,10 @@ export const es: Record<StringKey, string> = {
   "counter.moved_to_table": "Pasado a {table}",
   "bill.pay_with_bill_payments":
     "Parte de esta cuenta ya está pagada: cobra el resto como pago de cuenta",
+  "bill.received_exceeds_total_excess":
+    "Al mover estos artículos, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Mueve menos artículos o devuelve antes {amount}.",
+  "bill.refund_excess": "Devolver {amount}",
+  "bill.take_rest": "Cobrar el resto",
   "bill_pay.title": "Cobrar parte de la cuenta",
   "bill_pay.balance": "Esta cuenta",
   "bill_pay.reading": "Leyendo los pagos de la cuenta…",
@@ -1481,8 +1491,10 @@ export const es: Record<StringKey, string> = {
   "bill_refund.reason_long": "Usa 500 caracteres como mucho para el motivo",
   "bill_refund.continue": "Devolver {amount}",
   "bill_refund.approval_next": "A continuación lo aprueba un responsable o encargado con su PIN.",
+  "bill_refund.terminal_next":
+    "A continuación, devuélvelo en el datáfono aparte en el que se cobró. Después lo aprueba un responsable o encargado con su PIN.",
   "bill_refund.terminal":
-    "Waitron no puede devolver este pago con tarjeta por sí mismo. Si se cobró en otro datáfono, devuelve primero {amount} en ese datáfono y luego confírmalo aquí. Lo aprueba un responsable o encargado con su PIN.",
+    "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve primero {amount} en ese datáfono y luego confírmalo aquí. Lo aprueba un responsable o encargado con su PIN.",
   "bill_refund.terminal_done": "Devuelto en el datáfono",
   "bill_refund.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "bill_refund.unconfirmed":

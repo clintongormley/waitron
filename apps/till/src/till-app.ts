@@ -89,7 +89,9 @@ import "./widgets/bill-refund-dialog.js";
 import type { RefundRefusal } from "./widgets/bill-refund-dialog.js";
 import {
   confirmationOf,
+  payLines,
   paymentAsk,
+  refundOffered,
   refundSubmissionFor,
   submissionFor,
   unansweredAfter,
@@ -279,7 +281,35 @@ const TABLE_REFUSALS = new Set([
   "bill.other_party",
   "bill.payments_received",
   "bill.line_paid",
+  "bill.received_exceeds_total",
+  "bill.refund_in_progress",
+  "working_order.not_open",
 ]);
+
+/** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
+ * payments are read again, so the screen shows what the bill now holds. */
+const BILL_MONEY_REFUSALS = new Set([
+  "bill.payments_received",
+  "bill.line_paid",
+  "bill.received_exceeds_total",
+  "bill.refund_in_progress",
+  "order.payment_in_flight",
+  "working_order.not_open",
+]);
+
+function isBillMoneyRefusal(error: unknown): boolean {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" && BILL_MONEY_REFUSALS.has(code);
+}
+
+/** A table refusal as said: a move that would leave the bill owing less than it has received names
+ * by how much, with the offer to give that back first. */
+function billWriteError(error: unknown): CounterError {
+  const refused = error as { code?: unknown; excess?: unknown } | undefined;
+  return refused?.code === "bill.received_exceeds_total" && typeof refused.excess === "string"
+    ? { excess: refused.excess }
+    : tableWriteError(error);
+}
 
 function isPaymentsReceived(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "bill.payments_received";
@@ -465,12 +495,17 @@ interface Adjusting {
   offer: CounterError | undefined;
 }
 
-/** The bill payment dialog: the bill it pays, the order visit it opened on, and what the server
- * last answered it. */
-interface BillPaying {
-  id: number;
+/** The order a bill payment dialog pays: the table's bill on screen, whose `visit` is the order
+ * visit, or the counter's stored order in the basket, whose `visit` is the operator session. */
+interface PayingOrder {
+  surface: "table" | "counter";
   billId: string;
   visit: number;
+}
+
+/** The bill payment dialog: the order it pays, and what the server last answered it. */
+interface BillPaying extends PayingOrder {
+  id: number;
   way: PayWay;
   amount: string;
   lines: PayLine[];
@@ -485,12 +520,12 @@ interface BillPaying {
 
 /** A refund of one payment, opened from the bill payment dialog `payId`: what was asked, and
  * whether staff are to give a card back on its terminal first. */
-interface BillRefunding {
+interface BillRefunding extends PayingOrder {
   id: number;
   payId: number;
-  billId: string;
-  visit: number;
   payment: BillPaymentView;
+  /** An amount to offer as the part given back: the excess a refused move named. */
+  suggested: string | null;
   terminal: boolean;
   asked: RefundAsk | null;
   refusal: RefundRefusal | null;
@@ -552,6 +587,7 @@ type CounterError =
   | StringKey
   | { code: string }
   | { billPayments: string }
+  | { excess: string }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
@@ -597,6 +633,27 @@ function errorText(error: CounterError): string | TemplateResult {
   if ("partyChanged" in error) return partyChangeMessage(error.partyChanged);
   if ("billChanged" in error)
     return t(error.billChanged.key).replace("{line}", () => error.billChanged.line);
+  if ("excess" in error) {
+    const amount = formatMoney(error.excess, currentLocale());
+    return html`<span class="error-part"
+        >${t("bill.received_exceeds_total_excess").replaceAll("{amount}", () => amount)}</span
+      ><span class="error-action"
+        ><wt-button
+          variant="secondary"
+          size="sm"
+          data-refund-excess
+          @click=${(event: Event) =>
+            event.currentTarget!.dispatchEvent(
+              new CustomEvent("refund-excess", {
+                detail: { excess: error.excess },
+                bubbles: true,
+                composed: true,
+              }),
+            )}
+          >${t("bill.refund_excess").replace("{amount}", () => amount)}</wt-button
+        ></span
+      >`;
+  }
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -742,6 +799,11 @@ export class TillApp extends LitElement {
         inset-inline: var(--wt-space-3);
         bottom: calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom));
         z-index: 10;
+      }
+
+      .error-action {
+        display: block;
+        margin-top: var(--wt-space-2);
       }
 
       .error-part + .error-part {
@@ -1992,6 +2054,7 @@ export class TillApp extends LitElement {
     const label = this.#store.label;
     this.errorKey = undefined;
     let reachedFiscal = false;
+    let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     try {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
@@ -2013,13 +2076,21 @@ export class TillApp extends LitElement {
           : reachedFiscal && isNetworkFailure(error)
             ? "sale.unconfirmed"
             : counterError(error, "sale.error");
+      paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
     }
+    if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () =>
         this.#onConfirmPayment(event, true),
       );
+  }
+
+  /** Another till took a payment on the basket's order first: the held orders are read again, so
+   * its pay card offers to take the rest as a bill payment. A failed read leaves the list. */
+  async #readHeldAfterPaidMeanwhile(): Promise<void> {
+    await this.#refreshHeldOrders().catch(() => undefined);
   }
 
   /**
@@ -2037,6 +2108,7 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     this.cardOutcome = undefined;
     let reachedFiscal = false;
+    let paidMeanwhile = false;
     let refreshed: "adopted" | "confirming" | "failed" | undefined;
     try {
       if (!(await this.#syncIfDirty(id, lines, label))) return;
@@ -2069,9 +2141,11 @@ export class TillApp extends LitElement {
           : reachedFiscal && isNetworkFailure(error)
             ? "sale.unconfirmed"
             : counterError(error, "sale.error");
+      paidMeanwhile = isPaymentsReceived(error);
     } finally {
       this.submitting = false;
     }
+    if (paidMeanwhile) await this.#readHeldAfterPaidMeanwhile();
     if (refreshed !== undefined)
       await this.#afterVersionRefusal(refreshed, retried, () => this.#onCollectCard(event, true));
   }
@@ -2664,6 +2738,7 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-bill-refund-dialog
         .payment=${open.payment}
+        .suggested=${open.suggested}
         .terminal=${open.terminal}
         .refusal=${open.refusal}
         .busy=${open.busy}
@@ -4016,6 +4091,12 @@ export class TillApp extends LitElement {
       busy: false,
       preview: onField ? null : now.preview,
     };
+    // The invoice a change would issue refuses a dish sold out before it was sent.
+    if (
+      (isBillMoneyRefusal(error) || refusal === "product.unavailable") &&
+      !this.#hasLeftAdjusted(open)
+    )
+      await this.#rereadAdjusted(open);
   }
 
   /**
@@ -4112,8 +4193,11 @@ export class TillApp extends LitElement {
     this.errorKey =
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
-        : lineWriteError(outcome.error);
+        : code === "bill.received_exceeds_total"
+          ? billWriteError(outcome.error)
+          : lineWriteError(outcome.error);
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
+    else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
     else await this.#loadTabLines();
     if (code === "ticket.already_started" && !left()) this.cancelOffer = lineNo;
   }
@@ -4386,7 +4470,14 @@ export class TillApp extends LitElement {
   async #onBillPairRefusal(error: unknown): Promise<void> {
     if ((error as { code?: string } | undefined)?.code === "service_zone.mode_incompatible")
       this.errorKey = "table.bills_served_differently";
+    else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
     else await this.#onTableRefusal(error);
+  }
+
+  /** A bill action refused for the money on a bill: said, and the party's bills read again. */
+  async #onBillMoneyRefusal(error: unknown): Promise<void> {
+    this.errorKey = billWriteError(error);
+    await this.#loadPartyBills();
   }
 
   async #onMergeBills(event: Event): Promise<void> {
@@ -4434,6 +4525,7 @@ export class TillApp extends LitElement {
       const code = (error as { code?: string }).code;
       if (code === "tab.transfer_modifier_line") this.errorKey = "table.split_modifier_error";
       else if (code === "tab.split_held_line") this.errorKey = "table.split_held_error";
+      else if (isBillMoneyRefusal(error)) await this.#onBillMoneyRefusal(error);
       else await this.#onTableRefusal(error);
       return;
     }
@@ -4570,6 +4662,7 @@ export class TillApp extends LitElement {
     const tender = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
+    let paidMeanwhile = false;
     try {
       // The bill's id is the idempotency key on both paths, so a retry replays the first answer.
       this.result = presented
@@ -4577,8 +4670,9 @@ export class TillApp extends LitElement {
         : await this.api.recordSale([], tender, id);
       this.#showTicket(id, bill?.receiptAvailable !== true);
     } catch (error) {
+      paidMeanwhile = isPaymentsReceived(error);
       // No preliminary save, so any network failure may have filed.
-      this.errorKey = isPaymentsReceived(error)
+      this.errorKey = paidMeanwhile
         ? "bill.pay_with_bill_payments"
         : isPermanentSaleRefusal(error)
           ? "sale.refused"
@@ -4588,18 +4682,88 @@ export class TillApp extends LitElement {
     } finally {
       this.submitting = false;
     }
+    // Another device took a payment on the bill first: read again, the bill offers to take the rest
+    // as a bill payment.
+    if (paidMeanwhile && this.activeTabId === id) await this.#loadPartyBills();
   }
 
   /** Pay items, Contribute or Split equally pressed on the bill on screen: the dialog opens on the
    * balance last read and reads it again. */
   async #onBillPay(event: Event): Promise<void> {
     const { way, lines, amount } = (event as CustomEvent<BillPayDetail>).detail;
-    const billId = this.activeTabId;
-    if (billId === undefined || this.billPaying !== null) return;
+    await this.#openBillPaying(way, lines, amount);
+  }
+
+  /** "Give back" pressed on a move refused for leaving the bill owing less than it received: the
+   * bill payment dialog opens on the bill on screen, and when its payments, read again, have only
+   * one that can be given back, the refund of that one opens over it, offering the excess as the
+   * part to give back. */
+  async #onRefundExcess(event: Event): Promise<void> {
+    const { excess } = (event as CustomEvent<{ excess: string }>).detail;
+    const open = await this.#openBillPaying("contribution", this.#payLinesOnScreen());
+    const now = open === null ? null : this.#billPayingNow(open.id);
+    // Only on payments just read: a failed read says so beside the dialog's action instead.
+    if (now?.balance == null || now.refusal !== null || this.billRefunding !== null) return;
+    const balance = now.balance;
+    const offered = balance.payments.filter((payment) => refundOffered(payment, balance.status));
+    if (offered.length === 1) this.#openBillRefunding(now, offered[0]!, excess);
+  }
+
+  /** The pay card's offer on a counter order a payment is already on: the bill payment dialog opens
+   * on it, once an edit made to it in the basket is saved, as a single payment saves it first. */
+  async #onCounterBillPay(event: Event): Promise<void> {
+    const { amount } = (event as CustomEvent<{ amount: string }>).detail;
+    if (this.billPaying !== null || this.#basketPaidInPart() === undefined) return;
+    const id = this.#store.id;
+    const session = this.#operatorSession;
+    try {
+      if (!(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label))) return;
+    } catch (error) {
+      if (!this.#hasLeftCounterOrder(id, session))
+        this.errorKey = counterError(error, "sale.error");
+      return;
+    }
+    if (this.#hasLeftCounterOrder(id, session)) return;
+    await this.#openBillPaying(
+      "contribution",
+      payLines(this.counterLines?.lines ?? [], (line) => line.name ?? ""),
+      amount,
+      { surface: "counter", billId: id, visit: session },
+    );
+  }
+
+  /** After an answer to a payment or a refund, the order the dialog pays is read again: the table's
+   * bill with its party and what it owes, or the counter's order into the basket with the held
+   * orders. Nothing is read once the waiter has left the order. */
+  async #rereadPayingOrder(open: PayingOrder): Promise<void> {
+    if (open.surface === "counter") {
+      if (!this.#hasLeftCounterOrder(open.billId, open.visit))
+        await this.#reloadCounterOrder(open.billId, open.visit);
+    } else if (!this.#hasLeftOrder(open.billId, open.visit)) {
+      await this.#rereadAmounts(open.billId, open.visit);
+    }
+  }
+
+  /** The bill on screen's lines as an item payment offers them, named as staff know them. */
+  #payLinesOnScreen(): PayLine[] {
+    return payLines(this.tabLines, (line) => line.name ?? "");
+  }
+
+  /** The bill payment dialog on the bill on screen, unless one is open already; the balance last
+   * read shows at once and is read again. */
+  async #openBillPaying(
+    way: PayWay,
+    lines: PayLine[],
+    amount?: string,
+    order: PayingOrder | undefined = this.activeTabId === undefined
+      ? undefined
+      : { surface: "table", billId: this.activeTabId, visit: this.#orderVisit },
+  ): Promise<BillPaying | null> {
+    if (order === undefined || this.billPaying !== null) return null;
+    const { billId } = order;
     const open: BillPaying = {
       id: ++this.#billPays,
-      billId,
-      visit: this.#orderVisit,
+      ...order,
       way,
       amount: amount ?? "",
       lines,
@@ -4613,6 +4777,7 @@ export class TillApp extends LitElement {
     };
     this.billPaying = open;
     await this.#rereadBillPaying(open.id, billId);
+    return open;
   }
 
   /** The dialog as it is now, when it is still the one `id` names. */
@@ -4712,6 +4877,9 @@ export class TillApp extends LitElement {
       if (this.#billPayingNow(open.id) !== null) this.#closeBillPaying();
       this.result = result.invoice;
       this.#showTicket(open.billId);
+      // The paid order drops off the held list.
+      if (open.surface === "counter")
+        await this.#refreshAfterWrite("held", "refresh.held_after_sale");
       return;
     }
     const now = this.#billPayingNow(open.id);
@@ -4728,8 +4896,7 @@ export class TillApp extends LitElement {
             : { change: result.payment.change },
         busy: false,
       };
-    if (!this.#hasLeftOrder(open.billId, open.visit))
-      await this.#rereadAmounts(open.billId, open.visit);
+    await this.#rereadPayingOrder(open);
   }
 
   /**
@@ -4777,8 +4944,7 @@ export class TillApp extends LitElement {
       };
     }
     await this.#rereadBillPaying(id, now.billId);
-    if (!this.#hasLeftOrder(now.billId, now.visit))
-      await this.#rereadAmounts(now.billId, now.visit);
+    await this.#rereadPayingOrder(now);
   }
 
   #onBillPayEdit(): void {
@@ -4796,12 +4962,22 @@ export class TillApp extends LitElement {
     // The dialog offers Refund only on a payment of the balance it shows, and is under the refund
     // dialog while that is open.
     const open = this.billPaying!;
+    this.#openBillRefunding(
+      open,
+      open.balance!.payments.find((payment) => payment.id === paymentId)!,
+      null,
+    );
+  }
+
+  #openBillRefunding(open: BillPaying, payment: BillPaymentView, suggested: string | null): void {
     this.billRefunding = {
       id: ++this.#billRefunds,
       payId: open.id,
+      surface: open.surface,
       billId: open.billId,
       visit: open.visit,
-      payment: open.balance!.payments.find((payment) => payment.id === paymentId)!,
+      payment,
+      suggested,
       terminal: false,
       asked: null,
       refusal: null,
@@ -4825,12 +5001,17 @@ export class TillApp extends LitElement {
 
   /** How much and why, confirmed: the people who can approve it are read, and their PIN prompt
    * opens. Every refund is approved with a PIN, which a card keyed on a separate terminal needs
-   * even from someone allowed to give refunds. */
+   * even from someone allowed to give refunds. Such a card is first given back on its terminal,
+   * so its PIN is asked for once, when staff confirm that. */
   async #onRefundContinue(event: Event): Promise<void> {
     const asked = (event as CustomEvent<RefundAsk>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
     const open = this.billRefunding!;
     if (open.busy) return;
+    if (open.payment.entry === "manual" && asked.manualConfirmed !== true) {
+      this.billRefunding = { ...open, asked, terminal: true, refusal: null };
+      return;
+    }
     this.billRefunding = { ...open, asked, refusal: null, busy: true };
     try {
       const approvers = await this.api.listRefundAuthorizers();
@@ -4908,13 +5089,11 @@ export class TillApp extends LitElement {
         terminal: open.asked!.manualConfirmed === true,
       },
     };
-    if (!this.#hasLeftOrder(open.billId, open.visit))
-      await this.#rereadAmounts(open.billId, open.visit);
+    await this.#rereadPayingOrder(open);
   }
 
   /**
-   * A refusal of the approver's PIN shows in the PIN prompt; a card the server cannot give back
-   * itself asks staff to give it back on its terminal first; one naming a field goes under it, and
+   * A refusal of the approver's PIN shows in the PIN prompt; one naming a field goes under it, and
    * any other beside the refund's action. The bill is read again after every refusal. A refusal
    * after the operator has logged out changes nothing.
    */
@@ -4930,12 +5109,6 @@ export class TillApp extends LitElement {
       this.#closeRefundApprovers();
       if (isNetworkFailure(error)) {
         this.billRefunding = { ...now, refusal: { code: "network" }, busy: false };
-      } else if (
-        code === "bill.refund_unsupported" &&
-        now.payment.method === "card" &&
-        now.asked!.manualConfirmed !== true
-      ) {
-        this.billRefunding = { ...now, terminal: true, refusal: null, busy: false };
       } else {
         this.billRefunding = {
           ...now,
@@ -4948,8 +5121,7 @@ export class TillApp extends LitElement {
       }
     }
     await this.#rereadBillPaying(open.payId, open.billId);
-    if (!this.#hasLeftOrder(open.billId, open.visit))
-      await this.#rereadAmounts(open.billId, open.visit);
+    await this.#rereadPayingOrder(open);
   }
 
   /**
@@ -5154,6 +5326,7 @@ export class TillApp extends LitElement {
         .stage=${this.stage}
         .busy=${this.submitting || this.placing}
         .payHeld=${this.#payHeld()}
+        .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
         .counterTab=${tab}
         .cardProvider=${this.cardProvider}
         .tipsEnabled=${this.tipsEnabled}
@@ -5180,6 +5353,7 @@ export class TillApp extends LitElement {
       .defaultStationId=${this.#defaultStationId()}
       .busy=${this.submitting}
       .payHeld=${this.#payHeld()}
+      .payRest=${this.#basketPaidInPart()?.outstanding ?? null}
       .orderFlow=${this.orderFlow}
       .stage=${this.stage}
       .cardProvider=${this.cardProvider}
@@ -5381,6 +5555,8 @@ export class TillApp extends LitElement {
         @mark-cleared=${(event: Event) => void this.#onMarkCleared(event)}
         @pay-tab=${(event: Event) => void this.#onPayTab(event)}
         @bill-pay=${(event: Event) => void this.#onBillPay(event)}
+        @refund-excess=${(event: Event) => void this.#onRefundExcess(event)}
+        @counter-bill-pay=${(event: Event) => void this.#onCounterBillPay(event)}
         @back-to-floor=${() => this.#onBackToFloor()}
         @back-to-counter=${() => this.#onBackToCounter()}
         @open-allergens=${() => this.#onOpenAllergens()}

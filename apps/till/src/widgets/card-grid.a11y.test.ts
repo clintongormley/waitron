@@ -38,6 +38,16 @@ describe.each(["light", "dark"] as const)("till-card-grid a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  it("a counter tab whose order is partly paid, offering to take the rest, has no violations", async () => {
+    const store = new WorkingOrderStore();
+    const { host } = await mountWidget<TillCardGrid>(
+      "till-card-grid",
+      { tab: counterTab, store, payRest: "70.00" },
+      theme,
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("a permission-locked (inert) card cell has no violations", async () => {
     const store = new WorkingOrderStore();
     const { host } = await mountWidget<TillCardGrid>(

@@ -990,6 +990,7 @@ describe("till-bill-pay-dialog: the bill's payments", () => {
       kind: "contribution",
       shareOf: null,
       method: "cash",
+      entry: null,
       applied: "50.00",
       tip: "0.00",
       tendered: "50.00",

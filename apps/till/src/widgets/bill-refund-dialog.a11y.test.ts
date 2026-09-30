@@ -14,6 +14,7 @@ const card: BillPaymentView = {
   kind: "contribution",
   shareOf: null,
   method: "card",
+  entry: "manual",
   applied: "40.00",
   tip: "5.00",
   tendered: null,
@@ -43,6 +44,11 @@ describe.each(["light", "dark"] as const)("till-bill-refund-dialog a11y (%s them
     const { el, host } = await mount();
     await pressed(el, 'input[name="howMuch"][value="part"]');
     await pressed(el, "[data-refund-continue]");
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations opening on a suggested part of a card taken at a reader", async () => {
+    const { host } = await mount({ payment: { ...card, entry: "reader" }, suggested: "20.00" });
     await expectNoA11yViolations(host);
   });
 

@@ -2,6 +2,8 @@ import { type DietPredicate, memoVisibleProducts, shownMenu } from "../menu-filt
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { HANDHELD_COLUMNS, TILL_COLUMNS } from "@waitron/catalogue/src/home-layout-columns.js";
+import { formatMoney } from "@waitron/shared";
+import { currentLocale, t } from "../i18n/t.js";
 // Side-effect imports: registering each widget element so the switch below can render its tag.
 import "./menu-browser.js";
 import "./basket.js";
@@ -64,6 +66,19 @@ export class TillCardGrid extends LitElement {
     .cell.locked {
       opacity: var(--wt-opacity-disabled);
     }
+    .pay-rest {
+      display: flex;
+      flex-direction: column;
+      gap: var(--wt-space-3);
+      margin-bottom: var(--wt-space-3);
+      font-family: var(--wt-font-family);
+      font-size: var(--wt-font-size-md);
+      color: var(--wt-color-text);
+    }
+    .pay-rest p {
+      margin: 0;
+      font-weight: var(--wt-font-weight-bold);
+    }
   `;
 
   @property({ attribute: false }) tab?: TabDef;
@@ -80,6 +95,9 @@ export class TillCardGrid extends LitElement {
   /** Holds payment: a line of this card's basket must be resolved first, or the basket's order has
    * a payment on it. Shuts only its own pay card, never a table's, whose lines are saved (D10). */
   @property({ type: Boolean }) payHeld = false;
+  /** What the basket's order still owes when a payment is already on it: its pay card, held, is
+   * offered with a way to take that as a bill payment, which the single payment refuses. */
+  @property() payRest: string | null = null;
   @property() orderFlow: OrderFlow = "prepay";
   @property() stage: "order" | "collect" = "order";
   @property() cardProvider: CardProvider = "none";
@@ -172,6 +190,31 @@ export class TillCardGrid extends LitElement {
   }
 
   /** No `default`: a card type without a case here is a compile error rather than a dropped card. */
+  /** Above the pay card, which {@link payHeld} holds: what the order still owes, and the offer to
+   * take it as a bill payment. */
+  #payRest(outstanding: string): TemplateResult {
+    return html`<section class="pay-rest" data-counter-bill-payments>
+      <p>
+        ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(outstanding, currentLocale()))}
+      </p>
+      <wt-button
+        variant="primary"
+        data-pay-rest
+        .disabled=${this.busy}
+        @click=${() =>
+          this.dispatchEvent(
+            new CustomEvent("counter-bill-pay", {
+              detail: { amount: outstanding },
+              bubbles: true,
+              composed: true,
+            }),
+          )}
+      >
+        ${t("bill.take_rest")}
+      </wt-button>
+    </section>`;
+  }
+
   #element(card: CardInstance): TemplateResult | typeof nothing {
     switch (card.type) {
       case "product-grid": {
@@ -199,17 +242,17 @@ export class TillCardGrid extends LitElement {
       case "total":
         return html`<till-total .store=${this.store}></till-total>`;
       case "tender-pay":
-        return html`<till-tender-pay
-          .store=${this.store}
-          .busy=${this.busy || this.payHeld}
-          .mode=${this.orderFlow}
-          .stage=${this.stage}
-          .cardProvider=${this.cardProvider}
-          .tipsEnabled=${this.tipsEnabled}
-          .cardOutcome=${this.cardOutcome}
-          .activeReaders=${this.activeReaders}
-          .defaultReaderId=${this.defaultReaderId}
-        ></till-tender-pay>`;
+        return html`${this.payRest === null ? nothing : this.#payRest(this.payRest)}<till-tender-pay
+            .store=${this.store}
+            .busy=${this.busy || this.payHeld}
+            .mode=${this.orderFlow}
+            .stage=${this.stage}
+            .cardProvider=${this.cardProvider}
+            .tipsEnabled=${this.tipsEnabled}
+            .cardOutcome=${this.cardOutcome}
+            .activeReaders=${this.activeReaders}
+            .defaultReaderId=${this.defaultReaderId}
+          ></till-tender-pay>`;
       case "held-orders":
         return html`<till-held-orders
           .orders=${this.heldOrders}

@@ -107,6 +107,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has been presented, so it cannot be changed",
     es: "Esta cuenta ya se ha presentado, así que no se puede cambiar",
   },
+  "working_order.not_open": {
+    en: "This bill is no longer open: it has been paid or discarded",
+    es: "Esta cuenta ya no está abierta: se ha pagado o se ha descartado",
+  },
   "tab.not_open": {
     en: "That bill is no longer open. Choose another bill and send again",
     es: "Esa cuenta ya no está abierta. Elige otra cuenta y vuelve a enviar el pedido",

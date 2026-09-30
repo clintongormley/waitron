@@ -18,6 +18,7 @@ function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
     kind: "contribution",
     shareOf: null,
     method: "cash",
+    entry: null,
     applied: "50.00",
     tip: "0.00",
     tendered: "50.00",
@@ -291,6 +292,17 @@ describe("till-bill-refund-dialog: the server's refusals", () => {
 });
 
 describe("till-bill-refund-dialog: a card keyed on a separate terminal", () => {
+  it("says before it continues that a keyed card is given back on its terminal next, and any other payment approved next", async () => {
+    const keyed = await mount({ payment: { ...cardWithTip, entry: "manual" } });
+    expect(text(root(keyed).querySelector("[data-refund-next]"))).toBe(
+      t("bill_refund.terminal_next"),
+    );
+    const read = await mount({ payment: { ...cardWithTip, entry: "reader" } });
+    expect(text(root(read).querySelector("[data-refund-next]"))).toBe(
+      t("bill_refund.approval_next"),
+    );
+  });
+
   it("says to give it back on the terminal first, then confirms it with the same amounts", async () => {
     const el = await mount({ payment: cardWithTip });
     const asked = capture<RefundAsk>(el, "bill-refund-continue");

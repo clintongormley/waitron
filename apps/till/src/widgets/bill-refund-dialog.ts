@@ -33,8 +33,8 @@ const REASON_MAX = 500;
  * Gives back one payment of a bill: the whole of what is left of it, its tip included, or part of
  * it without the tip; a payment for particular items only whole. It asks why. It holds no request
  * of its own: `bill-refund-continue` carries the ask, which the app sends with an approver's PIN.
- * When the server cannot give a card back itself, the app sets {@link terminal}, and the dialog
- * asks staff to give it back on the card terminal and confirm, sending the same ask confirmed.
+ * For a card keyed on a separate terminal the app sets {@link terminal} first, and the dialog asks
+ * staff to give it back on that terminal and confirm, sending the same ask confirmed.
  */
 @customElement("till-bill-refund-dialog")
 export class TillBillRefundDialog extends LitElement {
@@ -115,11 +115,13 @@ export class TillBillRefundDialog extends LitElement {
 
   /** The payment given back from; the dialog is opened only with one. */
   @property({ attribute: false }) payment!: BillPaymentView;
-  /** The server cannot give this card back itself: staff give it back on the terminal, then
-   * confirm. */
+  /** A card keyed on a separate terminal: staff give it back on that terminal, then confirm. */
   @property({ type: Boolean }) terminal = false;
   @property({ attribute: false }) refusal: RefundRefusal | null = null;
   @property({ type: Boolean }) busy = false;
+  /** An amount offered as the part to give back, when this payment can give that part: the
+   * dialog opens on it. */
+  @property() suggested: string | null = null;
 
   @state() private howMuch: "whole" | "part" = "whole";
   @state() private typedAmountValue = "";
@@ -130,6 +132,19 @@ export class TillBillRefundDialog extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("refusal")) this.shownRefusal = this.refusal;
+    if (changed.has("suggested") && this.suggested !== null && this.#canGivePart(this.suggested)) {
+      this.howMuch = "part";
+      this.typedAmountValue = this.suggested;
+    }
+  }
+
+  /** Whether `amount` is a part this payment can give: above zero, and below what is left of it. */
+  #canGivePart(amount: string): boolean {
+    return (
+      !this.#wholeOnly() &&
+      compareDecimal(decimal(amount), decimal("0")) > 0 &&
+      compareDecimal(decimal(amount), decimal(this.#left().applied)) < 0
+    );
   }
 
   #money(amount: string): string {
@@ -313,7 +328,9 @@ export class TillBillRefundDialog extends LitElement {
         }}
         @keydown=${(event: KeyboardEvent) => this.#enter(event)}
       ></wt-input>
-      <p class="muted">${t("bill_refund.approval_next")}</p>
+      <p class="muted" data-refund-next>
+        ${t(this.payment.entry === "manual" ? "bill_refund.terminal_next" : "bill_refund.approval_next")}
+      </p>
       <wt-form-actions .error=${this.#bottomMessage(errors)}>
         ${this.#cancelButton()}
         <wt-button

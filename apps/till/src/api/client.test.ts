@@ -3563,6 +3563,7 @@ describe("TillApi: a bill's payments", () => {
     kind: "contribution",
     shareOf: null,
     method: "cash",
+    entry: null,
     applied: "10.00",
     tip: "0.00",
     tendered: "20.00",

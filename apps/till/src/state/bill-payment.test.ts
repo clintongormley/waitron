@@ -257,6 +257,7 @@ describe("a payment's refunds", () => {
     kind: "contribution",
     shareOf: null,
     method: "card",
+    entry: "reader",
     applied: "40.00",
     tip: "5.00",
     tendered: null,

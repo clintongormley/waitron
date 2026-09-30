@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import {
   adjustmentStubs,
+  cancelThroughDialog,
   cleanupWidgets,
   draftServer,
+  expectNoA11yViolations,
   mountWidget,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -11,6 +13,7 @@ import { TillApp } from "./till-app.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
+import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillBillPayDialog } from "./widgets/bill-pay-dialog.js";
@@ -27,12 +30,14 @@ import type {
   BillRefundView,
   CurrentOrders,
   FloorZone,
+  HeldOrderSummary,
   OrderGroup,
   PartyBill,
   TabLine,
   TableParty,
   TableState,
   TillApi,
+  TillProduct,
   TillSaleResult,
   ZoneOfferCatalogue,
 } from "./api/client.js";
@@ -154,6 +159,7 @@ function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
     kind: "contribution",
     shareOf: null,
     method: "cash",
+    entry: null,
     applied: "50.00",
     tip: "0.00",
     tendered: "50.00",
@@ -293,9 +299,9 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
   } as unknown as TillApi;
 }
 
-async function mountApp(overrides: Record<string, unknown> = {}) {
+async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light" | "dark") {
   api = stubApi(overrides);
-  return mountWidget<TillApp>("till-app", { api });
+  return mountWidget<TillApp>("till-app", { api }, theme);
 }
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
@@ -771,6 +777,36 @@ describe("till-app: the bill payment dialog's own steps", () => {
     },
   );
 
+  it("shows a payment answered after the waiter went back to the floor, and reads nothing of the table left", async () => {
+    let answer: (value: BillPaymentResult) => void = () => {};
+    const takeBillPayment = vi.fn(
+      () => new Promise<BillPaymentResult>((resolve) => (answer = resolve)),
+    );
+    const { el } = await mountApp({
+      takeBillPayment,
+      previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    emit(tableOrder(el), "back-to-floor");
+    await flush(el);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+    answer(
+      takenOf({ applied: "40.00", change: "10.00" }, { received: "40.00", outstanding: "80.00" }),
+    );
+    await flush(el);
+
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
+    expect(api.getPartyBills).toHaveBeenCalledTimes(billReads);
+  });
+
   it("says when the bill's payments cannot be read", async () => {
     const { el } = await mountApp({
       getBillBalance: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
@@ -865,6 +901,600 @@ describe("till-app: a bill that already holds money", () => {
     });
     const order = await openTable(el);
     expect(order.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+  });
+});
+
+describe("till-app: a change refused on a bill that holds money", () => {
+  const partly = billOf({ outstanding: "70.00", hasPayments: true });
+  const other = billOf({
+    workingOrderId: "wo-9",
+    label: "B",
+    total: "12.00",
+    outstanding: "12.00",
+  });
+  const heldMoney = balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] });
+  const banner = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>('p.error[role="alert"]');
+  const listed = (order: TillTableOrderScreen) =>
+    [...order.shadowRoot!.querySelectorAll<HTMLElement>("[data-bill]")].map((row) => ({
+      bill: row.dataset.bill,
+      total: text(row.querySelector("[data-bill-total]")),
+    }));
+
+  /** The table open on the partly paid bill, with how often each read had run by then. */
+  async function openHolding(overrides: Record<string, unknown>) {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly, other]),
+      getBillBalance: vi.fn().mockResolvedValue(heldMoney),
+      ...overrides,
+    });
+    const order = await openTable(el);
+    const reads = {
+      bills: vi.mocked(api.getPartyBills).mock.calls.length,
+      balance: vi.mocked(api.getBillBalance).mock.calls.length,
+      lines: vi.mocked(api.getTabLines).mock.calls.length,
+    };
+    return { el, order, reads };
+  }
+
+  function expectReadAgain(reads: { bills: number; balance: number; lines?: number }): void {
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads.bills);
+    expect(vi.mocked(api.getBillBalance).mock.calls.length).toBeGreaterThan(reads.balance);
+    if (reads.lines !== undefined)
+      expect(vi.mocked(api.getTabLines).mock.calls.length).toBeGreaterThan(reads.lines);
+  }
+
+  it("says a paid item's quantity cannot be raised, and reads the bill, its lines and its payments again", async () => {
+    const updateOrderLine = vi.fn().mockRejectedValue({ code: "bill.line_paid", lineNo: 1 });
+    const { el, order, reads } = await openHolding({ updateOrderLine });
+
+    emit(order, "change-line", {
+      lineNo: 1,
+      lineName: "Paella",
+      patch: { quantity: "2" },
+      revision: 0,
+    });
+    await flush(el);
+
+    expect(updateOrderLine).toHaveBeenCalledWith("wo-4", 1, { quantity: "2" }, 0);
+    expect(text(banner(el))).toBe(codeMessage("bill.line_paid"));
+    expectReadAgain(reads);
+  });
+
+  it("shows a Cancel refused because issuing the invoice finds a sold-out dish beside the Cancel, and reads the bill again", async () => {
+    const { el, order, reads } = await openHolding({
+      ...adjustmentStubs(),
+      applyAdjustment: vi
+        .fn()
+        .mockRejectedValue({ code: "product.unavailable", status: 409, productId: "p" }),
+    });
+
+    await cancelThroughDialog(el, order, "line-5", () => flush(el));
+
+    const adjust = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    expect(
+      adjust.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+    ).toBe(codeMessage("product.unavailable"));
+    expectReadAgain(reads);
+    expect(listed(tableOrder(el))).toEqual([
+      { bill: "wo-4", total: money("120.00") },
+      { bill: "wo-9", total: money("12.00") },
+    ]);
+  });
+
+  it("says why a merge of a bill holding money was refused, lists both bills as they were, and reads them again", async () => {
+    const mergeBills = vi
+      .fn()
+      .mockRejectedValue({ code: "bill.payments_received", status: 409, workingOrderId: "wo-4" });
+    const { el, order, reads } = await openHolding({ mergeBills });
+    const before = listed(order);
+
+    emit(order, "merge-bills", { fromBillId: "wo-9" });
+    await flush(el);
+
+    expect(mergeBills).toHaveBeenCalledOnce();
+    expect(text(banner(el))).toBe(codeMessage("bill.payments_received"));
+    expect(before).toEqual([
+      { bill: "wo-4", total: money("120.00") },
+      { bill: "wo-9", total: money("12.00") },
+    ]);
+    expect(listed(tableOrder(el))).toEqual(before);
+    expectReadAgain({ bills: reads.bills, balance: reads.balance });
+  });
+
+  it.each(["bill.refund_in_progress", "working_order.not_open"])(
+    "says a split refused %s in that code's own words, and reads the bill again",
+    async (code) => {
+      const { el, order, reads } = await openHolding({
+        splitBill: vi.fn().mockRejectedValue({ code, status: 409 }),
+      });
+
+      emit(order, "split-lines", { transfers: [{ lineNo: 4 }] });
+      await flush(el);
+
+      expect(text(banner(el))).toBe(codeMessage(code));
+      expect(text(banner(el))).not.toContain(t("table.error"));
+      expectReadAgain({ bills: reads.bills, balance: reads.balance });
+    },
+  );
+
+  it("names the excess of a split that would leave the bill owing less than it received, and offers to refund it first", async () => {
+    const splitBill = vi.fn().mockRejectedValue({
+      code: "bill.received_exceeds_total",
+      status: 409,
+      workingOrderId: "wo-4",
+      excess: "20.00",
+    });
+    const { el, order, reads } = await openHolding({ splitBill });
+
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    await flush(el);
+
+    expect(text(banner(el))).toContain(
+      t("bill.received_exceeds_total_excess").replaceAll("{amount}", money("20.00")),
+    );
+    const refund = banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!;
+    expect(text(refund)).toBe(t("bill.refund_excess").replace("{amount}", money("20.00")));
+    expectReadAgain({ bills: reads.bills, balance: reads.balance });
+    expect(tableOrder(el).orderId).toBe("wo-4");
+
+    refund.click();
+    await flush(el);
+
+    expect(dialog(el)).not.toBeNull();
+    const giving = el.shadowRoot!.querySelector<TillBillRefundDialog>("till-bill-refund-dialog")!;
+    expect(giving.payment.id).toBe("pay-1");
+    expect(
+      giving.shadowRoot!.querySelector<HTMLInputElement>('input[name="howMuch"][value="part"]')!
+        .checked,
+    ).toBe(true);
+    expect(
+      giving.shadowRoot!.querySelector<HTMLElement & { value: string }>('wt-input[name="amount"]')!
+        .value,
+    ).toBe("20.00");
+  });
+
+  it("names the excess of a line change that would leave the bill owing less than it received", async () => {
+    const { el, order } = await openHolding({
+      updateOrderLine: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.received_exceeds_total", status: 409, excess: "5.00" }),
+    });
+
+    emit(order, "change-line", {
+      lineNo: 5,
+      lineName: "Vino",
+      patch: { quantity: "0.5" },
+      revision: 0,
+    });
+    await flush(el);
+
+    expect(text(banner(el))).toContain(
+      t("bill.received_exceeds_total_excess").replaceAll("{amount}", money("5.00")),
+    );
+  });
+
+  it("opens only the bill payment dialog, saying so, when the payments cannot be read to give the excess back", async () => {
+    const getBillBalance = vi.fn().mockResolvedValue(heldMoney);
+    const { el, order } = await openHolding({
+      getBillBalance,
+      splitBill: vi
+        .fn()
+        .mockRejectedValue({ code: "bill.received_exceeds_total", status: 409, excess: "20.00" }),
+    });
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    await flush(el);
+    getBillBalance.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.click();
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.read_failed"));
+  });
+
+  it("offers the bill's payments to choose from when more than one can give the excess back", async () => {
+    const two = balanceOf({
+      received: "50.00",
+      outstanding: "70.00",
+      payments: [paymentOf({ applied: "25.00" }), paymentOf({ id: "pay-2", applied: "25.00" })],
+    });
+    const { el, order } = await openHolding({
+      getBillBalance: vi.fn().mockResolvedValue(two),
+      splitBill: vi.fn().mockRejectedValue({
+        code: "bill.received_exceeds_total",
+        status: 409,
+        excess: "20.00",
+      }),
+    });
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    await flush(el);
+
+    banner(el)!.querySelector<HTMLElement>("[data-refund-excess]")!.click();
+    await flush(el);
+
+    expect(dialog(el)).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(inDialog(el, '[data-payment-refund="pay-2"]')).not.toBeNull();
+  });
+});
+
+describe.each(["light", "dark"] as const)(
+  "till-app: a move refused for the money on the bill, a11y (%s theme)",
+  (theme) => {
+    it("has no violations naming the excess with the offer to give it back", async () => {
+      setLocale("es-ES");
+      const { el, host } = await mountApp(
+        {
+          getPartyBills: vi
+            .fn()
+            .mockResolvedValue([billOf({ outstanding: "70.00", hasPayments: true })]),
+          getBillBalance: vi
+            .fn()
+            .mockResolvedValue(
+              balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] }),
+            ),
+          splitBill: vi.fn().mockRejectedValue({
+            code: "bill.received_exceeds_total",
+            status: 409,
+            excess: "20.00",
+          }),
+        },
+        theme,
+      );
+      const order = await openTable(el);
+      emit(order, "split-lines", { transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-refund-excess]")).not.toBeNull();
+
+      await expectNoA11yViolations(host);
+    });
+  },
+);
+
+describe("till-app: a single payment refused because money is already on the bill", () => {
+  it("says so and offers to take the rest as a bill payment, once the bill is read again", async () => {
+    const getPartyBills = vi
+      .fn()
+      .mockResolvedValueOnce([billOf()])
+      .mockResolvedValue([billOf({ outstanding: "70.00", hasPayments: true })]);
+    const { el } = await mountApp({
+      getPartyBills,
+      getBillBalance: vi
+        .fn()
+        .mockResolvedValue(
+          balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] }),
+        ),
+    });
+    const order = await openTable(el);
+    expect(order.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
+
+    emit(order, "pay-tab", { method: "cash", amount: "120.00" });
+    await flush(el);
+
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
+      t("bill.pay_with_bill_payments"),
+    );
+    const rest = tableOrder(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]")!;
+    rest.click();
+    await flush(el);
+    expect(dialog(el)).not.toBeNull();
+  });
+});
+
+describe("till-app: a partly paid order at the counter", () => {
+  const counterCanvas: CanvasDef = {
+    formFactor: "till",
+    tabs: [
+      {
+        key: "counter",
+        title: "Counter",
+        columns: 12,
+        cards: [
+          { type: "basket", colSpan: 4, rowSpan: 4, config: {} },
+          { type: "tender-pay", colSpan: 4, rowSpan: 2, config: {} },
+          { type: "held-orders", colSpan: 8, rowSpan: 2, config: {} },
+        ],
+      },
+    ],
+  };
+  const held = (over: Partial<HeldOrderSummary> = {}): HeldOrderSummary => ({
+    id: "wo-1",
+    orderNumber: 5,
+    label: "Ana",
+    itemCount: 5,
+    total: "120.00",
+    outstanding: "70.00",
+    hasPayments: true,
+    partyId: null,
+    openedAt: "2026-09-30T19:00:00.000Z",
+    signals: [],
+    ...over,
+  });
+  const counterBalance = balanceOf({
+    workingOrderId: "wo-1",
+    received: "50.00",
+    outstanding: "70.00",
+    payments: [paymentOf()],
+  });
+  const counter = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  const grid = (el: TillApp) => counter(el).shadowRoot!.querySelector("till-card-grid")!;
+  const payRest = (el: TillApp) =>
+    grid(el).shadowRoot!.querySelector<HTMLElement>("[data-pay-rest]");
+
+  /** Signed in at the counter with the held order `wo-1` retrieved into the basket. */
+  async function retrieved(overrides: Record<string, unknown>): Promise<TillApp> {
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas: counterCanvas }),
+      listWorkingOrders: vi.fn().mockResolvedValue([held()]),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValue({ id: "wo-1", orderNumber: 5, label: "Ana", revision: 3, lines: [] }),
+      getBillBalance: vi.fn().mockResolvedValue(counterBalance),
+      previewBillPayment: vi.fn().mockResolvedValue(cash("70.00", "0.00")),
+      ...overrides,
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    emit(counter(el), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    return el;
+  }
+
+  async function payTheRest(el: TillApp): Promise<void> {
+    payRest(el)!.click();
+    await flush(el);
+    await type(el, "tendered", "70");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+  }
+
+  it("offers to take the rest as a bill payment in place of the single payment, and files the invoice when it is paid", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        takenOf(
+          { applied: "70.00", tendered: "70.00" },
+          { workingOrderId: "wo-1", received: "120.00", outstanding: "0.00", status: "settled" },
+          invoiceOf("120.00"),
+        ),
+      );
+    const el = await retrieved({ takeBillPayment });
+    expect(
+      grid(el).shadowRoot!.querySelector<HTMLElement & { busy: boolean }>("till-tender-pay")!.busy,
+    ).toBe(true);
+    expect(text(payRest(el))).toBe(t("bill.take_rest"));
+    const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+
+    payRest(el)!.click();
+    await flush(el);
+    expect(api.getBillBalance).toHaveBeenCalledWith("wo-1");
+    expect(inDialog(el, 'wt-input[name="amount"]') as unknown as { value: string }).toMatchObject({
+      value: "70.00",
+    });
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "50.00", "70.00"));
+    await type(el, "tendered", "70");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(takeBillPayment).toHaveBeenCalledWith("wo-1", expect.anything(), expect.anything());
+    expect(api.recordSale).not.toHaveBeenCalled();
+    expect(api.pay).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+    const ticket = el.shadowRoot!.querySelector<HTMLElement & { result: TillSaleResult }>(
+      "till-ticket-view",
+    )!;
+    expect(ticket.result.invoiceNumber).toBe("F-0007");
+    expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(listReads);
+  });
+
+  it("reads the order and the held orders again after a payment that leaves some to pay", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        takenOf(
+          { applied: "70.00", tendered: "70.00" },
+          { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
+        ),
+      );
+    const el = await retrieved({ takeBillPayment });
+    const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+    const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+
+    await payTheRest(el);
+
+    expect(dialog(el)).not.toBeNull();
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "100.00", "20.00"));
+    expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(orderReads);
+    expect(vi.mocked(api.listWorkingOrders).mock.calls.length).toBeGreaterThan(listReads);
+  });
+
+  it("reads nothing of the counter order when a payment is answered after the operator logged out", async () => {
+    let answer: (value: BillPaymentResult) => void = () => {};
+    const takeBillPayment = vi.fn(
+      () => new Promise<BillPaymentResult>((resolve) => (answer = resolve)),
+    );
+    const el = await retrieved({ takeBillPayment });
+    await payTheRest(el);
+    expect(takeBillPayment).toHaveBeenCalledOnce();
+
+    emit(counter(el), "logout");
+    await flush(el);
+    const orderReads = vi.mocked(api.retrieveWorkingOrder).mock.calls.length;
+    answer(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
+      ),
+    );
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+    expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(orderReads);
+  });
+
+  it("offers the bill payment once a card at the reader is refused because another till took a payment first", async () => {
+    const el = await retrieved({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValue([held()]),
+    });
+
+    emit(counter(el), "collect-card", {});
+    await flush(el);
+
+    expect(api.pay).toHaveBeenCalledOnce();
+    expect(payRest(el)).not.toBeNull();
+  });
+
+  it("keeps the message and the held list as they were when the held list cannot be read after such a refusal", async () => {
+    const el = await retrieved({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    emit(counter(el), "confirm-payment", { method: "cash", amount: "120.00" });
+    await flush(el);
+
+    expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
+      t("bill.pay_with_bill_payments"),
+    );
+    expect(payRest(el)).toBeNull();
+  });
+
+  it("opens one dialog for two presses, with no items to pick when the order's lines could not be read", async () => {
+    const el = await retrieved({
+      getTabLines: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    payRest(el)!.click();
+    payRest(el)!.click();
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelectorAll("till-bill-pay-dialog")).toHaveLength(1);
+    expect(dialog(el)!.lines).toEqual([]);
+    expect(api.getBillBalance).toHaveBeenCalledTimes(1);
+  });
+
+  describe("an edit made to the order in the basket", () => {
+    const flan: TillProduct = {
+      id: "flan",
+      menuItemId: "offer-flan",
+      name: "Flan",
+      customerName: { es: "Flan casero" },
+      pricingUnit: "each",
+      unitPrice: "5.00",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+      catalogueId: "cat-default",
+      catalogueName: "Carta",
+    };
+
+    async function edited(overrides: Record<string, unknown>): Promise<TillApp> {
+      const el = await retrieved(overrides);
+      counter(el).store.addProduct(flan, "1");
+      await flush(el);
+      return el;
+    }
+
+    it("is saved before the dialog opens", async () => {
+      const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 4 });
+      const el = await edited({ updateWorkingOrder });
+
+      payRest(el)!.click();
+      await flush(el);
+
+      expect(updateWorkingOrder).toHaveBeenCalledWith(
+        "wo-1",
+        expect.objectContaining({ revision: 3 }),
+      );
+      expect(dialog(el)).not.toBeNull();
+    });
+
+    it("that is refused opens no dialog and says so", async () => {
+      const el = await edited({
+        updateWorkingOrder: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+      });
+
+      payRest(el)!.click();
+      await flush(el);
+
+      expect(dialog(el)).toBeNull();
+      expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(t("sale.error"));
+    });
+
+    it("saved from a copy another till changed opens no dialog", async () => {
+      const el = await edited({
+        updateWorkingOrder: vi
+          .fn()
+          .mockRejectedValue({ code: "working_order.out_of_date", status: 409 }),
+      });
+
+      payRest(el)!.click();
+      await flush(el);
+
+      expect(dialog(el)).toBeNull();
+      expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toBe(
+        t("held.changed_elsewhere"),
+      );
+    });
+
+    it("answered after the operator logged out opens no dialog and says nothing", async () => {
+      for (const outcome of ["saved", "refused"] as const) {
+        let answer: { resolve: (value: unknown) => void; reject: (error: unknown) => void } = {
+          resolve: () => {},
+          reject: () => {},
+        };
+        const el = await edited({
+          updateWorkingOrder: vi.fn(
+            () => new Promise((resolve, reject) => (answer = { resolve, reject })),
+          ),
+        });
+        payRest(el)!.click();
+        await flush(el);
+
+        emit(counter(el), "logout");
+        await flush(el);
+        if (outcome === "saved") answer.resolve({ revision: 4 });
+        else answer.reject({ code: "server.internal", status: 500 });
+        await flush(el);
+
+        expect(dialog(el)).toBeNull();
+        expect(el.shadowRoot!.querySelector('p.error[role="alert"]')).toBeNull();
+        cleanupWidgets();
+      }
+    });
+  });
+
+  it("offers the bill payment once the single payment is refused because another till took a payment first", async () => {
+    const el = await retrieved({
+      listWorkingOrders: vi
+        .fn()
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValueOnce([held({ outstanding: "120.00", hasPayments: false })])
+        .mockResolvedValue([held()]),
+    });
+    expect(payRest(el)).toBeNull();
+
+    emit(counter(el), "confirm-payment", { method: "cash", amount: "120.00" });
+    await flush(el);
+
+    expect(api.recordSale).toHaveBeenCalledOnce();
+    expect(text(el.shadowRoot!.querySelector('p.error[role="alert"]'))).toContain(
+      t("bill.pay_with_bill_payments"),
+    );
+    payRest(el)!.click();
+    await flush(el);
+    expect(dialog(el)).not.toBeNull();
   });
 });
 
@@ -1428,10 +2058,12 @@ describe("till-app: giving back a bill payment", () => {
   const cashPaid = paymentOf();
   const keyedCard = paymentOf({
     method: "card",
+    entry: "manual",
     applied: "50.00",
     tendered: null,
     change: null,
   });
+  const readerCard = paymentOf({ ...keyedCard, entry: "reader" });
   const refundOf = (over: Partial<BillRefundView> = {}): BillRefundView => ({
     id: "r-1",
     paymentId: "pay-1",
@@ -1552,15 +2184,13 @@ describe("till-app: giving back a bill payment", () => {
     expect(openDrawer).not.toHaveBeenCalled();
   });
 
-  it("gives back a hand-keyed card on its terminal first, then records it with a manager's PIN", async () => {
-    const refundBillPayment = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "bill.refund_unsupported", status: 422, paymentId: "pay-1" })
-      .mockResolvedValueOnce(givenBack(keyedCard, refundOf()));
+  it("gives back a hand-keyed card on its terminal first, then records it with one manager's PIN", async () => {
+    const refundBillPayment = vi.fn().mockResolvedValue(givenBack(keyedCard, refundOf()));
     const el = await askRefund({ refundBillPayment }, keyedCard);
-    await pinPad(el, "1234");
 
     expect(approval(el)).toBeNull();
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    expect(refundBillPayment).not.toHaveBeenCalled();
     expect(text(inRefund(el, "[data-refund-terminal]"))).toBe(
       t("bill_refund.terminal").replace("{amount}", money("50.00")),
     );
@@ -1569,22 +2199,38 @@ describe("till-app: giving back a bill payment", () => {
     expect(approval(el)).not.toBeNull();
     await pinPad(el, "1234");
 
-    const [first, confirmed] = refunds();
-    expect(first!.request).not.toHaveProperty("manualConfirmed");
-    expect(confirmed!.request).toEqual({
-      submissionId: expect.any(String),
-      appliedAmount: "50.00",
-      tipAmount: "0.00",
-      reason: "Charged twice",
-      manualConfirmed: true,
-      override: { personId: "m-1", pin: "1234" },
-    });
-    expect(confirmed!.request.submissionId).not.toBe(first!.request.submissionId);
-    expect(api.listRefundAuthorizers).toHaveBeenCalledTimes(2);
+    expect(refunds()).toEqual([
+      {
+        billId: "wo-4",
+        paymentId: "pay-1",
+        request: {
+          submissionId: expect.any(String),
+          appliedAmount: "50.00",
+          tipAmount: "0.00",
+          reason: "Charged twice",
+          manualConfirmed: true,
+          override: { personId: "m-1", pin: "1234" },
+        },
+      },
+    ]);
+    expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
     expect(refundDialog(el)).toBeNull();
     expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
       t("bill_refund.done_terminal").replace("{amount}", money("50.00")),
     );
+  });
+
+  it("shows beside the action a card taken at a reader that the server cannot give back, and asks for no terminal", async () => {
+    const refundBillPayment = vi
+      .fn()
+      .mockRejectedValue({ code: "bill.refund_unsupported", status: 422, paymentId: "pay-1" });
+    const el = await askRefund({ refundBillPayment }, readerCard);
+    await pinPad(el, "1234");
+
+    expect(refunds()).toHaveLength(1);
+    expect(refunds()[0]!.request).not.toHaveProperty("manualConfirmed");
+    expect(inRefund(el, "[data-refund-terminal]")).toBeNull();
+    expect(inRefund(el, "wt-form-actions")!.error).toBe(codeMessage("bill.refund_unsupported"));
   });
 
   it("keeps the PIN prompt open after a wrong PIN, saying so, and reads the bill again", async () => {
@@ -1630,7 +2276,6 @@ describe("till-app: giving back a bill payment", () => {
   });
 
   it("says a card refund is waiting for the card provider", async () => {
-    const readerCard = { ...keyedCard };
     const el = await askRefund(
       {
         refundBillPayment: vi

@@ -331,3 +331,12 @@ it("explains an approver who may not approve, in both languages, naming no ident
     expect(codeMessage("authorization.not_permitted", locale)).not.toContain("authorization");
   }
 });
+
+it("says in both languages that a bill paid or discarded is no longer open, naming no identifier", () => {
+  expect(codeMessage("working_order.not_open", "en")).toBe(
+    "This bill is no longer open: it has been paid or discarded",
+  );
+  expect(codeMessage("working_order.not_open", "es")).toBe(
+    "Esta cuenta ya no está abierta: se ha pagado o se ha descartado",
+  );
+});
