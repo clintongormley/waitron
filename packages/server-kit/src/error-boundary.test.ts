@@ -14,6 +14,7 @@ declare module "@waitron/shared" {
     "test.not_found": { id: string };
     "session.required": Record<string, never>;
     "recovery.state_incomplete": { missing: string };
+    "test.with_reason": { reason: string };
   }
 }
 
@@ -109,6 +110,57 @@ describe("createErrorBoundary (the shared error boundary till-api and management
     await app.request("/boom");
     const warn = lines.find((l) => l.level === "warn");
     expect(warn?.fields.requestId).toBe("req-xyz");
+  });
+
+  it("logs an AppError's log-only reason and answers exactly as it would without one", async () => {
+    const lines: Line[] = [];
+    const status: Record<string, ContentfulStatusCode> = { "test.not_found": 404 };
+    const boundary = createErrorBoundary(status, "widget.failed");
+    const app = new Hono();
+    app.get("/with", (c) =>
+      boundary(c, collect(lines), () =>
+        Promise.reject(new AppError("test.not_found", { id: "s1" }, { reason: "secret-cause" })),
+      ),
+    );
+    app.get("/without", (c) =>
+      boundary(c, collect(lines), () =>
+        Promise.reject(new AppError("test.not_found", { id: "s1" })),
+      ),
+    );
+
+    const withReason = await app.request("/with");
+    const without = await app.request("/without");
+    expect(withReason.status).toBe(without.status);
+    const body = await withReason.text();
+    expect(body).toBe(await without.text());
+    expect(body).not.toContain("secret-cause");
+    expect(lines).toStrictEqual([
+      {
+        level: "warn",
+        event: "test.not_found",
+        fields: { id: "s1", requestId: undefined, logReason: "secret-cause" },
+      },
+      { level: "warn", event: "test.not_found", fields: { id: "s1", requestId: undefined } },
+    ]);
+  });
+
+  it("logs a log-only reason beside a param also named reason, overwriting neither", async () => {
+    const lines: Line[] = [];
+    const boundary = createErrorBoundary({}, "widget.failed");
+    const app = new Hono();
+    app.get("/boom", (c) =>
+      boundary(c, collect(lines), () =>
+        Promise.reject(
+          new AppError("test.with_reason", { reason: "shown" }, { reason: "log-only" }),
+        ),
+      ),
+    );
+
+    const res = await app.request("/boom");
+    expect(await res.json()).toEqual({
+      error: { code: "test.with_reason", params: { reason: "shown" } },
+    });
+    expect(lines[0]?.fields).toEqual({ reason: "shown", logReason: "log-only" });
   });
 
   it("maps a non-AppError to an opaque server.internal 500, logs it at error under the given tag, and NEVER leaks .message", async () => {
