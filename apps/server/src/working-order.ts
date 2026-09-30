@@ -341,6 +341,12 @@ async function readBasketOffers(
 }
 
 /**
+ * Marks a requested line that only prices extras added to a stored dish: its dish row is discarded,
+ * so it orders no new portion of the dish. A symbol, so no JSON body can set it.
+ */
+const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
+
+/**
  * Price requested lines from the order's zone's live menu versions — the dish, variant, extras and
  * options alike, each at the VAT class the version froze — and classify each line's product as it
  * stands now. Return both the insertable line snapshots and their gross lines, so a caller filing
@@ -364,6 +370,7 @@ async function priceOrderLines(
     options?: OptionSelection[];
     frozenOptions?: OptionSnapshot[];
     frozenExtras?: ExtraChild[];
+    [ADDED_EXTRAS_ONLY]?: true;
   } & LineExtras)[],
   zoneId?: string,
   /** The zone's offers, when the caller has already read them with {@link readBasketOffers}. */
@@ -420,7 +427,7 @@ async function priceOrderLines(
     if (!offer.available) {
       throw new AppError("product.unavailable", { productId: offer.productId });
     }
-    if (offer.ordering === "not_sold_separately") {
+    if (offer.ordering === "not_sold_separately" && line[ADDED_EXTRAS_ONLY] !== true) {
       throw new AppError("product.not_sold_separately", { productId: offer.productId });
     }
     return { ...line, offer };
@@ -3796,6 +3803,7 @@ async function applyLineEdits(
         quantity,
         frozenOptions: [],
         frozenExtras: extras.added,
+        [ADDED_EXTRAS_ONLY]: true,
       });
       pricedAs.push({ kind: "extras" });
     }

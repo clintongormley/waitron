@@ -1888,6 +1888,41 @@ describe("updateHeldOrder", () => {
     expect(after[0]).toEqual(before[0]);
   });
 
+  it("adds an extra to a held dish a publish made not sold separately, and refuses raising the dish", async () => {
+    const { cfg, cafeId, premiumCafeOfferId, extra, id, before } = await parkWithExtra("1");
+    await withTransaction(db, async (tx) => {
+      await catalogue.updateProduct(tx, cafeId, { ordering: "not_sold_separately" });
+      await republishMenus(tx);
+    });
+    const edit = async (dishes: string, picks: number) =>
+      updateHeldOrder({ db }, cfg, id, {
+        revision: await revisionOf(id),
+        lines: [
+          {
+            workingOrderLineId: before[0]!.id,
+            menuItemId: premiumCafeOfferId,
+            quantity: dishes,
+            extras: [
+              { listId: extra.listId, picks: [{ productId: extra.productId, quantity: picks }] },
+            ],
+          },
+        ],
+      });
+
+    await expect(edit("2", 1)).rejects.toMatchObject({
+      code: "product.not_sold_separately",
+      params: { productId: cafeId },
+    });
+    expect(await readLines(id)).toEqual(before);
+
+    await edit("1", 2);
+    const after = await readLines(id);
+    expect(after[0]).toEqual(before[0]);
+    expect(after.slice(1)).toEqual([
+      expect.objectContaining({ parent_line_id: before[0]!.id, quantity: "2000", line_total: 150 }),
+    ]);
+  });
+
   it("keeps a raised quantity on a sellable line beside an unchanged line whose extra is sold out", async () => {
     const { cfg, zoneId, premiumCafeOfferId, extra, extras } = await parkWithExtra("1");
     const id = randomUUID();
