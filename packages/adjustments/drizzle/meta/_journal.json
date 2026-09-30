@@ -15,6 +15,13 @@
       "when": 1790747353088,
       "tag": "0001_adjustments",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790765665496,
+      "tag": "0002_adjustment_settings",
+      "breakpoints": true
     }
   ]
 }

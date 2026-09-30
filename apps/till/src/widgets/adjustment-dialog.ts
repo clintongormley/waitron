@@ -619,7 +619,12 @@ export class TillAdjustmentDialog extends LitElement {
       ${
         preview.needsApproval === null
           ? nothing
-          : html`<p class="approval" data-needs-approval>${t(APPROVAL[preview.needsApproval])}</p>`
+          : html`<p class="approval" data-needs-approval>${t(APPROVAL[preview.needsApproval])}</p>
+              ${
+                preview.overBillDiscountLimit
+                  ? html`<p class="detail" data-over-bill-limit>${t("adjust.over_bill_limit")}</p>`
+                  : nothing
+              }`
       }
       <wt-form-actions .error=${bottom}>
         <wt-button

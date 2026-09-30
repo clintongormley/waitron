@@ -692,7 +692,9 @@ export interface AdjustmentAsk {
 }
 
 /** An adjustment to apply: made once per person's confirmation, and sent again unchanged only when
- * a request got no answer. `approver` is someone at or above the reason's approver role. */
+ * a request got no answer. `approver` is someone at or above the approver role: the higher of the
+ * reason's approver role (when the operator is below its apply role) and a manager (when the bill's
+ * discount limit asks for one). */
 export interface AdjustmentCommand extends AdjustmentAsk {
   submissionId: string;
   approver?: { personId: string; pin: string };
@@ -706,6 +708,10 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** The role that must approve it, or null when the operator may apply it alone. */
   needsApproval: PersonRole | null;
+  /** The operator is below a manager, and this discount takes the bill past the venue's limit, or
+   * this cancel leaves it past the limit with a larger share than before; whoever approves is then at
+   * least a manager. */
+  overBillDiscountLimit: boolean;
   lines: {
     lineId: string;
     lineNo: number;

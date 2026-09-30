@@ -89,6 +89,8 @@ function fakeApi(overrides: Partial<Record<keyof AdjustmentsApi, unknown>> = {})
     updateReason: vi.fn().mockResolvedValue(complaint),
     deactivateReason: vi.fn().mockResolvedValue(undefined),
     reorderReasons: vi.fn().mockResolvedValue(undefined),
+    getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp: null }),
+    saveSettings: vi.fn(async (settings: unknown) => settings),
     ...overrides,
   } as unknown as FakeApi;
   if (!("background" in overrides)) (api as { background: unknown }).background = api;
@@ -1044,5 +1046,283 @@ describe("deactivating", () => {
     expect(modal(el)).not.toBeNull();
     expect(bottom(el)).toBe("Something went wrong, try again");
     expect(button(el, "confirm-deactivate").disabled).toBe(false);
+  });
+});
+
+describe("the bill discount limit", () => {
+  const LIMIT_INVALID = "Enter a percentage above 0 and up to 100, with at most two decimals.";
+  const limit = (el: AdjustmentReasonsScreen) => field(el, "maxBillDiscount");
+  const section = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="limit"]')!;
+  const limitBottom = (el: AdjustmentReasonsScreen) =>
+    section(el)
+      .querySelector("wt-form-actions")!
+      .shadowRoot!.querySelector("[data-error]")
+      ?.textContent?.trim() ?? "";
+  const limitAlert = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector('[data-test="limit-alert"]')?.textContent?.trim() ?? "";
+  const saved = (el: AdjustmentReasonsScreen) =>
+    el.shadowRoot!.querySelector('[data-test="limit-saved"]')?.textContent?.trim() ?? "";
+  const withLimit = (maxBillDiscountBp: number | null, over: Record<string, unknown> = {}) =>
+    fakeApi({ getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp }), ...over });
+
+  it("shows the saved limit as a percentage, labelled and explained", async () => {
+    const el = await mount(withLimit(1250));
+    const input = limit(el) as Named & { label: string; hint: string };
+    expect(input.value).toBe("12.5");
+    expect(input.label).toBe("Largest total discount on one bill");
+    expect(input.hint).toBe(
+      "Discounts on a bill's items and on the whole bill, added together, as a share of the full price of what is still on the bill. When the person making the change is below a manager, a discount that goes past it, or a cancellation that leaves the bill past it with a larger share than before, needs the PIN of a manager or someone more senior. Give-aways made on this bill are not counted as discount. Leave it empty for no limit.",
+    );
+    expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
+      "Limit on a bill's discounts",
+    );
+  });
+
+  it("shows the percentage in a narrow box marked %, the label and help at full width", async () => {
+    const el = await mount(withLimit(1250));
+    const input = limit(el) as Named & { updateComplete: Promise<unknown> };
+    await input.updateComplete;
+    expect(input.tagName).toBe("WT-PRICE-INPUT");
+    const box = input.shadowRoot!.querySelector("[part=amount]")!;
+    const unit = input.shadowRoot!.querySelector("[part=unit]")!;
+    expect(unit.textContent!.trim()).toBe("%");
+    expect(input.shadowRoot!.querySelector("[part=currency]")).toBeNull();
+    const narrow = parseFloat(getComputedStyle(input).getPropertyValue("--wt-price-field-width"));
+    expect(box.getBoundingClientRect().width).toBeCloseTo(narrow, 0);
+    expect(box.getAttribute("aria-describedby")!.split(" ")).toContain(unit.id);
+  });
+
+  it("shows an empty field when the venue sets no limit", async () => {
+    const el = await mount(withLimit(null));
+    expect(limit(el).value).toBe("");
+  });
+
+  it("speaks Spanish, with the Spanish decimal mark, when the dashboard does", async () => {
+    setLocale("es");
+    const el = await mount(withLimit(1));
+    const input = limit(el) as Named & { label: string };
+    expect(input.value).toBe("0,01");
+    expect(input.label).toBe("Descuento total máximo en una cuenta");
+    expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
+      "Límite de descuento por cuenta",
+    );
+    expect(button(el, "save-limit").textContent!.trim()).toBe("Guardar límite");
+  });
+
+  it.each([
+    ["15", 1500],
+    ["12,5", 1250],
+    ["12.34", 1234],
+    ["0.01", 1],
+    ["100", 10000],
+    [" 7 ", 700],
+  ])("saves %j as %i basis points, says so, and reads the limit again", async (typed, bp) => {
+    const api = withLimit(null);
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", typed);
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: bp });
+    expect(api.getSettings).toHaveBeenCalledTimes(2);
+    expect(saved(el)).toBe("Limit saved.");
+    expect(limitBottom(el)).toBe("");
+  });
+
+  it("saves an emptied field as no limit", async () => {
+    const api = withLimit(1250);
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "");
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: null });
+  });
+
+  it("shows the limit the refresh reads after a save", async () => {
+    const api = withLimit(null, {
+      getSettings: vi
+        .fn()
+        .mockResolvedValueOnce({ maxBillDiscountBp: null })
+        .mockResolvedValue({ maxBillDiscountBp: 2500 }),
+    });
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(limit(el).value).toBe("25");
+  });
+
+  it("reads the limit first as the person's own request, and passively after a save", async () => {
+    const background = { getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp: 1500 }) };
+    const api = fakeApi({ background });
+    const el = await mount(api);
+    expect(api.getSettings).toHaveBeenCalledTimes(1);
+    await type(el, "maxBillDiscount", "15");
+    await press(el, "save-limit");
+    expect(background.getSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing and keeps Save working before the first press, even with the value wrong", async () => {
+    const el = await mount(withLimit(null));
+    await type(el, "maxBillDiscount", "abc");
+    expect(besideField(el, "maxBillDiscount")).toBe("");
+    expect(limitBottom(el)).toBe("");
+    expect(button(el, "save-limit").disabled).toBe(false);
+  });
+
+  it.each(["0", "0.00", "100.01", "150", "12.345", "abc", "-5", "1e2"])(
+    "refuses %j beside the field and beside Save, focuses it, and holds Save until it is fixed",
+    async (typed) => {
+      const api = withLimit(null);
+      const el = await mount(api);
+      await type(el, "maxBillDiscount", typed);
+      await press(el, "save-limit");
+      expect(api.saveSettings).not.toHaveBeenCalled();
+      expect(besideField(el, "maxBillDiscount")).toBe(LIMIT_INVALID);
+      expect(limitBottom(el)).toBe(FIX_FIELDS);
+      expect(el.shadowRoot!.activeElement).toBe(limit(el));
+      expect(button(el, "save-limit").disabled).toBe(true);
+      expect(limit(el).value).toBe(typed);
+      await type(el, "maxBillDiscount", "20");
+      expect(besideField(el, "maxBillDiscount")).toBe("");
+      expect(limitBottom(el)).toBe("");
+      expect(button(el, "save-limit").disabled).toBe(false);
+      await press(el, "save-limit");
+      expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: 2000 });
+    },
+  );
+
+  it("puts the server's refusal of the limit under the field, keeps Save working, and clears it on a change", async () => {
+    const el = await mount(
+      withLimit(null, {
+        saveSettings: vi.fn().mockRejectedValue({
+          code: "management.request_invalid",
+          params: { field: "maxBillDiscountBp" },
+        }),
+      }),
+    );
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(besideField(el, "maxBillDiscount")).toBe(LIMIT_INVALID);
+    expect(limitBottom(el)).toBe(FIX_FIELDS);
+    expect(el.shadowRoot!.activeElement).toBe(limit(el));
+    expect(button(el, "save-limit").disabled).toBe(false);
+    expect(saved(el)).toBe("");
+    await type(el, "maxBillDiscount", "25");
+    expect(besideField(el, "maxBillDiscount")).toBe("");
+    expect(limitBottom(el)).toBe("");
+  });
+
+  it("says any other refusal beside Save, keeps Save working, and says it until the next press", async () => {
+    const api = withLimit(null, {
+      saveSettings: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "server.internal" })
+        .mockResolvedValue({ maxBillDiscountBp: 2000 }),
+    });
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(limitBottom(el)).toBe("Something went wrong, try again");
+    expect(besideField(el, "maxBillDiscount")).toBe("");
+    expect(button(el, "save-limit").disabled).toBe(false);
+    await press(el, "save-limit");
+    expect(limitBottom(el)).toBe("");
+    expect(api.saveSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it("treats a failed refresh after a save as a load failure, not a failed save", async () => {
+    const api = withLimit(null, {
+      getSettings: vi
+        .fn()
+        .mockResolvedValueOnce({ maxBillDiscountBp: null })
+        .mockRejectedValue({ code: "x" }),
+    });
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledTimes(1);
+    expect(limitBottom(el)).toBe("");
+    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(alert(el)).toBe("");
+    expect(limit(el).value).toBe("20");
+  });
+
+  it("says the limit could not be loaded, apart from the reasons, and offers no field", async () => {
+    const el = await mount(
+      withLimit(null, { getSettings: vi.fn().mockRejectedValue({ code: "x" }) }),
+    );
+    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')!.getAttribute("role")).toBe(
+      "alert",
+    );
+    expect(alert(el)).toBe("");
+    expect(el.shadowRoot!.querySelector('[name="maxBillDiscount"]')).toBeNull();
+    expect(rowKeys(el)).toEqual(["e", "c", "d"]);
+  });
+
+  it("sends one save while it is in flight, holding the field", async () => {
+    let finish!: (value: { maxBillDiscountBp: number | null }) => void;
+    const api = withLimit(null, {
+      saveSettings: vi.fn(() => new Promise((resolve) => (finish = resolve))),
+    });
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(button(el, "save-limit").disabled).toBe(true);
+    expect((limit(el) as Named & { disabled: boolean }).disabled).toBe(true);
+    await press(el, "save-limit");
+    expect(api.saveSettings).toHaveBeenCalledTimes(1);
+    finish({ maxBillDiscountBp: 2000 });
+    await settle(el);
+    expect(button(el, "save-limit").disabled).toBe(false);
+  });
+
+  it("saves when Enter is pressed in the field", async () => {
+    const api = withLimit(null);
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    const input = limit(el).shadowRoot!.querySelector("input")!;
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }),
+    );
+    await settle(el);
+    expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: 2000 });
+  });
+
+  it("says nothing of a wrong value typed after a save until Save is pressed again", async () => {
+    const el = await mount(withLimit(null));
+    await type(el, "maxBillDiscount", "abc");
+    await press(el, "save-limit");
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    await type(el, "maxBillDiscount", "abc");
+    expect(besideField(el, "maxBillDiscount")).toBe("");
+    expect(limitBottom(el)).toBe("");
+    expect(button(el, "save-limit").disabled).toBe(false);
+  });
+
+  it("drops the could-not-load alert once a later read of the limit succeeds", async () => {
+    const api = withLimit(null, {
+      getSettings: vi
+        .fn()
+        .mockResolvedValueOnce({ maxBillDiscountBp: null })
+        .mockRejectedValueOnce({ code: "x" })
+        .mockResolvedValue({ maxBillDiscountBp: 2500 }),
+    });
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    await type(el, "maxBillDiscount", "25");
+    await press(el, "save-limit");
+    expect(limitAlert(el)).toBe("");
+    expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).toBeNull();
+  });
+
+  it("drops the saved note once the field changes again", async () => {
+    const el = await mount(withLimit(null));
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(saved(el)).toBe("Limit saved.");
+    await type(el, "maxBillDiscount", "25");
+    expect(saved(el)).toBe("");
   });
 });

@@ -1,10 +1,14 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import {
+  billCancelNeedsManager,
+  billDiscountNeedsManager,
   evaluateAdjustment,
   findAdjustmentReason,
   isPercentBp,
   percentReduction,
   policySnapshotOf,
+  readAdjustmentSettings,
+  readCompedLines,
   readReasonTotals,
   recordAdjustment,
   spreadBillDiscount,
@@ -12,6 +16,8 @@ import {
   type AdjustmentReason,
   type AdjustmentSplit,
   type AdjustmentStage,
+  type BillShare,
+  type CompedLines,
   type PricedRow,
   type SpreadLine,
 } from "@waitron/adjustments";
@@ -33,6 +39,7 @@ import {
   decimalToThousandths,
   grossOf,
   MONEY_SCALE,
+  multiplyDecimal,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
@@ -79,7 +86,9 @@ export interface AdjustmentAsk {
 
 export interface AdjustmentArgs extends AdjustmentAsk {
   submissionId: string;
-  /** Someone at or above the reason's approver role, when the operator is below its apply role. */
+  /** Someone at or above the plan's approver role: the higher of the reason's approver role (when
+   * the operator is below its apply role) and a manager (when the bill's discount limit asks for
+   * one). */
   approver?: { personId: string; pin: string };
 }
 
@@ -90,6 +99,10 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** The role that must approve, or null when the operator may apply it alone. */
   needsApproval: PersonRoleValue | null;
+  /** The operator is below a manager, and this discount takes the bill past the venue's limit, or
+   * this cancel leaves it past the limit with a larger share than before; whoever approves is then
+   * at least a manager. */
+  overBillDiscountLimit: boolean;
   /** Each line the action changes: what it loses, and the rows the changed part becomes. */
   lines: {
     lineId: string;
@@ -145,6 +158,7 @@ interface Plan {
   before: Decimal;
   stage: AdjustmentStage | null;
   approverRole: PersonRoleValue | null;
+  overBillDiscountLimit: boolean;
 }
 
 const ZERO = decimal("0");
@@ -344,6 +358,8 @@ async function planAdjustment(
   let dish: Row | null = null;
   let covered: number | null = null;
   let removed: number | null = null;
+  /** What a cancel leaves each row of the dish's family, in thousandths. */
+  let cancelLeft: Map<string, number> | null = null;
   let changes: Change[] = [];
   let reduction: Decimal;
   let nominal: Decimal;
@@ -388,6 +404,7 @@ async function planAdjustment(
       if (ask.amount !== undefined) throw invalid("amount");
       removed = partial ? covered : null;
       const left = leftAfterCancel(family, dish.quantity - covered);
+      cancelLeft = left;
       reduction = sumDecimals(
         family.map((row) =>
           subtractDecimal(gross(row.unit, row.quantity), gross(row.unit, left.get(row.id)!)),
@@ -454,6 +471,17 @@ async function planAdjustment(
     ...priors,
   });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
+  const overBillDiscountLimit =
+    ask.action !== "comp" &&
+    (await pastBillDiscountLimit(tx, orderId, rows, {
+      reduction,
+      cancelLeft,
+      actorRole: actor.role as PersonRoleValue,
+    }));
+  let approverRole = verdict.kind === "needs_approval" ? verdict.approverRole : null;
+  if (overBillDiscountLimit && (approverRole === null || !roleAtLeast(approverRole, "manager"))) {
+    approverRole = "manager";
+  }
   return {
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
@@ -465,8 +493,84 @@ async function planAdjustment(
     nominal,
     before,
     stage: dish === null ? null : stageOf(dish),
-    approverRole: verdict.kind === "needs_approval" ? verdict.approverRole : null,
+    approverRole,
+    overBillDiscountLimit,
   };
+}
+
+/**
+ * The bill's discount and its price before adjustments, over its rows at `quantityOf`, each row
+ * priced by `priceOf`. The discount is each row's list price less its price, none for a row priced
+ * above its list price, and left out for the rows this bill's own comp records prove comped. A
+ * comped row that has moved to another bill is not proven comped there, so there it counts as
+ * discount, which errs toward asking for a manager. `priceOf` is `gross` for the cents the bill
+ * shows, or `exactly` for the unrounded price a cancel's rise is also judged on.
+ */
+function shareOf(
+  rows: readonly Row[],
+  comped: CompedLines,
+  quantityOf: (row: Row) => number,
+  priceOf: (unitCents: number, quantity: number) => Decimal,
+): BillShare {
+  const rowIds = new Set(comped.rows);
+  const dishIds = new Set(comped.dishes);
+  const wasComped = (row: Row) =>
+    rowIds.has(row.id) ||
+    dishIds.has(row.id) ||
+    (row.parentLineId !== null && dishIds.has(row.parentLineId));
+  const listed = (row: Row) => priceOf(row.list ?? row.unit, quantityOf(row));
+  const discounts = rows
+    .filter((row) => !wasComped(row))
+    .map((row) => {
+      const off = subtractDecimal(listed(row), priceOf(row.unit, quantityOf(row)));
+      return compareDecimal(off, ZERO) > 0 ? off : ZERO;
+    });
+  return { discount: sumDecimals(discounts), value: sumDecimals(rows.map(listed)) };
+}
+
+/** `unitCents × quantity`, not rounded to the cent. */
+function exactly(unitCents: number, quantity: number): Decimal {
+  return multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity));
+}
+
+/**
+ * Whether a discount takes the bill's discount past the venue's limit, or a cancel (`cancelLeft`
+ * set) leaves it past the limit and higher than before, while the operator is below a manager.
+ */
+async function pastBillDiscountLimit(
+  tx: Transaction,
+  orderId: string,
+  rows: readonly Row[],
+  ask: {
+    reduction: Decimal;
+    cancelLeft: Map<string, number> | null;
+    actorRole: PersonRoleValue;
+  },
+): Promise<boolean> {
+  const { maxBillDiscountBp } = await readAdjustmentSettings(tx);
+  if (maxBillDiscountBp === null) return false;
+  const comped = await readCompedLines(tx, orderId);
+  const { cancelLeft } = ask;
+  if (cancelLeft === null) {
+    const now = shareOf(rows, comped, (row) => row.quantity, gross);
+    return billDiscountNeedsManager({
+      limitBp: maxBillDiscountBp,
+      priorDiscount: now.discount,
+      reduction: ask.reduction,
+      billValue: now.value,
+      actorRole: ask.actorRole,
+    });
+  }
+  const left = (row: Row) => cancelLeft.get(row.id) ?? row.quantity;
+  const all = (row: Row) => row.quantity;
+  return billCancelNeedsManager({
+    limitBp: maxBillDiscountBp,
+    before: shareOf(rows, comped, all, gross),
+    after: shareOf(rows, comped, left, gross),
+    exactBefore: shareOf(rows, comped, all, exactly),
+    exactAfter: shareOf(rows, comped, left, exactly),
+    actorRole: ask.actorRole,
+  });
 }
 
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
@@ -500,6 +604,7 @@ export async function previewAdjustment(
     reduction: money(plan.reduction),
     nominalValue: money(plan.nominal),
     needsApproval: plan.approverRole,
+    overBillDiscountLimit: plan.overBillDiscountLimit,
     lines,
   };
 }

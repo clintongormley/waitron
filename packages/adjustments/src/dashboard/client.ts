@@ -18,6 +18,12 @@ export interface AdjustmentReasonInput {
   noteRequired: boolean;
 }
 
+/** `maxBillDiscountBp` is in basis points of the price before adjustments of what is still on a
+ * bill; null is no limit. */
+export interface AdjustmentSettings {
+  maxBillDiscountBp: number | null;
+}
+
 export interface AdjustmentReason extends AdjustmentReasonInput {
   id: string;
   active: boolean;
@@ -137,6 +143,19 @@ export class AdjustmentsApi {
   /** `ids` is every active reason, once each, in the new order. */
   reorderReasons(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });
+  }
+
+  getSettings(): Promise<AdjustmentSettings> {
+    return this.request<AdjustmentSettings>(
+      "/management-api/adjustments/settings",
+      "GET",
+      undefined,
+      { passive: this.passive },
+    );
+  }
+
+  saveSettings(settings: AdjustmentSettings): Promise<AdjustmentSettings> {
+    return this.request("/management-api/adjustments/settings", "PUT", settings);
   }
 
   /** Without a range, the routes answer the venue's current business day. */

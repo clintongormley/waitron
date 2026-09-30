@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -18,6 +18,7 @@ import type { Transaction } from "@waitron/db";
 import {
   adjustments,
   createAdjustmentReason,
+  saveAdjustmentSettings,
   updateAdjustmentReason,
   type AdjustmentAction,
 } from "@waitron/adjustments";
@@ -27,6 +28,7 @@ import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
+import { splitBill, transferItems } from "./bill-actions.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1204,6 +1206,592 @@ describe("cumulative limits (plan D6)", () => {
         reasonId,
       },
       "adjustment.over_limit",
+    );
+  });
+});
+
+describe("the venue's limit on a bill's total discount (B11b)", () => {
+  // The venue is shared by every case in the file, so each case sets the limit it needs.
+  const setLimit = (maxBillDiscountBp: number | null) =>
+    inTx(venue, (tx) => saveAdjustmentSettings(tx, { maxBillDiscountBp }));
+  afterEach(() => setLimit(null));
+
+  const MANAGER_PIN = () => ({ personId: venue.managerId, pin: PINS.manager });
+  const billPercent = (percentBp: number, extra: Partial<Ask> = {}): Ask => ({
+    action: "discount_percent",
+    percentBp,
+    operatorId: venue.staffId,
+    ...extra,
+  });
+
+  it("asks a manager for a staff member's second 30% off a bill under a 40% limit, and records who approved", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+
+    await refusedWith(billId, billPercent(3000), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+    expect(await preview(billId, billPercent(3000))).toMatchObject({
+      reduction: "21.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+
+    await adjust(billId, billPercent(3000, { approver: MANAGER_PIN() }));
+    expect((await recordedOn(billId)).map((row) => [row.reduction, row.approvedBy])).toEqual([
+      [3000, null],
+      [2100, venue.managerId],
+    ]);
+  });
+
+  it("refuses a supervisor as the approver past the limit", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+    await refusedWith(
+      billId,
+      billPercent(3000, { approver: { personId: venue.supervisorId, pin: PINS.supervisor } }),
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+  });
+
+  it("counts a line discount and a bill discount together, each under the limit alone", async () => {
+    await setLimit(4000);
+    // €40.00 before adjustments, so the limit is €16.00: €9.00 off the bottle, then €8.00 off the bill.
+    const { billId } = await bill([{ name: "Bottle" }, { name: "Salad" }]);
+    const billAmount: Ask = {
+      action: "discount_amount",
+      amount: "8.00",
+      operatorId: venue.staffId,
+    };
+    expect(await preview(billId, billAmount)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 3000,
+      operatorId: venue.staffId,
+    });
+
+    await refusedWith(billId, billAmount, "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+  });
+
+  it("counts a line discount asked after a bill discount against the limit too", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Bottle" }, { name: "Salad" }]);
+    await adjust(billId, { action: "discount_amount", amount: "8.00", operatorId: venue.staffId });
+
+    await refusedWith(
+      billId,
+      {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "discount_amount",
+        amount: "8.01",
+        operatorId: venue.staffId,
+      },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+    // Reaching €16.00 exactly is allowed.
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_amount",
+      amount: "8.00",
+      operatorId: venue.staffId,
+    });
+  });
+
+  it("leaves a comp out of the total, and never asks a manager for one", async () => {
+    await setLimit(4000);
+    // €60.00 before adjustments, so the limit is €24.00; the €30.00 comp counts toward nothing.
+    const { billId } = await bill([{ name: "Bottle" }, { name: "Salad", quantity: "3" }]);
+    const comp: Ask = {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      operatorId: venue.staffId,
+    };
+    expect(await preview(billId, comp)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, comp);
+
+    await adjust(billId, { action: "discount_amount", amount: "20.00", operatorId: venue.staffId });
+    expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["comp", null],
+      ["discount_amount", null],
+    ]);
+  });
+
+  it("changes nothing when the venue has no limit", async () => {
+    await setLimit(null);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+    expect(await preview(billId, billPercent(3000))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, billPercent(3000));
+    expect(await recordedOn(billId)).toHaveLength(2);
+  });
+
+  it("lets a manager pass the limit without anyone's PIN", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    const byManager = billPercent(3000, { operatorId: venue.managerId });
+    await adjust(billId, byManager);
+    expect(await preview(billId, byManager)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, byManager);
+    expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null, null]);
+  });
+
+  it("asks for the higher role when the reason needs an approver of its own", async () => {
+    await setLimit(4000);
+    const policy = {
+      ...REASONS.house,
+      names: {},
+      actions: ["discount_percent" as const],
+    };
+    const [byAdmin, bySupervisor] = await inTx(venue, async (tx) => [
+      await createAdjustmentReason(tx, {
+        ...policy,
+        name: "Owner's discount B11b",
+        applyRole: "manager",
+        approverRole: "admin",
+      }),
+      await createAdjustmentReason(tx, {
+        ...policy,
+        name: "Regular's discount B11b",
+        applyRole: "supervisor",
+        approverRole: "supervisor",
+      }),
+    ]);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+
+    // Past the limit under an admin-approved reason: admin, the higher of the two.
+    expect(await preview(billId, billPercent(3000, { reasonId: byAdmin.id }))).toMatchObject({
+      needsApproval: "admin",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(
+      billId,
+      billPercent(3000, { reasonId: byAdmin.id, approver: MANAGER_PIN() }),
+      "adjustment.approval_required",
+      { approverRole: "admin" },
+    );
+
+    // Under the limit a supervisor would do; past it, a manager.
+    expect(await preview(billId, billPercent(1000, { reasonId: bySupervisor.id }))).toMatchObject({
+      needsApproval: "supervisor",
+      overBillDiscountLimit: false,
+    });
+    await refusedWith(
+      billId,
+      billPercent(3000, {
+        reasonId: bySupervisor.id,
+        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      }),
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+    await adjust(billId, billPercent(3000, { reasonId: bySupervisor.id, approver: MANAGER_PIN() }));
+    expect((await recordedOn(billId)).at(-1)).toMatchObject({ approvedBy: venue.managerId });
+  });
+
+  const byStaff = () => ({ operatorId: venue.staffId });
+  /** The staff member's command on `billId`'s party, at the party's current revision. */
+  const partyCommand = async (billId: string) => {
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: parties.revision })
+        .from(workingOrders)
+        .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+        .where(eq(workingOrders.id, billId)),
+    );
+    return { ...byStaff(), expectedPartyRevision: row!.revision };
+  };
+  const moveOff = async (billId: string, lineNos: number[]) => {
+    const command = await partyCommand(billId);
+    const split = await inTx(venue, (tx) =>
+      splitBill(
+        tx,
+        venue.cfg,
+        billId,
+        lineNos.map((lineNo) => ({ lineNo })),
+        command,
+      ),
+    );
+    return split.billId;
+  };
+  const cancelLine = async (billId: string, lineNo: number, extra: Partial<Ask> = {}) => ({
+    lineId: await lineIdOf(venue, billId, lineNo),
+    action: "cancel" as const,
+    ...byStaff(),
+    ...extra,
+  });
+
+  it("counts the discount a split-off line carries onto its new bill", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(4000));
+    const moved = await moveOff(billId, [1]);
+
+    expect(await preview(moved, billPercent(4000))).toMatchObject({
+      reduction: "24.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(moved, billPercent(4000), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+  });
+
+  it("counts the discount a transferred line carries onto the bill it joins", async () => {
+    await setLimit(4000);
+    // €130.00 in all, so a bill holding both lines has a €52.00 limit; €40.00 is off the salads.
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 4000,
+      ...byStaff(),
+    });
+    const other = await moveOff(billId, [2]);
+    const command = await partyCommand(billId);
+    await inTx(venue, (tx) =>
+      transferItems(tx, venue.cfg, billId, other, [{ lineNo: 1 }], command),
+    );
+
+    await refusedWith(
+      other,
+      { action: "discount_amount", amount: "13.00", ...byStaff() },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+  });
+
+  it("asks a manager for a cancel that leaves the bill's discount past the limit", async () => {
+    await setLimit(4000);
+    // €400.00 in all, €100.00 of it off the salads: 25%, under 40%. Without the bottles it is 100%.
+    const { billId } = await bill([
+      { name: "Salad", quantity: "10" },
+      { name: "Bottle", quantity: "10" },
+    ]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 10000,
+      ...byStaff(),
+    });
+
+    expect(await preview(billId, await cancelLine(billId, 2))).toMatchObject({
+      reduction: "300.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(billId, await cancelLine(billId, 2), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+    await adjust(billId, await cancelLine(billId, 2, { approver: MANAGER_PIN() }));
+    expect((await recordedOn(billId)).at(-1)).toMatchObject({
+      action: "cancel",
+      approvedBy: venue.managerId,
+    });
+  });
+
+  it("asks nobody for a cancel that leaves the bill's discount share where it was", async () => {
+    await setLimit(4000);
+    // 40% off every line, at the limit: cancelling the bottle leaves the salads at 40% too.
+    const even = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    await adjust(even.billId, billPercent(4000));
+    expect(await preview(even.billId, await cancelLine(even.billId, 2))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(even.billId, await cancelLine(even.billId, 2));
+
+    // 60% off every line, which a manager applied: past the limit, but the cancel does not raise it.
+    const approved = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    await adjust(approved.billId, billPercent(6000, { operatorId: venue.managerId }));
+    await adjust(approved.billId, await cancelLine(approved.billId, 2));
+
+    // A cancel that empties the bill leaves no share to measure.
+    const alone = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(alone.billId, billPercent(6000, { operatorId: venue.managerId }));
+    await adjust(alone.billId, await cancelLine(alone.billId, 1));
+    expect((await recordedOn(alone.billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["discount_percent", null],
+      ["cancel", null],
+    ]);
+  });
+
+  it("asks nobody for part of a weighed line cancelled at the same exact share, however its totals round", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Fish", quantity: "1.001" }]);
+    const lineId = await lineIdOf(venue, billId, 1);
+    await adjust(billId, {
+      lineId,
+      action: "discount_percent",
+      percentBp: 5000,
+      operatorId: venue.managerId,
+    });
+    // €6.50 off €12.99 a kilo on either weight; the rounded totals would read €6.50 of €13.00, then
+    // €6.50 of €12.99, a share that rises.
+    expect(await priced(billId)).toEqual([["Fish", "1.001", "6.49", "12.99", "6.50"]]);
+    const cancel = await cancelLine(billId, 1, { quantity: "0.001" });
+
+    expect(await preview(billId, cancel)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, cancel);
+    expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["discount_percent", null],
+      ["cancel", null],
+    ]);
+  });
+
+  it("asks nobody for a cancel that leaves the share the bill shows unchanged, though the exact share rises", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Fish", quantity: "1.001" }, { name: "Salad" }]);
+    for (const lineNo of [1, 2]) {
+      await adjust(billId, {
+        lineId: await lineIdOf(venue, billId, lineNo),
+        action: "discount_percent",
+        percentBp: 5000,
+        operatorId: venue.managerId,
+      });
+    }
+    // Shown, €11.50 of €23.00 becomes €6.50 of €13.00 without the salad: 50% both. Exactly,
+    // €11.5065 of €23.00299 becomes €6.5065 of €13.00299, a rise.
+    expect(await priced(billId)).toEqual([
+      ["Fish", "1.001", "6.49", "12.99", "6.50"],
+      ["Salad", "1.000", "5.00", "10.00", "5.00"],
+    ]);
+    const cancel = await cancelLine(billId, 2);
+
+    expect(await preview(billId, cancel)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, cancel);
+    expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["discount_percent", null],
+      ["discount_percent", null],
+      ["cancel", null],
+    ]);
+  });
+
+  it("measures a discount in the cents the bill shows, to the last cent the limit allows", async () => {
+    await setLimit(4000);
+    // The bill shows €43.00 before adjustments, so the limit is €17.20, and €6.50 off the fish:
+    // €10.70 more reaches the limit exactly. Measured exactly, the €6.5065 off €43.00299 would refuse
+    // it.
+    const { billId } = await bill([{ name: "Fish", quantity: "1.001" }, { name: "Bottle" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 5000,
+      operatorId: venue.managerId,
+    });
+    expect(await priced(billId)).toEqual([
+      ["Fish", "1.001", "6.49", "12.99", "6.50"],
+      ["Bottle", "1.000", "30.00", null, "30.00"],
+    ]);
+    const bottle = await lineIdOf(venue, billId, 2);
+    const off = (amount: string): Ask => ({
+      lineId: bottle,
+      action: "discount_amount",
+      amount,
+      ...byStaff(),
+    });
+
+    expect(await preview(billId, off("10.71"))).toMatchObject({
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(billId, off("10.71"), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+    expect(await preview(billId, off("10.70"))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, off("10.70"));
+    expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null, null]);
+  });
+
+  it("judges a cancel past the limit in the cents the bill shows, not the exact prices", async () => {
+    await setLimit(4000);
+    // €45.00 shown with the water, €17.20 off it; without the water €17.20 of €43.00 is the limit
+    // exactly. Measured exactly, €17.2065 of €43.00299 would be past it and higher than before.
+    const { billId } = await bill([
+      { name: "Fish", quantity: "1.001" },
+      { name: "Bottle" },
+      { name: "Water" },
+    ]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 5000,
+      operatorId: venue.managerId,
+    });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 2),
+      action: "discount_amount",
+      amount: "10.70",
+      ...byStaff(),
+    });
+    expect(await priced(billId)).toEqual([
+      ["Fish", "1.001", "6.49", "12.99", "6.50"],
+      ["Bottle", "1.000", "19.30", "30.00", "19.30"],
+      ["Water", "1.000", "2.00", null, "2.00"],
+    ]);
+    const cancel = await cancelLine(billId, 3);
+
+    expect(await preview(billId, cancel)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, cancel);
+    expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["discount_percent", null],
+      ["discount_amount", null],
+      ["cancel", null],
+    ]);
+  });
+
+  it("allows a whole weighed line off at a 100% limit, though its total rounds up", async () => {
+    await setLimit(10000);
+    // €13.03 on the bill, €13.02897 exactly: the whole of what the bill shows is 100% of it.
+    const { billId } = await bill([{ name: "Fish", quantity: "1.003" }]);
+    expect(await priced(billId)).toEqual([["Fish", "1.003", "12.99", null, "13.03"]]);
+    const all: Ask = {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 10000,
+      ...byStaff(),
+    };
+
+    expect(await preview(billId, all)).toMatchObject({
+      reduction: "13.03",
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, all);
+    expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null]);
+  });
+
+  it("leaves out a dish comped whole with its extras, and the part of a dish comped", async () => {
+    await setLimit(4000);
+    // €110.50 in all, limit €44.20: the €10.50 pizza and olive comped, then €43.00 off the salads,
+    // which the olive's €1.50 alone would take past the limit.
+    const whole = await bill([
+      { name: "Pizza", olives: 1 },
+      { name: "Salad", quantity: "10" },
+    ]);
+    await adjust(whole.billId, {
+      lineId: await lineIdOf(venue, whole.billId, 1),
+      action: "comp",
+      ...byStaff(),
+    });
+    const salads = await lineIdOf(venue, whole.billId, 3);
+    await adjust(whole.billId, {
+      lineId: salads,
+      action: "discount_amount",
+      amount: "43.00",
+      ...byStaff(),
+    });
+
+    // €150.00 in all, limit €60.00: one of two steaks comped (€25.00), then €40.00 off the salads.
+    const part = await bill([
+      { name: "Steak", quantity: "2" },
+      { name: "Salad", quantity: "10" },
+    ]);
+    await adjust(part.billId, {
+      lineId: await lineIdOf(venue, part.billId, 1),
+      action: "comp",
+      quantity: "1",
+      ...byStaff(),
+    });
+    await adjust(part.billId, {
+      lineId: await lineIdOf(venue, part.billId, 2),
+      action: "discount_percent",
+      percentBp: 4000,
+      ...byStaff(),
+    });
+    for (const billId of [whole.billId, part.billId]) {
+      expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null, null]);
+    }
+  });
+
+  it("still counts a line discounted to nothing", async () => {
+    await setLimit(4000);
+    // €40.00 in all, limit €16.00: €10.00 off the salad, which is then free, and €6.01 more.
+    const { billId } = await bill([{ name: "Salad" }, { name: "Bottle" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 10000,
+      ...byStaff(),
+    });
+    await refusedWith(
+      billId,
+      { action: "discount_amount", amount: "6.01", ...byStaff() },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+  });
+
+  it("counts a row priced above its list price as no discount, answering rather than failing", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    // Written by hand: no product path is known to price a row above its list price.
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ listUnitPriceGross: 2000 })
+        .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 2))),
+    );
+
+    expect(await preview(billId, billPercent(1000))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, billPercent(1000));
+    expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null]);
+  });
+
+  it("counts a comped dish as discount on a bill it has moved to, erring toward a manager", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([
+      { name: "Burger" },
+      { name: "Salad", quantity: "10" },
+      { name: "Bottle" },
+    ]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      ...byStaff(),
+    });
+    // The new bill is €112.00 before adjustments, limit €44.80; the €12.00 comp is not proven there.
+    const moved = await moveOff(billId, [1, 2]);
+
+    await refusedWith(
+      moved,
+      { action: "discount_amount", amount: "33.00", ...byStaff() },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
     );
   });
 });

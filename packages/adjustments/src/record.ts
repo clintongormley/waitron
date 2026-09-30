@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   decimalToCents,
@@ -113,4 +113,28 @@ export async function readReasonTotals(
     where working_order_id = ${workingOrderId} and reason_id = ${reasonId}
       and line_id in (select line_id from lineage)`);
   return { priorReductionOnBill, priorPercentOnLineBp: percent.rows[0]!.total };
+}
+
+/** The rows a bill's own comps priced at zero: the row each part comp split off, and the dish of
+ * each whole comp, whose extras rows were comped with it. */
+export interface CompedLines {
+  rows: string[];
+  dishes: string[];
+}
+
+/** The rows this bill's comp records name; a comp recorded on another bill is not read. */
+export async function readCompedLines(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<CompedLines> {
+  const comps = await tx
+    .select({ lineId: adjustments.lineId, splits: adjustments.splits })
+    .from(adjustments)
+    .where(and(eq(adjustments.workingOrderId, workingOrderId), eq(adjustments.action, "comp")));
+  const comped: CompedLines = { rows: [], dishes: [] };
+  for (const { lineId, splits } of comps) {
+    if (splits.length === 0) comped.dishes.push(lineId!);
+    else comped.rows.push(...splits.map((split) => split.to));
+  }
+  return comped;
 }

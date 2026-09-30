@@ -378,7 +378,13 @@ describe("till-adjustment-dialog: what a request out holds still", () => {
       quantity: "1",
     };
     el.choice = previewed;
-    el.preview = { reduction: "25.00", nominalValue: "25.00", needsApproval: null, lines: [] };
+    el.preview = {
+      reduction: "25.00",
+      nominalValue: "25.00",
+      needsApproval: null,
+      overBillDiscountLimit: false,
+      lines: [],
+    };
     await el.updateComplete;
     const confirmed = capture<AdjustmentChoice>(el, "adjust-confirm");
 
@@ -395,6 +401,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     reduction: "12.00",
     nominalValue: "12.00",
     needsApproval: null,
+    overBillDiscountLimit: false,
     lines: [],
     ...over,
   });
@@ -453,6 +460,50 @@ describe("till-adjustment-dialog: before confirming", () => {
       chooseReason(el, "Complaint"),
     );
     expect(text(root(el))).toContain(t("adjust.approval_manager"));
+    expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.ask_approval"));
+  });
+
+  it("says the bill's discounts end past the venue's limit, beside the approval", async () => {
+    const { el } = await atConfirm(
+      {
+        kind: "discount",
+        reasons: [regular],
+        preview: preview({ needsApproval: "manager", overBillDiscountLimit: true }),
+      },
+      async (el) => {
+        await chooseReason(el, "Regular");
+        await type(el, "percent", "30");
+      },
+    );
+    const approval = root(el).querySelector("[data-needs-approval]")!;
+    const why = root(el).querySelector("[data-over-bill-limit]")!;
+    expect(text(why)).toBe(t("adjust.over_bill_limit"));
+    expect(approval.nextElementSibling).toBe(why);
+    expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.ask_approval"));
+  });
+
+  it("says nothing of the limit when the preview does not flag it", async () => {
+    const { el } = await atConfirm({ preview: preview({ needsApproval: "manager" }) }, (el) =>
+      chooseReason(el, "Complaint"),
+    );
+    expect(root(el).querySelector("[data-needs-approval]")).not.toBeNull();
+    expect(root(el).querySelector("[data-over-bill-limit]")).toBeNull();
+    expect(text(root(el))).not.toContain(t("adjust.over_bill_limit"));
+  });
+
+  it("says a cancel leaves the bill's discounts past the venue's limit, beside the approval", async () => {
+    const { el } = await atConfirm(
+      {
+        kind: "cancel",
+        reasons: [reason("Void", { actions: ["cancel"] })],
+        preview: preview({ needsApproval: "manager", overBillDiscountLimit: true }),
+      },
+      (el) => chooseReason(el, "Void"),
+    );
+    const approval = root(el).querySelector("[data-needs-approval]")!;
+    const why = root(el).querySelector("[data-over-bill-limit]")!;
+    expect(text(why)).toBe(t("adjust.over_bill_limit"));
+    expect(approval.nextElementSibling).toBe(why);
     expect(confirmButton(el).textContent!.trim()).toBe(t("adjust.ask_approval"));
   });
 
@@ -548,7 +599,13 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     await chooseReason(el, "Complaint");
     await press(continueButton(el), el);
     el.choice = asked[0]!;
-    el.preview = { reduction: "12.00", nominalValue: "12.00", needsApproval: null, lines: [] };
+    el.preview = {
+      reduction: "12.00",
+      nominalValue: "12.00",
+      needsApproval: null,
+      overBillDiscountLimit: false,
+      lines: [],
+    };
     el.refusal = "order.payment_in_flight";
     await el.updateComplete;
     expect(actions(el).error).toBe(codeMessage("order.payment_in_flight"));

@@ -1,5 +1,11 @@
 import { roleAtLeast, type PersonRoleValue } from "@waitron/identity";
-import { addDecimal, compareDecimal, decimal, type Decimal } from "@waitron/shared";
+import {
+  addDecimal,
+  compareDecimal,
+  decimal,
+  multiplyDecimal,
+  type Decimal,
+} from "@waitron/shared";
 
 export const ADJUSTMENT_ACTIONS = [
   "cancel",
@@ -107,7 +113,84 @@ export function evaluateAdjustment(
   return { kind: "allowed" };
 }
 
-/** The policy an adjustment was evaluated under, kept on the adjustment so a later edit of the
+/** A discount asked on a bill, measured against the venue's limit on the bill's total discount. */
+export interface BillDiscountRequest {
+  /** The venue's limit in basis points of `billValue`; null sets none. */
+  limitBp: number | null;
+  /** What the bill's rows are already discounted by. */
+  priorDiscount: Decimal;
+  reduction: Decimal;
+  /** The bill's price before any adjustment. */
+  billValue: Decimal;
+  actorRole: PersonRoleValue;
+}
+
+/**
+ * Whether this discount takes the bill's discounts past the venue's limit when the operator is
+ * below a manager, so someone at or above a manager must approve it. Reaching the limit exactly is
+ * allowed; the amounts are in the cents the bill shows, and the share is compared without rounding.
+ */
+export function billDiscountNeedsManager(req: BillDiscountRequest): boolean {
+  const { limitBp } = req;
+  if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
+  for (const field of ["priorDiscount", "reduction", "billValue"] as const) {
+    if (compareDecimal(req[field], ZERO) < 0) throw new RangeError(`${field} is negative`);
+  }
+  if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
+  const taken = multiplyDecimal(addDecimal(req.priorDiscount, req.reduction), decimal("10000"));
+  return compareDecimal(taken, multiplyDecimal(req.billValue, decimal(String(limitBp)))) > 0;
+}
+
+/** A bill's discount and its price before adjustments, over the same rows. */
+export interface BillShare {
+  discount: Decimal;
+  value: Decimal;
+}
+
+/** A cancel asked on a bill: its share before and after the cancel, priced in the cents the bill
+ * shows and priced exactly. */
+export interface BillCancelRequest {
+  limitBp: number | null;
+  before: BillShare;
+  after: BillShare;
+  exactBefore: BillShare;
+  exactAfter: BillShare;
+  actorRole: PersonRoleValue;
+}
+
+/**
+ * Whether a cancel by an operator below a manager leaves the bill's discount share past the venue's
+ * limit, judged on `after`, and raises the share on both the shown and the exact prices, so a rise
+ * that rounding alone makes or hides asks nobody. A cancel that empties the bill leaves no share.
+ */
+export function billCancelNeedsManager(req: BillCancelRequest): boolean {
+  const { limitBp, before, after, exactBefore, exactAfter } = req;
+  if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
+  for (const [name, share] of [
+    ["before", before],
+    ["after", after],
+    ["exactBefore", exactBefore],
+    ["exactAfter", exactAfter],
+  ] as const) {
+    if (compareDecimal(share.discount, ZERO) < 0 || compareDecimal(share.value, ZERO) < 0) {
+      throw new RangeError(`${name} is negative`);
+    }
+  }
+  if (limitBp === null || roleAtLeast(req.actorRole, "manager")) return false;
+  const past =
+    compareDecimal(
+      multiplyDecimal(after.discount, decimal("10000")),
+      multiplyDecimal(after.value, decimal(String(limitBp))),
+    ) > 0;
+  const rises = (from: BillShare, to: BillShare) =>
+    compareDecimal(
+      multiplyDecimal(to.discount, from.value),
+      multiplyDecimal(from.discount, to.value),
+    ) > 0;
+  return past && rises(before, after) && rises(exactBefore, exactAfter);
+}
+
+/** The reason's policy an adjustment was evaluated under, kept on the adjustment so a later edit of the
  * reason never rewrites what was approved. */
 export interface AdjustmentPolicySnapshot {
   actions: AdjustmentAction[];

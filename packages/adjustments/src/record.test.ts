@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
-import { readReasonTotals, recordAdjustment, type NewAdjustment } from "./record.js";
+import {
+  readCompedLines,
+  readReasonTotals,
+  recordAdjustment,
+  type NewAdjustment,
+} from "./record.js";
 import { adjustments, type AdjustmentSplit } from "./schema/adjustments.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
@@ -288,5 +293,45 @@ describe("readReasonTotals", () => {
     await record(percent(other, reason, line, 1000, [{ from: line, to: carved }]));
     await record(percent(order, reason, line, 2000));
     expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(0);
+  });
+});
+
+describe("readCompedLines", () => {
+  const read = (workingOrderId: string) =>
+    withTransaction(db, (tx) => readCompedLines(tx, workingOrderId));
+
+  it("answers no rows on a bill nobody comped", async () => {
+    expect(await read(await seedWorkingOrder(db))).toEqual({ rows: [], dishes: [] });
+  });
+
+  it("names a whole comp's dish and a part comp's split-off row, and nothing else", async () => {
+    const order = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const whole = randomUUID();
+    const part = { from: randomUUID(), to: randomUUID() };
+    await record(comp(order, reason, { line: { ...comp(order, reason).line!, id: whole } }));
+    await record(
+      comp(order, reason, {
+        line: { ...comp(order, reason).line!, id: part.from },
+        splits: [part],
+      }),
+    );
+    await record(
+      percent(order, reason, randomUUID(), 2500, [{ from: randomUUID(), to: randomUUID() }]),
+    );
+    await record(comp(order, reason, { action: "cancel" }));
+    await record(comp(other, reason));
+    expect(await read(order)).toEqual({ rows: [part.to], dishes: [whole] });
+  });
+
+  it("reads the bill's comps through the index that leads with the working order", async () => {
+    const plan = await db.execute<{ detail: string }>(
+      sql`explain query plan select line_id, splits from adjustments
+        where working_order_id = ${randomUUID()} and action = 'comp'`,
+    );
+    expect(plan.rows.map((row) => row.detail).join("\n")).toContain(
+      "USING INDEX adjustments_order_reason_idx (working_order_id=?)",
+    );
   });
 });

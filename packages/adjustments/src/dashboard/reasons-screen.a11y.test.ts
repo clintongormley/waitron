@@ -72,6 +72,8 @@ async function screen(
   await mountThemed("<div></div>", theme);
   const api = {
     listReasons: vi.fn().mockResolvedValue(reasons),
+    getSettings: vi.fn().mockResolvedValue({ maxBillDiscountBp: 1500 }),
+    saveSettings: vi.fn(async (settings: unknown) => settings),
     ...overrides,
   } as Record<string, unknown>;
   api.background = api;
@@ -149,8 +151,32 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     });
     await press(el, "edit-c");
     await press(el, "save-editor");
-    const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
+    const actions = el.shadowRoot!.querySelector("wt-modal wt-form-actions")!;
     expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("the bill discount limit after an invalid submission", async () => {
+    const el = await screen(theme);
+    const field = deep(el, 'wt-price-input[name="maxBillDiscount"]');
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = "150";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await press(el, "save-limit");
+    expect((field as HTMLElement & { error: string }).error).not.toBe("");
+    await expectNoA11yViolations(host);
+  });
+
+  test("the bill discount limit just saved", async () => {
+    const el = await screen(theme);
+    await press(el, "save-limit");
+    expect(el.shadowRoot!.querySelector('[data-test="limit-saved"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  test("the bill discount limit that could not be loaded", async () => {
+    const el = await screen(theme, { getSettings: vi.fn().mockRejectedValue({ code: "x" }) });
+    expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

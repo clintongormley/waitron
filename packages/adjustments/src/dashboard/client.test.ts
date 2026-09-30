@@ -99,6 +99,31 @@ describe("AdjustmentsApi", () => {
     });
   });
 
+  it("reads the venue's bill discount limit, passively on the background client", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ maxBillDiscountBp: 1500 }));
+    expect(await api(fetchImpl).getSettings()).toEqual({ maxBillDiscountBp: 1500 });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
+      method: "GET",
+      credentials: "include",
+    });
+    await api(fetchImpl, true).getSettings();
+    const init = fetchImpl.mock.calls[1]![1] as RequestInit;
+    expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
+  });
+
+  it("replaces the venue's bill discount limit with a PUT, a null limit included", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ maxBillDiscountBp: null }));
+    expect(await api(fetchImpl).saveSettings({ maxBillDiscountBp: null })).toEqual({
+      maxBillDiscountBp: null,
+    });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/adjustments/settings", {
+      method: "PUT",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ maxBillDiscountBp: null }),
+    });
+  });
+
   it("reads the report over a range of business days, or over the current one", async () => {
     const report = {
       fromBusinessDay: "2026-09-01",

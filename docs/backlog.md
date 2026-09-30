@@ -3407,9 +3407,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     are applied under a reason (`POST /api/working-orders/:id/adjustments`, with a read-only
     `…/adjustments/preview` the till shows before confirming; `applyAdjustment` in
     `apps/server/src/adjustments-apply.ts`), recorded in the append-only `adjustments` table of
-    `packages/adjustments` with the reason and policy as they were, checked against the reason's
+    `packages/adjustments` with the reason and its policy as they were, checked against the reason's
     cumulative limits, and, when the operator's role is below the reason's `apply_role`, approved on
-    the waiter's till by the PIN of someone at or above its `approver_role`. A comp or discount lowers the line's price in whole cents per unit (plan D4, D15) and keeps
+    the waiter's till by the PIN of someone at or above its `approver_role`. Separately, when the
+    operator is below a manager and a discount takes the bill past the venue's limit, or a cancel
+    leaves it past the limit with a larger share than before (B11b, below), whoever approves is at
+    least a manager — or the reason's approver role, when the operator is also below the reason's
+    `apply_role` and that role is higher. A comp or discount lowers the line's price in whole cents per unit (plan D4, D15) and keeps
     its first price in `working_order_lines.list_unit_price_gross` (core migrations `0049`, `0050`;
     the second re-creates the line trigger with the column in both unchanged-column lists). The
     printed receipt, the till's open bill and its on-screen receipt show that first price before the
@@ -3440,6 +3444,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         (`packages/adjustments/src/configuration-transfer.ts`);
         no migration inserts one. **Next action:** decide whether setup should create a default
         cancel reason.
+    - _Done by lane B item B11b (2026-09-30):_ a venue can set a limit on a bill's TOTAL discount
+      (`adjustment_settings.max_bill_discount`, adjustments migration `0002`, set on the dashboard's
+      Adjustment reasons screen). The share is measured from the bill's current rows — each row's
+      price before adjustments less its price now, leaving out the rows this bill's own comps
+      priced at zero — against the price before adjustments of what is still on the bill. When the
+      operator is below a manager, a discount that takes the bill past it, or a cancel that leaves
+      it past the limit and raises the share (a rise under a cent from rounding alone does not
+      count), needs the PIN of someone at or above a manager
+      (`apps/server/src/adjustments-apply.ts`, `shareOf`). A comped row moved to another bill
+      counts as discount there. Splits, transfers and merges are not checked; the discount moves
+      with the rows. Left open:
+      - **The adjustment history records who approved, but not whether the bill's discount limit,
+        rather than the reason, is why.** Recording it would need a column. **Next action:** decide
+        whether to record it.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
@@ -3451,6 +3469,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       part of a line to another group starts with no percentage history (lines record no source line); a row a comp or discount carves keeps
       its source line's history. **Next action:**
       decide whether the per-line cap should see bill discounts.
+      _(2026-09-30: B11b's venue limit on a bill's total discount, above, can ask for a manager's
+      PIN when the combined discount passes it; this per-reason cap is unchanged.)_
     - **Not offered:** a comp or a discount of part of a dish with extras
       (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling

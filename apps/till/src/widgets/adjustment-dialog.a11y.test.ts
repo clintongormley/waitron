@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./adjustment-dialog.js";
@@ -100,8 +100,49 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
       reduction: "50.00",
       nominalValue: "50.00",
       needsApproval: "manager",
+      overBillDiscountLimit: false,
       lines: [],
     });
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations saying a discount leaves the bill past the venue's limit", async () => {
+    const { el, host } = await mount({ kind: "discount" });
+    await pressed(el, 'input[name="reason"]');
+    const input = el
+      .shadowRoot!.querySelector('wt-input[name="percent"]')!
+      .shadowRoot!.querySelector("input")!;
+    input.value = "30";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await previewed(el, {
+      reduction: "15.00",
+      nominalValue: "50.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+      lines: [],
+    });
+    expect(el.shadowRoot!.querySelector("[data-over-bill-limit]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations saying a cancel leaves the bill past the venue's limit", async () => {
+    const { el, host } = await mount({ kind: "cancel", target: { ...steaks, started: true } });
+    await pressed(el, 'input[name="reason"]');
+    const note = el
+      .shadowRoot!.querySelector('wt-input[name="note"]')!
+      .shadowRoot!.querySelector("input")!;
+    note.value = "Mal marcado";
+    note.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await previewed(el, {
+      reduction: "50.00",
+      nominalValue: "50.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+      lines: [],
+    });
+    expect(el.shadowRoot!.querySelector("[data-over-bill-limit]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -119,6 +160,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
       reduction: "3.28",
       nominalValue: "50.00",
       needsApproval: null,
+      overBillDiscountLimit: false,
       lines: [],
     });
     el.refusal = "order.payment_in_flight";

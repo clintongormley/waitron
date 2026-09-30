@@ -409,6 +409,8 @@ export const en = {
   "adjust.approval_supervisor": "A supervisor must approve this with their PIN.",
   "adjust.approval_manager": "A manager must approve this with their PIN.",
   "adjust.approval_admin": "An admin must approve this with their PIN.",
+  "adjust.over_bill_limit":
+    "Afterwards, the bill's discounts are more than the venue's limit allows.",
   "adjust.ask_approval": "Ask for approval",
   "adjust.do_comp": "Give it away",
   "adjust.do_discount": "Apply the discount",
@@ -1054,6 +1056,8 @@ export const es: Record<StringKey, string> = {
   "adjust.approval_supervisor": "Un supervisor debe aprobarlo con su PIN.",
   "adjust.approval_manager": "Un encargado debe aprobarlo con su PIN.",
   "adjust.approval_admin": "Un administrador debe aprobarlo con su PIN.",
+  "adjust.over_bill_limit":
+    "Después, los descuentos de la cuenta superan lo que permite el límite del local.",
   "adjust.ask_approval": "Pedir aprobación",
   "adjust.do_comp": "Invitar",
   "adjust.do_discount": "Aplicar el descuento",

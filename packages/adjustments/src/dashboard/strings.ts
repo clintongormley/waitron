@@ -68,6 +68,15 @@ const en = {
   "adjustments.error.noteRequired": "Choose whether staff must write a note.",
   "adjustments.load_error": "The adjustment reasons could not be loaded.",
   "adjustments.reorder_error": "The new order could not be saved.",
+  "adjustments.limit.heading": "Limit on a bill's discounts",
+  "adjustments.limit.field": "Largest total discount on one bill",
+  "adjustments.limit.hint":
+    "Discounts on a bill's items and on the whole bill, added together, as a share of the full price of what is still on the bill. When the person making the change is below a manager, a discount that goes past it, or a cancellation that leaves the bill past it with a larger share than before, needs the PIN of a manager or someone more senior. Give-aways made on this bill are not counted as discount. Leave it empty for no limit.",
+  "adjustments.limit.save": "Save limit",
+  "adjustments.limit.saved": "Limit saved.",
+  "adjustments.limit.load_error": "The bill discount limit could not be loaded.",
+  "adjustments.limit.invalid":
+    "Enter a percentage above 0 and up to 100, with at most two decimals.",
   "nav.adjustment_report": "Adjustment report",
   "adjustment_report.title": "Adjustment report",
   "adjustment_report.intro":
@@ -191,6 +200,15 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.error.noteRequired": "Elige si el personal debe escribir una nota.",
   "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
+  "adjustments.limit.heading": "Límite de descuento por cuenta",
+  "adjustments.limit.field": "Descuento total máximo en una cuenta",
+  "adjustments.limit.hint":
+    "Los descuentos en los artículos de una cuenta y en toda la cuenta, sumados, como proporción del precio completo de lo que sigue en la cuenta. Cuando quien hace el cambio está por debajo de un encargado, un descuento que lo supere, o una anulación que deje la cuenta por encima de él con una proporción mayor que antes, necesita el PIN de un encargado o de alguien de rango superior. Las invitaciones hechas en esta cuenta no cuentan como descuento. Déjalo vacío para no poner límite.",
+  "adjustments.limit.save": "Guardar límite",
+  "adjustments.limit.saved": "Límite guardado.",
+  "adjustments.limit.load_error": "No se pudo cargar el límite de descuento por cuenta.",
+  "adjustments.limit.invalid":
+    "Escribe un porcentaje mayor que 0 y hasta 100, con dos decimales como máximo.",
   "nav.adjustment_report": "Informe de ajustes",
   "adjustment_report.title": "Informe de ajustes",
   "adjustment_report.intro":
