@@ -49,6 +49,100 @@ async function table(props: Partial<WtDataTable<Row>> = {}): Promise<WtDataTable
   return el;
 }
 
+test("an unselectable row has no checkbox, and select-all counts only selectable rows", async () => {
+  const el = await table({ selectable: true, rowSelectable: (row) => row.id !== "b" });
+  expect(el.shadowRoot!.querySelector("[data-test=select-a]")).not.toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=select-b]")).toBeNull();
+  expect(el.shadowRoot!.querySelector('tr[data-row-key="b"] td.select')).not.toBeNull();
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(seen).toEqual([["a"]]);
+  el.selected = ["a"];
+  await el.updateComplete;
+  const header = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  expect(header.checked).toBe(true);
+  expect(header.indeterminate).toBe(false);
+  header.click();
+  expect(seen.at(-1)).toEqual([]);
+});
+
+test("an unselectable row leaves the other rows’ position keys unchanged", async () => {
+  const el = await table({
+    selectable: true,
+    rowKey: (_row, index) => String(index),
+    rowSelectable: (row) => row.id !== "b",
+  });
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(seen.at(-1)).toEqual(["1"]);
+  expect(el.shadowRoot!.querySelector("[data-test=select-0]")).toBeNull();
+  expect(el.shadowRoot!.querySelector("[data-test=select-1]")).not.toBeNull();
+});
+
+test("unselectable tree rows keep their empty grid cell and never enter select-all", async () => {
+  const el = await treeTable({ selectable: true, rowSelectable: (row) => row.id !== "food" });
+  const cell = el.shadowRoot!.querySelector('tr[data-row-key="food"] td.select')!;
+  expect(cell.getAttribute("role")).toBe("gridcell");
+  expect(cell.querySelector("input")).toBeNull();
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(seen.at(-1)).not.toContain("food");
+  expect(seen.at(-1)!.length).toBeGreaterThan(0);
+  el.selected = seen.at(-1)!;
+  await el.updateComplete;
+  el.rowSelectable = () => false;
+  await el.updateComplete;
+  const header = el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!;
+  expect(header.checked).toBe(false);
+  expect(header.indeterminate).toBe(false);
+});
+
+test("reports a user filter change once across the shadow boundary and not on restore", async () => {
+  sessionStorage.setItem("test.filter-event", JSON.stringify({ filters: { status: "off" } }));
+  const seen: CustomEvent[] = [];
+  const native = vi.fn();
+  const listen = (event: Event) => seen.push(event as CustomEvent);
+  document.addEventListener("wt-filter-change", listen);
+  document.addEventListener("change", native);
+  onTestFinished(() => {
+    document.removeEventListener("wt-filter-change", listen);
+    document.removeEventListener("change", native);
+  });
+  const el = (await mountInShadowRoot(
+    '<wt-data-table aria-label="Users"></wt-data-table>',
+  )) as WtDataTable<RowS>;
+  Object.assign(el, {
+    rows: rowsS,
+    columns: withStatus,
+    rowKey: (row: RowS) => row.id,
+    viewKey: "test.filter-event",
+  });
+  await el.updateComplete;
+  expect(seen).toEqual([]);
+  const select = el.shadowRoot!.querySelector<HTMLSelectElement>('select[data-filter="status"]')!;
+  expect(select.value).toBe("off");
+  select.value = "active";
+  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  expect(seen).toHaveLength(1);
+  expect(seen[0]!.detail).toEqual({ filters: { status: "active" } });
+  expect(seen[0]!.bubbles).toBe(true);
+  expect(seen[0]!.composed).toBe(true);
+  expect(native).not.toHaveBeenCalled();
+  select.value = "";
+  select.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  expect(seen[1]!.detail).toEqual({ filters: {} });
+  expect(seen[0]!.detail).toEqual({ filters: { status: "active" } });
+});
+
 test("renders native table semantics and consumer-provided cells", async () => {
   const el = await table();
   const native = el.shadowRoot!.querySelector("table")!;
