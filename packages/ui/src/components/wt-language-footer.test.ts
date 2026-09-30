@@ -1,4 +1,4 @@
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import { WtLanguageFooter } from "./wt-language-footer.js";
@@ -22,6 +22,13 @@ const triggerOf = (el: WtLanguageFooter) =>
 const menuOf = (el: WtLanguageFooter) => el.shadowRoot!.querySelector<HTMLElement>('[role="menu"]');
 const optionOf = (el: WtLanguageFooter, code: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[data-test="lang-${code}"]`);
+const innerTriggerOf = (el: WtLanguageFooter) => triggerOf(el).shadowRoot!.querySelector("button")!;
+/** The element holding focus, followed through every open shadow root. */
+function deepActive(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
 
 /** The first open awaits `loadLocales()` before flipping `open`, so one `updateComplete` is not enough. */
 async function settle(el: WtLanguageFooter): Promise<void> {
@@ -268,5 +275,413 @@ describe("wt-language-footer", () => {
     host.style.setProperty("--wt-space-3", "17px");
     const footer = getComputedStyle(el.shadowRoot!.querySelector("footer")!);
     expect(footer.paddingTop).toBe("17px");
+  });
+});
+
+describe("wt-language-footer keyboard, dismissal and focus", () => {
+  function deferredLoad() {
+    let resolve!: (value: Awaited<ReturnType<typeof twoLocales>>) => void;
+    let reject!: (reason: unknown) => void;
+    return {
+      loadLocales: () =>
+        new Promise<Awaited<ReturnType<typeof twoLocales>>>((res, rej) => {
+          resolve = res;
+          reject = rej;
+        }),
+      finish: async () => resolve(await twoLocales()),
+      fail: () => reject({ code: "server.internal" }),
+    };
+  }
+
+  /** Every document listener added since it started must have been removed with the same arguments. */
+  function watchDocumentListeners() {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    const calls = (spy: typeof added) =>
+      spy.mock.calls.map((args) => args.map(String).join(" ")).sort();
+    return {
+      expectNoneLeft: () => expect(calls(removed)).toEqual(calls(added)),
+      restore: () => {
+        added.mockRestore();
+        removed.mockRestore();
+      },
+    };
+  }
+
+  async function openWithEnter(el: WtLanguageFooter): Promise<void> {
+    innerTriggerOf(el).focus();
+    await userEvent.keyboard("{Enter}");
+    await settle(el);
+    expect(menuOf(el)).not.toBeNull();
+  }
+
+  function addOutsideButton(): HTMLButtonElement {
+    const outside = document.createElement("button");
+    outside.textContent = "Outside";
+    host.append(outside);
+    return outside;
+  }
+
+  it("opening with Enter moves focus to the checked option", async () => {
+    const el = await mountFooter({ active: "en-GB", loadLocales: twoLocales });
+    await openWithEnter(el);
+    expect(deepActive()).toBe(optionOf(el, "en-GB"));
+  });
+
+  it("opening moves focus to the first option when none is checked", async () => {
+    const el = await mountFooter({ active: "fr-FR", loadLocales: twoLocales });
+    await openWithEnter(el);
+    expect(deepActive()).toBe(optionOf(el, "es-ES"));
+  });
+
+  it("closed again before its menu draws, it leaves focus on the trigger", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    await open(el);
+    await open(el);
+    innerTriggerOf(el).focus();
+
+    triggerOf(el).click();
+    triggerOf(el).click();
+    await settle(el);
+
+    expect(menuOf(el)).toBeNull();
+    expect(deepActive()).toBe(innerTriggerOf(el));
+  });
+
+  it("arrow keys move between the options and wrap; Home and End reach the ends", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    await openWithEnter(el);
+    const es = optionOf(el, "es-ES");
+    const en = optionOf(el, "en-GB");
+
+    await userEvent.keyboard("{ArrowDown}");
+    expect(deepActive()).toBe(en);
+    await userEvent.keyboard("{ArrowDown}");
+    expect(deepActive()).toBe(es);
+    await userEvent.keyboard("{ArrowUp}");
+    expect(deepActive()).toBe(en);
+    await userEvent.keyboard("{ArrowUp}");
+    expect(deepActive()).toBe(es);
+    await userEvent.keyboard("{End}");
+    expect(deepActive()).toBe(en);
+    await userEvent.keyboard("{Home}");
+    expect(deepActive()).toBe(es);
+    await userEvent.keyboard("a");
+    expect(deepActive()).toBe(es);
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("an arrow key on the trigger moves nothing", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    await openWithEnter(el);
+    innerTriggerOf(el).focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(deepActive()).toBe(innerTriggerOf(el));
+  });
+
+  it("Escape closes the menu, returns focus to the trigger, and goes no further", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    const heard: string[] = [];
+    host.addEventListener("keydown", (event) => heard.push(event.key));
+    await openWithEnter(el);
+    heard.length = 0;
+
+    await userEvent.keyboard("{Escape}");
+    await el.updateComplete;
+
+    expect(menuOf(el)).toBeNull();
+    expect(deepActive()).toBe(innerTriggerOf(el));
+    expect(heard).toEqual([]);
+  });
+
+  it("Escape with the menu closed passes on to whatever surrounds the footer", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    const heard: string[] = [];
+    host.addEventListener("keydown", (event) => heard.push(event.key));
+    innerTriggerOf(el).focus();
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(heard).toEqual(["Escape"]);
+  });
+
+  it("an Escape something inside already handled leaves the menu open", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    await openWithEnter(el);
+    optionOf(el, "es-ES")!.addEventListener("keydown", (event) => event.preventDefault());
+
+    await userEvent.keyboard("{Escape}");
+    await el.updateComplete;
+
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("a press outside closes the menu and leaves focus where the press put it", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    const outside = addOutsideButton();
+    await openWithEnter(el);
+
+    await userEvent.click(outside);
+    await el.updateComplete;
+
+    expect(menuOf(el)).toBeNull();
+    expect(document.activeElement).toBe(outside);
+  });
+
+  it("a press outside on something that takes no focus closes the menu", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    const text = document.createElement("p");
+    text.textContent = "Some text";
+    host.append(text);
+    await openWithEnter(el);
+
+    await userEvent.click(text);
+    await el.updateComplete;
+
+    expect(menuOf(el)).toBeNull();
+  });
+
+  it("a click on the footer's empty area does not put focus on the trigger", async () => {
+    await page.viewport(390, 844);
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    const field = document.createElement("input");
+    field.setAttribute("aria-label", "Email");
+    host.prepend(field);
+    await userEvent.click(field);
+
+    const footer = el.shadowRoot!.querySelector("footer")!;
+    await userEvent.click(footer, { position: { x: 4, y: 4 } });
+
+    expect(deepActive()).not.toBe(innerTriggerOf(el));
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("a press inside the menu does not close it", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    await openWithEnter(el);
+
+    menuOf(el)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, composed: true }));
+    await el.updateComplete;
+
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("focus moving outside closes the menu without taking focus back", async () => {
+    const el = await mountFooter({ active: "en-GB", loadLocales: twoLocales });
+    const outside = addOutsideButton();
+    await openWithEnter(el);
+
+    await userEvent.tab();
+    await el.updateComplete;
+
+    expect(document.activeElement).toBe(outside);
+    expect(menuOf(el)).toBeNull();
+  });
+
+  it("a pick with the keyboard closes the menu and returns focus to the trigger", async () => {
+    const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+    const heard: string[] = [];
+    el.addEventListener("wt-locale-selected", (e) =>
+      heard.push((e as CustomEvent<{ code: string }>).detail.code),
+    );
+    await openWithEnter(el);
+
+    await userEvent.keyboard("{ArrowDown}");
+    await userEvent.keyboard("{Enter}");
+    await el.updateComplete;
+
+    expect(heard).toEqual(["en-GB"]);
+    expect(menuOf(el)).toBeNull();
+    expect(deepActive()).toBe(innerTriggerOf(el));
+  });
+
+  it("listens on the document only while open, and stops when it closes or leaves the page", async () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    try {
+      const el = await mountFooter({ active: "es-ES", loadLocales: twoLocales });
+      expect(added).not.toHaveBeenCalled();
+
+      await open(el);
+      const listeners = added.mock.calls.map(([type, listener]) => [type, listener]);
+      expect(listeners.map(([type]) => type).sort()).toEqual(["focusin", "pointerdown"]);
+
+      await open(el);
+      expect(removed.mock.calls.map(([type, listener]) => [type, listener])).toEqual(
+        expect.arrayContaining(listeners),
+      );
+      expect(removed).toHaveBeenCalledTimes(2);
+
+      removed.mockClear();
+      await open(el);
+      el.remove();
+      expect(removed).toHaveBeenCalledTimes(2);
+    } finally {
+      added.mockRestore();
+      removed.mockRestore();
+    }
+  });
+
+  it("a second press while the first load is pending starts no second load, and the menu stays closed", async () => {
+    const finishes: ((value: Awaited<ReturnType<typeof twoLocales>>) => void)[] = [];
+    const loadLocales = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<typeof twoLocales>>>((resolve) => finishes.push(resolve)),
+    );
+    const el = await mountFooter({ active: "es-ES", loadLocales });
+
+    triggerOf(el).click();
+    triggerOf(el).click();
+    expect(loadLocales).toHaveBeenCalledTimes(1);
+
+    finishes[0]!(await twoLocales());
+    await settle(el);
+    expect(menuOf(el)).toBeNull();
+
+    await open(el);
+    expect(loadLocales).toHaveBeenCalledTimes(1);
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("a third press while the load is pending asks for the menu again, still with one load", async () => {
+    const finishes: ((value: Awaited<ReturnType<typeof twoLocales>>) => void)[] = [];
+    const loadLocales = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<typeof twoLocales>>>((resolve) => finishes.push(resolve)),
+    );
+    const el = await mountFooter({ active: "es-ES", loadLocales });
+
+    triggerOf(el).click();
+    triggerOf(el).click();
+    triggerOf(el).click();
+    finishes[0]!(await twoLocales());
+    await settle(el);
+
+    expect(loadLocales).toHaveBeenCalledTimes(1);
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("a loader that throws before returning a promise stays closed, and the next open tries again", async () => {
+    const el = await mountFooter({
+      active: "es-ES",
+      loadLocales: () => {
+        throw new Error("refused");
+      },
+    });
+    await open(el);
+    expect(menuOf(el)).toBeNull();
+
+    el.loadLocales = twoLocales;
+    await open(el);
+    expect(menuOf(el)).not.toBeNull();
+  });
+
+  it("removed while its first load is pending, it opens nothing and leaves no document listener", async () => {
+    const load = deferredLoad();
+    const el = await mountFooter({ active: "es-ES", loadLocales: load.loadLocales });
+    const listeners = watchDocumentListeners();
+    try {
+      triggerOf(el).click();
+      el.remove();
+      load.finish();
+      await settle(el);
+
+      expect(menuOf(el)).toBeNull();
+      listeners.expectNoneLeft();
+    } finally {
+      listeners.restore();
+    }
+  });
+
+  it("press, move focus outside, then the load finishes: the menu stays closed and focus stays where the user put it", async () => {
+    const load = deferredLoad();
+    const el = await mountFooter({ active: "es-ES", loadLocales: load.loadLocales });
+    const field = document.createElement("input");
+    field.setAttribute("aria-label", "Email");
+    host.append(field);
+
+    await userEvent.click(innerTriggerOf(el));
+    await userEvent.click(field);
+    load.finish();
+    await settle(el);
+
+    expect(menuOf(el)).toBeNull();
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("a press outside on something that takes no focus, while the load is pending, cancels the opening", async () => {
+    const load = deferredLoad();
+    const el = await mountFooter({ active: "es-ES", loadLocales: load.loadLocales });
+    const text = document.createElement("p");
+    text.textContent = "Some text";
+    host.append(text);
+
+    await userEvent.click(innerTriggerOf(el));
+    await userEvent.click(text);
+    load.finish();
+    await settle(el);
+
+    expect(menuOf(el)).toBeNull();
+  });
+
+  it("Escape while the load is pending cancels the opening and goes no further", async () => {
+    const load = deferredLoad();
+    const el = await mountFooter({ active: "es-ES", loadLocales: load.loadLocales });
+    const heard: string[] = [];
+    host.addEventListener("keydown", (event) => heard.push(event.key));
+    innerTriggerOf(el).focus();
+
+    await userEvent.keyboard("{Enter}");
+    heard.length = 0;
+    await userEvent.keyboard("{Escape}");
+    load.finish();
+    await settle(el);
+
+    expect(menuOf(el)).toBeNull();
+    expect(deepActive()).toBe(innerTriggerOf(el));
+    expect(heard).toEqual([]);
+  });
+
+  it("however a pending load ends, no document listener is left behind once the menu is closed", async () => {
+    const listeners = watchDocumentListeners();
+    try {
+      const opened = deferredLoad();
+      const a = await mountFooter({ active: "es-ES", loadLocales: opened.loadLocales });
+      triggerOf(a).click();
+      opened.finish();
+      await settle(a);
+      expect(menuOf(a)).not.toBeNull();
+      await open(a);
+      listeners.expectNoneLeft();
+
+      const cancelled = deferredLoad();
+      const b = await mountFooter({ active: "es-ES", loadLocales: cancelled.loadLocales });
+      triggerOf(b).click();
+      triggerOf(b).click();
+      cancelled.finish();
+      await settle(b);
+      expect(menuOf(b)).toBeNull();
+      listeners.expectNoneLeft();
+
+      const refused = deferredLoad();
+      const c = await mountFooter({ active: "es-ES", loadLocales: refused.loadLocales });
+      triggerOf(c).click();
+      refused.fail();
+      await settle(c);
+      expect(menuOf(c)).toBeNull();
+      listeners.expectNoneLeft();
+    } finally {
+      listeners.restore();
+    }
+  });
+
+  it("keeps the active language's name when the loaded list does not include it", async () => {
+    const el = await mountFooter({
+      active: "es-ES",
+      loadLocales: async () => [{ code: "en-GB", label: "English" }],
+    });
+    await open(el);
+    expect(triggerOf(el).textContent!.trim()).toBe("Español");
+    expect(el.shadowRoot!.querySelector('[aria-checked="true"]')).toBeNull();
   });
 });

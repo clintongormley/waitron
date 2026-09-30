@@ -10,9 +10,8 @@ export interface WtLocaleOption {
 }
 
 /**
- * A page footer holding the language chooser. It sits in the page's flow, so it can never cover
- * content. It never changes the language itself: the parent sets `active` and decides what a pick
- * means.
+ * A page footer holding the language chooser. It never changes the language itself: the parent
+ * sets `active` and decides what a pick means.
  *
  * The options are NATIVE `<button role="menuitemradio">` elements as direct children of the
  * `role="menu"` container, so the role and `aria-checked` land on the element a screen reader
@@ -90,21 +89,126 @@ export class WtLanguageFooter extends LitElement {
 
   @state() private locales?: WtLocaleOption[];
 
-  async #toggle(): Promise<void> {
-    if (!this.open && this.locales === undefined) {
-      try {
-        this.locales = await this.loadLocales();
-      } catch {
-        // Leaving `locales` unset makes the next open fetch again.
-        return;
-      }
+  #loading?: Promise<void>;
+
+  /**
+   * Set by a press while a load is pending; any close clears it, so an outside press or focus, or
+   * Escape, stops the menu opening (and taking focus) when the load arrives.
+   */
+  #openWhenLoaded = false;
+
+  #listening = false;
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#close();
+  }
+
+  #toggle(): void {
+    if (this.open || this.#openWhenLoaded) {
+      this.#close();
+      return;
     }
-    this.open = !this.open;
+    if (this.locales !== undefined) {
+      this.#show();
+      return;
+    }
+    this.#openWhenLoaded = true;
+    this.#listen();
+    if (this.#loading !== undefined) return;
+    this.#loading = this.#load().then(() => {
+      this.#loading = undefined;
+      if (!this.#openWhenLoaded) return;
+      if (this.locales === undefined) this.#close();
+      else this.#show();
+    });
+  }
+
+  async #load(): Promise<void> {
+    try {
+      this.locales = await this.loadLocales();
+    } catch {
+      // Leaving `locales` unset makes the next open fetch again.
+    }
+  }
+
+  #show(): void {
+    this.#openWhenLoaded = false;
+    this.open = true;
+    this.#listen();
+    void this.updateComplete.then(() => {
+      const options = this.#options();
+      (options.find((o) => o.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
+    });
+  }
+
+  #close(): void {
+    this.open = false;
+    this.#openWhenLoaded = false;
+    if (!this.#listening) return;
+    this.#listening = false;
+    document.removeEventListener("pointerdown", this.#onOutside, true);
+    document.removeEventListener("focusin", this.#onOutside);
+  }
+
+  #listen(): void {
+    if (this.#listening) return;
+    this.#listening = true;
+    document.addEventListener("pointerdown", this.#onOutside, true);
+    document.addEventListener("focusin", this.#onOutside);
+  }
+
+  #onOutside = (event: Event): void => {
+    if (!event.composedPath().includes(this)) this.#close();
+  };
+
+  #options(): HTMLElement[] {
+    return [...this.renderRoot.querySelectorAll<HTMLElement>('[role="menuitemradio"]')];
+  }
+
+  #trigger(): HTMLElement {
+    return this.renderRoot.querySelector<HTMLElement>('[data-test="lang-trigger"]')!;
+  }
+
+  #onKeydown(event: KeyboardEvent): void {
+    if (!this.open && !this.#openWhenLoaded) return;
+    if (event.key === "Escape") {
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this.#close();
+      this.#trigger().focus();
+      return;
+    }
+    const options = this.#options();
+    const at = options.indexOf(event.target as HTMLElement);
+    if (at === -1) return;
+    const last = options.length - 1;
+    let to: number;
+    switch (event.key) {
+      case "ArrowDown":
+        to = at === last ? 0 : at + 1;
+        break;
+      case "ArrowUp":
+        to = at === 0 ? last : at - 1;
+        break;
+      case "Home":
+        to = 0;
+        break;
+      case "End":
+        to = last;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    options[to]!.focus();
   }
 
   #pick(event: Event, code: string): void {
     event.stopPropagation();
-    this.open = false;
+    this.#close();
+    this.#trigger().focus();
     this.dispatchEvent(
       new CustomEvent<{ code: string }>("wt-locale-selected", {
         detail: { code },
@@ -125,13 +229,13 @@ export class WtLanguageFooter extends LitElement {
   override render() {
     return html`
       <footer>
-        <div class="chooser">
+        <div class="chooser" @keydown=${(event: KeyboardEvent) => this.#onKeydown(event)}>
           <wt-button
             variant="secondary"
             data-test="lang-trigger"
             aria-haspopup="menu"
             aria-expanded=${this.open}
-            @click=${() => void this.#toggle()}
+            @click=${() => this.#toggle()}
           >
             ${this.#label(this.active)}
           </wt-button>
