@@ -976,6 +976,85 @@ describe("an item already paid for (design §8 test 5)", () => {
     ]);
   });
 
+  it("sends a held dish one guest paid for to the kitchen when it is fired, and charges it to nobody else", async () => {
+    const table = await inTx((tx) =>
+      createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.offers.zoneId,
+      }),
+    );
+    const seated = await request("POST", `/api/tables/${table.id}/seat`, {});
+    const {
+      tabId: billId,
+      partyId,
+      revision,
+    } = seated.json as { tabId: string; partyId: string; revision: number };
+    const round = await request("POST", `/api/parties/${partyId}/groups`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: revision,
+      groups: [
+        { lines: [{ menuItemId: offer("Paella"), quantity: "1" }], release: "fire" },
+        { lines: [{ menuItemId: offer("Tarta"), quantity: "1" }], release: "hold" },
+      ],
+    });
+    expect(round.status).toBe(200);
+    const tartaLine = async () =>
+      (
+        (await request("GET", `/api/working-orders/${billId}/lines`)).json.lines as {
+          lineNo: number;
+          name: string;
+          sentAt: string | null;
+          firedAt: string | null;
+        }[]
+      ).find((line) => line.name === "Tarta")!;
+    const tarta = await tartaLine();
+    const leaving = await pay(billId, {
+      kind: "items",
+      lines: [{ lineNo: tarta.lineNo }],
+      method: "cash",
+      tendered: "18.00",
+      applied: "18.00",
+      tip: "0.00",
+    });
+    expect(leaving.status).toBe(200);
+    const groups = await request("GET", `/api/parties/${partyId}/groups`);
+    const held = (groups.json.groups as { id: string; state: string }[]).find(
+      (group) => group.state === "held",
+    )!;
+
+    const fired = await request("POST", `/api/parties/${partyId}/groups/${held.id}/fire`, {
+      submissionId: randomUUID(),
+      expectedPartyRevision: groups.json.revision,
+    });
+    const again = await pay(billId, {
+      kind: "items",
+      lines: [{ lineNo: tarta.lineNo }],
+      method: "cash",
+      tendered: "18.00",
+      applied: "18.00",
+      tip: "0.00",
+    });
+    const rest = await request("POST", `/api/working-orders/${billId}/payments/preview`, {
+      kind: "share",
+      shareOf: 1,
+      method: "card",
+    });
+
+    expect(fired.status).toBe(200);
+    const sent = await tartaLine();
+    expect(sent.sentAt).not.toBeNull();
+    expect(sent.firedAt).not.toBeNull();
+    expect(again.status).toBe(409);
+    expect(again.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: tarta.lineNo } });
+    expect((await balance(billId)).json).toMatchObject({
+      total: "53.00",
+      received: "18.00",
+      outstanding: "35.00",
+      paidLines: [{ lineNo: tarta.lineNo, paidQuantity: "1.000" }],
+    });
+    expect(rest.json).toMatchObject({ kind: "allocated", applied: "35.00", tip: "0.00" });
+  });
+
   it("refuses an item payment naming a line the bill does not have", async () => {
     const billId = await tabWith("Paella");
 
