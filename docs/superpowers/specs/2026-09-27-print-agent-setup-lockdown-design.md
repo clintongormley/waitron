@@ -101,6 +101,7 @@ stops the job pull, the same way a failed scan does not today.
   _2026-09-30 (A141): an added Bluetooth printer's row offers Forget pairing whether it is switched on or off; in Spanish it is "Desvincular". A printer forgotten while switched on stays switched on. While no agent reports it paired, Add a printer lists it once an agent's scan finds it, without Show all devices, and offers **Pair** (Spanish "Emparejar"), which pairs it again without adding anything; the row keeps Pair so an unconfirmed pairing can be retried, and loses its Pair button once an agent reports it paired (its Paired status stays until dismissed)._
   _2026-09-30 (C103): Forget pairing is named Unpair and acts on one press; there is no Dismiss, and the Paired status fades after about four seconds._
   _2026-09-30 (C109): an Unpair from Waitron that succeeds now switches the printer off while the server still holds the command, unless another box can print to it, so Add a printer offers it as Add again rather than Pair._
+  _2026-10-01 (A163): the same pull ends the printer's waiting print jobs, so Add again does not print them._
 - **Both commands** take the same permission as starting a discovery scan, read from the existing
   route. Their error codes follow the `printer_discovery` / `agent` siblings — grep them before naming
   them.
