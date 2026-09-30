@@ -125,8 +125,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 1. **Finish table service and paying a bill in parts** (A4, lane B). Fifteen of the service
    plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
-   the adjustment reports, as #923; Task 13, standalone ordering, as #903). Left: the till's Cancel
-   taking a reason (waits on the owner, see Task 11's entry),
+   the adjustment reports, as #923; Task 13, standalone ordering, as #903), and the till's Cancel
+   taking a reason is done by lane B item B11a. Left:
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
@@ -359,7 +359,8 @@ screen offers Change on a sent line the kitchen has not started, a recalled line
 kitchen route; it opens the existing option, extras and note editor prefilled from the line and saves
 through the one-line edit route with the order's revision. A started line keeps Cancel only; Cancel
 is now offered on a queued line too, and a line of several whole units asks "Cancel 1" or "Cancel
-all". With the venue's "allow changes to items already sent" setting off, Change and Recall are
+all". _(2026-09-30, B11a: Cancel now asks for a reason in the adjustment dialog, which on a line of
+several whole units offers "1" or "All N" under "How many".)_ With the venue's "allow changes to items already sent" setting off, Change and Recall are
 hidden on sent kitchen work. The tab-lines answer (`GET /api/working-orders/:id/lines`) now carries
 that setting, and each line when it was released, its note, its offer and its parent product. A
 change or recall the server refuses because the kitchen has started the item, or because the venue
@@ -2816,7 +2817,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
     older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
     44 px); per-line Send, Change and Cancel have no guard against a second press while the first is
-    running (the group commands do); whether the floating language button covers the new draft bar
+    running (the group commands do) _(2026-09-30, B11a: Cancel now opens the adjustment dialog,
+    which ignores a second press while it is opening or open)_; whether the floating language button covers the new draft bar
     at 390 px has not been re-checked _(Task 8, 2026-09-28, looked at in screenshots at 390 px: it
     does not cover the new last-added bar; on the new Review view it covers the corner of Fire all
     now until the page is scrolled, which the page's bottom padding allows)_.
@@ -3476,7 +3478,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     table now points at" and "does not follow the table onto a new party's tab"; in
     `apps/till/src/till-app-parties.test.ts` "shows the chosen bill when a send to it got no answer".
     None of the eight failed in this branch's runs. **Next action:** wait for what each asserts on instead
-    of a fixed time.
+    of a fixed time. _(2026-09-30, B11a: two more of that shape wait on an adjustment's resends,
+    sleeping `SUBMIT_RETRY_PAUSE_MS + 100` and `3 * SUBMIT_RETRY_PAUSE_MS + 200` ms, both from #916,
+    in `apps/till/src/till-app-adjustments.test.ts`: "sends a request that got no answer again under
+    the same submission id, and a new confirmation under a new one" and "reads the bill again and
+    says the change may have been made when no answer ever comes".)_
   - **A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices
     included** (found 2026-09-30 in #903's review; I believe it predates that branch — `git log -S
     frozenExtras` puts it in #696 and #719). `priceOrderLines` (`apps/server/src/working-order.ts`)
