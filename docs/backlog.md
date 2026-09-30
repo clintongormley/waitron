@@ -2552,9 +2552,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   That test and the A139 end-to-end case both use a stand-in for the Bluetooth adapter, so what the
   box's real adapter reports as paired is still unchecked. The server's forget route takes an agent and an address, never a printer, so it had no
   switched-on check to change (read, not run: `apps/server/src/print-api.ts`). _(2026-09-30, A140,
-  below: `liveBtDevicePath` now returns the printer's address instead of throwing, and the box's
-  agent reports that it can print over Bluetooth, so A139's reason above describes only an agent
-  that predates A140.)_
+  below: `liveBtDevicePath` now returns the printer's address instead of throwing, and an agent
+  built with A140 reports that it can print over Bluetooth, so once it reports the printer paired
+  again it takes those jobs; only an agent built with A139 but not A140, which sends `false`, still
+  ends them with A139's reason.
+  The suspect's receipt above was taken while `liveBtDevicePath` threw.)_
 - **A print job for a Bluetooth printer waited with no reason (A139, owner 2026-09-29: _"i tried
   to print the character set block, but nothing printed, the jobs just get stuck"_) — FIXED where
   the tests reach (#904); the printing itself is A140.** The cause,
@@ -2614,8 +2616,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   holds Edit, Disable and Forget pairing is reached only by scrolling the table sideways — which
   works against A141's aim of making Forget pairing easy to find (observed 2026-09-30 in
   screenshots taken during the A141 work, not kept; the A141 finish-branch run-it review (Codex)
-  reported the same at 390 px; both before A139's note under a Bluetooth printer's name landed, so
-  re-check with it). The cause is not investigated. The product editor's variants table
+  reported the same at 390 px; both before A139's note under a Bluetooth printer's name landed, and
+  A140 (below) has since removed that note). The cause is not investigated. The product editor's variants table
   keeps its row menu on screen at phone width with its own layout rule for a narrow table, and the
   phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts` check that each row menu
   ends inside the frame ([design-system.md](developers/design-system.md), under
