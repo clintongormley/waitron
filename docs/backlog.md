@@ -2665,7 +2665,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   its box, that each row's ⋮ ends inside the box and the window with the table unscrolled, and that
   nothing is painted over it; the pinned cases in
   `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`.
-- **DONE (2026-09-30, A155): every `wt-data-table` whose row menu sits in its last column pins
+- **DONE (2026-09-30, A155, #950): every `wt-data-table` whose row menu sits in its last column pins
   that column** (owner's answer "a" to A145's question). `pinned: "end"` stays a per-column option,
   now set on every row-menu column keyed `actions` (the adjustment reasons screen's menu, keyed
   `manage` and not its last column, is left unpinned — recorded below): the Printers screen's Agents
