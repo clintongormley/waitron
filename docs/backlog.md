@@ -5881,7 +5881,7 @@ ongoing overhaul listed at the top of Track A.
   name until someone copies the list again. Migration `packages/identity/drizzle/0004_passkey_provider_last_used.sql`
   only adds the two columns.
 - **The browser's password manager is told which passkeys Waitron still accepts, and a passkey
-  Waitron no longer holds says so — DONE (C101, owner 2026-09-30, "yes all three", and ~16:10 on the
+  Waitron no longer holds says so — DONE (C101, #948, owner 2026-09-30, "yes all three", and ~16:10 on the
   unknown-passkey answer: "i think this is a valid error message").** After every dashboard sign-in
   (password, code, passkey, Google, account set-up) and after a passkey is added or removed on the
   Profile screen, the dashboard reads `GET /management-api/passkey/signals` (signed-in only:
@@ -5912,7 +5912,14 @@ ongoing overhaul listed at the top of Track A.
   gives Android as 144, where MDN copies desktop's 132 — which is right was not established;
   Chrome's article (developer.chrome.com/docs/identity/webauthn-signal-api) says Google Password
   Manager hides rather than deletes a passkey missing from the list, restores it if it is listed
-  again, and keeps a username the person edited there over one the site sends.
+  again, and keeps a username the person edited there over one the site sends. Left open from
+  the review, both predating C101 (#948's review read `packages/identity/src/passkey.ts` on main
+  before the branch): a suspended or pending person's passkey is refused before the signature check
+  and an active person's bad signature after it, so the two do different work — whether that can
+  be timed from outside was not measured; and an expired sign-in challenge answers its own
+  `passkey.challenge_expired`. Not taken: after a passkey is added or removed, the Profile screen
+  makes one request more than it needs (the signals read beside the profile reload); folding the
+  signal data into the profile response would remove it. Nothing waits on that request.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
