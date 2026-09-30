@@ -167,6 +167,8 @@ interface Plan {
   removed: number | null;
   carve: Carve | null;
   changes: Change[];
+  /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
+  compedExtras: string[];
   reduction: Decimal;
   nominal: Decimal;
   before: Decimal;
@@ -384,6 +386,7 @@ async function planAdjustment(
   /** What a cancel leaves each row of the line's family, in thousandths. */
   let cancelLeft: Map<string, number> | null = null;
   let changes: Change[] = [];
+  let compedExtras: string[] = [];
   let reduction: Decimal;
   let nominal: Decimal;
   let before: Decimal;
@@ -475,6 +478,7 @@ async function planAdjustment(
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row.unit, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
+      if (ask.action === "comp" && !partial) compedExtras = family.slice(1).map((row) => row.id);
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
       await refusePaidLines(
@@ -522,6 +526,7 @@ async function planAdjustment(
     removed,
     carve,
     changes,
+    compedExtras,
     reduction,
     nominal,
     before,
@@ -572,10 +577,10 @@ async function priorsOf(
  * The bill's discount and its price before adjustments, over its rows at `quantityOf`, each row
  * priced by `priceOf`. The discount is each row's list price less its price, none for a row priced
  * above its list price, and left out for the rows this bill's own records prove comped
- * ({@link readCompedLines}). A comped row that has moved to another bill is not proven comped
- * there, so there it counts as discount, which errs toward asking for a manager. `priceOf` is
- * `gross` for the cents the bill shows, or `exactly` for the unrounded price a cancel's rise is also
- * judged on.
+ * ({@link readCompedLines}): an extra added to a dish after the dish was comped is not one of them.
+ * A comped row that has moved to another bill is not proven comped there, so there it counts as
+ * discount, which errs toward asking for a manager. `priceOf` is `gross` for the cents the bill
+ * shows, or `exactly` for the unrounded price a cancel's rise is also judged on.
  */
 function shareOf(
   rows: readonly Row[],
@@ -585,10 +590,7 @@ function shareOf(
 ): BillShare {
   const rowIds = new Set(comped.rows);
   const dishIds = new Set(comped.dishes);
-  const wasComped = (row: Row) =>
-    rowIds.has(row.id) ||
-    dishIds.has(row.id) ||
-    (row.parentLineId !== null && dishIds.has(row.parentLineId));
+  const wasComped = (row: Row) => rowIds.has(row.id) || dishIds.has(row.id);
   const listed = (row: Row) => priceOf(row.list ?? row.unit, quantityOf(row));
   const discounts = rows
     .filter((row) => !wasComped(row))
@@ -821,6 +823,7 @@ export async function applyAdjustment(
                 stage: plan.stage!,
               },
         splits,
+        compedExtras: plan.compedExtras,
         quantity: plan.covered === null ? null : thousandthsToDecimal(plan.covered),
         reason: {
           id: plan.reason.id,

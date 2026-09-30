@@ -129,6 +129,7 @@ describe("recordAdjustment", () => {
           to: "44444444-4444-4444-8444-444444444444",
         },
       ],
+      compedExtras: [],
       lineName: "Steak",
       lineQuantity: 2000,
       lineListUnitPrice: 2500,
@@ -400,9 +401,43 @@ describe("readCompedLines", () => {
     expect(await read(order)).toEqual({ rows: [], dishes: [line] });
   });
 
+  it("names the extras a whole comp priced at zero with its dish, and the dish itself", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const [dish, olive, anchovy] = [randomUUID(), randomUUID(), randomUUID()];
+    await record(
+      comp(order, reason, {
+        line: { ...comp(order, reason).line!, id: dish },
+        compedExtras: [olive, anchovy],
+      }),
+    );
+
+    expect(await read(order)).toEqual({ rows: [olive, anchovy], dishes: [dish] });
+  });
+
+  it("follows a later split of an extra comped with its dish to its copy", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const [dish, olive, dishCopy, oliveCopy] = Array.from({ length: 4 }, () => randomUUID());
+    await record(
+      comp(order, reason, {
+        line: { ...comp(order, reason).line!, id: dish },
+        compedExtras: [olive],
+      }),
+    );
+    await record(
+      percent(order, reason, randomUUID(), 1000, [
+        { from: dish, to: dishCopy },
+        { from: olive, to: oliveCopy },
+      ]),
+    );
+
+    expect(await read(order)).toEqual({ rows: [olive, oliveCopy], dishes: [dish, dishCopy] });
+  });
+
   it("reads the bill's adjustments through the index that leads with the working order", async () => {
     const plan = await db.execute<{ detail: string }>(
-      sql`explain query plan select line_id, splits, action from adjustments
+      sql`explain query plan select line_id, splits, comped_extras, action from adjustments
         where working_order_id = ${randomUUID()} order by rowid`,
     );
     expect(plan.rows.map((row) => row.detail).join("\n")).toContain(
