@@ -5199,18 +5199,28 @@ ongoing overhaul listed at the top of Track A.
   `apps/setup/src/setup-app.test.ts`). A refused code is not such a refusal: the primary refuses it
   as `totp.invalid`, and this box's fetch turns any refused answer into
   `mirror.bundle_fetch_failed`, which names no field (`apps/server/src/mirror-bundle-fetch.ts`), so
-  it shows beside Connect with the code field empty and unmarked. Today that includes a CORRECT
-  code: the primary's mirror-bundle route calls `loginManagerById` without the key ring that
-  decrypts a stored authenticator secret (`apps/server/src/mirror-bundle-api.ts`), so an admin with
-  an authenticator set up cannot connect a standby at all. Measured 2026-09-30 with a temporary case
-  in `apps/server/src/mirror-bundle-api.test.ts`: a correct current code drew 401 `totp.invalid`,
-  and 400 `mirror.no_relay` (the login succeeded) once the route passed the ring the server builds
-  in `apps/server/src/boot.ts`. It dates from #298, which began encrypting the secret; C87 does not
-  change it. Still open, a defect: pass the ring in that route, with a test that signs in with a
-  real code. Still open, for the owner: whether a refused code should be marked under its field.
+  it shows beside Connect with the code field empty and unmarked (owner 2026-09-30: pass
+  `totp.invalid` through so it sits under the code field; queued as lane C's C92). A CORRECT code
+  was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
+  without the key ring that decrypts a stored authenticator secret, so an admin with an
+  authenticator set up could not connect a standby at all. **DONE (C91, 2026-09-30):** the route
+  passes the ring the server builds in `apps/server/src/boot.ts` (`credentialKeyRing` in
+  `apps/server/src/mirror-bundle-api.ts`). Test: "signs in an admin with an authenticator who sends
+  a correct current code" in `apps/server/src/mirror-bundle-api.test.ts` enrols an authenticator
+  through the profile's own two enrolment calls and joins with a current code; before the fix it
+  drew 401 `totp.invalid`, after it 200, and deleting the ring from the route turns it red again. A
+  wrong code is still refused `totp.invalid` (the case beside it). The peer membership read
+  (`GET /management-api/membership`, `apps/server/src/management-api.ts`) had the same gap and now
+  passes the ring too, with the same two cases in
+  `apps/server/src/management-api.membership.test.ts`. Still open, a defect: the promote route
+  (`apps/server/src/promote-api.ts`) calls `loginManagerById` without the ring as well. Measured
+  2026-09-30 with a temporary case on a real database: an admin with an authenticator sending a
+  correct current code drew 401 `totp.invalid` and the promotion never ran. Its deps carry no ring,
+  so the fix threads one from `boot.ts` as C91 did.
   Still open, seen while looking at C87 at 390 by 900 px: the wizard's floating language button sits
   over the bottom of the connect form, covering part of the refusal message beside Connect and, in
-  the English dark-theme screenshot, part of the Connect button; (6) the setup
+  the English dark-theme screenshot, part of the Connect button (owner 2026-09-30: move the
+  language choice into one shared footer; queued as lane C's C93); (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also
