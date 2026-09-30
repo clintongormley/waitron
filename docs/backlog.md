@@ -123,9 +123,9 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
 1. **Finish table service and paying a bill in parts** (A4, lane B). Fourteen of the service
-   plan's eighteen tasks are done: 0–10, 13 and 14 have landed (Task 9, marking dishes served, as
-   #814; Task 10, the attention signals, as #908; Task 13, standalone ordering, as #903), and
-   Task 11, comps and discounts, is done on `feat/service-adjustments`, awaiting its pull request. Left: the till's Cancel
+   plan's eighteen tasks are done: 0–11, 13 and 14 have landed (Task 9, marking dishes served, as
+   #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 13,
+   standalone ordering, as #903). Left: the till's Cancel
    taking a reason (waits on the owner, see Task 11's entry), the adjustment reports (12),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
@@ -3304,7 +3304,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         stricter than most of C81's table actions, whose late refusals are still said on the banner
         (Finish's refusal for a bill still unpaid and the name's own refusal are dropped there too).
         **Next action:** decide whether a late refusal of the bill request should be said too.
-  - **Task 11 (cancellations, comps and discounts)** DONE on `feat/service-adjustments` (lane B
+  - **Task 11 (cancellations, comps and discounts)** DONE (#916, main `488b63b28`, lane B
     item B11, 2026-09-30). A comp, a line discount (percentage or amount) and a whole-bill discount
     are applied under a reason (`POST /api/working-orders/:id/adjustments`, with a read-only
     `…/adjustments/preview` the till shows before confirming; `applyAdjustment` in
@@ -4996,7 +4996,7 @@ ongoing overhaul listed at the top of Track A.
   `packages/adjustments/src/dashboard/reasons-screen.test.ts` failed twice in about five runs while
   other browser suites ran beside it, then passed 27 times in a row; the failure text was not kept
   and the cause is not established. (e) and (f) are observations from the implementer's session.
-  _(2026-09-30, service plan Task 11 (`feat/service-adjustments`): (f)'s cause was found — Chromium
+  _(2026-09-30, service plan Task 11 (#916): (f)'s cause was found — Chromium
   reports the dialog's close with the next animation frame, so the test checked too early; that
   test now waits for the close.)_
 
