@@ -5344,11 +5344,22 @@ ongoing overhaul listed at the top of Track A.
   wrong code is still refused `totp.invalid` (the case beside it). The peer membership read
   (`GET /management-api/membership`, `apps/server/src/management-api.ts`) had the same gap and now
   passes the ring too, with the same two cases in
-  `apps/server/src/management-api.membership.test.ts`. Still open, a defect: the promote route
-  (`apps/server/src/promote-api.ts`) calls `loginManagerById` without the ring as well. Measured
-  2026-09-30 with a temporary case on a real database: an admin with an authenticator sending a
-  correct current code drew 401 `totp.invalid` and the promotion never ran. Its deps carry no ring,
-  so the fix threads one from `boot.ts` as C91 did.
+  `apps/server/src/management-api.membership.test.ts`. The promote route
+  (`apps/server/src/promote-api.ts`) called `loginManagerById` without the ring as well, so an
+  admin with an authenticator sending a correct current code drew 401 `totp.invalid` and the
+  promotion never ran. **DONE (C94, 2026-09-30):** `PromoteApiDeps` takes a `credentialKeyRing`,
+  which `boot.ts` fills with the same ring. Test: "signs in with a correct current code and
+  promotes" in `apps/server/src/promote-api.authenticator.test.ts` (real database, the promote
+  itself stubbed) drew 401 `totp.invalid` before the fix and 200 after; deleting the ring from the
+  route turns it red again, and a wrong code is still refused (the case beside it). The ring is now
+  a required argument everywhere the sign-in takes it, so a caller that leaves it out no longer
+  compiles (with the route's line deleted, `tsc` reports TS2741 at `promote-api.ts`):
+  `loginManager` and `loginManagerById` (`packages/identity/src/manager-login.ts`),
+  `decryptTotpSecret` (`mfa.ts`), the own-credential checks in `profile.ts`, `beginGoogleLink`
+  (`google-oidc.ts`), and `credentialKeyRing` in the management, profile and promote route
+  dependencies — the management and profile routes had silently fallen back to a key of their
+  own when none was given, and that fallback is gone, with the management routes'
+  `accountActionCodeKey`, which fed nothing else.
   Still open, seen while looking at C87 at 390 by 900 px: the wizard's floating language button sits
   over the bottom of the connect form, covering part of the refusal message beside Connect and, in
   the English dark-theme screenshot, part of the Connect button (owner 2026-09-30: move the

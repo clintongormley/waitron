@@ -148,10 +148,7 @@ export async function regenerateOwnRecoveryCodes(
   return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
-export async function disableOwnTotp(
-  tx: Transaction,
-  input: Owner & Credentials,
-): Promise<void> {
+export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(person, input);
   await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
