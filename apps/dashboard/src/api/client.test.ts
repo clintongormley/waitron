@@ -525,7 +525,6 @@ describe("DashboardApi", () => {
       id: "p1",
       catalogueId: "menu1",
       categoryId: "cat1",
-      labelIds: ["l1"],
       primaryCategoryId: "cat1",
       name: "Croquetas",
       customerName: { es: "Croquetas caseras" },
@@ -538,15 +537,16 @@ describe("DashboardApi", () => {
       dietOverride: null,
       image: null,
     };
-    const listed = { id: "p1", name: "Croquetas", active: true, primaryCategoryId: "cat2" };
+    const listed = { id: "p1", name: "Croquetas", active: true, primaryCategoryId: "cat1" };
+    const below = { id: "p2", name: "Flan", active: true, primaryCategoryId: "cat2" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(category))
       .mockResolvedValueOnce(jsonResponse({ ...category, image: "food.jpg" }))
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse([{ ...listed, labelIds: [] }]))
-      .mockResolvedValueOnce(jsonResponse([{ ...listed, labelIds: ["l1"] }]))
+      .mockResolvedValueOnce(jsonResponse([listed]))
+      .mockResolvedValueOnce(jsonResponse([listed, below]))
       .mockResolvedValueOnce(jsonResponse([product]))
       .mockResolvedValueOnce(jsonResponse({ primaryCategoryId: null }));
     const api = new DashboardApi("", fetchImpl);
@@ -557,9 +557,10 @@ describe("DashboardApi", () => {
     });
     await api.deleteCategory("cat1");
     await api.deleteCategory("cat1", { productsTo: "cat0", childrenTo: null });
-    expect(await api.listCategoryProducts("cat1")).toEqual([{ ...listed, labelIds: [] }]);
+    expect(await api.listCategoryProducts("cat1")).toEqual([listed]);
     expect(await api.listCategoryProducts("cat1", { includeDescendants: true })).toEqual([
-      { ...listed, labelIds: ["l1"] },
+      listed,
+      below,
     ]);
     expect(await api.listLibraryProducts()).toEqual([product]);
     expect(await api.setMainCategory("p1", null)).toEqual({ primaryCategoryId: null });
@@ -580,33 +581,6 @@ describe("DashboardApi", () => {
         "PUT",
         JSON.stringify({ primaryCategoryId: null }),
       ],
-    ]);
-  });
-
-  it("uses the label collection, item and product-label routes with their response shapes", async () => {
-    const label = { id: "l1", name: "Happy hour drinks" };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse([{ ...label, productCount: 3 }]))
-      .mockResolvedValueOnce(jsonResponse(label, true, 201))
-      .mockResolvedValueOnce(jsonResponse({ ...label, name: "Alcoholic" }))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse({ labelIds: ["l1"] }))
-      .mockResolvedValueOnce(jsonResponse({ labelIds: [] }));
-    const api = new DashboardApi("", fetchImpl);
-    expect(await api.listLabels()).toEqual([{ ...label, productCount: 3 }]);
-    expect(await api.createLabel("Happy hour drinks")).toEqual(label);
-    expect(await api.renameLabel("l1", "Alcoholic")).toEqual({ ...label, name: "Alcoholic" });
-    await expect(api.deleteLabel("l1")).resolves.toBeUndefined();
-    expect(await api.getProductLabels("p1")).toEqual({ labelIds: ["l1"] });
-    expect(await api.setProductLabels("p1", [])).toEqual({ labelIds: [] });
-    expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
-      ["/management-api/labels", "GET", undefined],
-      ["/management-api/labels", "POST", JSON.stringify({ name: "Happy hour drinks" })],
-      ["/management-api/labels/l1", "PATCH", JSON.stringify({ name: "Alcoholic" })],
-      ["/management-api/labels/l1", "DELETE", undefined],
-      ["/management-api/products/p1/labels", "GET", undefined],
-      ["/management-api/products/p1/labels", "PUT", JSON.stringify({ labelIds: [] })],
     ]);
   });
 
@@ -674,7 +648,6 @@ describe("DashboardApi", () => {
         id: "p1",
         catalogueId: "c1",
         categoryId: null,
-        labelIds: [],
         primaryCategoryId: null,
         name: "Café solo",
         customerName: { es: "Café solo de la casa" },

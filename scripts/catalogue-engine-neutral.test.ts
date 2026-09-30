@@ -43,7 +43,6 @@ const CATALOGUE_FILES = [
   "packages/catalogue/src/schema/menu.ts",
   "packages/catalogue/src/options.ts",
   "packages/catalogue/src/extras.ts",
-  "packages/catalogue/src/labels.ts",
   "packages/catalogue/src/product-modifiers.ts",
   "packages/catalogue/src/sale-classification.ts",
 ] as const;

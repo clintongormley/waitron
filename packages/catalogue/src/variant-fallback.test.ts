@@ -26,7 +26,6 @@ import { createExtraList } from "./extras.js";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductEditor } from "./product-editor.js";
 import { writeProductModifiers } from "./product-modifiers.js";
-import { labels, productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 import { createUnit } from "./units.js";
 import {
@@ -68,7 +67,6 @@ interface Fixture {
   otherCatalogueId: string;
   wines: string;
   bottles: string;
-  label: string;
   glass: string;
   largeGlass: string;
   stationId: string;
@@ -180,9 +178,6 @@ beforeEach(async () => {
       })
       .returning({ id: products.id });
     await tx.insert(productUnits).values({ productId: wine175!.id, unitId: largeGlass.id });
-    // Labels belong to the parent alone; a variant stores none of its own.
-    const [red] = await tx.insert(labels).values({ name: "Red" }).returning({ id: labels.id });
-    await tx.insert(productLabels).values({ productId: parent.id, labelId: red!.id });
     await assignCatalogueToLocation(tx, venue.locationId, catalogue.id);
     return {
       locationId: venue.locationId,
@@ -190,7 +185,6 @@ beforeEach(async () => {
       otherCatalogueId: other.id,
       wines: wines.id,
       bottles: bottles.id,
-      label: red!.id,
       glass: glass.id,
       largeGlass: largeGlass.id,
       stationId: station!.id,
@@ -215,7 +209,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
       unitPrice: "4.00",
       vatClass: "reduced",
       categoryId: f.wines,
-      labelIds: [f.label],
       unitId: f.glass,
     });
   });
@@ -237,7 +230,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
-          labelIds: [f.label],
         },
       },
       {
@@ -253,7 +245,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.bottles,
-          labelIds: [f.label],
         },
       },
     ]);
@@ -272,7 +263,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "4.00",
           vatClass: "reduced",
           primaryCategoryId: f.wines,
-          labelIds: [f.label],
         },
       },
       {
@@ -282,7 +272,6 @@ describe("listProducts lists the parent alone, its variants nested under it", ()
           unitPrice: "5.50",
           vatClass: "general",
           primaryCategoryId: f.bottles,
-          labelIds: [f.label],
         },
       },
     ]);
@@ -471,14 +460,13 @@ describe("readOfferedModifiers", () => {
 describe("readProductEditor", () => {
   // The editor shows a variant's OWN values, a blank field blank, and its parent's value for every
   // inherited field beside them. Wine 125 has no unit row or category and so
-  // inherits both; Wine 175 has its own. Neither has labels of its own: those are the parent's.
+  // inherits both; Wine 175 has its own.
   const parentValues = () => ({
     description: { en: "A dry white from Rueda" },
     image: "parent.jpg",
     unitPrice: "4.00",
     vatClass: "reduced",
     unitId: f.glass,
-    labelIds: [f.label],
     primaryCategoryId: f.wines,
     stationId: f.stationId,
     courseId: f.courseId,
@@ -497,7 +485,6 @@ describe("readProductEditor", () => {
       unitPrice: null,
       vatClass: null,
       unitId: null,
-      labelIds: [],
       primaryCategoryId: null,
       stationId: null,
       courseId: null,
@@ -518,7 +505,6 @@ describe("readProductEditor", () => {
       unitPrice: "5.50",
       vatClass: "general",
       unitId: f.largeGlass,
-      labelIds: [],
       primaryCategoryId: f.bottles,
       stationId: f.ownStationId,
       courseId: f.ownCourseId,
@@ -599,7 +585,6 @@ describe("createProduct", () => {
       image: "cava.jpg",
       unitId: f.largeGlass,
       categoryId: f.bottles,
-      labelIds: [],
       primaryCategoryId: f.bottles,
     });
   });

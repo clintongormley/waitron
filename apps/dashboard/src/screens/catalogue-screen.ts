@@ -13,7 +13,6 @@ import type {
   DashboardApi,
   ExtraList,
   ExtraListInput,
-  LabelSummary,
   LibrarySection,
   MenuStructure,
   OptionList,
@@ -96,7 +95,6 @@ export class CatalogueScreen extends LitElement {
   @state() private contentLanguages: ContentLanguages | null = null;
   @state() private catalogues: CatalogueSummary[] = [];
   @state() private categories: CategorySummary[] = [];
-  @state() private labels: LabelSummary[] = [];
   @state() private units: Unit[] = [];
   @state() private extraLists: ExtraList[] = [];
   @state() private optionLists: OptionList[] = [];
@@ -189,9 +187,6 @@ export class CatalogueScreen extends LitElement {
         }),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
-        }),
-        this.#queries.watch("listLabels", [], (value) => {
-          this.labels = value;
         }),
         this.#queries.watch("listUnits", [], (value) => {
           this.units = value;
@@ -603,7 +598,6 @@ export class CatalogueScreen extends LitElement {
           ? html`<dashboard-product-list
               .products=${this.products}
               .categories=${this.categories}
-              .labels=${this.labels}
               .extraLists=${this.extraLists}
               .optionLists=${this.optionLists}
               @edit-product=${(event: CustomEvent<{ productId: string }>) => {
@@ -635,7 +629,6 @@ export class CatalogueScreen extends LitElement {
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}
-        .labels=${this.labels}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .stations=${this.stations}
@@ -778,8 +771,6 @@ function missingChoiceField(
   if (code === "station.not_found" && named("stationId", submitted.stationId))
     return "product-station";
   if (code === "course.not_found" && named("courseId", submitted.courseId)) return "product-course";
-  if (code === "label.not_found" && submitted.labelIds.some((id) => named("labelId", id)))
-    return "labels";
   if (code === "product.variant_not_found") {
     const index = submitted.variants.findIndex((variant) => named("variantId", variant.id));
     if (index !== -1) return `variant-${index}-name`;

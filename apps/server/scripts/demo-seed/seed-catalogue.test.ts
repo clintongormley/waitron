@@ -179,14 +179,6 @@ describe("seedCatalogues", () => {
         join products v on v.parent_id = p.id
         where p.name = 'Café' and p.parent_id is null
         group by p.id, c.name`);
-      // Two labels that overlap on some drinks, and one that crosses into a soft drink: the demo
-      // shows a label is independent of the category tree and of other labels.
-      const { rows: labelled } = await tx.execute<{ label: string; product: string }>(sql`
-        select l.name as label, p.name as product
-        from labels l
-        join product_labels pl on pl.label_id = l.id
-        join products p on p.id = pl.product_id
-        order by l.name, p.name`);
       const { rows: coffeeVariants } = await tx.execute<{
         name: string;
         customer_en: string | null;
@@ -248,7 +240,6 @@ describe("seedCatalogues", () => {
         drinksRoute,
         charcuterieRoute,
         editorDemo,
-        labelled,
         coffeeVariants,
         threeNames,
         distinctNames,
@@ -304,14 +295,6 @@ describe("seedCatalogues", () => {
         // The menu overrides nothing, so each variant sells at its own price there.
         menu_overrides: 0,
       },
-    ]);
-    expect(res.labelled).toEqual([
-      { label: "Alcoholic", product: "Caña" },
-      { label: "Alcoholic", product: "Negroni" },
-      { label: "Alcoholic", product: "Tinto casa" },
-      { label: "Happy hour drinks", product: "Caña" },
-      { label: "Happy hour drinks", product: "Cola soft drink" },
-      { label: "Happy hour drinks", product: "Tinto casa" },
     ]);
     expect(res.coffeeVariants).toEqual([
       { name: "Café solo", customer_en: "Espresso", kitchen_name: "ESPRESSO" },

@@ -54,7 +54,6 @@ function variant(id: string, name: string, unitPrice: string | null) {
       unitPrice: unitPrice ?? "3.00",
       vatClass: "general" as const,
       primaryCategoryId: null,
-      labelIds: [],
     },
   };
 }

@@ -27,7 +27,6 @@ const coffee: ProductEditorDraft = {
   variants: [],
   allergens: { milk: { presence: "may_contain" } },
   dietaryDeclarations: ["vegan"],
-  labelIds: [],
   primaryCategoryId: "drinks",
   modifiers: [],
   stationId: "bar",
@@ -88,7 +87,6 @@ const variantPage: ProductEditorDraft = {
     unitPrice: "3.00",
     vatClass: "reduced",
     unitId: "each",
-    labelIds: ["happy"],
     primaryCategoryId: "drinks",
     stationId: "bar",
     courseId: "starters",
@@ -103,7 +101,6 @@ const variantPage: ProductEditorDraft = {
   vatClass: null,
   allergens: null,
   dietaryDeclarations: null,
-  labelIds: [],
   primaryCategoryId: null,
   stationId: null,
   courseId: null,
@@ -159,7 +156,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
                   : state === "variant-page"
                     ? variantPage
                     : state === "categories"
-                      ? { ...coffee, labelIds: ["alcoholic", "happy"] }
+                      ? { ...coffee, primaryCategoryId: "food" }
                       : state === "ordering"
                         ? { ...coffee, ordering: "staff_only" }
                         : coffee,
@@ -168,10 +165,6 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         categories: [
           { id: "drinks", name: { en: "Drinks" }, image: null, color: "#3355aa", parentId: null },
           { id: "food", name: { en: "Food" }, image: null, color: null, parentId: null },
-        ],
-        labels: [
-          { id: "alcoholic", name: "Alcoholic" },
-          { id: "happy", name: "Happy hour drinks" },
         ],
         stations: [{ id: "bar", name: "Bar" }],
         courses: [{ id: "starters", name: "Starters" }],
@@ -192,8 +185,12 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     }
     if (state === "errors") el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     if (state === "categories") {
-      // Without this the scan could pass on an editor that drew no chosen labels.
-      expect(el.shadowRoot!.querySelectorAll("[data-test=label-chips] wt-lozenge")).toHaveLength(2);
+      // Without this the scan could pass on an editor that drew no chosen category.
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+          'wt-combobox[name="primary"]',
+        )!.value,
+      ).toBe("food");
     }
     if (state === "inactive") {
       // Without this the scan could pass on an editor that never drew the notice and Restore.
@@ -236,7 +233,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
     await el.updateComplete;
     if (state === "variant-page") {
       // Without these the scan could pass on a page that drew none of its hints.
-      for (const name of ["labels-hint", "allergens-hint", "dietary-hint"])
+      for (const name of ["allergens-hint", "dietary-hint"])
         expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).not.toBeNull();
       const description =
         el.shadowRoot!.querySelector<HTMLTextAreaElement>("[name=description-en]")!;

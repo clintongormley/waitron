@@ -8,14 +8,13 @@ import "@waitron/ui/src/components/wt-row-actions.js";
 import { t, currentLocale } from "../i18n/t.js";
 import { allergenState, allergenStateName, vatClassName } from "../i18n/domain.js";
 import { categoryPath } from "./category-form.js";
-import { labelsText } from "./classification-fields.js";
 import { priceSearchText } from "./form-fields.js";
 import {
   modifierListName,
   modifierListNames,
   type ModifierListChoice,
 } from "./product-editor-model.js";
-import type { CategorySummary, Label, Product } from "../api/client.js";
+import type { CategorySummary, Product } from "../api/client.js";
 import {
   PRODUCT_ORDERINGS,
   type ProductOrdering,
@@ -88,7 +87,6 @@ export class ProductList extends LitElement {
 
   @property({ attribute: false }) products: Product[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
-  @property({ attribute: false }) labels: Label[] = [];
   @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
 
@@ -134,17 +132,10 @@ export class ProductList extends LitElement {
       : t("editor.missing_choice");
   }
 
-  /** A variant's row reads the values it is reported under, which the server resolves: its own
-   * main category or its parent's, and always its parent's labels. */
-  #values({ product, variant }: ProductRow): {
-    primaryCategoryId: string | null;
-    labelIds: string[];
-  } {
+  /** A variant's row reads the main category it is reported under, which the server resolves: its
+   * own or its parent's. */
+  #values({ product, variant }: ProductRow): { primaryCategoryId: string | null } {
     return variant?.effective ?? product;
-  }
-
-  #labels(row: ProductRow): string {
-    return labelsText(this.#values(row).labelIds, this.labels, t("editor.missing_choice"));
   }
 
   #modifierNames(product: Product): string {
@@ -207,13 +198,6 @@ export class ProductList extends LitElement {
         label: t("editor.main_category"),
         cell: (row) => this.#category(this.#values(row).primaryCategoryId),
         searchValue: (row) => this.#category(this.#values(row).primaryCategoryId),
-      },
-      {
-        key: "labels",
-        choosable: "shown",
-        label: t("labels.field"),
-        cell: (row) => this.#labels(row),
-        searchValue: (row) => this.#labels(row),
       },
       {
         key: "price",

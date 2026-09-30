@@ -9,14 +9,12 @@ import {
   assignCatalogueToLocation,
   createCatalogue,
   createCategory,
-  createLabel,
   createProduct,
   createSection,
   createUnit,
   menuItems,
   renameCatalogue,
   requireMenuRoot,
-  setProductLabels,
   setProductVariants,
   writeContentLanguages,
 } from "@waitron/catalogue";
@@ -195,21 +193,6 @@ export async function seedCatalogues(
   const casaId = await seedOne(CASA_DELGADO, provisionedMenus[0]?.id);
   const diaId = await seedOne(MENU_DEL_DIA);
   const deliId = await seedOne(DELI_TAKEAWAY);
-
-  // Two labels that overlap, one of them crossing into a soft drink.
-  const alcoholic = await createLabel(tx, "Alcoholic");
-  const happyHour = await createLabel(tx, "Happy hour drinks");
-  const labelled: [string, string[]][] = [
-    ["negroni.png", [alcoholic.id]],
-    ["vino-tinto.png", [alcoholic.id, happyHour.id]],
-    ["cana-cerveza.png", [alcoholic.id, happyHour.id]],
-    ["refresco-cola.png", [happyHour.id]],
-  ];
-  for (const [image, labelIds] of labelled) {
-    const productId = productsByImage.get(image);
-    if (productId === undefined) throw new Error(`demo-seed: '${image}' was not created`);
-    await setProductLabels(tx, productId, labelIds);
-  }
 
   const negroniId = productsByImage.get("negroni.png");
   if (negroniId === undefined) throw new Error("demo-seed: Negroni product was not created");

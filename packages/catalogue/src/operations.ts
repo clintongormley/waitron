@@ -10,10 +10,8 @@ import {
   stringToCents,
 } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
-import { productLabels } from "./schema/labels.js";
 import { readContentLanguages } from "./content-languages.js";
 import { readCategory, setMainReportingCategory } from "./categories.js";
-import { labelIdArray } from "./labels.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
 import type { Transaction } from "@waitron/db";
@@ -60,7 +58,6 @@ import {
   clearedPricingUnit,
   effectiveProductColumns as effective,
   isTopLevelProduct,
-  labelOwnerJoin,
   parentJoin,
   parentProducts,
   productWithId,
@@ -238,13 +235,12 @@ interface RawProduct {
 
 // `pricing_unit`/`vat_class` are constrained to their unions by a CHECK (catalogue.ts), which is
 // what makes the casts below safe.
-function toProduct(row: RawProduct, labelIds: string[], variants: ListedVariant[] = []): Product {
+function toProduct(row: RawProduct, variants: ListedVariant[] = []): Product {
   const { unitName, unitAbbreviation, unitPrecision, hardwareUnit, ...product } = row;
   const unit = sellableUnit(row.unitId, unitName, unitPrecision, hardwareUnit, unitAbbreviation);
   return {
     ...product,
     unitPrice: centsToDecimal(row.unitPrice),
-    labelIds,
     primaryCategoryId: row.categoryId,
     modifiers: [],
     unit,
@@ -921,28 +917,22 @@ export async function createProduct(tx: Transaction, input: CreateProductInput):
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .where(eq(products.id, row!.id));
-  // Created just now, so it carries no labels yet.
-  return toProduct(created!, []);
+  return toProduct(created!);
 }
 
 export async function listProducts(tx: Transaction, catalogueId?: string): Promise<Product[]> {
   const rows = await tx
-    .select({
-      ...PRODUCT_COLUMNS,
-      labelIds: labelIdArray,
-    })
+    .select(PRODUCT_COLUMNS)
     .from(products)
     .leftJoin(parentProducts, parentJoin)
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
-    .leftJoin(productLabels, labelOwnerJoin)
     .where(
       and(
         isTopLevelProduct,
         catalogueId === undefined ? undefined : eq(products.catalogueId, catalogueId),
       ),
     )
-    .groupBy(products.id, units.id)
     .orderBy(products.createdAt, products.id);
   if (rows.length === 0) return [];
   const modifiers = await readProductModifiers(
@@ -955,7 +945,7 @@ export async function listProducts(tx: Transaction, catalogueId?: string): Promi
     rows.map((row) => row.id),
   );
   return rows.map((row) => ({
-    ...toProduct(row, row.labelIds, variantsByProduct.get(row.id) ?? []),
+    ...toProduct(row, variantsByProduct.get(row.id) ?? []),
     modifiers: modifiers.get(row.id) ?? [],
   }));
 }
@@ -980,24 +970,13 @@ async function listedVariantsOfProducts(
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
       primaryCategoryId: effective.categoryId,
-      labelIds: labelIdArray,
     })
     .from(products)
     .leftJoin(parentProducts, parentJoin)
-    .leftJoin(productLabels, labelOwnerJoin)
     .where(inArray(products.parentId, [...productIds]))
-    .groupBy(products.id)
     .orderBy(products.parentId, products.variantOrder, products.id);
   const grouped = new Map<string, ListedVariant[]>();
-  for (const {
-    parentId,
-    ownPrice,
-    unitPrice,
-    vatClass,
-    primaryCategoryId,
-    labelIds,
-    ...row
-  } of rows) {
+  for (const { parentId, ownPrice, unitPrice, vatClass, primaryCategoryId, ...row } of rows) {
     const held = grouped.get(parentId!) ?? [];
     held.push({
       ...row,
@@ -1006,7 +985,6 @@ async function listedVariantsOfProducts(
         unitPrice: centsToDecimal(unitPrice),
         vatClass: vatClass as VatClass,
         primaryCategoryId,
-        labelIds,
       },
     });
     grouped.set(parentId!, held);

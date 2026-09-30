@@ -4264,7 +4264,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     The same keydown guard is on other dashboard forms. The tests of six of them press a real Escape
     during a save and pass with the dialog still open: "keeps the editor open when Escape is pressed
     during a save" (`apps/dashboard/src/widgets/category-form.test.ts`), "saves once and stays open
-    against Escape while a save is in flight" (`apps/dashboard/src/screens/labels-panel.test.ts`),
+    against Escape while a save is in flight" (`apps/dashboard/src/screens/labels-panel.test.ts`,
+    deleted with product labels on 2026-09-30),
     the three "keeps the … open against Escape" cases in
     `apps/dashboard/src/screens/categories-screen.test.ts`, "holds the draft open and unchanged
     while a save is in flight" (`apps/dashboard/src/widgets/content-languages.test.ts`), "ignores
@@ -5958,7 +5959,8 @@ ongoing overhaul listed at the top of Track A.
   form's buttons, because it also reports a refused Turn off, when no form is open; the cloud
   services screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons,
   and shows a refusal as a plain alert; the delete confirmations in
-  `apps/dashboard/src/screens/labels-panel.ts` and `apps/dashboard/src/screens/sections-screen.ts`
+  `apps/dashboard/src/screens/labels-panel.ts` (deleted with product labels on 2026-09-30) and
+  `apps/dashboard/src/screens/sections-screen.ts`
   keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image

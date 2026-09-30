@@ -19,12 +19,6 @@ import {
   deleteCategory,
   setMainReportingCategory,
   listCategoryProducts,
-  listLabels,
-  createLabel,
-  renameLabel,
-  deleteLabel,
-  readProductLabels,
-  setProductLabels,
   listSections,
   listMembers,
   readSection,
@@ -127,26 +121,10 @@ export interface CatalogueApiDeps {
  */
 const CATALOGUE_WRITE_PERMISSION: Permission = "person.manage";
 
-/** A label body's `name`, shape only: `createLabel`/`renameLabel` trim it and refuse a blank. */
-async function requireLabelName(c: Context): Promise<string> {
-  const body = await readJsonBody<{ name?: unknown }>(c);
-  if (typeof body.name !== "string")
-    throw new AppError("management.request_invalid", { field: "name" });
-  return body.name;
-}
-
 function nullOrUuid(value: unknown, field: string): string | null {
   if (value !== null && (typeof value !== "string" || !isUuid(value)))
     throw new AppError("management.request_invalid", { field });
   return value;
-}
-
-async function requireTopLevelProduct(tx: Transaction, productId: string): Promise<void> {
-  const [row] = await tx
-    .select({ id: products.id })
-    .from(products)
-    .where(productWithId(productId, "top-level"));
-  if (!row) throw new AppError("product.not_found", { productId });
 }
 
 function categoryInput(body: Record<string, unknown>, creating: boolean): Partial<CategoryInput> {
@@ -243,9 +221,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "category.not_found": 404,
   "category.color_invalid": 400,
   "category.reassign_invalid": 400,
-  "label.invalid": 400,
-  "label.not_found": 404,
-  "label.name_taken": 409,
   "menu_item.not_found": 404,
   // A menu offer asked for a variant, which follows its parent onto the menu instead.
   "menu_item.variant_not_allowed": 400,
@@ -1160,69 +1135,6 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const body = await readJsonBody<{ primaryCategoryId?: unknown }>(c);
       const categoryId = nullOrUuid(body.primaryCategoryId, "primaryCategoryId");
       return c.json(await gated(session, (tx) => setMainReportingCategory(tx, id, categoryId)));
-    }),
-  );
-
-  app.get("/management-api/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      return c.json(await gated(session, (tx) => listLabels(tx)));
-    }),
-  );
-  app.post("/management-api/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const name = await requireLabelName(c);
-      return c.json(await gated(session, (tx) => createLabel(tx, name)), 201);
-    }),
-  );
-  app.patch("/management-api/labels/:id", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "LabelId");
-      const name = await requireLabelName(c);
-      return c.json(await gated(session, (tx) => renameLabel(tx, id, name)));
-    }),
-  );
-  app.delete("/management-api/labels/:id", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "LabelId");
-      await gated(session, (tx) => deleteLabel(tx, id));
-      return c.body(null, 204);
-    }),
-  );
-  // A variant's id answers as an unknown id on both; the editor carries a variant's inherited
-  // labels.
-  app.get("/management-api/products/:id/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "ProductId");
-      return c.json(
-        await gated(session, async (tx) => {
-          await requireTopLevelProduct(tx, id);
-          return { labelIds: await readProductLabels(tx, id) };
-        }),
-      );
-    }),
-  );
-  app.put("/management-api/products/:id/labels", (c) =>
-    run(c, log, async () => {
-      const session = requireManagementSession(c);
-      const id = requireUuidParam(c.req.param("id"), "ProductId");
-      const body = await readJsonBody<{ labelIds?: unknown }>(c);
-      if (
-        !Array.isArray(body.labelIds) ||
-        body.labelIds.some((labelId) => typeof labelId !== "string" || !isUuid(labelId))
-      )
-        throw new AppError("management.request_invalid", { field: "labelIds" });
-      const labelIds = body.labelIds as string[];
-      return c.json(
-        await gated(session, async (tx) => {
-          await requireTopLevelProduct(tx, id);
-          return { labelIds: await setProductLabels(tx, id, labelIds) };
-        }),
-      );
     }),
   );
 

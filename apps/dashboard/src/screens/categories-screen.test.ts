@@ -49,14 +49,12 @@ const product: Product = {
   description: null,
   kitchenName: null,
   dietaryDeclarations: [],
-  labelIds: ["l-happy"],
   primaryCategoryId: "food",
   active: true,
   available: true,
   ordering: "public",
   variants: [],
 };
-const happyHour = { id: "l-happy", name: "Happy hour drinks", productCount: 1 };
 function apiFixture() {
   const api = {
     getContentLanguages: vi
@@ -67,7 +65,6 @@ function apiFixture() {
     createCategory: vi.fn().mockResolvedValue({ ...food, id: "new" }),
     updateCategory: vi.fn().mockResolvedValue(food),
     deleteCategory: vi.fn().mockResolvedValue(undefined),
-    listLabels: vi.fn().mockResolvedValue([happyHour]),
     setMainCategory: vi.fn().mockResolvedValue({ primaryCategoryId: null }),
     getCategoryDependants: vi
       .fn()
@@ -212,7 +209,6 @@ it("opens the products modal from the name and lists members with lozenges", asy
     ...product,
     id: "r",
     name: "Napkin",
-    labelIds: [],
     primaryCategoryId: "food",
   };
   fx.api.listCategories.mockResolvedValue([{ ...food, color: "#2244aa" }, drink]);
@@ -236,25 +232,14 @@ it("opens the products modal from the name and lists members with lozenges", asy
   expect(products.rows.map((row) => (row as { id: string }).id).sort()).toEqual(["p", "r"]);
   const lozenges = [...products.shadowRoot!.querySelectorAll("wt-lozenge")];
   expect(lozenges.some((lozenge) => lozenge.textContent?.trim() === "Food")).toBe(true);
-  // "Napkin" carries no labels, so its Labels cell falls back to the muted dash. The cell lands in the TABLE's shadow root, so read the painted colour back:
-  // presence alone passes while the dash renders unmuted.
-  const dash = products.shadowRoot!.querySelector<HTMLElement>('[part~="muted"]');
-  expect(dash).not.toBeNull();
-  expect(dash!.textContent!.trim()).toBe("—");
-  const mutedToken = getComputedStyle(el).getPropertyValue("--wt-color-text-muted").trim();
-  expect(getComputedStyle(dash!).color).toBe(hexToRgb(mutedToken));
-  // A control in the other direction: a cell that is NOT muted paints the ordinary text colour, so
-  // the assertion above is reading the muting and not simply the inherited default.
-  const plain = products.shadowRoot!.querySelector<HTMLElement>("td")!;
-  expect(getComputedStyle(plain).color).not.toBe(hexToRgb(mutedToken));
 });
 
 // The add-products list picks rows with the table's own per-row checkboxes, inside the table's
 // shadow root. Selecting two rows and pressing Add sends both ids in one call.
 it("adds products via the table's own per-row selection in one call", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null };
-  const r: Product = { ...product, id: "r", name: "Napkin", labelIds: [], primaryCategoryId: null };
+  const q: Product = { ...product, id: "q", name: "Juice", primaryCategoryId: null };
+  const r: Product = { ...product, id: "r", name: "Napkin", primaryCategoryId: null };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -300,8 +285,8 @@ it("adds products via the table's own per-row selection in one call", async () =
 // then sends the whole picked set.
 it("adds products using the table's own select-all", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null };
-  const r: Product = { ...product, id: "r", name: "Napkin", labelIds: [], primaryCategoryId: null };
+  const q: Product = { ...product, id: "q", name: "Juice", primaryCategoryId: null };
+  const r: Product = { ...product, id: "r", name: "Napkin", primaryCategoryId: null };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -517,28 +502,6 @@ it("shows no warning block when nothing depends on the category", async () => {
   expect(modal.querySelector('[data-test="delete-warning"]')).toBeNull();
   expect(modal.querySelector('wt-data-table[data-test="category-delete-products"]')).toBeNull();
   expect(modal.querySelector("wt-spinner")).toBeNull();
-});
-
-// A product's search haystack includes its labels, not only its name and main category.
-it("finds a product by one of its labels", async () => {
-  const fx = apiFixture();
-  fx.api.listLibraryProducts.mockResolvedValue([product, { ...product, id: "q", labelIds: [] }]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(2),
-  );
-  await openProducts(el, "food");
-  const members = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
-    'wt-data-table[data-test="category-products"]',
-  )!;
-  await members.updateComplete;
-  expect(members.shadowRoot!.querySelector('tr[data-row-key="p"]')!.textContent).toContain(
-    "Happy hour drinks",
-  );
-  await typeInto(el, "category-products", "Happy hour");
-  expect(renderedKeys(el, "category-products")).toEqual(["p"]);
 });
 
 // Since the delete cascades rather than being refused, this preview is the ONLY warning a manager
@@ -1086,7 +1049,6 @@ it("starts the add-products list with an empty search each time it opens", async
     ...product,
     id: "q",
     name: "Juice",
-    labelIds: [],
     primaryCategoryId: null,
   };
   fx.api.listLibraryProducts.mockResolvedValue([product, juice]);
@@ -1209,8 +1171,8 @@ it("restores the categories table's sort after the screen is reopened, but not i
 
 it("keeps a picked product picked after a search hides it, and adds it with the rest", async () => {
   const fx = apiFixture();
-  const q: Product = { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null };
-  const r: Product = { ...product, id: "r", name: "Napkin", labelIds: [], primaryCategoryId: null };
+  const q: Product = { ...product, id: "q", name: "Juice", primaryCategoryId: null };
+  const r: Product = { ...product, id: "r", name: "Napkin", primaryCategoryId: null };
   fx.api.listLibraryProducts.mockResolvedValue([q, r]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -1752,9 +1714,7 @@ it("keeps the products dialog open when a different category is deleted", async 
 
 it("adds nothing when Add is pressed with no product picked", async () => {
   const fx = apiFixture();
-  fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, id: "q", labelIds: [], primaryCategoryId: null },
-  ]);
+  fx.api.listLibraryProducts.mockResolvedValue([{ ...product, id: "q", primaryCategoryId: null }]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
@@ -1773,7 +1733,7 @@ it("adds nothing when Add is pressed with no product picked", async () => {
 async function pickForFood() {
   const fx = apiFixture();
   fx.api.listLibraryProducts.mockResolvedValue([
-    { ...product, id: "q", name: "Juice", labelIds: [], primaryCategoryId: null },
+    { ...product, id: "q", name: "Juice", primaryCategoryId: null },
   ]);
   const mounted = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -2472,54 +2432,10 @@ it("words a one-product move in the singular", async () => {
   ).toBe("Move 1 product to Food?");
 });
 
-describe("tabs", () => {
-  beforeEach(() => history.replaceState(null, "", "/manage/categories"));
-  function tabs(el: CategoriesScreen) {
-    return el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!;
-  }
-
-  it("records the Labels tab in the path and walks back to the categories", async () => {
-    const { el } = await mount();
-    expect(tabs(el).value).toBe("categories");
-    expect(location.pathname).toBe("/manage/categories/view/categories");
-    tabs(el).dispatchEvent(
-      new CustomEvent("wt-tab-change", {
-        detail: { value: "labels" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await el.updateComplete;
-    expect(location.pathname).toBe("/manage/categories/view/labels");
-    expect(el.shadowRoot!.querySelector('[slot="labels"] dashboard-labels-panel')).not.toBeNull();
-    history.back();
-    await vi.waitFor(() => expect(location.pathname).toBe("/manage/categories/view/categories"));
-    await vi.waitFor(() => expect(tabs(el).value).toBe("categories"));
-  });
-
-  it("opens on the Labels tab when the path names it", async () => {
-    history.replaceState(null, "", "/manage/categories/view/labels");
-    const { el } = await mount();
-    expect(tabs(el).value).toBe("labels");
-  });
-
-  it("falls back to the categories for an unknown tab without adding a history entry", async () => {
-    history.replaceState(null, "", "/manage/categories/view/bogus");
-    const before = history.length;
-    const { el } = await mount();
-    expect(tabs(el).value).toBe("categories");
-    expect(location.pathname).toBe("/manage/categories/view/categories");
-    expect(history.length).toBe(before);
-  });
-
-  it("ignores a change event from a control inside a tab", async () => {
-    const { el } = await mount();
-    el.shadowRoot!.querySelector('[slot="categories"]')!.dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "labels" }, bubbles: true, composed: true }),
-    );
-    await el.updateComplete;
-    expect(tabs(el).value).toBe("categories");
-  });
+it("shows the categories without a tab bar or a Labels tab", async () => {
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
+  expect(el.shadowRoot!.querySelector("dashboard-labels-panel")).toBeNull();
 });
 
 describe("at phone width", () => {

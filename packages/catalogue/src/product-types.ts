@@ -76,8 +76,6 @@ export interface ListedVariant extends ProductVariant {
     unitPrice: string;
     vatClass: VatClass;
     primaryCategoryId: string | null;
-    /** The parent's: a variant carries no labels of its own. */
-    labelIds: string[];
   };
 }
 
@@ -95,8 +93,6 @@ export interface Product {
   /** The main reporting category, or null for Uncategorised. `primaryCategoryId` is the same value. */
   categoryId: string | null;
   primaryCategoryId: string | null;
-  /** The product's label ids, sorted. */
-  labelIds: string[];
   /** The plain staff-facing name — what the dashboard, the till buttons and the sales reports show.
    * NOT NULL, so nothing downstream needs a fallback for it. */
   name: string;
@@ -164,8 +160,6 @@ export interface ProductEditorInput {
   vatClass: VatClass | null;
   /** Empty on a variant, which has no variants of its own. */
   variants: ProductVariantInput[];
-  /** Replaces the product's labels. Empty on a variant, which reads its parent's. */
-  labelIds: string[];
   /** The main reporting category: any category, or null — Uncategorised on a product, "follow the
    * parent's" on a variant. */
   primaryCategoryId: string | null;
@@ -193,7 +187,6 @@ export interface InheritedValues {
   unitPrice: string;
   vatClass: VatClass;
   unitId: string | null;
-  labelIds: string[];
   primaryCategoryId: string | null;
   stationId: string | null;
   courseId: string | null;

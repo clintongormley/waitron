@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { DashboardApi } from "./client.js";
-import { dashboardQuery } from "./live-queries.js";
+import { QUERY_DEPENDENCIES, dashboardQuery } from "./live-queries.js";
 
 it("counts the initial screen read as activity and subsequent refreshes as passive", async () => {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
@@ -75,10 +75,7 @@ it.each([
     ["extra_lists", "extra_list_items", "product_modifiers", "menu_item_extra_lists"],
   ],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
-  // A label's product count is read from `product_labels` (`listLabels`, packages/catalogue/src/labels.ts).
-  ["listLabels", [], ["labels", "product_labels"]],
-  ["getProductLabels", ["p1"], ["products", "product_labels"]],
-  ["listLibraryProducts", [], ["products", "product_labels"]],
+  ["listLibraryProducts", [], ["products"]],
   // `listSections` and `librarySectionUsages` (packages/catalogue/src/sections.ts); the usages
   // also name each menu from `catalogues`.
   ["listSections", [], ["sections", "section_members"]],
@@ -131,7 +128,7 @@ it.each([
   [
     "listCategoryProducts",
     ["c1", { includeDescendants: true }],
-    ["categories", "category_details", "products", "product_labels"],
+    ["categories", "category_details", "products"],
   ],
 ] as const)(
   "subscribes %s to exactly the tables its read selects from",
@@ -145,4 +142,10 @@ it("refreshes the bucket copy's settings every ten seconds, and depends on `back
   const query = dashboardQuery(new DashboardApi("", vi.fn()), "getStreamSettings", []);
   expect(query.dependencies).toEqual([{ type: "backup_status" }]);
   expect(query.refreshMs).toBe(10_000);
+});
+
+it("subscribes no read to the product label tables, which products no longer carry", () => {
+  const named = Object.values(QUERY_DEPENDENCIES).flat();
+  expect(named).not.toContain("labels");
+  expect(named).not.toContain("product_labels");
 });

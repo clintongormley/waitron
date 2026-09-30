@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, type TemplateResult } from "lit";
-import { categoryField, labelsField, labelsText } from "./classification-fields.js";
-import type { CategorySummary, Label } from "../api/client.js";
+import { categoryField } from "./classification-fields.js";
+import type { CategorySummary } from "../api/client.js";
 
 let host: HTMLDivElement;
 beforeEach(() => {
@@ -14,12 +14,10 @@ type Combobox = HTMLElement & {
   updateComplete: Promise<unknown>;
   options: { value: string; label: string }[];
   value: string;
-  values: string[];
   placeholder: string;
   error: string;
   disabled: boolean;
   label: string;
-  multiple: boolean;
 };
 
 const food: CategorySummary = {
@@ -44,8 +42,6 @@ const drinks: CategorySummary = {
   parentId: null,
 };
 const languages = { defaultLanguage: "es", languages: ["es"] };
-const alcoholic: Label = { id: "l-alc", name: "Alcoholic" };
-const happy: Label = { id: "l-happy", name: "Happy hour drinks" };
 
 async function mount(template: TemplateResult): Promise<Combobox> {
   render(template, host);
@@ -54,7 +50,7 @@ async function mount(template: TemplateResult): Promise<Combobox> {
   return combobox;
 }
 
-function pick(combobox: HTMLElement, detail: { value: string } | { values: string[] }): void {
+function pick(combobox: HTMLElement, detail: { value: string }): void {
   combobox.dispatchEvent(new CustomEvent("wt-change", { detail, bubbles: true, composed: true }));
 }
 
@@ -151,53 +147,4 @@ it("reports a picked category, and none as null, without letting the combobox's 
   pick(combobox, { value: "" });
   expect(change.mock.calls).toEqual([["food"], [null]]);
   expect(escaped).not.toHaveBeenCalled();
-});
-
-it("offers every label by name, sorted, and lists the chosen ones as lozenges", async () => {
-  const change = vi.fn();
-  const combobox = await mount(
-    labelsField({ labels: [happy, alcoholic], value: ["l-happy"], disabled: false, change }),
-  );
-  expect(combobox.getAttribute("name")).toBe("labels");
-  expect(combobox.multiple).toBe(true);
-  expect(combobox.options).toEqual([
-    { value: "l-alc", label: "Alcoholic" },
-    { value: "l-happy", label: "Happy hour drinks" },
-  ]);
-  expect(combobox.values).toEqual(["l-happy"]);
-  expect([...host.querySelectorAll("wt-lozenge")].map((chip) => chip.textContent)).toEqual([
-    "Happy hour drinks",
-  ]);
-  pick(combobox, { values: ["l-happy", "l-alc"] });
-  expect(change).toHaveBeenCalledWith(["l-happy", "l-alc"]);
-});
-
-const promo10: Label = { id: "l-10", name: "Promo 10" };
-const promo9: Label = { id: "l-9", name: "Promo 9" };
-
-it("offers and shows numbered labels by value, as the tables do", async () => {
-  const combobox = await mount(
-    labelsField({
-      labels: [promo10, promo9],
-      value: ["l-10", "l-9"],
-      disabled: false,
-      change: () => {},
-    }),
-  );
-  expect(combobox.options.map((option) => option.label)).toEqual(["Promo 9", "Promo 10"]);
-  expect([...host.querySelectorAll("wt-lozenge")].map((chip) => chip.textContent)).toEqual([
-    "Promo 9",
-    "Promo 10",
-  ]);
-});
-
-it("names numbered labels by value, as the tables do", () => {
-  expect(labelsText(["l-10", "l-9"], [promo10, promo9], "Missing")).toBe("Promo 9, Promo 10");
-});
-
-it("names a product's labels sorted by name, marking one that no longer exists", () => {
-  expect(labelsText(["l-happy", "gone", "l-alc"], [alcoholic, happy], "Missing")).toBe(
-    "Alcoholic, Happy hour drinks, Missing",
-  );
-  expect(labelsText([], [alcoholic, happy], "Missing")).toBe("");
 });

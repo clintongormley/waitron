@@ -354,7 +354,7 @@ it("lists the products whose main category is a category, or one below it", asyn
   ).toEqual([p1Id, p2Id].sort());
   expect(
     await app((tx) => listCategoryProducts(tx, xId, { includeDescendants: true })),
-  ).toMatchObject([{ id: p1Id, primaryCategoryId: xId, labelIds: [] }]);
+  ).toMatchObject([{ id: p1Id, primaryCategoryId: xId }]);
   expect(await app((tx) => listCategoryProducts(tx, eggsId, { includeDescendants: true }))).toEqual(
     [],
   );

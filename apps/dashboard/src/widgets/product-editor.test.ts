@@ -10,7 +10,7 @@ import {
   productEditorTranslationField,
 } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft } from "./product-editor-model.js";
-import type { CategorySummary, ExtraList, Label, OptionList } from "../api/client.js";
+import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
 import type { InheritedValues } from "@waitron/catalogue/src/product-types.js";
 import { localToday, vatRateOn } from "@waitron/catalogue/src/vat-rates.js";
 import { formatMoney } from "@waitron/shared";
@@ -38,7 +38,6 @@ const product: ProductEditorDraft = {
   ordering: "public",
   vatClass: "reduced",
   variants: [],
-  labelIds: [],
   primaryCategoryId: null,
   modifiers: [],
   allergens: null,
@@ -1086,10 +1085,6 @@ it("returns focus to the Modifiers control after every nested form it can open",
   }
 });
 
-const labels: Label[] = [
-  { id: "l-happy", name: "Happy hour drinks" },
-  { id: "l-alc", name: "Alcoholic" },
-];
 type Combobox = HTMLElement & {
   value: string;
   values: string[];
@@ -1106,28 +1101,26 @@ async function pickIn(el: ProductEditor, name: string, detail: object) {
   await el.updateComplete;
 }
 
-it("chooses the main category and the labels in the editor itself, and saves no categoryIds", async () => {
+it("chooses the main category in the editor itself, and saves no categoryIds or labelIds", async () => {
   const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
     open: true,
-    value: { ...product, primaryCategoryId: "drinks", labelIds: ["l-happy"] },
+    value: { ...product, primaryCategoryId: "drinks" },
     locales: ["en"],
     units: [unit],
     taxChoices: reduced,
     categories,
-    labels,
   });
   expect(combobox(el, "primary")!.value).toBe("drinks");
-  expect(combobox(el, "labels")!.values).toEqual(["l-happy"]);
+  expect(combobox(el, "labels")).toBeNull();
   // "plates" is a category the product was never in: any category can be the main one.
   await pickIn(el, "primary", { value: "plates" });
-  await pickIn(el, "labels", { values: ["l-happy", "l-alc"] });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);
   save(el);
   const value = submit.mock.calls[0]![0].detail.value;
   expect(value.primaryCategoryId).toBe("plates");
-  expect(value.labelIds).toEqual(["l-happy", "l-alc"]);
   expect("categoryIds" in value).toBe(false);
+  expect("labelIds" in value).toBe(false);
 });
 
 it("offers Uncategorised as the main category, and saves it as none", async () => {
@@ -1138,7 +1131,6 @@ it("offers Uncategorised as the main category, and saves it as none", async () =
     units: [unit],
     taxChoices: reduced,
     categories,
-    labels,
   });
   expect(combobox(el, "primary")!.placeholder).toBe(t("categories.uncategorised"));
   expect(combobox(el, "primary")!.options[0]).toEqual({
@@ -1316,7 +1308,6 @@ it("saves station and course with a new product, without a separate routing even
     ordering: "public",
     vatClass: "general",
     variants: [],
-    labelIds: [],
     primaryCategoryId: null,
     modifiers: [],
     allergens: null,
@@ -1800,7 +1791,6 @@ it("maps a rejected product body's field onto the editor field that holds it", (
   expect(productEditorField("unitPrice", "es")).toBe("unit-price");
   expect(productEditorField("vatClass", "es")).toBe("tax");
   expect(productEditorField("primaryCategoryId", "es")).toBe("primary");
-  expect(productEditorField("labelIds", "es")).toBe("labels");
   expect(productEditorField("variants.2.unitPrice", "es")).toBe("variant-2-price");
   expect(productEditorField("variants.0.name", "es")).toBe("variant-0-name");
   // A refused attachment names a POSITION in the product's list; the Modifiers section holds one
@@ -2171,7 +2161,6 @@ const parentValues: InheritedValues = {
   unitPrice: "9.00",
   vatClass: "reduced",
   unitId: litre.id,
-  labelIds: ["l-happy", "l-alc"],
   primaryCategoryId: "drinks",
   stationId: "bar",
   courseId: "mains",
@@ -2191,7 +2180,6 @@ const glass: ProductEditorDraft = {
   unitId: null,
   unitPrice: null,
   vatClass: null,
-  labelIds: [],
   primaryCategoryId: null,
   allergens: null,
   dietaryDeclarations: null,
@@ -2220,7 +2208,6 @@ async function mountVariant(value: ProductEditorDraft = glass) {
       units: [unit, litre],
       taxChoices: taxes,
       categories,
-      labels,
       stations,
       courses,
       api: { imageLibraryRequest: vi.fn().mockResolvedValue({}) } as never,
@@ -2368,15 +2355,10 @@ it("marks a variant's own choice selected over the 'Same as' option", async () =
   expect(control<HTMLSelectElement>(el, "product-course").value).toBe("desserts");
 });
 
-it("hints the parent's category, labels, allergens, dietary declarations and photo beside their controls", async () => {
+it("hints the parent's category, allergens, dietary declarations and photo beside their controls", async () => {
   const el = await mountVariant();
   expect(combobox(el, "primary")!.placeholder).toBe(sameAs("Bebidas"));
   expect(combobox(el, "primary")!.options[0]).toEqual({ value: "", label: sameAs("Bebidas") });
-  // A variant carries no labels of its own, so its parent's are shown and cannot be changed here.
-  expect(hint(el, "labels-hint")).toBe(
-    `${t("labels.field")}: ${sameAs("Alcoholic, Happy hour drinks")}`,
-  );
-  expect(combobox(el, "labels")).toBeNull();
   expect(hint(el, "allergens-hint")).toBe(
     `${t("modifiers.allergens")}: ${sameAs(allergenName("milk"))}`,
   );
@@ -2416,7 +2398,6 @@ it("saves every field a variant left blank as null, so it keeps reading the pare
     image: null,
     allergens: null,
     dietaryDeclarations: null,
-    labelIds: [],
     primaryCategoryId: null,
     variants: [],
     modifiers: [],

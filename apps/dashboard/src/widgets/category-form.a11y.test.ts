@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { CategoryForm } from "./category-form.js";
 import { html, render } from "lit";
-import { categoryField, labelsField } from "./classification-fields.js";
+import { categoryField } from "./classification-fields.js";
 afterEach(cleanupWidgets);
 const category = {
   id: "food",
@@ -58,7 +58,7 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
   });
 
   it.each(["none", "chosen", "invalid", "disabled"] as const)(
-    "renders the main-category and labels fields %s accessibly",
+    "renders the main-category field %s accessibly",
     async (state) => {
       const { el, host } = await mountWidget<HTMLDivElement>("div", {}, theme);
       render(
@@ -72,23 +72,13 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
           error: state === "invalid" ? "Choose another category." : "",
           disabled: state === "disabled",
           change: () => {},
-        })}
-        ${labelsField({
-          labels: [
-            { id: "l1", name: "Alcoholic" },
-            { id: "l2", name: "Happy hour drinks" },
-          ],
-          value: state === "none" ? [] : ["l1", "l2"],
-          error: state === "invalid" ? "Choose each label once." : "",
-          disabled: state === "disabled",
-          change: () => {},
         })}`,
         el,
       );
       const fields = [
         ...el.querySelectorAll<HTMLElement & { updateComplete: Promise<unknown> }>("wt-combobox"),
       ];
-      expect(fields).toHaveLength(2);
+      expect(fields).toHaveLength(1);
       await Promise.all(fields.map((field) => field.updateComplete));
       await expectNoA11yViolations(host);
     },

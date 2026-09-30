@@ -1,15 +1,14 @@
-import { html, nothing } from "lit";
+import { html } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
-import type { CategorySummary, Label } from "../api/client.js";
+import type { CategorySummary } from "../api/client.js";
 import { byLabel, categoryPath } from "./category-form.js";
 import { currentLocale, t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "@waitron/ui/src/components/wt-lozenge.js";
 
 /**
- * A product's classification: ONE main category from the reporting tree, plus any number of flat
- * labels. These are field templates rather than an element, so each control is rendered into the
- * host's own shadow root and a refusal naming the field can focus it by `name`.
+ * One category chosen from the reporting tree. This is a field template rather than an element, so
+ * the control is rendered into the host's own shadow root and a refusal naming the field can focus
+ * it by `name`.
  */
 
 export interface CategoryFieldOptions {
@@ -52,58 +51,4 @@ export function categoryField(options: CategoryFieldOptions) {
       options.change(event.detail.value || null);
     }}
   ></wt-combobox>`;
-}
-
-export interface LabelsFieldOptions {
-  labels: readonly Label[];
-  value: readonly string[];
-  error?: string;
-  disabled: boolean;
-  change: (ids: string[]) => void;
-}
-
-const byName = (a: Label, b: Label) => byLabel(a.name, b.name);
-
-export function labelsField(options: LabelsFieldOptions) {
-  const chosen = options.labels.filter((label) => options.value.includes(label.id)).sort(byName);
-  return html`<wt-combobox
-      name="labels"
-      multiple
-      label=${t("labels.field")}
-      placeholder=${t("labels.none")}
-      searchPlaceholder=${t("categories.combobox_search")}
-      noResultsLabel=${t("categories.combobox_no_results")}
-      .countLabel=${(count: number) =>
-        t("categories.combobox_selected").replace("{count}", String(count))}
-      .disabled=${options.disabled}
-      .error=${options.error ?? ""}
-      .invalid=${!!options.error}
-      .options=${[...options.labels]
-        .sort(byName)
-        .map((label) => ({ value: label.id, label: label.name }))}
-      .values=${[...options.value]}
-      @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
-        event.stopPropagation();
-        options.change(event.detail.values);
-      }}
-    ></wt-combobox>
-    ${
-      chosen.length
-        ? html`<div class="chips" data-test="label-chips">
-            ${chosen.map((label) => html`<wt-lozenge>${label.name}</wt-lozenge>`)}
-          </div>`
-        : nothing
-    }`;
-}
-
-/** A product's label names, sorted and joined; an id no loaded label has reads as `missing`. */
-export function labelsText(
-  ids: readonly string[],
-  labels: readonly Label[],
-  missing: string,
-): string {
-  return ids
-    .map((id) => labels.find((label) => label.id === id)?.name ?? missing)
-    .sort(byLabel)
-    .join(", ");
 }

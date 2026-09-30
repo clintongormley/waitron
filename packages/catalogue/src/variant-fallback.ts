@@ -1,7 +1,6 @@
 import { and, eq, exists, isNull, sql, type AnyColumn, type SQL } from "drizzle-orm";
 import { alias, QueryBuilder } from "drizzle-orm/sqlite-core";
 import { products } from "@waitron/db";
-import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 
 /**
@@ -9,12 +8,12 @@ import { productUnits } from "./schema/units.js";
  * `docs/developers/products.md`, under _Variants_).
  *
  * A `products` row with a `parent_id` is a variant. Every field in the inherited set below that the
- * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exceptions are
- * the unit, which a variant inherits by having NO `product_units` row of its own, and the labels,
- * which a variant never has of its own — see the owner joins at the end. The three names are never
- * inherited — a blank customer or kitchen name falls back to the variant's OWN staff name — nor is
- * anything that says what the row is (`id`, `catalogue_id`, `parent_id`, `variant_order`), whether
- * it is sold (`active`, `available`, `ordering`), or when it was written.
+ * variant leaves NULL reads as its parent's value; one it sets reads as its own. The exception is
+ * the unit, which a variant inherits by having NO `product_units` row of its own — see the owner
+ * join at the end. The three names are never inherited — a blank customer or kitchen name falls
+ * back to the variant's OWN staff name — nor is anything that says what the row is (`id`,
+ * `catalogue_id`, `parent_id`, `variant_order`), whether it is sold (`active`, `available`,
+ * `ordering`), or when it was written.
  *
  * The nullability of the four columns a variant may leave blank (`vat_class`, `pricing_unit`,
  * `unit_price`, `dietary_declarations`) stops here for reads that go through
@@ -119,13 +118,4 @@ export const unitOwnerJoin = eq(
       .from(ownUnit)
       .where(eq(ownUnit.productId, products.id)),
   )} then ${products.id} else ${products.parentId} end`,
-);
-
-/**
- * `.leftJoin(productLabels, labelOwnerJoin)`: the labels of the product whose labels apply — a
- * top-level product's own, and a variant's parent's, since a variant stores none.
- */
-export const labelOwnerJoin = eq(
-  productLabels.productId,
-  sql<string>`coalesce(${products.parentId}, ${products.id})`,
 );

@@ -3,7 +3,6 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
 import {
-  UrlStateController,
   baseStyles,
   focusFirstInvalid,
   isHexColor,
@@ -19,29 +18,24 @@ import type {
   CategoryReassignment,
   CategorySummary,
   DashboardApi,
-  LabelSummary,
   Product,
 } from "../api/client.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeOf, codeMessage } from "../i18n/codes.js";
-import { dashboardPath } from "../navigation.js";
 import {
   categoryPath,
   categoryRefusalErrors,
   categoryWithDescendants,
 } from "../widgets/category-form.js";
-import { categoryField, labelsText } from "../widgets/classification-fields.js";
-import "./labels-panel.js";
+import { categoryField } from "../widgets/classification-fields.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-lozenge.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import "@waitron/ui/src/components/wt-tabs.js";
 
 const MODE_KEY = "waitron.categories.mode";
 type ViewMode = "tree" | "flat";
-type Tab = "categories" | "labels";
 
 @customElement("dashboard-categories-screen")
 export class CategoriesScreen extends LitElement {
@@ -128,10 +122,6 @@ export class CategoriesScreen extends LitElement {
         overflow-wrap: anywhere;
         text-align: start;
       }
-      /* The products modal's "no labels" dash, also cell markup handed to a table. */
-      wt-data-table::part(muted) {
-        color: var(--wt-color-text-muted);
-      }
       /* Marks a tree-mode ancestor kept only to show a matching descendant's path — the table
          reports it through the cell's ancestorOnly context. The colour has to reach the <button> inside wt-button's OWN
          shadow root, which is one boundary further than ::part() can select. Re-pointing the token
@@ -146,8 +136,6 @@ export class CategoriesScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @state() private categories: CategorySummary[] = [];
   @state() private products: Product[] = [];
-  @state() private labels: LabelSummary[] = [];
-  @state() private tab: Tab = "categories";
   @state() private languages: ContentLanguages = { defaultLanguage: "en", languages: ["en"] };
   @state() private loading = true;
   @state() private loadError = false;
@@ -185,18 +173,6 @@ export class CategoriesScreen extends LitElement {
       this.loadError = true;
     },
   );
-  /** An unknown tab falls back to the categories and replaces rather than pushes, so Back still
-   * leaves the screen. */
-  readonly #url = new UrlStateController(
-    this,
-    () => {
-      if (this.#url.read("dashboard") !== "categories") return;
-      const view = this.#url.read("view");
-      this.tab = view === "labels" ? "labels" : "categories";
-      if (view !== this.tab) this.#url.write({ view: this.tab }, true);
-    },
-    dashboardPath,
-  );
   protected override updated(changes: PropertyValues<this>) {
     if (changes.has("api") && this.api) void this.#load();
   }
@@ -228,9 +204,6 @@ export class CategoriesScreen extends LitElement {
         }),
         this.#queries.watch("listLibraryProducts", [], (value) => {
           this.products = value;
-        }),
-        this.#queries.watch("listLabels", [], (value) => {
-          this.labels = value;
         }),
       ]);
       // A `?category=<id>` deep link opens the editor; an unknown id is ignored. Clearing the param
@@ -550,9 +523,6 @@ export class CategoriesScreen extends LitElement {
   #mainCategoryOf(product: Product): CategorySummary | undefined {
     return this.categories.find((item) => item.id === product.primaryCategoryId);
   }
-  #labelsText(product: Product): string {
-    return labelsText(product.labelIds, this.labels, t("editor.missing_choice"));
-  }
   #productColumns(trailing?: DataTableColumn<Product>): DataTableColumn<Product>[] {
     const base: DataTableColumn<Product>[] = [
       {
@@ -582,15 +552,6 @@ export class CategoriesScreen extends LitElement {
             (category) => this.#path(category),
           ),
         },
-      },
-      {
-        key: "labels",
-        label: t("labels.field"),
-        cell: (product) =>
-          product.labelIds.length
-            ? this.#labelsText(product)
-            : html`<span part="muted" aria-hidden="true">—</span>`,
-        searchValue: (product) => this.#labelsText(product),
       },
     ];
     return trailing ? [...base, trailing] : base;
@@ -733,7 +694,7 @@ export class CategoriesScreen extends LitElement {
     this.addingProducts = false;
     this.picked = new Set();
   }
-  #renderCategoriesTab() {
+  #renderCategories() {
     return html`<div class="header-actions">
         <div class="mode-toggle">
           <wt-button
@@ -889,21 +850,7 @@ export class CategoriesScreen extends LitElement {
               >`
           : nothing
       }
-      <wt-tabs
-        label=${t("nav.categories")}
-        .value=${this.tab}
-        .items=${[
-          { key: "categories", label: t("nav.categories") },
-          { key: "labels", label: t("labels.title") },
-        ]}
-        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
-          this.tab = event.detail.value === "labels" ? "labels" : "categories";
-          this.#url.write({ dashboard: "categories", view: this.tab });
-        }}
-      >
-        <div slot="categories">${this.#renderCategoriesTab()}</div>
-        <div slot="labels"><dashboard-labels-panel .api=${this.api}></dashboard-labels-panel></div>
-      </wt-tabs>
+      ${this.#renderCategories()}
       <wt-modal
         data-test="products-modal"
         .open=${this.selected !== null}

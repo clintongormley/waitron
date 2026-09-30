@@ -39,7 +39,6 @@ const products: Product[] = [
     modifiers: [],
     catalogueId: "cat-a",
     categoryId: null,
-    labelIds: [],
     primaryCategoryId: null,
     name: "Bizcocho",
     customerName: { es: "Bizcocho de la abuela" },

@@ -3,15 +3,8 @@ import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
-import { productLabels } from "./schema/labels.js";
 import { validateContentTranslations } from "./content-languages.js";
-import { labelIdArray } from "./labels.js";
-import {
-  isTopLevelProduct,
-  labelOwnerJoin,
-  productWithId,
-  type ProductScope,
-} from "./variant-fallback.js";
+import { isTopLevelProduct, productWithId, type ProductScope } from "./variant-fallback.js";
 import "./errors.js";
 
 export interface Category {
@@ -304,7 +297,6 @@ export interface CategoryProduct {
   name: string;
   active: boolean;
   primaryCategoryId: string | null;
-  labelIds: string[];
 }
 /**
  * The top-level products whose main category is this one — or, with `includeDescendants`, this one
@@ -324,11 +316,8 @@ export async function listCategoryProducts(
       name: products.name,
       active: products.active,
       primaryCategoryId: products.categoryId,
-      labelIds: labelIdArray,
     })
     .from(products)
-    .leftJoin(productLabels, labelOwnerJoin)
     .where(and(inArray(products.categoryId, ids), isTopLevelProduct))
-    .groupBy(products.id)
     .orderBy(products.id);
 }

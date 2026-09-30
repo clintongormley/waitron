@@ -86,7 +86,6 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
           id: "p",
           name: "Toast",
           customerName: { en: "Buttered toast" },
-          labelIds: ["l1"],
           primaryCategoryId: "food",
           active: true,
         },
@@ -103,12 +102,10 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
           id: "q",
           name: "Porridge",
           customerName: { en: "Warm porridge" },
-          labelIds: [],
           primaryCategoryId: "breakfast",
           active: true,
         },
       ],
-      listLabels: async () => [{ id: "l1", name: "Happy hour drinks", productCount: 1 }],
     } as unknown as DashboardApi;
   }
 
@@ -243,26 +240,6 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
     dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
     const actions = dialog.querySelector("wt-form-actions")!;
     await vi.waitFor(async () => expect(await formMessageOf(actions)).not.toBeNull());
-    await expectNoA11yViolations(host);
-  });
-
-  it("shows the Labels tab accessibly", async () => {
-    history.replaceState(null, "", "/manage/categories/view/labels");
-    const { el, host } = await mountWidget<CategoriesScreen>(
-      "dashboard-categories-screen",
-      { api: membersApi() },
-      theme,
-    );
-    const panel = el.shadowRoot!.querySelector("dashboard-labels-panel")!;
-    await vi.waitFor(() =>
-      expect(
-        panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-data-table"]>("wt-data-table")!
-          .rows,
-      ).toHaveLength(1),
-    );
-    expect(el.shadowRoot!.querySelector<HTMLElement & { value: string }>("wt-tabs")!.value).toBe(
-      "labels",
-    );
     await expectNoA11yViolations(host);
   });
 

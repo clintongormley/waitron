@@ -34,12 +34,6 @@ function id(value: unknown, field: string): string {
 function nullableId(value: unknown, field: string): string | null {
   return value === null ? null : id(value, field);
 }
-function ids(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) invalid(field);
-  const values = value.map((value) => id(value, field));
-  if (new Set(values).size !== values.length) invalid(field);
-  return values;
-}
 /**
  * The product's ordered attachment list: each entry names one list and which KIND of list it is, and
  * the array's order is the order a diner is offered them. Ids are lower-cased by {@link id}, so a
@@ -137,9 +131,8 @@ export function parseProductEditorInput(
   const unitId = nullableId(body.unitId, "unitId");
   // A body still on the membership contract is refused rather than having its categories ignored.
   if (body.categoryIds !== undefined) invalid("categoryIds");
-  const labelIds = ids(body.labelIds, "labelIds");
-  if (isVariant && labelIds.length > 0)
-    throw new AppError("product.variant_invalid", { field: "labelIds" });
+  // A body still carrying labels is refused rather than having them silently dropped.
+  if (body.labelIds !== undefined) invalid("labelIds");
   // The two fields the ordered `modifiers` list replaced. A body carrying either is refused rather
   // than having it ignored: ignoring would save a product with NO attachments and report success,
   // the one outcome a caller still on the old contract could not tell from having worked.
@@ -198,7 +191,6 @@ export function parseProductEditorInput(
     available: boolean(body.available, "available"),
     vatClass: tax,
     variants,
-    labelIds,
     primaryCategoryId,
     modifiers: attachments,
     allergens,

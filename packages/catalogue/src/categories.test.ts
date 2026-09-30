@@ -61,9 +61,9 @@ describe("category authoring", () => {
       id: product.id,
       categoryId: drinks.id,
       primaryCategoryId: drinks.id,
-      labelIds: [],
     });
     expect(listed).not.toHaveProperty("categoryIds");
+    expect(listed).not.toHaveProperty("labelIds");
     expect(await app((tx) => listCategoryProducts(tx, food.id))).toEqual([]);
     expect(await app((tx) => listCategoryProducts(tx, drinks.id))).toEqual([
       {
@@ -71,7 +71,6 @@ describe("category authoring", () => {
         name: product.name,
         active: true,
         primaryCategoryId: drinks.id,
-        labelIds: [],
       },
     ]);
     expect(await app((tx) => setMainReportingCategory(tx, product.id, null))).toEqual({

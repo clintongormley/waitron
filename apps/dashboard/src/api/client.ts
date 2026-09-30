@@ -295,14 +295,6 @@ export interface CategoryProduct {
   name: string;
   active: boolean;
   primaryCategoryId: string | null;
-  labelIds: string[];
-}
-export interface Label {
-  id: string;
-  name: string;
-}
-export interface LabelSummary extends Label {
-  productCount: number;
 }
 
 export interface Unit {
@@ -1741,25 +1733,6 @@ export class DashboardApi {
     return this.#request(`/management-api/products/${productId}/categories`, "PUT", {
       primaryCategoryId: categoryId,
     });
-  }
-
-  listLabels(): Promise<LabelSummary[]> {
-    return this.#request("/management-api/labels", "GET");
-  }
-  createLabel(name: string): Promise<Label> {
-    return this.#request("/management-api/labels", "POST", { name });
-  }
-  renameLabel(id: string, name: string): Promise<Label> {
-    return this.#request(`/management-api/labels/${id}`, "PATCH", { name });
-  }
-  deleteLabel(id: string): Promise<void> {
-    return this.#request(`/management-api/labels/${id}`, "DELETE");
-  }
-  getProductLabels(productId: string): Promise<{ labelIds: string[] }> {
-    return this.#request(`/management-api/products/${productId}/labels`, "GET");
-  }
-  setProductLabels(productId: string, labelIds: string[]): Promise<{ labelIds: string[] }> {
-    return this.#request(`/management-api/products/${productId}/labels`, "PUT", { labelIds });
   }
 
   listUnits(): Promise<Unit[]> {

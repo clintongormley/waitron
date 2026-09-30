@@ -111,18 +111,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This menu changed after the preview was shown, so it was not published. Check the new preview and publish again.",
     es: "Esta carta ha cambiado después de mostrar la vista previa, así que no se ha publicado. Revisa la nueva vista previa y vuelve a publicarla.",
   },
-  "label.invalid": {
-    en: "Enter a label name, and choose each label only once.",
-    es: "Introduce un nombre de etiqueta y elige cada etiqueta una sola vez.",
-  },
-  "label.name_taken": {
-    en: "Another label already has this name.",
-    es: "Ya hay otra etiqueta con este nombre.",
-  },
-  "label.not_found": {
-    en: "This label no longer exists. Refresh the list.",
-    es: "Esta etiqueta ya no existe. Actualiza la lista.",
-  },
   "category.image_not_found": {
     en: "Choose an image from your image library.",
     es: "Elige una imagen de tu biblioteca.",

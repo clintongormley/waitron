@@ -32,7 +32,6 @@ function product(id: string, name: string, overrides: Partial<Product> = {}): Pr
     modifiers: [],
     catalogueId: "cat-1",
     categoryId: null,
-    labelIds: [],
     primaryCategoryId: null,
     name,
     customerName: { es: `${name} para clientes`, en: `${name} for guests` },

@@ -129,16 +129,13 @@ export const QUERY_DEPENDENCIES = {
   getDeviceHomeLayouts: ["device_profile_home_layouts", "sections", "menu_details", "catalogues"],
   listCategories: ["categories", "category_details"],
   getCategory: ["categories", "category_details"],
-  listCategoryProducts: ["categories", "category_details", "products", "product_labels"],
-  listLibraryProducts: ["products", "product_labels"],
+  listCategoryProducts: ["categories", "category_details", "products"],
+  listLibraryProducts: ["products"],
   listSections: ["sections", "section_members"],
   // The usages name each menu from `catalogues` (`librarySectionUsages`, sections.ts).
   listSectionUsages: ["sections", "section_members", "catalogues"],
-  listLabels: ["labels", "product_labels"],
-  getProductLabels: ["products", "product_labels"],
   listUnits: ["units"],
   listProducts: [
-    "product_labels",
     "products",
     "categories",
     "recipe_lines",

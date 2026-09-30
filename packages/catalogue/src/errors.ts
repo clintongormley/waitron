@@ -18,12 +18,7 @@ declare module "@waitron/shared" {
      * deleted, or, for `childrenTo`, a category below it.
      */
     "category.reassign_invalid": { field: "productsTo" | "childrenTo" };
-    /** A label name is blank or not text (`field` "name"), or a label selection is not a list of
-     * distinct ids (`field` "labelIds"). */
-    "label.invalid": { field: string };
-    "label.name_taken": { name: string };
-    "label.not_found": { labelId: string };
-    /** A sale line's classification snapshot names a category or label that does not exist, holds
+    /** A sale line's classification snapshot names a category that does not exist, holds
      * an empty name, repeats a category in its chain, or ends at a category that is not the
      * product's main reporting category. */
     "sale_classification.invalid": {
