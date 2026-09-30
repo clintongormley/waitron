@@ -3153,9 +3153,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
     - `*** REPRINT ***` and `GROUP n` print in English. _(Task 6, 2026-09-27: so do `*** HOLD ***`,
       `*** FIRE ***`, `*** HOLD CHANGED ***` and `*** HOLD CANCELLED ***`.)_ _(B11g, 2026-10-01:
-      the extra-cancel slip is the one kind whose header and cancel line follow the server's
-      `locale`, so a Spanish venue's slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and `QUITAR:`,
-      mixed on one slip; every other slip stays English.)_
+      the extra-cancel slip is the one kind whose header word and cancel line follow the server's
+      locale (`WAITRON_TILL_LOCALE`, `es-ES` when unset), so by default a held slip reads
+      `*** HOLD CAMBIADO ***`, `GROUP n` and `QUITAR:`, mixed on one slip; every other slip stays
+      English.)_
     - A resend from the dashboard's Printers screen does not clear a table's printing problem, and
       there is no way to dismiss one: a detached or replaced printer leaves it showing. _(B6a,
       2026-09-28: a printer detached from the station now drops the problem, tested. A printer

@@ -394,7 +394,20 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       recorded = await noticesDuring(async () => {
         await expect(
           inTx(venue, async (tx) => {
+            const jobsBefore = (await tx.select({ kind: printJobs.kind }).from(printJobs)).length;
+            const noticesBefore = (await listStationNotices(tx, venue.cfg, venue.stationId)).length;
             await apply(tx, command);
+            const written = (
+              await tx
+                .select({ kind: printJobs.kind, payload: printJobs.payload })
+                .from(printJobs)
+                .orderBy(sql`rowid`)
+            ).slice(jobsBefore);
+            expect(written).toHaveLength(1);
+            expect(printedLines(written[0]!.payload)).toContain("  CANCEL: Gherkins");
+            expect(
+              (await listStationNotices(tx, venue.cfg, venue.stationId)).slice(noticesBefore),
+            ).toEqual([expect.objectContaining({ cancelledExtra: "Gherkins" })]);
             throw new Error("a later step of the request fails");
           }),
         ).rejects.toThrow("a later step of the request fails");
@@ -460,7 +473,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 });
 
 describe("cancelling an extra of a held dish (B11g)", () => {
-  it("prints a HOLD CHANGED slip naming the group when the group's HOLD ticket printed", async () => {
+  it("prints a HOLD CHANGED slip naming the group when the group's HOLD ticket was queued", async () => {
     await inTx(venue, (tx) => writePrintHeldWork(tx, true));
     try {
       const billId = await billOf("hamburger", "hold");
@@ -494,7 +507,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
     }
   });
 
-  it("tells the kitchen nothing when the group's HOLD ticket never printed", async () => {
+  it("tells the kitchen nothing when the group's HOLD ticket was never queued", async () => {
     const billId = await billOf("hamburger", "hold");
     let recorded: Awaited<ReturnType<typeof notices>> = [];
 

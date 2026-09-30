@@ -214,8 +214,9 @@ export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout
  * had). For held work on a HOLD ticket: `HOLD CHANGED` (the item's quantity `added` to or `removed`
  * from its group) or `HOLD CANCELLED` (taken out of the order); these name the item's group.
  * `EXTRA CANCELLED`: an extra taken off a dish the kitchen has, fired or `held` on a HOLD ticket,
- * printing the dish as it now stands and then the extra to take off, in the words of `locale`'s
- * language (Spanish, else English).
+ * printing the dish as it now stands and then the extra to take off. Its header word and cancel
+ * line follow `locale`'s language (Spanish, else English); the `HOLD` prefix and `GROUP n` stay
+ * English.
  */
 export type CorrectionSlip = {
   stationName: string;
