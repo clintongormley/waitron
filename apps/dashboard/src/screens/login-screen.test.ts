@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -95,6 +95,11 @@ async function openPasskey(el: LoginScreen, email = "owner@x.com"): Promise<void
 
 async function openPassword(el: LoginScreen, email = "owner@x.com"): Promise<void> {
   Object.assign(el as unknown as Record<string, string>, { email, step: "password" });
+  await el.updateComplete;
+}
+
+async function openGoogle(el: LoginScreen, email = "owner@x.com"): Promise<void> {
+  Object.assign(el as unknown as Record<string, string>, { email, step: "google" });
   await el.updateComplete;
 }
 
@@ -496,7 +501,9 @@ describe("login-screen", () => {
     expect(
       el
         .shadowRoot!.querySelector("wt-input[name=password]")
-        ?.nextElementSibling?.matches("a[data-test=reset-by-email]"),
+        ?.nextElementSibling?.matches(
+          ".links-and-actions:has(li:first-child a[data-test=reset-by-email])",
+        ),
     ).toBe(true);
     expect(el.shadowRoot!.querySelector("ul li a[data-test=passkey-login]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("ul li a[data-test=google-login]")).not.toBeNull();
@@ -2925,4 +2932,164 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
     await flush(el);
     expect(await bottomOf(el)).toBe(codeMessage("password.invalid"));
   });
+});
+
+describe("login-screen: a step's links are one bulleted list with its buttons on the first item's row", () => {
+  let restoreLocale: ReturnType<typeof currentLocale>;
+  let restoreViewport: [number, number];
+  beforeEach(() => {
+    restoreLocale = currentLocale();
+    restoreViewport = [window.innerWidth, window.innerHeight];
+  });
+  afterEach(async () => {
+    setLocale(restoreLocale);
+    await page.viewport(...restoreViewport);
+  });
+
+  /** Every sign-in method link on the step, in order, and the one list holding them. */
+  function links(el: LoginScreen) {
+    const lists = el.shadowRoot!.querySelectorAll("ul.alternative-list");
+    const methods = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[data-test]")];
+    return { lists, methods, order: methods.map((a) => a.dataset.test) };
+  }
+
+  /**
+   * Each of the step's buttons shares the first item's row, to the right of its link — or, where
+   * `mayWrap` allows it because the row is too narrow for both, sits wholly below the list. Either
+   * way the last button ends at the form's right edge.
+   */
+  function expectButtonsOnFirstRow(el: LoginScreen, mayWrap = false) {
+    const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
+    const listBox = list.getBoundingClientRect();
+    const first = list.querySelector("li")!.getBoundingClientRect();
+    const link = list.querySelector("li a")!.getBoundingClientRect();
+    const screen = el.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();
+    const buttons = [...el.shadowRoot!.querySelectorAll("wt-form-actions wt-button")];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      const box = button.getBoundingClientRect();
+      if (mayWrap && box.top >= listBox.bottom) continue;
+      const firstMiddle = first.top + first.height / 2;
+      expect(Math.abs(firstMiddle - (box.top + box.height / 2))).toBeLessThanOrEqual(2);
+      expect(box.left).toBeGreaterThan(link.right);
+    }
+    const last = buttons.at(-1)!.getBoundingClientRect();
+    expect(Math.abs(last.right - screen.right)).toBeLessThan(1);
+  }
+
+  async function openFactor() {
+    const login = vi.fn().mockRejectedValueOnce({ code: "totp.required" });
+    const { el } = await signInWithPassword({ login });
+    return el;
+  }
+
+  const widths = [
+    ["en-GB", 1280, 900],
+    ["es-ES", 1280, 900],
+    ["en-GB", 390, 844],
+    ["es-ES", 390, 844],
+  ] as const;
+
+  it.each(widths)(
+    "the password step lists the forgotten-password link first, then passkey and Google, with Log in on its row (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      await openPassword(el);
+      const { lists, methods, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["reset-by-email", "passkey-login", "google-login"]);
+      for (const method of methods) expect(method.closest("ul.alternative-list li")).not.toBeNull();
+      expect(
+        el
+          .shadowRoot!.querySelector("wt-input[name=password]")!
+          .nextElementSibling!.contains(lists[0]!),
+      ).toBe(true);
+      expectButtonsOnFirstRow(el);
+    },
+  );
+
+  it.each(widths)(
+    "the passkey step's links are one list with its button on the first item's row, or below it on a phone (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      await openPasskey(el);
+      const { lists, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["use-password", "reset-by-email", "google-login"]);
+      expectButtonsOnFirstRow(el, width < 600);
+    },
+  );
+
+  it.each(widths)(
+    "the Google step's links are one list with its button on the first item's row, or below it on a phone (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      await openGoogle(el);
+      const { lists, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["use-password", "passkey-login", "reset-by-email"]);
+      expectButtonsOnFirstRow(el, width < 600);
+    },
+  );
+
+  // Verdana with extra letter spacing stands in for the wider sans-serif a Linux desktop falls
+  // back to: with it, the widest link plus the button is wider than the form, while the first
+  // link plus the button is not.
+  it.each([
+    ["passkey", openPasskey],
+    ["Google", openGoogle],
+  ] as const)(
+    "the %s step keeps its button on the first item's row at desktop width in a wide font, however long a later link is",
+    async (_step, open) => {
+      setLocale("es-ES");
+      await page.viewport(1280, 900);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      el.style.setProperty("--wt-font-family", "Verdana");
+      el.style.letterSpacing = "1px";
+      await flush(el);
+      await open(el);
+      expectButtonsOnFirstRow(el);
+    },
+  );
+
+  it("at desktop width, where even the first link and the button do not fit, the button wraps below an unbroken first link", async () => {
+    setLocale("es-ES");
+    await page.viewport(1280, 900);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    // Wide enough in any font: the extra spacing alone makes the first link wider than the room
+    // the button leaves.
+    el.style.letterSpacing = "24px";
+    await flush(el);
+    await openGoogle(el);
+    const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
+    const button = el.shadowRoot!.querySelector("wt-form-actions wt-button")!;
+    expect(button.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      list.getBoundingClientRect().bottom,
+    );
+    // An inline link broken across lines has one box per line.
+    expect(list.querySelector("li a")!.getClientRects()).toHaveLength(1);
+    expectButtonsOnFirstRow(el, true);
+  });
+
+  it.each(widths)(
+    "the code step's link is one list with Back and Log in on its row, or below it on a phone (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const el = await openFactor();
+      const { lists, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["switch-factor"]);
+      expectButtonsOnFirstRow(el, width < 600);
+    },
+  );
 });

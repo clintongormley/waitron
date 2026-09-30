@@ -648,8 +648,8 @@ inside the field only while it contains an action.
 
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
-it stays on the bottom left. A secondary action that belongs beside the primary action goes in the
-`secondary` slot.
+it stays on the bottom left (the sign-in code step is an exception; see the login section). A
+secondary action that belongs beside the primary action goes in the `secondary` slot.
 
 ```ts
 html`
@@ -889,8 +889,16 @@ clears both the current attempt and the saved email/method, then returns to blan
 Keep the hidden semantic username input for password managers. Ordinary login has no separate
 Cancel or Forget button.
 
-On password, passkey and Google screens, show alternative methods as a persistent bulleted list of links. Put **I've forgotten my password**
-directly below the password field. Recovery opens **Check your email** with the address, delivery
+On password, passkey, Google and code screens, a step's other ways in are ONE persistent bulleted list of links, directly
+after the step's field or hint. On the password screen **I've forgotten my password** is its first
+item, then the other ways to log in. The step's buttons sit on the row of the list's first item, at
+the right; where that row is too narrow for both, they wrap below the list, still at the right. On
+a form at its full width only the first link has to fit beside the buttons, and a longer later link
+breaks inside the list; on a narrower form the row is sized by the widest link. On the code screen
+Back therefore sits beside Log in at the right, an exception to the Forms rule that puts Back
+bottom left. A refusal's message sits beside the action, so a message too long to share
+the row takes the buttons below the list with it.
+Recovery opens **Check your email** with the address, delivery
 guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
 pending accounts receive a setup link and active accounts receive a reset link. Invitation emails
 use links; the login screen has no manual invitation-code entry.
