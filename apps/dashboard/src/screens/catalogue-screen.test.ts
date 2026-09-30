@@ -286,9 +286,12 @@ describe("catalogue-screen", () => {
     await flush(el);
     const dialog = el.shadowRoot!.querySelector<HTMLElement>("[data-test=delete-dialog]")!;
     expect(dialog.getAttribute("open")).not.toBeNull();
-    expect(dialog.querySelector("[role=alert]")?.textContent).toContain(
-      codeMessage("server.internal"),
-    );
+    const actions = dialog.querySelector("wt-form-actions")!;
+    const message = await formMessageOf(actions);
+    expect(message?.textContent).toBe(codeMessage("server.internal"));
+    expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
   });
 
   it("creates the complete aggregate once, closes, then refreshes the list", async () => {

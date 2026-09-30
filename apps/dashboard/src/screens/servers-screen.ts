@@ -114,10 +114,6 @@ export class ServersScreen extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
-      .error {
-        margin: var(--wt-space-3) 0 0;
-        color: var(--wt-color-danger);
-      }
     `,
   ];
 
@@ -295,14 +291,14 @@ export class ServersScreen extends LitElement {
               <p class="machine" data-test=${`${action}-machine`}>
                 ${t("servers.machine")} <span class="machine-id">${this.#shortId(target)}</span>
               </p>
-              <p class="explanation">${t(keys.explanation)}</p>
-              ${
-                this.actionErrorKey === null
-                  ? nothing
-                  : html`<p class="error" role="alert">${codeMessage(this.actionErrorKey)}</p>`
-              }`
+              <p class="explanation">${t(keys.explanation)}</p>`
       }
-      <wt-form-actions slot="footer">
+      <wt-form-actions
+        slot="footer"
+        .error=${
+          target === null || this.actionErrorKey === null ? "" : codeMessage(this.actionErrorKey)
+        }
+      >
         <wt-button
           slot="cancel"
           variant="secondary"

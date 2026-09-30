@@ -1596,11 +1596,18 @@ it("says an unused section is not used, and keeps the dialog open with the reaso
   );
   expect(inModal(el, "delete", '[data-test="delete-menus"]')).toBeNull();
   click(el, '[data-test="confirm-delete"]');
-  await vi.waitFor(() =>
-    expect(inModal(el, "delete", '[data-test="delete-error"]')!.textContent!.trim()).toBe(
-      codeMessage("menu_section.not_found"),
-    ),
+  await vi.waitFor(async () =>
+    expect(await bottom(el, "delete")).toBe(codeMessage("menu_section.not_found")),
   );
+  const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(
+    el,
+    "delete",
+    "wt-form-actions",
+  )!;
+  const message = await formMessageOf(actions);
+  expect(modal(el, "delete").shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(modal(el, "delete").textContent).not.toContain(codeMessage("menu_section.not_found"));
   expect(modal(el, "delete").open).toBe(true);
   click(el, '[data-test="delete-cancel"]');
   await el.updateComplete;

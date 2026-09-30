@@ -1129,12 +1129,7 @@ export class SectionsScreen extends LitElement {
       }}
     >
       ${this.deleting ? this.#renderDeleteBody() : nothing}
-      ${
-        this.deleteError
-          ? html`<p class="error" role="alert" data-test="delete-error">${this.deleteError}</p>`
-          : nothing
-      }
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${this.deleteError ?? ""}
         ><wt-button
           slot="cancel"
           variant="secondary"

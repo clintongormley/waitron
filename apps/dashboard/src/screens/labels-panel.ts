@@ -304,8 +304,7 @@ export class LabelsPanel extends LitElement {
         }}
       >
         ${deleting ? html`<p data-test="delete-count">${this.#deleteCount(deleting)}</p>` : nothing}
-        ${this.saveError ? html`<p class="error" role="alert">${this.saveError}</p>` : nothing}
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${this.saveError}
           ><wt-button
             slot="cancel"
             variant="secondary"

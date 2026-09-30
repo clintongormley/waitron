@@ -670,12 +670,13 @@ export class ImageLibrary extends LitElement {
               }}
             >
               <p>${this.#text(this.deletion.image.names)}</p>
-              ${this.deleteError ? html`<p role="alert" class="error">${t("image.delete_error")}</p>` : nothing}
               <p>${t(this.deletion.uses.length ? "image.in_use" : "image.confirm_help")}</p>
               <ul>
                 ${this.deletion.uses.map((use) => html`<li>${this.#usage(use)}</li>`)}
               </ul>
-              <wt-form-actions slot="footer"
+              <wt-form-actions
+                slot="footer"
+                .error=${this.deleteError ? t("image.delete_error") : ""}
                 ><wt-button
                   slot="cancel"
                   variant="secondary"

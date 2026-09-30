@@ -1213,7 +1213,14 @@ it("keeps a refused delete in the dialog with its reason, then closes and reload
   await vi.waitFor(() => expect(confirmDelete(el).disabled).toBe(false));
   expect(client.deleteExtraList).not.toHaveBeenCalled();
   confirmDelete(el).click();
-  await vi.waitFor(() => expect(dialog.textContent).toContain(codeMessage("extras.not_found")));
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe(codeMessage("extras.not_found")),
+  );
+  const message = await formMessageOf(actions);
+  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(dialog.textContent).not.toContain(codeMessage("extras.not_found"));
   expect(dialog.open).toBe(true);
   confirmDelete(el).click();
   await vi.waitFor(() => expect(dialog.open).toBe(false));

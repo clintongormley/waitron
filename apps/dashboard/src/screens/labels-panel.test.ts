@@ -282,11 +282,14 @@ it("explains a refused delete and keeps the confirmation open", async () => {
   await rowAction(el, "l-alc", "delete-label");
   const dialog = modal(el, "label-delete");
   dialog.querySelector<HTMLElement>('wt-button[variant="danger"]')!.click();
-  await vi.waitFor(() =>
-    expect(dialog.querySelector('p[role="alert"]')?.textContent).toBe(
-      codeMessage("label.not_found"),
-    ),
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe(codeMessage("label.not_found")),
   );
+  const message = await formMessageOf(actions);
+  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(dialog.textContent).not.toContain(codeMessage("label.not_found"));
   expect(dialog.open).toBe(true);
   dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
   await el.updateComplete;

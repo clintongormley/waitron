@@ -2,7 +2,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
 import type { DashboardApi, ServerListing } from "../api/client.js";
@@ -105,6 +105,11 @@ function rowMenu(
 
 function menuTrigger(el: ServersScreen, nodeId: string): HTMLButtonElement {
   return rowMenu(el, nodeId)!.shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+}
+
+/** A confirmation's one message about a refused action, from the action row in its footer. */
+async function messageIn(confirmation: HTMLElementTagNameMap["wt-dialog"]): Promise<string | null> {
+  return (await formMessageOf(confirmation.querySelector("wt-form-actions")!))?.textContent ?? null;
 }
 
 async function openRemove(el: ServersScreen, nodeId = STANDBY): Promise<void> {
@@ -450,8 +455,12 @@ describe("servers screen removal", () => {
     await openRemove(el);
     await confirmRemove(el);
     expect(dialog(el).open).toBe(true);
-    const alert = dialog(el).querySelector("[role=alert]");
-    expect(alert!.textContent!.trim()).toBe(codeMessage(code));
+    const actions = dialog(el).querySelector("wt-form-actions")!;
+    const message = await formMessageOf(actions);
+    expect(message?.textContent).toBe(codeMessage(code));
+    expect(dialog(el).shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(dialog(el).textContent).not.toContain(codeMessage(code));
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
     // A refused write is not a load failure: the list stays as it was.
     expect(tableRoot(el).querySelector("[role=alert]")).toBeNull();
@@ -466,7 +475,7 @@ describe("servers screen removal", () => {
     await confirmRemove(el);
     expect(api.removeServer).toHaveBeenCalledOnce();
     expect(dialog(el).open).toBe(false);
-    expect(dialog(el).querySelector("[role=alert]")).toBeNull();
+    expect(await messageIn(dialog(el))).toBeNull();
     const alert = tableRoot(el).querySelector("[role=alert]");
     expect(alert!.textContent!.trim()).toBe(codeMessage("connection.failed"));
   });
@@ -515,9 +524,7 @@ describe("servers screen removal", () => {
     await flush(el);
     expect(native.open).toBe(true);
     expect(dialog(el).open).toBe(true);
-    expect(dialog(el).querySelector("[role=alert]")!.textContent!.trim()).toBe(
-      codeMessage("membership.standby_joined"),
-    );
+    expect(await messageIn(dialog(el))).toBe(codeMessage("membership.standby_joined"));
   });
 
   it("clears an earlier refusal when the confirmation is opened again", async () => {
@@ -527,11 +534,11 @@ describe("servers screen removal", () => {
     const el = await mount(api);
     await openRemove(el);
     await confirmRemove(el);
-    expect(dialog(el).querySelector("[role=alert]")).not.toBeNull();
+    expect(await messageIn(dialog(el))).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click();
     await flush(el);
     await openRemove(el);
-    expect(dialog(el).querySelector("[role=alert]")).toBeNull();
+    expect(await messageIn(dialog(el))).toBeNull();
   });
 });
 
@@ -656,10 +663,14 @@ describe("servers screen clearing", () => {
     await openClear(el);
     await confirmClear(el);
     expect(clearDialog(el).open).toBe(true);
-    const alert = clearDialog(el).querySelector("[role=alert]");
-    expect(alert!.textContent!.trim()).toBe(codeMessage(code));
+    const actions = clearDialog(el).querySelector("wt-form-actions")!;
+    const message = await formMessageOf(actions);
+    expect(message?.textContent).toBe(codeMessage(code));
+    expect(clearDialog(el).shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(clearDialog(el).textContent).not.toContain(codeMessage(code));
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
-    expect(dialog(el).querySelector("[role=alert]")).toBeNull();
+    expect(await messageIn(dialog(el))).toBeNull();
     // A refused write is not a load failure: the list stays as it was.
     expect(tableRoot(el).querySelector("[role=alert]")).toBeNull();
     expect(api.listServers).toHaveBeenCalledTimes(1);
@@ -673,7 +684,7 @@ describe("servers screen clearing", () => {
     await confirmClear(el);
     expect(api.clearServer).toHaveBeenCalledOnce();
     expect(clearDialog(el).open).toBe(false);
-    expect(clearDialog(el).querySelector("[role=alert]")).toBeNull();
+    expect(await messageIn(clearDialog(el))).toBeNull();
     const alert = tableRoot(el).querySelector("[role=alert]");
     expect(alert!.textContent!.trim()).toBe(codeMessage("connection.failed"));
   });
@@ -739,12 +750,12 @@ describe("servers screen clearing", () => {
     const el = await mount(api);
     await openRemove(el);
     await confirmRemove(el);
-    expect(dialog(el).querySelector("[role=alert]")).not.toBeNull();
+    expect(await messageIn(dialog(el))).not.toBeNull();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=cancel-remove]")!.click();
     await flush(el);
     await openClear(el);
     expect(clearDialog(el).open).toBe(true);
-    expect(clearDialog(el).querySelector("[role=alert]")).toBeNull();
+    expect(await messageIn(clearDialog(el))).toBeNull();
   });
 
   it("a Remove confirmation's close, reported after Clear has opened, leaves the Clear confirmation open", async () => {

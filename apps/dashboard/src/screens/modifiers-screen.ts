@@ -702,8 +702,7 @@ export class ModifiersScreen extends LitElement {
         }}
       >
         ${this.deleting ? this.#renderDependants() : nothing}
-        ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
-        <wt-form-actions slot="footer"
+        <wt-form-actions slot="footer" .error=${this.error ?? ""}
           ><wt-button
             slot="cancel"
             variant="secondary"

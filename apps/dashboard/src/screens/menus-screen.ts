@@ -2072,17 +2072,11 @@ export class MenusScreen extends LitElement {
       test: "layout-delete",
       open: target !== null,
       heading: t("home.delete_heading").replace("{name}", target?.name ?? ""),
-      body: html`<p>${t("home.delete_note")}</p>
-        ${
-          this.deleteLayoutError
-            ? html`<p class="error" role="alert" data-test="layout-delete-error">
-                ${this.deleteLayoutError}
-              </p>`
-            : nothing
-        }`,
+      body: html`<p>${t("home.delete_note")}</p>`,
       save: "layout-delete-confirm",
       saveLabel: t("action.delete"),
       saveVariant: "danger",
+      errors: { blocked: false, bottom: this.deleteLayoutError ?? "" },
       close: () => {
         this.deletingLayout = null;
       },

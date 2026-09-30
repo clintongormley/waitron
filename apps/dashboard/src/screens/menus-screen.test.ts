@@ -3900,10 +3900,21 @@ describe("home page", () => {
     emit(homeEditor(el), "wt-layout-delete", { layoutId: "l-counter" });
     await el.updateComplete;
     inModal(el, "layout-delete", '[data-test="layout-delete-confirm"]').click();
-    await vi.waitFor(() =>
-      expect(text(inModal(el, "layout-delete", '[data-test="layout-delete-error"]'))).toBe(
-        codeMessage("menu.default_layout_required"),
-      ),
+    await vi.waitFor(async () =>
+      expect(await bottom(el, "layout-delete")).toBe(codeMessage("menu.default_layout_required")),
+    );
+    const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(
+      el,
+      "layout-delete",
+      "wt-form-actions",
+    );
+    const message = await formMessageOf(actions);
+    expect(modal(el, "layout-delete").shadowRoot!.querySelector(".body")!.contains(message)).toBe(
+      true,
+    );
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(modal(el, "layout-delete").textContent).not.toContain(
+      codeMessage("menu.default_layout_required"),
     );
     expect(modal(el, "layout-delete").open).toBe(true);
     inModal(el, "layout-delete", '[data-test="layout-delete-cancel"]').click();

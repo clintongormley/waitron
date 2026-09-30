@@ -436,8 +436,10 @@ export class StaffScreen extends LitElement {
               </p>`
             : nothing
         }
-        ${this.rowAction && this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
-        <wt-form-actions slot="footer">
+        <wt-form-actions
+          slot="footer"
+          .error=${this.rowAction && this.errorKey ? codeMessage(this.errorKey) : ""}
+        >
           <wt-button
             slot="cancel"
             ?disabled=${this.rowBusy}

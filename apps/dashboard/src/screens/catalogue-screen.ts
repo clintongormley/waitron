@@ -687,12 +687,9 @@ export class CatalogueScreen extends LitElement {
               : "product.delete_warning",
           )}
         </p>
-        ${
-          this.deleteErrorKey
-            ? html`<p class="error" role="alert">${codeMessage(this.deleteErrorKey)}</p>`
-            : nothing
-        }
-        <wt-form-actions slot="footer"
+        <wt-form-actions
+          slot="footer"
+          .error=${this.deleteErrorKey ? codeMessage(this.deleteErrorKey) : ""}
           ><wt-button
             slot="cancel"
             variant="secondary"

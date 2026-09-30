@@ -236,9 +236,12 @@ describe("staff-screen", () => {
     expect(api.resetPin).toHaveBeenCalledTimes(1);
     const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
     expect(dialog.open).toBe(true);
-    expect(dialog.querySelector("[role=alert]")!.textContent).toContain(
-      codeMessage("server.internal"),
-    );
+    const actions = dialog.querySelector("wt-form-actions")!;
+    const message = await formMessageOf(actions);
+    expect(message?.textContent).toBe(codeMessage("server.internal"));
+    expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+    expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(dialog.textContent).not.toContain(codeMessage("server.internal"));
     confirm.click();
     await flush(el);
     expect(api.resetPin).toHaveBeenCalledTimes(2);

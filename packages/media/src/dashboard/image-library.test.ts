@@ -562,9 +562,15 @@ it("retains deletion confirmation after a failure and allows it to be dismissed"
     expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).not.toBeNull(),
   );
   click("[data-test=confirm-delete]");
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-modal")!.textContent).toContain("could not be deleted"),
+  const dialog = el.shadowRoot!.querySelector("wt-modal")!;
+  const actions = dialog.querySelector("wt-form-actions")!;
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions))?.textContent).toBe("The image could not be deleted."),
   );
+  const message = await formMessageOf(actions);
+  expect(dialog.shadowRoot!.querySelector(".body")!.contains(message)).toBe(true);
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(dialog.textContent).not.toContain("could not be deleted");
   el.shadowRoot!.querySelector("wt-modal")!.dispatchEvent(new CustomEvent("wt-close"));
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=confirm-delete]")).toBeNull();
