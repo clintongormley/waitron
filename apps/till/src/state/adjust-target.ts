@@ -74,30 +74,28 @@ export function listedGross(line: TabLine): Decimal {
   return listed === undefined ? tabLineGross(line) : grossOf(listed, line.quantity);
 }
 
-/** A dish with its extras (`lines` holds the order's rows, the dish's children among them). Part
- * of it can be adjusted only when it is several whole units, as the server allows: with no extras,
- * or for a cancel, which takes each unit's share of them. */
+/** A dish with its extras (`lines` holds the order's rows, the dish's children among them), or an
+ * extra on its own. Part of a dish can be adjusted when it is several whole units, taking each
+ * unit's share of its extras; an extra is adjusted whole only, as the server allows. */
 export function lineAdjustTarget(
   line: TabLine,
   lines: readonly TabLine[],
-  kind: AdjustKind,
   name: string,
   gross: (row: TabLine) => Decimal = tabLineGross,
 ): AdjustTarget {
   const extras = lines.filter((row) => row.parentLineNo === line.lineNo);
   const total = toScale(sumDecimals([line, ...extras].map(gross)), MONEY_SCALE);
-  let unitTotal: string | null = null;
-  if (moreThanOneWholeUnit(line)) {
-    if (extras.length === 0) unitTotal = toScale(decimal(line.unitPriceGross), MONEY_SCALE);
-    else if (kind === "cancel")
-      unitTotal = divideDecimal(total, decimal(line.quantity), MONEY_SCALE);
-  }
+  const isExtra = (line.parentLineNo ?? null) !== null;
   return {
     lineId: line.id,
     name,
     quantity: trimQuantity(line.quantity),
     total,
-    unitTotal,
+    unitTotal:
+      !isExtra && moreThanOneWholeUnit(line)
+        ? divideDecimal(total, decimal(line.quantity), MONEY_SCALE)
+        : null,
     started: isStarted(line),
+    ...((line.unitPrecision ?? 0) > 0 ? { weighed: true } : {}),
   };
 }

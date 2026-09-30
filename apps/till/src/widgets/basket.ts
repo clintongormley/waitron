@@ -465,6 +465,12 @@ export class TillBasket extends LitElement {
             }
           </div>
           ${
+            // Each row's actions sit straight under it, so a dish's are not read as its extra's.
+            adjustable !== null && listed !== undefined
+              ? this.#lineActions(line, index, listed, sent, adjustable)
+              : nothing
+          }
+          ${
             // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
             // answers and never its product, so a dish whose only question is its variant gets no
             // Edit button rather than a dialog whose save would carry nothing. The MIXED case —
@@ -486,12 +492,25 @@ export class TillBasket extends LitElement {
             // beside the dish's rows, never folded into them.
             (extra, i) => {
               const own = this.#extraOwnNutrition(line, extra.productId);
+              const listedExtra = this.#listedExtra(listed, extra);
               return html`
                 <div class="option">
                   <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
-                  ${this.#extraTotal(line, extra, this.#listedExtra(listed, extra))}
+                  ${this.#extraTotal(line, extra, listedExtra)}
                 </div>
                 ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
+                ${
+                  adjustable !== null && listedExtra !== undefined
+                    ? this.#extraActions(
+                        line,
+                        extra,
+                        `${index}-${i}`,
+                        listedExtra,
+                        sent,
+                        adjustable,
+                      )
+                    : nothing
+                }
               `;
             },
           )}
@@ -509,7 +528,6 @@ export class TillBasket extends LitElement {
           )}
           ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
-          ${adjustable !== null && listed !== undefined ? this.#lineActions(line, index, listed, sent, adjustable) : nothing}
           <div class="line-after"><slot name=${`after-${index}`}></slot></div>
         `;
       })}
@@ -653,7 +671,43 @@ export class TillBasket extends LitElement {
     listing: StoredLines,
   ) {
     const name = this.#lineName(line);
-    const target = (kind: AdjustKind) => lineAdjustTarget(listed, listing.lines, kind, name);
+    return this.#adjustActions(
+      "line",
+      String(index),
+      name,
+      () => lineAdjustTarget(listed, listing.lines, name),
+      sent,
+    );
+  }
+
+  /** The same, on an extra alone, whole: Cancel while its dish is with the kitchen. */
+  #extraActions(
+    line: OrderLine,
+    extra: SelectedExtra,
+    place: string,
+    listedExtra: TabLine,
+    sent: boolean,
+    listing: StoredLines,
+  ) {
+    const name = t("table.extra_of")
+      .replace("{extra}", () => extra.name)
+      .replace("{dish}", () => this.#lineName(line));
+    return this.#adjustActions(
+      "extra",
+      place,
+      name,
+      () => lineAdjustTarget(listedExtra, listing.lines, name),
+      sent,
+    );
+  }
+
+  #adjustActions(
+    row: "line" | "extra",
+    place: string,
+    name: string,
+    target: () => AdjustTarget,
+    sent: boolean,
+  ) {
     return html`<div class="line-actions">
       ${
         sent
@@ -661,9 +715,10 @@ export class TillBasket extends LitElement {
               class="line-cancel"
               size="sm"
               variant="danger"
-              data-cancel-line=${index}
+              data-cancel-line=${row === "line" ? place : nothing}
+              data-cancel-extra=${row === "extra" ? place : nothing}
               aria-label=${`${t("table.cancel_line")} · ${name}`}
-              @click=${() => this.#adjust("cancel", target("cancel"))}
+              @click=${() => this.#adjust("cancel", target())}
             >
               ${t("table.cancel_line")}
             </wt-button>`
@@ -675,10 +730,12 @@ export class TillBasket extends LitElement {
             class="line-adjust"
             size="sm"
             variant="secondary"
-            data-comp-line=${kind === "comp" ? index : nothing}
-            data-discount-line=${kind === "discount" ? index : nothing}
+            data-comp-line=${row === "line" && kind === "comp" ? place : nothing}
+            data-discount-line=${row === "line" && kind === "discount" ? place : nothing}
+            data-comp-extra=${row === "extra" && kind === "comp" ? place : nothing}
+            data-discount-extra=${row === "extra" && kind === "discount" ? place : nothing}
             aria-label=${`${t(label)} · ${name}`}
-            @click=${() => this.#adjust(kind, target(kind))}
+            @click=${() => this.#adjust(kind, target())}
           >
             ${t(label)}
           </wt-button>`,

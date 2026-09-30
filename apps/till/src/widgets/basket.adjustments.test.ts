@@ -105,7 +105,7 @@ async function mount(store: WorkingOrderStore, storedLines: StoredLines | null =
 
 const rows = (el: TillBasket) => [...el.shadowRoot!.querySelectorAll<HTMLElement>(".line")];
 /** A line's action, by the line's place in the basket. */
-const within = (el: TillBasket, index: number, attribute: string) =>
+const within = (el: TillBasket, index: number | string, attribute: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(`[${attribute}="${index}"]`);
 const all = (el: TillBasket, selector: string) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>(selector)].length;
@@ -174,11 +174,117 @@ describe("till-basket: a stored counter order", () => {
     );
   });
 
-  it("gives an extra no action of its own", async () => {
+  it("gives away or discounts an extra on its own and whole, naming it with its dish, and offers no Cancel while its dish is not with the kitchen", async () => {
     const el = await mount(storedOrder());
-    const extra = el.shadowRoot!.querySelector(".option")!;
-    expect(extra.textContent).toContain("Bacon");
-    expect(extra.querySelector("wt-button")).toBeNull();
+    const heard = adjustments(el);
+    const bacon = t("table.extra_of").replace("{extra}", "Bacon").replace("{dish}", "Hamburguesa");
+
+    expect(all(el, "[data-comp-extra]")).toBe(1);
+    expect(all(el, "[data-discount-extra]")).toBe(1);
+    expect(all(el, "[data-cancel-extra]")).toBe(0);
+    expect(within(el, "2-0", "data-comp-extra")!.getAttribute("aria-label")).toBe(
+      `${t("table.comp_line")} · ${bacon}`,
+    );
+    within(el, "2-0", "data-comp-extra")!.click();
+    within(el, "2-0", "data-discount-extra")!.click();
+
+    const target = {
+      lineId: "l-4",
+      name: bacon,
+      quantity: "1",
+      total: "1.50",
+      unitTotal: null,
+      started: false,
+    };
+    expect(heard).toEqual([
+      { kind: "comp", counter: true, target },
+      { kind: "discount", counter: true, target },
+    ]);
+  });
+
+  it("cancels an extra on its own and whole once its dish is with the kitchen", async () => {
+    const sentBurger: StoredLines = {
+      ...stored,
+      lines: listed.map((line) =>
+        line.lineNo === 3
+          ? { ...line, sentAt: "2026-09-30T09:00:00.000Z", state: "queued" as const }
+          : line,
+      ),
+    };
+    const el = await mount(storedOrder(), sentBurger);
+    const heard = adjustments(el);
+
+    expect(all(el, "[data-cancel-extra]")).toBe(1);
+    within(el, "2-0", "data-cancel-extra")!.click();
+
+    expect(heard).toEqual([
+      {
+        kind: "cancel",
+        counter: true,
+        target: expect.objectContaining({ lineId: "l-4", quantity: "1", unitTotal: null }),
+      },
+    ]);
+  });
+
+  it("shows each part of a dish split by a give-away with its own extra, and adjusts that extra", async () => {
+    const store = new WorkingOrderStore();
+    const bacon = {
+      listId: "list-extras",
+      productId: "p-bacon",
+      name: "Bacon",
+      price: "1.50",
+      quantity: 1,
+    };
+    store.loadFrom(
+      "wo-9",
+      [
+        { workingOrderLineId: "l-3", product: burger, quantity: "1", extras: [bacon] },
+        {
+          workingOrderLineId: "l-5",
+          product: { ...burger, unitPrice: "0.00" },
+          quantity: "1",
+          extras: [{ ...bacon, price: "0.00" }],
+        },
+      ],
+      undefined,
+      4,
+    );
+    const split: StoredLines = {
+      ...stored,
+      lines: [
+        listed[2]!,
+        listed[3]!,
+        {
+          ...listed[2]!,
+          id: "l-5",
+          lineNo: 5,
+          unitPriceGross: "0.00",
+          listUnitPriceGross: "10.00",
+        },
+        {
+          ...listed[3]!,
+          id: "l-6",
+          lineNo: 6,
+          parentLineNo: 5,
+          unitPriceGross: "0.00",
+          listUnitPriceGross: "1.50",
+        },
+      ],
+    };
+    const el = await mount(store, split);
+    const heard = adjustments(el);
+    const extraTotals = [...el.shadowRoot!.querySelectorAll(".option-total")];
+
+    expect(extraTotals[0]!.querySelector("s")).toBeNull();
+    expect(extraTotals[1]!.querySelector("s")!.textContent).toBe(
+      formatMoney("1.50", currentLocale()),
+    );
+    within(el, "0-0", "data-comp-extra")!.click();
+    within(el, "1-0", "data-comp-extra")!.click();
+    expect(heard.map(({ target }) => [target.lineId, target.total])).toEqual([
+      ["l-4", "1.50"],
+      ["l-6", "0.00"],
+    ]);
   });
 
   it("shows a dish's price before it was given away, struck through", async () => {
@@ -253,7 +359,7 @@ describe("till-basket: a stored counter order", () => {
     ]);
   });
 
-  it("gives away a dish with its extras whole, and cancels by each unit's share of them", async () => {
+  it("gives away or discounts one of a dish with its extras by each unit's share of them", async () => {
     const store = storedOrder();
     const twoBurgers: StoredLines = {
       ...stored,
@@ -268,8 +374,8 @@ describe("till-basket: a stored counter order", () => {
     within(el, 2, "data-discount-line")!.click();
 
     expect(heard.map(({ kind, target }) => [kind, target.total, target.unitTotal])).toEqual([
-      ["comp", "23.00", null],
-      ["discount", "23.00", null],
+      ["comp", "23.00", "11.50"],
+      ["discount", "23.00", "11.50"],
     ]);
   });
 
@@ -300,7 +406,9 @@ describe("till-basket: no adjustments until the basket matches the stored order"
     all(el, "[data-cancel-line]") +
     all(el, "[data-comp-line]") +
     all(el, "[data-discount-line]") +
-    all(el, "[data-discount-bill]");
+    all(el, "[data-discount-bill]") +
+    all(el, "[data-comp-extra]") +
+    all(el, "[data-discount-extra]");
 
   it("offers none on a walk-up basket", async () => {
     const store = new WorkingOrderStore();

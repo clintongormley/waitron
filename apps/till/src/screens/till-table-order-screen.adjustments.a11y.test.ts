@@ -1,12 +1,13 @@
-import { afterEach, beforeEach, describe, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PartyBill, TabLine, TableParty } from "../api/client.js";
 
-// The table screen's Give away and Discount actions, the bill's Discount, and a given-away or
-// discounted line's earlier price struck through (service plan Task 11, part B).
+// The table screen's Give away and Discount actions, on a dish and on an extra, the bill's
+// Discount, and a given-away or discounted line's earlier price struck through (service plan Task
+// 11, part B; B11d).
 
 const party: TableParty = {
   id: "v1",
@@ -59,6 +60,17 @@ const lines: TabLine[] = [
     unitPriceGross: "0.00",
     listUnitPriceGross: "12.00",
   },
+  // An extra, with Give away, Discount and Cancel of its own, painted muted a size down.
+  {
+    ...base,
+    id: "l4",
+    lineNo: 4,
+    name: "Queso",
+    parentLineNo: 1,
+    unitPrecision: null,
+    state: null,
+    unitPriceGross: "1.50",
+  },
   {
     ...base,
     id: "l2",
@@ -85,6 +97,7 @@ describe.each(["light", "dark"] as const)(
       );
       el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
       await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-cancel-line="4"]')).not.toBeNull();
       await expectNoA11yViolations(host);
     });
   },

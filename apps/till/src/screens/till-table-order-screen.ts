@@ -288,7 +288,8 @@ export interface UnsnoozeGroupDetail {
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
 
-/** `adjust`: Cancel, Give away or Discount pressed on a dish, or Discount on the bill on screen. */
+/** `adjust`: Cancel, Give away or Discount pressed on a dish or an extra, or Discount on the bill on
+ * screen. */
 export interface AdjustDetail {
   kind: AdjustKind;
   target: AdjustTarget;
@@ -1289,6 +1290,7 @@ export class TillTableOrderScreen extends LitElement {
   #heldInOrder: OrderGroup[] = [];
   /** Built with {@link lines}, for the held-groups list. */
   #lineById = new Map<string, TabLine>();
+  #lineByNo = new Map<number, TabLine>();
   #dishesWithExtras = new Set<number>();
 
   constructor() {
@@ -1313,6 +1315,7 @@ export class TillTableOrderScreen extends LitElement {
         this.lines.length,
       );
       this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
+      this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
       this.#dishesWithExtras = new Set(this.lines.flatMap((line) => line.parentLineNo ?? []));
     }
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
@@ -1362,8 +1365,7 @@ export class TillTableOrderScreen extends LitElement {
     this.#offerTaken = false;
     const offered = this.#offeredCancel;
     this.#offeredCancel = undefined;
-    if (offered !== undefined)
-      this.#adjust("cancel", this.#lineTarget(offered, "cancel"), { offered: true });
+    if (offered !== undefined) this.#adjust("cancel", this.#lineTarget(offered), { offered: true });
     this.dispatchEvent(
       new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
     );
@@ -1666,17 +1668,20 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Every sent line with a ticket item, a fired one, and every dish in a held group, a no-route one
    * included: whatever else a line offers, cancelling it always has a button. A held line outside a
-   * group keeps Send alone. */
+   * group keeps Send alone. An extra has no ticket item of its own, so it goes as its dish does. */
   #canCancel(line: TabLine): boolean {
-    if (this.#isChild(line)) return false;
+    if (this.#isChild(line)) {
+      const dish = this.#lineByNo.get(line.parentLineNo!);
+      return dish !== undefined && this.#canCancel(dish);
+    }
     if (inHeldGroup(line, this.#heldGroupIds!)) return true;
     const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
     return isStarted(line) || queued;
   }
 
-  /** A CHILD extras row is part of its dish and offers no action of its own. */
+  /** An extras row offers only Cancel, Give away and Discount, which take it on its own. */
   #lineActions(line: TabLine): TemplateResult | typeof nothing {
-    const name = this.#nameForLine(line);
+    const name = this.#adjustName(line);
     const label = (key: StringKey) => `${t(key)} · ${name}`;
     const actions: TemplateResult[] = [];
     if (sendsAlone(line, this.#heldGroupIds!))
@@ -1726,7 +1731,7 @@ export class TillTableOrderScreen extends LitElement {
           variant="danger"
           data-cancel-line=${line.lineNo}
           aria-label=${label("table.cancel_line")}
-          @click=${() => this.#adjust("cancel", this.#lineTarget(line, "cancel"))}
+          @click=${() => this.#adjust("cancel", this.#lineTarget(line))}
         >
           ${t("table.cancel_line")}
         </wt-button>`,
@@ -1742,10 +1747,10 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Give away and Discount on a dish, which cover its extras; an extras row has neither. */
+  /** Give away and Discount on a dish, which cover its extras, and on an extra alone. */
   #adjustActions(line: TabLine): TemplateResult[] {
-    if (this.#isChild(line) || !this.#adjustable()) return [];
-    const name = this.#nameForLine(line);
+    if (!this.#adjustable()) return [];
+    const name = this.#adjustName(line);
     return LINE_ADJUSTMENTS.map(
       ({ kind, label }) =>
         html`<wt-button
@@ -1755,17 +1760,27 @@ export class TillTableOrderScreen extends LitElement {
           data-comp-line=${kind === "comp" ? line.lineNo : nothing}
           data-discount-line=${kind === "discount" ? line.lineNo : nothing}
           aria-label=${`${t(label)} · ${name}`}
-          @click=${() => this.#adjust(kind, this.#lineTarget(line, kind))}
+          @click=${() => this.#adjust(kind, this.#lineTarget(line))}
         >
           ${t(label)}
         </wt-button>`,
     );
   }
 
-  #lineTarget(line: TabLine, kind: AdjustKind): AdjustTarget {
-    return lineAdjustTarget(line, this.lines, kind, this.#nameForLine(line), (row) =>
+  #lineTarget(line: TabLine): AdjustTarget {
+    return lineAdjustTarget(line, this.lines, this.#adjustName(line), (row) =>
       this.#lineGross(row),
     );
+  }
+
+  /** A dish's name, and an extra's with its dish's, so two extras of one name can be told apart. */
+  #adjustName(line: TabLine): string {
+    const dish = this.#isChild(line) ? this.#lineByNo.get(line.parentLineNo!) : undefined;
+    return dish === undefined
+      ? this.#nameForLine(line)
+      : t("table.extra_of")
+          .replace("{extra}", () => this.#nameForLine(line))
+          .replace("{dish}", () => this.#nameForLine(dish));
   }
 
   #adjust(kind: AdjustKind, target: AdjustTarget, also: { offered?: true } = {}): void {

@@ -20,18 +20,20 @@ export type AdjustKind = "cancel" | "comp" | "discount";
 
 /** What an adjustment acts on, as the dialog names it before anything is done. */
 export interface AdjustTarget {
-  /** The dish; null for the whole bill. */
+  /** The dish or the extra; null for the whole bill. */
   lineId: string | null;
   name: string;
-  /** The dish's quantity as shown; null for the bill. */
+  /** Its quantity as shown; null for the bill. */
   quantity: string | null;
-  /** What the action can take off: the dish with its extras, or the whole bill. */
+  /** What the action can take off: the dish with its extras, the extra, or the whole bill. */
   total: string;
   /** One unit's price, with its share of any extras, when the dish is several whole units the
-   * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or one
-   * with extras given away or discounted). */
+   * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or an
+   * extra). */
   unitTotal: string | null;
   started?: boolean;
+  /** Sold by weight, which the server refuses to give away or discount in part. */
+  weighed?: boolean;
 }
 
 /** The person's choices, which the app asks the server about and then applies. */
@@ -452,6 +454,13 @@ export class TillAdjustmentDialog extends LitElement {
         }}
         @keydown=${(event: KeyboardEvent) => this.#enter(event)}
       ></wt-input>
+      ${
+        target.weighed === true && this.kind !== "cancel"
+          ? html`<p class="detail" data-weighed-hint>
+              ${codeMessage("adjustment.weighed_partial")}
+            </p>`
+          : nothing
+      }
       <wt-form-actions .error=${bottom}>
         ${this.#closeButton("cancel")}
         <wt-button

@@ -1,4 +1,4 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./basket.js";
@@ -58,12 +58,19 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
     await expectNoA11yViolations(host);
   });
 
-  it("a stored order offering Cancel, Give away, Discount and a struck price has no violations", async () => {
+  it("a stored order offering Cancel, Give away, Discount and a struck price, on a dish and on its extra, has no violations", async () => {
     const store = new WorkingOrderStore();
     store.loadFrom(
       "wo-9",
       [
-        { workingOrderLineId: "l-1", product: cafe, quantity: "2" },
+        {
+          workingOrderLineId: "l-1",
+          product: cafe,
+          quantity: "2",
+          extras: [
+            { listId: "list-1", productId: "leche", name: "Leche", price: "0.30", quantity: 1 },
+          ],
+        },
         { workingOrderLineId: "l-2", product: { ...cafe, unitPrice: "0.00" }, quantity: "1" },
       ],
       undefined,
@@ -93,6 +100,16 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
         { ...line, id: "l-1", lineNo: 1, sentAt: "2026-09-30T09:00:00.000Z", state: "queued" },
         {
           ...line,
+          id: "l-3",
+          lineNo: 3,
+          parentLineNo: 1,
+          productId: "leche",
+          listId: "list-1",
+          unitPrecision: null,
+          unitPriceGross: "0.30",
+        },
+        {
+          ...line,
           id: "l-2",
           lineNo: 2,
           quantity: "1.000",
@@ -101,7 +118,12 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
         },
       ],
     };
-    const { host } = await mountWidget<TillBasket>("till-basket", { store, storedLines }, theme);
+    const { el, host } = await mountWidget<TillBasket>(
+      "till-basket",
+      { store, storedLines },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-comp-extra]")).toHaveLength(1);
     await expectNoA11yViolations(host);
   });
 

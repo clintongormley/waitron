@@ -10,6 +10,8 @@ import type { PartyBill, TabLine, TableParty } from "../api/client.js";
 // (service plan Task 11, part B).
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
+const olivesWithPizza = () =>
+  t("table.extra_of").replace("{extra}", "Olives").replace("{dish}", "Pizza");
 
 const party: TableParty = {
   id: "v1",
@@ -107,20 +109,54 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 
 describe("till-table-order-screen: giving away and discounting a dish", () => {
-  it("offers Give away and Discount on each dish of an open bill, naming the dish, and not on its extras", async () => {
+  it("offers Give away and Discount on each dish of an open bill and on each extra, naming the extra with its dish", async () => {
     const el = await mountScreen();
-    for (const lineNo of [1, 2, 4, 5]) {
+    for (const lineNo of [1, 2, 3, 4, 5]) {
       expect(action(el, "comp", lineNo)).not.toBeNull();
       expect(action(el, "discount", lineNo)).not.toBeNull();
     }
-    expect(action(el, "comp", 3)).toBeNull();
-    expect(action(el, "discount", 3)).toBeNull();
     expect(action(el, "comp", 1)!.getAttribute("aria-label")).toBe(
       `${t("table.comp_line")} · Steak`,
     );
     expect(action(el, "discount", 1)!.getAttribute("aria-label")).toBe(
       `${t("table.discount_line")} · Steak`,
     );
+    expect(action(el, "comp", 3)!.getAttribute("aria-label")).toBe(
+      `${t("table.comp_line")} · ${olivesWithPizza()}`,
+    );
+    expect(action(el, "discount", 3)!.getAttribute("aria-label")).toBe(
+      `${t("table.discount_line")} · ${olivesWithPizza()}`,
+    );
+  });
+
+  it("gives away or discounts an extra on its own and whole, even when it is several", async () => {
+    const el = await mountScreen({
+      lines: [
+        { ...pizza, quantity: "2.000" },
+        { ...olives, quantity: "2.000", unitPrecision: 0 },
+      ],
+    });
+    const asked = capture(el);
+    action(el, "comp", 3)!.click();
+    action(el, "discount", 3)!.click();
+    const target = {
+      lineId: "line-3",
+      name: olivesWithPizza(),
+      quantity: "2",
+      total: "3.00",
+      unitTotal: null,
+      started: false,
+    };
+    expect(asked).toEqual([
+      { kind: "comp", target },
+      { kind: "discount", target },
+    ]);
+  });
+
+  it("names an extra in Spanish with its dish", async () => {
+    setLocale("es-ES");
+    const el = await mountScreen();
+    expect(action(el, "comp", 3)!.getAttribute("aria-label")).toBe("Invitar · Olives (con Pizza)");
   });
 
   it("asks the app to adjust a dish of several whole units, which may be done one at a time", async () => {
@@ -142,24 +178,35 @@ describe("till-table-order-screen: giving away and discounting a dish", () => {
     ]);
   });
 
-  it("covers a dish with its extras, which can only be done whole", async () => {
+  it("covers a dish with its extras, and one of several with its share of them", async () => {
     const el = await mountScreen({ lines: [{ ...pizza, quantity: "2.000" }, olives] });
     const asked = capture(el);
     action(el, "comp", 2)!.click();
-    expect(asked[0]!.target).toMatchObject({
-      lineId: "line-2",
-      name: "Pizza",
-      quantity: "2",
-      total: "19.50",
-      unitTotal: null,
-    });
+    action(el, "discount", 2)!.click();
+    for (const { target } of asked)
+      expect(target).toMatchObject({
+        lineId: "line-2",
+        name: "Pizza",
+        quantity: "2",
+        total: "19.50",
+        unitTotal: "9.75",
+      });
+    expect(asked).toHaveLength(2);
   });
 
-  it("does a weighed dish whole", async () => {
+  it("does a weighed dish whole, and says it is weighed", async () => {
     const el = await mountScreen();
     const asked = capture(el);
     action(el, "discount", 4)!.click();
-    expect(asked[0]!.target).toMatchObject({ quantity: "0.333", total: "7.99", unitTotal: null });
+    action(el, "comp", 4)!.click();
+    for (const { target } of asked)
+      expect(target).toMatchObject({
+        quantity: "0.333",
+        total: "7.99",
+        unitTotal: null,
+        weighed: true,
+      });
+    expect(asked).toHaveLength(2);
   });
 
   it("offers them on a dish already served", async () => {
@@ -182,7 +229,7 @@ describe("till-table-order-screen: giving away and discounting a dish", () => {
 });
 
 describe("till-table-order-screen: cancelling a dish", () => {
-  it("asks the app to cancel a dish, which one at a time covers even with its extras, where Give away takes it whole", async () => {
+  it("asks the app to cancel a dish, which one at a time covers even with its extras, as Give away does", async () => {
     const el = await mountScreen({ lines: [{ ...pizza, quantity: "2.000" }, olives] });
     const asked = capture(el);
     el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="2"]')!.click();
@@ -199,8 +246,91 @@ describe("till-table-order-screen: cancelling a dish", () => {
           started: false,
         },
       },
-      { kind: "comp", target: expect.objectContaining({ unitTotal: null }) },
+      { kind: "comp", target: expect.objectContaining({ unitTotal: "9.75" }) },
     ]);
+  });
+
+  const cancelOf = (el: TillTableOrderScreen, lineNo: number) =>
+    el.shadowRoot!.querySelector<HTMLElement>(`[data-cancel-line="${lineNo}"]`);
+
+  it("cancels an extra on its own and whole, as coming off the bill, where its dish offers Cancel", async () => {
+    const el = await mountScreen({
+      lines: [
+        { ...pizza, quantity: "2.000", state: "preparing" },
+        { ...olives, quantity: "2.000" },
+      ],
+    });
+    const asked = capture(el);
+    expect(cancelOf(el, 3)!.getAttribute("aria-label")).toBe(
+      `${t("table.cancel_line")} · ${olivesWithPizza()}`,
+    );
+    cancelOf(el, 3)!.click();
+    expect(asked).toEqual([
+      {
+        kind: "cancel",
+        target: {
+          lineId: "line-3",
+          name: olivesWithPizza(),
+          quantity: "2",
+          total: "3.00",
+          unitTotal: null,
+          started: false,
+        },
+      },
+    ]);
+  });
+
+  it("offers no Cancel on an extra whose dish offers none", async () => {
+    const held = { ...pizza, sentAt: null, firedAt: null };
+    const el = await mountScreen({ lines: [held, olives] });
+    expect(el.shadowRoot!.querySelector('[data-send-line="2"]')).not.toBeNull();
+    expect(cancelOf(el, 2)).toBeNull();
+    expect(cancelOf(el, 3)).toBeNull();
+    expect(action(el, "comp", 3)).not.toBeNull();
+  });
+});
+
+describe("till-table-order-screen: a dish split by a give-away", () => {
+  const total = (row: Element) =>
+    row
+      .querySelector(".line-total")!
+      .textContent!.replace(/[ \n\t]+/g, " ")
+      .trim();
+
+  it("shows the part given away with its own extra under it, and the part left with its own", async () => {
+    // As the server lists Pizza x2 with an olive each once one was given away: the part split off
+    // and its olive are numbered after every other row, the olive straight after its dish.
+    const el = await mountScreen({
+      lines: [
+        pizza,
+        olives,
+        steaks,
+        { ...pizza, id: "line-6", lineNo: 6, unitPriceGross: "0.00", listUnitPriceGross: "9.00" },
+        {
+          ...olives,
+          id: "line-7",
+          lineNo: 7,
+          parentLineNo: 6,
+          unitPriceGross: "0.00",
+          listUnitPriceGross: "1.50",
+        },
+      ],
+    });
+    const rows = [...el.shadowRoot!.querySelectorAll(".pending-line")];
+    const rowOf = (lineNo: number) =>
+      rows.findIndex((row) => row.querySelector(`[data-comp-line="${lineNo}"]`) !== null);
+
+    expect([2, 3, 1, 6, 7].map(rowOf)).toEqual([0, 1, 2, 3, 4]);
+    expect(rows.map((row) => row.classList.contains("child-line"))).toEqual([
+      false,
+      true,
+      false,
+      false,
+      true,
+    ]);
+    expect(total(rows[1]!)).toBe(money("1.50"));
+    expect(total(rows[3]!)).toBe(`${t("table.price_was")} ${money("9.00")} ${money("0.00")}`);
+    expect(total(rows[4]!)).toBe(`${t("table.price_was")} ${money("1.50")} ${money("0.00")}`);
   });
 });
 

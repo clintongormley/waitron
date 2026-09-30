@@ -177,6 +177,35 @@ describe("till-adjustment-dialog: the form", () => {
     );
   });
 
+  it("tells staff, beside the action, to discount the whole of a weighed line rather than part", async () => {
+    const ham: AdjustTarget = {
+      lineId: "line-4",
+      name: "Ham",
+      quantity: "0.333",
+      total: "7.99",
+      unitTotal: null,
+      weighed: true,
+    };
+    const hint = (el: TillAdjustmentDialog) =>
+      root(el).querySelector("[data-weighed-hint]")?.textContent?.trim() ?? null;
+    for (const kind of ["comp", "discount"] as const) {
+      const el = await mount({ kind, target: ham });
+      expect(hint(el), kind).toBe(codeMessage("adjustment.weighed_partial"));
+      expect(root(el).querySelector("[data-quantity]"), kind).toBeNull();
+      // Beside the action: the last thing before the row holding it.
+      expect(root(el).querySelector("[data-weighed-hint]")!.nextElementSibling!.tagName).toBe(
+        "WT-FORM-ACTIONS",
+      );
+    }
+    expect(hint(await mount({ kind: "cancel", target: ham }))).toBeNull();
+    expect(hint(await mount({ kind: "discount", target: burger }))).toBeNull();
+
+    setLocale("es-ES");
+    expect(hint(await mount({ kind: "discount", target: ham }))).toBe(
+      "Un artículo al peso no se puede partir. Haz un descuento sobre la línea entera",
+    );
+  });
+
   it("names the whole bill for a bill discount", async () => {
     const el = await mount({
       kind: "discount",
