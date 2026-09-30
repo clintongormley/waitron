@@ -1137,14 +1137,20 @@ describe("createAgent — inventory, discovery and resolve", () => {
         probeNetwork: async () => [{ ...probedHp }],
         markPagePrinters,
       });
-      const c = client({ pullJobs: openWindowWithProbe() });
+      // The typed address arrives with the second reply, so the pull that carries the pass's
+      // devices is also the first to probe it.
+      const pulls = openWindowWithProbe().mockResolvedValueOnce(
+        okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: 10_000_000_000 }),
+      );
+      const c = client({ pullJobs: pulls });
       const agent = createAgent({ host, client: c });
-      await agent.runOnce(); // opens the window and records the typed address
+      await agent.runOnce(); // opens the window
       expect(markPagePrinters).not.toHaveBeenCalled();
-      await agent.runOnce(); // scans, probes, merges, then classifies
+      await agent.runOnce(); // starts the pass and records the typed address
+      await agent.runOnce(); // takes the pass's devices, probes, merges, then classifies
       expect(markPagePrinters).toHaveBeenCalledTimes(1);
       expect(markPagePrinters).toHaveBeenCalledWith([scannedHp]);
-      expect(inventoryOf(c, 1).scanned).toStrictEqual([{ ...scannedHp, pagePrinter: true }]);
+      expect(inventoryOf(c, 2).scanned).toStrictEqual([{ ...scannedHp, pagePrinter: true }]);
     });
 
     it("does not classify when nothing on the list is a network device", async () => {
@@ -1166,7 +1172,8 @@ describe("createAgent — inventory, discovery and resolve", () => {
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
       await agent.runOnce();
-      expect(inventoryOf(c, 1).scanned).toStrictEqual([bt]);
+      await agent.runOnce();
+      expect(inventoryOf(c, 2).scanned).toStrictEqual([bt]);
       expect(markPagePrinters).not.toHaveBeenCalled();
     });
 
@@ -1197,10 +1204,12 @@ describe("createAgent — inventory, discovery and resolve", () => {
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
       await agent.runOnce();
-      expect(inventoryOf(c, 1).scanned).toStrictEqual([scannedHp]);
+      await agent.runOnce();
+      expect(inventoryOf(c, 2).scanned).toStrictEqual([scannedHp]);
       expect(c.report).toHaveBeenCalledWith(expect.any(String), "a1.s", "classify-print", {
         status: "done",
       });
+      expect(c.report).toHaveBeenCalledTimes(2); // the pull whose classification threw printed too
       expect(host.logs.some((line) => line.includes("office-printer check failed"))).toBe(true);
     });
 
@@ -1216,7 +1225,8 @@ describe("createAgent — inventory, discovery and resolve", () => {
       const agent = createAgent({ host, client: c });
       await agent.runOnce();
       await agent.runOnce();
-      expect(inventoryOf(c, 1).scanned).toStrictEqual([scannedHp]);
+      await agent.runOnce();
+      expect(inventoryOf(c, 2).scanned).toStrictEqual([scannedHp]);
       expect(host.logs.some((line) => line.includes("office-printer check failed"))).toBe(false);
     });
   });
@@ -1258,12 +1268,14 @@ describe("createAgent — inventory, discovery and resolve", () => {
     await agent.runOnce(); // no prior window → no scan; this reply opens one
     expect(scan).not.toHaveBeenCalled();
     expect(inventoryOf(c, 0).scanned).toEqual([]);
-    await agent.runOnce(); // prior window open → scans and includes the results; this reply closes it
+    await agent.runOnce(); // prior window open → starts a pass; this reply closes the window
     expect(scan).toHaveBeenCalledTimes(1);
-    expect(inventoryOf(c, 1).scanned).toEqual(scanned);
-    await agent.runOnce(); // window closed → no further scan
+    await agent.runOnce(); // window closed → no further scan; carries the finished pass's results
     expect(scan).toHaveBeenCalledTimes(1);
-    expect(inventoryOf(c, 2).scanned).toEqual([]);
+    expect(inventoryOf(c, 2).scanned).toEqual(scanned);
+    await agent.runOnce();
+    expect(scan).toHaveBeenCalledTimes(1);
+    expect(inventoryOf(c, 3).scanned).toEqual([]);
   });
 
   it("a throwing discovery scan never blocks the job pull (isolated failure)", async () => {
@@ -1323,6 +1335,256 @@ describe("createAgent — inventory, discovery and resolve", () => {
     ]);
     expect(pulls).toHaveBeenCalledTimes(3);
     expect(host.statuses.at(-1)?.phase).toBe("running");
+  });
+
+  describe("a discovery pass runs beside the job pull", () => {
+    const bt = { transport: "bluetooth" as const, name: "BT-58", localKey: "AA:BB:CC" };
+    const open = (jobs: WireJob[] = []) =>
+      okR<PullReply>({ nodeId: "n1", servers: [], jobs, discoveryUntil: 10_000_000_000 });
+    // Lets every tick and pass whose host calls have already resolved run to the end.
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const never = () => new Promise<DiscoveredDevice[]>(() => {});
+
+    it("pulls and delivers a job queued while a scan is still running", async () => {
+      const pass = deferred<DiscoveredDevice[]>();
+      const scan = vi.fn(() => pass.promise);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValue(open([usbJob("during-scan")]));
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce(); // opens the window
+      const during = agent.runOnce(); // starts a pass that has not finished
+      await settle();
+      expect(scan).toHaveBeenCalledTimes(1);
+      expect(pulls).toHaveBeenCalledTimes(2);
+      expect(c.report).toHaveBeenCalledWith(A, "a1.s", "during-scan", { status: "done" });
+      pass.resolve([]);
+      await during;
+    });
+
+    it("a tick that finds a pass still running pulls and starts no second one", async () => {
+      const pass = deferred<DiscoveredDevice[]>();
+      const scan = vi.fn(() => pass.promise);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      const pulls = vi.fn(async () => open());
+      const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+      const ticks = [agent.runOnce(), agent.runOnce(), agent.runOnce()];
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(3);
+      expect(scan).toHaveBeenCalledTimes(1);
+      pass.resolve([]);
+      await Promise.all(ticks);
+      await settle();
+      await agent.runOnce(); // the pass has finished, so this tick starts the next one
+      expect(scan).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      [
+        "throws",
+        async (): Promise<DiscoveredDevice[]> => {
+          throw new Error("spawn bluetoothctl ENOENT");
+        },
+      ],
+      ["never finishes", never],
+    ])("a scan that %s never stops the job pulls", async (_, body) => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan: vi.fn(body) });
+      const pulls = vi.fn(async () => open([usbJob("keeps-printing")]));
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({ host, client: c });
+      const ticks = [agent.runOnce(), agent.runOnce(), agent.runOnce(), agent.runOnce()];
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(4);
+      expect(c.report).toHaveBeenCalledTimes(4);
+      expect(host.statuses.at(-1)?.phase).toBe("running");
+      await Promise.all(ticks);
+    });
+
+    it("reports a finished pass's devices on the next pull, and only once", async () => {
+      const pass = deferred<DiscoveredDevice[]>();
+      const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      const c = client({ pullJobs: vi.fn(async () => open()) });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce(); // opens the window
+      const starting = agent.runOnce(); // starts the pass
+      await settle();
+      pass.resolve([bt]);
+      await starting;
+      await settle();
+      expect(inventoryOf(c, 1).scanned).toEqual([]);
+      await agent.runOnce();
+      expect(inventoryOf(c, 2).scanned).toEqual([bt]);
+      await agent.runOnce();
+      expect(inventoryOf(c, 3).scanned).toEqual([]);
+    });
+
+    it("keeps a finished pass's devices through a failed pull and sends them on the next pull that succeeds", async () => {
+      const pass = deferred<DiscoveredDevice[]>();
+      const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      const closed = okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null });
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(closed)
+        .mockResolvedValueOnce(failR({ kind: "unreachable", detail: "network down" }))
+        .mockResolvedValue(closed);
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce(); // opens the window
+      await agent.runOnce(); // starts the pass; this reply closes the window
+      pass.resolve([bt]);
+      await settle();
+      await agent.runOnce(); // carries the devices, and the pull fails
+      await agent.runOnce();
+      await agent.runOnce();
+      expect(pulls.mock.calls.map((call) => call[2].scanned)).toEqual([[], [], [bt], [bt], []]);
+      expect(scan).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps the devices of a pass that finishes while a successful pull is carrying an older pass's", async () => {
+      const first = deferred<DiscoveredDevice[]>();
+      const second = deferred<DiscoveredDevice[]>();
+      const scan = vi
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise)
+        .mockImplementation(never);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      const inFlight = deferred<Result<PullReply>>();
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(open())
+        .mockReturnValueOnce(inFlight.promise)
+        .mockResolvedValue(open());
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({ host, client: c });
+      const usb = { transport: "usb" as const, name: "USB-80", localKey: "SN-9" };
+      await agent.runOnce(); // opens the window
+      await agent.runOnce(); // starts the first pass
+      first.resolve([bt]);
+      await settle();
+      const carrying = agent.runOnce(); // carries the first pass's devices and starts the second
+      await settle();
+      expect(scan).toHaveBeenCalledTimes(2);
+      second.resolve([usb]);
+      await settle();
+      inFlight.resolve(open());
+      await carrying;
+      await agent.runOnce();
+      expect(pulls.mock.calls.map((call) => call[2].scanned)).toEqual([[], [], [bt], [usb]]);
+    });
+
+    it("a setup reset drops a running pass's devices, and a new window scans once that pass ends", async () => {
+      const pass = deferred<DiscoveredDevice[]>();
+      const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(failR({ kind: "unauthorized" }))
+        .mockResolvedValue(open());
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({ host, client: c });
+      await agent.runOnce(); // opens the window
+      const halting = agent.runOnce(); // starts the pass; the pull is refused, so the agent halts
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(2);
+      await halting;
+      expect(await agent.configure({ serverUrl: A, name: "kitchen-pi" })).toBe(true);
+      await agent.runOnce(); // joins → pending
+      await agent.runOnce(); // approved → pulls, and this reply opens a new window
+      await agent.runOnce(); // the old pass is still running, so no second one starts
+      expect(scan).toHaveBeenCalledTimes(1);
+      pass.resolve([bt]);
+      await settle();
+      await agent.runOnce(); // the old pass ended: its devices are dropped and a new pass starts
+      expect(pulls.mock.calls.slice(2).map((call) => call[2].scanned)).toEqual([[], [], []]);
+      expect(scan).toHaveBeenCalledTimes(2);
+    });
+
+    it("a setup reset drops a finished pass's devices that no pull has carried yet", async () => {
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan: async () => [bt] });
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open())
+        .mockResolvedValueOnce(failR({ kind: "unauthorized" }))
+        .mockResolvedValue(
+          okR<PullReply>({ nodeId: "n1", servers: [], jobs: [], discoveryUntil: null }),
+        );
+      const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+      await agent.runOnce(); // opens the window
+      await agent.runOnce(); // starts the pass; the pull is refused, so the agent halts
+      await settle(); // the pass finishes while the agent is halted
+      expect(await agent.configure({ serverUrl: A, name: "kitchen-pi" })).toBe(true);
+      await agent.runOnce(); // joins → pending
+      await agent.runOnce(); // approved → pulls
+      expect(pulls.mock.calls[2]![2].scanned).toEqual([]);
+    });
+
+    it("a finished pass wakes a sleeping loop so its devices go out at once", async () => {
+      const pass = deferred<DiscoveredDevice[]>();
+      const scan = vi.fn().mockReturnValueOnce(pass.promise).mockImplementation(never);
+      const host = fakeHost({ config: CONFIG, token: "a1.s", scan });
+      host.sleep = () => new Promise(() => {});
+      // The first reply carries a job, so the loop re-polls at once and that tick starts the pass;
+      // after the second, empty, reply it sleeps for good unless something wakes it.
+      const pulls = vi
+        .fn()
+        .mockResolvedValueOnce(open([usbJob("opens")]))
+        .mockResolvedValue(open());
+      const c = client({ pullJobs: pulls });
+      const agent = createAgent({ host, client: c });
+      const loop = agent.start();
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(2);
+      pass.resolve([bt]);
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(3);
+      expect(inventoryOf(c, 2).scanned).toEqual([bt]);
+      agent.stop();
+      await loop;
+    });
+
+    it("logs a pass that rejects with a value String() cannot convert", async () => {
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: () => Promise.reject(Object.create(null) as object),
+      });
+      const agent = createAgent({ host, client: client({ pullJobs: vi.fn(async () => open()) }) });
+      await agent.runOnce(); // opens the window
+      await agent.runOnce(); // starts the pass
+      await settle();
+      expect(host.logs).toContain('warn scan failed {"error":"unstringifiable rejection"}');
+    });
+
+    it("a logger that throws while a pass fails neither escapes nor stops the pulls", async () => {
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        scan: async () => {
+          throw new Error("no adapter");
+        },
+      });
+      host.log.warn = () => {
+        throw new Error("log sink closed");
+      };
+      const pulls = vi.fn(async () => open());
+      const agent = createAgent({ host, client: client({ pullJobs: pulls }) });
+      await agent.runOnce();
+      await agent.runOnce();
+      await settle();
+      await agent.runOnce();
+      await settle();
+      expect(pulls).toHaveBeenCalledTimes(3);
+      expect(host.statuses.at(-1)?.phase).toBe("running");
+    });
   });
 
   it("resolves a usb job before sending", async () => {

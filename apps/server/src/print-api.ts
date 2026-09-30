@@ -346,8 +346,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const DISCOVERED_TTL_MS = 15_000;
-  // While the window is open an agent reports once per scan pass rather than every 2 s, and a pass
-  // whose Bluetooth `info` call the agent kills at its 15 s limit runs past 15 s.
+  // While the window is open an agent reports a pass's devices once per pass, on the pull after it
+  // ends, not every 2 s; a pass whose Bluetooth `info` call is killed at 15 s runs past 15 s.
   const SCANNING_TTL_MS = 45_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     at !== undefined && now - at <= DISCOVERED_TTL_MS;

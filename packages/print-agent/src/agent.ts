@@ -21,7 +21,7 @@ import type {
 import { Router } from "./router.js";
 
 /** A non-empty batch re-polls at once; only an empty pull sleeps, and a finished Bluetooth command
- * cuts the sleep short so its outcome goes out at once. */
+ * or a discovery pass that found devices cuts the sleep short so what it produced goes out at once. */
 export const POLL_INTERVAL_MS = 2_000;
 const RESET_WINDOW_MS = 5 * 60_000;
 
@@ -88,6 +88,10 @@ export function createAgent(opts: AgentOptions): Agent {
   // A setup reset moves it on, so a command already running then has its outcome dropped.
   let bluetoothGeneration = 0;
   let lastPairedFailure: string | undefined;
+  // At most one discovery pass at a time, even across a setup reset, which only drops its devices.
+  let scanning = false;
+  let scanGeneration = 0;
+  let scanFound: DiscoveredDevice[] = [];
 
   function replaceWakeSignal(): void {
     wakePromise = new Promise((resolve) => {
@@ -125,6 +129,8 @@ export function createAgent(opts: AgentOptions): Agent {
     executedBluetoothCommands.clear();
     bluetoothQueue = [];
     bluetoothGeneration += 1;
+    scanFound = [];
+    scanGeneration += 1;
   }
 
   replaceWakeSignal();
@@ -276,6 +282,28 @@ export function createAgent(opts: AgentOptions): Agent {
     if (!bluetoothWorking && bluetoothQueue.length > 0) void drainBluetoothCommands();
   }
 
+  /** Runs outside the poll loop's lock, so a pass never holds up a pull; its devices ride the next
+   * pull. A throwing pass reports nothing. */
+  async function discover(): Promise<void> {
+    scanning = true;
+    const generation = scanGeneration;
+    let found: DiscoveredDevice[] = [];
+    try {
+      found = await host.scan();
+    } catch (error) {
+      try {
+        host.log.warn("scan failed", { error: describeRejection(error) });
+      } catch {
+        // Nothing awaits this pass, so a throw here would be an unhandled rejection.
+      }
+    }
+    scanning = false;
+    if (generation === scanGeneration && found.length > 0) {
+      scanFound = found;
+      wake();
+    }
+  }
+
   /** Returns true when the tick did work (a non-empty batch), so `start` re-polls at once. */
   async function tick(): Promise<boolean> {
     // The loop, not the host, holds the live config, so a later merge never clobbers an earlier
@@ -408,17 +436,11 @@ export function createAgent(opts: AgentOptions): Agent {
     const pairedListing = listPairedBluetooth();
     const visible = await host.visibleDevices();
     const pairedBluetooth = await pairedListing;
-    // A throwing scan must NEVER stop the job pull.
-    let scanned: DiscoveredDevice[] = [];
-    if (host.now() < discoveryUntil) {
-      try {
-        scanned = await host.scan();
-      } catch (error) {
-        host.log.warn("scan failed", {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
+    // A copy, so the merges below never touch the pending list; it is dropped only once a pull
+    // carrying it succeeds, and only if no newer pass or reset has replaced it meanwhile.
+    const sentScan = scanFound;
+    let scanned = [...sentScan];
+    if (host.now() < discoveryUntil && !scanning) void discover();
     const targets =
       current === probeServer
         ? networkProbes.filter((probe) => host.now() < probe.expiresAt).map((probe) => probe.target)
@@ -486,6 +508,7 @@ export function createAgent(opts: AgentOptions): Agent {
     outOfTouch = false;
     resetAt = undefined;
     bluetoothOutcomes = bluetoothOutcomes.filter((outcome) => !sentOutcomes.includes(outcome));
+    if (scanFound === sentScan) scanFound = [];
     r.merge(pulled.value.servers);
     const servers = r
       .servers()
