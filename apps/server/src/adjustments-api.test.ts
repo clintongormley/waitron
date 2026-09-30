@@ -235,6 +235,40 @@ describe("a cancel's preview", () => {
     expect(await recordedOn(billId)).toEqual([]);
     expect((await rowsOf(venue, billId))[0]).toMatchObject({ quantity: "2.000" });
   });
+
+  it("previews a cancel of 1 of Pizza ×2 with olives as exactly what the applied cancel takes off the bill", async () => {
+    const { billId } = await billWith(venue, [{ name: "Pizza", quantity: "2", olives: 1 }]);
+    const lineId = await lineIdOf(venue, billId, 1);
+    const totalOf = async () =>
+      (await rowsOf(venue, billId)).reduce(
+        (sum, row) => sum + Math.round(Number(row.lineTotal) * 100),
+        0,
+      );
+    const before = await totalOf();
+
+    const preview = await post(
+      billId,
+      { lineId, action: "cancel", quantity: "1" },
+      { path: "/preview" },
+    );
+    const applied = await post(billId, { lineId, action: "cancel", quantity: "1" });
+
+    expect(applied.status).toBe(200);
+    expect(
+      (await rowsOf(venue, billId)).map((row) => [row.name, row.quantity, row.lineTotal]),
+    ).toEqual([
+      ["Pizza", "1.000", "9.00"],
+      ["Olives", "1.000", "1.50"],
+    ]);
+    expect(before - (await totalOf())).toBe(1050);
+    expect(preview.json).toMatchObject({ reduction: "10.50", nominalValue: "10.50" });
+    expect((await recordedOn(billId))[0]).toMatchObject({
+      action: "cancel",
+      quantity: 1000,
+      reduction: 1050,
+      nominalValue: 1050,
+    });
+  });
 });
 
 describe("the route's own rules", () => {

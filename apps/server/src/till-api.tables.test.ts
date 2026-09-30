@@ -30,6 +30,7 @@ import type { TillConfig } from "./till-config.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
+import { cancelBody } from "./testing/cancel-line.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
@@ -180,6 +181,14 @@ async function request(path: string, init: RequestInit = {}): Promise<Response> 
   return app.request(path, {
     ...init,
     headers: { "content-type": "application/json", cookie, ...init.headers },
+  });
+}
+
+/** Cancels `quantity` of line `lineNo`, all of it when absent, through the adjustment route. */
+async function cancel(tabId: string, lineNo: number, quantity?: string): Promise<Response> {
+  return request(`/api/working-orders/${tabId}/adjustments`, {
+    method: "POST",
+    body: JSON.stringify(await cancelBody(suite.db, tabId, lineNo, quantity)),
   });
 }
 
@@ -402,7 +411,7 @@ describe("table + tab routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "table.not_found" } });
   });
 
-  it("POST /api/parties/:id/groups appends; DELETE .../lines/:lineNo voids; GET /api/tables/state reflects it", async () => {
+  it("POST /api/parties/:id/groups appends; a cancel through .../adjustments voids; GET /api/tables/state reflects it", async () => {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
@@ -432,10 +441,13 @@ describe("table + tab routes", () => {
     });
 
     const before = await partyRevision(partyId);
-    const voided = await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" });
+    const voided = await cancel(tabId, 1);
     expect(voided.status).toBe(200);
     // The void moves the party on, so the answer says where to, for its next command.
-    expect(await voided.json()).toEqual({ party: { id: partyId, revision: before + 1 } });
+    expect(((await voided.json()) as { party: unknown }).party).toEqual({
+      id: partyId,
+      revision: before + 1,
+    });
     expect(await partyRevision(partyId)).toBe(before + 1);
 
     const state = (await (await request("/api/tables/state")).json()) as {
@@ -446,7 +458,7 @@ describe("table + tab routes", () => {
     expect(state.find((t) => t.id === id)).toMatchObject({ state: "open-tab", tabLineCount: 1 });
   });
 
-  it("DELETE .../lines/:lineNo?quantity= voids that part of the line, and refuses a quantity it cannot void", async () => {
+  it("a cancel of a quantity voids that part of the line, and refuses a quantity it cannot void", async () => {
     const { id } = (await (
       await request("/api/tables", {
         method: "POST",
@@ -457,18 +469,17 @@ describe("table + tab routes", () => {
     await sendRound(partyId, [{ menuItemId, quantity: "3" }]);
 
     for (const quantity of ["0", "4", "abc"]) {
-      const refused = await request(`/api/working-orders/${tabId}/lines/1?quantity=${quantity}`, {
-        method: "DELETE",
-      });
+      const refused = await cancel(tabId, 1, quantity);
       expect(refused.status).toBe(400);
       expect(await refused.json()).toMatchObject({
-        error: { code: "tab.void_quantity_invalid", params: { tabId, lineNo: 1, quantity } },
+        error: {
+          code: "adjustment.quantity_invalid",
+          params: { workingOrderId: tabId, lineNo: 1, quantity },
+        },
       });
     }
 
-    const voided = await request(`/api/working-orders/${tabId}/lines/1?quantity=1`, {
-      method: "DELETE",
-    });
+    const voided = await cancel(tabId, 1, "1");
     expect(voided.status).toBe(200);
     const { lines } = (await (await request(`/api/working-orders/${tabId}/lines`)).json()) as {
       lines: { quantity: string }[];
@@ -596,41 +607,6 @@ describe("table + tab routes", () => {
     });
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "party.not_open" } });
-  });
-
-  it("a malformed :id on the void route → 409 tab.not_open (not a 500)", async () => {
-    const res = await request("/api/working-orders/not-a-uuid/lines/1", { method: "DELETE" });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "tab.not_open" } });
-  });
-
-  it("a non-integer :lineNo on the void route → 404 tab.line_not_found (it names no line, not a 500)", async () => {
-    // A valid-uuid `:id` passes the `isUuid` screen so the `Number.isInteger` guard is what fires:
-    // `Number("abc")` is `NaN`, refused as `tab.line_not_found`.
-    const res = await request(`/api/working-orders/${randomUUID()}/lines/abc`, {
-      method: "DELETE",
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "tab.line_not_found" } });
-  });
-
-  it("an OUT-OF-int4-RANGE :lineNo on the void route → 404 tab.line_not_found (not an opaque 22003 500)", async () => {
-    // Open a REAL tab so `voidTabLine`'s `assertPartyBillOpen` passes — a random uuid would be
-    // refused as tab.not_open first. `9999999999` IS a `Number.isInteger`; the route's range bound
-    // refuses it as `tab.line_not_found` (a line number that cannot exist names no line).
-    const { id } = (await (
-      await request("/api/tables", {
-        method: "POST",
-        body: JSON.stringify({ label: "88", zoneId: tablesZoneId }),
-      })
-    ).json()) as { id: string };
-    const tabId = await seatWithOneLine(id);
-
-    const res = await request(`/api/working-orders/${tabId}/lines/9999999999`, {
-      method: "DELETE",
-    });
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({ error: { code: "tab.line_not_found" } });
   });
 
   /** A tab on a fresh table with one line fired to the kitchen, and the revision a copy reads. */
@@ -773,7 +749,7 @@ describe("table + tab routes", () => {
         method: "PUT",
         body: JSON.stringify({ note: "x", revision }),
       }),
-      await request(`/api/working-orders/${tabId}/lines/1`, { method: "DELETE" }),
+      await cancel(tabId, 1),
     ];
 
     for (const res of refusals) {
@@ -815,7 +791,6 @@ describe("table + tab routes", () => {
         body: JSON.stringify({ submissionId: "s", expectedPartyRevision: 0, groups: [] }),
       }),
       noAuth.request(`/api/working-orders/${id}/lines`),
-      noAuth.request(`/api/working-orders/${id}/lines/1`, { method: "DELETE" }),
       noAuth.request(`/api/working-orders/${id}/lines/1`, {
         method: "PUT",
         headers: json,

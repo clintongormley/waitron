@@ -125,8 +125,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 1. **Finish table service and paying a bill in parts** (A4, lane B). Fifteen of the service
    plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
-   the adjustment reports, as #923; Task 13, standalone ordering, as #903). Left: the till's Cancel
-   taking a reason (waits on the owner, see Task 11's entry),
+   the adjustment reports, as #923; Task 13, standalone ordering, as #903), and the till's Cancel
+   taking a reason is done by lane B item B11a. Left:
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
@@ -359,7 +359,8 @@ screen offers Change on a sent line the kitchen has not started, a recalled line
 kitchen route; it opens the existing option, extras and note editor prefilled from the line and saves
 through the one-line edit route with the order's revision. A started line keeps Cancel only; Cancel
 is now offered on a queued line too, and a line of several whole units asks "Cancel 1" or "Cancel
-all". With the venue's "allow changes to items already sent" setting off, Change and Recall are
+all". _(2026-09-30, B11a: Cancel now asks for a reason in the adjustment dialog, which on a line of
+several whole units offers "1" or "All N" under "How many".)_ With the venue's "allow changes to items already sent" setting off, Change and Recall are
 hidden on sent kitchen work. The tab-lines answer (`GET /api/working-orders/:id/lines`) now carries
 that setting, and each line when it was released, its note, its offer and its parent product. A
 change or recall the server refuses because the kitchen has started the item, or because the venue
@@ -763,7 +764,11 @@ table is an unchecked path to one. _(2026-09-29, table actions Task 11: the till
 table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
 (`apps/server/src/working-order.ts`) calls `assertPartyBillOpen`. It lets through an open bill
 that belongs to a party whether or not a table points at it, and a split check carries its party
-("can have a line voided", `apps/server/src/party-main-bill.test.ts`). An open order of no party
+("can have a line voided", `apps/server/src/party-main-bill.test.ts`). _(2026-09-30, B11a:
+`voidTabLine` is deleted; `applyAdjustment` (`apps/server/src/adjustments-apply.ts`) makes the same
+`assertPartyBillOpen` check, and that case now cancels by calling it directly, through the
+`cancelLine` test helper in `apps/server/src/testing/cancel-line.ts`, not through the route.)_
+An open order of no party
 that no table points at is still refused `tab.not_open`. Before Task 2 the server refused a void
 on a check no table pointed at (`assertAnchoredTabOpen`). Since menus Task 7b (owner decision
 2026-09-26), a part of a line the kitchen has started can be split onto a check. A check can be
@@ -2813,7 +2818,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     so the list can read "Group 1, Group 3"; the preview gives counts, not contents; the screen's
     older small buttons are 32 px tall, under the 44 px tap target (this branch's new ones are
     44 px); per-line Send, Change and Cancel have no guard against a second press while the first is
-    running (the group commands do); whether the floating language button covers the new draft bar
+    running (the group commands do) _(2026-09-30, B11a: Cancel now opens the adjustment dialog,
+    which ignores a second press while it is opening or open)_; whether the floating language button covers the new draft bar
     at 390 px has not been re-checked _(Task 8, 2026-09-28, looked at in screenshots at 390 px: it
     does not cover the new last-added bar; on the new Review view it covers the corner of Fire all
     now until the page is scrolled, which the page's bottom padding allows)_.
@@ -2977,7 +2983,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       ticket or a Reprint, each of which prints the group as it stands, can be relied on.
     - The route that removes a line, `DELETE /api/working-orders/:id/lines/:lineNo`, takes no
       revision and no retry id, so a retried removal of part of a held dish removes another part
-      and prints a second HOLD CANCELLED slip. The route predates Task 6.
+      and prints a second HOLD CANCELLED slip. The route predates Task 6. _(2026-09-30, B11a: the
+      route and `voidTabLine` are deleted; a cancel goes through the adjustment route, which takes
+      the bill's revision and a retry id.)_
     - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
       correction can print at a station whose printer never printed that group's HOLD ticket — a
       dish from another station joined to the group, say, or a printer switched back on after the
@@ -3415,14 +3423,23 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     migrated with the branch's `applyMigrations`; every pre-existing table kept its row count, and
     `pragma foreign_key_check` printed nothing. The golden huella test and `inmutabilidad` pass
     unedited. Left open:
-    - **The till's Cancel still takes no reason** and records no adjustment: it calls the old
-      `DELETE /api/working-orders/:id/lines/:lineNo`. Moving it onto the adjustment route (the dialog
-      already carries a cancel) changes assertions in tests that predate the branch — the one-press
-      cancel dialog and `api.voidLine` cases in `apps/till/src/screens/till-table-order-screen.test.ts`,
-      `apps/till/src/till-app.test.ts`, `apps/till/src/till-app-table-service.test.ts` and
-      `apps/till/src/till-app-parties.test.ts` — which needs the owner's word (lane B item B11a). The
-      reasonless route stays reachable from the API until then. **Next action:** the owner rules;
-      then move the Cancel and retire the old route.
+    - _Done by lane B item B11a (2026-09-30):_ the till's Cancel asks for a reason, and an
+      approver's PIN when the reason needs one, and records the cancel as an adjustment through
+      `POST /api/working-orders/:id/adjustments` (`action: "cancel"`). The reasonless
+      `DELETE /api/working-orders/:id/lines/:lineNo`, `voidTabLine` and the code
+      `tab.void_quantity_invalid` are gone. Part of a dish with extras can be cancelled, its extras
+      following the dish. An extras row cannot be cancelled on its own
+      (`adjustment.line_not_adjustable`); the old route took the whole of one, but the till offers
+      no Cancel on an extras row. Left open:
+      - **A newly set-up venue has no adjustment reasons, so its till cannot cancel anything** until
+        a manager adds a reason that allows a cancel, in the dashboard under Adjustment reasons; the
+        dialog says so (`adjust.no_reasons`). Outside tests, reasons are created only by the
+        dashboard's reasons route (`packages/adjustments/src/routes.ts`), the demo seed
+        (`apps/server/scripts/demo-seed/seed-adjustments.ts`), and a configuration imported at
+        setup, which copies another venue's reasons
+        (`packages/adjustments/src/configuration-transfer.ts`);
+        no migration inserts one. **Next action:** decide whether setup should create a default
+        cancel reason.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
@@ -3434,10 +3451,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       part of a line to another group starts with no percentage history (lines record no source line); a row a comp or discount carves keeps
       its source line's history. **Next action:**
       decide whether the per-line cap should see bill discounts.
-    - **Not offered:** part of a dish with extras (`adjustment.partial_with_extras`), part of a
-      weighed line (`adjustment.quantity_invalid`, a controller ruling during the build: its two
-      rounded parts need not add up to the line), and counter orders (the route takes a table's bill
-      only, as the old void does). A run-it review found that exactly representable weighed cases
+    - **Not offered:** a comp or a discount of part of a dish with extras
+      (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
+      following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
+      during the build: its two rounded parts need not add up to the line), and counter orders (the
+      route takes a table's bill only). A run-it review found that exactly representable weighed cases
       are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
       decides whether exactly representable partial weighed adjustments should be allowed.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
@@ -3461,7 +3479,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     table now points at" and "does not follow the table onto a new party's tab"; in
     `apps/till/src/till-app-parties.test.ts` "shows the chosen bill when a send to it got no answer".
     None of the eight failed in this branch's runs. **Next action:** wait for what each asserts on instead
-    of a fixed time.
+    of a fixed time. _(2026-09-30, B11a: two more of that shape wait on an adjustment's resends,
+    sleeping `SUBMIT_RETRY_PAUSE_MS + 100` and `3 * SUBMIT_RETRY_PAUSE_MS + 200` ms, both from #916,
+    in `apps/till/src/till-app-adjustments.test.ts`: "sends a request that got no answer again under
+    the same submission id, and a new confirmation under a new one" and "reads the bill again and
+    says the change may have been made when no answer ever comes".)_
   - **A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices
     included** (found 2026-09-30 in #903's review; I believe it predates that branch — `git log -S
     frozenExtras` puts it in #696 and #719). `priceOrderLines` (`apps/server/src/working-order.ts`)
@@ -3708,7 +3730,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       The moving site serves both `transferLines` and un-joining a table with items. _(2026-09-30,
       Task 13: the moving and splitting sites are deleted with `transferLines`, `unjoinTable` and
       `splitOffCheck`; `assertPartyBillOpen` is now called in `sendLines`, `recallLines`,
-      `priceTabRound`, `voidTabLine` and `setLineCourse`.)_ The round
+      `priceTabRound`, `voidTabLine` and `setLineCourse`.)_ _(2026-09-30, B11a: `voidTabLine` is
+      deleted; a cancel's check is now in `applyAdjustment`.)_ The round
       site serves `addTabRound`; `placeGroups` skips it, because the bill it chose has already
       been checked open and the party's. `assertPartyBillOpen` lets through an open
       bill that belongs to a party, whether or not a table points at it. An open order of no

@@ -56,6 +56,7 @@ import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { cancelBody } from "./testing/cancel-line.js";
 
 // The bill payment routes (bill payments design §8 tests 2, 4, 5, 6, 7, 8, 9, 11, 14 and 15, and plan
 // D8), driven over HTTP against a provisioned venue that files real Veri*Factu records. Each case
@@ -838,7 +839,11 @@ describe("an item already paid for (design §8 test 5)", () => {
   it("refuses voiding the steak", async () => {
     const billId = await steakPaid();
 
-    const refused = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    const refused = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
+    );
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 2 } });
@@ -890,8 +895,16 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect(paid.status).toBe(200);
 
     const moved = await splitOff(billId, [{ lineNo: 2, quantity: "2" }]);
-    const cutTooFar = await request("DELETE", `/api/working-orders/${billId}/lines/2?quantity=2`);
-    const cut = await request("DELETE", `/api/working-orders/${billId}/lines/2?quantity=1`);
+    const cutTooFar = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2, "2"),
+    );
+    const cut = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2, "1"),
+    );
 
     expect(moved.status).toBe(200);
     expect(cutTooFar.status).toBe(409);
@@ -1236,7 +1249,11 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const billId = await tabWith("Chuletón", "Tarta");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    const voided = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
+    );
 
     expect(voided.status).toBe(200);
     expect(await statusOf(billId)).toBe("settled");
@@ -1277,7 +1294,11 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const billId = await tabWith("Chuletón", "Tarta");
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
-    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    const voided = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
+    );
 
     expect(voided.status).toBe(200);
     await expectInvoicedOnDeviceTill(billId, 2500);
@@ -1331,7 +1352,11 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     await raiseLine(billId, 2, "3");
     expect((await contribute(billId, "42.00")).status).toBe(200);
 
-    const refused = await request("DELETE", `/api/working-orders/${billId}/lines/2?quantity=1`);
+    const refused = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2, "1"),
+    );
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
@@ -1345,9 +1370,9 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const billId = await tabWith("Chuletón", "Tarta");
 
     const voided = await request(
-      "DELETE",
-      `/api/working-orders/${billId}/lines/2`,
-      undefined,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
       venue.sessionCookie,
     );
 
@@ -1360,9 +1385,9 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     expect((await contribute(billId, "25.00")).status).toBe(200);
 
     const refused = await request(
-      "DELETE",
-      `/api/working-orders/${billId}/lines/2`,
-      undefined,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
       venue.sessionCookie,
     );
 
@@ -1895,7 +1920,11 @@ describe("a cash refund before the invoice (design §6)", () => {
       (await refund(billId, paymentId, { appliedAmount: "25.00", tipAmount: "0.00" })).status,
     ).toBe(200);
 
-    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    const voided = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
+    );
 
     expect(voided.status).toBe(200);
     expect(await lineTotals(billId)).toEqual(["35.00"]);
@@ -2346,7 +2375,11 @@ describe("refund first (design §4.3, §6a)", () => {
   it("refuses a €20.00 void by the €10.00 excess; after a €10.00 refund the void issues the €40.00 invoice with no tip (design §8 test 11)", async () => {
     const { billId, paymentId } = await sixtyHoldingFifty();
 
-    const refused = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    const refused = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
+    );
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
       code: "bill.received_exceeds_total",
@@ -2359,7 +2392,11 @@ describe("refund first (design §4.3, §6a)", () => {
       (await refund(billId, paymentId, { appliedAmount: "10.00", tipAmount: "0.00" })).status,
     ).toBe(200);
     const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
-    const voided = await request("DELETE", `/api/working-orders/${billId}/lines/2`);
+    const voided = await request(
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(suite.db, billId, 2),
+    );
 
     expect(voided.status).toBe(200);
     expect(await statusOf(billId)).toBe("settled");
@@ -2409,7 +2446,15 @@ describe("the ticket after a refund", () => {
     );
     const jobsBefore = new Set((await documentJobs()).map((job) => job.id));
 
-    expect((await request("DELETE", `/api/working-orders/${billId}/lines/2`)).status).toBe(200);
+    expect(
+      (
+        await request(
+          "POST",
+          `/api/working-orders/${billId}/adjustments`,
+          await cancelBody(suite.db, billId, 2),
+        )
+      ).status,
+    ).toBe(200);
 
     const printed = (await documentJobs())
       .filter((job) => !jobsBefore.has(job.id))
@@ -2473,7 +2518,15 @@ describe("an item payment whose line has gone", () => {
     expect(
       (await refund(billId, paymentId, { appliedAmount: "3.00", tipAmount: "0.00" })).status,
     ).toBe(200);
-    expect((await request("DELETE", `/api/working-orders/${billId}/lines/2`)).status).toBe(200);
+    expect(
+      (
+        await request(
+          "POST",
+          `/api/working-orders/${billId}/adjustments`,
+          await cancelBody(suite.db, billId, 2),
+        )
+      ).status,
+    ).toBe(200);
 
     const { json } = await balance(billId);
 

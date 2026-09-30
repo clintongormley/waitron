@@ -5,7 +5,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError, parties, saleLines, sales, workingOrders } from "@waitron/db";
 import { writeClearingWorkflow } from "@waitron/venue-service";
-import { abandonHeldOrder, listTablesWithState, voidTabLine } from "./working-order.js";
+import { abandonHeldOrder, listTablesWithState } from "./working-order.js";
 import { placeGroups, submitGroups } from "./order-groups.js";
 import {
   finishTable,
@@ -38,6 +38,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import "./errors.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // `resetPerTest: false`: the venue is provisioned once in `setup`, and a per-test reset would empty
 // every table it wrote (`packages/db/src/testing/venue-db.ts`, `applyReset`). Each case seats its own
@@ -287,7 +288,7 @@ describe("a split bill is a bill like any other", () => {
     await order(v, tabId, "Burger", "Vino");
     const checkId = await split(v, partyId, tabId, [2]);
 
-    await inTx(v, (tx) => voidTabLine(tx, v.cfg, checkId, 1));
+    await inTx(v, (tx) => cancelLine(tx, v.cfg, checkId, 1));
 
     expect(await linesOf(v, checkId)).toEqual([]);
   });

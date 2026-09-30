@@ -1439,8 +1439,9 @@ export interface TabLines {
   lines: TabLine[];
   revision: number;
   /** The venue's setting. When false the server refuses to change or recall a dish line with
-   * `sentAt !== null && state !== null` (`ticket.already_fired`). Cancelling it through the void route
-   * ({@link TillApi.voidLine}) still works; removing it inside an edit is refused like a change. */
+   * `sentAt !== null && state !== null` (`ticket.already_fired`). Cancelling it as an adjustment
+   * ({@link TillApi.applyAdjustment}) still works; removing it inside an edit is refused like a
+   * change. */
   editSentLines: boolean;
 }
 
@@ -2267,18 +2268,6 @@ export class TillApi {
    */
   async recallLines(orderId: string, lineNos: number[]): Promise<void> {
     await this.#request<void>(`/api/working-orders/${orderId}/lines/recall`, "POST", { lineNos });
-  }
-
-  /**
-   * Cancel (VOID) ONE line of an open tab → `DELETE /api/working-orders/:orderId/lines/:lineNo`: the
-   * cancel path for a sent line, whether or not the kitchen has started it. NON-FISCAL;
-   * the server prints a correction slip. `quantity`, a decimal string, voids that part of the line
-   * only; absent voids all of it. Rejects `tab.not_open`, `tab.line_not_found`,
-   * `tab.void_quantity_invalid` or `order.payment_in_flight`. Resolves the tab's party after the void.
-   */
-  voidLine(orderId: string, lineNo: number, quantity?: string): Promise<{ party: BillParty }> {
-    const part = quantity === undefined ? "" : `?quantity=${encodeURIComponent(quantity)}`;
-    return this.#request(`/api/working-orders/${orderId}/lines/${lineNo}${part}`, "DELETE");
   }
 
   /** The active reasons a cancel, a give-away or a discount can be made under →

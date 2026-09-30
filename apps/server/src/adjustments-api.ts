@@ -39,7 +39,7 @@ type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Res
 
 const NOTE_LIMIT = 500;
 
-/** A non-UUID names no open bill, so it gets the void route's `tab.not_open`. */
+/** A non-UUID names no open bill, so it gets `tab.not_open`. */
 function requireBill(id: string): string {
   return requireTabParam(id).toLowerCase();
 }
@@ -96,8 +96,7 @@ function requireRole(value: string | undefined): PersonRoleValue {
 export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
 
-  // One that leaves the bill exactly paid files its invoice on the requesting device's till, as
-  // the void route does.
+  // One that leaves the bill exactly paid files its invoice on the requesting device's till.
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
       const { personId } = await requireSession(deps, c);

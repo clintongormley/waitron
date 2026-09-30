@@ -553,7 +553,7 @@ export type HoldCorrection =
   { kind: "HOLD CHANGED"; direction: "added" | "removed" } | { kind: "HOLD CANCELLED" };
 
 /**
- * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link voidTabLine})
+ * Record a kitchen notice per item for a RECALL ({@link recallLines}) or VOID ({@link removeFromLine})
  * of a line that had already fired, then enqueue a correction slip per item where its station has
  * an active printer; callers pass only fired lines. The notice is recorded whether or not a printer
  * exists, so a station screen sees every correction. Each slip goes to every active printer on the

@@ -376,7 +376,6 @@ const LINE_REFUSALS = new Set([
   "product.not_sold_separately",
   "ticket.already_started",
   "ticket.already_fired",
-  "tab.void_quantity_invalid",
   "tab.serve_quantity_invalid",
   "group.not_held",
   "group.not_waiting",
@@ -427,6 +426,8 @@ interface Adjusting {
   preview: AdjustmentPreview | null;
   refusal: string | null;
   busy: boolean;
+  /** The banner that offered this cancel, which goes once the cancel is made. */
+  offer: CounterError | undefined;
 }
 
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
@@ -1155,6 +1156,10 @@ export class TillApp extends LitElement {
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
+    // An answer can move the app off the order while the dialog is open. An apply already out
+    // carries on without the dialog; #applyAdjustment says what its answer does then.
+    const open = this.adjusting;
+    if (open !== null && this.#hasLeftOrder(open.orderId, open.visit)) this.#closeAdjust();
   }
 
   #contentLanguageGeneration = 0;
@@ -3528,41 +3533,17 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** Already confirmed on the screen; an absent `quantity` cancels the whole line. The reload runs on
-   * both paths, as in {@link #onRecallLines}; a cancel that may have landed also reads the party's
-   * bills and what it still owes. */
-  async #onVoidLine(event: Event): Promise<void> {
-    const { lineNo, quantity } = (event as CustomEvent<{ lineNo: number; quantity?: string }>)
-      .detail;
-    const orderId = this.activeTabId;
-    if (orderId === undefined) return;
-    const orderVisit = this.#orderVisit;
-    this.errorKey = undefined;
-    try {
-      const { party } = await (quantity === undefined
-        ? this.api.voidLine(orderId, lineNo)
-        : this.api.voidLine(orderId, lineNo, quantity));
-      this.#noteBillParty(party);
-    } catch (error) {
-      this.errorKey = lineWriteError(error);
-      if (!isNetworkFailure(error)) {
-        await this.#loadTabLines();
-        return;
-      }
-    }
-    await this.#rereadAmounts(orderId, orderVisit);
-  }
-
-  /** Give away or Discount pressed: the reasons are read, then the dialog opens on the bill as the
-   * screen last read it. */
+  /** Cancel, Give away or Discount pressed, or Cancel offered: the reasons are read, then the dialog
+   * opens on the bill as the screen last read it. */
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target } = (event as CustomEvent<AdjustDetail>).detail;
+    const { kind, target, offered } = (event as CustomEvent<AdjustDetail>).detail;
     const orderId = this.activeTabId;
     if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
     const revision = this.tabRevision;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
-    this.errorKey = undefined;
+    if (offered !== true) this.errorKey = undefined;
+    const offer = offered === true ? this.errorKey : undefined;
     this.#adjustOpening = true;
     let reasons: AdjustmentReason[];
     try {
@@ -3586,6 +3567,7 @@ export class TillApp extends LitElement {
       preview: null,
       refusal: null,
       busy: false,
+      offer,
     };
   }
 
@@ -3648,9 +3630,13 @@ export class TillApp extends LitElement {
 
   /**
    * A fresh submission id for each confirmation, sent again unchanged only while a request gets no
-   * answer (plan D8). Applied, the dialog closes and the bill, its party and what it owes are read
-   * again; with no answer at all, they are read again too and the message says the change may have
-   * been made.
+   * answer (plan D8). Applied, the dialog closes if still open, the party's new revision is noted
+   * ({@link #noteBillParty}) and, unless the waiter has left the order, the bill, its party and
+   * what it owes are read again. With no answer at all while the dialog is open, it closes, they
+   * are read again too, and the message says the change may have been made unless the waiter has
+   * left the order by then. Once the dialog is gone, no answer only reads the floor again and
+   * takes the party from it ({@link #retakePartyFromFloor}) while the operator session that sent
+   * it lasts, and a refusal changes nothing.
    */
   async #applyAdjustment(
     open: Adjusting,
@@ -3671,11 +3657,16 @@ export class TillApp extends LitElement {
         () => session === this.#operatorSession,
       );
       this.#noteBillParty(answer.party);
-      this.#closeAdjust();
+      if (this.#adjustingNow(open.id) !== null) this.#closeAdjust();
+      if (this.errorKey === open.offer) this.errorKey = undefined;
       if (this.#hasLeftOrder(open.orderId, open.visit)) return;
       await this.#rereadAmounts(open.orderId, open.visit);
     } catch (error) {
-      if (this.#adjustingNow(open.id) === null) return;
+      if (this.#adjustingNow(open.id) === null) {
+        if (isNetworkFailure(error) && session === this.#operatorSession)
+          await this.#retakePartyFromFloor();
+        return;
+      }
       await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
     } finally {
       limit.done();
@@ -4689,7 +4680,6 @@ export class TillApp extends LitElement {
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
-        @void-line=${(event: Event) => void this.#onVoidLine(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}

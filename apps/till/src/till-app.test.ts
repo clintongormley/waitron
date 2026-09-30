@@ -3,6 +3,8 @@ import { currentContentLanguages } from "@waitron/ui";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import {
+  adjustmentStubs,
+  cancelThroughDialog,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -432,7 +434,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
-    voidLine: vi.fn().mockResolvedValue({ party: null }),
+    ...adjustmentStubs(),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
     joinTables: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
@@ -4288,21 +4290,24 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("void-line cancels the started line then reloads its lines", async () => {
-        const voidLine = vi.fn().mockResolvedValue({ party: null });
+      it("a cancel records the started line's cancel then reloads its lines", async () => {
+        const { applyAdjustment } = adjustmentStubs();
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
-          voidLine,
+          applyAdjustment,
           getTabLines,
         });
         const screen = await toTableOrder(el, openTable);
 
-        emit(screen, "void-line", { lineNo: 1 });
-        await flush(el);
+        await cancelThroughDialog(el, screen, "line-1", () => flush(el));
 
-        expect(voidLine).toHaveBeenCalledWith("wo-7", 1);
+        expect(applyAdjustment).toHaveBeenCalledWith(
+          "wo-7",
+          expect.objectContaining({ lineId: "line-1", action: "cancel" }),
+          expect.anything(),
+        );
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
@@ -4352,28 +4357,41 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(2);
       });
 
-      it("a rejected send-lines / void-line also surfaces the banner and reloads", async () => {
+      it("a rejected send-lines also surfaces the banner and reloads", async () => {
         const getTabLines = vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 });
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
           getTabLines,
           sendLines: vi.fn().mockRejectedValue({ code: "tab.not_open" }),
-          voidLine: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
         });
         const screen = await toTableOrder(el, openTable);
 
-        for (const [type, detail] of [
-          ["send-lines", { lineNos: [1] }],
-          ["void-line", { lineNo: 1 }],
-        ] as const) {
-          getTabLines.mockClear();
-          emit(screen, type, detail);
-          await flush(el);
-          expect(tableOrder(el)).not.toBeNull();
-          expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
-          expect(getTabLines).toHaveBeenCalledTimes(1);
-        }
+        getTabLines.mockClear();
+        emit(screen, "send-lines", { lineNos: [1] });
+        await flush(el);
+        expect(tableOrder(el)).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(".error")!.textContent).toContain(t("table.error"));
+        expect(getTabLines).toHaveBeenCalledTimes(1);
+      });
+
+      it("a refused cancel shows the refusal beside the cancel dialog's action", async () => {
+        const { el } = await mountApp({
+          getTablesState: vi.fn().mockResolvedValue([openTable]),
+          listZones: vi.fn().mockResolvedValue([floorZone]),
+          getTabLines: vi.fn().mockResolvedValue({ lines: [tabLine], revision: 0 }),
+          applyAdjustment: vi.fn().mockRejectedValue({ code: "tab.line_not_found" }),
+        });
+        const screen = await toTableOrder(el, openTable);
+
+        await cancelThroughDialog(el, screen, "line-1", () => flush(el));
+
+        expect(tableOrder(el)).not.toBeNull();
+        const dialog = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+        expect(
+          dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!
+            .error,
+        ).toBe(codeMessage("tab.line_not_found"));
       });
 
       // ── Move / join / merge / transfer table actions ──────────────────────────────────

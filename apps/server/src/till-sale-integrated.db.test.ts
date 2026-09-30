@@ -65,7 +65,6 @@ import {
   parkOrder,
   placeOrder,
   updateOrderLine,
-  voidTabLine,
 } from "./working-order.js";
 import { createTable } from "./tables.js";
 import {
@@ -80,6 +79,7 @@ import { bytesInclude } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -1622,7 +1622,7 @@ describe("an order being paid by card cannot be changed from another device (pla
           updateOrderLine(tx, t.cfg, id, 1, { note: "sin azúcar" }, revision),
         );
       },
-      () => withTransaction(suite.db, (tx) => voidTabLine(tx, t.cfg, id, 1, "1")),
+      () => withTransaction(suite.db, (tx) => cancelLine(tx, t.cfg, id, 1, "1")),
     ];
   }
 

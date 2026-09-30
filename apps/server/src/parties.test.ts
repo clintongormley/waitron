@@ -18,7 +18,6 @@ import type { Transaction } from "@waitron/db";
 import { writeClearingWorkflow } from "@waitron/venue-service";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
-import { voidTabLine } from "./working-order.js";
 import { takeBillPayment } from "./bill-payments.js";
 import {
   OPERATOR,
@@ -51,6 +50,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills } from "./bill-actions.js";
 import { joinTables, moveGuests } from "./table-actions.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -1561,7 +1561,7 @@ describe("money received against a bill before its invoice", () => {
     await order(venue, tabId, "Vino");
     const paymentId = await contribute(venue, tabId, "10.00", "5.00");
     await refund(venue.cfg, paymentId, 1000, 0);
-    await inTx(suite, (tx) => voidTabLine(tx, venue.cfg, tabId, 1));
+    await inTx(suite, (tx) => cancelLine(tx, venue.cfg, tabId, 1));
 
     const seen = (await partyRow(suite, partyId)).revision;
     const error = await captureError(() =>

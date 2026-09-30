@@ -43,7 +43,6 @@ import {
   priceStoredOrder,
   sendLines,
   updateOrderLine,
-  voidTabLine,
 } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -59,6 +58,7 @@ import { moveBill } from "./move-bill.js";
 import { moveGuests } from "./table-actions.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // What this suite proves: the check being table-less, and the line partition — plain row state. The
 // FISCAL filing (exactly-one-registro per check, desglose, contiguity) is the split-bill fiscal
@@ -757,7 +757,7 @@ describe("splitting a line the kitchen has", () => {
     const { from } = await twoTabs(seeded, { quantity: "2" });
     const to = await splitToT2(seeded, from, [{ lineNo: 1, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, to, 1));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, to, 1));
 
     expect(await noticesOn(from, to)).toEqual([
       { orderId: to, kind: "moved", quantity: 1000 },
@@ -776,7 +776,7 @@ describe("splitting a line the kitchen has", () => {
     const { from } = await twoTabs(seeded, { quantity: "2" });
     const to = await splitToT2(seeded, from, [{ lineNo: 1, quantity: "1" }]);
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, from, 1));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, from, 1));
 
     expect(await noticesOn(from, to)).toEqual([
       { orderId: to, kind: "moved", quantity: 1000 },

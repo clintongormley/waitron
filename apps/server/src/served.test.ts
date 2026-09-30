@@ -57,10 +57,10 @@ import {
   recallLines,
   unmarkServed,
   updateOrderLine,
-  voidTabLine,
 } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // What serving records, by quantity, on the lines of a party (spec §4, §12 item 5; plan D8, D18,
 // D19). Serving is an operational fact: it never touches a filed sale.
@@ -1186,7 +1186,7 @@ describe("a card refund pending on a bill", () => {
 
     await expectRefusedWithNothingWritten(
       s.partyId,
-      () => inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, s.croq.lineNo, "1", ALEX)),
+      () => inTx((tx) => cancelLine(tx, v.cfg, s.tabId, s.croq.lineNo, "1", ALEX)),
       { code: "bill.refund_in_progress", params: { workingOrderId: s.tabId } },
     );
   });
@@ -1258,7 +1258,7 @@ describe("a partly served line split or cut", () => {
     const s = await croquetas(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "3" }]);
 
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, s.croq.lineNo, "2", ALEX));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, s.croq.lineNo, "2", ALEX));
 
     expect(await lineById(s.partyId, s.croq.id)).toMatchObject({
       quantity: 2000,
@@ -1273,7 +1273,7 @@ describe("a partly served line split or cut", () => {
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "4" }]);
     const servedAt = await backdateServed(s.croq.id);
 
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, s.croq.lineNo, "1", ALEX));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, s.croq.lineNo, "1", ALEX));
 
     expect(await lineById(s.partyId, s.croq.id)).toMatchObject({
       quantity: 3000,
@@ -1287,7 +1287,7 @@ describe("a partly served line split or cut", () => {
     const s = await croquetas(v);
     await serve(v, s.partyId, [{ lineId: s.croq.id, quantity: "1" }]);
 
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, s.croq.lineNo, "2", ALEX));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, s.croq.lineNo, "2", ALEX));
 
     expect(await lineById(s.partyId, s.croq.id)).toMatchObject({
       quantity: 2000,

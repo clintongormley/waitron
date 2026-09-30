@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import {
+  adjustmentStubs,
+  cancelReason,
+  cancelThroughDialog,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -16,6 +19,7 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillModifierPicker } from "./widgets/modifier-picker.js";
+import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { CanvasDef, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
@@ -260,7 +264,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     setLineCourse: vi.fn().mockResolvedValue(undefined),
     sendLines: vi.fn().mockResolvedValue(undefined),
     recallLines: vi.fn().mockResolvedValue(undefined),
-    voidLine: vi.fn().mockResolvedValue({ party: null }),
+    ...adjustmentStubs(),
     updateOrderLine: vi.fn().mockResolvedValue({ revision: 1, party: null }),
     setTableStatus: vi.fn().mockResolvedValue(undefined),
     moveGuests: vi.fn().mockResolvedValue({ partyId: "v-2", mainBillId: "wo-7", merged: false }),
@@ -522,7 +526,14 @@ describe("till-app table ordering: a handheld's Order tab with no table opened",
     ["set-line-course", { lineNo: 1, courseId: null }, "setLineCourse"],
     ["send-lines", { lineNos: [1] }, "sendLines"],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
-    ["void-line", { lineNo: 1 }, "voidLine"],
+    [
+      "adjust",
+      {
+        kind: "cancel",
+        target: { lineId: "line-1", name: "Café", quantity: "1", total: "1.50", unitTotal: null },
+      },
+      "listAdjustmentReasons",
+    ],
     [
       "change-line",
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
@@ -563,7 +574,6 @@ describe("till-app table ordering: refused and failed table actions", () => {
       "submitDraft",
     ],
     ["recall-lines", { lineNos: [1] }, "recallLines"],
-    ["void-line", { lineNo: 1 }, "voidLine"],
     [
       "change-line",
       { lineNo: 1, lineName: "Café", patch: { note: "sin sal" }, revision: 0 },
@@ -589,6 +599,28 @@ describe("till-app table ordering: refused and failed table actions", () => {
       expect(banner(el)!.textContent).not.toContain("order.payment_in_flight");
     },
   );
+
+  it("a cancel refused because a card payment of the order is running says so", async () => {
+    const { el } = await mountApp({
+      ...seatedFloor(),
+      previewAdjustment: vi.fn().mockRejectedValue({ code: "order.payment_in_flight" }),
+    });
+    const screen = await toTableOrder(el);
+
+    await cancelThroughDialog(el, screen, "line-1", async () => {
+      await flush(el);
+      await flush(el);
+    });
+
+    const dialog = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    const message = dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+      "wt-form-actions",
+    )!.error;
+    expect(message).toContain(
+      "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",
+    );
+    expect(message).not.toContain("order.payment_in_flight");
+  });
 
   it.each([
     ["join-tables", { tableId: "t9", bills: "merge" }, "joinTables"],
@@ -767,8 +799,13 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     return { el, screen };
   }
 
-  const dialogOf = (screen: TillTableOrderScreen) =>
-    screen.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog.cancel-confirm")!;
+  /** The app's cancel dialog, or null when none is open. */
+  const cancelDialog = (el: TillApp) =>
+    el.shadowRoot!.querySelector<TillAdjustmentDialog>("till-adjustment-dialog");
+  async function closeCancel(el: TillApp): Promise<void> {
+    cancelDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-adjust-close]")!.click();
+    await flush(el);
+  }
 
   it("saves a note typed into Change with the order's revision, and the line then shows it at the same price", async () => {
     const getTabLines = vi
@@ -872,9 +909,62 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)!.textContent).toContain(
       "La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
     );
-    const dialog = dialogOf(tableOrder(el)!);
-    expect(dialog.open).toBe(true);
-    expect(dialog.textContent).toContain(t("table.cancel_started"));
+    await flush(el);
+    const dialog = cancelDialog(el)!;
+    expect(dialog.kind).toBe("cancel");
+    expect(dialog.target!.lineId).toBe("line-5");
+    expect(dialog.shadowRoot!.textContent).toContain(t("table.cancel_started"));
+  });
+
+  it("clears the offer to cancel once the offered cancel is made", async () => {
+    const { el, screen } = await openBurgerTab({
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    emit(screen, "change-line", change);
+    await flush(el);
+    await flush(el);
+    expect(banner(el)).not.toBeNull();
+
+    emit(cancelDialog(el)!, "adjust-preview", {
+      action: "cancel",
+      reasonId: cancelReason.id,
+      note: null,
+    });
+    await flush(el);
+    emit(cancelDialog(el)!, "adjust-confirm");
+    await flush(el);
+    await flush(el);
+
+    expect(api.applyAdjustment).toHaveBeenCalledWith(
+      "wo-7",
+      expect.objectContaining({ lineId: "line-5", action: "cancel" }),
+      expect.anything(),
+    );
+    expect(cancelDialog(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("keeps the offer to cancel on screen when the offered dialog is closed without cancelling", async () => {
+    const { el, screen } = await openBurgerTab({
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    emit(screen, "change-line", change);
+    await flush(el);
+    await flush(el);
+
+    await closeCancel(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("ticket.already_started"));
   });
 
   it("offers Cancel again when a second change of the same line is refused the same way", async () => {
@@ -888,14 +978,15 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     });
     emit(screen, "change-line", change);
     await flush(el);
-    dialogOf(tableOrder(el)!).querySelector<HTMLElement>("[data-cancel-dismiss]")!.click();
     await flush(el);
-    expect(dialogOf(tableOrder(el)!).open).toBe(false);
+    await closeCancel(el);
+    expect(cancelDialog(el)).toBeNull();
 
     emit(tableOrder(el)!, "change-line", change);
     await flush(el);
+    await flush(el);
 
-    expect(dialogOf(tableOrder(el)!).open).toBe(true);
+    expect(cancelDialog(el)).not.toBeNull();
   });
 
   it("shows a dismissed Cancel offer only once, even when a handheld's Order tab mounts again", async () => {
@@ -919,16 +1010,17 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
     emit(tableOrder(el)!, "change-line", change);
     await flush(el);
-    expect(dialogOf(tableOrder(el)!).open).toBe(true);
-    dialogOf(tableOrder(el)!).querySelector<HTMLElement>("[data-cancel-dismiss]")!.click();
     await flush(el);
+    expect(cancelDialog(el)).not.toBeNull();
+    await closeCancel(el);
 
     emit(shell(el), "tab-select", { key: "floor" });
     await flush(el);
     emit(shell(el), "tab-select", { key: "order" });
     await flush(el);
+    await flush(el);
 
-    expect(dialogOf(tableOrder(el)!).open).toBe(false);
+    expect(cancelDialog(el)).toBeNull();
   });
 
   describe("an answer that arrives after the waiter has moved to another table", () => {
@@ -976,7 +1068,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         "Tu cambio en Burger de la mesa 2 no se ha guardado. La cocina ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
       );
       expect(banner(el)!.textContent).not.toContain("Tarta");
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
       expect(tableOrder(el)!.revision).toBe(2);
       expect(api.getTabLines).toHaveBeenCalledTimes(reads);
     });
@@ -1065,7 +1158,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(tableOrder(el)!.orderId).toBe("wo-8");
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
       expect(banner(el)!.textContent).toContain(startedRefusal);
       expect(tableOrder(el)!.revision).toBe(2);
       expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-8"]]);
@@ -1084,7 +1178,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
       expect(tableOrder(el)!.orderId).toBe("wo-8");
       expect(banner(el)!.textContent).toContain(startedRefusal);
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
       expect(vi.mocked(api.getTabLines).mock.calls.slice(reads)).toEqual([["wo-8"]]);
     });
 
@@ -1142,7 +1237,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(tableOrder(el)!.orderId).toBe("wo-8");
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
       expect(banner(el)!.textContent).toContain(startedRefusal);
     });
 
@@ -1206,7 +1302,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
 
       expect(tableOrder(el)!.orderId).toBe("wo-8");
       expect(banner(el)!.textContent).toContain(startedRefusal);
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
     });
 
     it("names the refusal that lands after a till closes the table's view by selecting another tab", async () => {
@@ -1232,7 +1329,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(banner(el)!.textContent).not.toContain("Tu cambio");
-      expect(dialogOf(tableOrder(el)!).open).toBe(true);
+      await flush(el);
+      expect(cancelDialog(el)).not.toBeNull();
     });
 
     it("names the refusal that lands while a tablet opens another table from the same tab", async () => {
@@ -1260,7 +1358,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(tableOrder(el)!.orderId).toBe("wo-8");
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
       expect(banner(el)!.textContent).toContain(startedRefusal);
     });
 
@@ -1486,9 +1585,10 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       );
       expect(reads()).toBe(readsBack + 1);
       expect(tableOrder(el)!.orderId).toBe("wo-7");
-      const dialog = dialogOf(tableOrder(el)!);
-      expect(dialog.open).toBe(true);
-      expect(dialog.querySelector(".cancel-dish")!.textContent).toContain("Burger");
+      await flush(el);
+      const dialog = cancelDialog(el)!;
+      expect(dialog.kind).toBe("cancel");
+      expect(dialog.target!.name).toBe("Burger");
     });
 
     it("takes the saved revision after a till goes back to the floor and opens the same table again", async () => {
@@ -1582,7 +1682,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await flush(el);
 
       expect(tableOrder(el)!.orderId).toBe("wo-8");
-      expect(dialogOf(tableOrder(el)!).open).toBe(false);
+      await flush(el);
+      expect(cancelDialog(el)).toBeNull();
       expect(banner(el)!.textContent).toContain(
         "Tu cambio en Burger de la mesa 2 no se ha guardado.",
       );
@@ -1708,7 +1809,8 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(tableOrder(el)!.orderId).toBe("wo-8");
-    expect(dialogOf(tableOrder(el)!).open).toBe(false);
+    await flush(el);
+    expect(cancelDialog(el)).toBeNull();
   });
 
   it("says changes to sent items are switched off, and reloads the line's actions", async () => {
@@ -1726,27 +1828,34 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });
 
-  it("cancels one of a line through the void route with the quantity", async () => {
+  const settle = (el: TillApp) => async () => {
+    await flush(el);
+    await flush(el);
+  };
+
+  it("cancels one of a line as a cancel adjustment with the quantity", async () => {
     const { el, screen } = await openBurgerTab();
 
-    emit(screen, "void-line", { lineNo: 5, quantity: "1" });
-    await flush(el);
+    await cancelThroughDialog(el, screen, "line-5", settle(el), "1");
 
-    expect(api.voidLine).toHaveBeenCalledWith("wo-7", 5, "1");
+    expect(api.applyAdjustment).toHaveBeenCalledWith(
+      "wo-7",
+      expect.objectContaining({ lineId: "line-5", action: "cancel", quantity: "1" }),
+      expect.anything(),
+    );
     expect(api.updateOrderLine).not.toHaveBeenCalled();
   });
 
-  it("says so when the quantity to cancel is refused", async () => {
+  it("says so under the quantity when the quantity to cancel is refused", async () => {
     const { el, screen } = await openBurgerTab({
-      voidLine: vi.fn().mockRejectedValue({ code: "tab.void_quantity_invalid" }),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.quantity_invalid" }),
     });
 
-    emit(screen, "void-line", { lineNo: 5, quantity: "1" });
-    await flush(el);
+    await cancelThroughDialog(el, screen, "line-5", settle(el), "1");
 
-    expect(banner(el)!.textContent).toContain(
-      "No se puede cancelar esa cantidad de esta línea. Comprueba cuántos quedan",
-    );
+    expect(
+      cancelDialog(el)!.shadowRoot!.querySelector('[data-error-for="quantity"]')!.textContent,
+    ).toBe(codeMessage("adjustment.quantity_invalid"));
   });
 });
 

@@ -63,7 +63,6 @@ import {
   sendLines,
   updateHeldOrder,
   updateOrderLine,
-  voidTabLine,
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
@@ -88,6 +87,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills, transferItems } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
 import { moveBill } from "./move-bill.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -1041,7 +1041,7 @@ describe("firing", () => {
     });
 
     const [steak, fish] = await linesIn(s.partyId, s.mains);
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, steak!.lineNo));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, steak!.lineNo));
     await fire(v, s.partyId, s.mains);
     expect(await firedTicketLineIds(s.partyId)).toContain(fish!.id);
   });
@@ -2340,7 +2340,7 @@ describe("edits inside groups (D19)", () => {
     const [fish] = await linesIn(s.partyId, fishOnly);
     const revision = await revisionOf(s.partyId);
 
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
 
     expect((await groupRow(fishOnly)).state).toBe("removed");
     expect((await groupsOf(s.partyId)).groups.map((group) => group.id)).not.toContain(fishOnly);
@@ -2383,7 +2383,7 @@ describe("edits inside groups (D19)", () => {
     const revision = await revisionOf(s.partyId);
     const events = (await eventsOf(s.partyId)).length;
 
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish!.lineNo, undefined, MIA));
 
     expect((await groupRow(s.mains)).state).toBe("held");
     expect(await eventsOf(s.partyId)).toHaveLength(events);
@@ -2396,7 +2396,7 @@ describe("edits inside groups (D19)", () => {
     const [steak] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
 
-    await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, steak!.lineNo, "1", MIA));
+    await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, steak!.lineNo, "1", MIA));
 
     expect((await linesIn(s.partyId, s.mains))[0]).toMatchObject({ id: steak!.id, quantity: 1000 });
     expect(await revisionOf(s.partyId)).toBe(revision + 1);
@@ -3640,7 +3640,7 @@ describe("advance HOLD tickets (Task 6)", () => {
         { kind: "changed", lineName: DISHES.steak.kitchen, quantity: "1.000", direction: "added" },
       ]);
 
-      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
+      await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
 
       expect(await printedSince(v, 7)).toEqual([
         ["*** HOLD CANCELLED ***", ...header, "GROUP 4", `1.000 x ${DISHES.fish.kitchen}`],
@@ -3761,7 +3761,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       await inTx((tx) => recallLines(tx, v.cfg, s.tabId, [fish.lineNo]));
       expect((await printedSince(v, 6)).map((job) => job[0])).toEqual(["*** RECALLED ***"]);
 
-      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
+      await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
 
       expect(await printedSince(v, 7)).toEqual([]);
       expect((await noticesAt(v)).map((notice) => notice.kind)).toEqual(["recalled"]);
@@ -3984,8 +3984,8 @@ describe("advance HOLD tickets (Task 6)", () => {
       const steak = await lineOf(s, s.mains, "steak", v);
       const flan = await lineOf(s, s.desserts, "flan", v);
 
-      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, steak.lineNo, "1", MIA));
-      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, flan.lineNo, undefined, MIA));
+      await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, steak.lineNo, "1", MIA));
+      await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, flan.lineNo, undefined, MIA));
 
       expect(await printedSince(v, 5)).toEqual([
         ["*** HOLD CANCELLED ***", ...header, "GROUP 4", `1.000 x ${DISHES.steak.kitchen}`],
@@ -4092,7 +4092,7 @@ describe("advance HOLD tickets (Task 6)", () => {
       await printHeldWork(false);
       const fish = await lineOf(s, s.mains, "fish", v);
 
-      await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
+      await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, fish.lineNo, undefined, MIA));
       await fire(v, s.partyId, s.mains);
 
       expect((await printedSince(v, 5)).map((job) => job[0])).toEqual([

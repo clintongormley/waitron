@@ -72,7 +72,6 @@ import {
   setLineCourse,
   updateHeldOrder,
   updateOrderLine,
-  voidTabLine,
 } from "./working-order.js";
 import type { TicketState } from "./working-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -96,6 +95,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 const LOCALE = "es-ES";
 
@@ -4527,7 +4527,7 @@ describe("recallLines (A4: un-send a not-started line — fired → held)", () =
 // lines in these cases belong to no order group, so no HOLD ticket carries them, and only a line
 // whose ticket item had a NON-null `fired_at` produced paper: recalling or voiding a HELD line
 // enqueues nothing. `recallLines` emits RECALLED for the items it actually un-fires
-// (fired-and-queued before the update); `voidTabLine` emits VOID for a fired line,
+// (fired-and-queued before the update); a cancel (`removeFromLine`) emits VOID for a fired line,
 // reading it BEFORE the ON DELETE CASCADE removes the line + its ticket item. Non-fiscal: only
 // `ticket_items`/`working_order_lines`/`print_jobs`. These cases prove the enqueue count + payload
 // in both directions.
@@ -4636,7 +4636,7 @@ describe("correction slips on recall & void (A6)", () => {
       expect(byLine(await courseItemsFor(tx, tabId), starter).firedAt).not.toBeNull();
       const before = await jobRows(tx);
 
-      await voidTabLine(tx, cfg, tabId, 1);
+      await cancelLine(tx, cfg, tabId, 1);
 
       const after = await jobRows(tx);
       const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
@@ -4696,7 +4696,7 @@ describe("correction slips on recall & void (A6)", () => {
       expect(byLine(await courseItemsFor(tx, tabId), main).firedAt).toBeNull();
       const before = await jobRows(tx);
 
-      await voidTabLine(tx, cfg, tabId, 2);
+      await cancelLine(tx, cfg, tabId, 2);
 
       const after = await jobRows(tx);
       const fresh = after.filter((j) => !before.some((b) => b.id === j.id));
@@ -5203,7 +5203,7 @@ describe("bumpCourseReady / markCourseAway (KDS-3 expo/pass coordination verbs)"
   });
 });
 
-describe("voidTabLine extras cascade (FIX 2)", () => {
+describe("a cancel's extras cascade (FIX 2)", () => {
   /** Attach an extras list whose one product may be picked TWICE, returning the ids the wire needs. A
    *  list that ACCEPTS a tally of two AND an item cap of two, so a doubled pick SUMS to a per-dish
    *  quantity of 2 rather than being dropped, and is valid. */
@@ -5270,7 +5270,7 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
         },
         { productId: aguaId, quantity: "1" },
       ]);
-      await voidTabLine(tx, cfg, tabId, 1);
+      await cancelLine(tx, cfg, tabId, 1);
       const remaining = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -5286,7 +5286,7 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
     });
   });
 
-  it("voiding a CHILD extras line removes only that line (its dish stays)", async () => {
+  it("refuses to cancel a CHILD extras line on its own: it goes with its dish", async () => {
     const { cfg, cafeId, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const bacon = await addExtra(tx, catalogueId, cafeId, "Bacon");
@@ -5299,7 +5299,10 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
           extras: [{ listId: bacon.listId, picks: [{ productId: bacon.productId, quantity: 1 }] }],
         },
       ]);
-      await voidTabLine(tx, cfg, tabId, 2);
+      await expect(cancelLine(tx, cfg, tabId, 2)).rejects.toMatchObject({
+        code: "adjustment.line_not_adjustable",
+        params: { workingOrderId: tabId, lineNo: 2 },
+      });
       const remaining = await tx
         .select({
           lineNo: workingOrderLines.lineNo,
@@ -5308,8 +5311,7 @@ describe("voidTabLine extras cascade (FIX 2)", () => {
         .from(workingOrderLines)
         .where(eq(workingOrderLines.workingOrderId, tabId))
         .orderBy(workingOrderLines.lineNo);
-      // Only the dish left; the child is the one that went.
-      expect(remaining.map((r) => r.lineNo)).toEqual([1]);
+      expect(remaining.map((r) => r.lineNo)).toEqual([1, 2]);
       expect(remaining[0]!.productId).toBe(cafeId);
     });
   });

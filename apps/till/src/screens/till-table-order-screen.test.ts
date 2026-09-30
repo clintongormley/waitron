@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";
-import { TillTableOrderScreen, type TableServiceStatus } from "./till-table-order-screen.js";
+import {
+  TillTableOrderScreen,
+  type AdjustDetail,
+  type TableServiceStatus,
+} from "./till-table-order-screen.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -1547,20 +1551,28 @@ describe("till-table-order-screen", () => {
       expect([dialog("fire").open, dialog("move").open]).toEqual([false, false]);
     });
 
-    it("offers Change and Cancel on a dish in a held group, which comes off the bill once confirmed", async () => {
+    it("offers Change and Cancel on a dish in a held group, whose Cancel asks the app to take it off the bill", async () => {
       const { el } = await mountGroups();
-      const voids = capture(el, "void-line");
+      const asked = capture(el, "adjust");
       expect(control(el, '[data-change-line="4"]')).not.toBeNull();
       expect(control(el, '[data-cancel-line="3"]')).not.toBeNull();
       expect(control(el, '[data-send-line="3"]')).toBeNull();
 
       control(el, '[data-cancel-line="3"]')!.click();
-      await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<HTMLElement>(".cancel-confirm")!;
-      expect(text(dialog.querySelector(".cancel-body")!)).toContain(t("table.cancel_sent"));
-      dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
 
-      expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 3 }]);
+      expect(asked.map((event) => event.detail)).toEqual([
+        {
+          kind: "cancel",
+          target: {
+            lineId: "l-croq",
+            name: "Croquetas",
+            quantity: "1",
+            total: "10.00",
+            unitTotal: null,
+            started: false,
+          },
+        },
+      ]);
     });
 
     it("offers Cancel on a dish in a held group that goes to no kitchen, saying it comes off the bill", async () => {
@@ -1571,15 +1583,16 @@ describe("till-table-order-screen", () => {
           row.id === "g5" ? { ...row, lineIds: [...row.lineIds, "l-water"] } : row,
         ),
       });
-      const voids = capture(el, "void-line");
+      const asked = capture(el, "adjust");
 
       control(el, '[data-cancel-line="7"]')!.click();
-      await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<HTMLElement>(".cancel-confirm")!;
-      expect(text(dialog.querySelector(".cancel-body")!)).toContain(t("table.cancel_sent"));
-      dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
 
-      expect(voids.map((event) => event.detail)).toEqual([{ lineNo: 7 }]);
+      expect(asked.map((event) => event.detail)).toEqual([
+        {
+          kind: "cancel",
+          target: expect.objectContaining({ lineId: "l-water", started: false }),
+        },
+      ]);
     });
 
     it("gives every held group's control, and its dialogs' buttons, a tap target of 44 px each way", async () => {
@@ -1905,7 +1918,7 @@ describe("till-table-order-screen", () => {
       expect(captured!.bubbles).toBe(true);
     });
 
-    it("shows Cancel on a FIRED, started line; confirming emits void-line { lineNo }", async () => {
+    it("shows Cancel on a FIRED, started line; pressing it asks the app to cancel it as started", async () => {
       const { el } = await mount({ lines: [preparingLine], courses });
       await openDrawer(el);
       const cancel = el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]');
@@ -1915,17 +1928,13 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
 
       let captured: CustomEvent | undefined;
-      el.addEventListener("void-line", (e) => (captured = e as CustomEvent));
-      // Clicking Cancel OPENS the confirm — it does NOT void yet.
+      el.addEventListener("adjust", (e) => (captured = e as CustomEvent));
       cancel!.click();
-      await el.updateComplete;
-      expect(captured).toBeUndefined();
-      const confirm = el.shadowRoot!.querySelector<HTMLElement>("[data-cancel-confirm]");
-      expect(confirm).not.toBeNull();
-      // Only on confirm does the void fire.
-      confirm!.click();
       expect(captured).toBeInstanceOf(CustomEvent);
-      expect(captured!.detail).toEqual({ lineNo: 1 });
+      expect(captured!.detail).toEqual({
+        kind: "cancel",
+        target: expect.objectContaining({ lineId: pendingLine.id, started: true }),
+      });
       expect(captured!.composed).toBe(true);
       expect(captured!.bubbles).toBe(true);
     });
@@ -1935,21 +1944,6 @@ describe("till-table-order-screen", () => {
       await openDrawer(el);
       expect(el.shadowRoot!.querySelector('[data-cancel-line="1"]')).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-recall-line="1"]')).toBeNull();
-    });
-
-    it("dismissing the cancel confirm does NOT emit void-line", async () => {
-      const { el } = await mount({ lines: [preparingLine], courses });
-      await openDrawer(el);
-      let captured: CustomEvent | undefined;
-      el.addEventListener("void-line", (e) => (captured = e as CustomEvent));
-      el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]')!.click();
-      await el.updateComplete;
-      el.shadowRoot!.querySelector<HTMLElement>("[data-cancel-dismiss]")!.click();
-      await el.updateComplete;
-      expect(captured).toBeUndefined();
-      // The confirm closed, so its buttons are gone from view.
-      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-dialog");
-      expect(dialog!.open).toBe(false);
     });
   });
 
@@ -2114,20 +2108,6 @@ describe("till-table-order-screen", () => {
       el.orderId = "wo-9";
       await el.updateComplete;
       expect(editor(el)).toBeNull();
-    });
-
-    it("closes an open Cancel confirm when the app points the screen at another order", async () => {
-      const { el } = await mountLines([burgerLine], { orderId: "wo-7" });
-      await openDrawer(el);
-      lineAction(el, "cancel", 5)!.click();
-      await el.updateComplete;
-      const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-        "wt-dialog.cancel-confirm",
-      )!;
-      expect(dialog.open).toBe(true);
-      el.orderId = "wo-9";
-      await el.updateComplete;
-      expect(dialog.open).toBe(false);
     });
 
     it("offers Cancel alone on a line the kitchen has started", async () => {
@@ -2466,57 +2446,51 @@ describe("till-table-order-screen", () => {
 
     describe("Cancel on a line of more than one", () => {
       const pair: TabLine = { ...burgerLine, quantity: "2.000" };
-      function captureVoid(el: TillTableOrderScreen): { event?: CustomEvent } {
-        const seen: { event?: CustomEvent } = {};
-        el.addEventListener("void-line", (e) => (seen.event = e as CustomEvent));
+      function captureCancel(el: TillTableOrderScreen): AdjustDetail[] {
+        const seen: AdjustDetail[] = [];
+        el.addEventListener("adjust", (e) => {
+          expect(e.bubbles && e.composed).toBe(true);
+          seen.push((e as CustomEvent<AdjustDetail>).detail);
+        });
         return seen;
       }
-      async function openCancel(el: TillTableOrderScreen, lineNo: number): Promise<HTMLElement> {
+      async function pressCancel(el: TillTableOrderScreen, lineNo: number): Promise<AdjustDetail> {
+        const seen = captureCancel(el);
         lineAction(el, "cancel", lineNo)!.click();
         await el.updateComplete;
-        return el.shadowRoot!.querySelector<HTMLElement>("wt-dialog.cancel-confirm")!;
+        expect(seen).toHaveLength(1);
+        expect(seen[0]!.kind).toBe("cancel");
+        return seen[0]!;
       }
 
-      it("asks how many, and Cancel 1 cancels one", async () => {
+      it("lets the dialog cancel one of them, at one unit's price", async () => {
         const { el } = await mountLines([pair]);
         await openDrawer(el);
-        const dialog = await openCancel(el, 5);
-        expect(dialog.textContent).toContain(t("table.cancel_one_of").replace("{n}", "2"));
-        const seen = captureVoid(el);
-        dialog.querySelector<HTMLElement>("[data-cancel-one]")!.click();
-        expect(seen.event!.detail).toEqual({ lineNo: 5, quantity: "1" });
-        expect(seen.event!.bubbles).toBe(true);
-        expect(seen.event!.composed).toBe(true);
+        const { target } = await pressCancel(el, 5);
+        expect(target).toEqual({
+          lineId: "line-5",
+          name: "Burger",
+          quantity: "2",
+          total: "19.00",
+          unitTotal: "9.50",
+          started: false,
+        });
       });
 
-      it("Cancel all cancels the whole line", async () => {
-        const { el } = await mountLines([pair]);
-        await openDrawer(el);
-        const dialog = await openCancel(el, 5);
-        const seen = captureVoid(el);
-        const all = dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!;
-        expect(all.textContent!.trim()).toBe(t("table.cancel_all"));
-        all.click();
-        expect(seen.event!.detail).toEqual({ lineNo: 5 });
-      });
-
-      it("keeps the started wording when the kitchen has started the pair", async () => {
+      it("keeps the started wording, and one at a time, when the kitchen has started the pair", async () => {
         const { el } = await mountLines([{ ...pair, state: "preparing" }]);
         await openDrawer(el);
-        const dialog = await openCancel(el, 5);
-        expect(dialog.textContent).toContain(t("table.cancel_started"));
-        expect(dialog.querySelector("[data-cancel-one]")).not.toBeNull();
+        const { target } = await pressCancel(el, 5);
+        expect(target.started).toBe(true);
+        expect(target.unitTotal).toBe("9.50");
       });
 
-      it("does not ask how many on a line of one", async () => {
+      it("does not offer one at a time on a line of one", async () => {
         const { el } = await mountLines([burgerLine]);
         await openDrawer(el);
-        const dialog = await openCancel(el, 5);
-        expect(dialog.querySelector("[data-cancel-one]")).toBeNull();
-        expect(dialog.textContent).not.toContain(t("table.cancel_one_of").replace("{n}", "1"));
-        const seen = captureVoid(el);
-        dialog.querySelector<HTMLElement>("[data-cancel-confirm]")!.click();
-        expect(seen.event!.detail).toEqual({ lineNo: 5 });
+        const { target } = await pressCancel(el, 5);
+        expect(target.quantity).toBe("1");
+        expect(target.unitTotal).toBeNull();
       });
 
       it("cancels a weighed line whole", async () => {
@@ -2531,8 +2505,8 @@ describe("till-table-order-screen", () => {
         };
         const { el } = await mountLines([weighed]);
         await openDrawer(el);
-        const dialog = await openCancel(el, 5);
-        expect(dialog.querySelector("[data-cancel-one]")).toBeNull();
+        const { target } = await pressCancel(el, 5);
+        expect(target.unitTotal).toBeNull();
       });
 
       it("tells the app it has taken a Cancel offer, so the offer is shown once", async () => {
@@ -2549,14 +2523,12 @@ describe("till-table-order-screen", () => {
       it("opens nothing when the line the app offers Cancel for is no longer on the tab", async () => {
         const { el } = await mountLines([preparingBurger]);
         await openDrawer(el);
+        const seen = captureCancel(el);
         let taken: Event | undefined;
         el.addEventListener("cancel-offer-taken", (e) => (taken = e));
         el.cancelOffer = 42;
         await el.updateComplete;
-        const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-          "wt-dialog.cancel-confirm",
-        )!;
-        expect(dialog.open).toBe(false);
+        expect(seen).toEqual([]);
         // Taken all the same: a later mount must not open it on whatever line 42 then is.
         expect(taken).toBeInstanceOf(CustomEvent);
       });
@@ -2564,14 +2536,16 @@ describe("till-table-order-screen", () => {
       it("opens Cancel on the line the app offers it for after a refused change", async () => {
         const { el } = await mountLines([preparingBurger]);
         await openDrawer(el);
+        const seen = captureCancel(el);
         el.cancelOffer = 9;
         await el.updateComplete;
-        const dialog = el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>(
-          "wt-dialog.cancel-confirm",
-        )!;
-        expect(dialog.open).toBe(true);
-        expect(dialog.textContent).toContain(t("table.cancel_started"));
-        expect(dialog.textContent).toContain("Burger");
+        expect(seen).toEqual([
+          {
+            kind: "cancel",
+            target: expect.objectContaining({ lineId: "line-5", name: "Burger", started: true }),
+            offered: true,
+          },
+        ]);
       });
     });
   });

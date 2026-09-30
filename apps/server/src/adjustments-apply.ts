@@ -30,6 +30,7 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
+  decimalToThousandths,
   grossOf,
   MONEY_SCALE,
   subtractDecimal,
@@ -45,7 +46,9 @@ import type { TillConfig } from "./till-config.js";
 import {
   assertPartyBillOpen,
   bumpRevision,
+  extraQuantityFor,
   isReleased,
+  keptExtrasOf,
   partyAfterEdit,
   quantityOfLine,
   readOrderRevision,
@@ -185,6 +188,26 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
     .orderBy(workingOrderLines.lineNo);
 }
 
+/**
+ * The quantity, in thousandths, a cancel leaves each row of a dish's family (the dish first, then
+ * its extras) when the dish keeps `remaining`: what {@link removeFromLine} stores.
+ */
+function leftAfterCancel(family: readonly Row[], remaining: number): Map<string, number> {
+  const [dish, ...children] = family;
+  const dishLeft = thousandthsToDecimal(remaining);
+  const kept = keptExtrasOf(
+    children.map((row) => ({ id: row.id, quantity: row.quantity, unitPriceGross: row.unit })),
+    dish!.quantity,
+  );
+  return new Map([
+    [dish!.id, remaining],
+    ...kept.map(
+      ({ child, perDish }) =>
+        [child.id, decimalToThousandths(extraQuantityFor(perDish, dishLeft))] as const,
+    ),
+  ]);
+}
+
 /** The dish as `removeFromLine` takes it, from the row the plan read. */
 function voidTargetOf(dish: Row): VoidTarget {
   return {
@@ -309,7 +332,7 @@ async function planAdjustment(
   venueLocale: string,
 ): Promise<Plan> {
   const { orderId } = ask;
-  // The table screen is the only surface (ruling R1): an open bill of a party, as a void needs.
+  // The table screen is the only surface (ruling R1): an open bill of a party.
   const revision = await assertPartyBillOpen(tx, cfg, orderId);
   if (revision !== ask.expectedRevision) {
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
@@ -359,31 +382,29 @@ async function planAdjustment(
     const family = [dish, ...rows.filter((row) => row.parentLineId === dish!.id)];
     covered = coveredQuantity(orderId, dish, ask.quantity);
     const partial = covered < dish.quantity;
-    if (partial && family.length > 1) {
-      throw new AppError("adjustment.partial_with_extras", {
-        workingOrderId: orderId,
-        lineNo: dish.lineNo,
-      });
-    }
     const weighed = (dish.unitPrecision ?? 0) > 0;
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
       if (ask.amount !== undefined) throw invalid("amount");
       removed = partial ? covered : null;
-      reduction = partial
-        ? subtractDecimal(
-            gross(dish.unit, dish.quantity),
-            gross(dish.unit, dish.quantity - covered),
-          )
-        : sumDecimals(family.map((row) => gross(row.unit, row.quantity)));
-      nominal = partial
-        ? listValue(dish, covered)
-        : sumDecimals(family.map((row) => listValue(row, row.quantity)));
+      const left = leftAfterCancel(family, dish.quantity - covered);
+      reduction = sumDecimals(
+        family.map((row) =>
+          subtractDecimal(gross(row.unit, row.quantity), gross(row.unit, left.get(row.id)!)),
+        ),
+      );
+      nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
       before = reduction;
       await refusePaidLines(tx, orderId, [
         { id: dish.id, lineNo: dish.lineNo, keeps: dish.quantity - covered },
       ]);
     } else {
+      if (partial && family.length > 1) {
+        throw new AppError("adjustment.partial_with_extras", {
+          workingOrderId: orderId,
+          lineNo: dish.lineNo,
+        });
+      }
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
       if (partial && weighed) {
@@ -567,7 +588,7 @@ async function reprice(
 
 /**
  * Apply a cancellation, comp or discount to an open bill of a party, at most once per submission id
- * on the bill (plan D8): a cancel removes the part as a void does, telling the kitchen; a comp or a
+ * on the bill (plan D8): a cancel removes the part ({@link removeFromLine}), telling the kitchen; a comp or a
  * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's
  * revision and the party's on, and records one adjustment. The PIN never enters the recorded
  * command. `venueLocale` is the venue's display language, which names the reason for an operator

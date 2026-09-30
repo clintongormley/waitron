@@ -27,8 +27,9 @@ export interface AdjustTarget {
   quantity: string | null;
   /** What the action can take off: the dish with its extras, or the whole bill. */
   total: string;
-  /** One unit's price when the dish is several whole units the action may take one of; null when
-   * only the whole of it can be adjusted (a weighed dish, or one with extras). */
+  /** One unit's price, with its share of any extras, when the dish is several whole units the
+   * action may take one of; null when only the whole of it can be adjusted (a weighed dish, or one
+   * with extras given away or discounted). */
   unitTotal: string | null;
   started?: boolean;
 }

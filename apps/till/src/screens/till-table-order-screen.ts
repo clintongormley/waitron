@@ -11,6 +11,7 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
+  divideDecimal,
   formatMoney,
   grossOf,
   MONEY_SCALE,
@@ -287,10 +288,12 @@ const LINE_ADJUSTMENTS = [
   { kind: "discount", label: "table.discount_line" },
 ] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
 
-/** `adjust`: Give away or Discount pressed on a dish, or Discount on the bill on screen. */
+/** `adjust`: Cancel, Give away or Discount pressed on a dish, or Discount on the bill on screen. */
 export interface AdjustDetail {
   kind: AdjustKind;
   target: AdjustTarget;
+  /** Opened by the app's Cancel offer, so the message saying why stays on screen. */
+  offered?: true;
 }
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
@@ -1113,12 +1116,8 @@ export class TillTableOrderScreen extends LitElement {
    * ticket item, so those lines offer Cancel instead. */
   @property({ attribute: false }) editSentLines = true;
   /** Set by the app when a change was refused because the kitchen had started the line: that line's
-   * Cancel confirm opens. */
+   * Cancel opens. */
   @property({ attribute: false }) cancelOffer: number | null = null;
-
-  /** Cancelling takes a dish off the bill (and bins it once started), so — unlike Send/Recall — the
-   * void fires only once confirmed. */
-  @state() private cancelLine: TabLine | null = null;
 
   /** The held group whose Fire waits for confirmation. */
   @state() private fireGroupPending: OrderGroup | null = null;
@@ -1326,7 +1325,6 @@ export class TillTableOrderScreen extends LitElement {
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
       this.#closeChange();
-      this.cancelLine = null;
       this.fireGroupPending = null;
       this.movePending = null;
       this.servePending = null;
@@ -1357,7 +1355,7 @@ export class TillTableOrderScreen extends LitElement {
       const offered = this.lines.find(
         (line) => line.lineNo === this.cancelOffer && !this.#isChild(line),
       );
-      if (offered !== undefined) this.cancelLine = offered;
+      this.#offeredCancel = offered;
       this.#offerTaken = true;
     }
   }
@@ -1368,12 +1366,17 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchReminder();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
+    const offered = this.#offeredCancel;
+    this.#offeredCancel = undefined;
+    if (offered !== undefined)
+      this.#adjust("cancel", this.#lineTarget(offered, "cancel"), { offered: true });
     this.dispatchEvent(
       new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
     );
   }
 
   #offerTaken = false;
+  #offeredCancel: TabLine | undefined;
 
   /** Whether the party's release reminder is due, as of this render. */
   #reminderDue = false;
@@ -1737,7 +1740,7 @@ export class TillTableOrderScreen extends LitElement {
           variant="danger"
           data-cancel-line=${line.lineNo}
           aria-label=${label("table.cancel_line")}
-          @click=${() => this.#requestCancel(line)}
+          @click=${() => this.#adjust("cancel", this.#lineTarget(line, "cancel"))}
         >
           ${t("table.cancel_line")}
         </wt-button>`,
@@ -1767,34 +1770,39 @@ export class TillTableOrderScreen extends LitElement {
           data-comp-line=${kind === "comp" ? line.lineNo : nothing}
           data-discount-line=${kind === "discount" ? line.lineNo : nothing}
           aria-label=${`${t(label)} · ${name}`}
-          @click=${() => this.#adjust(kind, this.#lineTarget(line))}
+          @click=${() => this.#adjust(kind, this.#lineTarget(line, kind))}
         >
           ${t(label)}
         </wt-button>`,
     );
   }
 
-  /** A dish with its extras. Part of it can be adjusted only when it is several whole units with no
-   * extras, as the server allows. */
-  #lineTarget(line: TabLine): AdjustTarget {
+  /** A dish with its extras. Part of it can be adjusted only when it is several whole units, as the
+   * server allows: with no extras, or for a cancel, which takes each unit's share of them. */
+  #lineTarget(line: TabLine, kind: AdjustKind): AdjustTarget {
     const extras = this.lines.filter((row) => row.parentLineNo === line.lineNo);
     const total = toScale(
       sumDecimals([line, ...extras].map((row) => this.#lineGross(row))),
       MONEY_SCALE,
     );
-    const inParts = extras.length === 0 && this.#moreThanOneWholeUnit(line);
+    let unitTotal: string | null = null;
+    if (this.#moreThanOneWholeUnit(line)) {
+      if (extras.length === 0) unitTotal = toScale(decimal(line.unitPriceGross), MONEY_SCALE);
+      else if (kind === "cancel")
+        unitTotal = divideDecimal(total, decimal(line.quantity), MONEY_SCALE);
+    }
     return {
       lineId: line.id,
       name: this.#nameForLine(line),
       quantity: this.#displayQty(line.quantity),
       total,
-      unitTotal: inParts ? toScale(decimal(line.unitPriceGross), MONEY_SCALE) : null,
+      unitTotal,
       started: this.#isStarted(line),
     };
   }
 
-  #adjust(kind: AdjustKind, target: AdjustTarget): void {
-    const detail: AdjustDetail = { kind, target };
+  #adjust(kind: AdjustKind, target: AdjustTarget, also: { offered?: true } = {}): void {
+    const detail: AdjustDetail = { kind, target, ...also };
     this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
@@ -1856,101 +1864,9 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #requestCancel(line: TabLine): void {
-    this.cancelLine = line;
-  }
-
-  /** `quantity` absent cancels the whole line. */
-  #confirmCancel(quantity?: string): void {
-    const line = this.cancelLine;
-    if (line === null) return;
-    this.cancelLine = null;
-    this.dispatchEvent(
-      new CustomEvent("void-line", {
-        detail:
-          quantity === undefined ? { lineNo: line.lineNo } : { lineNo: line.lineNo, quantity },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  #dismissCancel(): void {
-    this.cancelLine = null;
-  }
-
   /** Such a line can be cancelled, or split, one unit at a time; a weighed line cannot. */
   #moreThanOneWholeUnit(line: TabLine): boolean {
     return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
-  }
-
-  /** Always present, driven by {@link cancelLine}, so an Escape close flows back through `wt-close` into
-   * the state rather than fighting the `.open` binding. */
-  #cancelDialog(): TemplateResult {
-    const line = this.cancelLine;
-    const started = line !== null && this.#isStarted(line);
-    const oneAtATime = line !== null && this.#moreThanOneWholeUnit(line);
-    return html`<wt-dialog
-      ${trackDialog()}
-      class="cancel-confirm"
-      .open=${line !== null}
-      .heading=${t("table.cancel_title")}
-      @wt-close=${() => this.#dismissCancel()}
-    >
-      <p class="cancel-body">
-        ${started ? t("table.cancel_started") : t("table.cancel_sent")}
-        ${
-          line !== null
-            ? html`<span class="cancel-dish"
-                >${this.#nameForLine(line)} ×${this.#displayQty(line.quantity)}</span
-              >`
-            : nothing
-        }
-      </p>
-      ${
-        oneAtATime
-          ? html`<p class="cancel-how-many">
-              ${t("table.cancel_one_of").replace("{n}", this.#displayQty(line.quantity))}
-            </p>`
-          : nothing
-      }
-      <div slot="footer" class="cancel-actions">
-        <wt-button
-          class="cancel-keep"
-          variant="secondary"
-          data-cancel-dismiss
-          @click=${() => this.#dismissCancel()}
-        >
-          ${t("table.cancel_keep")}
-        </wt-button>
-        ${
-          oneAtATime
-            ? html`<wt-button
-                class="cancel-one"
-                variant="danger"
-                data-cancel-one
-                @click=${() => this.#confirmCancel("1")}
-              >
-                ${t("table.cancel_one")}
-              </wt-button>`
-            : nothing
-        }
-        <wt-button
-          class="cancel-do"
-          variant="danger"
-          data-cancel-confirm
-          @click=${() => this.#confirmCancel()}
-        >
-          ${
-            oneAtATime
-              ? t("table.cancel_all")
-              : started
-                ? t("table.cancel_confirm")
-                : t("table.cancel_do")
-          }
-        </wt-button>
-      </div>
-    </wt-dialog>`;
   }
 
   #openChange(line: TabLine): void {
@@ -2179,9 +2095,9 @@ export class TillTableOrderScreen extends LitElement {
           ${draft === null ? nothing : this.#ordering(draft)}
           ${this.drawerOpen ? this.#drawer(pending) : nothing}
         </div>
-        ${this.#previewDialog()} ${this.#cancelDialog()} ${this.#fireGroupDialog()}
-        ${this.#moveDialog()} ${this.#serveDialog()} ${this.#changeEditor()}
-        ${this.#takeOverDialog()} ${this.#billChoiceDialog()} ${this.#nameDialog()}
+        ${this.#previewDialog()} ${this.#fireGroupDialog()} ${this.#moveDialog()}
+        ${this.#serveDialog()} ${this.#changeEditor()} ${this.#takeOverDialog()}
+        ${this.#billChoiceDialog()} ${this.#nameDialog()}
       </section>
     `;
   }
