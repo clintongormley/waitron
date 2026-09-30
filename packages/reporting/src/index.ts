@@ -1,4 +1,13 @@
-export { businessDayStart, currentBusinessDay, validateBusinessDay } from "./business-day.js";
+export {
+  businessDayRangeWindow,
+  businessDayStart,
+  currentBusinessDay,
+  validateBusinessDay,
+  validateBusinessDayRange,
+  validateCutover,
+  validateTimeZone,
+} from "./business-day.js";
+export type { WindowClause } from "./business-day.js";
 export { computeDailyClose } from "./daily-close.js";
 export { computeVatSummaryForPeriod } from "./vat-summary.js";
 export { computeTopSellers } from "./top-sellers.js";
