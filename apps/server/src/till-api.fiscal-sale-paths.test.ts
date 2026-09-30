@@ -818,7 +818,7 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
 
 describe("paying a parked pay-first order over POST /api/sales sends its dishes to the kitchen", () => {
   it.each(["cash", "card"] as const)(
-    "a %s payment sends each unsent dish exactly once, and a replay sends nothing more",
+    "a %s payment sends its dish once, and a replay sends nothing more",
     async (method) => {
       const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
       const each = available.find((p) => p.pricingUnit === "each")!;
@@ -826,11 +826,23 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await loginSession(app, cfg, operatorId);
       const deviceCookie = await enrolTillCookie(cfg);
-      const fired = async (id: string) =>
-        (await suite.db.execute(sql`select 1 from ticket_items where working_order_id = ${id}`))
-          .rows;
+      const kitchenItems = async (id: string) =>
+        (
+          await suite.db.execute<{ items: number; fired: number }>(
+            sql`select count(*) as items, count(fired_at) as fired from ticket_items
+                where working_order_id = ${id}`,
+          )
+        ).rows[0];
 
       const workingOrderId = randomUUID();
+      const filed = () =>
+        withTransaction(suite.db, async (tx) => ({
+          registros: await tx.select().from(registrosFacturacion),
+          wo: await tx
+            .select({ status: workingOrders.status })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, workingOrderId)),
+        }));
       const park = await app.request("/api/working-orders", {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
@@ -841,7 +853,7 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
         }),
       });
       expect(park.status).toBe(200);
-      expect(await fired(workingOrderId)).toHaveLength(0);
+      expect(await kitchenItems(workingOrderId)).toEqual({ items: 0, fired: 0 });
 
       const pay = () =>
         app.request("/api/sales", {
@@ -854,10 +866,16 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
           }),
         });
       expect((await pay()).status).toBe(200);
-      expect(await fired(workingOrderId)).toHaveLength(1);
+      expect(await kitchenItems(workingOrderId)).toEqual({ items: 1, fired: 1 });
+      const afterPay = await filed();
+      expect(afterPay.registros).toHaveLength(1);
+      expect(afterPay.wo).toEqual([{ status: "settled" }]);
 
       expect((await pay()).status).toBe(200);
-      expect(await fired(workingOrderId)).toHaveLength(1);
+      expect(await kitchenItems(workingOrderId)).toEqual({ items: 1, fired: 1 });
+      const afterReplay = await filed();
+      expect(afterReplay.registros).toHaveLength(1);
+      expect(afterReplay.wo).toEqual([{ status: "settled" }]);
     },
   );
 });

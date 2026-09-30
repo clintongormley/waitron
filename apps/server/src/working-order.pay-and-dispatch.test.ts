@@ -448,9 +448,9 @@ async function readAmendments(id: string): Promise<VerifiableAmendment[]> {
 }
 
 /** The kitchen state of the ticket item fired for this SINGLE-line order, or null when none was
- *  fired. Placing (Modes I/T, inside `placeOrder`) and send-to-prep (Mode P) fire one
- *  `ticket_items` row per line (KDS-1); a walk-up never fires. The callers here fire SINGLE-line
- *  orders, so at most one row exists. */
+ *  fired. Placing (Modes I/T, inside `placeOrder`) and paying a pay-first order (Mode P,
+ *  `firePrepayOrder`) fire one `ticket_items` row per dish line (KDS-1). The callers here fire
+ *  SINGLE-line orders, so at most one row exists. */
 async function ticketStateOf(id: string): Promise<string | null> {
   const { rows } = await suite.db.execute<{ state: string }>(sql`
     select state from ticket_items where working_order_id = ${id}
@@ -1908,8 +1908,8 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
 
 // The ticket prep surface (KDS-1 §3c): the per-line advance state machine (`advanceTicketItem`), the
 // whole-ticket bump (`advanceTicket`) and the per-station queue read (`listStationQueue`) over
-// `ticket_items`. `sendToPrep` (Mode P) and `placeOrder` (Modes I/T) are the FIRES that put items on
-// the queue; their settled-only guard is exercised here too.
+// `ticket_items`. `payWorkingOrder` (Mode P, at payment) and `placeOrder` (Modes I/T) are the fires
+// that put items on the queue; `sendToPrep`'s settled-only guard is exercised here too.
 describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surface)", () => {
   it("advanceTicketItem walks a line queued → preparing → ready; a skip, a repeat, a backwards move and to='queued' are all refused", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("prepay");
@@ -2232,7 +2232,8 @@ describe("markCollected (Mode-P kitchen-handover marker)", () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const id = randomUUID();
     // A walk-up in a ticket-then-pay zone settled through the direct pay primitive has no ticket item
-    // (only a prepay walk-up fires at pay), so there is nothing on any station display to hand over.
+    // (only a pay-first order's dishes are sent at payment), so there is nothing on any station
+    // display to hand over.
     await payWorkingOrder(
       { db: suite.db, backend, clock },
       cfg,
