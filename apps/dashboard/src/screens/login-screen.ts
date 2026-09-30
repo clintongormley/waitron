@@ -362,7 +362,7 @@ export class LoginScreen extends LitElement {
   #onPasswordChange(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     this.password = event.detail.value;
-    this.#dismissRefusal(this.token === null ? "password" : "new-password");
+    this.#dismissRefusal("new-password");
   }
 
   #onSecondFactorChange(event: CustomEvent<{ value: string }>): void {
@@ -533,13 +533,13 @@ export class LoginScreen extends LitElement {
 
   async #requestPasswordReset(): Promise<void> {
     if (this.busy) return;
+    this.errorKey = null;
     this.#updateResetCountdown();
     if (this.resetSeconds > 0) {
       this.step = "reset-sent";
       return;
     }
     this.busy = true;
-    this.errorKey = null;
     try {
       await this.api.requestPasswordReset(this.email);
       this.resetDeadlines.set(this.email.trim().toLowerCase(), Date.now() + 60_000);

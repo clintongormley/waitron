@@ -2862,6 +2862,28 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
     expect(await bottomOf(el)).toBe("");
   });
 
+  it("leaves the refusal behind when a reset link is asked for while the last one's minute runs", async () => {
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api: stubApi({ login: vi.fn().mockRejectedValue({ code: "password.invalid" }) }),
+    });
+    await flush(el);
+    await openPassword(el, "bea@x.com");
+    click(el, "reset-by-email");
+    await flush(el);
+    click(el, "change-account");
+    await el.updateComplete;
+    await openPassword(el, "bea@x.com");
+    input(el, "password", "wrong horse");
+    click(el, "submit");
+    await flush(el);
+    expect(await bottomOf(el)).toBe(t("login.failed"));
+
+    click(el, "reset-by-email");
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=reset-sent]")).not.toBeNull();
+    expect(await bottomOf(el)).toBe("");
+  });
+
   it("keeps a signed-in password re-check's own wording when adding a passkey after sign-in", async () => {
     const { el } = await mountPasskeyOffer({
       passkeyRegisterOptions: vi.fn().mockRejectedValue({ code: "password.invalid" }),
