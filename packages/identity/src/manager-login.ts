@@ -33,7 +33,8 @@ function selectPersonLogin(tx: Transaction) {
 type PersonLoginRow = Awaited<ReturnType<typeof selectPersonLogin>>[number];
 
 // Every refusal is `password.invalid` with no params, whatever the cause, except that the email
-// path asks for the authenticator code with `totp.required` once the password is right.
+// path asks for the authenticator code with `totp.required` once the password is right. The cause
+// travels only as the error's log-only `reason`.
 async function completeManagerLogin(
   tx: Transaction,
   input: {
@@ -47,14 +48,20 @@ async function completeManagerLogin(
 ): Promise<ManagementSession> {
   if (person?.status !== "active" || person.passwordHash === null) {
     await verifyPassword(input.password, DUMMY_PASSWORD_HASH);
-    throw new AppError("password.invalid", {});
+    const reason =
+      person === undefined
+        ? "unknown_account"
+        : person.status === "active"
+          ? "no_password"
+          : person.status;
+    throw new AppError("password.invalid", {}, { reason });
   }
   if (!(await verifyPassword(input.password, person.passwordHash))) {
-    throw new AppError("password.invalid", {});
+    throw new AppError("password.invalid", {}, { reason: "wrong_password" });
   }
   if (person.totpSecret !== null) {
     if (input.totp === undefined && input.recoveryCode === undefined) {
-      throw new AppError(missingFactorCode, {});
+      throw new AppError(missingFactorCode, {}, { reason: "missing_code" });
     }
     const secret = decryptTotpSecret(person.totpSecret, input.totpKeyRing);
     const totpOk =
@@ -64,7 +71,14 @@ async function completeManagerLogin(
       input.recoveryCode !== undefined &&
       (await consumeRecoveryCode(tx, person.id, input.recoveryCode));
     if (!totpOk && !recoveryOk) {
-      throw new AppError("password.invalid", {});
+      // Names the last check that failed: a recovery code is tried only once the code has failed.
+      const reason =
+        input.recoveryCode !== undefined
+          ? "wrong_recovery_code"
+          : secret === null
+            ? "unreadable_secret"
+            : "wrong_code";
+      throw new AppError("password.invalid", {}, { reason });
     }
   }
   return startManagementSession(tx, { personId: person.id });

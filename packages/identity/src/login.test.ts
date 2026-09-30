@@ -116,12 +116,16 @@ async function sessionCount(personId: string): Promise<number> {
 // Each refusal cause, with the right PIN wherever the account has one, so only the cause differs.
 async function refusalCauses(): Promise<Record<string, { personId: string; pin: string }>> {
   const noPin = await seedPerson(suite.db);
-  await run((tx) => tx.execute(sql`update persons set pin_hash = null where id = ${noPin}`));
+  const suspendedNoPin = await seedPerson(suite.db, "staff", "suspended");
+  await run((tx) =>
+    tx.execute(sql`update persons set pin_hash = null where id in (${noPin}, ${suspendedNoPin})`),
+  );
   return {
     unknown: { personId: crypto.randomUUID(), pin: "1234" },
     suspended: { personId: await seedPerson(suite.db, "staff", "suspended"), pin: "1234" },
     pending: { personId: await seedPerson(suite.db, "staff", "pending"), pin: "1234" },
     noPin: { personId: noPin, pin: "1234" },
+    suspendedNoPin: { personId: suspendedNoPin, pin: "1234" },
     wrongPin: { personId: await seedPerson(suite.db), pin: "9999" },
   };
 }
@@ -133,13 +137,15 @@ describe("loginWithPin's refusals", () => {
     for (const [cause, input] of Object.entries(await refusalCauses())) {
       refusals[cause] = await refusalOf(() => run((tx) => loginWithPin(tx, { tillId, ...input })));
     }
-    const expected = { code: "pin.invalid", params: {} };
+    // The same answer for every cause; only the log-only reason tells them apart.
+    const refused = (reason: string) => ({ code: "pin.invalid", params: {}, reason });
     expect(refusals).toEqual({
-      unknown: expected,
-      suspended: expected,
-      pending: expected,
-      noPin: expected,
-      wrongPin: expected,
+      unknown: refused("unknown_person"),
+      suspended: refused("suspended"),
+      pending: refused("pending"),
+      noPin: refused("no_pin"),
+      suspendedNoPin: refused("suspended"),
+      wrongPin: refused("wrong_pin"),
     });
   });
 

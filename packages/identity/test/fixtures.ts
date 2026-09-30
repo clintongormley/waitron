@@ -97,8 +97,13 @@ export async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
 }
 
-/** The code and params a rejected call threw, for comparing two refusals whole. */
+/**
+ * The code, params and log-only reason a rejected call threw, for comparing two refusals whole: the
+ * code and params are the answer, the reason is what only the log sees.
+ */
 export async function refusalOf(fn: () => Promise<unknown>): Promise<unknown> {
   const error = await captureError(fn);
-  return isAppError(error) ? { code: error.code, params: error.params } : error;
+  return isAppError(error)
+    ? { code: error.code, params: error.params, reason: error.reason }
+    : error;
 }

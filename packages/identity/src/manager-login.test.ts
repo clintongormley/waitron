@@ -278,8 +278,11 @@ async function refusalCauses(): Promise<Record<string, LoginAttempt>> {
     return { personId, email, password: "correct horse" };
   };
   const noPassword = await account();
+  const suspendedNoPassword = await account("suspended");
   await run((tx) =>
-    tx.execute(sql`update persons set password_hash = null where id = ${noPassword.personId}`),
+    tx.execute(
+      sql`update persons set password_hash = null where id in (${noPassword.personId}, ${suspendedNoPassword.personId})`,
+    ),
   );
   const wrongCode = await account();
   const wrongRecoveryCode = await account();
@@ -299,6 +302,7 @@ async function refusalCauses(): Promise<Record<string, LoginAttempt>> {
     suspended: await account("suspended"),
     pending: await account("pending"),
     noPassword,
+    suspendedNoPassword,
     wrongPassword: { ...(await account()), password: "wrong" },
     wrongCode: { ...wrongCode, totp: wrongCodeFor(await withAuthenticator(wrongCode.personId)) },
     wrongRecoveryCode: { ...wrongRecoveryCode, recoveryCode: "AAAA-BBBB-CCCC-DDDD" },
@@ -306,7 +310,19 @@ async function refusalCauses(): Promise<Record<string, LoginAttempt>> {
   };
 }
 
-const PASSWORD_INVALID = { code: "password.invalid", params: {} };
+// The same answer for every cause; only the log-only reason tells them apart.
+const refused = (reason: string) => ({ code: "password.invalid", params: {}, reason });
+const EVERY_CAUSE_REFUSED = {
+  unknown: refused("unknown_account"),
+  suspended: refused("suspended"),
+  pending: refused("pending"),
+  noPassword: refused("no_password"),
+  suspendedNoPassword: refused("suspended"),
+  wrongPassword: refused("wrong_password"),
+  wrongCode: refused("wrong_code"),
+  wrongRecoveryCode: refused("wrong_recovery_code"),
+  unreadableSecret: refused("unreadable_secret"),
+};
 
 describe("the manager logins' refusals", () => {
   it("are one answer by email, whatever the cause", async () => {
@@ -320,16 +336,7 @@ describe("the manager logins' refusals", () => {
         ),
       );
     }
-    expect(refusals).toEqual({
-      unknown: PASSWORD_INVALID,
-      suspended: PASSWORD_INVALID,
-      pending: PASSWORD_INVALID,
-      noPassword: PASSWORD_INVALID,
-      wrongPassword: PASSWORD_INVALID,
-      wrongCode: PASSWORD_INVALID,
-      wrongRecoveryCode: PASSWORD_INVALID,
-      unreadableSecret: PASSWORD_INVALID,
-    });
+    expect(refusals).toEqual(EVERY_CAUSE_REFUSED);
   });
 
   it("are one answer by id, whatever the cause, a missing authenticator code included", async () => {
@@ -353,17 +360,7 @@ describe("the manager logins' refusals", () => {
         ),
       );
     }
-    expect(refusals).toEqual({
-      unknown: PASSWORD_INVALID,
-      suspended: PASSWORD_INVALID,
-      pending: PASSWORD_INVALID,
-      noPassword: PASSWORD_INVALID,
-      wrongPassword: PASSWORD_INVALID,
-      wrongCode: PASSWORD_INVALID,
-      wrongRecoveryCode: PASSWORD_INVALID,
-      unreadableSecret: PASSWORD_INVALID,
-      missingCode: PASSWORD_INVALID,
-    });
+    expect(refusals).toEqual({ ...EVERY_CAUSE_REFUSED, missingCode: refused("missing_code") });
   });
 });
 
