@@ -192,7 +192,11 @@ v26.7.0) repeated 0 times in 20,000 pairs, so local runs did not show it. `freeP
 `apps/server/src/testing/free-ports.ts` holds every probe until the last port is drawn, which rules
 out a repeat within one call. It does not cover a port another worker takes between the release and
 the test's own bind, nor a port drawn to stay unused (an "unreachable peer") that another worker
-later binds. Nothing checks that a new suite uses the helper rather than its own copy.
+later binds. Nothing checks that a new suite uses the helper rather than its own copy. The S3 test
+server is the one caller that recovers from a port taken in that gap, because versitygw exits when
+its port is already bound and so can be started again on another (the stream loop test's section
+below, "The S3 test server knows its own server"). A Waitron server the suites start is not retried:
+a taken HTTP port is `server.listen_failed` (the `EADDRINUSE` case in `apps/server/src/boot.test.ts`).
 
 ## Locate the unfinished package before diagnosing a silent shard as database contention.
 
@@ -522,9 +526,10 @@ minutes, for the reason the "per-test timeout" section above gives.
 both under `.bin/` at the repository root; `WAITRON_LITESTREAM_BIN` and `WAITRON_VERSITYGW_BIN` point
 the test elsewhere. A missing binary, or one reporting another version, SKIPS the case locally, and
 FAILS it when `CI=true` (GitHub Actions sets it on every job) or `WAITRON_REQUIRE_STREAM_BINARIES=1`.
-CI runs both tests in `test-server-stream`, the one job that installs both binaries
-(`.github/workflows/ci.yml`; see [ci-and-gates.md](ci-and-gates.md), "The stream loop and pause
-tests run in a job of their own").
+CI runs both tests in `test-server-stream`, the one job that installs both binaries, together
+with the S3 test server's own suite, `apps/server/src/testing/s3-test-server.test.ts`, which
+skips and fails the same way (`.github/workflows/ci.yml`; see [ci-and-gates.md](ci-and-gates.md),
+"The stream loop and pause tests run in a job of their own").
 
 **A skipped run looks like a quiet pass.** Measured 2026-09-25 with Vitest 4.1.11 and
 `WAITRON_LITESTREAM_BIN=/nonexistent`: `pnpm --filter @waitron/server exec vitest run
@@ -655,6 +660,21 @@ not possible with our weak-consistency replication model". versitygw was preferr
 answers `If-Match` on a missing key with 404 as AWS documents (SeaweedFS answers 412), it is one
 process on one port, and its release publishes SHA-256 checksums (SeaweedFS publishes MD5). MinIO's
 repository is archived and its community binaries are no longer published.
+
+**The S3 test server knows its own server.** `startS3TestServer` draws its port with `freePort()`,
+which releases it before versitygw binds it, so a server another test started in the same run can
+take it first. versitygw 1.8.0 prints its "listening on" banner BEFORE it binds, and on a taken
+port then prints `bind: address already in use` and exits 1 (run by hand 2026-09-30, on macOS and
+in `node:24-slim`). Until 2026-09-30 the harness called a server ready once its port accepted a
+connection, and every server shared one set of credentials, so a start whose port the other test's
+server had taken came up talking to that server; its own `pause()` then did nothing, because its
+process had exited. That is what the pause test's bucket control failing once on `main` looks like
+(run 36619928071; `docs/backlog.md`, C88). Now each server has credentials of its own and is ready
+only once a listing signed with them is answered; a server that exits on a taken port is started
+again on a fresh one, up to five ports within the one `READY_TIMEOUT_MS`; and `pause()` and
+`resume()` throw, with the server's log, once its process has exited. The cases in
+`apps/server/src/testing/s3-test-server.test.ts` force a second server onto the first one's port
+through a mocked `freePort()`; each fails with its own part of that taken out.
 
 **It runs with `--sidecar`** (`apps/server/src/testing/s3-test-server.ts`), which keeps object
 metadata in a plain directory instead of extended attributes, so it does not depend on what the

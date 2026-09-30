@@ -770,7 +770,8 @@ jobs:
       # `test:shard` emits a blob rather than enforcing thresholds; test-server-merge is where the
       # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
       # (see test-heavy's shard step for why a bare `--` silently drops both flags). The two stream
-      # tests run in test-server-stream instead; `--exclude` adds to the config's own excludes.
+      # tests, and the suite of the S3 test server they start, run in test-server-stream instead;
+      # `--exclude` adds to the config's own excludes.
       - name: Run the server shard
         run: |
           set -euo pipefail
@@ -778,6 +779,7 @@ jobs:
             --shard=${{ matrix.shard }}/3 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
+            --exclude src/testing/s3-test-server.test.ts \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json
 
       # `if-no-files-found: error` guards a shard that silently ran nothing: no blob → the upload fails
@@ -792,11 +794,12 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # apps/server's stream loop and pause tests, on a runner of their own beside the server shards.
-  # They run the pinned Litestream against versitygw as child processes, and fail rather than skip
-  # without them in CI, so only this job downloads the two binaries. Downloaded, not cached: the
-  # Actions cache is at its budget (docs/developers/ci-and-gates.md). Its blob joins the shards' in
-  # test-server-merge, so the coverage gate counts what these two tests reach.
+  # apps/server's stream loop and pause tests, and the suite of the S3 test server they start, on a
+  # runner of their own beside the server shards. They run the pinned Litestream and versitygw as
+  # child processes, and fail rather than skip without them in CI, so only this job downloads the
+  # two binaries. Downloaded, not cached: the Actions cache is at its budget
+  # (docs/developers/ci-and-gates.md). Its blob joins the shards' in test-server-merge, so the
+  # coverage gate counts what these tests reach.
   test-server-stream:
     timeout-minutes: 15
     needs: changes
@@ -834,6 +837,7 @@ jobs:
           pnpm --filter "@waitron/server" test:shard \
             src/stream-loop.e2e.test.ts \
             src/stream-pause.e2e.test.ts \
+            src/testing/s3-test-server.test.ts \
             --outputFile=.vitest-reports/blob-stream.json
 
       - name: Upload the stream tests' coverage blob
