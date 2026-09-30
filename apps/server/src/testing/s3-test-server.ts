@@ -28,7 +28,10 @@ export const DEFAULT_LITESTREAM_BIN = join(REPO_ROOT, ".bin", "litestream");
 
 /** At least three characters: versitygw refuses shorter names with `InvalidBucketName`. */
 const BUCKET = "waitron-loop";
-/** How long `startS3TestServer` waits for its server to answer, over every port it tries. */
+/**
+ * How long `startS3TestServer` waits for its server to answer, over every port it tries. No readiness
+ * listing is given longer than what is left of it.
+ */
 export const READY_TIMEOUT_MS = 10_000;
 const STOP_GRACE_MS = 5_000;
 const VERSION_TIMEOUT_MS = 10_000;
@@ -112,7 +115,7 @@ const PORT_TAKEN = "address already in use";
 /** How many ports `startS3TestServer` draws before it gives up. */
 export const PORT_ATTEMPTS = 5;
 /** How long one readiness listing may take before it counts as not ready yet. */
-const PROBE_TIMEOUT_MS = 1_000;
+export const PROBE_TIMEOUT_MS = 1_000;
 
 class PortTaken extends Error {}
 
@@ -240,15 +243,16 @@ async function startOnPort(
   try {
     for (;;) {
       if (exitCode !== undefined) {
-        const words = `versitygw exited with ${exitCode} before listening on 127.0.0.1:${port}: ${log}`;
+        const words = `versitygw exited with ${exitCode} before answering on 127.0.0.1:${port}: ${log}`;
         throw log.includes(PORT_TAKEN) ? new PortTaken(words) : new Error(words);
       }
-      if (await answers(client)) return server;
-      if (Date.now() >= deadline) {
+      const left = deadline - Date.now();
+      if (left <= 0) {
         throw new Error(
           `versitygw did not answer on 127.0.0.1:${port} within ${READY_TIMEOUT_MS}ms: ${log}`,
         );
       }
+      if (await answers(client, Math.min(PROBE_TIMEOUT_MS, left))) return server;
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
   } catch (error) {
@@ -260,10 +264,10 @@ async function startOnPort(
 }
 
 /** Whether a listing signed with this server's own credentials is answered. */
-async function answers(client: S3Client): Promise<boolean> {
+async function answers(client: S3Client, timeoutMs: number): Promise<boolean> {
   try {
     await client.send(new ListObjectsV2Command({ Bucket: BUCKET, MaxKeys: 1 }), {
-      abortSignal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      abortSignal: AbortSignal.timeout(timeoutMs),
     });
     return true;
   } catch {

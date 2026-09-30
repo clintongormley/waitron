@@ -1,7 +1,8 @@
-// The S3 test server the stream loop and pause tests run, against the real pinned versitygw.
-// Without it the cases that start one are reported SKIPPED; with CI=true or
-// WAITRON_REQUIRE_STREAM_BINARIES=1 a missing binary FAILS them, as in `stream-loop.e2e.test.ts`.
-import { mkdtemp, rm } from "node:fs/promises";
+// The S3 test server the stream loop and pause tests run. The cases that start the real pinned
+// versitygw are reported SKIPPED without it; with CI=true or WAITRON_REQUIRE_STREAM_BINARIES=1 a
+// missing binary FAILS them, as in `stream-loop.e2e.test.ts`. The cases that start a stub run
+// everywhere.
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -10,6 +11,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi, type TestCont
 import { freePort } from "./free-ports.js";
 import {
   PORT_ATTEMPTS,
+  PROBE_TIMEOUT_MS,
+  READY_TIMEOUT_MS,
   resolveVersitygw,
   startS3TestServer,
   type S3TestServer,
@@ -26,6 +29,11 @@ const REQUIRED = process.env.CI === "true" || process.env.WAITRON_REQUIRE_STREAM
 const UNANSWERED_MS = 1_000;
 
 const versitygw = await resolveVersitygw(process.env);
+if (!versitygw.ok && !REQUIRED) {
+  console.warn(
+    `S3 test server versitygw cases SKIPPED: ${versitygw.reason}. Install with: ${INSTALL}`,
+  );
+}
 
 function versitygwBin(ctx: TestContext): string {
   if (versitygw.ok) return versitygw.bin;
@@ -55,12 +63,18 @@ describe("startS3TestServer", () => {
     started.push(server);
     return server;
   };
+  /** An executable started in versitygw's place; it is handed versitygw's flags. */
+  const stub = async (name: string, script: string) => {
+    const path = join(scratch, name);
+    await writeFile(path, script, { mode: 0o755 });
+    return path;
+  };
 
   beforeAll(async () => {
     scratch = await mkdtemp(join(tmpdir(), "waitron-s3-test-server-"));
   });
   afterEach(async () => {
-    vi.mocked(freePort).mockClear();
+    vi.mocked(freePort).mockReset();
     await Promise.all(started.splice(0).map((server) => server.stop()));
   });
   afterAll(async () => {
@@ -88,17 +102,11 @@ describe("startS3TestServer", () => {
     const bin = versitygwBin(ctx);
     const first = await start(bin);
     vi.mocked(freePort).mockResolvedValue(portOf(first));
-    try {
-      await expect(start(bin)).rejects.toThrow(
-        new RegExp(`127\\.0\\.0\\.1:${portOf(first)}.*address already in use`, "s"),
-      );
-      expect(vi.mocked(freePort)).toHaveBeenCalledTimes(PORT_ATTEMPTS + 1);
-    } finally {
-      vi.mocked(freePort).mockReset();
-      vi.mocked(freePort).mockImplementation(
-        (await vi.importActual<typeof import("./free-ports.js")>("./free-ports.js")).freePort,
-      );
-    }
+
+    await expect(start(bin)).rejects.toThrow(
+      new RegExp(`127\\.0\\.0\\.1:${portOf(first)}.*address already in use`, "s"),
+    );
+    expect(vi.mocked(freePort)).toHaveBeenCalledTimes(PORT_ATTEMPTS + 1);
     expect(await listing(first)).toBe("answered");
   });
 
@@ -114,5 +122,53 @@ describe("startS3TestServer", () => {
     // Node refuses versitygw's flags and exits: a start that fails, but not for its port.
     await expect(start(process.execPath)).rejects.toThrow(/exited with 9 .*bad option/s);
     expect(vi.mocked(freePort)).toHaveBeenCalledTimes(1);
+  });
+
+  it("recognises a lost port from words that arrive after the server's process has exited", async () => {
+    // The words come from a process the stub leaves behind holding its output open, so they
+    // always arrive after the stub's own exit.
+    const bin = await stub(
+      "loses-port-after-exit",
+      `#!/bin/sh\n{ sleep 0.2; echo "listen tcp: bind: address already in use" >&2; } &\nexit 1\n`,
+    );
+
+    await expect(start(bin)).rejects.toThrow(`lost every one of the ${PORT_ATTEMPTS} ports`);
+    expect(vi.mocked(freePort)).toHaveBeenCalledTimes(PORT_ATTEMPTS);
+  });
+
+  it("spends one deadline across every port it tries", async () => {
+    // Each start loses its port 4s in: three of them outlast the deadline, five do not fit in one.
+    const bin = await stub(
+      "loses-port-late",
+      `#!${process.execPath}\nsetTimeout(() => process.stderr.write("bind: address already in use\\n", () => process.exit(1)), 4000);\n`,
+    );
+    const began = Date.now();
+
+    await expect(start(bin)).rejects.toThrow(
+      new RegExp(`did not answer on .* within ${READY_TIMEOUT_MS}ms`),
+    );
+    expect(Date.now() - began).toBeLessThan(READY_TIMEOUT_MS + 4_000);
+    expect(vi.mocked(freePort).mock.calls.length).toBeLessThan(PORT_ATTEMPTS);
+  });
+
+  it("does not report ready on an answer that comes after the deadline", async () => {
+    // Refuses every listing until shortly before the deadline, then holds each one until after it,
+    // for less than one probe's own timeout.
+    const answerAt = Date.now() + READY_TIMEOUT_MS + 500;
+    const holdFrom = answerAt - (PROBE_TIMEOUT_MS - 100);
+    const bin = await stub(
+      "answers-late",
+      `#!${process.execPath}
+const [host, port] = process.argv[process.argv.indexOf("--port") + 1].split(":");
+process.getBuiltinModule("node:http").createServer((req, res) => {
+  if (Date.now() < ${holdFrom}) return res.writeHead(503).end();
+  setTimeout(() => res.writeHead(200, { "content-type": "application/xml" }).end(
+    '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>waitron-loop</Name><KeyCount>0</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>',
+  ), ${answerAt} - Date.now());
+}).listen(Number(port), host);
+`,
+    );
+
+    await expect(start(bin)).rejects.toThrow(/did not answer on/);
   });
 });
