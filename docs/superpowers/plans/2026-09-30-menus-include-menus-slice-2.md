@@ -51,13 +51,16 @@ The design left these to planning (§8) or did not reach them. Each is stated wh
   is one source; each menu this menu includes DIRECTLY and whose combined menu reaches the product
   is one source, carrying that menu's own combined answer. Menus included further down are that
   menu's business, so a chain Evening → Drinks → Wines asks Drinks, which asks Wines.
-- **P4. A variant with no price of its own follows its product's price on the menu when the menu
-  sets the product's price** (today's chain: the variant's own price beats the menu's price for the
-  parent, which beats the parent's own). Otherwise a variant is resolved by the same rule as a
-  product, source by source. **What the owner should know:** if Evening sets Lager to €4 and the
-  Drinks menu it includes sets Lager's pint (a size with no price of its own) to €3.80, Evening's
-  pint is €4 with no clash — the including menu's product price covers its sizes that have no
-  price of their own, even over an included menu's price for that size.
+- **P4. A price set for a specific size beats a price set for the whole product, wherever each was
+  set** (owner, 2026-10-01: "Variants are seldom the same price so we should respect the price of
+  the variant"). It extends today's single-menu chain, where a variant's own catalogue price
+  already beats the menu's price for its product. A size's price on a menu is: this menu's own
+  price for the size; else the size-specific prices from the places it comes from (its own
+  catalogue price, or an included menu's price for the size), which must agree or clash; else —
+  nobody priced the size — it follows its product's price on this menu. So if Evening sets Lager
+  to €4 and the Drinks menu it includes sets the pint (a size with no price of its own) to €3.80,
+  Evening's pint is €3.80, no clash; and a menu whose own sections hold Lager (pint unpriced) and
+  which includes that Drinks sells the pint at €3.80 too, no clash.
 - **P5. A clash matters only for what the menu sells.** A price clash on an item the menu resolves
   to "switched off" is not reported and does not block publishing. An on/off clash always is. A
   product with sizes (variants) is never sold as itself, so its price clashes are reported per
@@ -887,7 +890,11 @@ export interface CombinedOffer {
   productId: string;
   offered: Setting<boolean>;
   price: Setting<Decimal>;
-  variants: { variantId: string; offered: Setting<boolean>; price: Setting<Decimal> }[];
+  /** `level` (P4): `size` when the price was set for this size somewhere — this menu's override, the
+   * size's catalogue price, or an included menu whose own price is `size`-level — and `product`
+   * when the size follows its product's price on this menu. */
+  variants: { variantId: string; offered: Setting<boolean>;
+              price: Setting<Decimal> & { level: "size" | "product" } }[];
 }
 
 export interface CombineInput {
@@ -917,16 +924,22 @@ The rule, precisely:
   counts as own (pinned already: "keeps an override equal to the product's price when that price
   changes", `menu-structure.test.ts`).
 - **Candidates.** One per place, own sections first, then each included menu in `included` order:
-  own sections give the catalogue price (for a variant, its own price, else its product's) with
-  source `product`, and on/off `true` with source `product`; an included menu gives its
+  own sections give the catalogue price with source `product`, and on/off `true` with source
+  `product` (for a variant's PRICE see P4 below); an included menu gives its
   `CombinedOffer`'s value, wrapped as `{kind: "menu", menuId, menuName, from: <its source>}`, or
   `undecided` if that value is a clash there. All decided and equal by value
   (`compareDecimal(a, b) === 0`; booleans `===`) → `decided` with the FIRST candidate's source;
   otherwise `clash` listing every candidate.
-- **P4**, for a variant's price: own variant override, else — when the variant has no catalogue
-  price and this menu sets its product's price — that price with source `parent` and `otherwise` =
-  the candidates' result (what the size would cost if this menu did not set its product's price),
-  else the candidates.
+- **P4**, for a variant's price, in order:
+  1. this menu's own variant override → `own`, level `size`;
+  2. else the SIZE-LEVEL candidates only: own sections give one if the variant has its own
+     catalogue price (source `product`); each included menu gives one if its price for the variant
+     has level `size` (wrapped as `menu`), or `undecided` if it is a clash at level `size`. If there
+     is at least one: agree → decided, else clash; level `size`. Product-level places take no part
+     — a size-specific price beats them;
+  3. else (no place priced the size) the variant follows this menu's price for its product: the
+     same value, or the same clash, with source `parent`, level `product`. When this menu set that
+     product price itself, `otherwise` = what the size would cost without it.
 - **`clashesOf` (P5).** An on/off clash always (the product's, and each variant's). A price clash
   only where the product's `offered` is decided `true` — and for a product with variants, only
   each variant's price clash where that variant's `offered` is decided `true`; the product's own
@@ -998,9 +1011,12 @@ Drinks off → an on/off clash, always reported); a price clash on an item resol
 reported (P5); an included menu's own clash makes the including menu's candidate `undecided`
 (P6); a three-level chain Evening → Drinks → Wines gives the nested `from`; a menu including two
 menus that both include a third gets two candidates that agree, source = the first in `included`
-order; P4's owner-visible case (Evening €4 for Lager, Drinks €3.80 for the pint with no price of
-its own → Evening's pint €4, source `parent`); a variant WITH its own catalogue price and an
-included menu's override for it → a clash on that variant; `0.00` is a price, not a blank;
+order; P4's two owner cases — Evening sets Lager €4, the Drinks it includes sets the pint (no
+catalogue price) €3.80 → Evening's pint €3.80, source `menu` Drinks, level `size`, no clash; a menu
+whose own sections hold Lager (pint unpriced) and that includes the same Drinks → pint €3.80, no
+clash; with Drinks setting only LAGER €3.50 (no pint price), Evening's pint follows Evening's
+Lager price, source `parent`, level `product`; a variant WITH its own catalogue price €5 and an
+included menu's price for it €6 → a clash on that variant, level `size`; `0.00` is a price, not a blank;
 `"3.5"` and `"3.50"` agree (compared by value).
 
 `apps/server/src/till-api.sell-published.test.ts` — Review Focus 6: a product placed only in an

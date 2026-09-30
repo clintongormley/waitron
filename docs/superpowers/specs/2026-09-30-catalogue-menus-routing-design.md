@@ -173,6 +173,11 @@ is still one item, with one price and one on/off state, wherever it is tapped.
 3. If they disagree, that is a **clash**. The menu cannot be published until it sets its own
    override.
 
+_2026-10-01, owner: for a product with sizes, a price set for a specific size beats a price set
+for the whole product, wherever each was set — so a menu's own price for the product does not
+override an included menu's price for one size. Detail: the
+[slice 2 plan](../plans/2026-09-30-menus-include-menus-slice-2.md), decision P4._
+
 **Worked example.** Drinks overrides lager to €3.50. Afternoon includes Drinks and also puts lager
 in its own Specials section, where it carries the product's own €3. Afternoon shows a clash:
 "Lager is €3 in Specials and €3.50 in Drinks. Set Afternoon's price." Evening includes Drinks and
