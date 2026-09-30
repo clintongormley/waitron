@@ -2594,7 +2594,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   dashboard. _(2026-09-30, C102: the window is renewed while Add a printer is open, and while it is
   open the list keeps a device for 45 s; next entry.)_
 - **Scan for printers keeps going while Add a printer is open (C102, owner 2026-09-30) — DONE
-  (2026-09-30).** The owner: _"there is a button with a spinner that says 'Scanning', and underneath
+  (2026-09-30, #953).** The owner: _"there is a button with a spinner that says 'Scanning', and underneath
   it on the left it says 'Scanning' too. we can remove the second one. The scanning spinner stops
   after a while, and no printers are found. Later the printers appear. I think keep it spinning for
   longer, eg 30 seconds. Also, after a while, the BT printer disappears, and so did a network
@@ -6583,8 +6583,8 @@ approved.
   `packages/print-agent/src/agent.ts`), so a ticket queued during a pass is printed only after it —
   roughly ten seconds or more, by the timeouts in C102's entry under A3. Before C102 this lasted three
   minutes after each Scan; since C102 it lasts while Add a printer stays open and for about three
-  minutes after. Running the scan beside the pull rather than before it would remove the wait. Needs
-  the owner to say whether it matters.
+  minutes after. Running the scan beside the pull rather than before it would remove the wait. The
+  owner's answer (2026-09-30): land C102 with this open and fix it next, queued as lane C's C117.
 - **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
   run). `discoveryUntil` is a time on the server's clock, and the agent checks it against
   `host.now()` (`packages/print-agent/src/agent.ts`), where a network probe's deadline is sent as a
