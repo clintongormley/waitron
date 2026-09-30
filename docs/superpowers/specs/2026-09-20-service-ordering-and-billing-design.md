@@ -409,6 +409,8 @@ percentage discounts included; its percentage limit caps the combined percentage
 line. Asking above a limit is refused; the owner raises the policy to allow more. Someone below the
 reason's applying role needs approval from someone at or above its approving role.
 
+_(2026-09-30, B11b: a per-venue limit on a bill's total discount can also require a manager's PIN; see `adjustment_settings` and the backlog's Task 11 entry.)_
+
 Examples supplied by the owner include entry error, changed mind, unavailable item, complaint,
 friends and family, employee discount and manager special. They are examples, not a mandatory
 reason list. "Already paid" and "Paid separately" need payment reconciliation, not an automatic

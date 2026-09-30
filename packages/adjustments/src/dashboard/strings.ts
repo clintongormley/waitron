@@ -71,7 +71,7 @@ const en = {
   "adjustments.limit.heading": "Limit on a bill's discounts",
   "adjustments.limit.field": "Largest total discount on one bill",
   "adjustments.limit.hint":
-    "Discounts on a bill's items and on the whole bill, added together, as a share of the bill's full price. Going past it needs the PIN of a manager or someone more senior, and so does a cancellation that takes the bill past it. Give-aways made on this bill do not count. Leave it empty for no limit.",
+    "Discounts on a bill's items and on the whole bill, added together, as a share of the full price of what is still on the bill. When the person making the change is below a manager, a discount that goes past it, or a cancellation that leaves the bill past it with a larger share than before, needs the PIN of a manager or someone more senior. Give-aways made on this bill are not counted as discount. Leave it empty for no limit.",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
   "adjustments.limit.load_error": "The bill discount limit could not be loaded.",
@@ -201,9 +201,9 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
   "adjustments.limit.heading": "Límite de descuento por cuenta",
-  "adjustments.limit.field": "Máximo que pueden quitar los descuentos",
+  "adjustments.limit.field": "Descuento total máximo en una cuenta",
   "adjustments.limit.hint":
-    "Suma los descuentos en los artículos de una cuenta y en toda la cuenta, en proporción al precio antes de ajustes de lo que sigue en ella. Por encima de este porcentaje, quien esté por debajo de encargado necesita que un encargado, o alguien de rango superior, lo apruebe con su PIN. Anular un artículo también puede hacer que la cuenta lo supere. Las invitaciones hechas en esta cuenta no cuentan como descuento. Déjalo vacío para no poner límite.",
+    "Los descuentos en los artículos de una cuenta y en toda la cuenta, sumados, como proporción del precio completo de lo que sigue en la cuenta. Cuando quien hace el cambio está por debajo de un encargado, un descuento que lo supere, o una anulación que deje la cuenta por encima de él con una proporción mayor que antes, necesita el PIN de un encargado o de alguien de rango superior. Las invitaciones hechas en esta cuenta no cuentan como descuento. Déjalo vacío para no poner límite.",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",
   "adjustments.limit.load_error": "No se pudo cargar el límite de descuento por cuenta.",

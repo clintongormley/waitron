@@ -320,6 +320,7 @@ names it so the owner can overturn it at review.
     approver below the reason's `approver_role`, is a new code `adjustment.approval_required` with
     `{ approverRole }`: the shipped `authorization.not_permitted` carries `{ permission }`, and a
     role-based refusal has no permission to name (the plan's second review).
+  - _(2026-09-30, B11b: a per-venue limit on a bill's total discount can also require a manager's PIN; see `adjustment_settings` and the backlog's Task 11 entry.)_
 - **D7. Vocabulary.** "Held" means submitted but not released to the kitchen. The counter's
   parked basket keeps its code name "park" (`parkOrder`), and no new till string calls it held.
 - **D8. Every command that changes groups, drafts, service, adjustments, handover or payments

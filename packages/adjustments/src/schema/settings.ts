@@ -3,9 +3,8 @@ import { check } from "drizzle-orm/sqlite-core";
 import { count, nowIso, rate, table, tsString } from "@waitron/db";
 
 /**
- * The venue's adjustment settings, at most one row. `max_bill_discount` caps, in basis points of
- * the bill's price before adjustments, what every discount on one bill takes off together before a
- * manager must approve; null, or no row, sets no cap.
+ * The venue's adjustment settings, at most one row. `max_bill_discount` is in basis points; null,
+ * or no row, is no limit. The share it caps is `shareOf` in `apps/server/src/adjustments-apply.ts`.
  */
 export const adjustmentSettings = table(
   "adjustment_settings",

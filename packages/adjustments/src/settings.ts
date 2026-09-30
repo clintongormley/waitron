@@ -3,8 +3,8 @@ import { isPercentBp } from "./policy.js";
 import { adjustmentSettings } from "./schema/settings.js";
 
 export interface AdjustmentSettings {
-  /** The most, in basis points of the bill's price before adjustments, that every discount on one
-   * bill takes off together before a manager must approve; null sets no limit. */
+  /** In basis points; null is no limit. The share it caps is `shareOf` in
+   * `apps/server/src/adjustments-apply.ts`. */
   maxBillDiscountBp: number | null;
 }
 

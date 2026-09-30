@@ -14,8 +14,8 @@ declare module "@waitron/shared" {
     "adjustment.reason_inactive": Record<string, never>;
     /** A discount larger than the line or bill it is taken off; amounts are decimal strings. */
     "adjustment.exceeds_amount": { requested: string; available: string };
-    /** The requester is below the reason's `apply_role`, and no approver at or above
-     * `approverRole` was given. */
+    /** The requester is below the reason's `apply_role`, or the bill's discount limit asks for a
+     * manager, and no approver at or above `approverRole` was given. */
     "adjustment.approval_required": { approverRole: PersonRoleValue };
     /** Part of the quantity of a dish that has extras, which a give-away or a discount takes only
      * whole; a cancel can take part of it. */
