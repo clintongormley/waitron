@@ -424,8 +424,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // over Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another
   // box reported it can print to that printer within `DISCOVERED_TTL_MS`. The jobs are ended anyway
   // when that report is older than the window or, being held in memory, lost to a server restart.
-  // A reported succeeded Unpair switches that Bluetooth printer off first, unless another box
-  // reported it visible within `DISCOVERED_TTL_MS`.
+  // A reported succeeded Unpair switches that Bluetooth printer off first, while the server still
+  // holds the command (`COMMAND_TTL_MS`), unless another box reported it visible within
+  // `DISCOVERED_TTL_MS`.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
