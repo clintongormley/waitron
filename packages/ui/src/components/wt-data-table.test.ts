@@ -106,6 +106,69 @@ test("unselectable tree rows keep their empty grid cell and never enter select-a
   expect(header.indeterminate).toBe(false);
 });
 
+test("a row that becomes unselectable leaves the next individual selection", async () => {
+  const el = await table({ selectable: true, selected: ["b"] });
+  el.rowSelectable = (row) => row.id !== "b";
+  await el.updateComplete;
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-a]")!.click();
+  expect(seen).toEqual([["a"]]);
+});
+
+test("clearing select-all drops a row that became unselectable", async () => {
+  const el = await table({ selectable: true, selected: ["a", "b"] });
+  el.rowSelectable = (row) => row.id !== "b";
+  await el.updateComplete;
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(seen).toEqual([[]]);
+});
+
+test("a hidden unselectable row leaves selection while a hidden selectable row stays", async () => {
+  const el = await tableS({
+    selectable: true,
+    selected: ["1", "2"],
+    rows: [...rowsS, { id: "3", name: "Cy", status: "off" }],
+    columns: withStatus,
+    rowSelectable: (row) => row.id !== "2",
+  });
+  statusSelect(el).value = "active";
+  statusSelect(el).dispatchEvent(new Event("change"));
+  await el.updateComplete;
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-all]")!.click();
+  expect(seen).toEqual([[]]);
+  el.selected = ["1", "2", "3"];
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-1]")!.click();
+  expect(seen.at(-1)).toEqual(["3"]);
+});
+
+test("pruning selection uses the sorted row’s position key", async () => {
+  const el = await table({
+    selectable: true,
+    selected: ["1"],
+    sortKey: "name",
+    rowKey: (_row, index) => String(index),
+    rowSelectable: (row) => row.id !== "b",
+  });
+  const seen: string[][] = [];
+  el.addEventListener("wt-selection-change", (event) =>
+    seen.push((event as CustomEvent).detail.selected),
+  );
+  el.shadowRoot!.querySelector<HTMLInputElement>("[data-test=select-0]")!.click();
+  expect(seen).toEqual([["0"]]);
+});
+
 test("reports a user filter change once across the shadow boundary and not on restore", async () => {
   sessionStorage.setItem("test.filter-event", JSON.stringify({ filters: { status: "off" } }));
   const seen: CustomEvent[] = [];

@@ -568,9 +568,20 @@ export class WtDataTable<Row = unknown> extends LitElement {
   }
 
   #emitSelection(next: string[]): void {
+    const visible = this.#visibleRows();
+    const keyedRows = this.rowParent
+      ? this.#treeVisible(visible).rows
+      : this.#sortedRows(visible, this.#sortColumn(this.#shownColumns()));
+    const selectable = new Map(
+      this.rows.map((row, index) => [this.rowKey(row, index), this.rowSelectable(row)]),
+    );
+    // Rendered keys take precedence: a caller can key flat rows by their sorted, filtered position.
+    keyedRows.forEach((row, index) => {
+      selectable.set(this.rowKey(row, index), this.rowSelectable(row));
+    });
     this.dispatchEvent(
       new CustomEvent("wt-selection-change", {
-        detail: { selected: next },
+        detail: { selected: next.filter((key) => selectable.get(key) !== false) },
         bubbles: true,
         composed: true,
       }),
