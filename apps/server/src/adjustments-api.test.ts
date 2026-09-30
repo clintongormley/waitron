@@ -586,7 +586,11 @@ describe("what the till reads", () => {
     const names = (answer.json as unknown as { name: string }[]).map((reason) => reason.name);
     expect(names).toEqual(expect.arrayContaining(["Queja", "Casa", "Error"]));
     expect(names).not.toContain("Retired");
-    expect((answer.json as unknown as unknown[])[0]).toEqual({
+    expect(
+      (answer.json as unknown as { id: string }[]).find(
+        (reason) => reason.id === venue.reasonId.complaint,
+      ),
+    ).toEqual({
       id: venue.reasonId.complaint,
       name: "Queja",
       actions: ["comp", "discount_percent", "discount_amount"],
@@ -602,7 +606,11 @@ describe("what the till reads", () => {
     );
     try {
       const english = await send(venue.app, venue.cookie.staff, "GET", "/api/adjustment-reasons");
-      expect((english.json as unknown as { name: string }[])[0]!.name).toBe("Complaint");
+      expect(
+        (english.json as unknown as { id: string; name: string }[]).find(
+          (reason) => reason.id === venue.reasonId.complaint,
+        )!.name,
+      ).toBe("Complaint");
     } finally {
       await inTx(venue, (tx) =>
         tx.update(persons).set({ locale: null }).where(eq(persons.id, venue.staffId)),

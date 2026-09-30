@@ -1059,6 +1059,45 @@ describe("till-app: cancelling a dish", () => {
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
 
+  it("cancels with a reason shaped like the provisioned default: no note sent, and no PIN when the preview needs none", async () => {
+    // Shaped as apps/server/src/default-cancel-reason.test.ts pins the provisioned default.
+    const defaultReason: AdjustmentReason = {
+      id: "r-default",
+      name: "Entry error",
+      actions: ["cancel"],
+      noteRequired: false,
+      maxPercentBp: null,
+      maxAmount: null,
+      applyRole: "staff",
+      approverRole: "supervisor",
+    };
+    const { el } = await mountApp({
+      listAdjustmentReasons: vi.fn().mockResolvedValue([defaultReason]),
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: null })),
+    });
+    const order = await openMesa4(el);
+
+    await press(el, cancelButton(order, 1));
+    const names = [
+      ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
+    ].map((radio) => radio.closest("label")!.textContent!.trim());
+    expect(names).toEqual(["Entry error"]);
+    await chooseReason(el, "Entry error");
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+    const defaultAsk = { ...cancelAsk, reasonId: "r-default", note: null };
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", defaultAsk);
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-needs-approval]")).toBeNull();
+
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(applied()).toEqual([
+      { orderId: "wo-4", command: { ...defaultAsk, submissionId: expect.any(String) } },
+    ]);
+    expect(api.listAdjustmentApprovers).not.toHaveBeenCalled();
+    expect(approval(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+  });
+
   describe("a dish of two, with an extra on each", () => {
     const pair: TabLine = { ...wine, quantity: "2.000", unitPriceGross: "15.00" };
     const extra: TabLine = {

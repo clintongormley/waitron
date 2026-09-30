@@ -417,6 +417,8 @@ reason list. "Already paid" and "Paid separately" need payment reconciliation, n
 discount. "Customer left without paying" is an unpaid departure (§8), not a comp. Training belongs
 to the separate training environment, not a reason to erase a live transaction.
 
+_(2026-09-30, B11e: a venue set up with no reasons is given one of them, "Entry error", as a default cancel reason it can edit or switch off; see `packages/adjustments/src/provisioning.ts`.)_
+
 **Owner, 2026-09-26: discounts and comps reduce the line.** A line discount lowers that line's
 price. A whole-bill discount is spread across the bill's lines in proportion to their amounts, so
 each VAT rate's taxable amount drops correctly. A comp is the line at 100% off, shown on the invoice

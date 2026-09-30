@@ -3623,15 +3623,23 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       an extras row on its own, whole only, and that code is retired; the till offers all three on
       an extras row, at a table and in the counter's basket, and Cancel where its dish offers it.)_
       Left open:
-      - **A newly set-up venue has no adjustment reasons, so its till cannot cancel anything** until
-        a manager adds a reason that allows a cancel, in the dashboard under Adjustment reasons; the
-        dialog says so (`adjust.no_reasons`). Outside tests, reasons are created only by the
-        dashboard's reasons route (`packages/adjustments/src/routes.ts`), the demo seed
-        (`apps/server/scripts/demo-seed/seed-adjustments.ts`), and a configuration imported at
-        setup, which copies another venue's reasons
-        (`packages/adjustments/src/configuration-transfer.ts`);
-        no migration inserts one. **Next action:** decide whether setup should create a default
-        cancel reason.
+      - _Done by lane B item B11e (2026-09-30):_ a newly set-up venue has one cancel reason,
+        "Entry error" / "Error al marcar": cancel only, staff apply it alone, no limit, no note.
+        Both names are stored; the stored name is the Spanish one when the venue's first invoice
+        language is Spanish and the English one otherwise, and the till shows the reason in the
+        operator's language, or the venue's display language for an operator with none set. The
+        adjustments module's provisioning seed creates it
+        (`packages/adjustments/src/provisioning.ts`), so both the setup wizard and
+        `waitron-provision venue` give it, and only to a venue with no reason at all, switched off
+        or not. A configuration imported at setup replaces it with the imported venue's reasons,
+        so importing from a venue with no reasons leaves the new venue with none, and the till's
+        dialog then says so (`adjust.no_reasons`); whether setup should add the default after such
+        an import is left for the owner to decide. Registering a till
+        (`apps/server/scripts/register-till.ts`, through `provisionNode`) runs the same seed with
+        the same rule, so it would add the default to such a venue. The demo seed's own "Entry
+        error" is the same reason, so a demo venue lists it once. It is an ordinary reason a
+        manager can edit or switch off. A venue whose reasons are all switched off still cannot
+        cancel, and the till's dialog still says so (`adjust.no_reasons`).
     - _Done by lane B item B11b (2026-09-30, #931, main `e511aa831`):_ a venue can set a limit on a bill's TOTAL discount
       (`adjustment_settings.max_bill_discount`, adjustments migration `0002`, set on the dashboard's
       Adjustment reasons screen). The share is measured from the bill's current rows — each row's
