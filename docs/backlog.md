@@ -736,7 +736,8 @@ greyed.
 **A joined tab of no party can have kitchen slips naming a table its ticket did not print.**
 Correction and MOVED slips name such a tab's lowest-id table (`orderTableLabels`,
 `apps/server/src/kitchen-print.ts`), so after a join a MOVED slip's "from" can name the other
-table; recording each ticket's printed table would fix it. A party's bill names all its tables
+table; recording each ticket's printed table would fix it. _(2026-09-30, C86: `orderTableLabels`
+now lives in `packages/db/src/party-table-labels.ts`.)_ A party's bill names all its tables
 instead (the table-actions "Task 4 DONE" entry below). Outside tests, `openTab`'s one caller is
 `seatTable` (`apps/server/src/parties.ts`), which opens the tab on a new party. Whether a tab of no
 party can reach a join in production is not established: `moveTab` of an open parked order onto a
@@ -3537,7 +3538,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the till's list of a party's bills (`readBillsOfParties`, `apps/server/src/parties.ts`);
       `orderTableLabel`'s fallback once the party holds no table (slips and the pass); and the
       overdue report's own fallback to the order's label (`computeOverdueOrders`,
-      `packages/reporting/src/overdue-orders.ts`). Not yet checked: the payment API's
+      `packages/reporting/src/overdue-orders.ts`). _(2026-09-30, C86: the overdue report no longer
+      has its own; it calls `orderTableLabels`, the same fallback as the slips and the pass.)_ Not
+      yet checked: the payment API's
       `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
       `/management-api/payments/bill-refunds` queries (`apps/server/src/payments-api.ts`), which
       read the same column. **DECIDED (owner, 2026-09-29): leave it** — after payment the
@@ -3797,7 +3800,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       test) marked such a dish away and served, and it still got a notice: `kitchen-print.ts` reads
       neither `away_at` nor `served_at`. Receipts do not call `orderTableLabels`, and not every
       other view follows the merge (read, not run). _(2026-09-30, C86: a receipt of a bill of no
-      party now does; a party's receipt still does not.)_
+      party now calls `orderTableLabels`; a party's receipt still does not.)_
     Tests: `apps/server/src/party-table-actions.test.ts` and
     `apps/server/src/till-api.table-actions.test.ts`. No migration.
     Open points: **Fixed (C77):** the manager overview's slow-orders list (`computeOverdueOrders`,
@@ -6037,7 +6040,8 @@ approved.
     `working-order.ts`'s `splitOffCheck`
     points at "line ~221". _(2026-09-30, Task 13: `splitOffCheck` is deleted, which closes this
     one.)_ Read only, not run: `WebhookDeps.nodeId` looks unread by `settleWebhook`;
-    `receipt-order.ts` takes a `cfg` it never uses; `me-api.ts`'s profile save logs
+    `receipt-order.ts` takes a `cfg` it never uses _(2026-09-30, C86: it now reads
+    `cfg.locationId`, which closes this one)_; `me-api.ts`'s profile save logs
     `account_email.send_failed` with the caught error's message. The lock-ordering and deadlock
     cases for transfers, merges and split bills went with PostgreSQL and nothing replaced them (one
     write transaction per venue file is what serialises those writers now). Test titles #622 could
