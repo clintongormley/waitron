@@ -3495,7 +3495,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `tab.void_quantity_invalid` are gone. Part of a dish with extras can be cancelled, its extras
       following the dish. An extras row cannot be cancelled on its own
       (`adjustment.line_not_adjustable`); the old route took the whole of one, but the till offers
-      no Cancel on an extras row. _(2026-09-30, B11d: the server now cancels, comps and discounts
+      no Cancel on an extras row. _(2026-09-30, B11d, #946: the server now cancels, comps and discounts
       an extras row on its own, whole only, and that code is retired; the till offers all three on
       an extras row, at a table and in the counter's basket, and Cancel where its dish offers it.)_
       Left open:
@@ -3533,7 +3533,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/adjustments-apply.ts`). On the till, a stored order in the counter's basket
       that matches what the server holds offers Give away and Discount on each dish, Discount the
       bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
-      (`apps/till/src/widgets/basket.ts`). _(2026-09-30, B11d: an extra's row offers them too,
+      (`apps/till/src/widgets/basket.ts`). _(2026-09-30, B11d, #946: an extra's row offers them too,
       whole; see the B11d note under B11a, above.)_ The basket reads each line's sent state and price before
       an adjustment from `GET /api/working-orders/:id/lines` when it loads the order. It loads the
       order again after an adjustment is made, refused as out of date, or left unanswered while
@@ -3591,7 +3591,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). _Settled by the owner,
       2026-09-30:_ part of a weighed line stays refused for a give-away or a discount, exactly
       representable or not, and staff are told to discount the whole line instead.
-      _(2026-09-30, B11d: the server now comps or discounts part of a dish with extras, splitting
+      _(2026-09-30, B11d, #946: the server now comps or discounts part of a dish with extras, splitting
       its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
       line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
       The till offers one of several of a dish with extras, and never offers part of a weighed
@@ -3599,7 +3599,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       give-away or a discount that would take nothing off — the line already free, or a discount
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
-      still recorded when it takes nothing off.)_ Left open after B11d:
+      still recorded when it takes nothing off.)_ Left open after B11d (#946, main `c9f0b7317`):
       - **A discount can escape the bill's discount limit when the dish above it was given away
         whole.** The limit treats every extra of a dish given away whole as given away too
         (`shareOf`, `apps/server/src/adjustments-apply.ts`, reading the dishes `readCompedLines`
