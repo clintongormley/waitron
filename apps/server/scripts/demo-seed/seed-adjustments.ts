@@ -1,5 +1,5 @@
 // The owner's example reasons from the service design (§7). They are examples, not a required list,
-// so they belong to the demo venue and never to provisioning.
+// so they belong to the demo venue.
 
 import type { Transaction } from "@waitron/db";
 import {

@@ -4,6 +4,7 @@ import {
   ADJUSTMENTS_CONFIGURATION_TRANSFER,
   ADJUSTMENTS_MIGRATIONS,
   ADJUSTMENTS_PERMISSIONS,
+  ADJUSTMENTS_PROVISIONING,
   ADJUSTMENTS_ROUTES,
 } from "@waitron/adjustments";
 import { BOOKINGS_MIGRATIONS } from "@waitron/bookings";
@@ -174,6 +175,11 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
     expect(adjustments?.routes).toBe(ADJUSTMENTS_ROUTES);
     expect(adjustments?.permissions).toBe(ADJUSTMENTS_PERMISSIONS);
     expect(adjustments?.configurationTransfer).toBe(ADJUSTMENTS_CONFIGURATION_TRANSFER);
+  });
+
+  it("adjustments declares its provisioning seat, by reference", () => {
+    const adjustments = ALL_MODULES.find((module) => module.name === "adjustments");
+    expect(adjustments?.provisioning).toBe(ADJUSTMENTS_PROVISIONING);
   });
 
   it("fiscal declares its provisioning contribution and fills the fiscal slot, by reference", () => {
