@@ -6,6 +6,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
+import { ServerRouter } from "./api/server-router.js";
 import { formatMoney } from "@waitron/shared";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
@@ -1065,6 +1066,22 @@ const phone: CanvasDef = {
   ],
 };
 
+/** An API method whose answer waits until the test settles or refuses it. */
+function held() {
+  const answer: { settle: (value: unknown) => void; refuse: (reason: unknown) => void } = {
+    settle: () => undefined,
+    refuse: () => undefined,
+  };
+  const call = vi.fn(
+    () =>
+      new Promise((resolve, reject) => {
+        answer.settle = resolve;
+        answer.refuse = reject;
+      }),
+  );
+  return { call, answer };
+}
+
 describe("till-app: the party on a handheld", () => {
   const orderCard = (el: TillApp) =>
     tabGrid(el)?.shadowRoot?.querySelector<TillTableOrderScreen>("till-table-order-screen") ?? null;
@@ -1159,6 +1176,216 @@ describe("till-app: the party on a handheld", () => {
       );
     },
   );
+
+  describe("a table action's answer once the waiter has gone to the floor tab", () => {
+    const onPhone = (canvas: CanvasDef = phone) => ({
+      getTill: vi.fn().mockResolvedValue({ ...till, canvas }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", formFactor: "phone-portrait", stationId: null }),
+    });
+    const withCounter: CanvasDef = {
+      ...phone,
+      tabs: [
+        ...phone.tabs,
+        {
+          key: "counter",
+          title: "Counter",
+          columns: 12,
+          cards: [{ type: "product-grid", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+    const activeTab = (el: TillApp) =>
+      (shell(el) as HTMLElement & { activeTabKey?: string }).activeTabKey;
+    async function selectTab(el: TillApp, key: string): Promise<void> {
+      emit(shell(el), "tab-select", { key });
+      await flush(el);
+    }
+    async function openOnPhone(el: TillApp, tableId = "t4"): Promise<TillTableOrderScreen> {
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+      await flush(el);
+      emit(shell(el), "open-table", { tableId, seated: true });
+      await flush(el);
+      return orderCard(el)!;
+    }
+
+    it("Finish clears the finished party from the order tab", async () => {
+      const { call, answer } = held();
+      const { el } = await mountApp({ ...onPhone(), finishTable: call });
+      emit(await openOnPhone(el), "finish-table", {});
+      await flush(el);
+      await selectTab(el, "floor");
+
+      answer.settle({ state: "closed" });
+      await flush(el);
+      await selectTab(el, "order");
+
+      expect(call).toHaveBeenCalledWith("v1", 3);
+      expect(orderCard(el)!.party).toBeNull();
+      expect(orderCard(el)!.orderId).toBeUndefined();
+    });
+
+    it("Finish, with an open of another table under way that then fails, clears the finished party from the order tab", async () => {
+      const { call, answer } = held();
+      const offersRead = held();
+      const { el } = await mountApp({ ...onPhone(), finishTable: call });
+      emit(await openOnPhone(el), "finish-table", {});
+      await flush(el);
+      await selectTab(el, "floor");
+      vi.mocked(api.listZoneOffers).mockImplementation(offersRead.call as never);
+      emit(shell(el), "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+
+      answer.settle({ state: "closed" });
+      await flush(el);
+      offersRead.answer.refuse(new TypeError("Failed to fetch"));
+      await flush(el);
+      await selectTab(el, "order");
+
+      expect(offersRead.call).toHaveBeenCalledOnce();
+      expect(orderCard(el)!.party).toBeNull();
+      expect(orderCard(el)!.orderId).toBeUndefined();
+    });
+
+    it("Finish, answering once the waiter has moved on from the floor tab to the counter, stays on the counter and clears the finished party", async () => {
+      const { call, answer } = held();
+      const { el } = await mountApp({ ...onPhone(withCounter), finishTable: call });
+      emit(await openOnPhone(el), "finish-table", {});
+      await flush(el);
+      await selectTab(el, "floor");
+      await selectTab(el, "counter");
+
+      answer.settle({ state: "closed" });
+      await flush(el);
+
+      expect(call).toHaveBeenCalledOnce();
+      expect(activeTab(el)).toBe("counter");
+      await selectTab(el, "order");
+      expect(orderCard(el)!.party).toBeNull();
+      expect(orderCard(el)!.orderId).toBeUndefined();
+    });
+
+    it("Move guests: back on the order tab, the screen has followed the guests into the other party, and the floor tab said nothing about the bills", async () => {
+      const { call, answer } = held();
+      const mesa9Seated = seated(
+        { id: "t9", label: "9" },
+        { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
+      );
+      let moved = false;
+      const { el } = await mountApp({
+        ...onPhone(),
+        getTablesState: vi.fn(async () =>
+          moved ? [table(), mesa7, mesa9Seated] : [mesa4, mesa7, mesa9Seated],
+        ),
+        moveGuests: call,
+      });
+      emit(await openOnPhone(el), "move-guests", { toTableId: "t9", bills: "merge" });
+      await flush(el);
+      await selectTab(el, "floor");
+
+      moved = true;
+      answer.settle({ partyId: "v9", mainBillId: "wo-9", merged: false });
+      await flush(el);
+      expect(banner(el)).toBeNull();
+      await selectTab(el, "order");
+
+      expect(call).toHaveBeenCalledOnce();
+      expect(orderCard(el)!.party?.id).toBe("v9");
+      expect(orderCard(el)!.orderId).toBe("wo-9");
+      expect(banner(el)).toBeNull();
+    });
+
+    it("Join a seated table: the floor tab is read again and shows the tables joined, with nothing said about the bills there", async () => {
+      const { call, answer } = held();
+      const mesa9Seated = seated(
+        { id: "t9", label: "9" },
+        { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
+      );
+      const joinedAtFour = seated({}, { revision: 4, tableIds: ["t4", "t9"] });
+      const joinedAtNine = seated(
+        { id: "t9", label: "9" },
+        { revision: 4, tableIds: ["t4", "t9"] },
+      );
+      let joined = false;
+      const { el } = await mountApp({
+        ...onPhone(),
+        getTablesState: vi.fn(async () =>
+          joined ? [joinedAtFour, mesa7, joinedAtNine] : [mesa4, mesa7, mesa9Seated],
+        ),
+        joinTables: call,
+      });
+      emit(await openOnPhone(el), "join-tables", { tableId: "t9", bills: "merge" });
+      await flush(el);
+      await selectTab(el, "floor");
+      const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+      joined = true;
+      answer.settle({ partyId: "v1", mainBillId: "wo-4", merged: false });
+      await flush(el);
+
+      expect(call).toHaveBeenCalledOnce();
+      expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(floorReads);
+      expect(floor(el)!.tables).toEqual([joinedAtFour, mesa7, joinedAtNine]);
+      expect(banner(el)).toBeNull();
+    });
+
+    it("Split items onto a new bill: back on the order tab, the new bill is on screen", async () => {
+      const { call, answer } = held();
+      const { el } = await mountApp({ ...onPhone(), splitBill: call });
+      emit(await openOnPhone(el), "split-lines", { transfers: [{ lineNo: 1 }] });
+      await flush(el);
+      await selectTab(el, "floor");
+
+      answer.settle({ billId: "wo-check" });
+      await flush(el);
+      await selectTab(el, "order");
+
+      expect(call).toHaveBeenCalledOnce();
+      expect(orderCard(el)!.orderId).toBe("wo-check");
+    });
+
+    it("Split a table taking the bill on screen: back on the order tab, a bill of this party is on screen, not the one that left", async () => {
+      const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+      const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+      const remaining: PartyBill = { ...tabBill, workingOrderId: "remaining-a" };
+      let split = false;
+      let heldRead = false;
+      let release: () => void = () => undefined;
+      const { el } = await mountApp({
+        ...onPhone(),
+        getTablesState: vi.fn(async () =>
+          split
+            ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), mesa7]
+            : [atTwo, mesa5, mesa7],
+        ),
+        getPartyBills: vi.fn(() => {
+          if (!split) return Promise.resolve([tabBill, checkBill]);
+          heldRead = true;
+          return new Promise<PartyBill[]>((resolve) => (release = () => resolve([remaining])));
+        }),
+        splitTable: vi.fn(async () => {
+          split = true;
+          return { partyId: "v-split", mainBillId: "wo-check" };
+        }),
+      });
+      emit(await openOnPhone(el), "split-lines", { transfers: [{ lineNo: 1 }] });
+      await flush(el);
+      expect(orderCard(el)!.orderId).toBe("wo-check");
+      emit(orderCard(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
+      await flush(el);
+      expect(heldRead).toBe(true);
+      await selectTab(el, "floor");
+
+      release();
+      await flush(el);
+      await selectTab(el, "order");
+
+      expect(api.splitTable).toHaveBeenCalledOnce();
+      expect(orderCard(el)!.orderId).toBe("remaining-a");
+    });
+  });
 });
 
 /** The party's bills read left unanswered until the test settles it. */
@@ -1625,6 +1852,430 @@ describe("till-app: table actions on the party", () => {
     expect(banner(el)!.textContent).toContain(
       t("party.changed_tables").replace("{tables}", "4, 9"),
     );
+  });
+});
+
+describe("till-app: a table action's answer once the waiter has opened another party", () => {
+  const mesa9Seated = seated(
+    { id: "t9", label: "9" },
+    { id: "v9", revision: 1, mainBillId: "wo-9", tableIds: ["t9"] },
+  );
+  const bill7: PartyBill = { ...tabBill, workingOrderId: "wo-7", partyId: "v7" };
+
+  it.each([
+    {
+      action: "Move guests to a seated table",
+      method: "moveGuests",
+      event: "move-guests",
+      detail: { toTableId: "t9", bills: "merge" },
+      answer: { partyId: "v9", mainBillId: "wo-9", merged: false },
+    },
+    {
+      action: "Join a seated table",
+      method: "joinTables",
+      event: "join-tables",
+      detail: { tableId: "t9", bills: "merge" },
+      answer: { partyId: "v1", mainBillId: "wo-4", merged: false },
+    },
+    {
+      action: "Split items onto a new bill",
+      method: "splitBill",
+      event: "split-lines",
+      detail: { transfers: [{ lineNo: 1 }] },
+      answer: { billId: "wo-check" },
+    },
+    {
+      action: "Finish table",
+      method: "finishTable",
+      event: "finish-table",
+      detail: {},
+      answer: { state: "closed" },
+    },
+  ])("$action: an answer arriving late leaves the other party's screen as it is", async (c) => {
+    const { call, answer } = held();
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9Seated]),
+      getPartyBills: vi.fn((partyId: string) =>
+        Promise.resolve(partyId === "v7" ? [bill7] : [tabBill, checkBill]),
+      ),
+      [c.method]: call,
+    });
+    const order = await openMesa(el);
+    emit(order, c.event, c.detail);
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+    answer.settle(c.answer);
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)?.party?.id).toBe("v7");
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.bills).toEqual([bill7]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("a refusal of Finish for a bill still unpaid, arriving late, offers no payment on the other party", async () => {
+    const { call, answer } = held();
+    const { el } = await mountApp({ finishTable: call });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    answer.refuse({ code: "party.bill_outstanding" });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(tableOrder(el)!.finishRefused).toBe(false);
+    expect(banner(el)).toBeNull();
+  });
+
+  it.each([
+    {
+      read: "the floor",
+      answer: { partyId: "v9", mainBillId: "wo-9", merged: false },
+      holds: (method: string, partyId?: string) => method === "getTablesState" && !partyId,
+    },
+    {
+      read: "the bills it opens one of",
+      answer: { partyId: "v9", mainBillId: null, merged: false },
+      holds: (method: string, partyId?: string) => method === "getPartyBills" && partyId === "v9",
+    },
+    {
+      read: "the bills it says the merge from",
+      answer: { partyId: "v9", mainBillId: "wo-9", merged: false },
+      holds: (method: string, partyId?: string) => method === "getPartyBills" && partyId === "v9",
+    },
+  ])(
+    "Move guests: $read, read after the answer and answering once the waiter has opened another party, changes nothing",
+    async (c) => {
+      let holding = false;
+      let release: () => void = () => undefined;
+      /** Once `holding`, the first read `c.holds` picks waits for `release`. */
+      function answer<T>(method: string, value: () => T, partyId?: string): Promise<T> {
+        if (!holding || !c.holds(method, partyId)) return Promise.resolve(value());
+        holding = false;
+        return new Promise<T>((resolve) => (release = () => resolve(value())));
+      }
+      let moved = false;
+      const { el } = await mountApp({
+        getTablesState: vi.fn(() =>
+          answer("getTablesState", () =>
+            moved ? [mesa7, mesa9Seated] : [mesa4, mesa7, mesa9Seated],
+          ),
+        ),
+        getPartyBills: vi.fn((partyId: string) =>
+          answer(
+            "getPartyBills",
+            () => (partyId === "v7" ? [bill7] : [tabBill, checkBill]),
+            partyId,
+          ),
+        ),
+        moveGuests: vi.fn(async () => {
+          moved = true;
+          holding = true;
+          return c.answer;
+        }),
+      });
+      const order = await openMesa(el);
+      emit(order, "move-guests", { toTableId: "t9", bills: "merge" });
+      await flush(el);
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+      release();
+      await flush(el);
+
+      expect(tableOrder(el)!.party?.id).toBe("v7");
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+      expect(banner(el)).toBeNull();
+    },
+  );
+
+  it("Move guests answering after the waiter came back to the same party still follows the guests", async () => {
+    const { call, answer } = held();
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([mesa4, mesa7, mesa9Seated]),
+      moveGuests: call,
+    });
+    const order = await openMesa(el);
+    emit(order, "move-guests", { toTableId: "t9", bills: "separate" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+
+    answer.settle({ partyId: "v9", mainBillId: "wo-9", merged: false });
+    await flush(el);
+
+    expect(tableOrder(el)!.party?.id).toBe("v9");
+    expect(tableOrder(el)!.orderId).toBe("wo-9");
+  });
+
+  it("Join a seated table: an answer arriving after the waiter opened that table leaves it as opened, saying nothing about the bills", async () => {
+    const { call, answer } = held();
+    const bill9: PartyBill = { ...tabBill, workingOrderId: "wo-9", partyId: "v9" };
+    const joinedAtFour = seated({}, { revision: 4, tableIds: ["t4", "t9"] });
+    const joinedAtNine = seated({ id: "t9", label: "9" }, { revision: 4, tableIds: ["t4", "t9"] });
+    let joined = false;
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        joined ? [joinedAtFour, mesa7, joinedAtNine] : [mesa4, mesa7, mesa9Seated],
+      ),
+      getPartyBills: vi.fn((partyId: string) =>
+        Promise.resolve(partyId === "v9" ? [bill9] : [tabBill, checkBill]),
+      ),
+      joinTables: call,
+    });
+    const order = await openMesa(el);
+    emit(order, "join-tables", { tableId: "t9", bills: "merge" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-9");
+
+    joined = true;
+    answer.settle({ partyId: "v1", mainBillId: "wo-4", merged: false });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.party?.id).toBe("v9");
+    expect(tableOrder(el)!.orderId).toBe("wo-9");
+    expect(tableOrder(el)!.bills).toEqual([bill9]);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("Move guests into another party, with the floor unreadable after the answer, still opens that party's bill and says the bills stayed apart", async () => {
+    let moved = false;
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () => {
+        if (moved) throw new TypeError("Failed to fetch");
+        return [mesa4, mesa7, mesa9];
+      }),
+      moveGuests: vi.fn(async () => {
+        moved = true;
+        return { partyId: "v7", mainBillId: "wo-7", merged: false };
+      }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "move-guests", { toTableId: "t7", bills: "merge" });
+    await flush(el);
+
+    await expect(vi.mocked(api.getTablesState).mock.results.at(-1)!.value).rejects.toThrow();
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(banner(el)!.textContent).toContain(t("table.bills_kept_separate"));
+  });
+
+  it("Finish answering after the waiter logged out leaves the till locked", async () => {
+    const { call, answer } = held();
+    const { el } = await mountApp({ finishTable: call });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    answer.settle({ state: "closed" });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+    expect(lock(el)).not.toBeNull();
+  });
+
+  it("Finish answering after the till moved to another server leaves the till locked", async () => {
+    const { call, answer } = held();
+    const data = new Map<string, string>();
+    const router = new ServerRouter({
+      origin: "https://box.deli.test",
+      fetchImpl: vi.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }) as unknown as typeof fetch,
+      storage: { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v) },
+    });
+    api = stubApi({ finishTable: call });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    router.dispatchEvent(
+      new CustomEvent("server-changed", {
+        detail: { from: "https://box.deli.test", to: "https://cloud.deli.test" },
+      }),
+    );
+    await flush(el);
+    expect(lock(el)).not.toBeNull();
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    answer.settle({ state: "closed" });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+    expect(lock(el)).not.toBeNull();
+  });
+
+  it("Move guests answering while a free table is being seated leaves that table the one on screen", async () => {
+    const moved = held();
+    const seating = held();
+    const { el } = await mountApp({
+      moveGuests: moved.call,
+      seatTable: seating.call,
+      setTableStatus: vi.fn().mockResolvedValue(undefined),
+    });
+    const order = await openMesa(el);
+    emit(order, "move-guests", { toTableId: "t7", bills: "merge" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    moved.answer.settle({ partyId: "v7", mainBillId: "wo-7", merged: false });
+    await flush(el);
+    seating.answer.settle({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 });
+    await flush(el);
+    emit(tableOrder(el)!, "set-status", { statusId: "s1" });
+    await flush(el);
+
+    expect(moved.call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(api.setTableStatus).toHaveBeenCalledWith("t9", "s1");
+  });
+
+  it("Finish answering while a free table is being seated leaves that table the one on screen", async () => {
+    const finished = held();
+    const seating = held();
+    const { el } = await mountApp({
+      finishTable: finished.call,
+      seatTable: seating.call,
+      setTableStatus: vi.fn().mockResolvedValue(undefined),
+    });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t9", seated: false, guestCount: 2 });
+    await flush(el);
+
+    finished.answer.settle({ state: "closed" });
+    await flush(el);
+    seating.answer.settle({ partyId: "v-new", tabId: "wo-new", revision: 0, orderNumber: 12 });
+    await flush(el);
+    emit(tableOrder(el)!, "set-status", { statusId: "s1" });
+    await flush(el);
+
+    expect(finished.call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-new");
+    expect(api.setTableStatus).toHaveBeenCalledWith("t9", "s1");
+  });
+
+  it("Join answering after the waiter logged out reads nothing more", async () => {
+    const { call, answer } = held();
+    const { el } = await mountApp({ joinTables: call });
+    const order = await openMesa(el);
+    emit(order, "join-tables", { tableId: "t9", bills: "merge" });
+    await flush(el);
+    emit(tableOrder(el)!, "logout");
+    await flush(el);
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+
+    answer.settle({ partyId: "v1", mainBillId: "wo-4", merged: false });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
+    expect(lock(el)).not.toBeNull();
+  });
+
+  it("Finish answering once a till is back on the floor reads the floor again", async () => {
+    const { call, answer } = held();
+    let finished = false;
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        finished ? [table(), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+      ),
+      finishTable: call,
+    });
+    const order = await openMesa(el);
+    emit(order, "finish-table", {});
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+
+    finished = true;
+    answer.settle({ state: "closed" });
+    await flush(el);
+
+    expect(call).toHaveBeenCalledOnce();
+    expect(tableOrder(el)).toBeNull();
+    expect(floor(el)!.tables).toEqual([table(), mesa7, mesa9]);
+  });
+
+  it("Split a table: the party's bills, read after the answer and answering once the waiter has opened another party, leave that party's bill on screen", async () => {
+    const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+    const mesa5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+    const remaining: PartyBill = { ...tabBill, workingOrderId: "remaining-a" };
+    let split = false;
+    let heldRead = false;
+    let release: () => void = () => undefined;
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () =>
+        split
+          ? [seated({}, { revision: 4, mainBillId: null, tableIds: ["t4"] }), mesa7]
+          : [atTwo, mesa5, mesa7],
+      ),
+      getPartyBills: vi.fn((partyId: string) => {
+        if (partyId === "v7") return Promise.resolve([bill7]);
+        if (!split) return Promise.resolve([tabBill, checkBill]);
+        heldRead = true;
+        return new Promise<PartyBill[]>((resolve) => (release = () => resolve([remaining])));
+      }),
+      splitTable: vi.fn(async () => {
+        split = true;
+        return { partyId: "v-split", mainBillId: "wo-check" };
+      }),
+    });
+    const order = await openMesa(el);
+    emit(order, "split-lines", { transfers: [{ lineNo: 1 }] });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    emit(tableOrder(el)!, "split-table", { tableId: "t5", billId: "wo-check" });
+    await flush(el);
+    expect(heldRead).toBe(true);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+    release();
+    await flush(el);
+
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(tableOrder(el)!.orderId).toBe("wo-7");
+    expect(tableOrder(el)!.bills).toEqual([bill7]);
   });
 });
 
