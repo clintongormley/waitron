@@ -32,9 +32,9 @@ export function encryptTotpSecret(secret: string, entry: TotpKeyEntry): string {
 
 export function decryptTotpSecret(
   stored: string,
-  ring?: TotpKeyRing,
+  ring: TotpKeyRing,
 ): { secret: string; keyVersion: number } | null {
-  if (!stored.startsWith(`${PREFIX}.`) || ring === undefined) return null;
+  if (!stored.startsWith(`${PREFIX}.`)) return null;
   const parts = stored.split(".");
   if (parts.length !== 5) return null;
   const keyVersion = Number(parts[1]);

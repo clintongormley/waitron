@@ -41,7 +41,7 @@ interface Owner {
 interface Credentials {
   currentPassword?: string;
   totp?: string;
-  keyRing?: TotpKeyRing;
+  keyRing: TotpKeyRing;
 }
 
 async function ownSession(tx: Transaction, input: Owner) {
@@ -89,7 +89,7 @@ export async function verifyOwnCredentials(
 
 export async function beginOwnTotpEnrollment(
   tx: Transaction,
-  input: Owner & Credentials & { keyRing: TotpKeyRing },
+  input: Owner & Credentials,
 ): Promise<{ enrollmentId: string; secret: string; uri: string; expiresAt: string }> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(person, input);
@@ -141,7 +141,7 @@ export async function finishOwnTotpEnrollment(
 
 export async function regenerateOwnRecoveryCodes(
   tx: Transaction,
-  input: Owner & Credentials & { keyRing: TotpKeyRing },
+  input: Owner & Credentials,
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(person, input);
@@ -150,7 +150,7 @@ export async function regenerateOwnRecoveryCodes(
 
 export async function disableOwnTotp(
   tx: Transaction,
-  input: Owner & Credentials & { keyRing: TotpKeyRing },
+  input: Owner & Credentials,
 ): Promise<void> {
   const person = await ownPerson(tx, input);
   await verifyCurrent(person, input);

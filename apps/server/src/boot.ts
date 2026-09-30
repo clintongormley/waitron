@@ -1457,7 +1457,6 @@ async function bootServer(
       googleOidc: config.googleOidc,
       venueLocale,
       privacyNoticeUrl: config.privacyNoticeUrl,
-      accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
       credentialKeyRing: totpKeyRing,
       // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
       sendAccountEmail: async (message) => {

@@ -58,7 +58,7 @@ export interface MeApiDeps {
   onboardingIntent?: OnboardingIntent;
   /** The enabled module names, `core` included. */
   modules: string[];
-  credentialKeyRing?: TotpKeyRing;
+  credentialKeyRing: TotpKeyRing;
   accountActionCodeKey?: Buffer;
   accountActionBaseUrl?: string;
   privacyNoticeUrl?: string;
@@ -99,9 +99,7 @@ const run = createErrorBoundary(STATUS, "me.failed");
  * holds an empty permission set, so that gate would refuse every staff member.
  */
 export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
-  const credentialKeyRing = deps.credentialKeyRing ?? {
-    current: { version: 1, key: randomBytes(32) },
-  };
+  const credentialKeyRing = deps.credentialKeyRing;
   const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
   const profileThrottle = createPasswordThrottle();
   const asStaff = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> =>
