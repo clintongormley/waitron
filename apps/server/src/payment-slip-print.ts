@@ -1,5 +1,5 @@
 import "./errors.js";
-import { and, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
 import { payments, type CardDetails } from "@waitron/payments";
 import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
@@ -56,7 +56,9 @@ export async function printSalePaymentSlip(
           isNotNull(payments.settledAt),
         ),
       )
-      .orderBy(payments.settledAt, payments.id);
+      // Two cards can settle in the same millisecond; a tie falls back to `rowid`, the order the
+      // rows were written in.
+      .orderBy(payments.settledAt, sql`${payments}.rowid`);
     if (cards.length === 0) return;
     const printer = await resolveReceiptPrinter(tx, cfg);
     if (printer === undefined) return;

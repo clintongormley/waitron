@@ -3438,25 +3438,45 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       before the earlier card tender now and then (on B14a, and again on lane B's T5, #852).
       `readBillTenderLines` broke a tie on the millisecond timestamp with a random id, so two
       payments taken in the same millisecond, or two refunds completed in one, printed in a random
-      order. It now breaks the tie by the order the rows were written (`rowid`). Guard: the two
-      "taken within one millisecond" cases in `apps/server/src/bill-payments.test.ts`, whose ids are
+      order. It now breaks the tie by the order the rows were written (`rowid`). Guard: the two cases
+      under "the receipt's payments, taken within one millisecond" in
+      `apps/server/src/bill-payments.test.ts`, whose ids are
       made to sort against the taking order; each failed on every run with its half of the old
       tie-break restored (3 of 3 runs for refunds, 5 of 5 for payments).
-      **OPEN:** the review found the same random tie-break in other places, left alone because they
-      are outside this item. Each breaks a same-millisecond tie with a row id that is a random UUID
-      (`newId` in `packages/db/src/schema/columns.ts`), so two rows from one millisecond come back
-      in a random order:
-      - `readPaymentRows` in `apps/server/src/bill-payments.ts` orders a bill's payments by when
-        they were created, then by id, and `readPaymentsAndRefunds` in the same file orders the
-        refunds the same way.
-      - `apps/server/src/payment-slip-print.ts` orders a sale's card payments by when they settled,
-        then by id, so two cards settled in one millisecond print their slips in a random order.
-      - `readTenderBlock` in `apps/server/src/till-sale.ts` orders a sale's tenders by when they
-        settled, then by id, and keeps the first, so with two in one millisecond it can name a
-        different payment from the receipt's first payment line. The printed receipt
-        (`apps/server/src/receipt-ticket.ts`) prints the payments list instead whenever it has one,
-        but the till's on-screen ticket (`apps/till/src/screens/till-ticket-view.ts`) shows only
-        that one tender, so the random pick shows there.
+      **The same random tie-break in four other places — DONE (A136, 2026-09-30).** The review had
+      found four more reads that broke a same-millisecond tie with a random UUID id (`newId` in
+      `packages/db/src/schema/columns.ts`); each now breaks it by `rowid` too. Each guard below
+      writes its rows with one timestamp and ids made to sort against the writing order. All four
+      failed on 6 of 6 runs before the fix, and each failed alone, on each of 3 runs, with its own
+      site's old tie-break put back:
+      - `readPaymentRows` in `apps/server/src/bill-payments.ts` (a bill's payments). Guard: "shows
+        the bill's payments in the order they were taken" in `apps/server/src/bill-payments.test.ts`.
+      - `readPaymentsAndRefunds` in the same file (a payment's refunds). Guard: "shows a payment's
+        refunds in the order they were asked for", same file.
+      - `apps/server/src/payment-slip-print.ts` (the order card slips print). Guard: "prints the
+        card slips in the order the cards were taken", same file.
+      - `readTenderBlock` in `apps/server/src/till-sale.ts` (the one tender the till's on-screen
+        ticket shows). Guard: "shows the tender taken first when two were taken in the same
+        millisecond" in `apps/server/src/till-sale-tender-block.test.ts`.
+      **OPEN:** A136's search found no other payment or refund read breaking a tie with an id, but
+      several order by a timestamp with no tie-break at all, so which of two rows from one
+      millisecond comes first is whatever order SQLite reads them in. A136's run-it review showed
+      that order depends on the indexes: in a scratch copy of a migrated database, `payments` rows
+      sharing one `created_at`, read with an unfiltered `order by created_at`, came back in the
+      writing order, and in a different order once an index on `(created_at, id)` was added (an
+      index the schema does not have). Whether any of
+      these reads returns the wrong order today is not checked. They are `apps/server/src/payments-api.ts`
+      (the stuck card payments: those still `attempting` on an open order marked in flight, before
+      the route drops any a live attempt is still driving; and the pending bill payments and
+      refunds), `apps/server/src/bill-payments-loop.ts` (pending bill payments and refunds), and
+      `packages/payments/src/store.ts`: its lists of payments and refunds, and
+      `selectCapturedForWorkingOrder`, which keeps the most recently settled of two captured or
+      accepted-offline payments for one order, where the comment on
+      `findCapturedPaymentForWorkingOrder` says "At most one captured payment per working order
+      holds by construction, not by a constraint".
+      **Next action:** write two rows with one timestamp through each read named here, with ids
+      made to sort against the writing order, and add the `rowid` tie-break wherever the order can
+      come back different.
     - **Dashboard recovery for a bill's unsettled card payment or refund is done** (lane D item
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome

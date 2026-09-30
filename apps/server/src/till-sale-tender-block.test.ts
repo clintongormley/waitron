@@ -1,8 +1,10 @@
-import { randomUUID } from "node:crypto";
-import { beforeAll, describe, expect, it } from "vitest";
+import crypto, { randomUUID } from "node:crypto";
+import { syncBuiltinESMExports } from "node:module";
+import { eq, sql } from "drizzle-orm";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { withTransaction } from "@waitron/db";
+import { tenders, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   assignCatalogueToLocation,
@@ -16,7 +18,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { recordSale } from "@waitron/core";
+import { recordSale, settleSale } from "@waitron/core";
 import { associatePaymentWithSale, insertCapturedPayment } from "@waitron/payments";
 import type { CardDetails } from "@waitron/payments";
 import {
@@ -33,6 +35,7 @@ import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { readTenderBlock } from "./till-sale.js";
 import { createOpenOrder } from "./working-order.js";
+import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -319,5 +322,63 @@ describe("readTenderBlock", () => {
       tip: "0.00",
       reference: null,
     });
+  });
+
+  it("shows the tender taken first when two were taken in the same millisecond", async () => {
+    const descending = descendingIds();
+
+    const { block, written } = await withTransaction(suite.db, async (tx) => {
+      const workingOrderId = randomUUID();
+      const { gross } = await createOpenOrder(
+        tx,
+        cfg,
+        workingOrderId,
+        [{ menuItemId, quantity: "1" }],
+        null,
+        { zoneId },
+      );
+      const priced = rateLines(gross, "2026-09-27");
+      const { saleId } = await recordSale(tx, backend, {
+        tillId: cfg.tillId,
+        nodeId: cfg.nodeId,
+        seriesId: cfg.seriesId,
+        workingOrderId: brandWorkingOrderId(workingOrderId),
+        locale: cfg.locale,
+        invoiceLocales: cfg.invoiceLocales,
+        total: priced.total,
+        lines: priced.lines,
+        vatBreakdown: priced.vatBreakdown,
+        clock,
+        settlement: { kind: "deferred" },
+      });
+      const settledAt = new Date();
+      const tenderIds = vi.spyOn(crypto, "randomUUID").mockImplementation(descending);
+      syncBuiltinESMExports();
+      try {
+        await settleSale(tx, {
+          saleId,
+          tenders: [
+            { method: "cash", amount: "0.40", tipAmount: "0.00", cashTendered: "1.00", settledAt },
+            { method: "card", amount: "0.60", tipAmount: "0.00", settledAt },
+          ],
+        });
+      } finally {
+        tenderIds.mockRestore();
+        syncBuiltinESMExports();
+      }
+      const rows = await tx
+        .select({ id: tenders.id })
+        .from(tenders)
+        .where(eq(tenders.saleId, saleId))
+        .orderBy(sql`rowid`);
+      return {
+        block: await readTenderBlock(tx, cfg, saleId, workingOrderId),
+        written: rows.map((row) => row.id),
+      };
+    });
+
+    // Sorting by tender id would reverse the order they were written in.
+    expect(written).toEqual([...written].sort().reverse());
+    expect(block).toEqual({ method: "cash", change: "0.60" });
   });
 });
