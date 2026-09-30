@@ -474,8 +474,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
 - **Multi-table writes share ONE transaction, and `withTransaction` IS that transaction.** Write-path
   functions take a `tx: Transaction` and never open their own; a route handler opens exactly one
   `withTransaction` per request. This is a convention, not a compiler guarantee — `Database` is assignable
-  to `Transaction`. A secret check is the exception: it takes the `Database` and derives its scrypt
-  key with no transaction open ([conventions-data.md](docs/developers/conventions-data.md)).
+  to `Transaction`. A secret check should be the exception: it takes the `Database` and derives its
+  key with no transaction open; the PIN, manager-login and profile checks do not yet
+  (`docs/backlog.md`, [conventions-data.md](docs/developers/conventions-data.md)).
   **Splitting one logical change across transactions is a commented decision, never a default.**
   **Queries on one transaction are awaited in turn, never `Promise.all`** — this engine is
   synchronous, so two statements issued together run one after the other in an order nothing
