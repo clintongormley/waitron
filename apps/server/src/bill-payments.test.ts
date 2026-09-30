@@ -687,17 +687,17 @@ describe("the invoice at full payment", () => {
   });
 });
 
+// Ids that sort against the order they are made in, so a tie broken by id gives the reverse of
+// the taking order on every run rather than by chance.
+function descendingIds() {
+  const real = crypto.randomUUID.bind(crypto);
+  let made = 0;
+  return () =>
+    `${(0xffffffff - made++).toString(16)}${real().slice(8)}` as ReturnType<typeof randomUUID>;
+}
+
 describe("the receipt's payments, taken within one millisecond", () => {
   const AMOUNTS = [100, 200, 300, 400, 500, 2800];
-
-  // Ids that sort against the order they are made in, so a tie broken by id gives the reverse of
-  // the taking order on every run rather than by chance.
-  function descendingIds() {
-    const real = crypto.randomUUID.bind(crypto);
-    let made = 0;
-    return () =>
-      `${(0xffffffff - made++).toString(16)}${real().slice(8)}` as ReturnType<typeof randomUUID>;
-  }
 
   async function tenderLinesOf(billId: string) {
     const [sale] = await inTx((tx) =>
@@ -782,5 +782,119 @@ describe("the receipt's payments, taken within one millisecond", () => {
     expect(line!.refunds.map((refund) => refund.amount)).toEqual(
       AMOUNTS.map((cents) => (cents / 100).toFixed(2)),
     );
+  });
+});
+
+describe("the bill's payments, taken within one millisecond", () => {
+  const AMOUNTS = [100, 200, 300, 400, 500, 2800];
+  const decimals = AMOUNTS.map((cents) => (cents / 100).toFixed(2));
+
+  it("shows the bill's payments in the order they were taken", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const at = new Date().toISOString();
+    const paymentId = descendingIds();
+    for (const applied of AMOUNTS) {
+      await insertPayment(billId, {
+        id: paymentId(),
+        applied,
+        state: "received",
+        createdAt: at,
+        receivedAt: at,
+      });
+    }
+
+    const balance = await inTx((tx) => readBillBalance(tx, billId));
+
+    expect(balance.payments.map((payment) => payment.applied)).toEqual(decimals);
+  });
+
+  it("shows a payment's refunds in the order they were asked for", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const at = new Date().toISOString();
+    await insertPayment(billId, {
+      applied: 4300 + AMOUNTS.reduce((sum, cents) => sum + cents, 0),
+      state: "received",
+      receivedAt: at,
+    });
+    const [payment] = (await inTx((tx) => readBillBalance(tx, billId))).payments;
+    const refundId = descendingIds();
+    for (const appliedAmount of AMOUNTS) {
+      await inTx((tx) =>
+        tx.insert(billPaymentRefunds).values({
+          id: refundId(),
+          billPaymentId: payment!.id,
+          submissionId: randomUUID(),
+          fingerprint: "f",
+          appliedAmount,
+          reason: "error",
+          authorizedBy: OPERATOR,
+          requestedBy: OPERATOR,
+          tillId: venue.cfg.tillId,
+          state: "completed",
+          createdAt: at,
+          completedAt: at,
+        }),
+      );
+    }
+
+    const balance = await inTx((tx) => readBillBalance(tx, billId));
+
+    expect(balance.payments[0]!.refunds.map((refund) => refund.appliedAmount)).toEqual(decimals);
+  });
+
+  it("prints the card slips in the order the cards were taken", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    const at = new Date().toISOString();
+    const first = await insertPayment(billId, { applied: 2000, state: "received", receivedAt: at });
+    const second = await insertPayment(billId, {
+      applied: 2300,
+      tip: 200,
+      state: "received",
+      receivedAt: at,
+    });
+    const paymentId = descendingIds();
+    await inTx(async (tx) => {
+      await tx.insert(payments).values([
+        {
+          id: paymentId(),
+          workingOrderId: billId,
+          provider: "simulator",
+          paymentRef: randomUUID(),
+          amount: 2000,
+          state: "captured",
+          settledAt: at,
+          billPaymentId: first,
+        },
+        {
+          id: paymentId(),
+          workingOrderId: billId,
+          provider: "simulator",
+          paymentRef: randomUUID(),
+          amount: 2500,
+          state: "captured",
+          settledAt: at,
+          billPaymentId: second,
+        },
+      ]);
+    });
+    await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
+    const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
+
+    await printSalePaymentSlip(suite.db, venue.cfg, billId);
+
+    const jobs = await inTx((tx) =>
+      tx
+        .select({ id: printJobs.id, payload: printJobs.payload })
+        .from(printJobs)
+        .orderBy(sql`rowid`),
+    );
+    const printed = jobs
+      .filter((job) => !before.some((old) => old.id === job.id))
+      .map((slip) => decodeTicket(slip.payload));
+    expect(printed).toHaveLength(2);
+    expect(printed[0]).toContain("20,00");
+    expect(printed[0]).not.toContain("Propina");
+    expect(printed[1]).toContain("23,00");
+    expect(printed[1]).toContain("Propina");
   });
 });

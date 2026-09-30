@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   billPaymentLines,
   billPaymentRefunds,
@@ -230,11 +230,13 @@ async function readPaymentRows(
   workingOrderIds: readonly string[],
 ): Promise<PaymentRow[]> {
   if (workingOrderIds.length === 0) return [];
+  // Two payments can share a millisecond; a tie falls back to `rowid`, the order the rows were
+  // written in.
   return tx
     .select()
     .from(billPayments)
     .where(inArray(billPayments.workingOrderId, [...workingOrderIds]))
-    .orderBy(billPayments.createdAt, billPayments.id);
+    .orderBy(billPayments.createdAt, sql`${billPayments}.rowid`);
 }
 
 /** Each payment of the bills, with what its completed refunds leave of it. */
@@ -269,7 +271,9 @@ async function readPaymentsAndRefunds(
               rows.map((row) => row.id),
             ),
           )
-          .orderBy(billPaymentRefunds.createdAt, billPaymentRefunds.id);
+          // Two refunds can share a millisecond; a tie falls back to `rowid`, the order the rows
+          // were written in.
+          .orderBy(billPaymentRefunds.createdAt, sql`${billPaymentRefunds}.rowid`);
   return { rows, refunds };
 }
 

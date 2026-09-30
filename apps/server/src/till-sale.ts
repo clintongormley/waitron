@@ -206,7 +206,9 @@ export async function readTenderBlock(
     })
     .from(tenders)
     .where(eq(tenders.saleId, saleId))
-    .orderBy(tenders.settledAt, tenders.id)
+    // Two tenders can share a millisecond; a tie falls back to `rowid`, the order the rows were
+    // written in.
+    .orderBy(tenders.settledAt, sql`${tenders}.rowid`)
     .limit(1);
   // Invoice-first issuance legitimately precedes the tender.
   if (row === undefined) return { method: "unpaid" };
