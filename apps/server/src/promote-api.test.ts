@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import type { TotpKeyRing } from "@waitron/identity";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
@@ -39,8 +38,7 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 
 import { mountPromoteApi } from "./promote-api.js";
-
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const fakeDb = {} as Database;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";

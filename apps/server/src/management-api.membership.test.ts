@@ -10,13 +10,13 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
-import { enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
+import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * GET /management-api/membership returns this node's held signed membership chart to a peer
@@ -25,7 +25,6 @@ import { enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
  */
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),

@@ -2,11 +2,10 @@ import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { IDENTITY_MIGRATIONS, type TotpKeyRing } from "@waitron/identity";
+import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
-
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // A database with no `tenants` row: the boot configuration named no taxpayer.
 const suite = useVenueDb({

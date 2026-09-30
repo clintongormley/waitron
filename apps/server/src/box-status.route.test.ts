@@ -6,7 +6,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { createHealthState } from "./health.js";
@@ -16,8 +16,7 @@ import { buildBackend } from "./local-fs-backend.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
-
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // Exercise box-status authorization and the composed status read over a manager login. The full
 // manifest is migrated because the route composes cells several modules own.

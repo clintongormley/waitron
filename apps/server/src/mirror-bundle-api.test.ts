@@ -16,7 +16,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
 import {
   canonicalize,
@@ -35,7 +35,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
-import { enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
+import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // Pause points for the cases that land a removal part-way through a request. Each runs once and
 // clears itself; unset, the wrapped function behaves as the real one.
@@ -80,7 +80,6 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 // A real key, so the endorsement's signature can be verified.
 const STANDBY_PUB = generateNodeKeyPair().publicKey;

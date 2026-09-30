@@ -29,7 +29,7 @@ const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
 const STAFF_EMAIL = "clerk@x.com";
-const ACCOUNT_ACTION_CODE_KEY = Buffer.alloc(32, 21);
+const TOTP_KEY = Buffer.alloc(32, 21);
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -141,7 +141,7 @@ function mountApp(
       origin: "http://localhost",
       sendAccountEmail,
       passwordThrottle,
-      credentialKeyRing: { current: { version: 1, key: ACCOUNT_ACTION_CODE_KEY } },
+      credentialKeyRing: { current: { version: 1, key: TOTP_KEY } },
       ...(google === undefined
         ? {}
         : {
@@ -333,7 +333,7 @@ describe("Management API staff + session routes", () => {
         role: "manager",
         totpSecret: encryptTotpSecret("JBSWY3DPEHPK3PXP", {
           version: 1,
-          key: ACCOUNT_ACTION_CODE_KEY,
+          key: TOTP_KEY,
         }),
       });
     });
@@ -1138,7 +1138,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
         secureCookies: false,
         rpId: "localhost",
         origin: "http://localhost",
-        credentialKeyRing: { current: { version: 1, key: ACCOUNT_ACTION_CODE_KEY } },
+        credentialKeyRing: { current: { version: 1, key: TOTP_KEY } },
         ...extra,
       },
       log,

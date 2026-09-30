@@ -44,3 +44,5 @@ export function wrongTotpCode(secret: string): string {
     (code) => !accepted.has(code),
   )!;
 }
+
+export const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };

@@ -3,17 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
+import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
-import { enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
+import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // The admin-login path of `POST /management-api/promote` on a real database, for an admin who has
 // an authenticator: the sign-in, not the promote itself, so `run` is a stub.
 
 const ADMIN_PASSWORD = "promotePass123";
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
