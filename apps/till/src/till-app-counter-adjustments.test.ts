@@ -690,6 +690,40 @@ describe("till-app: no adjustment while the order is being paid, placed or held"
     expect(counter(el).store.lines[1]!.quantity).toBe("2");
   });
 
+  it("opens nothing when the same order is retrieved at a new revision while the reasons are read", async () => {
+    const { el, reasons } = await pressedWhileReasonsLoad({});
+
+    emit(counter(el), "retrieve-order", { id: "wo-9" });
+    await flush(el);
+    expect(counter(el).store.revision).toBe(5);
+    reasons.resolve([complaint]);
+    await flush(el);
+
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("sends nothing, and says so, when the same order lands at a new revision while the dialog is open", async () => {
+    const retrieving = deferred<HeldOrder>();
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementationOnce(() => retrieving.promise),
+    });
+
+    emit(counter(el), "retrieve-order", { id: "wo-9" });
+    await flush(el);
+    await previewComp(el);
+    retrieving.resolve(heldOrder(5, "0.00"));
+    await flush(el);
+    expect(counter(el).store.revision).toBe(5);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    expect(dialog(el)).toBeNull();
+    expect(banner(el)!.textContent).toBe(t("adjust.basket_changed"));
+  });
+
   it("sends nothing, and says so, when the basket changed while the dialog was open", async () => {
     const el = await retrieved();
     await previewComp(el);
@@ -705,6 +739,36 @@ describe("till-app: no adjustment while the order is being paid, placed or held"
     expect(store.dirty).toBe(true);
     expect(api.retrieveWorkingOrder).toHaveBeenCalledOnce();
     expect(banner(el)!.textContent).toBe(t("adjust.basket_changed"));
+  });
+
+  it("still sends when the same order, at the same revision, is loaded again while the dialog is open", async () => {
+    const retrieving = deferred<HeldOrder>();
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementationOnce(() => retrieving.promise)
+        .mockResolvedValue(heldOrder(5, "0.00")),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValueOnce(listing(4))
+        .mockResolvedValueOnce(listing(4))
+        .mockResolvedValue(listing(5, "0.00")),
+    });
+
+    emit(counter(el), "retrieve-order", { id: "wo-9" });
+    await flush(el);
+    await previewComp(el);
+    retrieving.resolve(heldOrder(4));
+    await flush(el);
+    expect(dialog(el)).not.toBeNull();
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(applied()).toEqual([
+      { orderId: "wo-9", command: { ...ask, submissionId: expect.any(String) } },
+    ]);
+    expect(banner(el)).toBeNull();
+    expect(counter(el).store.revision).toBe(5);
   });
 
   it("offers none, and opens nothing, while a card payment of the order is out", async () => {

@@ -424,9 +424,6 @@ interface Adjusting {
   orderId: string;
   revision: number;
   visit: number;
-  /** On the counter, the basket's {@link WorkingOrderStore.loadGeneration} when it opened; unused
-   * on a table. */
-  load: number;
   kind: AdjustKind;
   target: AdjustTarget;
   reasons: AdjustmentReason[];
@@ -3621,7 +3618,6 @@ export class TillApp extends LitElement {
       orderId,
       revision: surface === "counter" ? this.#store.revision : this.tabRevision,
       visit: surface === "counter" ? session : this.#orderVisit,
-      load: this.#store.loadGeneration,
     } as const;
     if (surface === "counter" && !this.#counterStillAdjustable(opened)) return;
     if (offered !== true) this.errorKey = undefined;
@@ -3656,20 +3652,17 @@ export class TillApp extends LitElement {
     };
   }
 
-  /** The counter's basket still holds the stored order it held when `open` was opened, as then
-   * loaded and at the same revision, and still as the basket requires to offer an adjustment:
-   * unchanged, and with no pay, place or hold of it out. */
-  #counterStillAdjustable(open: Pick<Adjusting, "orderId" | "revision" | "load">): boolean {
+  /** The counter's basket still holds the stored order it held when `open` was opened, at the same
+   * revision, and still as the basket requires to offer an adjustment: unchanged, and with no pay,
+   * place or hold of it out. */
+  #counterStillAdjustable(open: Pick<Adjusting, "orderId" | "revision">): boolean {
     const listing = adjustableListing(
       this.#store,
       this.#basketStoredLines(),
       this.#counterOrderInFlight(),
     );
     return (
-      listing !== null &&
-      listing.orderId === open.orderId &&
-      listing.revision === open.revision &&
-      this.#store.loadGeneration === open.load
+      listing !== null && listing.orderId === open.orderId && listing.revision === open.revision
     );
   }
 
