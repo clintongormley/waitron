@@ -8819,14 +8819,14 @@ it. Left open:
     no Litestream setting has changed. Since A142 (#898) the full figures sit in
     [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
     checkpoint", and §5 keeps the rule, the longest wait on each disk and a link there; since A135
-    (#907) it also says in one clause what A135 found, and since A135's close-out the owner's
-    decision to leave the checkpoints alone.
+    (#907) it also says in one clause what A135 found, and since A135's close-out (#917) the
+    owner's decision to leave the checkpoints alone.
   - **MEASURED (lane C's A135, #907, 2026-09-30, run 36657175716, probe commit `bc3b94671` on the
-    throwaway branch `probe/a135-litestream-checkpoints`, deleted at A135's close-out): switching
-    off Litestream's timed checkpoint and setting its page-count one to a billion pages removed the
-    wait on the delayed disk, but not on the runner's normal disk at about 80 sales a second. The
-    owner chose to leave both alone (below), so no setting has changed.** The variant wrote
-    `checkpoint-interval: 0s` and `min-checkpoint-page-count: 1000000000` into the database's
+    throwaway branch `probe/a135-litestream-checkpoints`, deleted at A135's close-out, #917):
+    switching off Litestream's timed checkpoint and setting its page-count one to a billion pages
+    removed the wait on the delayed disk, but not on the runner's normal disk at about 80 sales a
+    second. The owner chose to leave both alone (below), so no setting has changed.** The variant
+    wrote `checkpoint-interval: 0s` and `min-checkpoint-page-count: 1000000000` into the database's
     Litestream entry (the page-count checkpoint cannot be switched off, as A133's review found:
     `db.go` line 788 at tag v0.5.17 refuses 0, and the pinned binary given 0 exited with
     `cannot open store: minimum checkpoint page count required`). A local pre-check with the pinned
