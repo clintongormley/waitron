@@ -125,7 +125,9 @@ export function createLinuxDevices(
       ...(d.name !== undefined ? { model: d.name } : {}),
       devicePath: btDevicePath(d.mac),
     }));
-  // A listing that started before a forget finished may still hold the forgotten printer.
+  // A listing that started before a forget finished may still hold the forgotten printer, and one
+  // that started before a pairing may lack the new one, so a job the recent listing cannot serve
+  // runs a listing of its own rather than joining one already running.
   const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
     const recent = recentPaired;
     const reusable =
@@ -133,7 +135,7 @@ export function createLinuxDevices(
       recent.startedAt > forgottenAt &&
       now() - recent.startedAt < PAIRED_REUSE_MS &&
       recent.devices.some((d) => d.mac === mac);
-    return toLocal(reusable ? recent.devices : await sharedListing());
+    return toLocal(reusable ? recent.devices : await listPaired());
   };
 
   const dropPath = (d: LocalDevice): VisibleDevice => ({

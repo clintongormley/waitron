@@ -71,6 +71,7 @@ FROM node:26-slim AS print-agent
 RUN set -eux; \
   apt-get update; \
   dpkg-query -W -f '${Package}\n' | sort > /tmp/base-packages; \
+  [ -s /tmp/base-packages ]; \
   apt-get install -y --no-install-recommends python3-minimal; \
   dpkg-query -W -f '${Package}\n' | sort | comm -13 /tmp/base-packages - > /tmp/python3-packages; \
   grep -qx python3-minimal /tmp/python3-packages; \

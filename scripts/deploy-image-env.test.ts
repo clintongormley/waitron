@@ -651,6 +651,17 @@ describe("the print-agent image carries the copyright files of python3-minimal a
     expect(bluez).toBeGreaterThan(stage.indexOf("comm -13 /tmp/base-packages"));
   });
 
+  // A pipe reports only its last command's status, so a failed listing of the base would otherwise
+  // leave the list empty and every installed package would be counted as pulled in.
+  it("refuses an empty list of the base image's packages", () => {
+    const listed = stage.indexOf("> /tmp/base-packages;");
+    const guard = stage.indexOf("[ -s /tmp/base-packages ];");
+    expect(guard).toBeGreaterThan(listed);
+    expect(
+      stage.indexOf("apt-get install -y --no-install-recommends python3-minimal;"),
+    ).toBeGreaterThan(guard);
+  });
+
   it("refuses a list without python3-minimal, and copies each listed package's copyright file", () => {
     expect(stage).toContain("grep -qx python3-minimal /tmp/python3-packages");
     expect(stage).toContain(

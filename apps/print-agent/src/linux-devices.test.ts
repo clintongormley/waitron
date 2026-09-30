@@ -667,6 +667,52 @@ describe("createLinuxDevices — resolve() against a recent paired listing", () 
     expect(paired).toHaveBeenCalledTimes(2);
   });
 
+  // A listing held open, a pairing change finishing while it runs, and a job resolved before it
+  // answers with the devices from before the change.
+  function heldListing(before: { mac: string }[], after: { mac: string }[]) {
+    let release!: () => void;
+    const paired = vi
+      .fn<() => Promise<{ mac: string }[]>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(before);
+          }),
+      )
+      .mockResolvedValueOnce(after);
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({
+        paired,
+        pair: async () => ({ ok: true, localKey: PRINTER }),
+        forget: async () => ({ ok: true }),
+      }),
+    });
+    return { devices, paired, release: () => release() };
+  }
+
+  it("does not join a listing that was already running when this agent forgot the printer", async () => {
+    const { devices, paired, release } = heldListing([{ mac: PRINTER }], []);
+    const listed = devices.pairedBluetooth();
+    await devices.forgetBluetooth(PRINTER);
+    const resolved = devices.resolve(job(PRINTER));
+    release();
+    await listed;
+    await expect(resolved).rejects.toThrow(`device ${PRINTER} not attached`);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not join a listing that was already running when this agent paired the printer", async () => {
+    const { devices, paired, release } = heldListing([], [{ mac: PRINTER }]);
+    const listed = devices.pairedBluetooth();
+    await devices.pair(PRINTER);
+    const resolved = devices.resolve(job(PRINTER));
+    release();
+    await listed;
+    expect((await resolved).devicePath).toBe(PRINTER);
+    expect(paired).toHaveBeenCalledTimes(2);
+  });
+
   it("does not reuse an earlier listing once a later one has failed", async () => {
     const { devices, paired, poll } = setup([[{ mac: PRINTER }]]);
     await poll();
