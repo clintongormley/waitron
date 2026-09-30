@@ -20,7 +20,7 @@ function screen(id: string, label: string, group: string, requiresPermission: st
   };
 }
 
-function twoScreenModule(): DashboardContribution {
+function threeScreenModule(): DashboardContribution {
   const primary = screen("widgets", "Widgets", "service", "test.use");
   const report = screen("widget-report", "Widget report", "reports", "test.use");
   const secret = screen("widget-audit", "Widget audit", "reports", "test.audit");
@@ -41,7 +41,7 @@ function twoScreenModule(): DashboardContribution {
 
 vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@waitron/dashboard-modules")>()),
-  DASHBOARD_MODULES: [twoScreenModule()],
+  DASHBOARD_MODULES: [threeScreenModule()],
 }));
 
 afterEach(() => {
@@ -165,6 +165,27 @@ it("refuses to start when a further screen names an unknown nav group", async ()
     report.group = "reports";
   }
 });
+
+// "sales" is in the nav; "alerts" is a built-in screen the nav does not list.
+it.each(["sales", "alerts"])(
+  "refuses to start when a module screen reuses the built-in screen id %s",
+  async (id) => {
+    const report = DASHBOARD_MODULES[0]!.moreScreens![0]!.screen;
+    report.id = id;
+    try {
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi(),
+        request: async () => [] as never,
+      });
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("dashboard-login-screen")).not.toBeNull(),
+      );
+      expect(navItem(el, "widgets")).toBeNull();
+    } finally {
+      report.id = "widget-report";
+    }
+  },
+);
 
 it("refuses to start when a further screen repeats another screen's id", async () => {
   const report = DASHBOARD_MODULES[0]!.moreScreens![0]!.screen;

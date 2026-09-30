@@ -85,40 +85,42 @@ import {
  * "Your profile" is not a `CoreScreen`: it is a modal ({@link profileOpen}) over whichever face is
  * current, reached from the banner's account menu.
  */
-type CoreScreen =
-  | "login"
-  | "my-schedule"
-  | "overview"
-  | "sales"
-  | "staff"
-  | "categories"
-  | "catalogue"
-  | "modifiers"
-  | "sections"
-  | "menus"
-  | "units"
-  | "receipt"
-  | "location-settings"
-  | "content-languages"
-  | "statuses"
-  | "floor"
-  | "kitchen"
-  | "roster"
-  | "approvals"
-  | "planned-actual"
-  | "purchases"
-  | "devices"
-  | "printers"
-  | "printing-rules"
-  | "canvas-editor"
-  | "device-profiles"
-  | "diagnostics"
-  | "backup"
-  | "servers"
-  | "cloud"
-  | "email"
-  | "payments"
-  | "alerts";
+const CORE_SCREENS = [
+  "login",
+  "my-schedule",
+  "overview",
+  "sales",
+  "staff",
+  "categories",
+  "catalogue",
+  "modifiers",
+  "sections",
+  "menus",
+  "units",
+  "receipt",
+  "location-settings",
+  "content-languages",
+  "statuses",
+  "floor",
+  "kitchen",
+  "roster",
+  "approvals",
+  "planned-actual",
+  "purchases",
+  "devices",
+  "printers",
+  "printing-rules",
+  "canvas-editor",
+  "device-profiles",
+  "diagnostics",
+  "backup",
+  "servers",
+  "cloud",
+  "email",
+  "payments",
+  "alerts",
+] as const;
+type CoreScreen = (typeof CORE_SCREENS)[number];
 
 /** The `& {}` keeps the `CoreScreen` literal autocomplete while admitting any module id. */
 type ScreenId = CoreScreen | (string & {});
@@ -1020,11 +1022,12 @@ export class DashboardApp extends LitElement {
   /**
    * Runs on every probe/login and rebuilds the maps from scratch, so a module disabled server-side
    * since the last session stops showing. A screen naming an unknown nav group id, or repeating
-   * another screen's id, THROWS rather than silently dropping or replacing a screen.
+   * another screen's id or a built-in screen's, THROWS rather than silently dropping or replacing a
+   * screen.
    */
   #activate(enabled: readonly string[]): void {
     const knownGroups = new Set<NavGroupId>(NAV_GROUPS.map((g) => g.id));
-    const ids = new Set<string>();
+    const ids = new Set<string>(CORE_SCREENS);
     this.#activeScreens.clear();
     this.#navGroups.clear();
     for (const c of DASHBOARD_MODULES) {
