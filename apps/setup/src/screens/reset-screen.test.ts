@@ -179,16 +179,38 @@ describe("setup-reset-screen", () => {
     expect(events).toEqual([]);
   });
 
-  it("marks both fields and names the refused login beside the reset button when the login was refused", async () => {
+  it("marks no field and names the refused login beside the reset button when the login was refused", async () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       credentialsRejected: true,
     });
-    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("Check the admin person ID.");
-    expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(true);
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("Check the admin password.");
+    expect(q(el, "[data-test=personId]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
+    expect(q(el, "[data-test=password]")!.hasAttribute("invalid")).toBe(false);
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
     expect(await bottomOf(el)).toBe(REJECTED);
     expect(await alerts(el)).toHaveLength(1);
+  });
+
+  // Owner rule (A153, 2026-09-30): a refused login marks no field, so it cannot say which part was
+  // wrong; only a missing or malformed value is marked.
+  it("marks no field on a refused login, says so once beside the reset button and focuses the password", async () => {
+    const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
+    await fillValid(el);
+    el.credentialsRejected = true;
+    await el.updateComplete;
+    await new Promise((resolve) => setTimeout(resolve));
+
+    for (const field of ["personId", "password"]) {
+      const input = q(el, `[data-test=${field}]`)!;
+      expect(input.getAttribute("error")).toBe("");
+      expect(input.hasAttribute("invalid")).toBe(false);
+    }
+    expect(await bottomOf(el)).toBe(REJECTED);
+    expect(await bottomOf(el)).not.toContain(FIX_FIELDS);
+    expect(await alerts(el)).toHaveLength(1);
+    const password = q(el, "[data-test=password]")!;
+    expect(el.shadowRoot!.activeElement).toBe(password);
+    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
   });
 
   it("shows a routed-back message as one alert beside the reset button, leaving it working", async () => {
@@ -270,7 +292,7 @@ describe("setup-reset-screen", () => {
     expect(events).toHaveLength(1);
   });
 
-  it("leaves the reset button working under a refused login, and focuses the person ID when it arrives", async () => {
+  it("leaves the reset button working under a refused login, and focuses the password when it arrives", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
     await fillValid(el);
@@ -278,8 +300,8 @@ describe("setup-reset-screen", () => {
     await el.updateComplete;
     await new Promise((resolve) => setTimeout(resolve));
 
-    const personId = q(el, "[data-test=personId]")!;
-    expect(personId.shadowRoot!.activeElement).toBe(personId.shadowRoot!.querySelector("input"));
+    const password = q(el, "[data-test=password]")!;
+    expect(password.shadowRoot!.activeElement).toBe(password.shadowRoot!.querySelector("input"));
     expect((q(el, "[data-test=reset]") as HTMLElement & { disabled: boolean }).disabled).toBe(
       false,
     );
@@ -322,7 +344,7 @@ describe("setup-reset-screen", () => {
     expect(q(el, "[data-test=personId]")!.getAttribute("error")).toBe("");
   });
 
-  it("withdraws a refused login from both fields once either changes, and the reset then sends the new login", async () => {
+  it("withdraws a refused login's message once either field changes, and the reset then sends the new login", async () => {
     const { el, host } = await mountWidget<SetupResetScreen>("setup-reset-screen", {});
     const events = collect(host);
     await fillValid(el);
@@ -422,9 +444,7 @@ describe("setup-reset-screen", () => {
     const { el } = await mountWidget<SetupResetScreen>("setup-reset-screen", {
       credentialsRejected: true,
     });
-    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe(
-      "Revisa la contraseña del administrador.",
-    );
+    expect(q(el, "[data-test=password]")!.getAttribute("error")).toBe("");
     expect(await bottomOf(el)).toBe(
       "Ese ID de persona y esa contraseña no son el inicio de sesión de administrador que se usó para conectar este servidor. Revísalos e inténtalo de nuevo.",
     );
