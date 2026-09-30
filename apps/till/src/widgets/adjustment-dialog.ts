@@ -34,6 +34,8 @@ export interface AdjustTarget {
   started?: boolean;
   /** Sold by weight, which the server refuses to give away or discount in part. */
   weighed?: boolean;
+  /** An extra of a dish, adjusted on its own. */
+  extra?: boolean;
 }
 
 /** The person's choices, which the app asks the server about and then applies. */
@@ -75,6 +77,12 @@ const TITLES: Record<AdjustKind, StringKey> = {
   cancel: "adjust.cancel_title",
   comp: "adjust.comp_title",
   discount: "adjust.discount_title",
+};
+
+const EXTRA_TITLES: Record<AdjustKind, StringKey> = {
+  cancel: "adjust.cancel_extra_title",
+  comp: "adjust.comp_extra_title",
+  discount: "adjust.discount_extra_title",
 };
 
 const APPROVAL: Record<PersonRole, StringKey> = {
@@ -354,7 +362,7 @@ export class TillAdjustmentDialog extends LitElement {
     const title =
       this.kind === "discount" && target.lineId === null
         ? t("adjust.discount_bill_title")
-        : t(TITLES[this.kind]);
+        : t((target.extra === true ? EXTRA_TITLES : TITLES)[this.kind]);
     const noReasons =
       this.kind === "discount" ? this.#discountKinds().length === 0 : this.#offered().length === 0;
     return html`<wt-dialog

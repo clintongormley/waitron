@@ -301,6 +301,12 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
   );
   expect(codeMessage("adjustment.weighed_partial", "en")).toBe(
-    "A weighed item can't be split. Give a discount on the whole line instead",
+    "Part of an item sold by weight or measure can't be given away or discounted. Discount the whole line instead",
+  );
+  expect(codeMessage("adjustment.quantity_invalid", "en")).toBe(
+    "That quantity cannot be used on this line. Check how many are on it; an extra is done whole",
+  );
+  expect(codeMessage("adjustment.quantity_invalid", "es")).toBe(
+    "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero",
   );
 });

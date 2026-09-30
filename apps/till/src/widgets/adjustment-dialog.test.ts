@@ -202,8 +202,28 @@ describe("till-adjustment-dialog: the form", () => {
 
     setLocale("es-ES");
     expect(hint(await mount({ kind: "discount", target: ham }))).toBe(
-      "Un artículo al peso no se puede partir. Haz un descuento sobre la línea entera",
+      "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
     );
+  });
+
+  it("titles an extra's dialogs with an extra, and a dish's with an item, in both languages", async () => {
+    const olives: AdjustTarget = { ...burger, name: "Olives (with Pizza)", extra: true };
+    const heading = async (kind: TillAdjustmentDialog["kind"], target: AdjustTarget) =>
+      root(await mount({ kind, target })).querySelector<HTMLElement & { heading: string }>(
+        "wt-dialog",
+      )!.heading;
+
+    expect(await heading("comp", olives)).toBe("Give an extra away");
+    expect(await heading("discount", olives)).toBe("Discount an extra");
+    expect(await heading("cancel", olives)).toBe("Cancel an extra");
+    expect(await heading("comp", burger)).toBe("Give an item away");
+    expect(await heading("discount", burger)).toBe("Discount an item");
+    expect(await heading("cancel", burger)).toBe("Cancel an item");
+
+    setLocale("es-ES");
+    expect(await heading("comp", olives)).toBe("Invitar un extra");
+    expect(await heading("discount", olives)).toBe("Descuento en un extra");
+    expect(await heading("cancel", olives)).toBe("Cancelar un extra");
   });
 
   it("names the whole bill for a bill discount", async () => {

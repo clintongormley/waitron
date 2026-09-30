@@ -97,5 +97,6 @@ export function lineAdjustTarget(
         : null,
     started: isStarted(line),
     ...((line.unitPrecision ?? 0) > 0 ? { weighed: true } : {}),
+    ...(isExtra ? { extra: true } : {}),
   };
 }

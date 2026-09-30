@@ -195,6 +195,7 @@ describe("till-basket: a stored counter order", () => {
       total: "1.50",
       unitTotal: null,
       started: false,
+      extra: true,
     };
     expect(heard).toEqual([
       { kind: "comp", counter: true, target },
@@ -221,7 +222,12 @@ describe("till-basket: a stored counter order", () => {
       {
         kind: "cancel",
         counter: true,
-        target: expect.objectContaining({ lineId: "l-4", quantity: "1", unitTotal: null }),
+        target: expect.objectContaining({
+          lineId: "l-4",
+          quantity: "1",
+          unitTotal: null,
+          extra: true,
+        }),
       },
     ]);
   });

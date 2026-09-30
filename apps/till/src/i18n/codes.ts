@@ -212,12 +212,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Alguien con un puesto superior debe aprobarlo con su PIN",
   },
   "adjustment.weighed_partial": {
-    en: "A weighed item can't be split. Give a discount on the whole line instead",
-    es: "Un artículo al peso no se puede partir. Haz un descuento sobre la línea entera",
+    en: "Part of an item sold by weight or measure can't be given away or discounted. Discount the whole line instead",
+    es: "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
   },
   "adjustment.quantity_invalid": {
-    en: "That quantity cannot be used on this line. Check how many are on it; an extra goes whole, with its dish",
-    es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero, con su plato",
+    en: "That quantity cannot be used on this line. Check how many are on it; an extra is done whole",
+    es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero",
   },
   "adjustment.no_reduction": {
     en: "That takes nothing off. Check whether it is already free, or enter a larger discount",
