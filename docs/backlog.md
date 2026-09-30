@@ -2592,7 +2592,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   keeps scanning through a pairing because skipping the scan would drop every unpaired device from
   the list after the server's 15 s `DISCOVERED_TTL_MS`. Box check owed: time a pairing through the
   dashboard. _(2026-09-30, C102: the window is renewed while Add a printer is open, and while it is
-  open the list keeps a device for 45 s; next entry.)_
+  open the list keeps a device for 45 s; next entry.)_ _(2026-09-30, C117: an ask no longer waits
+  for the scan, so a Pair reaches the agent on its next ask — every 2 s when idle. An ask still
+  waits first for the paired listing, the USB read (`host.visibleDevices()`, which has no overall
+  limit), any typed-address checks and the office-printer check, and a Pair in a reply is taken
+  only after that reply's jobs have been printed (`acceptBluetoothCommands` runs after the job
+  loop). A finished pairing wakes the loop and goes out on the next ask to reach the server, rather
+  than when a scan ends. Read, not timed.)_
 - **Scan for printers keeps going while Add a printer is open (C102, owner 2026-09-30) — DONE
   (2026-09-30, #953).** The owner: _"there is a button with a spinner that says 'Scanning', and underneath
   it on the left it says 'Scanning' too. we can remove the second one. The scanning spinner stops
@@ -2634,7 +2640,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     sweep of 1021 addresses (the 1.5-second mDNS listen runs beside it), 6 s for the inquiry, up to
     15 s for the `info` calls (asked all at once), 1.5 s for the office-printer check of up to eight
     network devices, and the 2-second wait. 45 seconds does not cover every pass, and a device not
-    reported within 45 seconds drops off the list until its next report.
+    reported within 45 seconds drops off the list until its next report. _(2026-09-30, C117: the
+    pass now runs beside the agent's poll, which keeps its 2-second rhythm; the pass's devices still
+    arrive once per pass, on the poll after it ends, which a pass that found devices wakes at once —
+    so the 2-second wait in the sum above is replaced by whatever is left of a poll already running
+    when the pass ends. The paired listing and the USB read still come before the send, and the
+    office-printer check still runs on the sending poll, which classifies the pass's devices before
+    the pull. Read, not timed.)_
   - Why the printers disappeared (read, not reproduced: there is no bluetoothctl on macOS, and the
     box was not used): the window closed three minutes after the last Scan, and 15 seconds later the
     list dropped every device known only from a scan — network printers and unpaired Bluetooth
@@ -2642,6 +2654,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     was paired at the time is not known.
   - Left open: print jobs now wait behind scan passes while the dialog is open and for about three
     minutes after (B6, "While Add a printer is open, print jobs wait behind each scan pass").
+    _(2026-09-30: done in C117, #955 — the scan now runs beside the job pull.)_
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
@@ -2724,7 +2737,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   than that between pulls. _(2026-09-30, C102: an agent that is scanning pulls once per scan pass,
   and the discovery window now stays open while Add a printer is open and for up to three minutes
   after; this check kept its
-  15 seconds.)_ A140 must
+  15 seconds. C117, the same day: the agent pulls every 2 seconds again while scanning, and reports
+  each pass's devices once, on the pull after the pass ends.)_ A140 must
   have the agent send `true`, or stop sending the field, once it can print; must close that restart
   gap if it matters then; and must remove, or key on something other than
   the transport or the stored code, each place the dashboard says Bluetooth printing is not
@@ -6581,13 +6595,46 @@ approved.
     the agent has joined and is not out of touch, `/status.json` answers only loopback callers
     (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
 
-- **While Add a printer is open, print jobs wait behind each scan pass** (found in C102, read, not
-  timed). While a discovery window is open the agent runs a whole scan before each job pull (`tick`,
-  `packages/print-agent/src/agent.ts`), so a ticket queued during a pass is printed only after it —
-  roughly ten seconds or more, by the timeouts in C102's entry under A3. Before C102 this lasted three
-  minutes after each Scan; since C102 it lasts while Add a printer stays open and for about three
-  minutes after. Running the scan beside the pull rather than before it would remove the wait. The
-  owner's answer (2026-09-30): land C102 with this open and fix it next, queued as lane C's C117.
+- **DONE (C117, #955): while Add a printer is open, print jobs no longer wait behind each scan pass.**
+  The agent's poll (`tick`, `packages/print-agent/src/agent.ts`) starts a scan pass without waiting
+  for it and asks for jobs at once; at most one pass runs at a time, a poll that finds one running
+  starts no other. A finished pass's devices go out on the next poll, which the pass wakes so they
+  are not held for the 2-second pause, and again on each later poll until one succeeds, unless a
+  newer pass's devices replace them first or a setup reset drops them. A setup reset also drops
+  what a running pass finds. Timed
+  on 2026-09-30 with a throwaway script driving the real loop with real timers, a 2-second pause and
+  a fake server queueing a job every 1.3 s: with a 10-second fake scan, the time from a job being
+  queued to the poll that took it was 0.09 / 7.50 / 11.80 s (min / median / max, 12 jobs) on the
+  old loop and 0.10 / 1.30 / 2.00 s on the new one. The run-it review repeated it independently the
+  same day, on the branch before the pending-list change (real loop, real timers, a 2-second pause,
+  a 10-second fake scan, 12 jobs queued every 1.3 s): 0.10 / 0.85 / 1.70 s on the branch, 0.30 /
+  6.60 / 10.70 s on the old loop. The agent puts no limit of its own on a pass: a
+  pass that never ends only stops later passes starting, never the job pulls. What ends a real
+  pass is the host's own timers: each `bluetoothctl` call is killed after 15 s
+  (`apps/print-agent/src/bluetooth-command.ts`), mDNS closes after 1.5 s (`liveMdnsScan`,
+  `apps/print-agent/src/linux-devices.ts`) and each sweep connection gives up after 500 ms
+  (`DEFAULT_TIMEOUT_MS`, applied by `sweepPort` in `apps/print-agent/src/sweep.ts`, enforced by
+  `connectTcp` in `apps/print-agent/src/tcp-probe.ts`). The run-it review timed those three on
+  2026-09-30 with fakes in scratch tests: a hung fake `bluetoothctl` was killed with SIGKILL at
+  15.0 s, a live mDNS listen ended at 1.50 s, and a silent sweep socket was destroyed at 0.50 s.
+  Read, not run: the whole sweep across several networks and the USB reads have no overall limit.
+  Tests: the cases under "a discovery pass runs beside the job pull" in
+  `packages/print-agent/src/agent.test.ts`. Deletion proofs, re-run on 2026-09-30 against the code
+  after the pending-list change, each with
+  `pnpm --filter @waitron/print-agent exec vitest run src/agent.test.ts`: awaiting the pass inside
+  the poll again turned 8 cases red, "pulls and delivers a job queued while a scan is still running" among them; dropping the one-pass-at-a-time
+  check, the reset's generation check, the wake or the reset's clearing, clearing the devices
+  before the pull again, or clearing them after every successful pull without checking they are
+  still the list that was sent each turned its own case red ("a tick that finds a pass still
+  running pulls and starts no second one"; "a setup reset drops a running pass's devices, and a new
+  window scans once that pass ends"; "a finished pass wakes a sleeping loop so its devices go out at
+  once"; "a setup reset drops a finished pass's devices that no pull has carried yet"; "keeps a
+  finished pass's devices through a failed pull and sends them on the next pull that succeeds";
+  "keeps the devices of a pass that finishes while a successful pull is carrying an older pass's").
+  Removing the logger's `try`/`catch` made no case fail its assertions; the run fails on the
+  unhandled rejection Vitest reports. Left open: the office-printer
+  check and the check of addresses typed into the dashboard still run inside the poll, so the job
+  pull still waits for them (see "A sweep in flight keeps connecting" below).
 - **An agent compares the server's discovery deadline with its own clock** (found in C102, read, not
   run). `discoveryUntil` is a time on the server's clock, and the agent checks it against
   `host.now()` (`packages/print-agent/src/agent.ts`), where a network probe's deadline is sent as a
