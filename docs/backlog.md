@@ -3426,8 +3426,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     struck through. When the bill's adjustment records no longer add up to what its rows show (part
     of a discounted line cancelled afterwards, for one) or one names a row that is not on the
     receipt, each dish instead gets one line for what its rows lost, and a discount on the whole
-    bill is not shown on its own: `withReceiptAdjustments`,
-    `apps/server/src/receipt-adjustments.ts`.)_
+    bill is not shown on its own: `receiptLines`, `apps/server/src/receipt-adjustments.ts`. The
+    cases in `receipt-ticket.test.ts` that pinned the `->` were removed or rewritten with it.)_
     Raising the quantity of an adjusted line adds the new units as their own line at today's price;
     while the adjusted line is held they wait in its group and fire with it. **The upgrade was
     measured**
@@ -3725,7 +3725,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - a bill's invoice is issued when it is fully paid, several payments may come before it, and lines
     can still be split off after a contribution;
   - discounts reduce the line, comps show at €0.00 with the original price, and weighed items take
-    discounts to the nearest cent;
+    discounts to the nearest cent; _(2026-09-30, C90: the receipt now prints the dish at its full
+    price with the comp or discount on a line of its own beneath it.)_
   - an item is credited to whoever owns the draft when it is submitted, and adjustment rates are
     measured against those credits.
 
