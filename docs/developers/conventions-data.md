@@ -339,8 +339,10 @@ therefore repeated the same sequential database work. `priceOrderLines` now read
 before its in-memory line loop; the variants come from the offers it holds (`LiveOffer.variants`).
 `working-order.test.ts` spies on `listZoneOffers` and checks that a basket repeating one offer calls
 it once. Kitchen routing follows the same
-rule: `fireLines` makes one `resolvePreparationRoutes` call per fire, which answers for every product
-with at most three reads; `working-order.test.ts` checks the single call and
+rule: `fireLines` makes one route-resolving call per fire (`resolvePreparationRoutes`, or
+`resolvePreparationRouteOutcomes` when the fire is a payment's, made with `unroutable: "skip"`),
+which answers for every product with at most three reads; `working-order.test.ts` checks the
+single call on the refusing path only, and
 `packages/venue-service/src/operations.test.ts` checks the read count for one product and for five.
 
 **Tables the application code may read and never write**

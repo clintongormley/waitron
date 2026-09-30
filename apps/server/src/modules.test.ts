@@ -24,7 +24,7 @@ describe("classification assembly", () => {
 describe("alert assembly", () => {
   it("collects every module's event-code claims", () => {
     expect(ALL_ALERT_CLAIMS.map((c) => c.prefix)).toEqual(
-      expect.arrayContaining(["chain.", "clock.", "payment.", "fiscal."]),
+      expect.arrayContaining(["chain.", "clock.", "payment.", "fiscal.", "route."]),
     );
   });
 
