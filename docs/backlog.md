@@ -724,7 +724,7 @@ stale `pending` or `approved`; both routes return only `{ status }` and issue no
 the joiner's next request goes through `tryReadDevice` or `authenticateAgent`, which re-read the
 row (the till and print-agent clients were not traced). (2) With the blocking twin gone,
 `verifySecretAsync` could be renamed `verifySecret` across the tree (optional). (3) **Done
-(2026-09-30, A146):** `tryReadDevice`'s last-seen write did not re-check the device, so a device
+(2026-09-30, A146, #941):** `tryReadDevice`'s last-seen write did not re-check the device, so a device
 revoked or given a new token while its request waited for the write lock was still served. It now
 re-reads the row inside that transaction, refuses one no longer active or no longer holding the
 checked token (as the print agent does), and returns the device's details as read there. Of the
