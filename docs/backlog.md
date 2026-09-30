@@ -3873,11 +3873,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         empty tables only, and #959 measured the row-carrying upgrade once, in a throwaway test.
         **Next action:** decide whether the upgrade guard should carry rows (it would serve every
         set, not only adjustments).
-      - **Cancelling an extra of a dish the kitchen already has tells the kitchen nothing** — no
-        VOID slip and no correction to a held ticket — as the cancel route this replaced did not
-        either; the till says the extra comes off the bill. **Next action:** if the owner wants
-        the kitchen told, print a correction slip naming the dish once its ticket has fired.
-        (Owner, 2026-09-30: yes — queued as lane B's B11g.)
+      - _Done by lane B item B11g (branch `feat/service-extra-cancel-slip`):_ cancelling an extra
+        of a fired dish, or of a held dish whose HOLD ticket printed, now records a `changed`
+        kitchen notice naming the extra and prints a CHANGED (or HOLD CHANGED) slip of the dish as
+        it now stands with a `CANCEL:` line (`tellKitchenOfCancelledExtra`,
+        `apps/server/src/working-order.ts`). Left open: for an extra of a held dish whose HOLD
+        ticket printed, the kitchen is told but the till's cancel dialog still says only that it
+        comes off the bill, because the till cannot see whether the HOLD ticket printed.
+        **Next action:** decide whether the till should be told that.
       - **An extra now counts its dish's percentage under a reason's per-line cap, and a dish the
         largest of its extras'.** So an extra added after its dish was discounted 30%, under a 50%
         cap, is refused a 30% discount of its own. This errs toward refusing; a review found no way
