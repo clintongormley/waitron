@@ -2281,7 +2281,9 @@ export class TillApp extends LitElement {
     signal?: AbortSignal,
   ): Promise<boolean | undefined> {
     const [order, listed] = await Promise.all([
-      this.api.retrieveWorkingOrder(id, { signal }),
+      signal === undefined
+        ? this.api.retrieveWorkingOrder(id)
+        : this.api.retrieveWorkingOrder(id, { signal }),
       this.#readStoredLines(id, signal),
     ]);
     if (left?.() === true) return undefined;

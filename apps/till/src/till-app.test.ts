@@ -3039,7 +3039,7 @@ describe("till-app", () => {
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
 
-    expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledWith("wo-1", { signal: undefined });
+    expect(currentApi.retrieveWorkingOrder).toHaveBeenCalledWith("wo-1");
     // the retrieved order's own id is adopted (so paying it later keys the same idempotency slot)
     expect(store.id).toBe("wo-1");
     expect(store.label).toBe("Mesa 4");
