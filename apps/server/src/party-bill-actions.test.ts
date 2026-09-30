@@ -42,6 +42,7 @@ import {
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { joinTables } from "./table-actions.js";
+import { overridePinAttempts } from "./till-api.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 // Split, merge and transfer between a party's bills (table actions plan, Task 5; spec §7, §9, §15).
@@ -544,7 +545,7 @@ describe("merge bills", () => {
       {
         personId: adminId,
         sessionId: session.id,
-        attempts: { throttle: createPinThrottle(), slot: `override:${v.cfg.tillId}` },
+        attempts: overridePinAttempts(createPinThrottle(), v.cfg.tillId),
       },
     );
     const before = await snapshot(partyId, [main, second]);

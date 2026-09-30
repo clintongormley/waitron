@@ -469,8 +469,6 @@ export async function attestCardRefund(
  * Cash and staff-confirmed standalone-terminal refunds are completed in this transaction. A
  * connected card refund is written `pending` before its provider is asked (design §6b), and the
  * bill is locked until the evidence settles it.
- *
- * Every manager PIN this checks counts against `operator.attempts`, the till's wrong-PIN limit.
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,

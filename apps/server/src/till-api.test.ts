@@ -21,7 +21,7 @@ import { departments, preparationRoutes } from "@waitron/venue-service";
 import {
   createPinThrottle,
   endSession,
-  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
+  PIN_THROTTLE_MAX_KEYS_PER_SLOT,
   hashPin,
   hashSessionToken,
   loginWithPin,
@@ -773,7 +773,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
 
     // Filled through the route's own throttle rather than thousands of requests; "counts an unknown
     // person's wrong attempts" below shows the route records exactly this failure for a made-up id.
-    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_DEVICE; i++) {
+    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++) {
       pinThrottle.recordFailure(deviceIdOf(flooder), randomUUID());
     }
     const refused = await post(flooder, randomUUID(), "0000");

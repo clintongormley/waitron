@@ -3590,23 +3590,32 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         on Hold, New sale, a retrieve or a sign-out, and at the latest after the till's request
         limit (150 s). How long it lasts on a real network is not measured. **Next action:** dim
         the basket, or show a one-line note, while `editsLocked` is set.
-    - **Approver PINs are limited — DONE (C89).** A run-it review had sent twelve wrong approver
-      PINs in a row and got twelve 401s and no 429 (2026-09-30). Now a manager's or supervisor's PIN
-      typed on the till to approve an adjustment, to open the cash drawer for someone, or to approve
-      a refund (the PIN that confirms a hand-keyed card refund included) counts its wrong tries:
-      three are free, then each wrong one makes the till wait 2, 4, 8… up to 60 seconds before that
-      person's PIN is tried again, answered 429 `pin.throttled`, even for the right PIN. There is one
-      count per till and person, shared by the three kinds of request and separate from the
-      sign-in count; the till is the one the requesting session was opened on. A right PIN starts
-      the count again. A PIN the server never checks, because the operator may do the thing
-      themselves, neither counts nor starts it again. The till's drawer and adjustment PIN prompts
-      stay open and say "Too many wrong PINs. Wait a moment, then try again" (the till has no refund
-      screen). The counts are kept in the server's
-      memory, so a restart clears them, and like sign-in's they are capped per till
-      (`PIN_THROTTLE_MAX_KEYS_PER_DEVICE`): a till holding that many answers each new person with a
+    - _Done by lane C item C89 (2026-09-30):_ approver PINs are limited. A run-it review had sent
+      twelve wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). Now a
+      manager's or supervisor's PIN typed on the till to approve an adjustment, to open the cash
+      drawer for someone, or to approve a refund (the PIN that confirms a hand-keyed card refund
+      included) counts its wrong tries: three are free, then each wrong one makes the till wait 2,
+      4, 8… up to 60 seconds before that person's PIN is tried again, answered 429 `pin.throttled`,
+      even for the right PIN. There is one count per till and person, shared by the three kinds of
+      request and separate from the sign-in count; the till is the one the requesting session was
+      opened on. A right PIN starts the count again. A PIN the server never checks, because the
+      operator may do the thing themselves, neither counts nor starts it again. The till's drawer
+      and adjustment PIN prompts stay open and say "Too many wrong PINs. Wait a moment, then try
+      again" (the till has no refund screen). The counts are kept in the server's memory, so a
+      restart clears them, and they are capped per till, as sign-in's are per device
+      (`PIN_THROTTLE_MAX_KEYS_PER_SLOT`): a till holding that many answers each new person with a
       60-second wait. Guards: the "limit on wrong" cases in
       `apps/server/src/till-api.receipt.test.ts`, `apps/server/src/adjustments-api.test.ts` and
-      `apps/server/src/bill-payments-api.test.ts`, and `packages/identity/src/credential.test.ts`.
+      `apps/server/src/bill-payments-api.test.ts`, the "authorize with a limit on wrong override
+      PINs" block in `packages/identity/src/authorize.test.ts`,
+      `packages/identity/src/credential.test.ts`, and the till's cases in
+      `apps/till/src/till-app.test.ts`, `apps/till/src/till-app-adjustments.test.ts` and
+      `apps/till/src/widgets/supervisor-override-dialog.test.ts`. They are weaker than the sentences
+      above: no case checks that a refund's wrong PINs share the drawer's and adjustments' count
+      (only the drawer's sharing with an adjustment is tested, in `adjustments-api.test.ts`); no
+      case checks that the sign-in and override counts are separate in either direction (the drawer
+      suite checks only that signing in again does not start the count again); and no case uses a
+      second till, so nothing checks that the count is per till.
     - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
       discount, or two bill discounts under one reason, because a bill discount counts as 0% on
       each line (a run-it review, 2026-09-30, applied two successive 30% whole-bill discounts under a
@@ -5769,7 +5778,7 @@ ongoing overhaul listed at the top of Track A.
   check; a malformed person id is `pin.invalid` too. On the till every refused sign-in with a
   well-formed person id now counts toward the wrong-PIN back-off, so an unknown id reaches
   `pin.throttled` as a known one does, and
-  the back-off table is capped per device (`PIN_THROTTLE_MAX_KEYS_PER_DEVICE`,
+  each device's sign-in share of the back-off table is capped (`PIN_THROTTLE_MAX_KEYS_PER_SLOT`,
   `packages/identity/src/pin-throttle.ts`): a device holding its limit answers each new person
   with a 60-second wait, and room returns only as that device's entries fall idle, fifteen minutes
   after each was last used; every other till keeps working.
@@ -5806,11 +5815,10 @@ ongoing overhaul listed at the top of Track A.
   warm-up pairs, 200 pairs of each kind, interleaved: the first request answered at a median
   0.864 ms for a known address against 0.862 ms for an unknown one, and the second at 1.065 ms
   against 0.326 ms. In the control the route did no later work at all (no lookup, write or email):
-  the second request answered at 0.251 ms against 0.258 ms. Since C89 the override PINs have a
-  wrong-PIN back-off of their own, one per till and person; refusals thrown in `apps/server`
+  the second request answered at 0.251 ms against 0.258 ms. Refusals thrown in `apps/server`
   itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
   (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
-  approval routes no longer send for an approver — left for lane B, whose file it is; and the dashboard's
+  approval routes no longer send for an approver; and the dashboard's
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
   a flood of made-up addresses delays the sign-in of anyone it is not already tracking.

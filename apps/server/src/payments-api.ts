@@ -119,7 +119,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "pin.throttled": 429,
 };
 
-/** The throttle's device slot for a PIN entered on the dashboard, so it keys on the person alone
+/** The throttle's slot for a PIN entered on the dashboard, so it keys on the person alone
  * and a new management session does not start the count again. */
 const DASHBOARD_PIN_SLOT = "management";
 

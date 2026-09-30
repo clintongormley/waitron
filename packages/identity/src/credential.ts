@@ -12,9 +12,9 @@ import type { PinThrottle } from "./pin-throttle.js";
 const DUMMY_PIN_HASH = hashPin("timing-equalization-dummy");
 
 /**
- * Both `loginWithPin` and `authorize`'s OVERRIDE branch call this. Every refusal is `pin.invalid`
- * with no params, whatever the cause, so the answer never says whether the person exists or why
- * they cannot sign in; the cause travels only as the error's log-only `reason`.
+ * Every refusal is `pin.invalid` with no params, whatever the cause, so the answer never says
+ * whether the person exists or why they cannot sign in; the cause travels only as the error's
+ * log-only `reason`.
  */
 export async function verifyPersonCredential(
   tx: Transaction,
