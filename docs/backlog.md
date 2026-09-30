@@ -3756,8 +3756,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         what is left on it, and the correction as the rounded amount the row would store). The
         sum is taken at the cent amount the row stores: `stringToCents` rounds a third decimal
         place half away from zero, so -14.414 against 14.41 records and -14.415 is refused. A
-        correction to exactly zero records, and so does any positive correction, including one of
-        a credit note that is already below zero. The check runs after the permission check, so
+        correction to exactly zero records. Any positive correction passes this check, including
+        one of a credit note that is already below zero; whether it records is the fiscal
+        backend's call, and only the `none` backend records a correction of a credit note
+        (Veri\*Factu refuses one with `fiscal.correction_unsupported`,
+        `packages/fiscal-verifactu/src/backend.ts`). The check runs after the permission check, so
         a person who may not correct is not told the invoice's amounts, and before an invoice
         number is allocated. The -20.00-on-18.00 case in
         `apps/server/src/collect-by-invoice.test.ts` is now that refusal, and the bill then
@@ -3766,16 +3769,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         failed the one-cent-over, over-after-an-earlier-correction, rounds-to-one-cent-more,
         negative-correction-of-a-credit-note and refused-before-numbering cases and the server
         case; moving it before the permission check failed the unauthorised-session case;
-        widening `< 0` to `<= 0` failed the exactly-zero, rounds-to-exactly and
-        positive-correction-of-a-credit-note cases (and older cases that fully reverse an
-        invoice); comparing the raw input instead of the cent amount failed the two rounding
-        cases; dropping the "is negative" condition failed the positive-correction-of-a-credit-note
-        case; and allocating the number before the check failed the refused-before-numbering
-        case. The case that raises an invoice already at zero is refused by no probe: it is the
-        control that the check does not refuse too much. `settleSale`'s refusal of a bill whose
-        amount due is below zero (`sale.tender_shortfall`, `packages/core/src/settle-sale.ts`,
-        reached through `collectOrder`) stays; the case "refuses to close a bill already corrected
-        below zero, with the domain code, and leaves it open" in
+        widening `< 0` to `<= 0` failed the exactly-zero and rounds-to-exactly cases, and every
+        case whose setup fully reverses an invoice (the raise-from-zero and both credit-note cases
+        among them); comparing the raw input instead of the cent amount, with the reported
+        correction left as the cent amount, failed only the rounds-to-exactly case, refused with
+        `sale.correction_exceeds_total`; dropping the "is negative" condition failed the
+        positive-correction-of-a-credit-note case; and allocating the number before the check
+        failed the refused-before-numbering case. No probe made the check refuse a raise itself,
+        so the raise-from-zero case is the control that the check does not refuse too much.
+        `settleSale`'s refusal when the tenders do not match the amount due
+        (`sale.tender_shortfall`, `packages/core/src/settle-sale.ts`), which `collectOrder`
+        reaches with no tender on a bill below zero, stays; the case "refuses to close a bill
+        already corrected below zero, with the domain code, and leaves it open" in
         `apps/server/src/collect-by-invoice.test.ts` inserts a -20.00 corrective row straight into
         `sales`, and failed with that check deleted.
         **Still open: the card-reader path.** `payWorkingOrderIntegrated`

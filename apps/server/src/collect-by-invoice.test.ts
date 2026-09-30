@@ -321,13 +321,15 @@ describe("collecting an invoice that carries a corrective invoice", () => {
             eq(invoiceSeries.purpose, "rectificative"),
           ),
         );
+      const now = venue.clock.now();
+      // No fiscal record is written for this row: it bypasses recordCorrection on purpose.
       await tx.insert(sales).values({
         tillId: venue.cfg.tillId,
         nodeId: venue.cfg.nodeId,
         seriesId: series!.id,
         invoiceNumber: await allocateInvoiceNumber(tx, series!.id),
-        issuedAt: new Date().toISOString(),
-        issuedOffsetMinutes: 60,
+        issuedAt: now.instant.toISOString(),
+        issuedOffsetMinutes: now.offsetMinutes,
         total: -2000,
         vatBreakdown: [{ rate: "21.00", base: "-16.53", tax: "-3.47" }],
         locale: venue.cfg.locale,

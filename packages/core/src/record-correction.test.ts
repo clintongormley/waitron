@@ -169,6 +169,24 @@ function correctionInput(
   };
 }
 
+/** A one-line credit: `base` plus its tax at `vatRate`, rounded to the cent, is `total`'s magnitude. */
+function credit(base: string, total: string, vatRate = "21.00"): Partial<RecordCorrectionInput> {
+  return {
+    total,
+    lines: [
+      {
+        lineNo: 1,
+        name: "Discount",
+        descriptions: { "es-ES": "Descuento" },
+        quantity: "-1",
+        unitPrice: base,
+        vatRate,
+        lineTotal: `-${base}`,
+      },
+    ],
+  };
+}
+
 /** Records an original sale in one transaction, on a node registered with the backend. */
 async function sell(backend: FiscalBackend, overrides: Partial<RecordSaleInput> = {}) {
   return withTransaction(suite.db, async (tx) => {
@@ -412,27 +430,15 @@ describe("recordCorrection — never below zero", () => {
   /** The fake refuses to correct anything but a sale; the `none` backend (fiscal-none) records a
    * correction of a credit note, which this stands in for. */
   class CorrectsCreditNotesBackend extends FakeFiscalBackend {
-    override recordCorrection(tx: Transaction, sale: SaleForFiscalRecord) {
+    override recordCorrection(
+      tx: Transaction,
+      sale: SaleForFiscalRecord,
+      // Kept so the override matches the interface's signature, as in the parent fake.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
+      _correction: { correctsSaleId: SaleId },
+    ) {
       return this.recordSale(tx, sale);
     }
-  }
-
-  /** A one-line credit: `base` plus its tax at `vatRate`, rounded to the cent, is `total`'s magnitude. */
-  function credit(base: string, total: string, vatRate = "21.00"): Partial<RecordCorrectionInput> {
-    return {
-      total,
-      lines: [
-        {
-          lineNo: 1,
-          name: "Discount",
-          descriptions: { "es-ES": "Descuento" },
-          quantity: "-1",
-          unitPrice: base,
-          vatRate,
-          lineTotal: `-${base}`,
-        },
-      ],
-    };
   }
 
   async function rectSeriesNext(): Promise<number | undefined> {
@@ -661,18 +667,7 @@ describe("recordCorrection — authorization", () => {
     // 11.92 at 21% is 14.42, more than the 14.41 invoice.
     await expect(
       correct(backend, originalId, {
-        total: "-14.42",
-        lines: [
-          {
-            lineNo: 1,
-            name: "Discount",
-            descriptions: { "es-ES": "Descuento" },
-            quantity: "-1",
-            unitPrice: "11.92",
-            vatRate: "21.00",
-            lineTotal: "-11.92",
-          },
-        ],
+        ...credit("11.92", "-14.42"),
         authz: { sessionId: staffSessionId },
       }),
     ).rejects.toMatchObject({ code: "authorization.not_permitted" });
