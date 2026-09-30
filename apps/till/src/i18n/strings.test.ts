@@ -73,3 +73,19 @@ describe("the Spanish strings call a restaurant menu a carta", () => {
     );
   });
 });
+
+describe("the till's Spanish Clear snooze label, and no aplazar in the catalogue", () => {
+  // Owner decision (2026-09-29): "Cancelar" or "Cancelar posponer", because nobody uses
+  // posposición. A bare "Cancelar" would not say what the reminder row's button cancels. Weaker
+  // than its name: only the catalogue in strings.ts is read, not the Spanish in codes.ts.
+  it("labels Clear snooze Cancelar posponer", () => {
+    expect(catalogues["es-ES"]?.["table.reminder_clear_snooze"]).toBe("Cancelar posponer");
+  });
+
+  it("has no Spanish catalogue string that says aplazar", () => {
+    const aplaza = Object.entries(catalogues["es-ES"] ?? {}).filter(([, text]) =>
+      /aplaz/i.test(text),
+    );
+    expect(aplaza).toEqual([]);
+  });
+});
