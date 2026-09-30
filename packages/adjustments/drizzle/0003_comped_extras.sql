@@ -1,0 +1,1 @@
+ALTER TABLE `adjustments` ADD `comped_extras` text DEFAULT '[]' NOT NULL;

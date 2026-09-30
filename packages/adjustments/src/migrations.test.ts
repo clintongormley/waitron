@@ -189,6 +189,7 @@ describe("the adjustments table", () => {
       working_order_id: 1,
       line_id: 0,
       splits: 1,
+      comped_extras: 1,
       line_name: 0,
       line_quantity: 0,
       line_list_unit_price: 0,

@@ -25,6 +25,8 @@ export interface NewAdjustment {
   } | null;
   /** The rows this adjustment split off, each with the row it came from. */
   splits?: readonly AdjustmentSplit[];
+  /** On a whole comp of a dish, its extras rows, which the comp priced at zero with it. */
+  compedExtras?: readonly string[];
   /** How much of the line the adjustment covered; null exactly when `line` is. */
   quantity: string | null;
   reason: { id: string; name: string; policy: AdjustmentPolicySnapshot };
@@ -50,6 +52,7 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
       workingOrderId: row.workingOrderId,
       lineId: line?.id ?? null,
       splits: [...(row.splits ?? [])],
+      compedExtras: [...(row.compedExtras ?? [])],
       lineName: line?.name ?? null,
       lineQuantity: line === null ? null : stringToThousandths(line.quantity),
       lineListUnitPrice: line === null ? null : decimalToCents(line.listUnitPriceGross),
@@ -130,9 +133,10 @@ export async function readLinePercents(
   return new Map(percent.rows.map((row) => [row.seed, row.total]));
 }
 
-/** The rows a bill's own comps priced at zero: the rows each part comp split off (a dish and its
- * extras), and the line of each whole comp, a dish's extras rows comped with it. Each also names
- * the copies later adjustments on the bill split off those rows, at any remove. */
+/** The rows a bill's own comps priced at zero. `rows`: the rows each part comp split off (a dish
+ * and its extras) and the extras rows a whole comp of a dish priced with it; `dishes`: the line of
+ * each whole comp. Each also names the copies later adjustments on the bill split off those rows,
+ * at any remove. */
 export interface CompedLines {
   rows: string[];
   dishes: string[];
@@ -146,14 +150,20 @@ export async function readCompedLines(
   // In the order they were written: a copy split off a row before the row was comped keeps the
   // price it had.
   const written = await tx
-    .select({ lineId: adjustments.lineId, splits: adjustments.splits, action: adjustments.action })
+    .select({
+      lineId: adjustments.lineId,
+      splits: adjustments.splits,
+      compedExtras: adjustments.compedExtras,
+      action: adjustments.action,
+    })
     .from(adjustments)
     .where(eq(adjustments.workingOrderId, workingOrderId))
     .orderBy(sql`rowid`);
   const rows = new Set<string>();
   const dishes = new Set<string>();
-  for (const { lineId, splits, action } of written) {
+  for (const { lineId, splits, compedExtras, action } of written) {
     if (action === "comp" && splits.length === 0) dishes.add(lineId!);
+    for (const extra of compedExtras) rows.add(extra);
     for (const { from, to } of splits) {
       if (action === "comp" || rows.has(from)) rows.add(to);
       if (dishes.has(from)) dishes.add(to);

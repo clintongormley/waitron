@@ -1823,6 +1823,70 @@ describe("the venue's limit on a bill's total discount (B11b)", () => {
     });
   });
 
+  describe("an extra added at full price to a dish given away whole", () => {
+    /** A held Pizza and Bread ×4, the Pizza comped whole, then Olives added to it at €1.50:
+     * €20.50 before adjustments. Answers the bill and the Olives' row. */
+    async function compedPizzaWithOlivesAdded() {
+      const { billId } = await bill([{ name: "Pizza" }, { name: "Bread", quantity: "4" }], {
+        release: "hold",
+      });
+      const pizza = await lineIdOf(venue, billId, 1);
+      await adjust(billId, { lineId: pizza, action: "comp", ...byStaff() });
+      await inTx(venue, async (tx) =>
+        updateOrderLine(
+          tx,
+          venue.cfg,
+          billId,
+          1,
+          {
+            extras: [
+              { listId: venue.pizzaExtras, picks: [{ productId: venue.olivesId, quantity: 1 }] },
+            ],
+          },
+          await readOrderRevision(tx, billId),
+          venue.staffId,
+        ),
+      );
+      const olives = (await rowsOf(venue, billId)).find((row) => row.parentLineId === pizza)!;
+      expect(olives.unitPriceGross).toBe("1.50");
+      return { billId, pizza, olives: olives.id };
+    }
+
+    // Limit 20% of €20.50 is €4.10. 30% off the Bread is €3.00: with the Olives' €1.50 of
+    // discount that is €4.50, past the limit; without it €3.00, under it.
+    const breadAsk = async (billId: string) => ({
+      lineId: (await rowsOf(venue, billId)).find((row) => row.name === "Bread")!.id,
+      ...billPercent(3000),
+    });
+
+    it("counts a discount on the added Olives against the limit", async () => {
+      await setLimit(2000);
+      const { billId, olives } = await compedPizzaWithOlivesAdded();
+      await adjust(billId, { lineId: olives, ...billPercent(10000) });
+
+      expect(await preview(billId, await breadAsk(billId))).toMatchObject({
+        reduction: "3.00",
+        needsApproval: "manager",
+        overBillDiscountLimit: true,
+      });
+    });
+
+    it("counts a discount on the whole given-away Pizza, which lands on its added Olives", async () => {
+      await setLimit(2000);
+      const { billId, pizza } = await compedPizzaWithOlivesAdded();
+      await adjust(billId, { lineId: pizza, ...billPercent(10000) });
+      expect(
+        Object.fromEntries((await rowsOf(venue, billId)).map((row) => [row.name, row.lineTotal])),
+      ).toEqual({ Pizza: "0.00", Bread: "10.00", Olives: "0.00" });
+
+      expect(await preview(billId, await breadAsk(billId))).toMatchObject({
+        reduction: "3.00",
+        needsApproval: "manager",
+        overBillDiscountLimit: true,
+      });
+    });
+  });
+
   it("still counts a line discounted to nothing", async () => {
     await setLimit(4000);
     // €40.00 in all, limit €16.00: €10.00 off the salad, which is then free, and €6.01 more.
