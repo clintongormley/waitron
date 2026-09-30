@@ -29,6 +29,7 @@ export function fakeHost(
     pair: (mac: string, pin?: string) => Promise<PairResult>;
     pairedBluetooth: () => Promise<PairedBluetoothDevice[]>;
     forgetBluetooth: (mac: string) => Promise<BluetoothCommandResult>;
+    bluetoothPrinting: () => boolean;
     now: () => number;
     sleep: (ms: number) => Promise<void>;
   }> = {},
@@ -110,5 +111,8 @@ export function fakeHost(
       overrides.forgetBluetooth ??
         (async () => ({ ok: false, error: "not implemented in fake host" })),
     ),
+    ...(overrides.bluetoothPrinting === undefined
+      ? {}
+      : { bluetoothPrinting: overrides.bluetoothPrinting }),
   };
 }

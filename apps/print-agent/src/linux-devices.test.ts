@@ -417,6 +417,22 @@ describe("createLinuxDevices — forgetBluetooth()", () => {
   });
 });
 
+describe("createLinuxDevices — bluetoothPrinting()", () => {
+  it("says it cannot print over Bluetooth with the production device path, which is not built", () => {
+    const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth() });
+    expect(devices.bluetoothPrinting()).toBe(false);
+  });
+
+  it("says it can print over Bluetooth once it is given a device path", () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth(),
+      btDevicePath: (mac) => `/dev/rfcomm-${mac}`,
+    });
+    expect(devices.bluetoothPrinting()).toBe(true);
+  });
+});
+
 describe("createLinuxDevices — resolve()", () => {
   it("maps a USB job's localKey to its current device path", async () => {
     const devices = createLinuxDevices({ sysfsRoot: root, devRoot: "/dev" });

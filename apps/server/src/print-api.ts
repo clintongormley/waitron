@@ -34,6 +34,7 @@ import {
   deactivatePrinter,
   dpiValue,
   enqueuePrintJob,
+  failUnprintableBluetoothJobs,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
   reportPrintJob,
@@ -413,7 +414,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 
   // A usb/bluetooth printer is claimed only by the box that currently sees its `local_key`; a
-  // network_tcp printer by any box at the printer's location.
+  // network_tcp printer by any box at the printer's location. A box that says it cannot print over
+  // Bluetooth has its paired Bluetooth printers' due jobs ended failed instead.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
@@ -425,6 +427,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         setupPort?: unknown;
         pairedBluetooth?: unknown;
         bluetoothOutcomes?: unknown;
+        bluetoothPrinting?: unknown;
       }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
@@ -466,6 +469,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const visibleKeys = visible
         .filter((v) => v.transport === "usb" || v.transport === "bluetooth")
         .map((v) => v.localKey);
+      // Absent from an agent that predates the field, which then changes nothing.
+      const unprintable =
+        body.bluetoothPrinting === false ? pairedBluetooth.map((p) => p.localKey) : [];
 
       // The claim commits within this request: no transaction is held across the agent's socket write,
       // and the agent reports the outcome in a separate request.
@@ -492,6 +498,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             );
         }
+        await failUnprintableBluetoothJobs(tx, agentId, unprintable);
         return claimPrintJobs(tx, agentId, {
           locationId: deps.cfg.locationId,
           visibleKeys,

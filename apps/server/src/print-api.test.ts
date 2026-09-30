@@ -20,7 +20,12 @@ import {
   persons,
   startManagementSession,
 } from "@waitron/identity";
-import { enqueuePrintJob, esc } from "@waitron/printing";
+import {
+  BLUETOOTH_PRINTING_UNAVAILABLE,
+  MAX_DELIVERY_ATTEMPTS,
+  enqueuePrintJob,
+  esc,
+} from "@waitron/printing";
 import { PIN_WITHHELD, type BluetoothCommand, type NetworkProbe } from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
@@ -250,6 +255,7 @@ async function pull(
     scanned?: unknown;
     pairedBluetooth?: unknown;
     bluetoothOutcomes?: unknown;
+    bluetoothPrinting?: unknown;
   } = {},
 ): Promise<PullReply> {
   const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token, body: inventory });
@@ -2204,6 +2210,65 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(seen.jobs.filter((job) => job.printerId === printerId).map((job) => job.id)).toEqual([
       jobId,
     ]);
+  });
+
+  async function bluetoothPrinterWithJob(app: Hono): Promise<{ mac: string; jobId: string }> {
+    const mac = lowerMac().toUpperCase();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+    });
+    const { id: printerId } = (await created.json()) as { id: string };
+    return { mac, jobId: await enqueue(printerId, esc().text("Mesa 2").cut().bytes()) };
+  }
+
+  it("ends a bluetooth printer's job failed, with its reason, once the box that has it paired says it cannot print over Bluetooth", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const { mac, jobId } = await bluetoothPrinterWithJob(app);
+
+    const reply = await pull(app, token, {
+      visible: [],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: false,
+    });
+
+    expect(reply.jobs.map((job) => job.id)).not.toContain(jobId);
+    expect(await jobRow(jobId)).toEqual({
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      last_error: BLUETOOTH_PRINTING_UNAVAILABLE,
+      delivered_at: null,
+    });
+  });
+
+  it("leaves a bluetooth printer's job waiting when the box that cannot print over Bluetooth does not have it paired", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const { jobId } = await bluetoothPrinterWithJob(app);
+
+    await pull(app, token, {
+      visible: [],
+      pairedBluetooth: [{ localKey: lowerMac().toUpperCase() }],
+      bluetoothPrinting: false,
+    });
+
+    expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, last_error: null });
+  });
+
+  it("claims, and does not end, a paired bluetooth printer's job when the box says it can print over Bluetooth", async () => {
+    const app = mountApp();
+    const { token } = await joinAndAccept(app);
+    const { mac, jobId } = await bluetoothPrinterWithJob(app);
+
+    const reply = await pull(app, token, {
+      visible: [{ transport: "bluetooth", localKey: mac }],
+      pairedBluetooth: [{ localKey: mac }],
+      bluetoothPrinting: true,
+    });
+
+    expect(reply.jobs.map((job) => job.id)).toContain(jobId);
+    expect(await jobRow(jobId)).toMatchObject({ status: "printing", last_error: null });
   });
 
   function lowerMac(): string {

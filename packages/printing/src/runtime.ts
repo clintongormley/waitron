@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { claimRows, nowIso, type Transaction } from "@waitron/db";
 import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-agent";
 
@@ -6,8 +6,8 @@ import type { PrintTransport, PrinterTarget, Transport } from "@waitron/print-ag
  * The agent runtime: one pull → push → report batch. The calling loop owns the interval between
  * batches, which is also the only spacing between retries.
  *
- * Single writer per row: the enqueuer owns a job's creation, this path its
- * `printing`→`done`/`failed` transition.
+ * Single writer per row: the enqueuer owns a job's creation, this path its move to `printing`,
+ * `done` or `failed`.
  */
 
 /** Jobs claimed per batch. A bound, not a tuning knob — the loop calls again while work remains. */
@@ -66,6 +66,24 @@ export type ClaimedJob = {
 
 export type JobOutcome = { status: "done" } | { status: "failed"; error: string };
 
+/** The claim stamp, and the predicate, against the alias `j`, that a job is due now. */
+function dueNow(): { claimedAt: string; due: SQL } {
+  // `claimed_at` is text, so `<` is a string comparison, a correct time order only for the
+  // `toISOString()` spelling `nowIso` writes; the cutoff is computed here to keep one spelling. Stamp
+  // and cutoff read the clock of the one process that holds the venue file.
+  const claimedAt = nowIso();
+  const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
+  return {
+    claimedAt,
+    due: sql`(
+        j.status = 'queued'
+        or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
+        or (j.status = 'printing'
+            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
+      )`,
+  };
+}
+
 /**
  * Claims a batch of this agent's due jobs and returns each with its printer's connection facts.
  * Separate from `runAgentOnce` so the server can commit the claim in one request and hand the jobs to
@@ -83,11 +101,7 @@ export async function claimPrintJobs(
   agentId: string,
   ctx: { locationId: string; visibleKeys: string[] },
 ): Promise<ClaimedJob[]> {
-  // `claimed_at` is text, so `<` is a string comparison, a correct time order only for the
-  // `toISOString()` spelling `nowIso` writes; the cutoff is computed here to keep one spelling. Stamp
-  // and cutoff read the clock of the one process that holds the venue file.
-  const claimedAt = nowIso();
-  const leaseCutoff = new Date(Date.parse(claimedAt) - PRINT_JOB_LEASE_MS).toISOString();
+  const { claimedAt, due } = dueNow();
   const usbBt =
     ctx.visibleKeys.length > 0
       ? sql`(p.transport in ('usb','bluetooth') and p.local_key in ${ctx.visibleKeys})`
@@ -98,12 +112,7 @@ export async function claimPrintJobs(
     claimableJoin: sql`join printers p on p.id = j.printer_id`,
     claimable: sql`p.active = true
       and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
-      and (
-        j.status = 'queued'
-        or (j.status = 'failed' and j.attempts < ${MAX_DELIVERY_ATTEMPTS})
-        or (j.status = 'printing'
-            and (j.claimed_at is null or j.claimed_at < ${leaseCutoff}))
-      )`,
+      and ${due}`,
     order: sql`j.created_at`,
     limit: PULL_BATCH_LIMIT,
     set: sql`status = 'printing', claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
@@ -114,6 +123,37 @@ export async function claimPrintJobs(
       (select port from printers where printers.id = print_jobs.printer_id) as port,
       (select local_key from printers where printers.id = print_jobs.printer_id) as local_key`,
   });
+}
+
+/** The `last_error` of a job {@link failUnprintableBluetoothJobs} ended: a code the dashboard
+ * words, not a sentence. */
+export const BLUETOOTH_PRINTING_UNAVAILABLE = "printer.bluetooth_printing_unavailable";
+
+/**
+ * Ends failed, with no attempts left, the due jobs of the active Bluetooth printers at `addresses`:
+ * the ones paired with an agent that says it cannot print over Bluetooth. Every reader of
+ * `MAX_DELIVERY_ATTEMPTS` then counts the job finished.
+ */
+export async function failUnprintableBluetoothJobs(
+  tx: Transaction,
+  agentId: string,
+  addresses: string[],
+): Promise<string[]> {
+  if (addresses.length === 0) return [];
+  const { claimedAt, due } = dueNow();
+  const ended = await claimRows<{ id: string }>(tx, {
+    table: "print_jobs",
+    key: "id",
+    claimableJoin: sql`join printers p on p.id = j.printer_id`,
+    claimable: sql`p.active = true and p.transport = 'bluetooth' and p.local_key in ${addresses}
+      and ${due}`,
+    order: sql`j.created_at`,
+    limit: PULL_BATCH_LIMIT,
+    set: sql`status = 'failed', last_error = ${BLUETOOTH_PRINTING_UNAVAILABLE},
+      attempts = ${MAX_DELIVERY_ATTEMPTS}, claimed_at = ${claimedAt}, claimed_by = ${agentId}`,
+    returning: sql`print_jobs.id`,
+  });
+  return ended.map(({ id }) => id);
 }
 
 /**

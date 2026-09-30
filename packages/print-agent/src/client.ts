@@ -17,6 +17,7 @@ export interface AgentInventory {
   scanned: DiscoveredDevice[];
   pairedBluetooth: PairedBluetoothDevice[];
   bluetoothOutcomes: BluetoothCommandOutcome[];
+  bluetoothPrinting?: boolean;
 }
 
 export type BluetoothCommandKind = "pair" | "forget";

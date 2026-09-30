@@ -46,7 +46,13 @@ type LocalDevice = VisibleDevice & { devicePath: string };
 
 export type LinuxDevices = Pick<
   Host,
-  "visibleDevices" | "scan" | "pair" | "pairedBluetooth" | "forgetBluetooth" | "resolve"
+  | "visibleDevices"
+  | "scan"
+  | "pair"
+  | "pairedBluetooth"
+  | "forgetBluetooth"
+  | "resolve"
+  | "bluetoothPrinting"
 >;
 
 export interface BluetoothStatusSource {
@@ -59,7 +65,7 @@ export interface BluetoothStatusSource {
 
 export function createLinuxDevices(
   opts: LinuxDeviceOptions = {},
-): LinuxDevices & BluetoothStatusSource {
+): LinuxDevices & BluetoothStatusSource & Required<Pick<Host, "bluetoothPrinting">> {
   const sysfsRoot = opts.sysfsRoot ?? "/sys";
   // `/dev` is a SIBLING of `/sys`: deriving it from sysfsRoot would open `/sys/dev/usb/lp0`.
   const devRoot = opts.devRoot ?? "/dev";
@@ -184,6 +190,9 @@ export function createLinuxDevices(
     forgetBluetooth(mac): Promise<BluetoothCommandResult> {
       return bluetooth.forget(mac);
     },
+
+    // Only a device path someone supplies can print: `liveBtDevicePath` is not built.
+    bluetoothPrinting: () => opts.btDevicePath !== undefined,
 
     async resolve(job: WireJob): Promise<PrinterTarget> {
       if (job.transport === "network_tcp") {

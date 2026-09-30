@@ -133,4 +133,7 @@ export interface Host {
   pairedBluetooth(): Promise<PairedBluetoothDevice[]>;
   /** Removes the bond; an address BlueZ no longer knows counts as removed. */
   forgetBluetooth(mac: string): Promise<BluetoothCommandResult>;
+  /** False when this host cannot print to any paired Bluetooth printer, which the loop tells the
+   * server so it can end those printers' jobs rather than leave them waiting. */
+  bluetoothPrinting?(): boolean;
 }

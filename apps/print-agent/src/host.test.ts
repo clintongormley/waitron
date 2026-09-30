@@ -5,6 +5,7 @@ import { join } from "node:path";
 import type { AgentStatus } from "@waitron/print-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnvConfig } from "./config.js";
+import { createLinuxDevices } from "./linux-devices.js";
 import { createContainerHost } from "./host.js";
 import type { MediaQuery } from "./ipp-probe.js";
 import { FileState } from "./state.js";
@@ -254,6 +255,16 @@ describe("createContainerHost — the rest of the seam", () => {
       devicePath: "/dev/usb/lp0",
     });
     expect(devices.resolve).toHaveBeenCalledWith(job);
+  });
+
+  it("passes on whether the injected device seam can print over Bluetooth", () => {
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+      devices: createLinuxDevices({ sysfsRoot: dir }),
+    });
+    expect(host.bluetoothPrinting?.()).toBe(false);
   });
 
   it("checks a typed address over TCP without asking IPP, and marks page printers in a separate step", async () => {
