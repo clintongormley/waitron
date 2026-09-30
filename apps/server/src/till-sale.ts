@@ -3,6 +3,7 @@ import { readReceiptIssuer } from "./receipt-issuer.js";
 import { randomUUID } from "node:crypto";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
+import { clearBillRequestIfPaid } from "./bill-request.js";
 import "./errors.js";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {
@@ -678,6 +679,7 @@ async function fileImmediateSale(
       ...(markCollected ? { collectedAt: settledAt.toISOString() } : {}),
     })
     .where(eq(workingOrders.id, workingOrderId));
+  await clearBillRequestIfPaid(tx, workingOrderId);
 
   // After both writes above, so a manual acquirer reference is visible.
   const tenderBlock = await readTenderBlock(tx, cfg, saleId, workingOrderId);
@@ -1112,6 +1114,7 @@ async function finalizeCapture(
             : { paymentAttemptAt: null }),
         })
         .where(eq(workingOrders.id, req.id));
+      await clearBillRequestIfPaid(tx, req.id);
 
       const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
@@ -1248,6 +1251,7 @@ async function finalizeRecovery(
           : { paymentAttemptAt: null }),
       })
       .where(eq(workingOrders.id, req.id));
+    await clearBillRequestIfPaid(tx, req.id);
 
     const tenderBlock = await readTenderBlock(tx, cfg, saleId, req.id);
 
@@ -1343,6 +1347,7 @@ async function finalizeSettle(
           collectedAt: settledAt.toISOString(),
         })
         .where(eq(workingOrders.id, req.id));
+      await clearBillRequestIfPaid(tx, req.id);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       return ticket;
@@ -1432,6 +1437,7 @@ async function finalizeSettleRecovery(
         collectedAt: settledAt.toISOString(),
       })
       .where(eq(workingOrders.id, req.id));
+    await clearBillRequestIfPaid(tx, req.id);
 
     const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
     return { outcome: "captured", ticket };
@@ -1546,6 +1552,7 @@ export async function collectOrder(
           collectedAt: settledAt.toISOString(),
         })
         .where(eq(workingOrders.id, req.id));
+      await clearBillRequestIfPaid(tx, req.id);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
       if (req.tender.method === "cash" && !paysNothing) {

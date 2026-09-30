@@ -162,5 +162,4 @@ export const DEMO_STATUSES: SeedStatus[] = [
   { label: { en: "Free", es: "Libre" }, color: "#22c55e" },
   { label: { en: "Occupied", es: "Ocupada" }, color: "#ef4444" },
   { label: { en: "Reserved", es: "Reservada" }, color: "#f59e0b" },
-  { label: { en: "Bill requested", es: "Cuenta pedida" }, color: "#3b82f6" },
 ];

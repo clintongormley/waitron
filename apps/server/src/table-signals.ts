@@ -1,0 +1,248 @@
+import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
+import {
+  kitchenStations,
+  orderDrafts,
+  orderGroups,
+  parties,
+  products,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
+import type { Transaction } from "@waitron/db";
+import { classifyBand, worstBand } from "@waitron/shared";
+import type { KitchenSignal, ReadyAtStation, TableSignal } from "@waitron/shared";
+import { partyFamilies } from "./parties.js";
+import type { TableParty } from "./working-order.js";
+import { productSellable } from "./working-order.js";
+
+/** A fired dish line nobody has finished serving, with its station's name and waiting bands. */
+interface KitchenLine {
+  billId: string;
+  stationId: string;
+  stationName: string;
+  displayOrder: number;
+  state: string;
+  queuedAt: string;
+  units: number;
+  warmAfterMinutes: number;
+  overdueAfterMinutes: number;
+  forgottenAfterMinutes: number;
+}
+
+/** The fired dish lines of these bills still to serve, in one query. */
+async function readKitchenLines(
+  tx: Transaction,
+  billIds: readonly string[],
+): Promise<KitchenLine[]> {
+  if (billIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      billId: workingOrderLines.workingOrderId,
+      stationId: ticketItems.stationId,
+      stationName: kitchenStations.name,
+      displayOrder: kitchenStations.displayOrder,
+      state: ticketItems.state,
+      queuedAt: ticketItems.queuedAt,
+      quantity: workingOrderLines.quantity,
+      servedQuantity: workingOrderLines.servedQuantity,
+      unitPrecision: workingOrderLines.unitPrecision,
+      warmAfterMinutes: kitchenStations.warmAfterMinutes,
+      overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
+      forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
+    })
+    .from(ticketItems)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+    .innerJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
+    .where(
+      and(
+        inArray(workingOrderLines.workingOrderId, [...billIds]),
+        isNull(workingOrderLines.servedAt),
+        isNull(workingOrderLines.parentLineId),
+        isNotNull(ticketItems.firedAt),
+      ),
+    );
+  return rows.map(({ quantity, servedQuantity, unitPrecision, ...line }) => ({
+    ...line,
+    // A weighed dish is one plate however much it weighs; a counted one is its units left to serve.
+    units: unitPrecision ? 1 : (quantity - servedQuantity) / 1000,
+  }));
+}
+
+/** `ready` per station and the worst `long_wait` band over the lines, in that order. */
+function kitchenSignals(lines: readonly KitchenLine[], nowMs: number): KitchenSignal[] {
+  const signals: KitchenSignal[] = [];
+  const ready = new Map<string, ReadyAtStation & { displayOrder: number }>();
+  for (const line of lines) {
+    if (line.state !== "ready") continue;
+    const station = ready.get(line.stationId) ?? {
+      stationId: line.stationId,
+      stationName: line.stationName,
+      displayOrder: line.displayOrder,
+      count: 0,
+    };
+    station.count += line.units;
+    ready.set(line.stationId, station);
+  }
+  if (ready.size > 0) {
+    const byStation = [...ready.values()]
+      .sort((a, b) => a.displayOrder - b.displayOrder || a.stationName.localeCompare(b.stationName))
+      .map(({ stationId, stationName, count }) => ({ stationId, stationName, count }));
+    signals.push({ kind: "ready", byStation });
+  }
+  const band = worstBand(lines.map((line) => classifyBand(Date.parse(line.queuedAt), nowMs, line)));
+  if (band !== "fresh") signals.push({ kind: "long_wait", band });
+  return signals;
+}
+
+/** Each bill's `ready` and `long_wait` signals, keyed by bill: the counter's tab list shows them. */
+export async function readBillSignals(
+  tx: Transaction,
+  billIds: readonly string[],
+  nowMs: number,
+): Promise<Map<string, KitchenSignal[]>> {
+  const lines = await readKitchenLines(tx, billIds);
+  return new Map(
+    billIds.map((billId) => [
+      billId,
+      kitchenSignals(
+        lines.filter((line) => line.billId === billId),
+        nowMs,
+      ),
+    ]),
+  );
+}
+
+/**
+ * Each seated party's signals, keyed by party, in {@link TableSignal}'s order. Bills and dishes are
+ * read over the party's family, abandoned bills left out, so a paid bill's dish still waiting shows.
+ * Every kind of fact is one query for all the parties, whatever their number.
+ */
+export async function readPartySignals(
+  tx: Transaction,
+  seated: readonly TableParty[],
+  nowMs: number,
+): Promise<Map<string, TableSignal[]>> {
+  const partyIds = seated.map((party) => party.id);
+  if (partyIds.length === 0) return new Map();
+  const families = await partyFamilies(tx, partyIds);
+  const bills = await tx
+    .select({
+      id: workingOrders.id,
+      partyId: workingOrders.partyId,
+      lines: sql<number>`count(${workingOrderLines.id})`,
+    })
+    .from(workingOrders)
+    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+    .where(
+      and(
+        inArray(workingOrders.partyId, [...new Set([...families.values()].flat())]),
+        ne(workingOrders.status, "abandoned"),
+      ),
+    )
+    .groupBy(workingOrders.id);
+  const kitchen = await readKitchenLines(
+    tx,
+    bills.map((bill) => bill.id),
+  );
+  const unavailable = await tx
+    .select({
+      groupId: orderGroups.id,
+      partyId: orderGroups.partyId,
+      name: workingOrderLines.name,
+      variantName: workingOrderLines.variantName,
+    })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .innerJoin(products, eq(products.id, workingOrderLines.productId))
+    .leftJoin(parentProducts, parentJoin)
+    .where(
+      and(
+        inArray(orderGroups.partyId, partyIds),
+        eq(orderGroups.state, "held"),
+        ne(workingOrders.status, "abandoned"),
+        sql`not ${productSellable}`,
+      ),
+    )
+    .orderBy(
+      asc(orderGroups.position),
+      asc(orderGroups.createdAt),
+      asc(orderGroups.id),
+      asc(workingOrders.orderNumber),
+      asc(workingOrderLines.lineNo),
+    );
+  const drafting = new Set(
+    (
+      await tx
+        .selectDistinct({ partyId: orderDrafts.partyId })
+        .from(orderDrafts)
+        .where(and(inArray(orderDrafts.partyId, partyIds), eq(orderDrafts.state, "open")))
+    ).map((row) => row.partyId),
+  );
+  const requests = new Map(
+    (
+      await tx
+        .select({ id: parties.id, at: parties.billRequestedAt })
+        .from(parties)
+        .where(inArray(parties.id, partyIds))
+    ).map((row) => [row.id, row.at]),
+  );
+
+  const signals = new Map<string, TableSignal[]>();
+  for (const party of seated) {
+    const family = new Set(families.get(party.id));
+    const own = bills.filter((bill) => family.has(bill.partyId!));
+    const ownBills = new Set(own.map((bill) => bill.id));
+    const list: TableSignal[] = [];
+    if (own.every((bill) => bill.lines === 0) && !drafting.has(party.id)) {
+      list.push({ kind: "take_order" });
+    }
+    if (party.unsentDrafts.length > 0) {
+      list.push({
+        kind: "unsent_draft",
+        ownerNames: party.unsentDrafts.map((draft) => draft.ownerName),
+      });
+    }
+    list.push(
+      ...kitchenSignals(
+        kitchen.filter((line) => ownBills.has(line.billId)),
+        nowMs,
+      ),
+    );
+    if (party.reminder?.dueAt != null) {
+      list.push({
+        kind: "release_due",
+        groupId: party.reminder.groupId,
+        dueAt: party.reminder.dueAt,
+      });
+    }
+    const held = new Map<string, string[]>();
+    for (const line of unavailable.filter((row) => row.partyId === party.id)) {
+      const names = held.get(line.groupId) ?? [];
+      names.push(staffPresentationName(line));
+      held.set(line.groupId, names);
+    }
+    for (const [groupId, lineNames] of held) {
+      list.push({ kind: "held_unavailable", groupId, lineNames });
+    }
+    const requestedAt = requests.get(party.id);
+    if (requestedAt != null) list.push({ kind: "bill_requested", requestedAt });
+    signals.set(party.id, list);
+  }
+  return signals;
+}
+
+/** The table's signals: its party's, if one sits there, then whether it waits to be cleared. */
+export function tableSignals(
+  partySignals: readonly TableSignal[] | undefined,
+  needsClearingSince: string | null,
+): TableSignal[] {
+  return [
+    ...(partySignals ?? []),
+    ...(needsClearingSince === null
+      ? []
+      : [{ kind: "needs_clearing" as const, since: needsClearingSince }]),
+  ];
+}

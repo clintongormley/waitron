@@ -74,6 +74,7 @@ import {
   toVatBreakdown,
 } from "./working-order.js";
 import type { TillSaleDeps } from "./working-order.js";
+import { clearBillRequestIfPaid } from "./bill-request.js";
 import "./errors.js";
 
 /**
@@ -701,6 +702,7 @@ async function issueWhenFullyPaid(
     .update(workingOrders)
     .set({ label: receiptOrder.orderLabel, status: "settled", settledAt })
     .where(eq(workingOrders.id, workingOrderId));
+  await clearBillRequestIfPaid(tx, workingOrderId);
 
   const ticket: TillSaleResult = {
     ...(await readReceiptIssuer(deps.backend, tx, saleId)),

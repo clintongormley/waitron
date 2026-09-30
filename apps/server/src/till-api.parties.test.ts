@@ -7,6 +7,7 @@ import {
   locations,
   tills,
   parties,
+  serviceCommands,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -307,6 +308,140 @@ describe("POST /api/parties/:id/finish", () => {
       false,
     );
     expect(res.status).toBe(401);
+  });
+});
+
+describe("POST /api/parties/:id/bill-request", () => {
+  const path = (partyId: string) => `/api/parties/${partyId}/bill-request`;
+  const ask = (requested: boolean, expectedPartyRevision: number, submissionId = randomUUID()) => ({
+    submissionId,
+    expectedPartyRevision,
+    requested,
+  });
+  /** What the request writes: the party row, and its recorded commands. */
+  async function written(partyId: string) {
+    const commands = await withTransaction(suite.db, (tx) =>
+      tx.select().from(serviceCommands).where(eq(serviceCommands.scopeId, partyId)),
+    );
+    return { party: await partyRow(partyId), commands: commands.length };
+  }
+
+  it("records the request, answering the party's revision and when it was asked", async () => {
+    const { partyId } = await seat();
+
+    const res = await post(path(partyId), ask(true, 0));
+
+    expect(res.status).toBe(200);
+    const answer = (await res.json()) as { revision: number; billRequestedAt: string };
+    const row = await partyRow(partyId);
+    expect(answer).toEqual({ revision: 1, billRequestedAt: row.billRequestedAt });
+    expect(row.billRequestedAt).not.toBeNull();
+    expect(row.revision).toBe(1);
+  });
+
+  it("answers a retry with the recorded result and writes nothing more", async () => {
+    const { partyId } = await seat();
+    const sent = ask(true, 0);
+    const first = await (await post(path(partyId), sent)).json();
+    const before = await written(partyId);
+
+    const again = await post(path(partyId), sent);
+
+    expect(again.status).toBe(200);
+    expect(await again.json()).toEqual(first);
+    expect(await written(partyId)).toEqual(before);
+  });
+
+  it("keeps the time of a request already standing when asked again", async () => {
+    const { partyId } = await seat();
+    await post(path(partyId), ask(true, 0));
+    const { billRequestedAt } = await partyRow(partyId);
+
+    const res = await post(path(partyId), ask(true, 1));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ revision: 2, billRequestedAt });
+  });
+
+  it("takes the request back", async () => {
+    const { partyId } = await seat();
+    await post(path(partyId), ask(true, 0));
+
+    const res = await post(path(partyId), ask(false, 1));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ revision: 2, billRequestedAt: null });
+    expect((await partyRow(partyId)).billRequestedAt).toBeNull();
+  });
+
+  it("answers 409 submission.id_reused for a used id sent with another body, writing nothing", async () => {
+    const { partyId } = await seat();
+    const used = randomUUID();
+    await post(path(partyId), ask(true, 0, used));
+    const before = await written(partyId);
+
+    const res = await post(path(partyId), ask(false, 1, used));
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "submission.id_reused", params: { submissionId: used } },
+    });
+    expect(await written(partyId)).toEqual(before);
+  });
+
+  it("answers 409 party.out_of_date for a stale revision, writing nothing", async () => {
+    const { partyId } = await seat();
+    await post(path(partyId), ask(true, 0));
+    const before = await written(partyId);
+
+    const res = await post(path(partyId), ask(false, 0));
+
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({
+      error: { code: "party.out_of_date", params: { partyId, revision: 1 } },
+    });
+    expect(await written(partyId)).toEqual(before);
+  });
+
+  it("answers 409 party.not_open for a finished party, a malformed id and an unknown one", async () => {
+    const { partyId } = await seat();
+    expect(
+      (await post(`/api/parties/${partyId}/finish`, { expectedPartyRevision: 0 })).status,
+    ).toBe(200);
+    const before = await written(partyId);
+
+    for (const id of [partyId, "not-a-uuid", randomUUID()]) {
+      const res = await post(path(id), ask(true, 1));
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({
+        error: { code: "party.not_open", params: { partyId: id } },
+      });
+    }
+    expect(await written(partyId)).toEqual(before);
+  });
+
+  it.each([
+    [{ submissionId: randomUUID(), expectedPartyRevision: 0 }, "requested"],
+    [{ submissionId: randomUUID(), expectedPartyRevision: 0, requested: "yes" }, "requested"],
+    [{ submissionId: randomUUID(), requested: true }, "expectedPartyRevision"],
+    [{ expectedPartyRevision: 0, requested: true }, "submissionId"],
+  ])("refuses %j as a bad field", async (body, field) => {
+    const { partyId } = await seat();
+
+    const res = await post(path(partyId), body);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect((await partyRow(partyId)).billRequestedAt).toBeNull();
+  });
+
+  it("401s without a session", async () => {
+    const { partyId } = await seat();
+    const res = await post(path(partyId), ask(true, 0), false);
+    expect(res.status).toBe(401);
+    expect((await partyRow(partyId)).billRequestedAt).toBeNull();
   });
 });
 

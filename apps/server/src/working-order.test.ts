@@ -1287,6 +1287,7 @@ describe("listHeldOrders", () => {
         hasPayments: false,
         partyId: null,
         openedAt: a.openedAt,
+        signals: [],
       },
       {
         id: idB,
@@ -1298,6 +1299,7 @@ describe("listHeldOrders", () => {
         hasPayments: false,
         partyId: null,
         openedAt: b.openedAt,
+        signals: [],
       },
     ]);
   });

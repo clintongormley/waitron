@@ -473,20 +473,8 @@ export async function finishTable(
   const { partyId } = args;
   await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
 
-  const family = await partyFamily(tx, partyId);
-  const bills = await tx
-    .select({
-      id: workingOrders.id,
-      status: workingOrders.status,
-      lines: sql<number>`count(${workingOrderLines.id})`,
-    })
-    .from(workingOrders)
-    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(inArray(workingOrders.partyId, family))
-    .groupBy(workingOrders.id);
-  if (
-    bills.some((bill) => bill.status === "placed" || (bill.status === "open" && bill.lines > 0))
-  ) {
+  const bills = await readFamilyBills(tx, await partyFamily(tx, partyId));
+  if (bills.some(billOwes)) {
     throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
@@ -509,6 +497,28 @@ export async function finishTable(
     .where(eq(parties.id, partyId));
   await leaveForClearing(tx, tables, at);
   return { state: "closed" };
+}
+
+/** Each bill of these parties with how many lines it holds. */
+export async function readFamilyBills(
+  tx: Transaction,
+  family: readonly string[],
+): Promise<{ id: string; status: PartyBill["status"]; lines: number }[]> {
+  return tx
+    .select({
+      id: workingOrders.id,
+      status: workingOrders.status,
+      lines: sql<number>`count(${workingOrderLines.id})`,
+    })
+    .from(workingOrders)
+    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+    .where(inArray(workingOrders.partyId, [...family]))
+    .groupBy(workingOrders.id);
+}
+
+/** A bill still to pay: presented, or open with a line on it. */
+export function billOwes(bill: { status: PartyBill["status"]; lines: number }): boolean {
+  return bill.status === "placed" || (bill.status === "open" && bill.lines > 0);
 }
 
 /** The table is ready for the next party. Clearing a table that does not need it is not refused. */

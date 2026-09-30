@@ -146,6 +146,7 @@ import {
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 // Side-effect only: loads this host's errors.ts augmentation.
+import { requestBill } from "./bill-request.js";
 import "./errors.js";
 
 export interface TillApiDeps {
@@ -1630,6 +1631,21 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       if (!isUuid(id)) throw new AppError("table.not_found", { tableId: id });
       await withTransaction(deps.db, (tx) => markTableCleared(tx, id));
       return c.body(null, 204);
+    }),
+  );
+
+  app.post("/api/parties/:id/bill-request", (c) =>
+    run(c, log, async () => {
+      const { personId } = await requireSession(deps, c);
+      const partyId = requirePartyParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const args = groupCommand(personId, body);
+      const { requested } = body;
+      if (typeof requested !== "boolean") throw invalid("requested");
+      const answer = await withTransaction(deps.db, (tx) =>
+        requestBill(tx, partyId, requested, args),
+      );
+      return c.json(answer);
     }),
   );
 
