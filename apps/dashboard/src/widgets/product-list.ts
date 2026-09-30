@@ -320,6 +320,7 @@ export class ProductList extends LitElement {
         key: "actions",
         label: t("staff.actions"),
         align: "end",
+        pinned: "end",
         cell: ({ product, variant }) => {
           const { id, name } = variant ?? product;
           const restore = variant !== null && !variant.active;

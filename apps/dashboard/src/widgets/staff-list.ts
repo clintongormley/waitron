@@ -75,6 +75,7 @@ export class StaffList extends LitElement {
         key: "actions",
         label: t("staff.actions"),
         align: "end",
+        pinned: "end",
         cell: (person) => html`
           <wt-row-actions label=${`${t("staff.actions")}: ${person.displayName}`}>
             <wt-button

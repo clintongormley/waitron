@@ -307,6 +307,7 @@ export class UnitsScreen extends LitElement {
       {
         key: "actions",
         label: t("units.actions"),
+        pinned: "end",
         cell: (product) => html`
           <wt-button
             data-test=${`edit-product-${product.id}`}
@@ -363,6 +364,7 @@ export class UnitsScreen extends LitElement {
       {
         key: "actions",
         label: t("units.actions"),
+        pinned: "end",
         cell: (unit) => html`
           <wt-row-actions label=${`${t("units.actions")}: ${localizedName(unit.name)}`}>
             <wt-button

@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
@@ -401,4 +401,69 @@ describe("dashboard-alerts-screen", () => {
     expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("open");
     expect(location.pathname).toBe("/manage/alerts/view/open");
   });
+});
+
+describe("the open alerts at phone width", () => {
+  const long: AlertView = {
+    ...open,
+    key: "incident:i3",
+    code: "fiscal.registro_rechazado",
+    params: {
+      mensaje: "El-NIF-del-destinatario-no-está-identificado-en-el-censo-de-la-AEAT",
+      codigo: 4102,
+    },
+    area: "fiscal",
+  };
+  // This table's actions column holds a plain button rather than a row menu, so each row's
+  // button is checked the way expectRowMenusOnScreen checks a menu's.
+  it.each(["en-GB", "es-ES"])(
+    "keeps every open alert's action button on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const api = stubApi({
+          listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [long, open, ongoing] }),
+        });
+        const { el } = await mountWidget<AlertsScreen>("dashboard-alerts-screen", {
+          api,
+          canOpen: () => true,
+        });
+        await flush(el);
+        const table = el.shadowRoot!.querySelector("[data-test=open-alerts-table]")!;
+        const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+        expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(
+          scroll.clientWidth,
+        );
+        expect(scroll.scrollLeft).toBe(0);
+        const box = scroll.getBoundingClientRect();
+        const actions = [
+          ...table.shadowRoot!.querySelectorAll(
+            "[data-test=alert-handle], [data-test=alert-go-to]",
+          ),
+        ];
+        expect(actions).toHaveLength(3);
+        for (const [index, action] of actions.entries()) {
+          const button = action.shadowRoot!.querySelector("button")!;
+          const at = button.getBoundingClientRect();
+          expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+          expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+          expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(
+            window.innerWidth,
+          );
+          // Hit-tested from the table's shadow root: the button's label is slotted text, which a
+          // hit test inside the button's own shadow root reports as its host.
+          const hit = table.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+          expect(hit, `row ${index} is covered`).toBe(action);
+        }
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

@@ -1,11 +1,12 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
 import type { DashboardApi, ServerListing } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 
@@ -760,4 +761,46 @@ describe("servers screen clearing", () => {
     await flush(el);
     expect(clearDialog(el).open).toBe(true);
   });
+});
+
+describe("servers screen at phone width", () => {
+  // The screen wraps a long address, so the table overflows only when narrower and with larger text.
+  // Larger text makes each row tall, so the fixture keeps one menu row inside an 844 px window.
+  const phoneListing: ServerListing = {
+    term: 3,
+    nodes: [
+      listing.nodes[0]!,
+      {
+        ...listing.nodes[1]!,
+        contactUrl:
+          "https://standby-server-in-the-back-office-of-the-restaurant.venue.example:8443",
+      },
+    ],
+  };
+  it.each(["en-GB", "es-ES"])(
+    "keeps every row's menu on screen and uncovered at 320 px with larger text while the other columns scroll sideways (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(320, 844);
+        expect(window.innerWidth).toBe(320);
+        const { el, host } = await mountWidget<ServersScreen>("dashboard-servers-screen", {
+          api: stubApi({ listServers: vi.fn().mockResolvedValue(phoneListing) }),
+        });
+        host.style.setProperty("--wt-font-size-sm", "var(--wt-font-size-lg)");
+        host.style.setProperty("--wt-font-size-md", "var(--wt-font-size-xl)");
+        const family = getComputedStyle(host).getPropertyValue("--wt-font-family");
+        expect(family).not.toBe("");
+        host.style.setProperty("--wt-font-family", `Verdana, ${family}`);
+        await flush(el);
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 1);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

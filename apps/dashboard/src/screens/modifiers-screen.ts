@@ -440,6 +440,7 @@ export class ModifiersScreen extends LitElement {
       {
         key: "actions",
         label: t("modifiers.actions"),
+        pinned: "end",
         cell: (list) =>
           html`<wt-row-actions label=${`${t("modifiers.actions")}: ${list.name}`}
             ><wt-button

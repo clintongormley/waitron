@@ -213,8 +213,8 @@ hook, or how tests are scheduled:
   `eslint.config.js` is not type-aware. Proven by mutation.
 - **Two TypeScript compilers are installed on purpose, and there is no `tsc` at the ROOT.** A
   package's `tsc` is version 7; the root resolves `typescript` to the version 6 API typescript-eslint
-  and two root scripts, `scripts/comments-only.mjs` and `scripts/apply-migrations-callers.test.ts`,
-  still need, and its only binary is `tsc6`. Cost: typescript-eslint
+  and three root scripts, `scripts/comments-only.mjs`, `scripts/apply-migrations-callers.test.ts`
+  and `scripts/pinned-actions-column.test.ts`, still need, and its only binary is `tsc6`. Cost: typescript-eslint
   refuses version 7 by its major alone, before loading its parser, so raising the root to it makes `pnpm lint` refuse to start with
   no results at all — and version 7 rejected the one typechecked file reaching into another package by
   relative path (`TS6059`). See [ci-and-gates.md](docs/developers/ci-and-gates.md).
@@ -339,6 +339,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   that credential id has a row; a suspended owner's passkey stays generic. Guards: the one-answer
   cases in identity's login suites and the route suites conventions-ui.md names, weaker than the
   set looks — some sign-in routes have no case of their own, and a new one is seen by none. See [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the
+  menu stays on a phone's screen (owner decision, A155). Cost: most tables put the menu past a
+  phone's right edge. Guard: `scripts/pinned-actions-column.test.ts`, weaker than its name — it
+  knows a menu column only by the key `actions`, reads only non-test `.ts` files under `apps/` and `packages/`, and misses a key
+  not written as the literal `key: "actions"` (a variable, a shorthand, a computed name, an
+  `as const`). The adjustment reasons screen's menu, keyed `manage`, is left unpinned on purpose (`docs/backlog.md`). See [design-system.md](docs/developers/design-system.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the

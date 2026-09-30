@@ -249,6 +249,7 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       key: "actions",
       label: "Actions",
       align: "end",
+      pinned: "end",
       cell: (row: { name: string; role: string }) => html`
         <wt-row-actions label=${`Actions for ${row.name}`}>
           <wt-button align="start" @click=${() => openMember(row)}>Edit</wt-button>

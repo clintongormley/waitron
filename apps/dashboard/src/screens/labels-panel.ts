@@ -179,6 +179,7 @@ export class LabelsPanel extends LitElement {
       {
         key: "actions",
         label: t("categories.actions"),
+        pinned: "end",
         cell: (label) =>
           html`<wt-row-actions label=${`${t("categories.actions")}: ${label.name}`}
             ><wt-button

@@ -2665,22 +2665,42 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   its box, that each row's ⋮ ends inside the box and the window with the table unscrolled, and that
   nothing is painted over it; the pinned cases in
   `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`.
-- **The Printers screen's Agents tab still puts its row menu off a phone's screen, and the other
-  unpinned tables, bar the menus list, are unchecked at phone width.** Measured 2026-09-30 in headless Chromium at 390 px (a 388 px
-  box), with an agent named "Raspberry Pi de la cocina caliente": the Agents tab table was 683 px
-  (English) to 775 px (Spanish in Verdana) wide. Only the Printers tab pins its Actions column
-  (A145); every other table with an `actions` column is unpinned — `git grep 'key: "actions"'`
-  outside the tests lists them, among them the Agents tab, the categories, units, menus, sections,
-  servers, payments, alerts, modifiers and labels screens, the product and staff lists, and the
-  adjustments and venue operations modules. The menus screen's list has a 390 px case holding that
-  it does not scroll sideways (`apps/dashboard/src/screens/menus-screen.test.ts`); none of the
-  others, the Agents tab included, has a case that checks where its row menu sits at phone width —
-  the Agents tab's figures above are a measurement, not a test.
-  Whether to pin them all is an owner decision. A pinned column in a table with `rowClick` has one
-  cost: a click on the pinned cell's empty space lands on the cell rather than the row's activator,
-  so it does not open the row (2026-09-30: an `elementFromPoint` hit test, and a click probe in
-  review that called `rowClick` zero times from the pinned cell's padding and once from an ordinary
-  cell's; no test holds it).
+- **DONE (2026-09-30, A155): every `wt-data-table` whose row menu sits in its last column pins
+  that column** (owner's answer "a" to A145's question). `pinned: "end"` stays a per-column option,
+  now set on every row-menu column keyed `actions` (the adjustment reasons screen's menu, keyed
+  `manage` and not its last column, is left unpinned — recorded below): the Printers screen's Agents
+  tab, the categories screen
+  and its products-in-category table, the units screen and its in-use products table, the menus,
+  sections, servers, payments, alerts, modifiers (Extras and Options) and labels screens, the
+  product and staff lists, venue operations' five tables and the `packages/ui` demo's table (`packages/ui/demo/main.ts`). In a table with `rowClick` (the units
+  screen), a click on a pinned cell's empty space now opens the row; a click on anything inside the
+  cell does not. Measured 2026-09-30 in headless Chromium with a long unbroken name, before the
+  change: at 390 px the right edge of each table's first-row ⋮ (or, in the alerts and in-use
+  products tables, its buttons) was between 474 and 1495 px from the window's left, in a box
+  ending at 390 px or less (373 px in the two tables inside a dialog); the servers table (which wraps its addresses) did so only at 320 px with
+  larger text, and the menus list (whose narrow layout starts at 480 px) only between 500 and 700
+  px. At 1280 px pinning changes no column's width (849/262/169 px pinned and unpinned, same rows).
+  Guards: a phone-width case per dashboard table in each screen's own suite (English and Spanish;
+  most use `expectRowMenusOnScreen`, `packages/ui/src/test-helpers.ts`, and the alerts and in-use
+  products tables, whose column holds a button, check it by hand; the demo has none), the pinned-click
+  cases in `packages/ui/src/components/wt-data-table.test.ts`, and
+  `scripts/pinned-actions-column.test.ts`, weaker than its name — it knows a row-menu column only by
+  a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`; its
+  header lists the rest.
+- **The adjustment reasons table's row menu leaves a phone's screen when a reason's name is long.**
+  Its menu is not in the last column: the `manage` column (move up, move down and ⋮) is second, on
+  purpose, "so a phone reaches the controls without scrolling the table"
+  (`packages/adjustments/src/dashboard/reasons-screen.ts`). Measured 2026-09-30 at 390 px with a
+  reason named "Queja del cliente por el tiempo de espera en la terraza": the ⋮'s right edge was
+  643 px (English) and 584 px (Spanish) from the window's left. Moving that column last and pinning
+  it would change the column order an existing test pins (`reasons-screen.test.ts`, the column
+  chooser case), so A155 left it; it is an owner decision. Its column keyed `actions` is data (the
+  actions a reason allows), excused in the guard's `NOT_A_ROW_MENU`.
+- **Row menus in plain `<table>`s are unchecked at phone width.** `variant-table.ts` and
+  `option-list-form.ts` (`apps/dashboard/src/widgets/`) put a `wt-row-actions` in a plain table,
+  not `wt-data-table`, so `pinned` does not reach them; `member-list-editor.ts` and
+  `product-editor.ts` also contain both a `<table>` and a row menu (found by grep, not read). None
+  has a phone-width case and none was measured.
 - **Printing to a paired Bluetooth printer over its serial channel (A140, owner 2026-09-29: the
   calibration print _"nothing printed"_) — BUILT where the tests and CI reach (#909, 2026-09-30); no real
   printer has printed through it yet.** The box's agent sends a Bluetooth job's bytes over RFCOMM
@@ -8502,8 +8522,8 @@ Either bring the three decisions across and re-baseline, or change the sentence 
   in any case. typescript-eslint tracks the work in its issue 10940,
   and the message it prints today names version **7.1** as the target. When a typescript-eslint
   release supports it, the root entry goes back to a plain `^7` range and the alias disappears.
-  `scripts/comments-only.mjs` and `scripts/apply-migrations-callers.test.ts` parse with the version
-  6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them, before that
+  `scripts/comments-only.mjs`, `scripts/apply-migrations-callers.test.ts` and
+  `scripts/pinned-actions-column.test.ts` parse with the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them, before that
   move. The whole arrangement, with the receipts, is in
   [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
   is deliberate*.

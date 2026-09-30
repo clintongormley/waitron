@@ -1,8 +1,9 @@
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html } from "lit";
 import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { registerCatalogue } from "@waitron/dashboard-kit";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
   DashboardApi,
@@ -13,6 +14,7 @@ import type {
   StuckPaymentRow,
 } from "../api/client.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
@@ -1365,4 +1367,39 @@ describe("card payments stuck after a restart", () => {
       "Check with the card provider: Order 12 · Terrace 3",
     );
   });
+});
+
+describe("the readers table at phone width", () => {
+  // A long unbroken reader name widens the name column past a phone's screen.
+  const phoneReaders: ReaderRow[] = [
+    ...READERS,
+    {
+      id: "r-2",
+      provider: "acme",
+      name: "Terminal-de-la-barra-de-la-terraza-junto-a-la-puerta",
+      active: true,
+      canEnable: true,
+      deviceCount: 0,
+    },
+  ];
+  it.each(["en-GB", "es-ES"])(
+    "keeps every reader row's menu on screen and uncovered at 390 px while the other columns scroll sideways (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const { el } = await mount(
+          stubApi({ listReaders: vi.fn().mockResolvedValue(phoneReaders) }),
+        );
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, phoneReaders.length);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

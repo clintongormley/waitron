@@ -1,10 +1,12 @@
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { allergenStateName, vatClassName } from "../i18n/domain.js";
 import type { Product } from "../api/client.js";
 import type { ListedVariant } from "@waitron/catalogue/src/product-types.js";
 import { ProductList } from "./product-list.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
 // The table remembers its sort and filter choices in sessionStorage under waitron.products.table, so
@@ -1149,4 +1151,33 @@ describe("product-list", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", { products: [] });
     expect((await tableRoot(el)).querySelectorAll("tbody tr").length).toBe(0);
   });
+});
+
+describe("the product list at phone width", () => {
+  // A long unbroken product name widens the name column past a phone's screen.
+  const phoneProducts = () => [
+    product({ id: "a" }),
+    product({ id: "b", name: "Croquetas-caseras-de-jamon-iberico-de-bellota-y-queso-azul" }),
+  ];
+  it.each(["en-GB", "es-ES"])(
+    "keeps every product row's menu on screen and uncovered at 390 px while the other columns scroll sideways (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          products: phoneProducts(),
+        });
+        await tableRoot(el);
+        expectRowMenusOnScreen(el.shadowRoot!.querySelector("wt-data-table")!, 2);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

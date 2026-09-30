@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
   CatalogueSummary,
@@ -15,7 +16,7 @@ import type {
 } from "../api/client.js";
 import type { ExtraListForm } from "../widgets/extra-list-form.js";
 import type { OptionListForm } from "../widgets/option-list-form.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
@@ -1613,4 +1614,46 @@ it("opens one editor when Edit is pressed twice before the modal closes", async 
   expect(detailModal(el).open).toBe(false);
   expect(extraForm(el).open).toBe(true);
   expect(extraForm(el).value).toEqual(extraList);
+});
+
+describe("the modifier list tables at phone width", () => {
+  // A long unbroken list name widens the name column past a phone's screen.
+  const longName = "Panes-artesanos-de-masa-madre-del-obrador-de-la-esquina";
+  const phoneApi = () =>
+    api({
+      listExtraLists: vi
+        .fn()
+        .mockResolvedValue([extraList, { ...extraList, id: "e2", name: longName }]),
+      listOptionLists: vi
+        .fn()
+        .mockResolvedValue([optionList, { ...optionList, id: "o2", name: longName }]),
+    });
+  it.each(
+    ["en-GB", "es-ES"].flatMap((locale) =>
+      [
+        { tab: "extras", testId: "extra-lists" },
+        { tab: "options", testId: "option-lists" },
+      ].map(({ tab, testId }) => ({ locale, tab, testId })),
+    ),
+  )(
+    "keeps every $tab row's menu on screen and uncovered at 390 px while the other columns scroll sideways ($locale)",
+    async ({ locale, tab, testId }) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const el = await mount(phoneApi());
+        await selectTab(el, tab);
+        const found = table(el, testId);
+        await found.updateComplete;
+        expectRowMenusOnScreen(found, 2);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

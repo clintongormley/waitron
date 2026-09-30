@@ -8,6 +8,7 @@ import {
   menuDocument,
   mountWidget,
 } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,
@@ -30,7 +31,7 @@ import type { MenuPricesTable } from "../widgets/menu-prices-table.js";
 import type { MemberListEditor } from "../widgets/member-list-editor.js";
 import type { MenuStructureTree } from "../widgets/menu-structure-tree.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
@@ -4235,4 +4236,43 @@ describe("the name forms", () => {
     expect(await bottom(el, form.form)).toBe("");
     expect(save().disabled).toBe(false);
   });
+});
+
+// At 390 px the list takes its narrow layout, which wraps the name and never scrolls sideways (the
+// phone-width case above); from about 480 px the Status column returns and a long name overflows.
+describe("the menus list just wider than its narrow layout", () => {
+  it.each(["en-GB", "es-ES"])(
+    "keeps every menu row's menu on screen and uncovered while the other columns scroll sideways (600 px, %s)",
+    async (locale) => {
+      const longMenus: CatalogueSummary[] = [
+        {
+          id: "menu-lunch",
+          name: "Menú-del-mediodía-de-lunes-a-viernes-con-postre",
+          active: true,
+          version: 1,
+        },
+        menus[1]!,
+      ];
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(600, 844);
+        expect(window.innerWidth).toBe(600);
+        const el = await mount(api({ listCatalogues: vi.fn().mockResolvedValue(longMenus) }));
+        await vi.waitFor(async () => {
+          await table(el).updateComplete;
+          expect(table(el).shadowRoot.querySelectorAll("tbody tr")).toHaveLength(2);
+          expect(
+            [...table(el).shadowRoot.querySelectorAll("thead th")].map((th) => text(th)),
+          ).toContain(t("menus.status"));
+        });
+        expectRowMenusOnScreen(table(el), longMenus.length);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

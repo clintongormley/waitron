@@ -1,9 +1,10 @@
-import { userEvent } from "vitest/browser";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { LabelsPanel } from "./labels-panel.js";
 import type { DashboardApi, LabelSummary } from "../api/client.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
@@ -451,4 +452,33 @@ it("starts again when reopened: no messages and Save working", async () => {
   expect(nameInput(el).error).toBe("");
   expect(await bottomOf(el)).toBe("");
   expect(saveButton(el).hasAttribute("disabled")).toBe(false);
+});
+
+describe("the labels table at phone width", () => {
+  // A long unbroken label name widens the name column past a phone's screen.
+  const longLabel: LabelSummary = {
+    id: "l-long",
+    name: "Bebidas-alcoholicas-de-la-carta-de-verano-en-la-terraza",
+    productCount: 12,
+  };
+  it.each(["en-GB", "es-ES"])(
+    "keeps every label row's menu on screen and uncovered at 390 px while the other columns scroll sideways (%s)",
+    async (locale) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      const before = currentLocale();
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const fx = apiFixture();
+        fx.api.listLabels.mockResolvedValue([alcoholic, longLabel]);
+        const { el } = await mount(fx);
+        expectRowMenusOnScreen(table(el), 2);
+      } finally {
+        setLocale(before);
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

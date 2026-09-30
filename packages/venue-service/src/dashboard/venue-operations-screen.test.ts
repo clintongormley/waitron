@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
@@ -1974,4 +1975,66 @@ describe("the setting for the reminder to fire the next group", () => {
       "30 minutos",
     ]);
   });
+});
+
+describe("the venue tables at phone width", () => {
+  // A long name in each table's first column widens it past a 390 px screen.
+  const phoneModel: VenueServiceView = {
+    ...model,
+    departments: [
+      { ...model.departments[0]!, name: "Restaurante, terraza y barra de la planta principal" },
+      model.departments[1]!,
+    ],
+    hours: [
+      ...model.hours,
+      { departmentId: "d1", weekday: 2, opensAt: "12:00:00", closesAt: "23:00:00" },
+    ],
+    floorZones: [
+      { id: "z1", name: "Comedor principal junto a la terraza del jardín" },
+      model.floorZones[1]!,
+    ],
+    menus: [
+      { id: "m1", name: "Carta de temporada de la casa con maridajes y postres", active: true },
+      model.menus[1]!,
+    ],
+    products: [{ id: "p1", name: "Negroni de la casa con naranja amarga y vermú rojo" }],
+    routes: [
+      ...model.routes,
+      {
+        id: "r2",
+        zoneId: null,
+        categoryId: null,
+        productId: "p1",
+        stationId: "s1",
+        noPreparation: false,
+      },
+    ],
+  };
+  const tables: { name: string; tab: string; open?: string; rows: number }[] = [
+    { name: "departments", tab: "departments", rows: phoneModel.departments.length },
+    { name: "hours", tab: "departments", rows: phoneModel.hours.length },
+    { name: "zones", tab: "zones", rows: phoneModel.floorZones.length },
+    { name: "zone-menus", tab: "zones", open: "zone-menus-z1", rows: 1 },
+    { name: "preparation-routes", tab: "routing", rows: phoneModel.routes.length },
+  ];
+  it.each(tables.flatMap((table) => ["en", "es"].map((locale) => ({ ...table, locale }))))(
+    "keeps every $name row's menu on screen and uncovered while the other columns scroll sideways (390 px, $locale)",
+    async ({ name, tab, open, rows, locale }) => {
+      const width = window.innerWidth,
+        height = window.innerHeight;
+      try {
+        setLocale(locale);
+        await page.viewport(390, 844);
+        expect(window.innerWidth).toBe(390);
+        const el = await mount({
+          load: vi.fn().mockResolvedValue(phoneModel),
+        } as unknown as VenueServiceApi);
+        await selectTab(el, tab);
+        if (open) await action(el, open);
+        expectRowMenusOnScreen(table(el, name), rows);
+      } finally {
+        await page.viewport(width, height);
+      }
+    },
+  );
 });

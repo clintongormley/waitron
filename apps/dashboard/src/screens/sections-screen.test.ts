@@ -1,5 +1,7 @@
+import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, customSquarePixels, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { SectionsScreen } from "./sections-screen.js";
 import type {
   CategorySummary,
@@ -11,7 +13,7 @@ import type {
 } from "../api/client.js";
 import type { MemberListEditor } from "../widgets/member-list-editor.js";
 import type { SectionAddProducts } from "../widgets/section-add-products.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 
 afterEach(cleanupWidgets);
@@ -1653,3 +1655,32 @@ it("offers Edit from each row's actions", async () => {
   await vi.waitFor(() => expect(modal(el, "editor").open).toBe(true));
   expect(field(el, "internalName").value).toBe("Beer");
 });
+
+it.each(["en-GB", "es-ES"])(
+  "keeps every section row's menu on screen and uncovered while the other columns scroll sideways (390 px, %s)",
+  async (locale) => {
+    const longSections = sections().map((section) =>
+      section.id === "s-fav"
+        ? { ...section, internalName: "Favoritos-de-la-casa-para-compartir-en-la-terraza" }
+        : section,
+    );
+    const width = window.innerWidth,
+      height = window.innerHeight;
+    const before = currentLocale();
+    try {
+      setLocale(locale);
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      const el = await mount(api({ listSections: vi.fn().mockResolvedValue(longSections) }));
+      await vi.waitFor(() =>
+        expect(table(el).shadowRoot.textContent).toContain(
+          "Favoritos-de-la-casa-para-compartir-en-la-terraza",
+        ),
+      );
+      expectRowMenusOnScreen(table(el), shown(el).length);
+    } finally {
+      setLocale(before);
+      await page.viewport(width, height);
+    }
+  },
+);
