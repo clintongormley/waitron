@@ -3491,7 +3491,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `APPROVER_REFUSALS` in `apps/till/src/till-app.ts` names `person.not_found` and
         `person.suspended`, which an approver's PIN check stopped returning when every login
         failure became `pin.invalid` (C95, #930). **Next action:** drop the two entries.
-    - _Done by lane B item B11c (2026-09-30):_ comps, discounts and Cancel work on a stored open
+    - _Done by lane B item B11c (2026-09-30, #938, main `a9f58e0a5`):_ comps, discounts and Cancel work on a stored open
       counter order — a bill moved from a table, a split or edit of one, and an order parked at the
       counter — with the same reasons, limits and approvals as a table's bill (owner, 2026-09-30).
       The server takes an adjustment on any open order (`planAdjustment`,
