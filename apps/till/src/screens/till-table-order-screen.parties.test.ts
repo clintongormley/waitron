@@ -334,7 +334,7 @@ describe("till-table-order-screen: the bill request", () => {
       "Cuenta pedida",
     );
     expect(bills(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
-      "Anular la cuenta pedida de Ana",
+      "Anular la petición de cuenta de Ana",
     );
   });
 });

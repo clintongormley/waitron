@@ -1,9 +1,9 @@
 import type { ExtraSelection, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { randomUUID } from "node:crypto";
+import { clearBillRequestIfPaid } from "./bill-request.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
 // its codes.
-import { clearBillRequestIfPaid } from "./bill-request.js";
 import "./errors.js";
 import { and, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import {

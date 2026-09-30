@@ -102,16 +102,19 @@ export async function readBillSignals(
   billIds: readonly string[],
   nowMs: number,
 ): Promise<Map<string, KitchenSignal[]>> {
-  const lines = await readKitchenLines(tx, billIds);
-  return new Map(
-    billIds.map((billId) => [
-      billId,
-      kitchenSignals(
-        lines.filter((line) => line.billId === billId),
-        nowMs,
-      ),
-    ]),
-  );
+  const lines = groupBy(await readKitchenLines(tx, billIds), (line) => line.billId);
+  return new Map(billIds.map((billId) => [billId, kitchenSignals(lines.get(billId) ?? [], nowMs)]));
+}
+
+/** The rows grouped by `key`, each group in the rows' own order. */
+function groupBy<T>(rows: readonly T[], key: (row: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const group = groups.get(key(row));
+    if (group === undefined) groups.set(key(row), [row]);
+    else group.push(row);
+  }
+  return groups;
 }
 
 /**
@@ -142,11 +145,15 @@ export async function readPartySignals(
       ),
     )
     .groupBy(workingOrders.id);
-  const kitchen = await readKitchenLines(
-    tx,
-    bills.map((bill) => bill.id),
+  const billsByParty = groupBy(bills, (bill) => bill.partyId!);
+  const kitchen = groupBy(
+    await readKitchenLines(
+      tx,
+      bills.map((bill) => bill.id),
+    ),
+    (line) => line.billId,
   );
-  const unavailable = await tx
+  const unavailableRows = await tx
     .select({
       groupId: orderGroups.id,
       partyId: orderGroups.partyId,
@@ -173,6 +180,7 @@ export async function readPartySignals(
       asc(workingOrders.orderNumber),
       asc(workingOrderLines.lineNo),
     );
+  const unavailable = groupBy(unavailableRows, (row) => row.partyId);
   const drafting = new Set(
     (
       await tx
@@ -192,9 +200,7 @@ export async function readPartySignals(
 
   const signals = new Map<string, TableSignal[]>();
   for (const party of seated) {
-    const family = new Set(families.get(party.id));
-    const own = bills.filter((bill) => family.has(bill.partyId!));
-    const ownBills = new Set(own.map((bill) => bill.id));
+    const own = families.get(party.id)!.flatMap((id) => billsByParty.get(id) ?? []);
     const list: TableSignal[] = [];
     if (own.every((bill) => bill.lines === 0) && !drafting.has(party.id)) {
       list.push({ kind: "take_order" });
@@ -207,7 +213,7 @@ export async function readPartySignals(
     }
     list.push(
       ...kitchenSignals(
-        kitchen.filter((line) => ownBills.has(line.billId)),
+        own.flatMap((bill) => kitchen.get(bill.id) ?? []),
         nowMs,
       ),
     );
@@ -219,7 +225,7 @@ export async function readPartySignals(
       });
     }
     const held = new Map<string, string[]>();
-    for (const line of unavailable.filter((row) => row.partyId === party.id)) {
+    for (const line of unavailable.get(party.id) ?? []) {
       const names = held.get(line.groupId) ?? [];
       names.push(staffPresentationName(line));
       held.set(line.groupId, names);

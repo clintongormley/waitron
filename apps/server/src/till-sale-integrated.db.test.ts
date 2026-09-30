@@ -21,6 +21,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   drawerOpens,
+  parties,
   printJobs,
   withTransaction,
   workingOrderLines,
@@ -49,12 +50,15 @@ import { SumUpCloudProvider } from "@waitron/payments-sumup";
 import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
-import { ALL_MODULES } from "./modules.js";
+import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { ServiceMode } from "@waitron/module";
+import { requestBill } from "./bill-request.js";
 import {
   addTabRound,
   createOpenOrder,
   listStationQueue,
+  listTablesWithState,
   parkOrder,
   placeOrder,
   updateOrderLine,
@@ -72,7 +76,7 @@ import { DRAWER_KICK } from "./receipt-print.js";
 import { bytesInclude } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
-import { openPartyTab } from "./testing/serve-line.js";
+import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -1876,5 +1880,154 @@ describe("an order being paid by card cannot be changed from another device (pla
     provider.release();
     expect((await paying).outcome).toBe("captured");
     expect(await markOf(id)).toBeNull();
+  });
+});
+
+describe("a party's bill request goes when a card or collect settles its last owing bill", () => {
+  /**
+   * A party at a table, asking for the bill, with one café on its tab. With `owingSibling`, a second
+   * café is split onto another bill of the party, left unpaid. For any other `serviceMode` the tab
+   * is then moved to a counter zone serving it, as `collect-by-invoice.test.ts` moves a counter
+   * bill: a tab opens only in a `table_tab` zone, and placing a bill there issues no invoice.
+   */
+  async function partyAskingForBill(serviceMode: ServiceMode, owingSibling = false) {
+    const venue = await setupVenue();
+    const { cfg, cafe } = venue;
+    const seated = await withTransaction(suite.db, async (tx) => {
+      const offers = await offerProducts(tx, cfg, { zone: "tables" });
+      const table = await createTable(tx, cfg, { label: "T1", zoneId: offers.zoneId });
+      const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId: table.id });
+      await addTabRound(tx, cfg, tabId, [
+        { menuItemId: offers.offerFor(cafe.id), quantity: owingSibling ? "2" : "1" },
+      ]);
+      if (owingSibling) await splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]);
+      if (serviceMode !== "table_tab") {
+        const elsewhere = await offerProducts(tx, cfg, { serviceMode });
+        await VENUE_SERVICE.retargetOrderContext(tx, cfg, tabId, elsewhere.zoneId);
+      }
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, partyId));
+      await requestBill(tx, partyId, true, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party!.revision,
+        operatorId: OPERATOR,
+      });
+      return { tabId, partyId, tableId: table.id };
+    });
+    return { ...venue, ...seated };
+  }
+
+  /** The tab placed, which in an `invoice_first` zone issues its invoice and leaves it outstanding. */
+  async function placed(cfg: TillConfig, tabId: string): Promise<void> {
+    await placeOrder({ db: suite.db, backend, clock }, cfg, tabId, OPERATOR, cfg.tillId);
+    expect(await outstandingSalesFor()).toHaveLength(1);
+  }
+
+  /** A captured card payment of the tab's 1.50 that no sale was filed for. */
+  async function lostCapture(tabId: string): Promise<void> {
+    await withTransaction(suite.db, (tx) =>
+      insertCapturedPayment(tx, {
+        workingOrderId: tabId,
+        provider: "stripe",
+        paymentRef: `pi-ref-${randomUUID()}`,
+        amount: decimal("1.50"),
+        settledAt: new Date(),
+        externalRef: `pi_lost_${randomUUID()}`,
+      }),
+    );
+  }
+
+  async function payByCard(cfg: TillConfig, tabId: string): Promise<void> {
+    const { deps } = integratedDeps(cfg, suite.db);
+    expect((await payWorkingOrderIntegrated(deps, cfg, { id: tabId, lines: [] })).outcome).toBe(
+      "captured",
+    );
+    expect((await orderState(tabId)).status).toBe("settled");
+  }
+
+  async function collectInCash(cfg: TillConfig, tabId: string): Promise<void> {
+    await collectOrder(
+      { db: suite.db, backend, clock },
+      cfg,
+      { id: tabId, lines: [], tender: { method: "cash", amount: "1.50" } },
+      OPERATOR,
+    );
+    expect((await orderState(tabId)).status).toBe("settled");
+  }
+
+  /** The party's stored request time, and whether the floor shows its table asking for the bill. */
+  async function request(cfg: TillConfig, partyId: string, tableId: string) {
+    return withTransaction(suite.db, async (tx) => {
+      const [party] = await tx
+        .select({ at: parties.billRequestedAt })
+        .from(parties)
+        .where(eq(parties.id, partyId));
+      const table = (await listTablesWithState(tx, cfg)).find((row) => row.id === tableId)!;
+      return {
+        billRequestedAt: party!.at,
+        shown: table.signals.some((signal) => signal.kind === "bill_requested"),
+      };
+    });
+  }
+
+  const gone = { billRequestedAt: null, shown: false };
+  const kept = { billRequestedAt: expect.any(String), shown: true };
+
+  const paths: [string, ServiceMode, (cfg: TillConfig, tabId: string) => Promise<void>][] = [
+    ["a card capture of an open bill", "table_tab", payByCard],
+    [
+      "the recovery of a card capture never filed",
+      "table_tab",
+      async (cfg, tabId) => {
+        await lostCapture(tabId);
+        await payByCard(cfg, tabId);
+      },
+    ],
+    [
+      "a card settling a presented bill's invoice",
+      "invoice_first",
+      async (cfg, tabId) => {
+        await placed(cfg, tabId);
+        await payByCard(cfg, tabId);
+      },
+    ],
+    [
+      "the recovery of a card capture of a presented bill's invoice",
+      "invoice_first",
+      async (cfg, tabId) => {
+        await placed(cfg, tabId);
+        await lostCapture(tabId);
+        await payByCard(cfg, tabId);
+      },
+    ],
+    [
+      "collecting a presented bill's invoice",
+      "invoice_first",
+      async (cfg, tabId) => {
+        await placed(cfg, tabId);
+        await collectInCash(cfg, tabId);
+      },
+    ],
+  ];
+
+  describe.each(paths)("through %s", (_name, serviceMode, settle) => {
+    it("goes when that bill was the party's last owing one", async () => {
+      const { cfg, tabId, partyId, tableId } = await partyAskingForBill(serviceMode);
+      expect(await request(cfg, partyId, tableId)).toEqual(kept);
+
+      await settle(cfg, tabId);
+
+      expect(await request(cfg, partyId, tableId)).toEqual(gone);
+    });
+
+    it("stays while another bill of the party still owes", async () => {
+      const { cfg, tabId, partyId, tableId } = await partyAskingForBill(serviceMode, true);
+
+      await settle(cfg, tabId);
+
+      expect(await request(cfg, partyId, tableId)).toEqual(kept);
+    });
   });
 });

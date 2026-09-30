@@ -593,7 +593,7 @@ describe("a bill request", () => {
     expect(await billRequestedAt(v, partyId)).toBeNull();
   });
 
-  it("stays while a merged-in party's bill still owes, until that bill is paid", async () => {
+  it("stays on the surviving party while a merged-in party's bill still owes, and goes when that bill is paid", async () => {
     const v = await setupPartyVenue(suite.db);
     const mesa2 = await v.table("Mesa 2");
     const mesa8 = await v.table("Mesa 8");
@@ -620,6 +620,13 @@ describe("a bill request", () => {
     await pay(v, into.tabId, "12.00");
 
     expect(await billRequestedAt(v, into.partyId)).toBe(requestedAt);
+
+    await pay(v, stray, "2.00");
+
+    expect(await billRequestedAt(v, into.partyId)).toBeNull();
+    expect((await floorRow(v, mesa2)).signals).not.toContainEqual(
+      expect.objectContaining({ kind: "bill_requested" }),
+    );
   });
 });
 

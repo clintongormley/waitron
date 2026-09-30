@@ -145,8 +145,8 @@ import {
   tryReadDevice,
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
-// Side-effect only: loads this host's errors.ts augmentation.
 import { requestBill } from "./bill-request.js";
+// Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
 export interface TillApiDeps {

@@ -45,8 +45,9 @@ export async function requestBill(
 }
 
 /**
- * Take away the bill request of the settled bill's party once no bill of its family is left to pay.
- * Called in the transaction that settles the bill; a bill of no party changes nothing.
+ * Take away the bill request of the party the settled bill belongs to — the one its party was merged
+ * into, if it was — once no bill of that party's family is left to pay. Called in the transaction
+ * that settles the bill; a bill of no party changes nothing.
  */
 export async function clearBillRequestIfPaid(tx: Transaction, billId: string): Promise<void> {
   const [bill] = await tx
@@ -55,10 +56,24 @@ export async function clearBillRequestIfPaid(tx: Transaction, billId: string): P
     .where(eq(workingOrders.id, billId));
   const partyId = bill?.partyId ?? null;
   if (partyId === null) return;
-  const bills = await readFamilyBills(tx, await partyFamily(tx, partyId));
+  const survivor = await survivingParty(tx, partyId);
+  const bills = await readFamilyBills(tx, await partyFamily(tx, survivor));
   if (bills.some(billOwes)) return;
   await tx
     .update(parties)
     .set({ billRequestedAt: null })
-    .where(and(eq(parties.id, partyId), isNotNull(parties.billRequestedAt)));
+    .where(and(eq(parties.id, survivor), isNotNull(parties.billRequestedAt)));
+}
+
+/** The party at the end of the party's chain of merges: itself, if it was never merged. */
+async function survivingParty(tx: Transaction, partyId: string): Promise<string> {
+  const { rows } = await tx.execute<{ id: string }>(sql`
+    with recursive chain(id, merged_into) as (
+      select id, merged_into_party_id from parties where id = ${partyId}
+      union
+      select p.id, p.merged_into_party_id from parties p join chain c on p.id = c.merged_into
+    )
+    select id from chain where merged_into is null
+  `);
+  return rows[0]!.id;
 }

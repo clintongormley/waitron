@@ -59,7 +59,6 @@ export function signalChips(
   });
 }
 
-/** Mirrors `@waitron/ui`'s `wt-table-token` `.badge.chip`, so a list and the map token match. */
 export const signalChipStyles = css`
   .chip {
     display: inline-flex;
