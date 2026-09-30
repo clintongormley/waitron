@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PersonSummary } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { roleName } from "../i18n/domain.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -32,8 +32,7 @@ function change(el: PersonEdit, testId: string, value: string): void {
 
 async function bottomOf(el: PersonEdit): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const saveOf = (el: PersonEdit): HTMLElement =>

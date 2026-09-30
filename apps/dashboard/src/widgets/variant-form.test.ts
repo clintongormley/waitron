@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "./test-helpers.js";
 import type { VariantForm } from "./variant-form.js";
 import "./variant-form.js";
 import type { ImageUploader } from "./image-upload.js";
@@ -70,8 +70,7 @@ function field(el: VariantForm, name: string) {
 
 async function bottomOf(el: VariantForm): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const saveOf = (el: VariantForm): HTMLElement =>

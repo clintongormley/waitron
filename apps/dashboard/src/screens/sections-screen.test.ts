@@ -1,6 +1,11 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, customSquarePixels, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  customSquarePixels,
+  mountWidget,
+  formMessageOf,
+} from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { SectionsScreen } from "./sections-screen.js";
 import type {
@@ -248,11 +253,10 @@ function field(el: SectionsScreen, name: string) {
   return inModal<HTMLElementTagNameMap["wt-input"]>(el, "editor", `wt-input[name="${name}"]`)!;
 }
 
-/** The one message beside a form's primary action. */
+/** A form's one message about a failed submission. */
 async function bottom(el: SectionsScreen, testId: string): Promise<string> {
   const actions = inModal<HTMLElementTagNameMap["wt-form-actions"]>(el, testId, "wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function button(el: SectionsScreen, testId: string, button: string) {

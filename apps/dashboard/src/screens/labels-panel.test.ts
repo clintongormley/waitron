@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { LabelsPanel } from "./labels-panel.js";
 import type { DashboardApi, LabelSummary } from "../api/client.js";
@@ -73,8 +73,7 @@ function saveButton(el: LabelsPanel): HTMLElement {
 }
 async function bottomOf(el: LabelsPanel): Promise<string> {
   const actions = modal(el, "label-form").querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 async function openAdd(el: LabelsPanel): Promise<void> {
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-label"]')!.click();

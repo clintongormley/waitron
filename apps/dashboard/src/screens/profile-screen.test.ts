@@ -1,6 +1,11 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  mountWidget,
+  expectNoA11yViolations,
+  formMessageOf,
+} from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -134,11 +139,10 @@ async function editDetails(el: ProfileScreen) {
   el.editDetails();
   await flush(el);
 }
-/** The one message beside the modal's action; "" when there is none. */
+/** The modal's one message about a failed submission; "" when there is none. */
 async function bottomOf(el: ProfileScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 function input(el: ProfileScreen, name: string, value: string) {
   el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(

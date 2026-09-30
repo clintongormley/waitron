@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardApi, ProductUsingUnit, Unit } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, formMessageOf, mountWidget } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { UnitsScreen } from "./units-screen.js";
 import "./units-screen.js";
@@ -287,12 +287,11 @@ describe("units-screen", () => {
     );
     await flush(el);
     await form.updateComplete;
-    const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
+    const message = await formMessageOf(form.shadowRoot!.querySelector("wt-form-actions")!);
     return {
       el,
       form,
-      bottom: actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "",
+      bottom: message?.textContent?.trim() ?? "",
       fieldError: (testId: string) =>
         form.shadowRoot!.querySelector(`[data-test=${testId}]`)!.getAttribute("error"),
     };

@@ -266,7 +266,9 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
     await el.updateComplete;
     const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
     await actions.updateComplete;
-    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector(".body [data-error]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-field-error="department-name"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });

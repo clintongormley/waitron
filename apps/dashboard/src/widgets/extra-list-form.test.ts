@@ -2,7 +2,12 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  formMessageOf,
+} from "./test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-extra-list-form`.
 import { ExtraListForm } from "./extra-list-form.js";
@@ -148,8 +153,7 @@ function text(el: ExtraListForm, testId: string): string {
 
 async function bottomOf(el: ExtraListForm): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const saveOf = (el: ExtraListForm): HTMLElementTagNameMap["wt-button"] =>

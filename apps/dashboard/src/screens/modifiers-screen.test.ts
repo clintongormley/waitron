@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
@@ -220,12 +220,11 @@ function confirmDelete(el: ModifiersScreen) {
   )!;
 }
 
-/** The message a list form shows beside its Save. */
+/** The message a list form shows about a failed Save. */
 async function bottomOf(form: OptionListForm | ExtraListForm) {
   await form.updateComplete;
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 // ---------------------------------------------------------------------------

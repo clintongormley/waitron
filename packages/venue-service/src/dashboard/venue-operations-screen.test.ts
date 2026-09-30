@@ -159,12 +159,12 @@ function tableText(el: VenueOperationsScreen, name: string) {
 function pageAlert(el: VenueOperationsScreen) {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')!.textContent!.trim();
 }
-/** The editor's one message beside its buttons. */
+/** The editor's one message, at the end of the dialog's body. */
 function bottom(el: VenueOperationsScreen) {
   return (
     el
-      .shadowRoot!.querySelector("wt-form-actions")!
-      .shadowRoot!.querySelector("[data-error]")
+      .shadowRoot!.querySelector("wt-modal")!
+      .shadowRoot!.querySelector(".body [data-error]")
       ?.textContent?.trim() ?? ""
   );
 }

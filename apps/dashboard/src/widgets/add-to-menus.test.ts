@@ -2,7 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CatalogueSummary, LibrarySection, MenuStructure } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  formMessageOf,
+} from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
 
@@ -84,8 +89,7 @@ const button = (el: AddToMenus, test: string) =>
 
 async function bottomOf(el: AddToMenus): Promise<string> {
   const actions = root(el).querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 async function tick(el: AddToMenus, box: HTMLInputElement): Promise<void> {

@@ -7,6 +7,7 @@ import {
   documentSection,
   menuDocument,
   mountWidget,
+  formMessageOf,
 } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
@@ -546,11 +547,10 @@ function inModal<T extends Element = HTMLElement>(
   return modal(el, testId).querySelector<T>(selector)!;
 }
 
-/** The one message beside the primary action of `root`'s form. */
+/** The one message about a failed submission of `root`'s form. */
 async function bottomIn(root: Element): Promise<string> {
   const actions = root.querySelector<HTMLElementTagNameMap["wt-form-actions"]>("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function bottom(el: MenusScreen, testId: string): Promise<string> {

@@ -212,10 +212,9 @@ function alert(el: AdjustmentReasonsScreen): string {
   return el.shadowRoot!.querySelector('[data-test="page-alert"]')?.textContent?.trim() ?? "";
 }
 
-/** The open form's one message, shown beside its primary action. */
+/** The open form's one message, shown at the end of the dialog's body. */
 function bottom(el: AdjustmentReasonsScreen): string {
-  const actions = modal(el)!.querySelector("wt-form-actions")!;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return modal(el)!.shadowRoot!.querySelector(".body [data-error]")?.textContent?.trim() ?? "";
 }
 
 function button(el: AdjustmentReasonsScreen, test: string): HTMLElement & { disabled: boolean } {

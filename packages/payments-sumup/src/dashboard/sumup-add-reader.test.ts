@@ -77,7 +77,9 @@ async function setInput(el: SumUpAddReader, testId: string, value: string): Prom
 async function bottomOf(el: SumUpAddReader): Promise<string> {
   const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
   await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const dialog = q(el, "wt-dialog") as HTMLElement & { updateComplete: Promise<unknown> };
+  await dialog.updateComplete;
+  return dialog.shadowRoot!.querySelector(".body [data-error]")?.textContent?.trim() ?? "";
 }
 
 function fieldError(el: SumUpAddReader, testId: string): string {

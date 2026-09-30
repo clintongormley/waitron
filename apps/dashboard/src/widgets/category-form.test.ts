@@ -5,6 +5,7 @@ import {
   closeReportsDelivered,
   customSquarePixels,
   mountWidget,
+  formMessageOf,
 } from "./test-helpers.js";
 import {
   CategoryForm,
@@ -36,8 +37,7 @@ const child: CategorySummary = {
 
 async function bottomOf(el: CategoryForm): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const nameOf = (el: CategoryForm, locale: string) =>

@@ -1,7 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type {
@@ -90,12 +90,11 @@ const editor = (el: RecipeScreen): RecipeEditor =>
 const errorKey = (el: RecipeScreen): string | null =>
   (el as unknown as { errorKey: string | null }).errorKey;
 
-/** The one message the form shows beside its action, or "" when it shows none. */
+/** The form's one message about a failed submission, or "" when it shows none. */
 async function bottomOf(form: IngredientForm): Promise<string> {
   await form.updateComplete;
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function emit(source: Element, type: string, detail?: unknown): void {

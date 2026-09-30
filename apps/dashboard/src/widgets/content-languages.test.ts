@@ -1,6 +1,11 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  formMessageOf,
+  mountWidget,
+} from "./test-helpers.js";
 import { ContentLanguageEditor } from "./content-languages.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -20,8 +25,7 @@ function click(el: ContentLanguageEditor, action: string): void {
 
 async function bottomOf(el: ContentLanguageEditor): Promise<string | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[role=alert]")?.textContent ?? null;
+  return (await formMessageOf(actions))?.textContent ?? null;
 }
 
 const disabled = (el: ContentLanguageEditor, action: string): boolean =>

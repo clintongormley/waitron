@@ -3,7 +3,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 
@@ -83,11 +83,11 @@ function change(el: PaymentsScreen, selector: string, value: string): void {
 }
 
 async function bottomOf(el: PaymentsScreen): Promise<string> {
-  const actions = q(el, "[data-test=bill-attest-dialog] wt-form-actions") as HTMLElement & {
-    updateComplete: Promise<unknown>;
-  };
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const actions = q(
+    el,
+    "[data-test=bill-attest-dialog] wt-form-actions",
+  ) as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 const errorOf = (el: PaymentsScreen, testId: string): string =>

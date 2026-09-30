@@ -151,8 +151,9 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
     });
     await press(el, "edit-c");
     await press(el, "save-editor");
-    const actions = el.shadowRoot!.querySelector("wt-modal wt-form-actions")!;
-    expect(actions.shadowRoot!.querySelector("[data-error]")).not.toBeNull();
+    const modal = el.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector(".body [data-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

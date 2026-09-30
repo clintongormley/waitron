@@ -44,7 +44,9 @@ async function bottomOf(): Promise<string> {
     "wt-modal wt-form-actions",
   )!;
   await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const modal = el.shadowRoot!.querySelector("wt-modal")!;
+  await modal.updateComplete;
+  return modal.shadowRoot!.querySelector(".body [data-error]")?.textContent?.trim() ?? "";
 }
 function field(name: string, value: string) {
   el.shadowRoot!.querySelector(`[name="${name}"]`)!.dispatchEvent(

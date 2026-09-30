@@ -13,7 +13,7 @@ import type {
   StuckPaymentResolution,
   StuckPaymentRow,
 } from "../api/client.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
@@ -366,11 +366,11 @@ async function openAdd(el: PaymentsScreen) {
   await flush(el);
 }
 async function bottomOf(el: PaymentsScreen, dialog: string): Promise<string> {
-  const actions = q(el, `[data-test=${dialog}] wt-form-actions`) as HTMLElement & {
-    updateComplete: Promise<unknown>;
-  };
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  const actions = q(
+    el,
+    `[data-test=${dialog}] wt-form-actions`,
+  ) as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 const errorOf = (el: PaymentsScreen, testId: string): string =>
   (q(el, `[data-test=${testId}]`) as HTMLElement & { error: string }).error;

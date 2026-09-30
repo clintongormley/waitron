@@ -1,6 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, formMessageOf, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type { DashboardApi, PersonSummary } from "../api/client.js";
@@ -70,14 +70,14 @@ function form(el: StaffScreen): PersonForm {
   return el.shadowRoot!.querySelector("dashboard-person-form")!;
 }
 
-function bottomOf(dialog: HTMLElement): string | undefined {
+async function bottomOf(dialog: HTMLElement): Promise<string | undefined> {
   return (
-    dialog.shadowRoot!.querySelector("wt-form-actions")!.shadowRoot!.querySelector("[data-error]")
-      ?.textContent ?? undefined
+    (await formMessageOf(dialog.shadowRoot!.querySelector("wt-form-actions")!))?.textContent ??
+    undefined
   );
 }
 
-function formErrorText(el: StaffScreen): string | undefined {
+function formErrorText(el: StaffScreen): Promise<string | undefined> {
   return bottomOf(form(el));
 }
 
@@ -375,7 +375,7 @@ describe("staff-screen", () => {
     await form(el).updateComplete;
     const email = form(el).shadowRoot!.querySelector("[data-test=email]")!;
     expect(email.getAttribute("error")).toBe(codeMessage("person.email_taken", "es-ES"));
-    const banner = formErrorText(el);
+    const banner = await formErrorText(el);
     expect(banner).toBe(t("form.fix_fields"));
     expect(banner).not.toContain("person.email_taken");
     expect(await nativeDisabled(form(el), "confirm")).toBe(false);
@@ -470,7 +470,7 @@ describe("staff-screen", () => {
     await editForm(el).updateComplete;
     expect(email.getAttribute("error")).toBe("");
     await editForm(el).shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
-    expect(bottomOf(editForm(el))).toBe(codeMessage("connection.failed", "es-ES"));
+    expect(await bottomOf(editForm(el))).toBe(codeMessage("connection.failed", "es-ES"));
   });
 
   it("opens the existing inactive user when a create reuses their email", async () => {
@@ -563,8 +563,8 @@ describe("staff-screen", () => {
     await flush(el);
 
     expect(form(el).error).toBe("pin.too_short");
-    expect(formErrorText(el)).toContain(codeMessage("pin.too_short", "es-ES"));
-    expect(formErrorText(el)).not.toContain("pin.too_short");
+    expect(await formErrorText(el)).toContain(codeMessage("pin.too_short", "es-ES"));
+    expect(await formErrorText(el)).not.toContain("pin.too_short");
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
@@ -738,7 +738,7 @@ describe("staff-screen — row edit", () => {
 
     expect(editForm(el).error).toBe("authorization.not_permitted");
     await editForm(el).shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
-    expect(bottomOf(editForm(el))).toBe(codeMessage("authorization.not_permitted", "es-ES"));
+    expect(await bottomOf(editForm(el))).toBe(codeMessage("authorization.not_permitted", "es-ES"));
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 

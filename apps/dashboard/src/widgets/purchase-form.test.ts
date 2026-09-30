@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
@@ -39,8 +39,7 @@ async function click(el: PurchaseForm, testId: string): Promise<void> {
 
 async function bottomOf(el: PurchaseForm): Promise<Element | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]");
+  return formMessageOf(actions);
 }
 
 const errorOf = (el: PurchaseForm, testId: string): string | null =>

@@ -9,7 +9,7 @@ import type {
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, formMessageOf, mountWidget } from "./test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
@@ -226,8 +226,7 @@ async function click(el: MenuPricesTable, testId: string): Promise<void> {
 
 async function bottomOf(el: MenuPricesTable): Promise<string> {
   const actions = modal(el).querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return text(actions.shadowRoot!.querySelector("[data-error]"));
+  return text(await formMessageOf(actions));
 }
 
 const saveOf = (el: MenuPricesTable): HTMLElement =>

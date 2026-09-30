@@ -20,7 +20,12 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountWidget,
+  formMessageOf,
+} from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";
@@ -562,11 +567,10 @@ describe("catalogue-screen", () => {
     await flush(el);
     await form.updateComplete;
   }
-  /** The one message a form shows beside its primary action, or "" when it shows none. */
+  /** A form's one message about a failed submission, or "" when it shows none. */
   async function bottomOf(form: Element): Promise<string> {
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
-    return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+    return (await formMessageOf(actions))?.textContent?.trim() ?? "";
   }
   const errorBeside = (form: Element, selector: string): string =>
     form.shadowRoot!.querySelector<HTMLElement & { error: string }>(selector)!.error;

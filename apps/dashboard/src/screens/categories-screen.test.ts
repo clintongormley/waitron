@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
 import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
@@ -714,10 +714,7 @@ it.each([
       expect(form.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
     }
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
-    expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
-      t("form.fix_fields"),
-    );
+    expect((await formMessageOf(actions))!.textContent!.trim()).toBe(t("form.fix_fields"));
     expect(
       form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
         .disabled,
@@ -1503,11 +1500,10 @@ async function openMainCategory(el: CategoriesScreen, remove: boolean) {
   await mainCategoryCombobox(el).updateComplete;
   return dialog;
 }
-/** The main-category dialog's one message, drawn beside Save inside its action row. */
-async function besideSave(dialog: Element): Promise<string | null> {
+/** The main-category dialog's one message about a failed Save. */
+async function saveMessage(dialog: Element): Promise<string | null> {
   const actions = dialog.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? null;
+  return (await formMessageOf(actions))?.textContent?.trim() ?? null;
 }
 function mainCategoryCombobox(el: CategoriesScreen) {
   return el.shadowRoot!.querySelector<
@@ -1648,10 +1644,7 @@ it("puts a refused parent beside the parent field, and says to correct it beside
   };
   await vi.waitFor(() => expect(besideParent()).toBe("Check the form and try again"));
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  await actions.updateComplete;
-  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
-    t("form.fix_fields"),
-  );
+  expect((await formMessageOf(actions))!.textContent!.trim()).toBe(t("form.fix_fields"));
   expect(form.open).toBe(true);
 });
 
@@ -1876,7 +1869,7 @@ it("explains a refused main-category save and keeps its dialog open", async () =
   const dialog = await openMainCategory(el, true);
   dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
   await vi.waitFor(async () =>
-    expect(await besideSave(dialog)).toBe(codeMessage("category.not_found")),
+    expect(await saveMessage(dialog)).toBe(codeMessage("category.not_found")),
   );
   expect(alertTexts(dialog)).toEqual([]);
   expect(dialog.open).toBe(true);
@@ -1999,7 +1992,7 @@ it.each(["Cancel", "a close"])(
     await openProducts(el, "food");
     const dialog = await openMainCategory(el, true);
     dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
-    await vi.waitFor(async () => expect(await besideSave(dialog)).not.toBeNull());
+    await vi.waitFor(async () => expect(await saveMessage(dialog)).not.toBeNull());
     if (way === "Cancel") dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
     else dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
@@ -2227,7 +2220,7 @@ it.each([
     await vi.waitFor(() => expect(picker.error).toBe(codeMessage(refusal.code)));
     await el.updateComplete;
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await besideSave(dialog)).toBe(t("form.fix_fields"));
+    expect(await saveMessage(dialog)).toBe(t("form.fix_fields"));
     await vi.waitFor(() => expect(holdsFocus(picker)).toBe(true));
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2237,7 +2230,7 @@ it.each([
     await el.updateComplete;
     expect(picker.error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await besideSave(dialog)).toBeNull();
+    expect(await saveMessage(dialog)).toBeNull();
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },

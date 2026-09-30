@@ -79,7 +79,11 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
       "wt-modal wt-form-actions",
     )!;
     await actions.updateComplete;
-    expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");
+    const modal = library.shadowRoot!.querySelector("wt-modal")!;
+    await modal.updateComplete;
+    expect(modal.shadowRoot!.querySelector(".body [data-error]")!.getAttribute("role")).toBe(
+      "alert",
+    );
     await expectNoA11yViolations(host);
   });
   it("labels translated metadata fields in the edit dialog", async () => {
