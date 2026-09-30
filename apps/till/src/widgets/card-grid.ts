@@ -121,6 +121,8 @@ export class TillCardGrid extends LitElement {
   @property({ type: Boolean }) groupCommandBusy = false;
   /** A handheld form factor, whose menu browser shows fewer columns unless its card sets them. */
   @property({ type: Boolean }) handheld = false;
+  /** The app opens a station's view from the floor: false on a device without one. */
+  @property({ type: Boolean }) canOpenStation = false;
 
   readonly #browserProducts = memoVisibleProducts();
 
@@ -216,6 +218,7 @@ export class TillCardGrid extends LitElement {
           .tables=${this.tables}
           .api=${this.api}
           .canExitToCounter=${false}
+          .canOpenStation=${this.canOpenStation}
         ></till-floor-screen>`;
       case "expo":
         return html`<till-expo-screen

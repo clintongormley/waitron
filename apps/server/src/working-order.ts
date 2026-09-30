@@ -7,9 +7,11 @@ import {
 import type { ExtraChild, ExtraProductFacts } from "./modifier-selection.js";
 import type {
   ExtraSelection,
+  KitchenSignal,
   OptionSelection,
   OptionSnapshot,
   SaleLineClassification,
+  TableSignal,
 } from "@waitron/shared";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 // Side-effect only: keeps this host's error registry (errors.ts) reachable from a file that throws
@@ -127,6 +129,8 @@ import { issueMoment } from "./issue-moment.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { readUnsentDrafts } from "./order-drafts.js";
+import { readBillSignals, readPartySignals, tableSignals } from "./table-signals.js";
+import type { SeatedPartyFacts } from "./table-signals.js";
 import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
@@ -156,6 +160,7 @@ import {
 import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
+import type { Logger } from "./logger.js";
 import type { TillConfig } from "./till-config.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
@@ -181,6 +186,8 @@ export interface TillSaleDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
+  /** Where a failure that must not undo the sale or attempt around it is logged. */
+  log?: Logger;
 }
 
 type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
@@ -663,7 +670,7 @@ export function screenNote(value: unknown): string | null {
 }
 
 /** A line's product can be sold now: Active and Available, and so is its parent for a variant. */
-const productSellable = sql<number>`(${products.active} and ${products.available}
+export const productSellable = sql<number>`(${products.active} and ${products.available}
   and (${parentProducts.id} is null or (${parentProducts.active} and ${parentProducts.available})))`;
 
 const storedLineColumns = {
@@ -2998,6 +3005,8 @@ export interface HeldOrderSummary {
   outstanding: string;
   /** A payment is pending or received on the bill, one given back in full included. */
   hasPayments: boolean;
+  /** The bill's own dishes ready or waiting long, which the counter's list shows. */
+  signals: KitchenSignal[];
   /** Null for a counter order; a party's bill is listed here too. */
   partyId: string | null;
   openedAt: string;
@@ -3102,10 +3111,9 @@ export async function listHeldOrders(
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
-    const { received, holding } = await readPaymentsByBill(
-      tx,
-      rows.map((row) => row.id),
-    );
+    const ids = rows.map((row) => row.id);
+    const { received, holding } = await readPaymentsByBill(tx, ids);
+    const signals = await readBillSignals(tx, ids, Date.now());
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       return {
@@ -3113,6 +3121,7 @@ export async function listHeldOrders(
         total,
         outstanding: outstandingOf(total, received.get(row.id)),
         hasPayments: holding.has(row.id),
+        signals: signals.get(row.id)!,
       };
     });
   });
@@ -5280,7 +5289,10 @@ export interface TableState {
   /** The GROSS draft total of the party's open bills; present with `hasOpenTab`. */
   tabTotal?: string;
   pendingDeliveries: number;
-  /** The unserved lines of the party's open and presented bills, whatever their kitchen state. */
+  /**
+   * The unserved lines of every bill of the party's family that is not abandoned, paid ones
+   * included, whatever their kitchen state.
+   */
   pendingToServe: number;
   /** Those unserved lines whose ticket item is `ready`. */
   readyToServe: number;
@@ -5298,14 +5310,16 @@ export interface TableState {
   /** Merged from the enabled modules' floor annotators; `null` when none annotates the table. */
   nextReservation: { time: string } | null;
   party: TableParty | null;
+  /** What wants attention at the table: its party's signals, then its own clearing. */
+  signals: TableSignal[];
 }
 
 /**
  * Read the location's active tables with their occupancy. Every table a party holds shows that
- * party's bills: the open ones for its line count and total, and the open and presented ones for
- * the dishes still to serve, since a presented bill's dishes are still carried to the table. A
- * party takes precedence over a delivery. A pending delivery has kitchen items and is neither
- * collected nor abandoned.
+ * party's bills: the open ones for its line count and total, and for the dishes still to serve every
+ * bill of its family that is not abandoned, since a paid or presented bill's dishes are still
+ * carried to the table. A party takes precedence over a delivery. A pending delivery has kitchen
+ * items and is neither collected nor abandoned.
  */
 export async function listTablesWithState(
   tx: Transaction,
@@ -5338,6 +5352,13 @@ export async function listTablesWithState(
     rotation: number | null;
     needs_clearing_since: string | null;
   }>(sql`
+    -- Each seated party and every party merged into it: a bill a merged-in party kept still has its
+    -- dishes carried to the table.
+    with recursive family(root, id) as (
+      select party_id, party_id from party_tables where left_at is null
+      union
+      select f.root, p.id from parties p join family f on p.merged_into_party_id = f.id
+    )
     select
       dt.id, dt.label, dt.zone_id, dt.capacity,
       dt.pos_x, dt.pos_y, dt.shape, dt.rotation, dt.needs_clearing_since,
@@ -5376,11 +5397,11 @@ export async function listTablesWithState(
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
-             -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved,
-             -- FIRED (ti.id is not null) line, one JSON object per line -- never a band label (§3's
-             -- raw-material-in-SQL, classified-in-JS split), reduced with classifyBand/worstBand in
-             -- JS below. An unfired line (no ticket_items row) has not reached a station yet, so it
-             -- carries no stamp and is excluded, same as a served one.
+             -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved
+             -- line with a ticket item (ti.id is not null), a HELD one included, one JSON object per
+             -- line -- never a band label (§3's raw-material-in-SQL, classified-in-JS split), reduced
+             -- with classifyBand/worstBand in JS below. A line never sent has no ticket_items row and
+             -- is excluded, same as a served one.
              --
              -- json_group_array(json_object(...)) in place of PostgreSQL's aggregate pair:
              -- those two are PostgreSQL names and this engine does not have them. The result is
@@ -5394,8 +5415,9 @@ export async function listTablesWithState(
                )
              ) filter (where wol.served_at is null and ti.id is not null) as unserved_lines
       from party_tables pt
+      join family f on f.root = pt.party_id
       join working_orders wo
-        on wo.party_id = pt.party_id and wo.status in ('open', 'placed')
+        on wo.party_id = f.id and wo.status <> 'abandoned'
       left join working_order_lines wol
         on wol.working_order_id = wo.id
       left join ticket_items ti
@@ -5427,10 +5449,11 @@ export async function listTablesWithState(
     order by dt.label
   `);
 
-  const seated = await readSeatedParties(tx, loc);
-
+  const { seated, facts } = await readSeatedParties(tx, loc);
   // Not the `now` parameter, which is the VENUE clock the annotators take and a caller may supply.
   const nowMs = Date.now();
+  const partySignals = await readPartySignals(tx, [...new Set(seated.values())], facts, nowMs);
+
   const states = result.rows.map((r) => {
     const hasOpenTab = Number(r.open_bills) > 0;
     const party = seated.get(r.id);
@@ -5472,6 +5495,10 @@ export async function listTablesWithState(
       rotation: r.rotation,
       nextReservation: null as { time: string } | null,
       party: party ?? null,
+      signals: tableSignals(
+        party === undefined ? undefined : partySignals.get(party.id),
+        r.needs_clearing_since,
+      ),
       ...(hasOpenTab
         ? {
             tabLineCount: Number(r.tab_line_count),
@@ -5495,11 +5522,14 @@ export async function listTablesWithState(
   return states;
 }
 
-/** Each table of the location a party holds, with the party. */
+/**
+ * Each table of the location a party holds, with the party, and what else was read of each party,
+ * keyed by party.
+ */
 async function readSeatedParties(
   tx: Transaction,
   locationId: string,
-): Promise<Map<string, TableParty>> {
+): Promise<{ seated: Map<string, TableParty>; facts: Map<string, SeatedPartyFacts> }> {
   const members = await tx
     .select({
       tableId: partyTables.tableId,
@@ -5509,6 +5539,7 @@ async function readSeatedParties(
       state: parties.state,
       name: parties.name,
       mainBillId: parties.mainBillId,
+      billRequestedAt: parties.billRequestedAt,
     })
     .from(partyTables)
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
@@ -5521,6 +5552,7 @@ async function readSeatedParties(
   const unsentDrafts = await readUnsentDrafts(tx, partyIds);
   const reminders = await readReleaseReminders(tx, partyIds);
   const partyOf = new Map<string, TableParty>();
+  const facts = new Map<string, SeatedPartyFacts>();
   for (const member of members) {
     const known = partyOf.get(member.partyId);
     if (known !== undefined) {
@@ -5528,6 +5560,7 @@ async function readSeatedParties(
       continue;
     }
     const own = bills.get(member.partyId)!;
+    facts.set(member.partyId, { bills: own, billRequestedAt: member.billRequestedAt });
     partyOf.set(member.partyId, {
       id: member.partyId,
       revision: member.revision,
@@ -5543,5 +5576,8 @@ async function readSeatedParties(
       reminder: reminders.get(member.partyId)!,
     });
   }
-  return new Map(members.map((member) => [member.tableId, partyOf.get(member.partyId)!]));
+  return {
+    seated: new Map(members.map((member) => [member.tableId, partyOf.get(member.partyId)!])),
+    facts,
+  };
 }

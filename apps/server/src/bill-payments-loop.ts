@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { codeOf } from "@waitron/server-kit";
 import { findPaymentByBillPayment } from "@waitron/payments";
@@ -19,6 +18,7 @@ import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
 import type { TillConfig } from "./till-config.js";
 import type { TillSaleResult } from "./till-sale.js";
+import type { TillSaleDeps } from "./working-order.js";
 import "./errors.js";
 
 /**
@@ -48,10 +48,7 @@ export function refundLookupGapMs(sentAgeMs: number): number {
  * restart every pending refund is looked up once on the first pass. */
 const lastLookupsOf = perDatabase(() => new Map<string, number>());
 
-export interface BillPaymentsLoopDeps {
-  db: Database;
-  backend: FiscalBackend;
-  clock: TrustedClock;
+export interface BillPaymentsLoopDeps extends TillSaleDeps {
   /** The box's till configuration; an invoice is filed on the bill payment's own till. */
   cfg: TillConfig;
   /** The card providers pending refunds are looked up at; without it none is looked up. */

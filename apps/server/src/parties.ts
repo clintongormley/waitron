@@ -389,8 +389,20 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
         )
     ).map((sale) => sale.workingOrderId),
   );
-  return bills.map((bill) => ({ ...bill, receiptAvailable: filed.has(bill.workingOrderId) }));
+  return bills.map((bill) => ({
+    workingOrderId: bill.workingOrderId,
+    partyId: bill.partyId,
+    label: bill.label,
+    status: bill.status,
+    total: bill.total,
+    outstanding: bill.outstanding,
+    hasPayments: bill.hasPayments,
+    receiptAvailable: filed.has(bill.workingOrderId),
+  }));
 }
+
+/** A bill as {@link readBillsOfParties} reads it, with how many lines it holds. */
+export type FamilyBill = Omit<PartyBill, "receiptAvailable"> & { lines: number };
 
 /**
  * {@link readPartyBills} for several parties at once, keyed by each party asked about, without
@@ -399,7 +411,7 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
 export async function readBillsOfParties(
   tx: Transaction,
   partyIds: readonly string[],
-): Promise<Map<string, Omit<PartyBill, "receiptAvailable">[]>> {
+): Promise<Map<string, FamilyBill[]>> {
   if (partyIds.length === 0) return new Map();
   const families = await partyFamilies(tx, partyIds);
   const members = [...new Set([...families.values()].flat())];
@@ -410,6 +422,7 @@ export async function readBillsOfParties(
       label: workingOrders.label,
       status: workingOrders.status,
       total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
+      lines: sql<number>`count(${workingOrderLines.id})`,
     })
     .from(workingOrders)
     .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
@@ -420,7 +433,7 @@ export async function readBillsOfParties(
     tx,
     rows.map((row) => row.workingOrderId),
   );
-  const bills = rows.map((row): Omit<PartyBill, "receiptAvailable"> => {
+  const bills = rows.map((row): FamilyBill => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
     return {
@@ -433,6 +446,7 @@ export async function readBillsOfParties(
         ? outstandingOf(total, received.get(row.workingOrderId))
         : centsToDecimal(0),
       hasPayments: holding.has(row.workingOrderId),
+      lines: row.lines,
     };
   });
   return new Map(
@@ -473,20 +487,8 @@ export async function finishTable(
   const { partyId } = args;
   await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
 
-  const family = await partyFamily(tx, partyId);
-  const bills = await tx
-    .select({
-      id: workingOrders.id,
-      status: workingOrders.status,
-      lines: sql<number>`count(${workingOrderLines.id})`,
-    })
-    .from(workingOrders)
-    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
-    .where(inArray(workingOrders.partyId, family))
-    .groupBy(workingOrders.id);
-  if (
-    bills.some((bill) => bill.status === "placed" || (bill.status === "open" && bill.lines > 0))
-  ) {
+  const bills = await readFamilyBills(tx, await partyFamily(tx, partyId));
+  if (bills.some(billOwes)) {
     throw new AppError("party.bill_outstanding", { partyId });
   }
   const empty = bills.filter((bill) => bill.status === "open").map((bill) => bill.id);
@@ -509,6 +511,28 @@ export async function finishTable(
     .where(eq(parties.id, partyId));
   await leaveForClearing(tx, tables, at);
   return { state: "closed" };
+}
+
+/** Each bill of these parties with how many lines it holds. */
+export async function readFamilyBills(
+  tx: Transaction,
+  family: readonly string[],
+): Promise<{ id: string; status: PartyBill["status"]; lines: number }[]> {
+  return tx
+    .select({
+      id: workingOrders.id,
+      status: workingOrders.status,
+      lines: sql<number>`count(${workingOrderLines.id})`,
+    })
+    .from(workingOrders)
+    .leftJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+    .where(inArray(workingOrders.partyId, [...family]))
+    .groupBy(workingOrders.id);
+}
+
+/** A bill still to pay: presented, or open with a line on it. */
+export function billOwes(bill: { status: PartyBill["status"]; lines: number }): boolean {
+  return bill.status === "placed" || (bill.status === "open" && bill.lines > 0);
 }
 
 /** The table is ready for the next party. Clearing a table that does not need it is not refused. */

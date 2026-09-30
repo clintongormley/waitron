@@ -112,12 +112,7 @@ describe("seedFloor", () => {
       expect(table.shape).not.toBeNull();
     }
 
-    expect(res.statuses.map((s) => s.label)).toEqual([
-      "Free",
-      "Occupied",
-      "Reserved",
-      "Bill requested",
-    ]);
-    expect(new Set(res.statuses.map((s) => s.color)).size).toBe(4);
+    expect(res.statuses.map((s) => s.label)).toEqual(["Free", "Occupied", "Reserved"]);
+    expect(new Set(res.statuses.map((s) => s.color)).size).toBe(3);
   });
 });

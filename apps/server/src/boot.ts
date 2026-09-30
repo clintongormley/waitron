@@ -1964,6 +1964,7 @@ async function bootServer(
           clock: tillClock,
           cfg: till,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+          log,
         }),
       () => holders.singletonRole.current,
       log,

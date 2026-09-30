@@ -317,6 +317,40 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     },
   );
 
+  it("has no violations in the party's bills with the bill requested", async () => {
+    const asked: TableState = {
+      id: "t4",
+      label: "Mesa 4",
+      zoneId: null,
+      capacity: null,
+      state: "open-tab",
+      condition: "held",
+      hasOpenTab: true,
+      pendingDeliveries: 0,
+      pendingToServe: 0,
+      readyToServe: 0,
+      enRoute: 0,
+      timingBand: "fresh",
+      status: null,
+      nextReservation: null,
+      posX: null,
+      posY: null,
+      shape: null,
+      rotation: null,
+      party,
+      signals: [{ kind: "bill_requested", requestedAt: "2026-09-30T20:00:00.000Z" }],
+    };
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      { products, lines: [], statuses, orderId: "wo-1", party, bills: partyBills, tables: [asked] },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-cancel-bill-request]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   describe("the draft's actions", () => {
     /** Rings two cafés, checks the first when `select` is set, and lets the nested widgets settle. */
     async function withDraft(over: Partial<TillTableOrderScreen>, select: boolean) {
@@ -626,6 +660,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       posY: null,
       shape: null,
       rotation: null,
+      signals: [],
       party: null,
       ...over,
     });

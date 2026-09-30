@@ -92,6 +92,7 @@ export {
 export type { ContentLanguages } from "./content-languages.js";
 export { BAND_RANK, classifyBand, worstBand } from "./timing.js";
 export type { StationThresholds, TimingBand } from "./timing.js";
+export type { KitchenSignal, ReadyAtStation, TableSignal } from "./table-signals.js";
 export { perDishOptionQuantity } from "./quantity.js";
 export { draftLineMergeKey, normaliseDraftLines } from "./draft-merge.js";
 export type { MergeableDraftLine } from "./draft-merge.js";

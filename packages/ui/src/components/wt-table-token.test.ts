@@ -174,6 +174,70 @@ describe("the fire-due chip", () => {
   });
 });
 
+describe("the signal chips", () => {
+  const chips = (el: HTMLElement) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-chip]"),
+  ];
+
+  test("shows each chip's words in the badges, in the order given, keyed by the consumer", async () => {
+    const el = await mountToken(
+      table({
+        state: "open-tab",
+        chips: [
+          { key: "ready", text: "Bar: 3 ready", tone: "success" },
+          { key: "bill-requested", text: "Bill requested", tone: "primary-filled" },
+        ],
+      }),
+    );
+    expect(chips(el).map((chip) => [chip.dataset.chip, chip.textContent!.trim()])).toEqual([
+      ["ready", "Bar: 3 ready"],
+      ["bill-requested", "Bill requested"],
+    ]);
+    expect(chips(el).every((chip) => chip.closest(".badges") !== null)).toBe(true);
+  });
+
+  test("shows no chip for a table that carries none", async () => {
+    const empty = await mountToken(table({ state: "open-tab", chips: [] }));
+    const absent = await mountToken(table({ state: "open-tab" }));
+    expect(chips(empty)).toEqual([]);
+    expect(chips(absent)).toEqual([]);
+  });
+
+  test.each([
+    ["success", "--wt-color-success"],
+    ["primary", "--wt-color-primary"],
+    ["warning", "--wt-color-warning"],
+    ["danger", "--wt-color-danger"],
+  ] as const)(
+    "a %s chip paints its words on the neutral chip tokens with %s as its border",
+    async (tone, token) => {
+      const el = await mountToken(
+        table({ state: "open-tab", chips: [{ key: "k", text: "Words", tone }] }),
+      );
+      host.style.setProperty(token, "rgb(4, 5, 6)");
+      host.style.setProperty("--wt-color-surface-raised", "rgb(7, 8, 9)");
+      host.style.setProperty("--wt-color-text", "rgb(10, 11, 12)");
+      const style = getComputedStyle(chips(el)[0]!);
+      expect(style.borderTopColor).toBe("rgb(4, 5, 6)");
+      expect(style.borderTopStyle).toBe("solid");
+      expect(style.backgroundColor).toBe("rgb(7, 8, 9)");
+      expect(style.color).toBe("rgb(10, 11, 12)");
+    },
+  );
+
+  test("a primary-filled chip paints on the primary and on-primary tokens", async () => {
+    const el = await mountToken(
+      table({ state: "open-tab", chips: [{ key: "k", text: "Words", tone: "primary-filled" }] }),
+    );
+    host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-color-on-primary", "rgb(10, 11, 12)");
+    const style = getComputedStyle(chips(el)[0]!);
+    expect(style.backgroundColor).toBe("rgb(4, 5, 6)");
+    expect(style.borderTopColor).toBe("rgb(4, 5, 6)");
+    expect(style.color).toBe("rgb(10, 11, 12)");
+  });
+});
+
 describe("the unsent-order mark", () => {
   const unsent = (el: HTMLElement) => el.shadowRoot!.querySelector<HTMLElement>("[data-unsent]");
   const shown = (el: HTMLElement) => {

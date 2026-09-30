@@ -122,12 +122,13 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Eleven of the service plan's
-   eighteen tasks have landed (0–9 and 14; Task 9, marking dishes served, as #814). Left: the
-   attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12),
+1. **Finish table service and paying a bill in parts** (A4, lane B). Thirteen of the service
+   plan's eighteen tasks are done: 0–9, 13 and 14 have landed (Task 9, marking dishes served, as
+   #814; Task 13, standalone ordering, as #903), and 10, the attention signals, is on branch
+   `feat/service-service-dashboard`. Left: applying a cancellation,
+   comp or discount to an order (11) and its reports (12),
    several payments on the till (15 — the server side landed as #721 and nothing on
-   the till calls it yet), counter handover (16) and a table that leaves without paying (17). Task 13,
-   standalone ordering, landed as #903.
+   the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -3075,7 +3076,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         in screenshots during A117 but not measured: a round token's "Reservada 22:30" chip does
         the same. The owner chose on 2026-09-29 to land #891 with the chip inside the token and
         fix this later. **Next action:** decide whether the map keeps a token inside the plan, or
-        the chip hangs off the token's edge like "Unsent".
+        the chip hangs off the token's edge like "Unsent". _(2026-09-30, service plan Task 10: the
+        token now also carries the table's signal chips (ready per station, take order, a wait,
+        an unavailable held dish, bill requested), one row each, drawn like "Time to fire": they
+        wrap only between words and run past the token's edge. Seen in screenshots, not measured:
+        at 390 px a floor of six tables with two or three chips each overlapped so much that
+        tokens covered each other's chips; at 1280 px they did not overlap.)_
       - The map gives its "forgotten table" corner marker no spoken name. This predates the
         branch: at `700ec7f70` `wt-floor-canvas` passes its tables no such label.
     - The table screen:
@@ -3248,6 +3254,38 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     and "fires and pays a table's held standalone line after a publish makes it not sold
     separately"); the same line in a draft is refused when the draft is sent or saved, and the till
     marks it for removal.
+  - **Task 10 (the service dashboard's attention signals)** is on branch
+    `feat/service-service-dashboard` (lane B item B10, 2026-09-30). The floor read and the
+    counter's held-orders list carry a list of signals per table or order, the till shows them as
+    chips with a per-station summary of dishes ready, and a party can be marked as having asked
+    for the bill. Decided by the owner on that branch:
+    - A bill request is cleared only when a PAYMENT leaves the party's family with nothing to pay.
+      Other ways of leaving nothing owed — moving the last owing bill away, voiding its last line,
+      or asking for the bill when nothing is owed — keep the request until staff press Cancel or
+      Finish table closes the party.
+    - Merging a party that asked for the bill into another drops its request.
+    - The long-wait chip counts only dishes sent to the kitchen, not held ones.
+    - The floor's to-serve, ready and long-wait figures now include paid bills and the bills of
+      parties merged in, which reverses the figure table-actions Task 13 stated: a venue that never
+      records serving sees a paid table's dishes as waiting until Finish table.
+    - Asking for the bill and cancelling the request share one route,
+      `POST /api/parties/:id/bill-request`, with a `requested` true or false.
+    - Left open, for the owner:
+      - The floor's older waiting band (`timingBand`, which colours the card and shows "Forgotten")
+        still counts HELD dishes, from #185 (`a272c0daa`), before this branch, while the new
+        long-wait chip counts only dishes sent to the kitchen. So a table whose only work is a held
+        course queued long ago shows "Forgotten" with no wait chip. **Next action:** decide whether
+        `timingBand` should also count only dishes sent to the kitchen.
+      - The "Take order" chip has the same primary border on a neutral fill as the "Reserved"
+        badge, and the "Bill requested" chip is filled primary like the "N en camino" badge, so each
+        pair looks alike. **Next action:** decide whether the chips get tones of their own.
+      - At 390 px the map's tokens now carry chips and overlap more: see the dated note on the map
+        entry under Task 8's "The floor:" above.
+      - The till drops the bill request's late answer, a refusal included, once the waiter has
+        signed out or left the party (`#onRequestBill`, `apps/till/src/till-app.ts`). That is
+        stricter than most of C81's table actions, whose late refusals are still said on the banner
+        (Finish's refusal for a bill still unpaid and the name's own refusal are dropped there too).
+        **Next action:** decide whether a late refusal of the bill request should be said too.
   - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). Each
     sleeps `2 * SUBMIT_RETRY_PAUSE_MS + 50` ms while the retries pause on real time; one more test of
     that shape, "takes the party's revision from the floor read after a round that got no answer"
@@ -4211,6 +4249,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`apps/server/src/move-bill.ts`) also raised for Move a bill, Move guests and Join tables by
       reading the table's pointer to its bill, and which went with that pointer. The floor works out a table's open bill, its line
       count, its total and its dishes still to serve from the bills of the party holding it.
+      _(2026-09-30, service Task 10: the dishes still to serve now also count paid bills and the
+      bills of parties merged into it.)_
     - Schema, core migrations `0043`–`0045`: `0043` drops the three triggers that name or sit on a
       rebuilt table (`parties_clear_table_status`, `working_orders_release_main_bill` and
       `working_orders_release_main_bill_on_move`); `0044`, generated, rebuilds `dining_tables`

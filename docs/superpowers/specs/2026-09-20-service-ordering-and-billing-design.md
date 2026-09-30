@@ -62,7 +62,8 @@ mutually exclusive status. **Owner, 2026-09-26:** the signals are:
 - a held group due for release (§4);
 - a held item that has become unavailable (§10);
 - bill requested — a fact on the visit, set by a Bill requested action and cleared when every bill
-  is paid, not one of the venue's manual table statuses;
+  is paid, not one of the venue's manual table statuses; _(2026-09-30, Task 10: only a payment that
+  leaves nothing to pay clears the request; other ways keep it until Cancel or Finish table.)_
 - needs clearing (§8).
 
 Exact priority, thresholds and landing-view configuration remain interaction-design work. The

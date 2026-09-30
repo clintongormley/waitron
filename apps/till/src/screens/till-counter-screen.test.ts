@@ -236,6 +236,7 @@ describe("till-counter-screen", () => {
         hasPayments: false,
         partyId: null,
         openedAt: "2026-08-05T10:00:00.000Z",
+        signals: [],
       },
     ];
     const { el } = await mount({ heldOrders });

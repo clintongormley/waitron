@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { floorTrayStyles, selectStyles } from "./base-styles.js";
+import { floorChipStyles } from "./floor-chips.js";
 import { cleanup, mount } from "./test-helpers.js";
 
 afterEach(cleanup);
@@ -8,6 +9,7 @@ afterEach(cleanup);
 test.each([
   ["selectStyles", selectStyles],
   ["floorTrayStyles", floorTrayStyles],
+  ["floorChipStyles", floorChipStyles],
 ])("%s declares no literal colours", (_name, styles) => {
   expect(styles.cssText).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
 });

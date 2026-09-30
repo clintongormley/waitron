@@ -742,7 +742,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
     }
     return row;
   };
-  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, cfg: deps.cfg };
+  const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, cfg: deps.cfg, log };
 
   // Card payments towards a bill that nothing is driving any more (bill payments design §5.4).
   app.get("/management-api/payments/bill-payments", (c) =>

@@ -1507,7 +1507,8 @@ Spec §1 (the floor and counter landing views; signals that coexist; the station
 **Files:**
 - Modify:
   - `visits.bill_requested_at` (a "Bill requested" action; cleared when every bill of the visit's
-    FAMILY is paid, D2), one migration;
+    FAMILY is paid, D2), one migration; _(2026-09-30, Task 10: only a payment that leaves nothing
+    to pay clears the request; other ways keep it until Cancel or Finish table.)_
   - `listTablesWithState` returns a list of signals per table, not one status;
   - `apps/till/src/screens/till-floor-screen.ts` (the signals as coexisting chips);
   - `widgets/held-orders.ts` (the counter's tab list, showing the same signals, and tabs without a

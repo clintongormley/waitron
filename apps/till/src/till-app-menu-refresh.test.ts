@@ -913,6 +913,7 @@ const table = {
   posY: null,
   shape: null,
   rotation: null,
+  signals: [],
   party: party as typeof party | null,
 };
 

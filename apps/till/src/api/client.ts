@@ -26,9 +26,11 @@ import { compareDecimal, decimal, subtractDecimal } from "@waitron/shared";
 import type { CanvasDef, CapabilityFlag, ReceiptConfig } from "../layout.js";
 import type {
   ExtraSelection,
+  KitchenSignal,
   OptionSelection,
   OptionSnapshot,
   StationThresholds,
+  TableSignal,
   TimingBand,
 } from "@waitron/shared";
 import type { AccessibleCatalogue, OfferedModifier } from "@waitron/catalogue/src/menu-types.js";
@@ -565,6 +567,11 @@ export interface GroupCommand {
   expectedPartyRevision: number;
 }
 
+/** Record (`requested: true`) or take back the party's bill request. */
+export interface BillRequestCommand extends GroupCommand {
+  requested: boolean;
+}
+
 /** A group submission: the groups in the order they go in the party's sequence, or one held group
  * added to the existing held group `joinGroupId`. */
 export interface GroupSubmission extends GroupCommand {
@@ -740,6 +747,8 @@ export interface HeldOrderSummary {
   /** Null for a counter order; a party's own bill is listed too. */
   partyId: string | null;
   openedAt: string;
+  /** The bill's own dishes ready at a station, and its long wait. */
+  signals: KitchenSignal[];
 }
 
 /**
@@ -1277,10 +1286,10 @@ export interface MoveBillResult {
  * `"open-tab"` while a party holds it, paid or not. `hasOpenTab` says the party has an open bill,
  * and `tabLineCount`/`tabTotal` are present exactly then: the line count and gross draft total of
  * the party's open bills, the total as a two-place decimal string. `status` is the table's MANUAL
- * service status, independent of occupancy. `pendingToServe` counts the lines of the party's open
- * and presented bills still to deliver, `readyToServe` those the kitchen has bumped `ready` but the
- * waiter has not served, and `enRoute` those the pass has dispatched but the waiter has not
- * acknowledged; all three are DISTINCT from `pendingDeliveries` (uncollected counter deliveries).
+ * service status, independent of occupancy. `pendingToServe` counts the lines still to deliver,
+ * `readyToServe` those the kitchen has bumped `ready` but the waiter has not served, and `enRoute`
+ * those the pass has dispatched but the waiter has not acknowledged; all three are DISTINCT from
+ * `pendingDeliveries` (uncollected counter deliveries).
  */
 export interface TableState {
   id: string;
@@ -1299,9 +1308,11 @@ export interface TableState {
   readyToServe: number;
   enRoute: number;
   /**
-   * The worst age band across the open tab's UNSERVED lines; `"fresh"` for a free table. Only the
-   * REDUCED band is sent, not the per-line ages and thresholds, so the floor cannot re-derive it
-   * locally: it is fixed until the next `getTablesState` fetch.
+   * The worst age band across the unserved lines that have a ticket item, held ones included, of
+   * every bill of the party's family that is not abandoned, paid ones included; `"fresh"` for a free
+   * table. Only the REDUCED band is sent, not
+   * the per-line ages and thresholds, so the floor cannot re-derive it locally: it is fixed until the
+   * next `getTablesState` fetch.
    */
   timingBand: TimingBand;
   status: { id: string; label: string; color: string } | null;
@@ -1319,6 +1330,8 @@ export interface TableState {
   shape: TableShape | null;
   rotation: number | null;
   party: TableParty | null;
+  /** What wants attention at the table; several at once. */
+  signals: TableSignal[];
 }
 
 /** The rendered shape of a placed table; a server round-trip re-validates against the real vocabulary. */
@@ -2102,6 +2115,16 @@ export class TillApi {
     command: GroupCommand,
   ): Promise<{ revision: number }> {
     return this.#request(`/api/parties/${partyId}/groups/${groupId}/unsnooze`, "POST", command);
+  }
+
+  /** Record or take back the party's bill request → `POST /api/parties/:partyId/bill-request`.
+   * `billRequestedAt` is null once taken back. */
+  requestBill(
+    partyId: string,
+    command: BillRequestCommand,
+    options: ReadOptions = {},
+  ): Promise<{ revision: number; billRequestedAt: string | null }> {
+    return this.#request(`/api/parties/${partyId}/bill-request`, "POST", command, options.signal);
   }
 
   /** A party's Current orders → `GET /api/parties/:partyId/current-orders`. */

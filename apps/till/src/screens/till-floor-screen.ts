@@ -12,6 +12,7 @@ import {
   defaultTraySlot,
   floorTrayStyles,
   isTableZoneless,
+  renderFloorChips,
   resolveActiveTabKey,
   toFloorTable,
 } from "@waitron/ui";
@@ -28,6 +29,8 @@ import "../widgets/seat-dialog.js";
 import type { SeatConfirmDetail } from "../widgets/seat-dialog.js";
 import type { FloorZone, TableState, TableParty, TillApi, UnsentDraft } from "../api/client.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
+import { readyByStation, signalOf, type StationReady } from "../state/table-signals.js";
+import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 
 function needsClearing(table: TableState): boolean {
   return table.condition === "needs_clearing";
@@ -46,6 +49,11 @@ function unsentText({ ownerName, lineCount }: UnsentDraft): string {
 function shownPartyName(table: TableState): string | undefined {
   const name = table.party?.displayName;
   return name === undefined || name === table.label ? undefined : name;
+}
+
+/** The table's own Forgotten badge already says a forgotten wait. */
+function tableChips(table: TableState) {
+  return signalChips(table.signals, { forgottenShown: table.timingBand === "forgotten" });
 }
 
 /** Nothing of the party is left to pay, and no tab is open that could still take a round. */
@@ -72,6 +80,7 @@ export class TillFloorScreen extends LitElement {
   static override styles = [
     baseStyles,
     floorTrayStyles,
+    signalChipStyles,
     css`
       :host {
         display: block;
@@ -286,11 +295,8 @@ export class TillFloorScreen extends LitElement {
       }
 
       /* "Reserved HH:MM" (Bookings-1 §4) -- the table's imminent booking. A PRIMARY border on a neutral
-         chip (theme text on a neutral fill, so contrast stays token-fixed): distinct from the ready
-         chip's success border, the status chip's neutral border, and the en-route chip's filled primary.
-         An independent signal that sits beside the one service hint and the manual status, never in their
-         place. Mirrors @waitron/ui's wt-table-token .badge.reserved so the list card and the map token
-         match. */
+         chip (theme text on a neutral fill, so contrast stays token-fixed). Mirrors @waitron/ui's
+         wt-table-token .badge.reserved so the list card and the map token match. */
       .badge.reserved {
         background: var(--wt-color-surface-raised);
         color: var(--wt-color-text);
@@ -344,6 +350,44 @@ export class TillFloorScreen extends LitElement {
         border: 1px dashed var(--wt-color-warning);
       }
 
+      .stations {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-3);
+        border: 1px solid var(--wt-color-success);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-surface);
+      }
+
+      .stations h2 {
+        margin: 0;
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .stations ul {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-2);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .station-ready {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-2);
+      }
+
+      .station-tables {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
       .dot {
         display: inline-block;
         width: var(--wt-space-2);
@@ -361,6 +405,8 @@ export class TillFloorScreen extends LitElement {
    * every placement write. */
   @property({ attribute: false }) canEdit = false;
   @property({ attribute: false }) canExitToCounter = true;
+  /** The device has a station view, so each station's ready work links into it. */
+  @property({ attribute: false }) canOpenStation = false;
   /** Mounted inside a card host, which supplies the header; the view/edit toggles stay. */
   @property({ type: Boolean }) embedded = false;
   /**
@@ -556,6 +602,7 @@ export class TillFloorScreen extends LitElement {
       unsentDrafts: table.party?.unsentDrafts.map((draft) => draft.ownerName),
       partyName: shownPartyName(table),
       fireDue: this.#fireDue(table),
+      chips: tableChips(table),
     });
   }
 
@@ -639,6 +686,7 @@ export class TillFloorScreen extends LitElement {
               </nav>`
             : nothing
         }
+        ${this.#stationSummary()}
         ${
           view === "map"
             ? this.#map(placed, unplaced)
@@ -846,6 +894,7 @@ export class TillFloorScreen extends LitElement {
             ? html`<span class="badge fire-due" data-fire-due>${t("floor.fire_due")}</span>`
             : nothing
         }
+        ${renderFloorChips(tableChips(table))}
         ${
           table.status !== null
             ? html`<span
@@ -860,6 +909,47 @@ export class TillFloorScreen extends LitElement {
         }
       </span>
     </button>`;
+  }
+
+  /** Every zone's tables, not only the zone on screen: a station serves the whole floor. */
+  #stationSummary(): TemplateResult | typeof nothing {
+    const stations = readyByStation(this.tables);
+    if (stations.length === 0) return nothing;
+    return html`<section class="stations" data-station-summary aria-labelledby="stations-title">
+      <h2 id="stations-title">${t("floor.ready_title")}</h2>
+      <ul>
+        ${stations.map((station) => this.#stationRow(station))}
+      </ul>
+    </section>`;
+  }
+
+  #stationRow(station: StationReady): TemplateResult {
+    const tables = station.parties
+      .map(({ name, count }) =>
+        t("floor.station_table")
+          .replace("{table}", () => name)
+          .replace("{n}", String(count)),
+      )
+      .join(", ");
+    return html`<li class="station-ready" data-station-ready=${station.stationId}>
+      <span class="station-tables" data-station-tables
+        >${t("floor.station_tables")
+          .replace("{station}", () => station.stationName)
+          .replace("{tables}", () => tables)}</span
+      >
+      ${
+        this.canOpenStation
+          ? html`<wt-button
+              size="sm"
+              variant="secondary"
+              data-open-station=${station.stationId}
+              @click=${() => this.#emit("show-station", { stationId: station.stationId })}
+            >
+              ${t("floor.open_station").replace("{station}", () => station.stationName)}
+            </wt-button>`
+          : nothing
+      }
+    </li>`;
   }
 
   #partyName(table: TableState): TemplateResult | typeof nothing {
@@ -887,7 +977,8 @@ export class TillFloorScreen extends LitElement {
   }
 
   /** Only the MOST ADVANCED of the three service signals renders: a dispatched line is still `ready`
-   * and unserved, so all three counts can be positive at once. */
+   * and unserved, so all three counts can be positive at once. The stations' ready chips stand in
+   * for the ready count when the table carries them. */
   #hint(table: TableState): TemplateResult | typeof nothing {
     if (table.enRoute > 0) {
       return html`<span class="badge en-route" data-en-route
@@ -895,6 +986,7 @@ export class TillFloorScreen extends LitElement {
       >`;
     }
     if (table.readyToServe > 0) {
+      if (signalOf(table.signals, "ready") !== undefined) return nothing;
       return html`<span class="badge ready" data-ready
         >${table.readyToServe} ${t("floor.ready")}</span
       >`;

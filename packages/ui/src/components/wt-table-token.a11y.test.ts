@@ -126,6 +126,25 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
     await expectNoA11yViolations(host);
   });
 
+  test("a token carrying a chip of every tone is accessible", async () => {
+    const el = await mountToken(
+      tableData({
+        state: "open-tab",
+        tabTotal: "12.00",
+        chips: [
+          { key: "take-order", text: "Take order", tone: "primary" },
+          { key: "ready", text: "Bar: 3 ready", tone: "success" },
+          { key: "wait", text: "Waiting", tone: "warning" },
+          { key: "unavailable", text: "Unavailable: Steak", tone: "danger" },
+          { key: "bill", text: "Bill requested", tone: "primary-filled" },
+        ],
+      }),
+      theme,
+    );
+    expect(el.shadowRoot!.querySelectorAll("[data-chip]").length).toBe(5);
+    await expectNoA11yViolations(host);
+  });
+
   test("a token naming the party seated there is accessible", async () => {
     await mountToken(tableData({ state: "open-tab", tabTotal: "12.00", partyName: "Ana" }), theme);
     await expectNoA11yViolations(host);

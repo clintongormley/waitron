@@ -53,6 +53,7 @@ function table(over: Partial<TableState> = {}): TableState {
     posY: null,
     shape: null,
     rotation: null,
+    signals: [],
     party: null,
     ...over,
   };
@@ -2327,6 +2328,7 @@ describe("till-app: moving a bill", () => {
       hasPayments: false,
       partyId: null,
       openedAt: "2026-08-05T10:00:00.000Z",
+      signals: [],
     };
     const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
     const listWorkingOrders = vi.fn().mockResolvedValue([]);
@@ -2923,6 +2925,372 @@ function floorThat(before: TableState[], after: TableState[]) {
   const other = { acted: false };
   return { other, getTablesState: vi.fn(async () => (other.acted ? after : before)) };
 }
+
+describe("till-app: the bill request", () => {
+  const requestedAt = "2026-09-30T20:00:00.000Z";
+  /** Mesa 4 as the floor reads it once the party has asked for the bill. */
+  const asked = (revision: number) => ({
+    ...seated({}, { revision }),
+    signals: [{ kind: "bill_requested" as const, requestedAt }],
+  });
+  /** Opens the order's Tab drawer, where the bills are, if it is closed. */
+  async function drawer(el: TillApp): Promise<ShadowRoot> {
+    const root = tableOrder(el)!.shadowRoot!;
+    if (root.querySelector("[data-drawer]") === null) {
+      root.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+      await flush(el);
+    }
+    return root;
+  }
+  const requestedOnScreen = async (el: TillApp) =>
+    (await drawer(el)).querySelector("[data-chip='bill-requested']") !== null;
+
+  it("records the request under a submission id of its own, at the revision the party was shown at", async () => {
+    const requestBill = vi.fn().mockResolvedValue({ revision: 4, billRequestedAt: requestedAt });
+    const { el } = await mountApp({
+      requestBill,
+      getTablesState: vi.fn(async () =>
+        requestBill.mock.calls.length > 0 ? [asked(4), mesa7, mesa9] : [mesa4, mesa7, mesa9],
+      ),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledOnce();
+    expect(requestBill).toHaveBeenCalledWith(
+      "v1",
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 3,
+        requested: true,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(tableOrder(el)!.party!.revision).toBe(4);
+    expect(await requestedOnScreen(el)).toBe(true);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("cancels the request, and the screen offers it again", async () => {
+    const requestBill = vi.fn().mockResolvedValue({ revision: 5, billRequestedAt: null });
+    const { el } = await mountApp({
+      requestBill,
+      getTablesState: vi.fn(async () =>
+        requestBill.mock.calls.length > 0
+          ? [seated({}, { revision: 5 }), mesa7, mesa9]
+          : [asked(4), mesa7, mesa9],
+      ),
+    });
+    const order = await openMesa(el);
+    expect(await requestedOnScreen(el)).toBe(true);
+
+    emit(order, "request-bill", { requested: false });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledWith(
+      "v1",
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 4,
+        requested: false,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(await requestedOnScreen(el)).toBe(false);
+    expect((await drawer(el)).querySelector("[data-request-bill]")).not.toBeNull();
+  });
+
+  it("sends a request that got no answer again under the same submission id, and a new press under a new one", async () => {
+    const requestBill = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue({ revision: 4, billRequestedAt: requestedAt });
+    const { el } = await mountApp({ requestBill });
+    const order = await openMesa(el);
+
+    emit(order, "request-bill", { requested: true });
+    await expect.poll(() => tableOrder(el)!.party!.revision, { timeout: 10_000 }).toBe(4);
+    await flush(el);
+    emit(tableOrder(el)!, "request-bill", { requested: true });
+    await flush(el);
+
+    const [first, retry, next] = requestBill.mock.calls.map(([, command]) => command);
+    expect(requestBill).toHaveBeenCalledTimes(3);
+    expect(retry).toEqual(first);
+    expect(next.submissionId).not.toBe(first.submissionId);
+  });
+
+  it("reads the floor again and says so when no answer comes at all", async () => {
+    const requestBill = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el } = await mountApp({ requestBill });
+    const order = await openMesa(el);
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    emit(order, "request-bill", { requested: true });
+    await expect
+      .poll(() => banner(el)?.textContent ?? "", { timeout: 10_000 })
+      .toContain(t("table.error"));
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledTimes(3);
+    expect(api.getTablesState).toHaveBeenCalledTimes(floorReads + 1);
+    expect(banner(el)!.textContent).toContain(t("table.error"));
+  });
+
+  it("drops a second press while the first is out, and a press with no party's order open", async () => {
+    let answer!: (value: { revision: number; billRequestedAt: string }) => void;
+    const requestBill = vi.fn(() => new Promise((resolve) => (answer = resolve)));
+    const { el } = await mountApp({ requestBill });
+    const screen = await toFloor(el);
+    emit(screen, "request-bill", { requested: true });
+    await flush(el);
+    expect(requestBill).not.toHaveBeenCalled();
+    emit(screen, "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const order = tableOrder(el)!;
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+    answer({ revision: 4, billRequestedAt: requestedAt });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledOnce();
+  });
+
+  it("shows a refusal in its code's own words", async () => {
+    const { el } = await mountApp({
+      requestBill: vi.fn().mockRejectedValue({ code: "party.not_open" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("party.not_open"));
+  });
+
+  it("reloads and says the bill was asked for elsewhere, and sends nothing more until the person acts again", async () => {
+    const requestBill = vi
+      .fn()
+      .mockRejectedValue({ code: "party.out_of_date", partyId: "v1", revision: 5 });
+    const reads = floorThat([mesa4, mesa7, mesa9], [asked(5), mesa7, mesa9]);
+    const { el } = await mountApp({ requestBill, getTablesState: reads.getTablesState });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "request-bill", { requested: true });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenCalledOnce();
+    expect(banner(el)!.textContent).toContain(t("party.changed").replace("{table}", "4"));
+    expect(banner(el)!.textContent).toContain(t("party.changed_bill_requested"));
+    expect(tableOrder(el)!.party!.revision).toBe(5);
+    expect(await requestedOnScreen(el)).toBe(true);
+
+    requestBill.mockResolvedValue({ revision: 6, billRequestedAt: null });
+    emit(tableOrder(el)!, "request-bill", { requested: false });
+    await flush(el);
+
+    expect(requestBill).toHaveBeenLastCalledWith(
+      "v1",
+      {
+        submissionId: expect.any(String),
+        expectedPartyRevision: 5,
+        requested: false,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+  });
+
+  it("says the request was cancelled elsewhere when that is what changed", async () => {
+    const reads = floorThat([asked(4), mesa7, mesa9], [seated({}, { revision: 5 }), mesa7, mesa9]);
+    const { el } = await mountApp({
+      requestBill: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+      getTablesState: reads.getTablesState,
+    });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "request-bill", { requested: false });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(t("party.changed_bill_request_cancelled"));
+  });
+
+  describe("once the waiter has signed out or opened another party", () => {
+    afterEach(() => vi.useRealTimers());
+
+    async function signOutAndIn(el: TillApp): Promise<void> {
+      emit(tableOrder(el)!, "logout");
+      await flush(el);
+      emit(lock(el), "logged-in", { personId: "p2", displayName: "Sam", canConfigureTill: false });
+      await flush(el);
+    }
+
+    it("sends nothing more after a sign-out during the pause before a resend, and shows the next person nothing", async () => {
+      const requestBill = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ requestBill });
+      const order = await openMesa(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      emit(order, "request-bill", { requested: true });
+      await flush(el);
+      expect(requestBill).toHaveBeenCalledOnce();
+
+      await signOutAndIn(el);
+      await vi.advanceTimersByTimeAsync(2 * SUBMIT_RETRY_PAUSE_MS);
+      await flush(el);
+
+      expect(requestBill).toHaveBeenCalledOnce();
+      expect(banner(el)).toBeNull();
+    });
+
+    it.each([
+      { outcome: "recorded", answer: { settle: { revision: 4, billRequestedAt: requestedAt } } },
+      { outcome: "refused", answer: { refuse: { code: "party.not_open" } } },
+      {
+        outcome: "changed elsewhere",
+        answer: { refuse: { code: "party.out_of_date", partyId: "v1" } },
+      },
+    ])(
+      "an answer ($outcome) arriving after the waiter signed out reads nothing and says nothing to the next person",
+      async ({ answer: late }) => {
+        const { call, answer } = held();
+        const { el } = await mountApp({ requestBill: call });
+        const order = await openMesa(el);
+        emit(order, "request-bill", { requested: true });
+        await flush(el);
+        await signOutAndIn(el);
+        const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+        if ("settle" in late) answer.settle(late.settle);
+        else answer.refuse(late.refuse);
+        await flush(el);
+
+        expect(call).toHaveBeenCalledOnce();
+        expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+        expect(banner(el)).toBeNull();
+      },
+    );
+
+    it.each([
+      { outcome: "recorded", answer: { settle: { revision: 4, billRequestedAt: requestedAt } } },
+      { outcome: "refused", answer: { refuse: { code: "party.not_open" } } },
+      {
+        outcome: "changed elsewhere",
+        answer: { refuse: { code: "party.out_of_date", partyId: "v1" } },
+      },
+    ])(
+      "an answer ($outcome) arriving after the waiter opened another party leaves that party's screen as it is",
+      async ({ answer: late }) => {
+        const { call, answer } = held();
+        const { el } = await mountApp({ requestBill: call });
+        const order = await openMesa(el);
+        emit(order, "request-bill", { requested: true });
+        await flush(el);
+        emit(tableOrder(el)!, "back-to-floor");
+        await flush(el);
+        emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+        await flush(el);
+        expect(tableOrder(el)!.orderId).toBe("wo-7");
+        const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+        if ("settle" in late) answer.settle(late.settle);
+        else answer.refuse(late.refuse);
+        await flush(el);
+
+        expect(tableOrder(el)?.party?.id).toBe("v7");
+        expect(tableOrder(el)!.orderId).toBe("wo-7");
+        expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
+        expect(banner(el)).toBeNull();
+      },
+    );
+
+    it("gives up a request that gets no answer at all at the time limit, and the next press is sent", async () => {
+      const requestBill = vi.fn(
+        (_partyId: string, _command: unknown, options?: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) =>
+            options?.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            ),
+          ),
+      );
+      const { el } = await mountApp({ requestBill });
+      const order = await openMesa(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      emit(order, "request-bill", { requested: true });
+      await flush(el);
+
+      await vi.advanceTimersByTimeAsync(150_000);
+      await flush(el);
+
+      expect(requestBill).toHaveBeenCalledOnce();
+      expect(banner(el)!.textContent).toContain(t("table.error"));
+      emit(tableOrder(el)!, "request-bill", { requested: true });
+      await flush(el);
+      expect(requestBill).toHaveBeenCalledTimes(2);
+    });
+
+    /** The floor answers at once, except the first read after `hold`, which waits for `release`. */
+    function floorHeldOnce() {
+      let holdNext = false;
+      let release: () => void = () => undefined;
+      const getTablesState = vi.fn(async () => {
+        if (holdNext) {
+          holdNext = false;
+          await new Promise<void>((resolve) => (release = resolve));
+        }
+        return [mesa4, mesa7, mesa9];
+      });
+      return { getTablesState, hold: () => (holdNext = true), release: () => release() };
+    }
+
+    it("says nothing on the other party's screen when the waiter opened it while the floor was read again after no answer", async () => {
+      const floorRead = floorHeldOnce();
+      const requestBill = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+      const { el } = await mountApp({ requestBill, getTablesState: floorRead.getTablesState });
+      const order = await openMesa(el);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      floorRead.hold();
+      emit(order, "request-bill", { requested: true });
+      await vi.advanceTimersByTimeAsync(2 * SUBMIT_RETRY_PAUSE_MS);
+      await flush(el);
+      expect(requestBill).toHaveBeenCalledTimes(3);
+      emit(tableOrder(el)!, "back-to-floor");
+      await flush(el);
+      emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+      await flush(el);
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+
+      floorRead.release();
+      await flush(el);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-7");
+      expect(banner(el)).toBeNull();
+    });
+
+    it("says nothing to the next person when the reads after a change elsewhere answer after sign-out", async () => {
+      const floorRead = floorHeldOnce();
+      const { el } = await mountApp({
+        requestBill: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+        getTablesState: floorRead.getTablesState,
+      });
+      const order = await openMesa(el);
+      floorRead.hold();
+      emit(order, "request-bill", { requested: true });
+      await flush(el);
+      await signOutAndIn(el);
+
+      floorRead.release();
+      await flush(el);
+
+      expect(banner(el)).toBeNull();
+    });
+  });
+});
 
 describe("till-app: another device changed the table first", () => {
   const moved = seated(
