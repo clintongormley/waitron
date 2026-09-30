@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
-import { cleanupWidgets, mountWidget, formMessageOf } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";

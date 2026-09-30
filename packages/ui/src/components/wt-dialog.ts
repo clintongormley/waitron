@@ -96,7 +96,8 @@ export class WtDialog extends LitElement {
       if (this.open && !this.dialog.open) this.dialog.showModal();
       if (!this.open && this.dialog.open) this.dialog.close();
     }
-    // A message set while the dialog was shut could not be scrolled to then, so opening does it.
+    // A footer row's message set while the dialog was shut could not be scrolled to then, so
+    // opening does it.
     if (changed.has("footerMessage") || changed.has("open")) {
       this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }

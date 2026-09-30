@@ -67,7 +67,7 @@ test("keeps the primary action on the right while a message shows", async () => 
   expect(primary.getBoundingClientRect().right).toBe(row.getBoundingClientRect().right);
 });
 
-test("at phone width too, puts the message on its own line above the actions, within the row's width", async () => {
+test("on a narrow (320 px) row too, puts the message on its own line above the actions, within the row's width", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>',
   )) as WtFormActions;
@@ -85,7 +85,7 @@ test("at phone width too, puts the message on its own line above the actions, wi
   expect(primary.right).toBe(row.right);
 });
 
-test("at phone width, keeps cancel level with the primary action below the message", async () => {
+test("on a narrow (320 px) row, keeps cancel level with the primary action below the message", async () => {
   const el = (await mount(
     '<wt-form-actions><wt-button slot="cancel">Cancel</wt-button><wt-button variant="primary">Save</wt-button></wt-form-actions>',
   )) as WtFormActions;

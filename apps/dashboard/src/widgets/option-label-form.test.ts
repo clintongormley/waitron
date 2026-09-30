@@ -1,12 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  mountWidget,
-  formMessageOf,
-} from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 // Value import (not `import type`): pulls the module in for its `@customElement` side effect, so
 // `mountWidget` can create `dashboard-option-label-form`.
 import { OptionLabelForm, type DraftLabel } from "./option-label-form.js";

@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanupWidgets,
-  expectNoA11yViolations,
-  formMessageOf,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategorySummary, DashboardApi } from "../api/client.js";
 afterEach(cleanupWidgets);

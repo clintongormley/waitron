@@ -13,8 +13,8 @@ import type {
   StuckPaymentResolution,
   StuckPaymentRow,
 } from "../api/client.js";
-import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 

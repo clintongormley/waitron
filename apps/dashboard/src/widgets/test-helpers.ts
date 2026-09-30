@@ -295,5 +295,3 @@ function frozenOffer(
     offeredModifiers: [],
   };
 }
-
-export { formMessageOf } from "@waitron/ui/src/test-helpers.js";

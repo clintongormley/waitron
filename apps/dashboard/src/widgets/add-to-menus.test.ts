@@ -2,12 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CatalogueSummary, LibrarySection, MenuStructure } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  mountWidget,
-  formMessageOf,
-} from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 

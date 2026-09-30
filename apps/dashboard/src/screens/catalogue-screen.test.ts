@@ -20,12 +20,8 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
 import type { ProductList } from "../widgets/product-list.js";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  mountWidget,
-  formMessageOf,
-} from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { CatalogueScreen } from "./catalogue-screen.js";

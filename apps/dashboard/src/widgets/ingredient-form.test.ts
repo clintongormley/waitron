@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, mountWidget, formMessageOf } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { IngredientForm, ingredientRefusalErrors } from "./ingredient-form.js";

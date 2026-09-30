@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";

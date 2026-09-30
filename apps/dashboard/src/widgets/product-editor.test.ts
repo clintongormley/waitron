@@ -2,12 +2,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  mountWidget,
-  formMessageOf,
-} from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   ProductEditor,
   productEditorField,

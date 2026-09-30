@@ -1,7 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { setContentLanguages } from "@waitron/ui";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type {

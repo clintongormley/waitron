@@ -7,9 +7,8 @@ import {
   documentSection,
   menuDocument,
   mountWidget,
-  formMessageOf,
 } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,

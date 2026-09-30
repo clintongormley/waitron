@@ -5697,11 +5697,11 @@ ongoing overhaul listed at the top of Track A.
   steps show it above the list of other ways to sign in and the buttons (`formMessage`, now exported
   from `@waitron/ui`), and the Add printer dialog's address check lets its button row take the
   panel's full width while it has a message. A dialog with more than one action row in its footer
-  shows every row's message, joined; a dialog opened with a message already present scrolls it into
-  view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
+  shows every row's message, joined; a dialog opened with a footer row's message already present
+  scrolls it into view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
   message scrolled into view when it appears.
-  Two screens drew their own message instead and now pass it to their footer `wt-form-actions`: the
-  categories screen's delete dialog (`#dialogMessage`, removed) and its products window, which drew
+  Two dialogs on the categories screen drew their own message instead and now pass it to their
+  footer `wt-form-actions`: its delete dialog (`#dialogMessage`, removed) and its products window, which drew
   a refused add at the top of its body.
   Browser tests hold the placement on location settings, the setup wizard's connect form, the
   profile screen's Add passkey dialog, the sign-in passkey step and the address check, at 1280 and

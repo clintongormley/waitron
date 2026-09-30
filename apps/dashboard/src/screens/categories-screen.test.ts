@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget, formMessageOf } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -2271,7 +2271,7 @@ it.each([
   },
 );
 
-it("keeps a delete refusal that names no picker in the dialog's alert", async () => {
+it("keeps a delete refusal that names no picker in the dialog's bottom message", async () => {
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue(everything);
   api.deleteCategory.mockRejectedValueOnce({

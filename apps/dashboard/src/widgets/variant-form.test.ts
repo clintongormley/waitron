@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanupWidgets, mountWidget, formMessageOf } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { VariantForm } from "./variant-form.js";
 import "./variant-form.js";
 import type { ImageUploader } from "./image-upload.js";

@@ -1,11 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  formMessageOf,
-  mountWidget,
-} from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { ContentLanguageEditor } from "./content-languages.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";

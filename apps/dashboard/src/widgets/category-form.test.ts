@@ -5,8 +5,8 @@ import {
   closeReportsDelivered,
   customSquarePixels,
   mountWidget,
-  formMessageOf,
 } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   CategoryForm,
   categoryAncestors,

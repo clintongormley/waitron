@@ -9,7 +9,8 @@ import type {
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { MenuPricesTable, type OfferSave } from "./menu-prices-table.js";
-import { cleanupWidgets, formMessageOf, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => {
