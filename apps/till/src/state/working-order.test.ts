@@ -1100,7 +1100,7 @@ describe("WorkingOrderStore.lockEdits", () => {
     expect(s.lines[0]!.quantity).toBe("3");
   });
 
-  it("counts every load and clear, a load of the same order included, and nothing else", () => {
+  it("counts every load and clear, a load of the same order included, and not a quantity, label or lock change", () => {
     const s = new WorkingOrderStore();
     const first = s.loadGeneration;
 
