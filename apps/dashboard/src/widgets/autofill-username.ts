@@ -1,8 +1,6 @@
 import { css, html, nothing } from "lit";
 
-/** Tells the browser's password manager whose saved login a password field wants, without adding a
- * visible or keyboard-reachable control. Without it, Chromium 153 holding two logins for the site
- * filled the profile's current-password field with the other login's password (C98). */
+/** A host adds these to its own styles: the field renders into the host's shadow root. */
 export const autofillUsernameStyles = css`
   .autofill-username {
     position: absolute;
@@ -15,6 +13,8 @@ export const autofillUsernameStyles = css`
   }
 `;
 
+/** Tells the browser's password manager whose saved login a password field wants, without adding a
+ * visible or keyboard-reachable control. */
 export function autofillUsername(email: string | null) {
   return email
     ? html`<input

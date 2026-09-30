@@ -1275,9 +1275,7 @@ describe("your profile — errors beside Save, not above the form", () => {
   });
 });
 
-describe("your profile — the browser's saved password fills the current-password field", () => {
-  // Every step asking for the current password carries the signed-in email in a field marked
-  // `username`, so a password manager holding several logins fills the signed-in person's.
+describe("your profile — the signed-in email is named as the username beside the current-password field", () => {
   function expectSavedUsernameBeside(el: ProfileScreen, email: string) {
     const root = el.shadowRoot!;
     const username = root.querySelector<HTMLInputElement>("input[autocomplete=username]");
@@ -1287,7 +1285,8 @@ describe("your profile — the browser's saved password fills the current-passwo
     expect(username!.readOnly).toBe(true);
     expect(username!.tabIndex).toBe(-1);
     expect(username!.getAttribute("aria-hidden")).toBe("true");
-    const password = root.querySelector("wt-input[name=currentPassword]")!;
+    const password = root.querySelector<HTMLElement>("wt-input[name=currentPassword]")!;
+    expect(password.shadowRoot!.querySelector("input")!.autocomplete).toBe("current-password");
     expect(username!.compareDocumentPosition(password) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
       0,
     );
