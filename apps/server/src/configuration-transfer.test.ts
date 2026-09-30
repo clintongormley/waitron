@@ -54,6 +54,8 @@ import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
   listAdjustmentReasons,
+  readAdjustmentSettings,
+  saveAdjustmentSettings,
 } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
 import { decimal, nodeId, seriesId, tillId } from "@waitron/shared";
@@ -1007,6 +1009,31 @@ it("transfers the adjustment reasons, inactive ones included, with their limits 
   const withoutId = (reasons: typeof imported) =>
     reasons.map((reason) => ({ ...reason, id: undefined }));
   expect(withoutId(imported)).toEqual(withoutId(prepared));
+});
+
+it("transfers the venue's limit on a bill's total discount", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) => saveAdjustmentSettings(tx, { maxBillDiscountBp: 4000 }));
+  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-09-30T12:00:00Z"),
+    versions,
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx, result) =>
+      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+  });
+  expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual({
+    maxBillDiscountBp: 4000,
+  });
 });
 
 it("leaves a table's clearing state behind", async () => {
