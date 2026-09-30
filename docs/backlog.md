@@ -126,8 +126,8 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
-   taking a reason is done by lane B item B11a, and Task 15, several payments on the till, is
-   built by lane B item B15 (#956; the server side landed as #721). Left:
+   taking a reason is done by lane B item B11a, and Task 15, several payments on the till, has
+   landed as lane B item B15 (#956; the server side landed as #721). Left:
    counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
@@ -3961,8 +3961,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       with a note and their PIN. The screen has English and Spanish text and browser accessibility
       cases. Task 15 can build the till flow that creates bill payments. _(2026-09-30: lane B item
       B15 builds it.)_
-  - **Task 15, several payments on the till, is built by lane B item B15** (2026-09-30, B15's pull
-    request, not yet landed). A table's bill, or a retrieved counter order's, can be paid in parts:
+  - **Task 15, several payments on the till, is built by lane B item B15** (2026-09-30, landed as
+    #956, main `a426b948b`). A table's bill, or a retrieved counter order's, can be paid in parts:
     by items, an amount or an equal share, in cash (change or tip) or by card (keyed on a separate
     terminal, or on a card reader). The bill payment dialog lists the bill's payments and gives one
     back: given back by someone who may give refunds, or approved with a supervisor's or manager's
