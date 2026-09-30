@@ -127,6 +127,8 @@ const en = {
   "adjustment_report.entries.credited_to": "Credited to",
   "adjustment_report.entries.order": "Order",
   "adjustment_report.entries.guest": "Guest",
+  "adjustment_report.entries.show_more": "Show more",
+  "adjustment_report.entries.more_error": "More adjustments could not be loaded: {reason}",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -248,6 +250,8 @@ const es: Record<keyof typeof en, string> = {
   "adjustment_report.entries.credited_to": "Atribuido a",
   "adjustment_report.entries.order": "Pedido",
   "adjustment_report.entries.guest": "Cliente",
+  "adjustment_report.entries.show_more": "Mostrar más",
+  "adjustment_report.entries.more_error": "No se pudieron cargar más ajustes: {reason}",
 };
 
 export const ADJUSTMENTS_STRINGS = { en, es };

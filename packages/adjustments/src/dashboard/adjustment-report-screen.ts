@@ -219,6 +219,9 @@ export class AdjustmentReportScreen extends LitElement {
       .entries-head h2 {
         margin: 0;
       }
+      .more {
+        margin-top: var(--wt-space-3);
+      }
       /* Cell markup lives in the table's shadow root, so only a part reaches it. */
       wt-data-table::part(amount) {
         white-space: nowrap;
@@ -246,6 +249,15 @@ export class AdjustmentReportScreen extends LitElement {
   @state() private entriesName = "";
   @state() private entries?: AdjustmentEntry[];
   @state() private entriesError?: string;
+  /** The cursor of the list's next page; null when the rows shown end the list. */
+  @state() private entriesNext: string | null = null;
+  @state() private loadingMore = false;
+  @state() private moreError?: string;
+  /** What the shown list asked for, so a further page asks for the same rows. */
+  #listed?: { from: string; to: string; of: EntriesOf };
+  /** Moved on whenever the list starts again from its first page, so a further page asked for
+   * before then is dropped. */
+  #pagesGeneration = 0;
   /** Set once the person picks a day; until then the report follows the venue's current business
    * day, which the routes answer when no range is given. */
   #rangeChosen = false;
@@ -261,6 +273,7 @@ export class AdjustmentReportScreen extends LitElement {
     this,
     () => this.api.liveData,
     (error) => {
+      this.#firstPage();
       this.entries = [];
       this.entriesError = tf("adjustment_report.entries.error", {
         reason: codeMessage(codeOf(error)),
@@ -325,10 +338,12 @@ export class AdjustmentReportScreen extends LitElement {
 
   /** Only once a report is shown, so both days are known. */
   #loadEntries(of: EntriesOf): void {
+    this.#firstPage();
     this.entries = undefined;
     this.entriesError = undefined;
     const from = this.from!;
     const to = this.to!;
+    this.#listed = { from, to, of };
     void this.#entryQueries
       .watch(
         "entries",
@@ -338,17 +353,54 @@ export class AdjustmentReportScreen extends LitElement {
           refreshMs: 60_000,
           read: firstReadThenPassive(
             () => this.api,
-            async (api) => (await api.listEntries(from, to, of)).entries,
+            (api) => api.listEntries(from, to, of),
           ),
         },
-        (entries) => {
-          this.entries = entries;
+        (page) => {
+          this.#firstPage();
+          this.entries = page.entries;
+          this.entriesNext = page.next;
           this.entriesError = undefined;
         },
       )
       .catch(() => {
         // The query's error callback has already said why.
       });
+  }
+
+  /** Drops any further page still on its way, and what the list said about the last one. */
+  #firstPage(): void {
+    this.#pagesGeneration += 1;
+    this.entriesNext = null;
+    this.loadingMore = false;
+    this.moreError = undefined;
+  }
+
+  /** The person's own request. Focus stays on Show more, or moves to the list's heading once there
+   * is no more to show. */
+  async #showMore(): Promise<void> {
+    const { from, to, of } = this.#listed!;
+    const generation = this.#pagesGeneration;
+    const button = this.renderRoot.querySelector<HTMLElement>('[data-test="show-more"]')!;
+    const hadFocus = button.matches(":focus-within");
+    this.loadingMore = true;
+    this.moreError = undefined;
+    try {
+      const page = await this.api.listEntries(from, to, of, { after: this.entriesNext! });
+      if (generation !== this.#pagesGeneration) return;
+      this.entries = [...this.entries!, ...page.entries];
+      this.entriesNext = page.next;
+    } catch (error) {
+      if (generation !== this.#pagesGeneration) return;
+      this.moreError = tf("adjustment_report.entries.more_error", {
+        reason: codeMessage(codeOf(error)),
+      });
+    }
+    this.loadingMore = false;
+    await this.updateComplete;
+    if (!hadFocus) return;
+    const target = this.entriesNext === null ? "entries-heading" : "show-more";
+    this.renderRoot.querySelector<HTMLElement>(`[data-test="${target}"]`)!.focus();
   }
 
   #onDateChange(field: "from" | "to", event: Event): void {
@@ -373,6 +425,7 @@ export class AdjustmentReportScreen extends LitElement {
 
   #closeEntries(): void {
     this.#entryQueries.release("entries");
+    this.#firstPage();
     this.entriesOf = undefined;
     this.entries = undefined;
     this.entriesError = undefined;
@@ -749,6 +802,23 @@ export class AdjustmentReportScreen extends LitElement {
         .emptyMessage=${t("adjustment_report.none")}
         .errorMessage=${this.entriesError ?? ""}
       ></wt-data-table>
+      ${
+        this.entriesNext === null
+          ? nothing
+          : html`<wt-button
+              class="more"
+              variant="secondary"
+              data-test="show-more"
+              ?loading=${this.loadingMore}
+              @click=${() => void this.#showMore()}
+              >${t("adjustment_report.entries.show_more")}</wt-button
+            >`
+      }
+      ${
+        this.moreError
+          ? html`<p class="alert" role="alert" data-test="more-error">${this.moreError}</p>`
+          : nothing
+      }
     </section>`;
   }
 

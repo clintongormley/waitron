@@ -590,6 +590,184 @@ describe("the drill-down", () => {
   });
 });
 
+describe("more of a long list", () => {
+  /** The first page is Alex's three rows and names a cursor; the second is Sam's row, and the last. */
+  function twoPages(second: () => Promise<unknown> = () => Promise.resolve(onePage([samEntry()]))) {
+    return vi.fn((_from: string, _to: string, _of: unknown, page?: { after?: string }) =>
+      page?.after === "c1" ? second() : Promise.resolve({ entries: alexEntries(), next: "c1" }),
+    );
+  }
+
+  async function showAll(el: AdjustmentReportScreen): Promise<void> {
+    part(el, "show-all")!.click();
+    await settle(el);
+  }
+
+  async function showMore(el: AdjustmentReportScreen): Promise<void> {
+    part(el, "show-more")!.click();
+    await settle(el);
+  }
+
+  const keys = (el: AdjustmentReportScreen) => rows(part(el, "entries")!).map((each) => each.key);
+
+  it("adds the next page below the rows already shown, then offers no more after the last", async () => {
+    const api = fakeApi({ listEntries: twoPages() });
+    const el = await mount(api);
+    await showAll(el);
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    expect(text(part(el, "show-more"))).toBe("Show more");
+    part(el, "show-more")!.focus();
+    await showMore(el);
+    expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-29", "2026-09-29", "everyone", {
+      after: "c1",
+    });
+    expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
+    expect(part(el, "show-more")).toBeNull();
+    expect(el.shadowRoot!.activeElement).toBe(part(el, "entries-heading"));
+  });
+
+  it("offers no more when the first page is the last", async () => {
+    const el = await mount(fakeApi());
+    await open(el, ALEX);
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    expect(part(el, "show-more")).toBeNull();
+  });
+
+  it("keeps focus on Show more while there is still more", async () => {
+    const listEntries = vi.fn((_f: string, _t: string, _o: unknown, page?: { after?: string }) =>
+      Promise.resolve(
+        page?.after === undefined
+          ? { entries: alexEntries(), next: "c1" }
+          : { entries: [samEntry()], next: "c2" },
+      ),
+    );
+    const el = await mount(fakeApi({ listEntries }));
+    await showAll(el);
+    part(el, "show-more")!.focus();
+    await showMore(el);
+    expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
+    expect(el.shadowRoot!.activeElement).toBe(part(el, "show-more"));
+  });
+
+  it("marks Show more busy while the next page loads", async () => {
+    let resolve!: (page: unknown) => void;
+    const el = await mount(
+      fakeApi({ listEntries: twoPages(() => new Promise((done) => (resolve = done))) }),
+    );
+    await showAll(el);
+    await showMore(el);
+    expect(part(el, "show-more")!.hasAttribute("loading")).toBe(true);
+    resolve(onePage([samEntry()]));
+    await settle(el);
+    expect(part(el, "show-more")).toBeNull();
+  });
+
+  it("says why a further page could not be loaded, and keeps the rows already shown", async () => {
+    const el = await mount(fakeApi({ listEntries: twoPages(() => Promise.reject({ code: "x" })) }));
+    await showAll(el);
+    await showMore(el);
+    const alert = part(el, "more-error")!;
+    expect(alert.getAttribute("role")).toBe("alert");
+    expect(text(alert)).toBe(
+      "More adjustments could not be loaded: Something went wrong, try again",
+    );
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    expect(part(el, "show-more")!.hasAttribute("loading")).toBe(false);
+  });
+
+  it("starts again from the first page when live data refreshes the list", async () => {
+    const liveData = new LiveData();
+    const background = fakeApi({ listEntries: twoPages() });
+    const api = fakeApi({ liveData, listEntries: twoPages() });
+    api.background = background;
+    const el = await mount(api);
+    await showAll(el);
+    await showMore(el);
+    expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() => expect(background.listEntries).toHaveBeenCalledOnce());
+    await settle(el);
+    expect(background.listEntries).toHaveBeenCalledWith("2026-09-29", "2026-09-29", "everyone");
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    expect(part(el, "show-more")).not.toBeNull();
+    liveData.clear();
+  });
+
+  it("drops a page that arrives after live data refreshed the list", async () => {
+    let resolve!: (page: unknown) => void;
+    const liveData = new LiveData();
+    const background = fakeApi({ listEntries: twoPages() });
+    const api = fakeApi({
+      liveData,
+      listEntries: twoPages(() => new Promise((done) => (resolve = done))),
+    });
+    api.background = background;
+    const el = await mount(api);
+    await showAll(el);
+    await showMore(el);
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() => expect(background.listEntries).toHaveBeenCalledOnce());
+    await settle(el);
+    resolve(onePage([samEntry()]));
+    await settle(el);
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    expect(part(el, "show-more")).not.toBeNull();
+    expect(part(el, "show-more")!.hasAttribute("loading")).toBe(false);
+    liveData.clear();
+  });
+
+  it("drops a page, or its refusal, that arrives after another list was opened", async () => {
+    let refuse!: (error: unknown) => void;
+    const listEntries = vi.fn((_f: string, _t: string, of: unknown, page?: { after?: string }) =>
+      of === "everyone" && page?.after === "c1"
+        ? new Promise((_done, fail) => (refuse = fail))
+        : Promise.resolve(
+            of === "everyone" ? { entries: alexEntries(), next: "c1" } : onePage([samEntry()]),
+          ),
+    );
+    const el = await mount(fakeApi({ listEntries }));
+    await showAll(el);
+    await showMore(el);
+    await open(el, SAM);
+    refuse({ code: "x" });
+    await settle(el);
+    expect(keys(el)).toEqual(["e4"]);
+    expect(part(el, "more-error")).toBeNull();
+    expect(part(el, "show-more")).toBeNull();
+  });
+
+  it("asks for the next page again over a new range, from its first page", async () => {
+    const api = fakeApi({ listEntries: twoPages() });
+    const el = await mount(api);
+    await showAll(el);
+    await showMore(el);
+    await pick(el, "to", "2026-09-30");
+    expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-29", "2026-09-30", "everyone");
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    await showMore(el);
+    expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-29", "2026-09-30", "everyone", {
+      after: "c1",
+    });
+  });
+
+  it("offers no more once the list is closed", async () => {
+    const el = await mount(fakeApi({ listEntries: twoPages() }));
+    await showAll(el);
+    part(el, "close-entries")!.click();
+    await settle(el);
+    expect(part(el, "show-more")).toBeNull();
+  });
+
+  it("offers more in Spanish", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi({ listEntries: twoPages(() => Promise.reject({ code: "x" })) }));
+    await showAll(el);
+    expect(text(part(el, "show-more"))).toBe("Mostrar más");
+    await showMore(el);
+    expect(text(part(el, "more-error"))).toMatch(/^No se pudieron cargar más ajustes: /);
+  });
+});
+
 describe("sorting and columns", () => {
   const keys = (table: HTMLElement) => rows(table).map((each) => each.key);
   async function sortBy(el: AdjustmentReportScreen, test: string, key: string): Promise<void> {

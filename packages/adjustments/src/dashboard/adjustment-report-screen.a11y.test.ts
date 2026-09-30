@@ -87,6 +87,21 @@ describe.each(["light", "dark"] as const)("adjustment report accessibility (%s)"
     await expectNoA11yViolations(host);
   });
 
+  test("a list with more to show, whose next page could not be loaded", async () => {
+    const listEntries = vi.fn((_from: string, _to: string, _of: unknown, page?: object) =>
+      page === undefined
+        ? Promise.resolve({ entries: alexEntries(), next: "c1" })
+        : Promise.reject({ code: "x" }),
+    );
+    const el = await screen(theme, { listEntries });
+    await openAlex(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="show-more"]')!.click();
+    await settle(el);
+    expect(el.shadowRoot!.querySelector('[data-test="more-error"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="show-more"]')).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   test("a list that could not be loaded", async () => {
     const el = await screen(theme, { listEntries: vi.fn().mockRejectedValue({ code: "x" }) });
     await openAlex(el);
