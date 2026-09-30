@@ -346,12 +346,12 @@ export async function computeAdjustmentReport(
     ...totalsOf(acc, reasonNames),
     sales: acc.sales,
     ratePercent: rateOf(acc.reduction, acc.sales),
-    approvers: [...acc.approvers]
-      .map(([approverId, count]) => ({ ...ref(approverId), count }))
-      .sort((a, b) => b.count - a.count || byName(a, b)),
+    // A stable sort, so approvers with the same count stay in name order.
+    approvers: byName(
+      [...acc.approvers].map(([approverId, count]) => ({ ...ref(approverId), count })),
+    ).sort((a, b) => b.count - a.count),
     approvalsGiven: acc.approvalsGiven,
   }));
-  personRows.sort(byName);
 
   return {
     fromBusinessDay: input.fromBusinessDay,
@@ -361,20 +361,17 @@ export async function computeAdjustmentReport(
       sales: overallSales,
       ratePercent: rateOf(overall.reduction, overallSales),
     },
-    people: personRows,
+    people: byName(personRows),
     guests: totalsOf(guests, reasonNames),
   };
 }
 
-/** By name, a person the directory no longer holds last, then by id. */
-function byName(a: PersonRef, b: PersonRef): number {
-  if (a.name !== b.name) {
-    if (a.name === null) return 1;
-    if (b.name === null) return -1;
-    const order = a.name.localeCompare(b.name);
-    if (order !== 0) return order;
-  }
-  return a.personId.localeCompare(b.personId);
+/** By name, then by id, with the people the directory no longer holds last. */
+function byName<T extends PersonRef>(rows: T[]): T[] {
+  const byId = (a: T, b: T) => a.personId.localeCompare(b.personId);
+  const known = rows.filter((row) => row.name !== null);
+  known.sort((a, b) => a.name!.localeCompare(b.name!) || byId(a, b));
+  return [...known, ...rows.filter((row) => row.name === null).sort(byId)];
 }
 
 /**

@@ -39,10 +39,10 @@ const DAY = "2026-09-15";
 const EVENING = "2026-09-15T18:00:00.000Z";
 const range = (from = DAY, to = from) => ({ fromBusinessDay: from, toBusinessDay: to, ...CLOCK });
 
-async function person(name: string): Promise<string> {
+async function person(name: string, status?: "suspended"): Promise<string> {
   const [row] = await db
     .insert(persons)
-    .values({ displayName: name })
+    .values({ displayName: name, ...(status === undefined ? {} : { status }) })
     .returning({ id: persons.id });
   return row!.id;
 }
@@ -62,7 +62,7 @@ async function bill(
       .returning({ id: locations.id });
     [{ id: tillId }] = (await db
       .insert(tills)
-      .values({ locationId: location!.id, name: "Caja 1" })
+      .values({ locationId: location!.id, name: "Till 1" })
       .returning({ id: tills.id })) as [{ id: string }];
   } else {
     tillId = till.id;
@@ -738,5 +738,77 @@ describe("stages, reasons and guests", () => {
 
     expect(read.people).toMatchObject([{ personId: gone, name: null }]);
     expect(await entries()).toMatchObject([{ requestedBy: { personId: gone, name: null } }]);
+  });
+});
+
+describe("the order of the rows", () => {
+  it("orders people by name, a namesake by id and the unknown last; approvers by count, then name; reasons by reduction, then name, then id", async () => {
+    // A suspended person's name is free for someone else.
+    const [firstAna, secondAna] = [await person("Ana"), await person("Ana", "suspended")].sort();
+    const bea = await person("Bea");
+    const carl = await person("Carl");
+    const [gone, alsoGone] = [randomUUID(), randomUUID()].sort();
+    const house = await seedReason(db);
+    const late = await seedReason(db);
+    const large = await seedReason(db);
+    const [twinA, twinB] = [await seedReason(db), await seedReason(db)].sort((a, b) =>
+      a.id.localeCompare(b.id),
+    );
+    const visit = await bill();
+    let minute = 0;
+    const comp = (
+      by: string,
+      approvedBy: string | undefined,
+      reason: AdjustmentReason,
+      name: string,
+      price = "1.50",
+    ) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName: name,
+        action: "comp",
+        line: { name: "Coffee", list: price, creditedTo: by, stage: "served" },
+        before: price,
+        after: "0.00",
+        nominal: price,
+        by,
+        approvedBy,
+        at: `2026-09-15T19:${String((minute += 1)).padStart(2, "0")}:00.000Z`,
+      });
+    // Bea's four requests: two approved by Carl, one by each Ana. Every reason but "Zulu" takes
+    // €3.00 off.
+    await comp(bea, carl, house, "House");
+    await comp(bea, carl, house, "House");
+    await comp(bea, secondAna, late, "Late");
+    await comp(bea, firstAna, late, "Late");
+    await comp(alsoGone, undefined, twinB, "Twin");
+    await comp(gone, undefined, twinA, "Twin");
+    await comp(carl, undefined, twinA, "Twin");
+    await comp(secondAna, undefined, twinB, "Twin");
+    await comp(carl, undefined, large, "Zulu", "9.00");
+
+    const read = await report();
+
+    expect(read.people.map((row) => row.personId)).toEqual([
+      firstAna,
+      secondAna,
+      bea,
+      carl,
+      gone,
+      alsoGone,
+    ]);
+    expect(personRow(read, bea).approvers).toEqual([
+      { personId: carl, name: "Carl", count: 2 },
+      { personId: firstAna, name: "Ana", count: 1 },
+      { personId: secondAna, name: "Ana", count: 1 },
+    ]);
+    expect(read.overall.byReason.map((row) => [row.reasonId, row.reasonName])).toEqual([
+      [large.id, "Zulu"],
+      [house.id, "House"],
+      [late.id, "Late"],
+      [twinA.id, "Twin"],
+      [twinB.id, "Twin"],
+    ]);
   });
 });

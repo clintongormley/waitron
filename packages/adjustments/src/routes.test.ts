@@ -337,7 +337,7 @@ describe("adjustment report routes", () => {
     const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
     const [till] = await db
       .insert(tills)
-      .values({ locationId: location!.id, name: "Caja 1" })
+      .values({ locationId: location!.id, name: "Till 1" })
       .returning({ id: tills.id });
     const [bill] = await db
       .insert(workingOrders)
