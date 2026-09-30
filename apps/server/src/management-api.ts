@@ -101,7 +101,7 @@ import {
   type FireControl,
 } from "./kitchen.js";
 import type { TillConfig } from "./till-config.js";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import { requireBodyUuid, requireEnum, requireNullableBodyUuid } from "@waitron/server-kit";
 import {
@@ -188,6 +188,19 @@ async function deliverAccountAction(
       personId: issued.personId,
     });
     return false;
+  }
+}
+
+async function issueRecovery(
+  email: string,
+  db: Database,
+  log: Logger,
+): Promise<IssuedAccountAction | null> {
+  try {
+    return await withTransaction(db, (tx) => requestAccountRecoveryAction(tx, { email }));
+  } catch (error) {
+    log("error", "account_action.request_failed", { errorCode: codeOf(error) });
+    return null;
   }
 }
 
@@ -411,7 +424,20 @@ async function parsePasskeyVerifyBody(
   return { challengeHandle: body.challengeHandle, response: body.response, name: body.name };
 }
 
-export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
+export interface MountedManagementApi {
+  /**
+   * Resolves once every password reset answered so far has finished its lookup and, for a known
+   * address, its token write. It does not wait for the email.
+   */
+  settle(): Promise<void>;
+}
+
+export function mountManagementApi(
+  app: Hono,
+  deps: ManagementApiDeps,
+  log: Logger,
+): MountedManagementApi {
+  const recoveries = new Set<Promise<void>>();
   const credentialKeyRing = deps.credentialKeyRing;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
@@ -608,14 +634,20 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
         return c.body(null, 202);
       }
       if (typeof body.email === "string") {
-        const issued = await withTransaction(deps.db, async (tx) => {
-          return requestAccountRecoveryAction(tx, {
-            email: body.email as string,
-          });
-        });
-        // Not awaited, so a known address does not wait on SMTP while an unknown one returns at once.
-        // `deliverAccountAction` catches its own failure.
-        if (issued !== null) void deliverAccountAction(deps, log, issued);
+        // Answered before the lookup, so a known address answers as fast as an unknown one.
+        // Shutdown waits for the write through `settle`, not for the email.
+        const email = body.email;
+        const recovery: Promise<void> = new Promise<IssuedAccountAction | null>((resolve) =>
+          setImmediate(() => resolve(issueRecovery(email, deps.db, log))),
+        )
+          .then(
+            (issued) => {
+              if (issued !== null) void deliverAccountAction(deps, log, issued).catch(() => {});
+            },
+            () => {},
+          )
+          .finally(() => recoveries.delete(recovery));
+        recoveries.add(recovery);
       }
       return c.body(null, 202);
     }),
@@ -1969,4 +2001,10 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
       return c.json({ personId: session.personId });
     }),
   );
+
+  return {
+    settle: async () => {
+      await Promise.all(recoveries);
+    },
+  };
 }
