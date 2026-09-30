@@ -191,6 +191,46 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That quantity cannot be marked on this line. Check how many are left to serve, or how many were served",
     es: "No se puede marcar esa cantidad en esta línea. Comprueba cuántos quedan por servir o cuántos se han servido",
   },
+  "adjustment.action_not_allowed": {
+    en: "That reason cannot be used for this. Choose another reason",
+    es: "Ese motivo no sirve para esto. Elige otro motivo",
+  },
+  "adjustment.over_limit": {
+    en: "That goes over what this reason allows on this bill. Choose another reason or ask a manager",
+    es: "Supera lo que permite este motivo en esta cuenta. Elige otro motivo o pregunta a un responsable",
+  },
+  "adjustment.note_required": {
+    en: "This reason needs a note. Add one and try again",
+    es: "Este motivo necesita una nota. Añádela e inténtalo de nuevo",
+  },
+  "adjustment.reason_inactive": {
+    en: "That reason is no longer in use. Choose another reason",
+    es: "Ese motivo ya no se usa. Elige otro motivo",
+  },
+  "adjustment.exceeds_amount": {
+    en: "That discount is more than it would come off. Enter a smaller amount",
+    es: "Ese descuento es mayor que el importe al que se aplica. Introduce un importe menor",
+  },
+  "adjustment.approval_required": {
+    en: "Someone with a higher role must approve this with their PIN",
+    es: "Alguien con un puesto superior debe aprobarlo con su PIN",
+  },
+  "adjustment.partial_with_extras": {
+    en: "A dish with extras can only be cancelled, comped or discounted whole",
+    es: "Un plato con extras solo se puede cancelar, invitar o descontar entero",
+  },
+  "adjustment.line_not_adjustable": {
+    en: "Choose the dish itself, not one of its extras",
+    es: "Elige el plato, no uno de sus extras",
+  },
+  "adjustment.quantity_invalid": {
+    en: "That quantity cannot be used on this line. Check how many are on it; a weighed item is done whole",
+    es: "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un artículo al peso va entero",
+  },
+  "adjustment_reason.not_found": {
+    en: "That reason no longer exists. Reload and choose another",
+    es: "Ese motivo ya no existe. Vuelve a cargar y elige otro",
+  },
   "product.unavailable": {
     en: "An item on this order has sold out. Remove it and try again",
     es: "Un artículo de este pedido está agotado. Quítalo e inténtalo de nuevo",
