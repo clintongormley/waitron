@@ -690,3 +690,119 @@ describe("till-app: the basket while the order is loaded again", () => {
     expect(counter(el).store.dirty).toBe(true);
   });
 });
+
+describe("till-app: the basket's lock while the order is loaded again", () => {
+  const cafe = product("cafe", "Café", "1.50");
+
+  async function givenAway(reload: Promise<HeldOrder>): Promise<TillApp> {
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementation(() => reload),
+    });
+    await previewComp(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(dialog(el)).toBeNull();
+    return el;
+  }
+
+  it("ends when the order is held, so the next basket takes products", async () => {
+    const reload = deferred<HeldOrder>();
+    const el = await givenAway(reload.promise);
+
+    emit(counter(el), "park-order", {});
+    await flush(el);
+    expect(counter(el).store.lineCount).toBe(0);
+    counter(el).store.addProduct(cafe, "1");
+
+    expect(counter(el).store.lineCount).toBe(1);
+    reload.resolve(heldOrder(5, "0.00"));
+    await flush(el);
+    expect(counter(el).store.lines.map((line) => line.product.id)).toEqual(["cafe"]);
+  });
+
+  it("ends on New sale, so the next basket takes products", async () => {
+    const reload = deferred<HeldOrder>();
+    const el = await givenAway(reload.promise);
+
+    emit(counter(el), "new-sale");
+    await flush(el);
+    counter(el).store.addProduct(cafe, "1");
+
+    expect(counter(el).store.lineCount).toBe(1);
+  });
+
+  it("ends when the till locks, so the next operator can edit the basket", async () => {
+    const reload = deferred<HeldOrder>();
+    const el = await givenAway(reload.promise);
+    const store = counter(el).store;
+
+    emit(counter(el), "logout");
+    await flush(el);
+    store.addProduct(cafe, "1");
+
+    expect(store.lineCount).toBe(3);
+    reload.resolve(heldOrder(5, "0.00"));
+    await flush(el);
+    expect(store.lineCount).toBe(3);
+  });
+
+  it("says the order could not be read again when the reload gets no answer", async () => {
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+
+    await previewComp(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
+    counter(el).store.addProduct(cafe, "1");
+    expect(counter(el).store.lineCount).toBe(3);
+  });
+
+  it("ends at the request limit when the reload never answers, and a late answer changes nothing", async () => {
+    const reload = deferred<HeldOrder>();
+    let signal: AbortSignal | undefined;
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementation((_id: string, options?: { signal?: AbortSignal }) => {
+          signal = options?.signal;
+          return reload.promise;
+        }),
+    });
+    await previewComp(el);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      const settle = async () => {
+        await vi.advanceTimersByTimeAsync(0);
+        await el.updateComplete;
+      };
+      inDialog(el, "[data-adjust-confirm]").click();
+      await settle();
+      await settle();
+      counter(el).store.addProduct(cafe, "1");
+      expect(counter(el).store.lineCount).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(150_000);
+      await settle();
+      expect(signal?.aborted).toBe(true);
+      counter(el).store.addProduct(cafe, "1");
+      expect(counter(el).store.lineCount).toBe(3);
+
+      reload.resolve(heldOrder(5, "0.00"));
+      await settle();
+      await settle();
+      expect(counter(el).store.lineCount).toBe(3);
+      expect(counter(el).store.revision).toBe(4);
+      expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

@@ -1085,6 +1085,9 @@ export class TillApp extends LitElement {
   @state() private adjustApproverError: string | null = null;
   /** Each opening of the adjustment dialog, so an answer to a closed one changes nothing. */
   #adjustments = 0;
+  /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder}; a no-op once it
+   * has ended, and for a lock taken later. */
+  #endReloadLock: () => void = () => {};
   #adjustOpening = false;
   /**
    * The outcome of the last non-captured `collect-card` attempt. Cleared wherever the basket it describes
@@ -2267,10 +2270,12 @@ export class TillApp extends LitElement {
   /** Replaces the basket with the open order `id` as stored, with its lines as the server lists
    * them; a failed read rejects, basket untouched. Nothing changes when `left` says, once the order
    * is read, that the basket has moved on. */
-  async #loadHeldOrder(id: string, left?: () => boolean): Promise<void> {
+  async #loadHeldOrder(id: string, left?: () => boolean, signal?: AbortSignal): Promise<void> {
     const [order, listed] = await Promise.all([
-      this.api.retrieveWorkingOrder(id),
-      this.#readStoredLines(id),
+      signal === undefined
+        ? this.api.retrieveWorkingOrder(id)
+        : this.api.retrieveWorkingOrder(id, { signal }),
+      this.#readStoredLines(id, signal),
     ]);
     if (left?.() === true) return;
     const lines: OrderLine[] = [];
@@ -2340,9 +2345,11 @@ export class TillApp extends LitElement {
 
   /** Null when the lines cannot be read: the basket then offers no adjustment, and keeps its own
    * controls on every line. */
-  async #readStoredLines(orderId: string): Promise<StoredLines | null> {
+  async #readStoredLines(orderId: string, signal?: AbortSignal): Promise<StoredLines | null> {
     try {
-      const { lines, revision } = await this.api.getTabLines(orderId);
+      const { lines, revision } = await (signal === undefined
+        ? this.api.getTabLines(orderId)
+        : this.api.getTabLines(orderId, { signal }));
       return { orderId, revision, lines };
     } catch {
       return null;
@@ -2357,21 +2364,29 @@ export class TillApp extends LitElement {
 
   /** After an adjustment to the stored order in the basket was made, refused or got no answer: the
    * order is loaded into the basket again, unless the basket has moved on by the time it is read.
-   * Until then the basket takes no edit, which the load would otherwise replace. False when the
-   * order or its lines could not be read. */
+   * Until then the basket takes no edit, which the load would otherwise replace; the lock ends when
+   * the basket moves on or the operator session ends, and at the request limit, after which a late
+   * answer is dropped. False when
+   * the order or its lines could not be read. */
   async #reloadCounterOrder(orderId: string, session: number): Promise<boolean> {
-    const left = () => this.#hasLeftCounterOrder(orderId, session);
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const unlock = this.#store.lockEdits();
+    this.#endReloadLock = unlock;
+    limit.signal.addEventListener("abort", unlock, { once: true });
+    const left = () => limit.signal.aborted || this.#hasLeftCounterOrder(orderId, session);
     let failure: StringKey | undefined;
-    this.#store.sending = true;
     try {
-      await this.#loadHeldOrder(orderId, left);
-      if (this.counterLines === null) failure = "held.reread_failed";
-    } catch {
-      failure = "held.stale";
+      await this.#loadHeldOrder(orderId, left, limit.signal);
+      if (limit.signal.aborted || this.counterLines === null) failure = "held.reread_failed";
+    } catch (error) {
+      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
+      failure = gone ? "held.stale" : "held.reread_failed";
     } finally {
-      this.#store.sending = false;
+      limit.done();
+      unlock();
     }
-    if (failure !== undefined && !left()) this.errorKey = failure;
+    if (failure !== undefined && !this.#hasLeftCounterOrder(orderId, session))
+      this.errorKey = failure;
     await this.#refreshHeldOrders();
     return failure === undefined;
   }
@@ -4322,6 +4337,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#endReloadLock();
     this.#menuPoll.stop();
     this.#tableZoneId = undefined;
     this.#markedRounds.clear();

@@ -3501,7 +3501,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`apps/till/src/widgets/basket.ts`); the basket reads each line's sent state and price before
       an adjustment from `GET /api/working-orders/:id/lines` when it loads the order, and loads the
       order again after an adjustment is made, refused as out of date, or left unanswered, taking
-      no edit until that load answers. An unsaved or changed basket offers none of them, nor does
+      no edit until that load answers, the basket moves on, the operator signs out, or the till's
+      request limit (150 s) passes, after which a late answer is dropped. An unsaved or changed basket offers none of them, nor does
       one whose pay, place or hold is out; a changed one offers them again once it is held and
       retrieved. Left open:
       - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be

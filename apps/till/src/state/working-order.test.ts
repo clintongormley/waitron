@@ -1067,3 +1067,47 @@ describe("WorkingOrderStore.splitLine (Split quantity)", () => {
     expect(rows(s)).toEqual(["burger ×2"]);
   });
 });
+
+describe("WorkingOrderStore.lockEdits", () => {
+  it("takes no edit while locked, and takes edits again once unlocked", () => {
+    const s = new WorkingOrderStore();
+    s.addProduct(cafe, "1");
+    const unlock = s.lockEdits();
+
+    expect(s.editsLocked).toBe(true);
+    s.addProduct(cafe, "1");
+    s.setLineQuantity(0, "3");
+    expect(s.lines.map((line) => line.quantity)).toEqual(["1"]);
+
+    unlock();
+    expect(s.editsLocked).toBe(false);
+    s.setLineQuantity(0, "3");
+    expect(s.lines.map((line) => line.quantity)).toEqual(["3"]);
+  });
+
+  it("ends when the basket is cleared or another order is loaded into it", () => {
+    const s = new WorkingOrderStore();
+    s.lockEdits();
+    s.clear();
+    expect(s.editsLocked).toBe(false);
+    s.addProduct(cafe, "1");
+    expect(s.lineCount).toBe(1);
+
+    s.lockEdits();
+    s.loadFrom("wo-2", [{ product: cafe, quantity: "2" }]);
+    expect(s.editsLocked).toBe(false);
+    s.setLineQuantity(0, "3");
+    expect(s.lines[0]!.quantity).toBe("3");
+  });
+
+  it("leaves a later lock in place when an earlier one is unlocked", () => {
+    const s = new WorkingOrderStore();
+    const earlier = s.lockEdits();
+    s.clear();
+    s.lockEdits();
+
+    earlier();
+
+    expect(s.editsLocked).toBe(true);
+  });
+});

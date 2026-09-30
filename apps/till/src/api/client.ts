@@ -1729,8 +1729,8 @@ export class TillApi {
    * Retrieve one parked order → `GET /api/working-orders/:id`. An id naming no OPEN order rejects with
    * `working_order.not_found`.
    */
-  retrieveWorkingOrder(id: string): Promise<HeldOrder> {
-    return this.#request<HeldOrder>(`/api/working-orders/${id}`, "GET");
+  retrieveWorkingOrder(id: string, options: ReadOptions = {}): Promise<HeldOrder> {
+    return this.#request<HeldOrder>(`/api/working-orders/${id}`, "GET", undefined, options.signal);
   }
 
   /**
@@ -2251,8 +2251,13 @@ export class TillApi {
    * Read one open tab's lines → `GET /api/working-orders/:orderId/lines`. A non-open or absent tab
    * rejects with `tab.not_open`. `revision` is what an edit of this copy sends back.
    */
-  getTabLines(orderId: string): Promise<TabLines> {
-    return this.#request<TabLines>(`/api/working-orders/${orderId}/lines`, "GET");
+  getTabLines(orderId: string, options: ReadOptions = {}): Promise<TabLines> {
+    return this.#request<TabLines>(
+      `/api/working-orders/${orderId}/lines`,
+      "GET",
+      undefined,
+      options.signal,
+    );
   }
 
   /**

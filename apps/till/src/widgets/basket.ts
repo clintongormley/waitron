@@ -597,6 +597,7 @@ export class TillBasket extends LitElement {
       !this.orderInFlight &&
       !store.dirty &&
       !store.sending &&
+      !store.editsLocked &&
       listing.revision === store.revision
       ? listing
       : null;
