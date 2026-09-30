@@ -1,10 +1,13 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import {
+  billDiscountNeedsManager,
   evaluateAdjustment,
   findAdjustmentReason,
   isPercentBp,
   percentReduction,
   policySnapshotOf,
+  readAdjustmentSettings,
+  readBillDiscountTotal,
   readReasonTotals,
   recordAdjustment,
   spreadBillDiscount,
@@ -90,6 +93,8 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** The role that must approve, or null when the operator may apply it alone. */
   needsApproval: PersonRoleValue | null;
+  /** The discount takes the bill's discounts past the venue's limit, so a manager must approve. */
+  overBillDiscountLimit: boolean;
   /** Each line the action changes: what it loses, and the rows the changed part becomes. */
   lines: {
     lineId: string;
@@ -145,6 +150,7 @@ interface Plan {
   before: Decimal;
   stage: AdjustmentStage | null;
   approverRole: PersonRoleValue | null;
+  overBillDiscountLimit: boolean;
 }
 
 const ZERO = decimal("0");
@@ -454,6 +460,13 @@ async function planAdjustment(
     ...priors,
   });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
+  const overBillDiscountLimit =
+    (ask.action === "discount_percent" || ask.action === "discount_amount") &&
+    (await pastBillDiscountLimit(tx, orderId, rows, reduction, actor.role as PersonRoleValue));
+  let approverRole = verdict.kind === "needs_approval" ? verdict.approverRole : null;
+  if (overBillDiscountLimit && (approverRole === null || !roleAtLeast(approverRole, "manager"))) {
+    approverRole = "manager";
+  }
   return {
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
@@ -465,8 +478,29 @@ async function planAdjustment(
     nominal,
     before,
     stage: dish === null ? null : stageOf(dish),
-    approverRole: verdict.kind === "needs_approval" ? verdict.approverRole : null,
+    approverRole,
+    overBillDiscountLimit,
   };
+}
+
+/** Whether `reduction` takes the bill's discounts past the venue's limit, measured against the
+ * bill's price before adjustments, while the operator is below a manager. */
+async function pastBillDiscountLimit(
+  tx: Transaction,
+  orderId: string,
+  rows: readonly Row[],
+  reduction: Decimal,
+  actorRole: PersonRoleValue,
+): Promise<boolean> {
+  const { maxBillDiscountBp } = await readAdjustmentSettings(tx);
+  if (maxBillDiscountBp === null) return false;
+  return billDiscountNeedsManager({
+    limitBp: maxBillDiscountBp,
+    priorDiscount: await readBillDiscountTotal(tx, orderId),
+    reduction,
+    billValue: sumDecimals(rows.map((row) => listValue(row, row.quantity))),
+    actorRole,
+  });
 }
 
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
@@ -500,6 +534,7 @@ export async function previewAdjustment(
     reduction: money(plan.reduction),
     nominalValue: money(plan.nominal),
     needsApproval: plan.approverRole,
+    overBillDiscountLimit: plan.overBillDiscountLimit,
     lines,
   };
 }

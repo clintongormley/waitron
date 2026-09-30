@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -18,6 +18,7 @@ import type { Transaction } from "@waitron/db";
 import {
   adjustments,
   createAdjustmentReason,
+  saveAdjustmentSettings,
   updateAdjustmentReason,
   type AdjustmentAction,
 } from "@waitron/adjustments";
@@ -1205,6 +1206,205 @@ describe("cumulative limits (plan D6)", () => {
       },
       "adjustment.over_limit",
     );
+  });
+});
+
+describe("the venue's limit on a bill's total discount (B11b)", () => {
+  // The venue is shared by every case in the file, so each case sets the limit it needs.
+  const setLimit = (maxBillDiscountBp: number | null) =>
+    inTx(venue, (tx) => saveAdjustmentSettings(tx, { maxBillDiscountBp }));
+  afterEach(() => setLimit(null));
+
+  const MANAGER_PIN = () => ({ personId: venue.managerId, pin: PINS.manager });
+  const billPercent = (percentBp: number, extra: Partial<Ask> = {}): Ask => ({
+    action: "discount_percent",
+    percentBp,
+    operatorId: venue.staffId,
+    ...extra,
+  });
+
+  it("asks a manager for a staff member's second 30% off a bill under a 40% limit, and records who approved", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+
+    await refusedWith(billId, billPercent(3000), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+    expect(await preview(billId, billPercent(3000))).toMatchObject({
+      reduction: "21.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+
+    await adjust(billId, billPercent(3000, { approver: MANAGER_PIN() }));
+    expect((await recordedOn(billId)).map((row) => [row.reduction, row.approvedBy])).toEqual([
+      [3000, null],
+      [2100, venue.managerId],
+    ]);
+  });
+
+  it("refuses a supervisor as the approver past the limit", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+    await refusedWith(
+      billId,
+      billPercent(3000, { approver: { personId: venue.supervisorId, pin: PINS.supervisor } }),
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+  });
+
+  it("counts a line discount and a bill discount together, each under the limit alone", async () => {
+    await setLimit(4000);
+    // €40.00 before adjustments, so the limit is €16.00: €9.00 off the bottle, then €8.00 off the bill.
+    const { billId } = await bill([{ name: "Bottle" }, { name: "Salad" }]);
+    const billAmount: Ask = {
+      action: "discount_amount",
+      amount: "8.00",
+      operatorId: venue.staffId,
+    };
+    expect(await preview(billId, billAmount)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 3000,
+      operatorId: venue.staffId,
+    });
+
+    await refusedWith(billId, billAmount, "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+  });
+
+  it("counts a line discount asked after a bill discount against the limit too", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Bottle" }, { name: "Salad" }]);
+    await adjust(billId, { action: "discount_amount", amount: "8.00", operatorId: venue.staffId });
+
+    await refusedWith(
+      billId,
+      {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "discount_amount",
+        amount: "8.01",
+        operatorId: venue.staffId,
+      },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+    // Reaching €16.00 exactly is allowed.
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_amount",
+      amount: "8.00",
+      operatorId: venue.staffId,
+    });
+  });
+
+  it("leaves a comp out of the total, and never asks a manager for one", async () => {
+    await setLimit(4000);
+    // €60.00 before adjustments, so the limit is €24.00; the €30.00 comp counts toward nothing.
+    const { billId } = await bill([{ name: "Bottle" }, { name: "Salad", quantity: "3" }]);
+    const comp: Ask = {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      operatorId: venue.staffId,
+    };
+    expect(await preview(billId, comp)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, comp);
+
+    await adjust(billId, { action: "discount_amount", amount: "20.00", operatorId: venue.staffId });
+    expect((await recordedOn(billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["comp", null],
+      ["discount_amount", null],
+    ]);
+  });
+
+  it("changes nothing when the venue has no limit", async () => {
+    await setLimit(null);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+    expect(await preview(billId, billPercent(3000))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, billPercent(3000));
+    expect(await recordedOn(billId)).toHaveLength(2);
+  });
+
+  it("lets a manager pass the limit without anyone's PIN", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    const byManager = billPercent(3000, { operatorId: venue.managerId });
+    await adjust(billId, byManager);
+    expect(await preview(billId, byManager)).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(billId, byManager);
+    expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null, null]);
+  });
+
+  it("asks for the higher role when the reason needs an approver of its own", async () => {
+    await setLimit(4000);
+    const policy = {
+      ...REASONS.house,
+      names: {},
+      actions: ["discount_percent" as const],
+    };
+    const [byAdmin, bySupervisor] = await inTx(venue, async (tx) => [
+      await createAdjustmentReason(tx, {
+        ...policy,
+        name: "Owner's discount B11b",
+        applyRole: "manager",
+        approverRole: "admin",
+      }),
+      await createAdjustmentReason(tx, {
+        ...policy,
+        name: "Regular's discount B11b",
+        applyRole: "supervisor",
+        approverRole: "supervisor",
+      }),
+    ]);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(3000));
+
+    // Past the limit under an admin-approved reason: admin, the higher of the two.
+    expect(await preview(billId, billPercent(3000, { reasonId: byAdmin.id }))).toMatchObject({
+      needsApproval: "admin",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(
+      billId,
+      billPercent(3000, { reasonId: byAdmin.id, approver: MANAGER_PIN() }),
+      "adjustment.approval_required",
+      { approverRole: "admin" },
+    );
+
+    // Under the limit a supervisor would do; past it, a manager.
+    expect(await preview(billId, billPercent(1000, { reasonId: bySupervisor.id }))).toMatchObject({
+      needsApproval: "supervisor",
+      overBillDiscountLimit: false,
+    });
+    await refusedWith(
+      billId,
+      billPercent(3000, {
+        reasonId: bySupervisor.id,
+        approver: { personId: venue.supervisorId, pin: PINS.supervisor },
+      }),
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+    await adjust(billId, billPercent(3000, { reasonId: bySupervisor.id, approver: MANAGER_PIN() }));
+    expect((await recordedOn(billId)).at(-1)).toMatchObject({ approvedBy: venue.managerId });
   });
 });
 
