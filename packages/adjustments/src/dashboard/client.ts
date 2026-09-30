@@ -18,7 +18,8 @@ export interface AdjustmentReasonInput {
   noteRequired: boolean;
 }
 
-/** `maxBillDiscountBp` is in basis points of a bill's price before adjustments; null is no limit. */
+/** `maxBillDiscountBp` is in basis points of the price before adjustments of what is still on a
+ * bill; null is no limit. */
 export interface AdjustmentSettings {
   maxBillDiscountBp: number | null;
 }

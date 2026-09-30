@@ -69,9 +69,9 @@ const en = {
   "adjustments.load_error": "The adjustment reasons could not be loaded.",
   "adjustments.reorder_error": "The new order could not be saved.",
   "adjustments.limit.heading": "Limit on a bill's discounts",
-  "adjustments.limit.field": "Bill discount limit (%)",
+  "adjustments.limit.field": "Most the discounts may take off",
   "adjustments.limit.hint":
-    "Discounts on one bill, on its items and on the whole bill added together, may take off up to this share of its price before adjustments; past it, a manager must approve with their PIN. Give-aways and cancellations do not count. Leave it empty for no limit.",
+    "Counts the discounts on a bill's items and on the whole bill together, as a share of the price before adjustments of what is still on the bill. Past this share, anyone below a manager needs a manager, or someone more senior, to approve with their PIN. Cancelling an item can also take a bill past it. Give-aways made on this bill do not count as discount. Leave it empty for no limit.",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
   "adjustments.limit.load_error": "The bill discount limit could not be loaded.",
@@ -201,9 +201,9 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
   "adjustments.limit.heading": "Límite de descuento por cuenta",
-  "adjustments.limit.field": "Límite de descuento por cuenta (%)",
+  "adjustments.limit.field": "Máximo que pueden quitar los descuentos",
   "adjustments.limit.hint":
-    "Los descuentos de una cuenta, en sus artículos y en toda la cuenta sumados, pueden quitar hasta este porcentaje de su precio antes de ajustes; por encima, un encargado debe aprobarlo con su PIN. Las invitaciones y las anulaciones no cuentan. Déjalo vacío para no poner límite.",
+    "Suma los descuentos en los artículos de una cuenta y en toda la cuenta, en proporción al precio antes de ajustes de lo que sigue en ella. Por encima de este porcentaje, quien esté por debajo de encargado necesita que un encargado, o alguien de rango superior, lo apruebe con su PIN. Anular un artículo también puede hacer que la cuenta lo supere. Las invitaciones hechas en esta cuenta no cuentan como descuento. Déjalo vacío para no poner límite.",
   "adjustments.limit.save": "Guardar límite",
   "adjustments.limit.saved": "Límite guardado.",
   "adjustments.limit.load_error": "No se pudo cargar el límite de descuento por cuenta.",

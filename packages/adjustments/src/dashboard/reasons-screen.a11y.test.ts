@@ -158,7 +158,7 @@ describe.each(["light", "dark"] as const)("adjustment reasons accessibility (%s)
 
   test("the bill discount limit after an invalid submission", async () => {
     const el = await screen(theme);
-    const field = deep(el, 'wt-input[name="maxBillDiscount"]');
+    const field = deep(el, 'wt-price-input[name="maxBillDiscount"]');
     const input = field.shadowRoot!.querySelector("input")!;
     input.value = "150";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));

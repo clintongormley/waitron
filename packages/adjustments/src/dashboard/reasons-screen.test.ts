@@ -1070,13 +1070,27 @@ describe("the bill discount limit", () => {
     const el = await mount(withLimit(1250));
     const input = limit(el) as Named & { label: string; hint: string };
     expect(input.value).toBe("12.5");
-    expect(input.label).toBe("Bill discount limit (%)");
+    expect(input.label).toBe("Most the discounts may take off");
     expect(input.hint).toBe(
-      "Discounts on one bill, on its items and on the whole bill added together, may take off up to this share of its price before adjustments; past it, a manager must approve with their PIN. Give-aways and cancellations do not count. Leave it empty for no limit.",
+      "Counts the discounts on a bill's items and on the whole bill together, as a share of the price before adjustments of what is still on the bill. Past this share, anyone below a manager needs a manager, or someone more senior, to approve with their PIN. Cancelling an item can also take a bill past it. Give-aways made on this bill do not count as discount. Leave it empty for no limit.",
     );
     expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
       "Limit on a bill's discounts",
     );
+  });
+
+  it("shows the percentage in a narrow box marked %, the label and help at full width", async () => {
+    const el = await mount(withLimit(1250));
+    const input = limit(el) as Named & { updateComplete: Promise<unknown> };
+    await input.updateComplete;
+    expect(input.tagName).toBe("WT-PRICE-INPUT");
+    const box = input.shadowRoot!.querySelector("[part=amount]")!;
+    const unit = input.shadowRoot!.querySelector("[part=unit]")!;
+    expect(unit.textContent!.trim()).toBe("%");
+    expect(input.shadowRoot!.querySelector("[part=currency]")).toBeNull();
+    const narrow = parseFloat(getComputedStyle(input).getPropertyValue("--wt-price-field-width"));
+    expect(box.getBoundingClientRect().width).toBeCloseTo(narrow, 0);
+    expect(box.getAttribute("aria-describedby")!.split(" ")).toContain(unit.id);
   });
 
   it("shows an empty field when the venue sets no limit", async () => {
@@ -1089,7 +1103,10 @@ describe("the bill discount limit", () => {
     const el = await mount(withLimit(1));
     const input = limit(el) as Named & { label: string };
     expect(input.value).toBe("0,01");
-    expect(input.label).toBe("Límite de descuento por cuenta (%)");
+    expect(input.label).toBe("Máximo que pueden quitar los descuentos");
+    expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
+      "Límite de descuento por cuenta",
+    );
     expect(button(el, "save-limit").textContent!.trim()).toBe("Guardar límite");
   });
 
@@ -1268,6 +1285,36 @@ describe("the bill discount limit", () => {
     );
     await settle(el);
     expect(api.saveSettings).toHaveBeenCalledWith({ maxBillDiscountBp: 2000 });
+  });
+
+  it("says nothing of a wrong value typed after a save until Save is pressed again", async () => {
+    const el = await mount(withLimit(null));
+    await type(el, "maxBillDiscount", "abc");
+    await press(el, "save-limit");
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    await type(el, "maxBillDiscount", "abc");
+    expect(besideField(el, "maxBillDiscount")).toBe("");
+    expect(limitBottom(el)).toBe("");
+    expect(button(el, "save-limit").disabled).toBe(false);
+  });
+
+  it("drops the could-not-load alert once a later read of the limit succeeds", async () => {
+    const api = withLimit(null, {
+      getSettings: vi
+        .fn()
+        .mockResolvedValueOnce({ maxBillDiscountBp: null })
+        .mockRejectedValueOnce({ code: "x" })
+        .mockResolvedValue({ maxBillDiscountBp: 2500 }),
+    });
+    const el = await mount(api);
+    await type(el, "maxBillDiscount", "20");
+    await press(el, "save-limit");
+    expect(limitAlert(el)).toBe("The bill discount limit could not be loaded.");
+    await type(el, "maxBillDiscount", "25");
+    await press(el, "save-limit");
+    expect(limitAlert(el)).toBe("");
+    expect(el.shadowRoot!.querySelector('[data-test="limit-alert"]')).toBeNull();
   });
 
   it("drops the saved note once the field changes again", async () => {

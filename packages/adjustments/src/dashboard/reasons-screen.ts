@@ -196,7 +196,6 @@ export class AdjustmentReasonsScreen extends LitElement {
       .limit {
         display: grid;
         gap: var(--wt-space-3);
-        max-width: var(--wt-modal-max-width);
         margin-top: var(--wt-space-6);
       }
       .limit h2,
@@ -588,9 +587,10 @@ export class AdjustmentReasonsScreen extends LitElement {
       ...(this.limitError ? [this.limitError] : []),
       ...(error ? [t("adjustments.fix_fields")] : []),
     ].join(" ");
-    return html`<wt-input
+    return html`<wt-price-input
         name="maxBillDiscount"
-        autocomplete="off"
+        unit="%"
+        fixed-unit
         label=${t("adjustments.limit.field")}
         hint=${t("adjustments.limit.hint")}
         .value=${this.#limitText()}
@@ -604,7 +604,7 @@ export class AdjustmentReasonsScreen extends LitElement {
         }}
         @keydown=${(event: KeyboardEvent) =>
           submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-limit"]'))}
-      ></wt-input>
+      ></wt-price-input>
       ${
         this.limitSaved
           ? html`<p role="status" data-test="limit-saved">${t("adjustments.limit.saved")}</p>`
