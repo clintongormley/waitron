@@ -73,12 +73,11 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
   });
 
   it("mounts the adjustment report on the context's request and live data", async () => {
-    const fetchImpl = vi.fn((path: string) =>
+    const fetchImpl = vi.fn(() =>
       Promise.resolve({
         ok: true,
         status: 200,
-        text: async () =>
-          JSON.stringify(path.includes("overview") ? { businessDay: "2026-09-29" } : emptyReport()),
+        text: async () => JSON.stringify(emptyReport()),
       } as Response),
     );
     const liveData = new LiveData();
@@ -101,7 +100,7 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
     expect(screen.api.liveData).toBe(liveData);
     await vi.waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith(
-        "/management-api/adjustments/report?from=2026-09-29&to=2026-09-29",
+        "/management-api/adjustments/report",
         expect.objectContaining({ method: "GET" }),
       ),
     );

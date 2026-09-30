@@ -22,16 +22,21 @@ afterEach(() => {
 type Fake = {
   getReport: ReturnType<typeof vi.fn>;
   listEntries: ReturnType<typeof vi.fn>;
-  currentBusinessDay: ReturnType<typeof vi.fn>;
   liveData: LiveData | undefined;
   background?: Fake;
 };
 
+type Range = { from: string; to: string };
+
+/** The routes answer a request without a range with the venue's current business day. */
+function answer(report: typeof fixtureReport, range?: Range) {
+  return range === undefined ? report("2026-09-29") : report(range.from, range.to);
+}
+
 function fakeApi(overrides: Partial<Fake> = {}): Fake {
   const api: Fake = {
     liveData: undefined,
-    currentBusinessDay: vi.fn().mockResolvedValue("2026-09-29"),
-    getReport: vi.fn((from: string, to: string) => Promise.resolve(fixtureReport(from, to))),
+    getReport: vi.fn((range?: Range) => Promise.resolve(answer(fixtureReport, range))),
     listEntries: vi.fn().mockResolvedValue(alexEntries()),
     ...overrides,
   };
@@ -107,12 +112,11 @@ async function pick(
 }
 
 describe("the adjustment report", () => {
-  it("reads the venue's current business day, then the report over that one day", async () => {
+  it("first asks for the venue's current business day, and shows the days the answer covers", async () => {
     const api = fakeApi();
     const el = await mount(api);
-    expect(api.currentBusinessDay).toHaveBeenCalledTimes(1);
     expect(api.getReport).toHaveBeenCalledTimes(1);
-    expect(api.getReport).toHaveBeenCalledWith("2026-09-29", "2026-09-29");
+    expect(api.getReport).toHaveBeenCalledWith(undefined);
     expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!.value).toBe(
       "2026-09-29",
     );
@@ -245,31 +249,67 @@ describe("the range", () => {
     const api = fakeApi();
     const el = await mount(api);
     await pick(el, "from", "2026-09-01");
-    expect(api.getReport).toHaveBeenLastCalledWith("2026-09-01", "2026-09-29");
+    expect(api.getReport).toHaveBeenLastCalledWith({ from: "2026-09-01", to: "2026-09-29" });
     expect(api.getReport).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps a range chosen before the business day arrives", async () => {
-    let answer!: (day: string) => void;
-    const api = fakeApi({
-      currentBusinessDay: vi.fn(() => new Promise<string>((resolve) => (answer = resolve))),
-    });
-    const el = await mount(api);
+  it("keeps a range chosen before the first answer arrives", async () => {
+    let first!: (report: ReturnType<typeof fixtureReport>) => void;
+    const getReport = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (first = resolve)))
+      .mockImplementation((range?: Range) => Promise.resolve(answer(fixtureReport, range)));
+    const el = await mount(fakeApi({ getReport }));
     await pick(el, "from", "2026-09-01");
     await pick(el, "to", "2026-09-02");
-    answer("2026-09-29");
+    first(fixtureReport("2026-09-29"));
     await settle(el);
-    expect(api.getReport).toHaveBeenLastCalledWith("2026-09-01", "2026-09-02");
+    expect(getReport).toHaveBeenLastCalledWith({ from: "2026-09-01", to: "2026-09-02" });
     expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!.value).toBe(
       "2026-09-01",
     );
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="to"]')!.value).toBe(
+      "2026-09-02",
+    );
   });
 
-  it("falls back to today when the business day cannot be read", async () => {
-    const api = fakeApi({ currentBusinessDay: vi.fn().mockRejectedValue({ code: "x" }) });
-    await mount(api);
-    const today = new Date().toISOString().slice(0, 10);
-    expect(api.getReport).toHaveBeenCalledWith(today, today);
+  it("leaves the days empty when the first read is refused, and reads the days then chosen", async () => {
+    const getReport = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "x" })
+      .mockImplementation((range?: Range) => Promise.resolve(answer(fixtureReport, range)));
+    const el = await mount(fakeApi({ getReport }));
+    expect(part(el, "load-error")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="from"]')!.value).toBe("");
+    await pick(el, "from", "2026-09-01");
+    expect(getReport).toHaveBeenCalledTimes(1);
+    await pick(el, "to", "2026-09-03");
+    expect(getReport).toHaveBeenLastCalledWith({ from: "2026-09-01", to: "2026-09-03" });
+    expect(part(el, "load-error")).toBeNull();
+    expect(part(el, "people")).not.toBeNull();
+  });
+
+  it("follows the current business day while no day has been chosen", async () => {
+    const liveData = new LiveData();
+    const getReport = vi
+      .fn()
+      .mockResolvedValueOnce(fixtureReport("2026-09-29"))
+      .mockResolvedValue(fixtureReport("2026-09-30"));
+    const api = fakeApi({ liveData, getReport });
+    const el = await mount(api);
+    await open(el, ALEX);
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector<HTMLInputElement>('input[name="to"]')!.value).toBe(
+        "2026-09-30",
+      ),
+    );
+    await vi.waitFor(() =>
+      expect(api.listEntries).toHaveBeenLastCalledWith("2026-09-30", "2026-09-30", {
+        personId: ALEX,
+      }),
+    );
+    liveData.clear();
   });
 
   it("ignores a cleared day", async () => {
@@ -291,15 +331,13 @@ describe("the range", () => {
     expect(part(el, "people")).toBeNull();
     await pick(el, "to", "2026-09-30");
     expect(part(el, "range-error")).toBeNull();
-    expect(api.getReport).toHaveBeenLastCalledWith("2026-09-30", "2026-09-30");
+    expect(api.getReport).toHaveBeenLastCalledWith({ from: "2026-09-30", to: "2026-09-30" });
   });
 
   it("shows a refusal in words and no stale report", async () => {
     const getReport = vi
       .fn()
-      .mockImplementationOnce((from: string, to: string) =>
-        Promise.resolve(fixtureReport(from, to)),
-      )
+      .mockImplementationOnce((range?: Range) => Promise.resolve(answer(fixtureReport, range)))
       .mockRejectedValue({ code: "management.forbidden" });
     const el = await mount(fakeApi({ getReport }));
     await pick(el, "from", "2026-09-28");
@@ -412,10 +450,8 @@ describe("the drill-down", () => {
   it("keeps the person's name over a range where they have no row", async () => {
     const getReport = vi
       .fn()
-      .mockImplementationOnce((from: string, to: string) =>
-        Promise.resolve(fixtureReport(from, to)),
-      )
-      .mockImplementation((from: string, to: string) => Promise.resolve(emptyReport(from, to)));
+      .mockImplementationOnce((range?: Range) => Promise.resolve(answer(fixtureReport, range)))
+      .mockImplementation((range?: Range) => Promise.resolve(answer(emptyReport, range)));
     const el = await mount(fakeApi({ getReport }));
     await open(el, ALEX);
     await pick(el, "from", "2026-09-01");
@@ -534,6 +570,30 @@ describe("sorting and columns", () => {
 });
 
 describe("live data", () => {
+  it("leaves nothing observed when the screen closes before its first answer", async () => {
+    const liveData = new LiveData();
+    let first!: (report: ReturnType<typeof fixtureReport>) => void;
+    const pending = new Promise((resolve) => (first = resolve));
+    const getReport = vi.fn(() => pending);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    hosts.push(host);
+    const el = document.createElement(
+      "dashboard-adjustment-report-screen",
+    ) as AdjustmentReportScreen;
+    el.api = fakeApi({ liveData, getReport }) as unknown as AdjustmentsApi;
+    host.appendChild(el);
+    el.remove();
+    first(fixtureReport("2026-09-29"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(liveData.interests).toEqual([]);
+    const reads = getReport.mock.calls.length;
+    liveData.invalidate([{ type: "adjustments" }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(getReport).toHaveBeenCalledTimes(reads);
+  });
+
   it("reads the report and the open list again, passively, when an adjustment changes", async () => {
     const liveData = new LiveData();
     const background = fakeApi();
@@ -545,7 +605,7 @@ describe("live data", () => {
     expect(api.listEntries).toHaveBeenCalledTimes(1);
     liveData.invalidate([{ type: "adjustments" }]);
     await vi.waitFor(() => {
-      expect(background.getReport).toHaveBeenCalledWith("2026-09-29", "2026-09-29");
+      expect(background.getReport).toHaveBeenCalledWith(undefined);
       expect(background.listEntries).toHaveBeenCalledWith("2026-09-29", "2026-09-29", {
         personId: ALEX,
       });

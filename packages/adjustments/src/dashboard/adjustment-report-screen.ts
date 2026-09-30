@@ -15,6 +15,7 @@ import type {
   PersonRef,
 } from "./client.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { perLocale } from "./per-locale.js";
 import { actionName, actionTotalName, stageName, t, tf } from "./strings.js";
 
 const ACTIONS: readonly AdjustmentAction[] = [
@@ -50,19 +51,6 @@ interface PersonRow {
   approvalsGiven: number | null;
 }
 
-/** One per locale, built on first use: a table formats every row on every render. */
-function perLocale<T>(make: (locale: string) => T): (locale: string) => T {
-  const made = new Map<string, T>();
-  return (locale) => {
-    let value = made.get(locale);
-    if (value === undefined) {
-      value = make(locale);
-      made.set(locale, value);
-    }
-    return value;
-  };
-}
-
 const rateFormat = perLocale(
   (locale) =>
     new Intl.NumberFormat(locale, {
@@ -94,11 +82,6 @@ function tallyCell(tally: AdjustmentTally): string {
 
 function personName(ref: PersonRef): string {
   return ref.name ?? t("adjustment_report.unknown_person");
-}
-
-/** Today in UTC, so near midnight it can name a different day than the venue's. */
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 /** `YYYY-MM-DD HH:MM` in the browser's own time zone, as the dashboard writes a moment elsewhere. */
@@ -239,8 +222,9 @@ export class AdjustmentReportScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: AdjustmentsApi;
-  @state() private from = today();
-  @state() private to = today();
+  /** Empty until the first answer names the venue's current business day. */
+  @state() private from?: string;
+  @state() private to?: string;
   @state() private report?: AdjustmentReport;
   @state() private loadError?: string;
   @state() private entriesOf?: EntriesOf;
@@ -249,7 +233,8 @@ export class AdjustmentReportScreen extends LitElement {
   @state() private entriesName = "";
   @state() private entries?: AdjustmentEntry[];
   @state() private entriesError?: string;
-  /** Set once the person picks a day, so a late business day never replaces their choice. */
+  /** Set once the person picks a day; until then the report follows the venue's current business
+   * day, which the routes answer when no range is given. */
   #rangeChosen = false;
   readonly #reports = new QueryController(
     this,
@@ -272,24 +257,12 @@ export class AdjustmentReportScreen extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    void this.#start();
-  }
-
-  async #start(): Promise<void> {
-    try {
-      const day = await this.api.currentBusinessDay();
-      if (!this.#rangeChosen) {
-        this.from = day;
-        this.to = day;
-      }
-    } catch {
-      // The report still opens, over today by the browser's clock.
-    }
-    if (!this.#rangeChosen) this.#load();
+    // Synchronously: a watch started after an await could outlive a screen already closed.
+    this.#load();
   }
 
   #backwards(): boolean {
-    return this.from > this.to;
+    return this.from !== undefined && this.to !== undefined && this.from > this.to;
   }
 
   /** The first read of each range is the person's; the refreshes live data asks for are passive. */
@@ -306,36 +279,50 @@ export class AdjustmentReportScreen extends LitElement {
   #load(): void {
     this.report = undefined;
     this.loadError = undefined;
-    if (this.#backwards()) {
-      this.#reports.release("report");
-      this.#entryQueries.release("entries");
-      return;
-    }
     const { from, to } = this;
+    let range: { from: string; to: string } | undefined;
+    if (this.#rangeChosen) {
+      if (from === undefined || to === undefined || this.#backwards()) {
+        this.#reports.release("report");
+        this.#entryQueries.release("entries");
+        return;
+      }
+      range = { from, to };
+    }
     void this.#reports
       .watch(
         "report",
         {
-          key: JSON.stringify(["adjustments:report", from, to]),
+          key: JSON.stringify(["adjustments:report", range ?? "current"]),
           dependencies: QUERY_DEPENDENCIES.report.map((type) => ({ type })),
           refreshMs: 60_000,
-          read: this.#reader((api) => api.getReport(from, to)),
+          read: this.#reader((api) => api.getReport(range)),
         },
-        (report) => {
-          this.report = report;
-          this.loadError = undefined;
-        },
+        (report) => this.#answered(report),
       )
       .catch(() => {
         // The query's error callback has already said why.
       });
+    if (range !== undefined && this.entriesOf !== undefined) this.#loadEntries(this.entriesOf);
+  }
+
+  /** Until a day is chosen, the answer's days are the range, and a new business day moves it. */
+  #answered(report: AdjustmentReport): void {
+    this.report = report;
+    this.loadError = undefined;
+    if (this.#rangeChosen) return;
+    if (report.fromBusinessDay === this.from && report.toBusinessDay === this.to) return;
+    this.from = report.fromBusinessDay;
+    this.to = report.toBusinessDay;
     if (this.entriesOf !== undefined) this.#loadEntries(this.entriesOf);
   }
 
+  /** Only once a report is shown, so both days are known. */
   #loadEntries(of: EntriesOf): void {
     this.entries = undefined;
     this.entriesError = undefined;
-    const { from, to } = this;
+    const from = this.from!;
+    const to = this.to!;
     void this.#entryQueries
       .watch(
         "entries",
@@ -748,7 +735,7 @@ export class AdjustmentReportScreen extends LitElement {
         <input
           type="date"
           name=${field}
-          .value=${this[field]}
+          .value=${this[field] ?? ""}
           aria-invalid=${backwards ? "true" : "false"}
           aria-describedby=${backwards ? "range-error" : nothing}
           @change=${(event: Event) => this.#onDateChange(field, event)}

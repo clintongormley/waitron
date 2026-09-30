@@ -27,7 +27,6 @@ async function screen(
   setLocale("en");
   await mountThemed("<div></div>", theme);
   const api = {
-    currentBusinessDay: vi.fn().mockResolvedValue("2026-09-29"),
     getReport: vi.fn().mockResolvedValue(fixtureReport()),
     listEntries: vi.fn().mockResolvedValue(alexEntries()),
     ...overrides,

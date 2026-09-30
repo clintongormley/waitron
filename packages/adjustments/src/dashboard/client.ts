@@ -130,9 +130,11 @@ export class AdjustmentsApi {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });
   }
 
-  getReport(from: string, to: string): Promise<AdjustmentReport> {
+  /** Without a range, the routes answer the venue's current business day. */
+  getReport(range?: { from: string; to: string }): Promise<AdjustmentReport> {
+    const query = range === undefined ? "" : `?${new URLSearchParams(range)}`;
     return this.request<AdjustmentReport>(
-      `/management-api/adjustments/report?${new URLSearchParams({ from, to })}`,
+      `/management-api/adjustments/report${query}`,
       "GET",
       undefined,
       { passive: this.passive },
@@ -150,15 +152,5 @@ export class AdjustmentsApi {
       { passive: this.passive },
     );
     return body.entries;
-  }
-
-  async currentBusinessDay(): Promise<string> {
-    const body = await this.request<{ businessDay: string }>(
-      "/management-api/reports/overview",
-      "GET",
-      undefined,
-      { passive: this.passive },
-    );
-    return body.businessDay;
   }
 }

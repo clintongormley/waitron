@@ -99,17 +99,23 @@ describe("AdjustmentsApi", () => {
     });
   });
 
-  it("reads the report over a range of business days", async () => {
+  it("reads the report over a range of business days, or over the current one", async () => {
     const report = {
       fromBusinessDay: "2026-09-01",
       toBusinessDay: "2026-09-02",
     } as AdjustmentReport;
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(report));
-    expect(await api(fetchImpl).getReport("2026-09-01", "2026-09-02")).toEqual(report);
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/adjustments/report?from=2026-09-01&to=2026-09-02",
-      { method: "GET", credentials: "include" },
+    expect(await api(fetchImpl).getReport({ from: "2026-09-01", to: "2026-09-02" })).toEqual(
+      report,
     );
+    await api(fetchImpl).getReport();
+    expect(fetchImpl.mock.calls).toEqual([
+      [
+        "/management-api/adjustments/report?from=2026-09-01&to=2026-09-02",
+        { method: "GET", credentials: "include" },
+      ],
+      ["/management-api/adjustments/report", { method: "GET", credentials: "include" }],
+    ]);
   });
 
   it("lists everyone's adjustments, one person's, or the guests', from the entries envelope", async () => {
@@ -128,23 +134,12 @@ describe("AdjustmentsApi", () => {
     ]);
   });
 
-  it("reads the venue's current business day from the sales overview", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ businessDay: "2026-09-29" }));
-    expect(await api(fetchImpl).currentBusinessDay()).toBe("2026-09-29");
-    expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/overview", {
-      method: "GET",
-      credentials: "include",
-    });
-  });
-
   it("marks each report read passive on the background client", async () => {
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ entries: [], businessDay: "2026-09-29" }));
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [] }));
     const client = api(fetchImpl, true);
-    await client.getReport("2026-09-01", "2026-09-01");
+    await client.getReport();
+    await client.getReport({ from: "2026-09-01", to: "2026-09-01" });
     await client.listEntries("2026-09-01", "2026-09-01", "everyone");
-    await client.currentBusinessDay();
     for (const call of fetchImpl.mock.calls) {
       expect(new Headers((call[1] as RequestInit).headers).get("x-waitron-live")).toBe("1");
     }
