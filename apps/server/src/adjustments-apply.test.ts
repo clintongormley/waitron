@@ -28,6 +28,7 @@ import { listStationNotices, writePrintHeldWork } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
+import { splitBill, transferItems } from "./bill-actions.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1405,6 +1406,217 @@ describe("the venue's limit on a bill's total discount (B11b)", () => {
     );
     await adjust(billId, billPercent(3000, { reasonId: bySupervisor.id, approver: MANAGER_PIN() }));
     expect((await recordedOn(billId)).at(-1)).toMatchObject({ approvedBy: venue.managerId });
+  });
+
+  const byStaff = () => ({ operatorId: venue.staffId });
+  /** The staff member's command on `billId`'s party, at the party's current revision. */
+  const partyCommand = async (billId: string) => {
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: parties.revision })
+        .from(workingOrders)
+        .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+        .where(eq(workingOrders.id, billId)),
+    );
+    return { ...byStaff(), expectedPartyRevision: row!.revision };
+  };
+  const moveOff = async (billId: string, lineNos: number[]) => {
+    const command = await partyCommand(billId);
+    const split = await inTx(venue, (tx) =>
+      splitBill(
+        tx,
+        venue.cfg,
+        billId,
+        lineNos.map((lineNo) => ({ lineNo })),
+        command,
+      ),
+    );
+    return split.billId;
+  };
+  const cancelLine = async (billId: string, lineNo: number, extra: Partial<Ask> = {}) => ({
+    lineId: await lineIdOf(venue, billId, lineNo),
+    action: "cancel" as const,
+    ...byStaff(),
+    ...extra,
+  });
+
+  it("counts the discount a split-off line carries onto its new bill", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(billId, billPercent(4000));
+    const moved = await moveOff(billId, [1]);
+
+    expect(await preview(moved, billPercent(4000))).toMatchObject({
+      reduction: "24.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(moved, billPercent(4000), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+  });
+
+  it("counts the discount a transferred line carries onto the bill it joins", async () => {
+    await setLimit(4000);
+    // €130.00 in all, so a bill holding both lines has a €52.00 limit; €40.00 is off the salads.
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 4000,
+      ...byStaff(),
+    });
+    const other = await moveOff(billId, [2]);
+    const command = await partyCommand(billId);
+    await inTx(venue, (tx) =>
+      transferItems(tx, venue.cfg, billId, other, [{ lineNo: 1 }], command),
+    );
+
+    await refusedWith(
+      other,
+      { action: "discount_amount", amount: "13.00", ...byStaff() },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+  });
+
+  it("asks a manager for a cancel that leaves the bill's discount past the limit", async () => {
+    await setLimit(4000);
+    // €400.00 in all, €100.00 of it off the salads: 25%, under 40%. Without the bottles it is 100%.
+    const { billId } = await bill([
+      { name: "Salad", quantity: "10" },
+      { name: "Bottle", quantity: "10" },
+    ]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 10000,
+      ...byStaff(),
+    });
+
+    expect(await preview(billId, await cancelLine(billId, 2))).toMatchObject({
+      reduction: "300.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+    });
+    await refusedWith(billId, await cancelLine(billId, 2), "adjustment.approval_required", {
+      approverRole: "manager",
+    });
+    await adjust(billId, await cancelLine(billId, 2, { approver: MANAGER_PIN() }));
+    expect((await recordedOn(billId)).at(-1)).toMatchObject({
+      action: "cancel",
+      approvedBy: venue.managerId,
+    });
+  });
+
+  it("asks nobody for a cancel that leaves the bill's discount share where it was", async () => {
+    await setLimit(4000);
+    // 40% off every line, at the limit: cancelling the bottle leaves the salads at 40% too.
+    const even = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    await adjust(even.billId, billPercent(4000));
+    expect(await preview(even.billId, await cancelLine(even.billId, 2))).toMatchObject({
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+    await adjust(even.billId, await cancelLine(even.billId, 2));
+
+    // 60% off every line, which a manager applied: past the limit, but the cancel does not raise it.
+    const approved = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
+    await adjust(approved.billId, billPercent(6000, { operatorId: venue.managerId }));
+    await adjust(approved.billId, await cancelLine(approved.billId, 2));
+
+    // A cancel that empties the bill leaves no share to measure.
+    const alone = await bill([{ name: "Salad", quantity: "10" }]);
+    await adjust(alone.billId, billPercent(6000, { operatorId: venue.managerId }));
+    await adjust(alone.billId, await cancelLine(alone.billId, 1));
+    expect((await recordedOn(alone.billId)).map((row) => [row.action, row.approvedBy])).toEqual([
+      ["discount_percent", null],
+      ["cancel", null],
+    ]);
+  });
+
+  it("leaves out a dish comped whole with its extras, and the part of a dish comped", async () => {
+    await setLimit(4000);
+    // €110.50 in all, limit €44.20: the €10.50 pizza and olive comped, then €43.00 off the salads,
+    // which the olive's €1.50 alone would take past the limit.
+    const whole = await bill([
+      { name: "Pizza", olives: 1 },
+      { name: "Salad", quantity: "10" },
+    ]);
+    await adjust(whole.billId, {
+      lineId: await lineIdOf(venue, whole.billId, 1),
+      action: "comp",
+      ...byStaff(),
+    });
+    const salads = await lineIdOf(venue, whole.billId, 3);
+    await adjust(whole.billId, {
+      lineId: salads,
+      action: "discount_amount",
+      amount: "43.00",
+      ...byStaff(),
+    });
+
+    // €150.00 in all, limit €60.00: one of two steaks comped (€25.00), then €40.00 off the salads.
+    const part = await bill([
+      { name: "Steak", quantity: "2" },
+      { name: "Salad", quantity: "10" },
+    ]);
+    await adjust(part.billId, {
+      lineId: await lineIdOf(venue, part.billId, 1),
+      action: "comp",
+      quantity: "1",
+      ...byStaff(),
+    });
+    await adjust(part.billId, {
+      lineId: await lineIdOf(venue, part.billId, 2),
+      action: "discount_percent",
+      percentBp: 4000,
+      ...byStaff(),
+    });
+    for (const billId of [whole.billId, part.billId]) {
+      expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null, null]);
+    }
+  });
+
+  it("still counts a line discounted to nothing", async () => {
+    await setLimit(4000);
+    // €40.00 in all, limit €16.00: €10.00 off the salad, which is then free, and €6.01 more.
+    const { billId } = await bill([{ name: "Salad" }, { name: "Bottle" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 10000,
+      ...byStaff(),
+    });
+    await refusedWith(
+      billId,
+      { action: "discount_amount", amount: "6.01", ...byStaff() },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
+  });
+
+  it("counts a comped dish as discount on a bill it has moved to, erring toward a manager", async () => {
+    await setLimit(4000);
+    const { billId } = await bill([
+      { name: "Burger" },
+      { name: "Salad", quantity: "10" },
+      { name: "Bottle" },
+    ]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      ...byStaff(),
+    });
+    // The new bill is €112.00 before adjustments, limit €44.80; the €12.00 comp is not proven there.
+    const moved = await moveOff(billId, [1, 2]);
+
+    await refusedWith(
+      moved,
+      { action: "discount_amount", amount: "33.00", ...byStaff() },
+      "adjustment.approval_required",
+      { approverRole: "manager" },
+    );
   });
 });
 

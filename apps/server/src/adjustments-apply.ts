@@ -1,5 +1,6 @@
 import { eq, inArray, sql } from "drizzle-orm";
 import {
+  billCancelNeedsManager,
   billDiscountNeedsManager,
   evaluateAdjustment,
   findAdjustmentReason,
@@ -7,7 +8,7 @@ import {
   percentReduction,
   policySnapshotOf,
   readAdjustmentSettings,
-  readBillDiscountTotal,
+  readCompedLines,
   readReasonTotals,
   recordAdjustment,
   spreadBillDiscount,
@@ -15,6 +16,8 @@ import {
   type AdjustmentReason,
   type AdjustmentSplit,
   type AdjustmentStage,
+  type BillShare,
+  type CompedLines,
   type PricedRow,
   type SpreadLine,
 } from "@waitron/adjustments";
@@ -93,7 +96,8 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** The role that must approve, or null when the operator may apply it alone. */
   needsApproval: PersonRoleValue | null;
-  /** The discount takes the bill's discounts past the venue's limit, so a manager must approve. */
+  /** This discount, or this cancel, leaves the bill's discount past the venue's limit, so someone at
+   * or above a manager must approve. */
   overBillDiscountLimit: boolean;
   /** Each line the action changes: what it loses, and the rows the changed part becomes. */
   lines: {
@@ -350,6 +354,8 @@ async function planAdjustment(
   let dish: Row | null = null;
   let covered: number | null = null;
   let removed: number | null = null;
+  /** What a cancel leaves each row of the dish's family, in thousandths. */
+  let cancelLeft: Map<string, number> | null = null;
   let changes: Change[] = [];
   let reduction: Decimal;
   let nominal: Decimal;
@@ -394,6 +400,7 @@ async function planAdjustment(
       if (ask.amount !== undefined) throw invalid("amount");
       removed = partial ? covered : null;
       const left = leftAfterCancel(family, dish.quantity - covered);
+      cancelLeft = left;
       reduction = sumDecimals(
         family.map((row) =>
           subtractDecimal(gross(row.unit, row.quantity), gross(row.unit, left.get(row.id)!)),
@@ -461,8 +468,12 @@ async function planAdjustment(
   });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   const overBillDiscountLimit =
-    (ask.action === "discount_percent" || ask.action === "discount_amount") &&
-    (await pastBillDiscountLimit(tx, orderId, rows, reduction, actor.role as PersonRoleValue));
+    ask.action !== "comp" &&
+    (await pastBillDiscountLimit(tx, orderId, rows, {
+      reduction,
+      cancelLeft,
+      actorRole: actor.role as PersonRoleValue,
+    }));
   let approverRole = verdict.kind === "needs_approval" ? verdict.approverRole : null;
   if (overBillDiscountLimit && (approverRole === null || !roleAtLeast(approverRole, "manager"))) {
     approverRole = "manager";
@@ -483,23 +494,67 @@ async function planAdjustment(
   };
 }
 
-/** Whether `reduction` takes the bill's discounts past the venue's limit, measured against the
- * bill's price before adjustments, while the operator is below a manager. */
+/**
+ * The bill's discount and its price before adjustments, over its rows at `quantityOf`. The discount
+ * is each row's list price less its price, left out for the rows this bill's own comp records
+ * prove comped. A comped row that has moved to another bill is not proven comped there, so there
+ * it counts as discount, which errs toward asking for a manager.
+ */
+function shareOf(
+  rows: readonly Row[],
+  comped: CompedLines,
+  quantityOf: (row: Row) => number,
+): BillShare {
+  const rowIds = new Set(comped.rows);
+  const dishIds = new Set(comped.dishes);
+  const wasComped = (row: Row) =>
+    rowIds.has(row.id) ||
+    dishIds.has(row.id) ||
+    (row.parentLineId !== null && dishIds.has(row.parentLineId));
+  const discounts = rows
+    .filter((row) => !wasComped(row))
+    .map((row) =>
+      subtractDecimal(listValue(row, quantityOf(row)), gross(row.unit, quantityOf(row))),
+    );
+  return {
+    discount: sumDecimals(discounts),
+    value: sumDecimals(rows.map((row) => listValue(row, quantityOf(row)))),
+  };
+}
+
+/**
+ * Whether a discount takes the bill's discount past the venue's limit, or a cancel (`cancelLeft`
+ * set) leaves it past the limit and higher than before, while the operator is below a manager.
+ */
 async function pastBillDiscountLimit(
   tx: Transaction,
   orderId: string,
   rows: readonly Row[],
-  reduction: Decimal,
-  actorRole: PersonRoleValue,
+  ask: {
+    reduction: Decimal;
+    cancelLeft: Map<string, number> | null;
+    actorRole: PersonRoleValue;
+  },
 ): Promise<boolean> {
   const { maxBillDiscountBp } = await readAdjustmentSettings(tx);
   if (maxBillDiscountBp === null) return false;
-  return billDiscountNeedsManager({
+  const comped = await readCompedLines(tx, orderId);
+  const before = shareOf(rows, comped, (row) => row.quantity);
+  const { cancelLeft } = ask;
+  if (cancelLeft === null) {
+    return billDiscountNeedsManager({
+      limitBp: maxBillDiscountBp,
+      priorDiscount: before.discount,
+      reduction: ask.reduction,
+      billValue: before.value,
+      actorRole: ask.actorRole,
+    });
+  }
+  return billCancelNeedsManager({
     limitBp: maxBillDiscountBp,
-    priorDiscount: await readBillDiscountTotal(tx, orderId),
-    reduction,
-    billValue: sumDecimals(rows.map((row) => listValue(row, row.quantity))),
-    actorRole,
+    before,
+    after: shareOf(rows, comped, (row) => cancelLeft.get(row.id) ?? row.quantity),
+    actorRole: ask.actorRole,
   });
 }
 
