@@ -419,7 +419,7 @@ export const en = {
   "adjust.unconfirmed":
     "No answer from the server. The bill has been read again: check whether the change was made before trying again.",
   "adjust.unconfirmed_unread":
-    "No answer from the server, and the order could not be read again: the change may already have been made. Hold the order, then retrieve it, and check whether the change was made before trying again.",
+    "No answer from the server: the change may already have been made. Hold the order, then retrieve it, and check whether the change was made before trying again.",
   "adjust.basket_changed": "The order changed while this was open, so nothing was sent.",
   "adjust.changed_bill":
     "This bill was changed on another device. It has been read again: check it and try again.",
@@ -1071,7 +1071,7 @@ export const es: Record<StringKey, string> = {
   "adjust.unconfirmed":
     "El servidor no ha respondido. Se ha vuelto a leer la cuenta: comprueba si se hizo el cambio antes de volver a intentarlo.",
   "adjust.unconfirmed_unread":
-    "El servidor no ha respondido y no se pudo volver a leer el pedido: puede que el cambio ya se haya hecho. Aparca el pedido, recupéralo y comprueba si se hizo el cambio antes de volver a intentarlo.",
+    "El servidor no ha respondido: puede que el cambio ya se haya hecho. Aparca el pedido, recupéralo y comprueba si se hizo el cambio antes de volver a intentarlo.",
   "adjust.basket_changed":
     "El pedido cambió mientras esto estaba abierto, así que no se envió nada.",
   "adjust.changed_bill":

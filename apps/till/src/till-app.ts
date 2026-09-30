@@ -183,6 +183,9 @@ const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
 type RefreshList = "held" | "station";
 
+/** How reading an adjusted order again ended. */
+type Reread = "read" | "unread" | "gone";
+
 interface RefreshRetry {
   /** What the write that preceded the failed refresh achieved. */
   messageKey: StringKey;
@@ -2367,9 +2370,9 @@ export class TillApp extends LitElement {
 
   /** Staff edits are locked while the order is read, so the load cannot replace a staff edit made
    * meanwhile; an answer the basket has moved past (cleared, or loaded again, the same order
-   * included) is dropped. False when the order or its lines could not be read, or the answer was
-   * dropped. */
-  async #reloadCounterOrder(orderId: string, session: number): Promise<boolean> {
+   * included) is dropped. `unread` when the order or its lines could not be read, or the answer was
+   * dropped; `gone` when the order no longer exists. */
+  async #reloadCounterOrder(orderId: string, session: number): Promise<Reread> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const unlock = this.#store.lockEdits();
     this.#endReloadLock = unlock;
@@ -2394,7 +2397,8 @@ export class TillApp extends LitElement {
     }
     if (failure !== undefined && !movedOn()) this.errorKey = failure;
     await this.#refreshHeldOrders();
-    return failure === undefined;
+    if (failure === undefined) return "read";
+    return failure === "held.stale" ? "gone" : "unread";
   }
 
   /** A discard already made on another till is a non-fatal `held.stale`; the list refreshes on both paths. */
@@ -3674,12 +3678,12 @@ export class TillApp extends LitElement {
   }
 
   /** The order the dialog adjusts, read again after an answer: the table's bill with its party and
-   * what it owes, or the counter's stored order into the basket. False when the counter's was not
-   * loaded again with its lines; why has been said, unless the basket had moved on. */
-  async #rereadAdjusted(open: Adjusting): Promise<boolean> {
+   * what it owes, or the counter's stored order into the basket. Not `read` when the counter's was
+   * not loaded again with its lines; why has been said, unless the basket had moved on. */
+  async #rereadAdjusted(open: Adjusting): Promise<Reread> {
     if (open.surface === "counter") return this.#reloadCounterOrder(open.orderId, open.visit);
     await this.#rereadAmounts(open.orderId, open.visit);
-    return true;
+    return "read";
   }
 
   /** The adjusted order's lines as last read; none when the counter's could not be read. */
@@ -3750,11 +3754,12 @@ export class TillApp extends LitElement {
    * ({@link #noteBillParty}) and, unless the waiter has left the order, it is read again
    * ({@link #rereadAdjusted}). With no answer at all while the dialog is open, it closes, the order
    * is read again too, and unless the waiter has left the order by then the message says the change
-   * may have been made; when that read failed or its answer was dropped, it also says to hold and
-   * retrieve the order to check, unless the order has gone. Once the dialog is gone, no answer on a
-   * table's bill only reads the floor again and takes the party from it
-   * ({@link #retakePartyFromFloor}) while the operator session that sent it lasts, and a refusal changes nothing. On the counter nothing is sent once
-   * the basket no longer holds the order as the dialog opened on it: the dialog closes and says so.
+   * may have been made, and when that read failed or its answer was dropped, to hold and retrieve
+   * the order to check; an order found gone is said to be gone, and nothing more. Once the dialog
+   * is gone, no answer on a table's bill only reads the floor again and takes the party from it
+   * ({@link #retakePartyFromFloor}) while the operator session that sent it lasts, and a refusal
+   * changes nothing. On the counter nothing is sent once the basket no longer holds the order as
+   * the dialog opened on it: the dialog closes and says so.
    */
   async #applyAdjustment(
     open: Adjusting,
@@ -3821,9 +3826,8 @@ export class TillApp extends LitElement {
     if ((stage === "apply" || stage === "approved") && isNetworkFailure(error)) {
       this.#closeAdjust();
       const read = await this.#rereadAdjusted(open);
-      // An order that has gone cannot be retrieved to check it, so its `held.stale` stays.
-      if (!this.#hasLeftAdjusted(open) && this.errorKey !== "held.stale")
-        this.errorKey = read ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
+      if (!this.#hasLeftAdjusted(open) && read !== "gone")
+        this.errorKey = read === "read" ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
       return;
     }
     const refusal = code ?? "server.internal";
@@ -3857,7 +3861,7 @@ export class TillApp extends LitElement {
     const before = this.#adjustedLines(open).find((line) => line.id === lineId);
     this.#closeAdjust();
     const read = await this.#rereadAdjusted(open);
-    if (this.#hasLeftAdjusted(open) || !read) return;
+    if (this.#hasLeftAdjusted(open) || read !== "read") return;
     const after = this.#adjustedLines(open).find((line) => line.id === lineId);
     const changed =
       before !== undefined &&

@@ -534,6 +534,34 @@ describe("till-app: a stored counter order changed elsewhere", () => {
     expect(banner(el)!.textContent).toBe(t("held.stale"));
   });
 
+  it("still says the change may have been made when another order, which has gone, is retrieved while it is read again", async () => {
+    const applyAdjustment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const reload = deferred<HeldOrder>();
+    const el = await retrieved({
+      applyAdjustment,
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(heldOrder(4))
+        .mockImplementationOnce(() => reload.promise)
+        .mockRejectedValue({ code: "working_order.not_found", status: 404 }),
+    });
+    await previewComp(el);
+
+    inDialog(el, "[data-adjust-confirm]").click();
+    await vi.waitFor(() => expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2), {
+      timeout: 4000,
+      interval: 50,
+    });
+    emit(counter(el), "retrieve-order", { id: "wo-gone" });
+    await flush(el);
+    expect(banner(el)!.textContent).toBe(t("held.stale"));
+    reload.resolve(heldOrder(5, "0.00"));
+    await flush(el, 6);
+
+    expect(counter(el).store.revision).toBe(5);
+    expect(banner(el)!.textContent).toBe(t("adjust.unconfirmed"));
+  });
+
   it("says the change may have been made when no answer comes and the same order is retrieved while it is read again", async () => {
     const applyAdjustment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const reload = deferred<HeldOrder>();
