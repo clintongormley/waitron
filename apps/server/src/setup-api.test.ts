@@ -2041,6 +2041,27 @@ describe("POST /setup-api/adopt — mirror bundle fetch + adopt + restart, shari
     expect(requestRestart).not.toHaveBeenCalled(); // a failed fetch never restarts
   });
 
+  it.each([
+    ["totp.invalid", {}, 401],
+    ["person.not_found", { personId: "op-7" }, 404],
+  ] as const)(
+    "answers the primary's refusal %s from adopt as its own status, for the wizard to place under a field",
+    async (code, params, status) => {
+      const app = new Hono();
+      const adopt = vi.fn(async () => {
+        throw new AppError(code, params);
+      });
+      const { deps, requestRestart } = makeAdoptDeps({ adopt });
+      mountSetup(app, deps, noopLog);
+
+      const res = await postAdopt(app, adoptBody());
+      expect(res.status).toBe(status);
+      expect(await res.json()).toEqual({ error: { code, params } });
+      await tick();
+      expect(requestRestart).not.toHaveBeenCalled();
+    },
+  );
+
   it("latches out a second concurrent adopt with 409 while the first is in flight", async () => {
     const app = new Hono();
     let release!: (v: { breakGlassSecret: string }) => void;

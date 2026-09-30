@@ -125,11 +125,72 @@ describe("fetchMirrorBundle — the real HTTP bundle fetcher (C2b Task 9)", () =
     }
   });
 
-  it("maps a non-2xx response to mirror.bundle_fetch_failed", async () => {
+  it("maps the primary's password.invalid refusal to mirror.bundle_fetch_failed", async () => {
     const app = new Hono();
     app.post("/management-api/mirror-bundle", (c: Context) =>
       c.json({ error: { code: "password.invalid", params: {} } }, 401),
     );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+  });
+
+  it("passes the primary's refusal of the one-time code through as totp.invalid, carrying none of its params", async () => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.json(
+        { error: { code: "totp.invalid", params: { detail: "https://primary.internal" } } },
+        401,
+      ),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "totp.invalid")).toBe(true);
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it("passes the primary's person.not_found through, naming the person id this box sent", async () => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.json({ error: { code: "person.not_found", params: { personId: "someone-else" } } }, 404),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "person.not_found")).toBe(true);
+    expect(isAppError(error) && error.params).toEqual({ personId: CREDENTIAL.personId });
+  });
+
+  it("does not pass person.not_found through for a person id that is not UUID-shaped", async () => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) =>
+      c.json({ error: { code: "person.not_found", params: {} } }, 404),
+    );
+    const base = await startServer(app);
+
+    const error = await fetchMirrorBundle(
+      base,
+      { ...CREDENTIAL, personId: "a password pasted into the id field" },
+      STANDBY,
+    ).catch((e: unknown) => e);
+    expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
+    expect(isAppError(error) && error.params).toEqual({});
+  });
+
+  it.each([
+    ["an unparseable body", "not json"],
+    ["a body that is not an object", JSON.stringify(["totp.invalid"])],
+    ["an error that is not an object", JSON.stringify({ error: "totp.invalid" })],
+    ["an error with no code", JSON.stringify({ error: {} })],
+    [
+      "a code that retyping one field of the connect form cannot fix",
+      JSON.stringify({ error: { code: "person.suspended" } }),
+    ],
+  ])("maps a refusal with %s to mirror.bundle_fetch_failed", async (_shape, body) => {
+    const app = new Hono();
+    app.post("/management-api/mirror-bundle", (c: Context) => c.body(body, 403));
     const base = await startServer(app);
 
     const error = await fetchMirrorBundle(base, CREDENTIAL, STANDBY).catch((e: unknown) => e);
