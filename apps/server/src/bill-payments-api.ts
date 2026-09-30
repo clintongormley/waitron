@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import type { PinThrottle } from "@waitron/identity";
 import { kindOfFormFactor } from "@waitron/layouts";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
@@ -16,7 +17,7 @@ import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertDeviceCapability, requireSaleTillId, tryReadDevice } from "./device-session.js";
 import type { DeviceBinding } from "./device-session.js";
 import type { Logger } from "./logger.js";
-import { parseDrawerOverride, resolveCardCollector } from "./till-api.js";
+import { overridePinAttempts, parseDrawerOverride, resolveCardCollector } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import type { TillConfig } from "./till-config.js";
 import { isUuid, requireSession } from "./till-session.js";
@@ -229,7 +230,13 @@ export async function withSaleTillWhenIssuing<T>(
  * The bill payment routes (bill payments design §3.6, §5.1, §6, §7), behind the till session. A
  * payment is taken on the device's own till, which is the till its cash drawer and its invoice use.
  */
-export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
+export function mountBillPaymentsApi(
+  app: Hono,
+  deps: TillApiDeps,
+  log: Logger,
+  run: Run,
+  pinThrottle: PinThrottle,
+): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
 
   app.get("/api/working-orders/:id/payments", (c) =>
@@ -289,7 +296,7 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
   // through its provider, while a separately charged card needs staff confirmation and a manager PIN.
   app.post("/api/working-orders/:id/payments/:paymentId/refunds", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId } = await requireSession(deps, c);
+      const { personId, sessionId, tillId } = await requireSession(deps, c);
       const id = requireBillParam(c.req.param("id"));
       const paymentId = c.req.param("paymentId");
       const refund = parseRefund(asObject(await readRawJsonBody<unknown>(c)));
@@ -307,7 +314,7 @@ export function mountBillPaymentsApi(app: Hono, deps: TillApiDeps, log: Logger, 
           id,
           paymentId,
           refund,
-          { personId, sessionId },
+          { personId, sessionId, attempts: overridePinAttempts(pinThrottle, tillId) },
         ),
       );
     }),

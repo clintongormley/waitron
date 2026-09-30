@@ -12,7 +12,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { loginWithPin } from "@waitron/identity";
+import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { mergeBills, requireUntouched, splitBill, transferItems } from "./bill-actions.js";
 import { takeBillPayment } from "./bill-payments.js";
@@ -541,7 +541,11 @@ describe("merge bills", () => {
       second,
       paymentId,
       { submissionId: randomUUID(), appliedAmount: "5.00", tipAmount: "0.00", reason: "error" },
-      { personId: adminId, sessionId: session.id },
+      {
+        personId: adminId,
+        sessionId: session.id,
+        attempts: { throttle: createPinThrottle(), slot: `override:${v.cfg.tillId}` },
+      },
     );
     const before = await snapshot(partyId, [main, second]);
 

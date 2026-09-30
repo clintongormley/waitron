@@ -1,6 +1,7 @@
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { authorize } from "./authorize.js";
-export { verifyPersonCredential } from "./credential.js";
+export { verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
+export type { PinAttempts } from "./credential.js";
 // Exported for the writers OUTSIDE this package that create a person, which must fold the same way.
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";

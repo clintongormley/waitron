@@ -10,7 +10,7 @@ import {
   deactivateAdjustmentReason,
   createAdjustmentReason,
 } from "@waitron/adjustments";
-import { persons } from "@waitron/identity";
+import { createPinThrottle, persons } from "@waitron/identity";
 import { send } from "./testing/bill-venue.js";
 import {
   billWith,
@@ -198,6 +198,110 @@ describe("approval through the route (plan D6)", () => {
     expect(refused.status).toBe(401);
     expect(refused.json).toMatchObject({ code: "pin.invalid" });
     expect(await recordedOn(billId)).toEqual([]);
+  });
+
+  describe("the limit on wrong approver PINs", () => {
+    /** The till routes on this venue with a wrong-PIN limit on a clock the case moves. */
+    function throttledApp() {
+      const clockAt = { now: 1_000_000 };
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          cfg: venue.cfg,
+          secureCookies: false,
+          venueLocale: venue.venueLocale,
+          pinThrottle: createPinThrottle({ now: () => clockAt.now }),
+        },
+        () => {},
+      );
+      return { app, clockAt };
+    }
+
+    async function postOn(app: Hono, billId: string, body: Record<string, unknown>) {
+      return send(app, venue.cookie.staff, "POST", `/api/working-orders/${billId}/adjustments`, {
+        submissionId: randomUUID(),
+        expectedRevision: await revisionOf(billId),
+        note: null,
+        ...body,
+      });
+    }
+
+    const approvedBy = (pin: string) => ({ approver: { personId: venue.managerId, pin } });
+
+    it("after four wrong PINs even the right one is 429 pin.throttled and applies nothing, until the wait is over", async () => {
+      const { app, clockAt } = throttledApp();
+      const { billId } = await billWith(venue, [{ name: "Burger" }]);
+
+      for (let i = 0; i < 4; i += 1) {
+        const wrong = await postOn(app, billId, { ...(await comp(billId)), ...approvedBy("0000") });
+        expect(wrong.status).toBe(401);
+        expect(wrong.json).toMatchObject({ code: "pin.invalid" });
+      }
+      const throttled = await postOn(app, billId, {
+        ...(await comp(billId)),
+        ...approvedBy(PINS.manager),
+      });
+
+      expect(throttled.status).toBe(429);
+      expect(throttled.json).toEqual({ code: "pin.throttled", params: { retryAfterSeconds: 2 } });
+      expect(await recordedOn(billId)).toEqual([]);
+
+      clockAt.now += 2_001;
+      const applied = await postOn(app, billId, {
+        ...(await comp(billId)),
+        ...approvedBy(PINS.manager),
+      });
+      expect(applied.status).toBe(200);
+      expect(await recordedOn(billId)).toMatchObject([{ approvedBy: venue.managerId }]);
+    });
+
+    it("counts wrong PINs sent to the cash drawer from the same till toward the same approver", async () => {
+      const { app } = throttledApp();
+      const { billId } = await billWith(venue, [{ name: "Burger" }]);
+      // The session alone: the drawer route is reached without the device, whose profile may not
+      // open a drawer.
+      const staffSession = venue.cookie.staff.split("; ")[0]!;
+
+      for (let i = 0; i < 4; i += 1) {
+        const drawer = await send(app, staffSession, "POST", "/api/drawer/open", {
+          override: { personId: venue.managerId, pin: "0000" },
+        });
+        expect(drawer.status).toBe(401);
+      }
+      const throttled = await postOn(app, billId, {
+        ...(await comp(billId)),
+        ...approvedBy(PINS.manager),
+      });
+
+      expect(throttled.status).toBe(429);
+      expect(throttled.json).toMatchObject({ code: "pin.throttled" });
+      expect(await recordedOn(billId)).toEqual([]);
+    });
+
+    it("an approver sent with an adjustment that needs none is never checked, so a wrong PIN there does not count", async () => {
+      const { app } = throttledApp();
+      const { billId } = await billWith(venue, [{ name: "Burger" }, { name: "Water" }]);
+
+      for (let i = 0; i < 5; i += 1) {
+        const noApprovalNeeded = await postOn(app, billId, {
+          lineId: await lineIdOf(venue, billId, 2),
+          action: "discount_percent",
+          percentBp: 100,
+          reasonId: venue.reasonId.house,
+          ...approvedBy("0000"),
+        });
+        expect(noApprovalNeeded.status).toBe(200);
+      }
+      const applied = await postOn(app, billId, {
+        ...(await comp(billId)),
+        ...approvedBy(PINS.manager),
+      });
+      expect(applied.status).toBe(200);
+    });
   });
 
   it("says in the preview who must approve, before anyone is asked", async () => {

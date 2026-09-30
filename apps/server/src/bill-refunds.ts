@@ -1,7 +1,12 @@
 import { and, eq, isNotNull, ne } from "drizzle-orm";
 import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { authorize, roleHasPermission, verifyPersonCredential } from "@waitron/identity";
+import {
+  authorize,
+  roleHasPermission,
+  verifyThrottledCredential,
+  type PinAttempts,
+} from "@waitron/identity";
 import type { Override } from "@waitron/identity";
 import {
   MANUAL_PROVIDER,
@@ -464,6 +469,8 @@ export async function attestCardRefund(
  * Cash and staff-confirmed standalone-terminal refunds are completed in this transaction. A
  * connected card refund is written `pending` before its provider is asked (design §6b), and the
  * bill is locked until the evidence settles it.
+ *
+ * Every manager PIN this checks counts against `operator.attempts`, the till's wrong-PIN limit.
  */
 export async function refundBillPayment(
   deps: BillRefundDeps,
@@ -471,18 +478,18 @@ export async function refundBillPayment(
   workingOrderId: string,
   paymentId: string,
   req: BillRefundRequest,
-  operator: { personId: string; sessionId: string },
+  operator: { personId: string; sessionId: string; attempts: PinAttempts },
 ): Promise<BillRefundResult> {
   const applied = money(decimal(req.appliedAmount));
   const tip = money(decimal(req.tipAmount));
   let release = (): void => {};
   try {
     const begun = await withTransaction(deps.db, async (tx) => {
-      const authorization = await authorize(tx, {
-        sessionId: operator.sessionId,
-        permission: "sale.refund",
-        override: req.override,
-      });
+      const authorization = await authorize(
+        tx,
+        { sessionId: operator.sessionId, permission: "sale.refund", override: req.override },
+        operator.attempts,
+      );
       const [payment] = await tx
         .select()
         .from(billPayments)
@@ -573,10 +580,11 @@ export async function refundBillPayment(
           if (req.override === undefined) {
             throw new AppError("bill.manual_refund_pin_required", { paymentId });
           }
-          const confirmer = await verifyPersonCredential(
+          const confirmer = await verifyThrottledCredential(
             tx,
             req.override.personId,
             req.override.pin,
+            operator.attempts,
           );
           if (!roleHasPermission(confirmer.role, "sale.refund")) {
             throw new AppError("authorization.not_permitted", { permission: "sale.refund" });

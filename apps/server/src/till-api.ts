@@ -16,7 +16,7 @@ import {
   roleHasPermission,
   setPersonLocale,
 } from "@waitron/identity";
-import type { PinThrottle } from "@waitron/identity";
+import type { PinAttempts, PinThrottle } from "@waitron/identity";
 import { listAccessibleCatalogues, listAvailableProducts } from "@waitron/catalogue";
 import {
   kindOfFormFactor,
@@ -433,6 +433,16 @@ export function parseDrawerOverride(
 }
 
 /**
+ * Where the till's override PINs count their wrong tries: one bucket per till, apart from sign-in's
+ * per-device one. It is the requesting SESSION's till because that is fixed when the session opens:
+ * the device cookie can be left off a request, and anyone can open a fresh session with their own
+ * PIN, so keying on either would let a caller start the count again.
+ */
+export function overridePinAttempts(pinThrottle: PinThrottle, sessionTillId: string): PinAttempts {
+  return { throttle: pinThrottle, slot: `override:${sessionTillId}` };
+}
+
+/**
  * The whole bound on `dining_tables.capacity`: it is a plain integer column with no check, so
  * nothing below this screen refuses an out-of-range value.
  */
@@ -786,8 +796,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   const pinThrottle = deps.pinThrottle ?? createPinThrottle();
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
-  mountBillPaymentsApi(app, deps, log, run);
-  mountAdjustmentsApi(app, deps, log, run);
+  mountBillPaymentsApi(app, deps, log, run, pinThrottle);
+  mountAdjustmentsApi(app, deps, log, run, pinThrottle);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it, and the shift records the device's own till rather than `cfg.tillId`.
@@ -1439,7 +1449,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // operator is refused whatever the printer state.
   app.post("/api/drawer/open", (c) =>
     run(c, log, async () => {
-      const { personId, sessionId } = await requireSession(deps, c);
+      const { personId, sessionId, tillId } = await requireSession(deps, c);
       const device = await tryReadDevice(deps, c);
       await assertNotHandheld(deps, c, "drawer_open", device);
       await assertDeviceCapability(deps, c, "open-cash-drawer", "drawer_open", device);
@@ -1457,11 +1467,15 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         const { authorizedBy, viaOverride } =
           policy === "open"
             ? { authorizedBy: personId, viaOverride: false }
-            : await authorize(tx, {
-                sessionId,
-                permission: "cash.drawer",
-                override: parseDrawerOverride(body.override),
-              });
+            : await authorize(
+                tx,
+                {
+                  sessionId,
+                  permission: "cash.drawer",
+                  override: parseDrawerOverride(body.override),
+                },
+                overridePinAttempts(pinThrottle, tillId),
+              );
 
         const printer = await resolveReceiptPrinter(tx, deps.cfg);
         if (printer === undefined) {

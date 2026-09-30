@@ -29,7 +29,7 @@ import {
 } from "@waitron/catalogue";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
+import { createPinThrottle, hashPassword, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { insertCapturedPayment, payments, SimulatorPaymentProvider } from "@waitron/payments";
 import { createPrinter } from "@waitron/printing";
 import { applyVenue, planVenue } from "@waitron/provisioning";
@@ -2244,6 +2244,130 @@ describe("a cash refund before the invoice (design §6)", () => {
       });
     }
     expect(await refundRows(paymentId)).toEqual([]);
+  });
+});
+
+describe("the limit on wrong refund PINs", () => {
+  /** The till routes with a wrong-PIN limit on a clock the case moves. */
+  function throttledApp() {
+    const clockAt = { now: 1_000_000 };
+    const app = new Hono();
+    mountTillApi(
+      app,
+      {
+        db: suite.db,
+        backend,
+        clock,
+        cfg: venue.cfg,
+        secureCookies: false,
+        venueLocale: LOCALE,
+        cardProvider: new SimulatorPaymentProvider(suite.db),
+        pinThrottle: createPinThrottle({ now: () => clockAt.now }),
+      },
+      quiet,
+    );
+    const refundOn = async (
+      billId: string,
+      paymentId: string,
+      body: RefundBody,
+      cookie = venue.cookie,
+    ) => {
+      const res = await app.request(`/api/working-orders/${billId}/payments/${paymentId}/refunds`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ submissionId: randomUUID(), reason: "El cliente lo pide", ...body }),
+      });
+      const json = (await res.json()) as Record<string, unknown>;
+      return { status: res.status, json: (json.error as Record<string, unknown>) ?? json };
+    };
+    return { clockAt, refundOn };
+  }
+
+  /** The admin, who holds `sale.refund`, signed in on the staff session's till and device. */
+  async function adminCookie(): Promise<string> {
+    const adminSession = await inTx((tx) =>
+      loginWithPin(tx, { tillId: venue.cfg.tillId, personId: venue.adminId, pin: "1234" }),
+    );
+    const deviceCookie = venue.cookie
+      .split("; ")
+      .find((part) => part.startsWith(`${DEVICE_COOKIE}=`));
+    return `${SESSION_COOKIE}=${adminSession.token}; ${deviceCookie}`;
+  }
+
+  const ask = { appliedAmount: "1.00", tipAmount: "0.00" };
+  const byAdmin = (pin: string) => ({ override: { personId: venue.adminId, pin } });
+
+  it("after four wrong manager PINs even the right one is 429 pin.throttled and refunds nothing, until the wait is over", async () => {
+    const { clockAt, refundOn } = throttledApp();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await refundOn(billId, paymentId, { ...ask, ...byAdmin("9999") });
+      expect(wrong.status).toBe(401);
+      expect(wrong.json).toMatchObject({ code: "pin.invalid" });
+    }
+    const throttled = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+
+    expect(throttled.status).toBe(429);
+    expect(throttled.json).toEqual({ code: "pin.throttled", params: { retryAfterSeconds: 2 } });
+    expect(await refundRows(paymentId)).toEqual([]);
+    expect(await refundDrawerOpens(paymentId)).toEqual([]);
+
+    clockAt.now += 2_001;
+    const refunded = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+    expect(refunded.status).toBe(200);
+    expect(await refundRows(paymentId)).toMatchObject([{ authorizedBy: venue.adminId }]);
+  });
+
+  it("limits the manager PIN that confirms a hand-keyed card refund, even for an operator who may refund", async () => {
+    const { refundOn } = throttledApp();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(
+      await pay(billId, {
+        kind: "contribution",
+        amount: "40.00",
+        method: "card",
+        entry: "manual",
+        applied: "40.00",
+        tip: "0.00",
+      }),
+    );
+    const admin = await adminCookie();
+    const confirmed = { ...ask, manualConfirmed: true };
+
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await refundOn(billId, paymentId, { ...confirmed, ...byAdmin("9999") }, admin);
+      expect(wrong.status).toBe(401);
+      expect(wrong.json).toMatchObject({ code: "pin.invalid" });
+    }
+    const throttled = await refundOn(
+      billId,
+      paymentId,
+      { ...confirmed, ...byAdmin("1234") },
+      admin,
+    );
+
+    expect(throttled.status).toBe(429);
+    expect(throttled.json).toMatchObject({ code: "pin.throttled" });
+    expect(await refundRows(paymentId)).toEqual([]);
+  });
+
+  it("an override sent by an operator who may refund cash is never checked, so its right PIN does not clear the count", async () => {
+    const { refundOn } = throttledApp();
+    const billId = await bill120();
+    const paymentId = paymentIdOf(await contribute(billId, "50.00"));
+    const admin = await adminCookie();
+
+    for (let i = 0; i < 4; i += 1) {
+      expect((await refundOn(billId, paymentId, { ...ask, ...byAdmin("9999") })).status).toBe(401);
+    }
+    const unchecked = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") }, admin);
+    expect(unchecked.status).toBe(200);
+
+    const still = await refundOn(billId, paymentId, { ...ask, ...byAdmin("1234") });
+    expect(still.status).toBe(429);
+    expect(still.json).toMatchObject({ code: "pin.throttled" });
   });
 });
 
