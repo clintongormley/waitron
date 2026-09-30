@@ -408,7 +408,7 @@ export function createAgent(opts: AgentOptions): Agent {
     const pairedListing = listPairedBluetooth();
     const visible = await host.visibleDevices();
     const pairedBluetooth = await pairedListing;
-    // A throwing scan (a box with no Bluetooth adapter, say) must NEVER stop the job pull.
+    // A throwing scan must NEVER stop the job pull.
     let scanned: DiscoveredDevice[] = [];
     if (host.now() < discoveryUntil) {
       try {

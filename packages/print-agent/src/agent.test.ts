@@ -1267,7 +1267,6 @@ describe("createAgent — inventory, discovery and resolve", () => {
   });
 
   it("a throwing discovery scan never blocks the job pull (isolated failure)", async () => {
-    // A box with no Bluetooth adapter throws `spawn bluetoothctl ENOENT` from scan(["bluetooth"]).
     const scan = vi.fn(async () => {
       throw new Error("spawn bluetoothctl ENOENT");
     });
