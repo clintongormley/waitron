@@ -3587,13 +3587,44 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
       during the build: its two rounded parts need not add up to the line). _(2026-09-30: counter
       orders are offered since B11c, above.)_ A run-it review found that exactly representable weighed cases
-      are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
-      decides whether exactly representable partial weighed adjustments should be allowed.
+      are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). _Settled by the owner,
+      2026-09-30:_ part of a weighed line stays refused for a give-away or a discount, exactly
+      representable or not, and staff are told to discount the whole line instead.
       _(2026-09-30, B11d: the server now comps or discounts part of a dish with extras, splitting
       its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
       line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
       The till offers one of several of a dish with extras, and never offers part of a weighed
-      line: its give-away and discount dialog says the same sentence beside the action.)_
+      line: its give-away and discount dialog says the same sentence beside the action. A
+      give-away or a discount that would take nothing off — the line already free, or a discount
+      too small to move any price — is now refused `adjustment.no_reduction`; before, every such
+      case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
+      still recorded when it takes nothing off.)_ Left open after B11d:
+      - **A discount can escape the bill's discount limit when the dish above it was given away
+        whole.** The limit treats every extra of a dish given away whole as given away too
+        (`shareOf`, `apps/server/src/adjustments-apply.ts`, reading the dishes `readCompedLines`
+        names), including an extra added after the give-away at full price, so a later discount on
+        that extra, or on the whole given-away dish (possible since #931), is not counted. A review
+        measured it on the B11d branch: limit 20%, a held Pizza and Bread ×4, the Pizza given away,
+        Olives added through `updateOrderLine` (€1.50), 100% off the Olives, then a preview of 30%
+        off the Bread answered not over the limit, though the real discount is €4.50 of €20.50,
+        about 22%. This predates B11d (#931,
+        `e511aa831`). **Next action:** have a whole give-away record the rows it covered (an
+        adjustments migration adding them to the record), and have the limit read those rather
+        than work them out from the dish.
+      - **Cancelling an extra of a dish the kitchen already has tells the kitchen nothing** — no
+        VOID slip and no correction to a held ticket — as the cancel route this replaced did not
+        either; the till says the extra comes off the bill. **Next action:** if the owner wants
+        the kitchen told, print a correction slip naming the dish once its ticket has fired.
+      - **An extra now counts its dish's percentage under a reason's per-line cap, and a dish the
+        largest of its extras'.** So an extra added after its dish was discounted 30%, under a 50%
+        cap, is refused a 30% discount of its own. This errs toward refusing; a review found no way
+        to get past the cap through it. **Next action:** none unless staff find it gets in the way.
+      - **Only give-aways and discounts split a dish's extras with it.** Splitting a bill,
+        transferring items and moving part of a dish to another group still refuse part of a dish
+        with extras (`tab.transfer_modifier_line`). The same code now also refuses a give-away or
+        discount of part of a dish whose extra is not a whole count for each dish, which no
+        product path is known to store. **Next action:** decide whether those moves should split
+        extras too.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
       close report arrives with the next animation frame): "saves on Enter and cancels on Escape from
       a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and `pressEscape`'s fixed
