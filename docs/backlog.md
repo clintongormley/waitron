@@ -5686,7 +5686,7 @@ ongoing overhaul listed at the top of Track A.
   the empty field in. The payments screen's manager-PIN prompt
   (`apps/dashboard/src/screens/payments-screen.ts`), which this entry left marked
   `autocomplete="current-password"`, now says `autocomplete="off"`, the owner's choice on
-  2026-09-30 (C110) to match the profile screen's PIN fields; nobody checked in a real browser
+  2026-09-30 (C110, #940) to match the profile screen's PIN fields; nobody checked in a real browser
   whether it then stops offering the dashboard password there.
 - **A sign-in step's links are one bulleted list, with its buttons on the first item's row — DONE
   (C96, #936, owner 2026-09-30: "Move 'Login with passkey' under 'i've forgotten my password' … the same
