@@ -26,6 +26,8 @@ const SIGHTING_INTERVAL_MS = 60_000;
  *
  * Auth runs on every pull and report, so the sighting write is gated to one per
  * {@link SIGHTING_INTERVAL_MS}, and the venue's write lock is taken only when that write is due.
+ * That write re-reads the row inside its transaction first, so a revoke or a re-key committed
+ * while this call waited for the lock refuses the token too.
  */
 export async function authenticateAgent(db: Database, token: string): Promise<{ agentId: string }> {
   const dot = token.indexOf(".");
@@ -58,8 +60,17 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
   const seenAt = nowIso();
   const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
   if (row.lastSeenAt === null || row.lastSeenAt < staleBefore) {
-    await withTransaction(db, (tx) =>
-      tx
+    await withTransaction(db, async (tx) => {
+      const [locked] = await tx
+        .select({ tokenHash: printAgents.tokenHash })
+        .from(printAgents)
+        .where(current);
+      if (locked === undefined || locked.tokenHash !== checked.tokenHash) {
+        throw new AppError("agent.unauthorized", {});
+      }
+      // The staleness check on the row read spares a call the write lock; the same check in this
+      // update keeps calls that all read a stale row to one write.
+      await tx
         .update(printAgents)
         .set({ lastSeenAt: seenAt })
         .where(
@@ -68,8 +79,8 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
             // `<` is UNKNOWN for NULL, so a never-seen agent needs its own alternative.
             or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
           ),
-        ),
-    );
+        );
+    });
   }
   return { agentId };
 }
