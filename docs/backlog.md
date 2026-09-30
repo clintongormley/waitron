@@ -3992,7 +3992,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       the screen. Before, a late Move put the moved party on the screen of the table opened
       since. Any other late refusal is still said on the banner. Merge bills, Transfer items and a
       named party are unchanged: after a successful answer each re-reads the floor and the bill
-      on screen.)_
+      on screen. #905.)_ Open (found by #905's review, by reading, not reproduced): on a handheld,
+      a waiter who taps a free table to seat it, goes back to the order tab while the seating is
+      still under way and starts Move guests can have the move set the wrong table on the new
+      party. The review's suggested fix is to count only table opens started in the current
+      operator session; not queued.
     - The floor's card and map token show the party's display name when it says more than the
       table's label: a name staff gave, or a joined party's tables ("Mesa 4, 5").
     - Opening a seated table opens its party's main bill, else its first unpaid bill, else its
