@@ -2625,7 +2625,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   390 px case for the Printers tab's list runs only the accessibility check; the one check that
   the screen does not scroll sideways is on a printer's status view (read, not run).
 - **Printing to a paired Bluetooth printer over its serial channel (A140, owner 2026-09-29: the
-  calibration print _"nothing printed"_) — BUILT where the tests and CI reach (this PR); no real
+  calibration print _"nothing printed"_) — BUILT where the tests and CI reach (#909, 2026-09-30); no real
   printer has printed through it yet.** The box's agent sends a Bluetooth job's bytes over RFCOMM
   (Bluetooth's serial-cable channel) to the printer's own address (`RfcommTransport`,
   `apps/print-agent/src/rfcomm.ts`), so two paired printers never share a path. Node has no
