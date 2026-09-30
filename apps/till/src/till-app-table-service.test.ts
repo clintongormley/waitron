@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import {
   adjustmentStubs,
+  cancelReason,
   cancelThroughDialog,
   cleanupWidgets,
   draftServer,
@@ -913,6 +914,57 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(dialog.kind).toBe("cancel");
     expect(dialog.target!.lineId).toBe("line-5");
     expect(dialog.shadowRoot!.textContent).toContain(t("table.cancel_started"));
+  });
+
+  it("clears the offer to cancel once the offered cancel is made", async () => {
+    const { el, screen } = await openBurgerTab({
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    emit(screen, "change-line", change);
+    await flush(el);
+    await flush(el);
+    expect(banner(el)).not.toBeNull();
+
+    emit(cancelDialog(el)!, "adjust-preview", {
+      action: "cancel",
+      reasonId: cancelReason.id,
+      note: null,
+    });
+    await flush(el);
+    emit(cancelDialog(el)!, "adjust-confirm");
+    await flush(el);
+    await flush(el);
+
+    expect(api.applyAdjustment).toHaveBeenCalledWith(
+      "wo-7",
+      expect.objectContaining({ lineId: "line-5", action: "cancel" }),
+      expect.anything(),
+    );
+    expect(cancelDialog(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("keeps the offer to cancel on screen when the offered dialog is closed without cancelling", async () => {
+    const { el, screen } = await openBurgerTab({
+      getTabLines: vi.fn().mockResolvedValue({
+        lines: [{ ...burgerLine, state: "preparing" }],
+        revision: 7,
+        editSentLines: true,
+      }),
+      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_started" }),
+    });
+    emit(screen, "change-line", change);
+    await flush(el);
+    await flush(el);
+
+    await closeCancel(el);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("ticket.already_started"));
   });
 
   it("offers Cancel again when a second change of the same line is refused the same way", async () => {

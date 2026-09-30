@@ -426,6 +426,8 @@ interface Adjusting {
   preview: AdjustmentPreview | null;
   refusal: string | null;
   busy: boolean;
+  /** The banner that offered this cancel, which goes once the cancel is made. */
+  offer: CounterError | undefined;
 }
 
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
@@ -3537,6 +3539,7 @@ export class TillApp extends LitElement {
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
     if (offered !== true) this.errorKey = undefined;
+    const offer = offered === true ? this.errorKey : undefined;
     this.#adjustOpening = true;
     let reasons: AdjustmentReason[];
     try {
@@ -3560,6 +3563,7 @@ export class TillApp extends LitElement {
       preview: null,
       refusal: null,
       busy: false,
+      offer,
     };
   }
 
@@ -3646,6 +3650,7 @@ export class TillApp extends LitElement {
       );
       this.#noteBillParty(answer.party);
       this.#closeAdjust();
+      if (this.errorKey === open.offer) this.errorKey = undefined;
       if (this.#hasLeftOrder(open.orderId, open.visit)) return;
       await this.#rereadAmounts(open.orderId, open.visit);
     } catch (error) {
