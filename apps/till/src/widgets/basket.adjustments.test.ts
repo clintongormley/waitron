@@ -132,6 +132,24 @@ describe("till-basket: a stored counter order", () => {
     );
   });
 
+  it("keeps the dish the kitchen has lined up with the others, stacked or not", async () => {
+    const el = await mount(storedOrder());
+    el.parentElement!.style.width = "600px";
+    const edge = (row: HTMLElement, selector: string, side: "left" | "right") =>
+      Math.round(row.querySelector(selector)!.getBoundingClientRect()[side]);
+    const columns = () =>
+      rows(el).map((row) => ({
+        total: edge(row, ".line-total", "right"),
+        note: edge(row, ".note-toggle", "right"),
+      }));
+
+    expect(new Set(columns().map((row) => JSON.stringify(row))).size).toBe(1);
+    el.stacked = true;
+    await el.updateComplete;
+    expect(new Set(columns().map((row) => JSON.stringify(row))).size).toBe(1);
+    expect(new Set(rows(el).map((row) => edge(row, ".count", "left"))).size).toBe(1);
+  });
+
   it("keeps remove and −/+ on the dishes the kitchen does not have, which offer no Cancel", async () => {
     const el = await mount(storedOrder());
 

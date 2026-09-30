@@ -173,6 +173,13 @@ export class TillBasket extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      /* Hold the places of the − and × a dish the kitchen has does not show, so its count, total and
+         Note line up with the rows that keep them. */
+      .step-gap,
+      .remove-gap {
+        min-width: var(--wt-tap-min);
+      }
+
       /* The price before an adjustment stands above the price now, so the column stays narrow. */
       .line-total .list-total,
       .option-total .list-total {
@@ -443,7 +450,7 @@ export class TillBasket extends LitElement {
             </wt-button>
             ${
               sent
-                ? nothing
+                ? html`<span class="remove-gap"></span>`
                 : html`<wt-button
                     class="remove"
                     variant="ghost"
@@ -576,7 +583,7 @@ export class TillBasket extends LitElement {
       <span class="qty stepper">
         ${
           sent
-            ? nothing
+            ? html`<span class="step-gap"></span>`
             : html`<wt-button
                 class="step step-dec"
                 variant="ghost"
