@@ -68,6 +68,7 @@ import { fingerprint } from "./parties.js";
 import {
   priceStoredOrder,
   priceStoredOrderForIssuance,
+  readListUnitPrices,
   readInvoiceNumber,
   refuseOrderPaymentMarked,
   refuseRefundInProgress,
@@ -711,7 +712,7 @@ async function issueWhenFullyPaid(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    lines: ticketLinesFrom(priced),
+    lines: ticketLinesFrom(priced, await readListUnitPrices(tx, workingOrderId)),
     tender: await readTenderBlock(tx, cfg, saleId, workingOrderId),
     payments: await readBillTenderLines(tx, saleId),
     qr: fiscal.verificationUrl ?? "",

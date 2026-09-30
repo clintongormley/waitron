@@ -45,6 +45,7 @@ import {
   fireLines,
   priceStoredOrder,
   priceStoredOrderForIssuance,
+  readListUnitPrices,
   readInvoiceNumber,
   refusePaymentInFlight,
   toVatBreakdown,
@@ -127,6 +128,11 @@ export interface TillSaleLine {
   quantity: string;
   /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. */
   gross: string;
+  /**
+   * The line's total at its price before a comp or a discount lowered it, present only when that
+   * differs from `gross`. The receipt shows it; nothing is filed from it.
+   */
+  listGross?: string;
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else `null`/absent.
    *  Presentation only: it groups already-filed lines and is no fiscal figure. */
   parentLineNo?: number | null;
@@ -536,7 +542,10 @@ export async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
+  const ticketLines = ticketLinesFrom(
+    await priceStoredOrder(tx, workingOrderId),
+    await readListUnitPrices(tx, workingOrderId),
+  );
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -689,7 +698,7 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    lines: ticketLinesFrom(priced),
+    lines: ticketLinesFrom(priced, await readListUnitPrices(tx, workingOrderId)),
     tender: tenderBlock,
     qr: fiscal.verificationUrl ?? "",
   };
@@ -851,6 +860,8 @@ async function payIntegrated(
     // P3 files THESE gross lines, whatever changes while the reader runs, at the rates of the day it
     // issues the invoice.
     const gross = await issuancePass(tx, cfg, req.id, order);
+    // The receipt's list prices for these lines, read with them.
+    const listUnitGross = await readListUnitPrices(tx, req.id);
     // A `placed` order here is a counter collect, so `finalizeCapture` stamps `collected_at`.
     const wasPlaced = locked?.status === "placed";
     // An open order's lines could still change under the reader, so it is marked in flight (plan
@@ -865,7 +876,7 @@ async function payIntegrated(
       // Inside the transaction, so no release pass runs between the mark and its registration.
       onMarked(attemptAt);
     }
-    return { kind: "collect" as const, gross, wasPlaced, attemptAt };
+    return { kind: "collect" as const, gross, listUnitGross, wasPlaced, attemptAt };
   });
 
   if (prepared.kind === "replay") {
@@ -920,6 +931,7 @@ async function payIntegrated(
     cfg,
     req,
     prepared.gross,
+    prepared.listUnitGross,
     tip,
     result,
     operatorId,
@@ -1048,6 +1060,7 @@ async function finalizeCapture(
   cfg: TillConfig,
   req: IntegratedPayRequest,
   grossInP1: GrossLines,
+  listUnitGross: readonly (Decimal | null)[],
   tip: Decimal,
   result: PaymentResult,
   operatorId?: string,
@@ -1122,7 +1135,7 @@ async function finalizeCapture(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced),
+        lines: ticketLinesFrom(priced, listUnitGross),
         tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
@@ -1259,7 +1272,7 @@ async function finalizeRecovery(
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      lines: ticketLinesFrom(priced),
+      lines: ticketLinesFrom(priced, await readListUnitPrices(tx, req.id)),
       tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };

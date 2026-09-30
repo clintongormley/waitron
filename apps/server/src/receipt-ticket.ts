@@ -34,6 +34,7 @@ import {
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
 import {
   addDecimal,
+  compareDecimal,
   decimal,
   perDishOptionQuantity,
   resolveSnapshotText,
@@ -113,6 +114,19 @@ const QTY_BADGE = "×";
  */
 function lineName(descriptions: Record<string, string>, locale: string): string {
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
+}
+
+/**
+ * A line's printed amount: its gross, after its total before a comp or a discount when one changed
+ * it. No character set the receipt prints in has a right arrow (`receipt-ticket.test.ts`), so the
+ * change is written `->`.
+ */
+function lineAmount(line: TillSaleLine, locale: string): string {
+  const gross = formatMoney(line.gross, locale);
+  return line.listGross === undefined ||
+    compareDecimal(decimal(line.listGross), decimal(line.gross)) === 0
+    ? gross
+    : `${formatMoney(line.listGross, locale)} -> ${gross}`;
 }
 
 interface LineGroup {
@@ -213,11 +227,7 @@ export function formatReceipt({
     // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
     // shrinks to a few columns and the name wraps one glyph per line.
     const nameIndent = quantity.length > columns / 2 ? 2 : quantity.length;
-    row(
-      `${quantity}${lineName(dish.descriptions, locale)}`,
-      formatMoney(dish.gross, locale),
-      nameIndent,
-    );
+    row(`${quantity}${lineName(dish.descriptions, locale)}`, lineAmount(dish, locale), nameIndent);
     // The dish's frozen answers to its options lists, each under the dish it was asked about. An
     // extras pick is NOT here: it is its own priced child line, printed by the loop below.
     for (const label of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
@@ -228,7 +238,7 @@ export function formatReceipt({
       const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
       const name = lineName(option.descriptions, locale);
       const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
-      row(label, formatMoney(option.gross, locale), 2);
+      row(label, lineAmount(option, locale), 2);
     }
   }
   b.line();

@@ -231,6 +231,8 @@ describe("a reduction after contributions (design §8 test 11)", () => {
       expect.objectContaining({ method: "cash", amount: 4000, tip: 0, billPaymentId: paymentId }),
     ]);
     const printed = await newTicket(jobsBefore);
+    // The comped line prints what it cost before the comp (ruling R13).
+    expect(printed.filter((line) => line.endsWith(" 20,00 € -> 0,00 €"))).toHaveLength(1);
     const start = printed.findIndex((line) => line.startsWith("TOTAL"));
     expect(printed[start]).toBe("TOTAL 40,00 €");
     expect(

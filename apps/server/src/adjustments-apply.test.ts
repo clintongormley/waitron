@@ -22,12 +22,20 @@ import {
   type AdjustmentAction,
 } from "@waitron/adjustments";
 import { localToday, rateLines, type GrossLines, type VatClass } from "@waitron/catalogue";
+import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
 import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { placeGroups } from "./order-groups.js";
-import { payWorkingOrder } from "./till-sale.js";
+import { formatReceipt } from "./receipt-ticket.js";
+import { printedLines } from "./testing/decode-ticket.js";
+import {
+  payWorkingOrder,
+  payWorkingOrderIntegrated,
+  readSettledTicket,
+  type TillSaleResult,
+} from "./till-sale.js";
 import {
   addTabRound,
   advanceTicketItem,
@@ -302,6 +310,108 @@ describe("a comp (plan D4)", () => {
       ["Olives", "1.000", "0.00", "1.50", "0.00"],
     ]);
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 1050, nominalValue: 1050 });
+  });
+});
+
+describe("the receipt (ruling R13)", () => {
+  /** A ticket's lines as `[customer name, gross, total before the change]`. */
+  const shown = (ticket: TillSaleResult) =>
+    ticket.lines.map((line) => [line.descriptions["es-ES"], line.gross, line.listGross]);
+
+  async function compBurgerAndDiscountBottle() {
+    const { billId } = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }]);
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 2),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    return billId;
+  }
+
+  const ADJUSTED_LINES = [
+    ["Hamburguesa", "0.00", "12.00"],
+    ["Rioja crianza", "27.00", "30.00"],
+    ["Pan de pueblo", "2.50", undefined],
+  ];
+
+  it("prints the Burger's €12.00 before its €0.00, when the bill is paid and when it is printed again", async () => {
+    const billId = await compBurgerAndDiscountBottle();
+
+    const ticket = await payWorkingOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: billId, tender: { method: "cash", amount: "29.50" }, lines: [] },
+    );
+
+    expect(shown(ticket)).toEqual(ADJUSTED_LINES);
+    const again = await inTx(venue, (tx) =>
+      readSettledTicket(venue.backend, tx, venue.cfg, billId),
+    );
+    expect(shown(again)).toEqual(ADJUSTED_LINES);
+    const printed = printedLines(
+      formatReceipt({
+        result: again,
+        issuer: { venueName: "Ajustes SL", nif: "62000003K" },
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: {
+          paperWidth: "80mm",
+          resolution: "180dpi",
+          characterSet: "wpc1252",
+          characterTable: 16,
+        },
+      }),
+    );
+    expect(
+      printed.filter((line) => /^1 ud {2}Hamburguesa +12,00 € -> 0,00 €$/u.test(line)),
+    ).toHaveLength(1);
+  });
+
+  it("shows the change on a card reader's receipt too", async () => {
+    const billId = await compBurgerAndDiscountBottle();
+
+    const paid = await payWorkingOrderIntegrated(
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider: new SimulatorPaymentProvider(venue.db),
+      },
+      venue.cfg,
+      { id: billId, lines: [], simulationOutcome: "captured" },
+    );
+
+    expect(paid.outcome).toBe("captured");
+    expect(shown((paid as { ticket: TillSaleResult }).ticket)).toEqual(ADJUSTED_LINES);
+  });
+
+  it("shows the change when a card payment whose reply was lost is filed later", async () => {
+    const billId = await compBurgerAndDiscountBottle();
+    await inTx(venue, (tx) =>
+      insertCapturedPayment(tx, {
+        workingOrderId: billId,
+        provider: "simulator",
+        paymentRef: `sim-${randomUUID()}`,
+        amount: decimal("29.50"),
+        settledAt: new Date(),
+        externalRef: `sim_lost_${randomUUID()}`,
+      }),
+    );
+
+    const paid = await payWorkingOrderIntegrated(
+      {
+        db: venue.db,
+        backend: venue.backend,
+        clock: venue.clock,
+        provider: new SimulatorPaymentProvider(venue.db),
+      },
+      venue.cfg,
+      { id: billId, lines: [] },
+    );
+
+    expect(paid.outcome).toBe("captured");
+    expect(shown((paid as { ticket: TillSaleResult }).ticket)).toEqual(ADJUSTED_LINES);
   });
 });
 

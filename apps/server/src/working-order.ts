@@ -718,6 +718,23 @@ export async function readLockedLines(
   );
 }
 
+/**
+ * Each stored line's unit price before a cancel, comp or discount changed it
+ * (`list_unit_price_gross`), or null, in the order {@link readLockedLines} reads the lines: the
+ * receipt's list prices, read in the transaction that prices the lines they go with.
+ */
+export async function readListUnitPrices(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<(Decimal | null)[]> {
+  const rows = await tx
+    .select({ list: workingOrderLines.listUnitPriceGross })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .orderBy(workingOrderLines.lineNo);
+  return rows.map(({ list }) => (list === null ? null : centsToDecimal(list)));
+}
+
 /** {@link readLockedLines}, with whether each line may be paid now, read in the same query. */
 async function readLockedLinesForIssuance(
   tx: Transaction,
@@ -4455,7 +4472,7 @@ export async function placeOrder(
         total: priced.total,
         qr: fiscal.verificationUrl ?? "",
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced),
+        lines: ticketLinesFrom(priced, await readListUnitPrices(tx, id)),
         tender: { method: "unpaid" },
       };
       placeResult = {

@@ -1,4 +1,4 @@
-import { FEED_BEFORE_CUT, columnsFor, esc, withQuietZone } from "@waitron/printing";
+import { FEED_BEFORE_CUT, columnsFor, esc, prepareText, withQuietZone } from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
@@ -1214,5 +1214,162 @@ describe("a bill payment partly given back before its invoice", () => {
         .slice(0, 4),
     ).toEqual(["Tarjeta 20,00 €", "Ref. OP-3", "Devolución -5,00 €", "VERI*FACTU"]);
     expectPaymentRowsToAddUpToTotal(printed);
+  });
+});
+
+describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
+  it.each(["wpc1252", "pc858", "plain"] as const)(
+    "cannot print a right arrow in %s, so the change is written with ->",
+    (characterSet) => {
+      expect(prepareText("\u{2192}", characterSet)).toBe("?");
+      expect(prepareText("->", characterSet)).toBe("->");
+    },
+  );
+
+  const ADJUSTED: TillSaleResult = {
+    ...FILED_SALE,
+    total: "31.00",
+    vatBreakdown: [{ rate: "21", base: "25.62", tax: "5.38" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Hamburguesa" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "12.00",
+        parentLineNo: null,
+      },
+      {
+        descriptions: { "es-ES": "Rioja crianza" },
+        quantity: "1",
+        gross: "27.00",
+        listGross: "30.00",
+        parentLineNo: null,
+      },
+      {
+        descriptions: { "es-ES": "Agua mineral" },
+        quantity: "2",
+        gross: "4.00",
+        parentLineNo: null,
+      },
+      {
+        descriptions: { "es-ES": "Pizza margarita" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "9.00",
+        parentLineNo: null,
+      },
+      {
+        descriptions: { "es-ES": "Aceitunas" },
+        quantity: "1",
+        gross: "0.00",
+        listGross: "1.50",
+        parentLineNo: 4,
+      },
+    ],
+    tender: { method: "cash", change: "0.00" },
+  };
+
+  it("prints a comped line's list total before its €0.00, and a discounted one's before what is left", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: ADJUSTED,
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    const first = lines.indexOf(`1  Hamburguesa${" ".repeat(11)}12,00 € -> 0,00 €`);
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 5)).toEqual([
+      `1  Hamburguesa${" ".repeat(11)}12,00 € -> 0,00 €`,
+      `1  Rioja crianza${" ".repeat(8)}30,00 € -> 27,00 €`,
+      `2  Agua mineral${" ".repeat(21)}4,00 €`,
+      `1  Pizza margarita${" ".repeat(8)}9,00 € -> 0,00 €`,
+      `  Aceitunas${" ".repeat(15)}1,50 € -> 0,00 €`,
+    ]);
+    // What the invoice charges is unchanged: the total is the filed one.
+    expect(lines).toContain(`TOTAL${" ".repeat(30)}31,00 €`);
+  });
+
+  it("prints no change where the list total is the price", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: {
+          ...FILED_SALE,
+          lines: [{ ...FILED_SALE.lines[0]!, listGross: FILED_SALE.lines[0]!.gross }],
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_80,
+      }),
+    );
+    expect(lines).toContain(`1  Menú del día${" ".repeat(20)}12,10 €`);
+    expect(lines.join("\n")).not.toContain("->");
+  });
+
+  it("puts the change under a long name on the narrow roll, right-aligned", () => {
+    const lines = printedLines(
+      formatReceipt({
+        result: {
+          ...ADJUSTED,
+          lines: [
+            {
+              descriptions: { "es-ES": "Tostada con tomate y jamón ibérico de bellota" },
+              quantity: "1",
+              gross: "0.00",
+              listGross: "12.50",
+              parentLineNo: null,
+            },
+          ],
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: PRINTER_58,
+      }),
+    );
+    const first = lines.indexOf("1  Tostada con tomate y jamón".padEnd(30));
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 3)).toEqual([
+      "1  Tostada con tomate y jamón".padEnd(30),
+      "   ibérico de bellota".padEnd(30),
+      "12,50 € -> 0,00 €".padStart(30),
+    ]);
+  });
+
+  it.each([
+    PRINTER_80,
+    PRINTER_58,
+    { paperWidth: "58mm", resolution: "203dpi", characterSet: "plain", characterTable: 0 } as const,
+    { paperWidth: "80mm", resolution: "203dpi", characterSet: "plain", characterTable: 0 } as const,
+  ])("keeps every line of changed prices within $paperWidth ($characterSet)", (printer) => {
+    const lines = printedLines(
+      formatReceipt({
+        result: {
+          ...ADJUSTED,
+          lines: [
+            ...ADJUSTED.lines,
+            {
+              descriptions: { "es-ES": "Chuletón de buey madurado a la brasa con guarnición" },
+              quantity: "12",
+              gross: "1111.11",
+              listGross: "1234.56",
+              parentLineNo: null,
+            },
+          ],
+        },
+        issuer: ISSUER,
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer,
+      }),
+    );
+    const columns = columnsFor(printer.paperWidth);
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
+    const euro = printer.characterSet === "plain" ? "EUR" : "€";
+    const amount = `1234,56 ${euro} -> 1111,11 ${euro}`;
+    expect(lines.filter((line) => line.endsWith(amount))).toHaveLength(1);
   });
 });
