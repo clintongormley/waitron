@@ -2617,7 +2617,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `jobReason` in the jobs list and in the calibration dialog's "Not printed: <reason>"
   (`apps/dashboard/src/screens/printers-screen.ts`); A140 decides whether jobs ended before it keep
   that reason text. Not run on the box.
-- **DONE (2026-09-30, A145): on a phone, a printer's row menu on the Printers tab stays on
+- **DONE (2026-09-30, A145, #935): on a phone, a printer's row menu on the Printers tab stays on
   screen.** The Printers tab's Actions column is pinned to the right-hand edge of the table's box
   with `wt-data-table`'s new opt-in `pinned: "end"` column option, so the three-dot button (⋮)
   holding Edit, Disable and Forget pairing is in view without scrolling; the other columns still
