@@ -5625,6 +5625,20 @@ ongoing overhaul listed at the top of Track A.
   `autocomplete="current-password"`, which invites the browser to offer the dashboard password there
   (not measured); left unchanged, a question to the owner. Third, which browser and address the
   owner saw the empty field in. **Next action:** the owner answers the PIN-field question.
+- **A sign-in step's links are one bulleted list, with its buttons on the first item's row — DONE
+  (C96, owner 2026-09-30: "Move 'Login with passkey' under 'i've forgotten my password' … the same
+  for any other similar links. Also the login button should be at the same level as the 'I've
+  forgotten my password' on the right"; then "list the links with bullets").** On the dashboard's
+  password step, "I've forgotten my password" is now the first item of the bulleted list, above
+  "Log in with passkey" and "Continue with Google", and Log in sits on that first row at the right.
+  The passkey, Google and authenticator-code steps take the same shape (their links unchanged in
+  order; the code step's Back and Log in share its one link's row). The email, account-link,
+  passkey-offer and check-your-email steps offer no other way to sign in and are unchanged (the
+  privacy-notice link under every step stays where it was). At 390 px the password
+  and code steps keep the buttons on the first row in English and Spanish; the passkey and Google
+  steps' longer buttons wrap below the list, right-aligned. While a refusal shows, the message and
+  the buttons wrap below the list together, because the message still sits beside the action; C97,
+  queued next, is to move it to the bottom of the form. Layout only, `apps/dashboard/src/screens/login-screen.ts`.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and

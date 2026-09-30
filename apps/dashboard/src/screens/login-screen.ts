@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   browserSupportsWebAuthnAutofill,
@@ -121,11 +121,35 @@ export class LoginScreen extends LitElement {
       }
 
       .alternative-list {
-        margin-block: var(--wt-space-4);
+        margin-block: 0;
         padding-inline-start: var(--wt-space-6);
       }
       .alternative-list li {
         margin-block: var(--wt-space-2);
+      }
+
+      /* A step's buttons share the row of its first link, on the right. The list is pushed down by
+         half the difference between a button's height and a line, so the first link sits level
+         with the buttons' middle. Baseline alignment cannot do it: wt-form-actions takes its
+         baseline from its empty cancel slot's bottom edge when a step has no Cancel. */
+      .links-and-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        column-gap: var(--wt-space-4);
+        margin-block: var(--wt-space-4);
+      }
+      .links-and-actions .alternative-list {
+        padding-top: calc((var(--wt-tap-min) - 1lh) / 2);
+      }
+      .links-and-actions .alternative-list li:first-child {
+        margin-top: 0;
+      }
+      .links-and-actions wt-form-actions {
+        width: auto;
+        margin-top: 0;
+        margin-inline-start: auto;
       }
 
       .alternative-hint {
@@ -855,13 +879,37 @@ export class LoginScreen extends LitElement {
     >`;
   }
 
-  #alternatives() {
-    return html`<ul class="alternative-list">
-      ${this.step !== "password" ? html`<li>${this.#methodLink("use-password", t("login.use_password"), () => this.#showPasswordStep())}</li>` : nothing}
-      ${this.step !== "passkey" ? html`<li>${this.#methodLink("passkey-login", t("login.with_passkey"), () => void this.#passkeyLogin())}</li>` : nothing}
-      ${this.step !== "password" ? html`<li>${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}</li>` : nothing}
-      ${this.googleConfigured && this.step !== "google" ? html`<li>${this.#methodLink("google-login", t("login.with_google"), () => void this.#googleLogin())}</li>` : nothing}
-    </ul>`;
+  #alternatives(): TemplateResult[] {
+    const reset = this.#methodLink(
+      "reset-by-email",
+      t("login.reset_by_email"),
+      () => void this.#requestPasswordReset(),
+    );
+    const passkey = this.#methodLink(
+      "passkey-login",
+      t("login.with_passkey"),
+      () => void this.#passkeyLogin(),
+    );
+    const google =
+      this.googleConfigured && this.step !== "google"
+        ? [this.#methodLink("google-login", t("login.with_google"), () => void this.#googleLogin())]
+        : [];
+    if (this.step === "password") return [reset, passkey, ...google];
+    return [
+      this.#methodLink("use-password", t("login.use_password"), () => this.#showPasswordStep()),
+      ...(this.step !== "passkey" ? [passkey] : []),
+      reset,
+      ...google,
+    ];
+  }
+
+  #linksAndActions(links: TemplateResult[], actions: TemplateResult) {
+    return html`<div class="links-and-actions">
+      <ul class="alternative-list">
+        ${links.map((link) => html`<li>${link}</li>`)}
+      </ul>
+      ${actions}
+    </div>`;
   }
 
   /** A stable field, so the footer's `loadLocales` property does not change on every render. */
@@ -1126,32 +1174,36 @@ export class LoginScreen extends LitElement {
                     <h1>${t("login.google_heading")}</h1>
                     ${this.#renderLoginContext()}
                     <p class="alternative-hint">${t("login.google_hint")}</p>
-                    <wt-form-actions .error=${form.bottom}
-                      ><wt-button
-                        variant="primary"
-                        data-test="google-login"
-                        ?disabled=${this.busy || !this.googleConfigured}
-                        @click=${() => void this.#googleLogin()}
-                        >${t("login.with_google")}</wt-button
-                      ></wt-form-actions
-                    >
-                    ${this.#alternatives()}
+                    ${this.#linksAndActions(
+                      this.#alternatives(),
+                      html`<wt-form-actions .error=${form.bottom}
+                        ><wt-button
+                          variant="primary"
+                          data-test="google-login"
+                          ?disabled=${this.busy || !this.googleConfigured}
+                          @click=${() => void this.#googleLogin()}
+                          >${t("login.with_google")}</wt-button
+                        ></wt-form-actions
+                      >`,
+                    )}
                   `
                 : this.step === "passkey"
                   ? html`
                       <h1>${t("login.use_passkey_heading")}</h1>
                       ${this.#renderLoginContext()}
                       <p class="alternative-hint">${t("login.passkey_hint")}</p>
-                      <wt-form-actions .error=${form.bottom}>
-                        <wt-button
-                          variant="primary"
-                          data-test="passkey-login"
-                          ?disabled=${this.busy}
-                          @click=${() => void this.#passkeyLogin()}
-                          >${t("login.with_passkey")}</wt-button
-                        >
-                      </wt-form-actions>
-                      ${this.#alternatives()}
+                      ${this.#linksAndActions(
+                        this.#alternatives(),
+                        html`<wt-form-actions .error=${form.bottom}>
+                          <wt-button
+                            variant="primary"
+                            data-test="passkey-login"
+                            ?disabled=${this.busy}
+                            @click=${() => void this.#passkeyLogin()}
+                            >${t("login.with_passkey")}</wt-button
+                          >
+                        </wt-form-actions>`,
+                      )}
                     `
                   : this.step === "password"
                     ? html`
@@ -1195,17 +1247,18 @@ export class LoginScreen extends LitElement {
                             >${this.#renderPasswordIcon(this.passwordVisible)}</wt-button
                           >
                         </wt-input>
-                        ${this.#methodLink("reset-by-email", t("login.reset_by_email"), () => void this.#requestPasswordReset())}
-                        <wt-form-actions .error=${form.bottom}>
-                          <wt-button
-                            variant="primary"
-                            data-test="submit"
-                            ?disabled=${this.busy || form.blocked}
-                            @click=${() => void this.#submit()}
-                            >${t("action.login")}</wt-button
-                          >
-                        </wt-form-actions>
-                        ${this.#alternatives()}
+                        ${this.#linksAndActions(
+                          this.#alternatives(),
+                          html`<wt-form-actions .error=${form.bottom}>
+                            <wt-button
+                              variant="primary"
+                              data-test="submit"
+                              ?disabled=${this.busy || form.blocked}
+                              @click=${() => void this.#submit()}
+                              >${t("action.login")}</wt-button
+                            >
+                          </wt-form-actions>`,
+                        )}
                       `
                     : this.step === "factor"
                       ? html`
@@ -1237,30 +1290,9 @@ export class LoginScreen extends LitElement {
                             @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.shadowRoot!.querySelector<HTMLElement>("[data-test=submit-factor]"))}
                             @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onSecondFactorChange(e)}
                           ></wt-input>
-                          <wt-form-actions .error=${form.bottom}>
-                            <wt-button
-                              slot="cancel"
-                              variant="secondary"
-                              data-test="back-to-password"
-                              ?disabled=${this.busy}
-                              @click=${() => {
-                                this.secondFactor = "";
-                                this.errorKey = null;
-                                this.step = "password";
-                              }}
-                              >${t("action.back")}</wt-button
-                            >
-                            <wt-button
-                              variant="primary"
-                              data-test="submit-factor"
-                              ?disabled=${this.busy || form.blocked}
-                              @click=${() => void this.#submit()}
-                              >${t("action.login")}</wt-button
-                            >
-                          </wt-form-actions>
-                          <ul class="alternative-list">
-                            <li>
-                              ${this.#methodLink(
+                          ${this.#linksAndActions(
+                            [
+                              this.#methodLink(
                                 "switch-factor",
                                 this.factorMode === "totp"
                                   ? t("login.use_recovery_code")
@@ -1271,9 +1303,30 @@ export class LoginScreen extends LitElement {
                                   this.secondFactor = "";
                                   this.attempted = false;
                                 },
-                              )}
-                            </li>
-                          </ul>
+                              ),
+                            ],
+                            html`<wt-form-actions .error=${form.bottom}>
+                              <wt-button
+                                slot="cancel"
+                                variant="secondary"
+                                data-test="back-to-password"
+                                ?disabled=${this.busy}
+                                @click=${() => {
+                                  this.secondFactor = "";
+                                  this.errorKey = null;
+                                  this.step = "password";
+                                }}
+                                >${t("action.back")}</wt-button
+                              >
+                              <wt-button
+                                variant="primary"
+                                data-test="submit-factor"
+                                ?disabled=${this.busy || form.blocked}
+                                @click=${() => void this.#submit()}
+                                >${t("action.login")}</wt-button
+                              >
+                            </wt-form-actions>`,
+                          )}
                         `
                       : this.step === "reset-sent"
                         ? html`

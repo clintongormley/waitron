@@ -872,8 +872,12 @@ clears both the current attempt and the saved email/method, then returns to blan
 Keep the hidden semantic username input for password managers. Ordinary login has no separate
 Cancel or Forget button.
 
-On password, passkey and Google screens, show alternative methods as a persistent bulleted list of links. Put **I've forgotten my password**
-directly below the password field. Recovery opens **Check your email** with the address, delivery
+On password, passkey, Google and code screens, a step's other ways in are ONE persistent bulleted list of links, directly
+after the step's field or hint. On the password screen **I've forgotten my password** is its first
+item, then the other ways to log in. The step's buttons sit on the row of the list's first item, at
+the right; where that row is too narrow for both, they wrap below the list, still at the right.
+While a refusal shows beside the action, the message and the buttons wrap below the list together.
+Recovery opens **Check your email** with the address, delivery
 guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
 pending accounts receive a setup link and active accounts receive a reset link. Invitation emails
 use links; the login screen has no manual invitation-code entry.

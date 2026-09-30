@@ -1,4 +1,4 @@
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -496,7 +496,9 @@ describe("login-screen", () => {
     expect(
       el
         .shadowRoot!.querySelector("wt-input[name=password]")
-        ?.nextElementSibling?.matches("a[data-test=reset-by-email]"),
+        ?.nextElementSibling?.matches(
+          ".links-and-actions:has(li:first-child a[data-test=reset-by-email])",
+        ),
     ).toBe(true);
     expect(el.shadowRoot!.querySelector("ul li a[data-test=passkey-login]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("ul li a[data-test=google-login]")).not.toBeNull();
@@ -2925,4 +2927,123 @@ describe("login-screen: a refused sign-in says only that the login failed", () =
     await flush(el);
     expect(await bottomOf(el)).toBe(codeMessage("password.invalid"));
   });
+});
+
+describe("login-screen: a step's links are one bulleted list with its buttons on the first item's row", () => {
+  afterEach(async () => {
+    setLocale("en-GB");
+    await page.viewport(1280, 900);
+  });
+
+  /** Every sign-in method link on the step, in order, and the one list holding them. */
+  function links(el: LoginScreen) {
+    const lists = el.shadowRoot!.querySelectorAll("ul.alternative-list");
+    const methods = [...el.shadowRoot!.querySelectorAll<HTMLAnchorElement>("a[data-test]")];
+    return { lists, methods, order: methods.map((a) => a.dataset.test) };
+  }
+
+  /**
+   * Each of the step's buttons shares the first item's row, to the right of its link — or, where
+   * `mayWrap` allows it because the row is too narrow for both, sits wholly below the list. Either
+   * way the last button ends at the form's right edge.
+   */
+  function expectButtonsOnFirstRow(el: LoginScreen, mayWrap = false) {
+    const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
+    const listBox = list.getBoundingClientRect();
+    const first = list.querySelector("li")!.getBoundingClientRect();
+    const link = list.querySelector("li a")!.getBoundingClientRect();
+    const screen = el.shadowRoot!.querySelector(".screen")!.getBoundingClientRect();
+    const buttons = [...el.shadowRoot!.querySelectorAll("wt-form-actions wt-button")];
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      const box = button.getBoundingClientRect();
+      if (mayWrap && box.top >= listBox.bottom) continue;
+      const firstMiddle = first.top + first.height / 2;
+      expect(Math.abs(firstMiddle - (box.top + box.height / 2))).toBeLessThanOrEqual(2);
+      expect(box.left).toBeGreaterThan(link.right);
+    }
+    const last = buttons.at(-1)!.getBoundingClientRect();
+    expect(Math.abs(last.right - screen.right)).toBeLessThan(1);
+  }
+
+  async function openFactor() {
+    const login = vi.fn().mockRejectedValueOnce({ code: "totp.required" });
+    const { el } = await signInWithPassword({ login });
+    return el;
+  }
+
+  const widths = [
+    ["en-GB", 1280, 900],
+    ["es-ES", 1280, 900],
+    ["en-GB", 390, 844],
+    ["es-ES", 390, 844],
+  ] as const;
+
+  it.each(widths)(
+    "the password step lists the forgotten-password link first, then passkey and Google, with Log in on its row (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      await openPassword(el);
+      const { lists, methods, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["reset-by-email", "passkey-login", "google-login"]);
+      for (const method of methods) expect(method.closest("ul.alternative-list li")).not.toBeNull();
+      expect(
+        el
+          .shadowRoot!.querySelector("wt-input[name=password]")!
+          .nextElementSibling!.contains(lists[0]!),
+      ).toBe(true);
+      expectButtonsOnFirstRow(el);
+    },
+  );
+
+  it.each(widths)(
+    "the passkey step's links are one list with its button on the first item's row, or below it on a phone (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      await openPasskey(el);
+      const { lists, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["use-password", "reset-by-email", "google-login"]);
+      expectButtonsOnFirstRow(el, width < 600);
+    },
+  );
+
+  it.each(widths)(
+    "the Google step's links are one list with its button on the first item's row, or below it on a phone (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      await flush(el);
+      Object.assign(el as unknown as Record<string, string>, {
+        email: "owner@x.com",
+        step: "google",
+      });
+      await el.updateComplete;
+      const { lists, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["use-password", "passkey-login", "reset-by-email"]);
+      expectButtonsOnFirstRow(el, width < 600);
+    },
+  );
+
+  it.each(widths)(
+    "the code step's link is one list with Back and Log in on its row, or below it on a phone (%s, %i px)",
+    async (locale, width, height) => {
+      setLocale(locale);
+      await page.viewport(width, height);
+      const el = await openFactor();
+      const { lists, order } = links(el);
+      expect(lists).toHaveLength(1);
+      expect(order).toEqual(["switch-factor"]);
+      expectButtonsOnFirstRow(el, width < 600);
+    },
+  );
 });
