@@ -2418,6 +2418,18 @@ describe("DashboardApi — printing (agents + printers + jobs)", () => {
     });
   });
 
+  it("renews the printer discovery window without reporting dashboard session activity", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ discoveryUntil: 5678 }));
+    const activity = vi.fn();
+    const api = new DashboardApi("", fetchImpl, undefined, activity);
+    expect(await api.background.renewPrinterDiscovery()).toEqual({ discoveryUntil: 5678 });
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/printer-discovery/renew", {
+      method: "POST",
+      credentials: "include",
+    });
+    expect(activity).not.toHaveBeenCalled();
+  });
+
   it("listDiscoveredPrinters GETs the discovered-printers route and decodes the rows", async () => {
     const rows = [
       {

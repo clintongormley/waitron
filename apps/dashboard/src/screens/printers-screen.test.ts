@@ -14,7 +14,12 @@ import type {
   Printer,
   Till,
 } from "../api/client.js";
-import { PrintersScreen, SCAN_LISTEN_MS, SCAN_POLL_MS } from "./printers-screen.js";
+import {
+  AGENT_SCAN_LISTEN_MS,
+  PrintersScreen,
+  SCAN_LISTEN_MS,
+  SCAN_POLL_MS,
+} from "./printers-screen.js";
 import { LiveData } from "@waitron/dashboard-kit";
 
 beforeEach(() => {
@@ -246,6 +251,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
     testCharacterTables: vi.fn().mockResolvedValue({ jobId: "j11", calibrationLocale: "es-ES" }),
     startPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 60_000 }),
+    renewPrinterDiscovery: vi.fn().mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
     listDiscoveredPrinters: vi.fn().mockResolvedValue([] as DiscoveredPrinter[]),
     listTills: vi.fn().mockResolvedValue(tills),
     ...overrides,
@@ -2165,6 +2171,132 @@ describe("printers-screen", () => {
     }
   });
 
+  it("leaves the empty discovered table without a message while Scan's spinner runs", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      expect(q(el, "[data-test=scan-printers]")!.hasAttribute("loading")).toBe(true);
+      const table = q(el, "[data-test=discovered-table]") as import("@waitron/ui").WtDataTable;
+      expect(table.emptyMessage).toBe("");
+      expect(table.shadowRoot!.textContent).not.toContain(t("printers.scan_loading", "es-ES"));
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps Scan's spinner on for 30 seconds, not less", async () => {
+    const api = stubApi();
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      const button = () => q(el, "[data-test=scan-printers]")!;
+      await vi.advanceTimersByTimeAsync(29_000);
+      await el.updateComplete;
+      expect(button().hasAttribute("loading")).toBe(true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      await el.updateComplete;
+      expect(button().hasAttribute("loading")).toBe(false);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("renews the discovery window in the background while Add a printer stays open, and stops once it closes", async () => {
+    const background = stubApi();
+    const api = stubApi({ background });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      expect(background.renewPrinterDiscovery).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+      // A second Scan opens the window again by hand and must not add a second renewal timer.
+      q(el, "[data-test=scan-printers]")!.click();
+      await flush(el);
+      expect(api.startPrinterDiscovery).toHaveBeenCalledTimes(2);
+      await vi.advanceTimersByTimeAsync(4 * 60_000 - SCAN_LISTEN_MS);
+      expect(background.renewPrinterDiscovery).toHaveBeenCalledTimes(4);
+      expect(api.renewPrinterDiscovery).not.toHaveBeenCalled();
+
+      q(el, "[data-test=cancel-new-printer]")!.click();
+      await flush(el);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(background.renewPrinterDiscovery).toHaveBeenCalledTimes(4);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops renewing the discovery window when the Printers screen goes away", async () => {
+    const background = stubApi();
+    const api = stubApi({ background });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(background.renewPrinterDiscovery).toHaveBeenCalledOnce();
+      el.remove();
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(background.renewPrinterDiscovery).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not renew a discovery window the server refused to open", async () => {
+    const background = stubApi();
+    const api = stubApi({
+      background,
+      startPrinterDiscovery: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(background.renewPrinterDiscovery).not.toHaveBeenCalled();
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps renewing after one renewal fails, and shows no error for it", async () => {
+    const background = stubApi({
+      renewPrinterDiscovery: vi
+        .fn()
+        .mockRejectedValueOnce({ code: "connection.failed" })
+        .mockResolvedValue({ discoveryUntil: Date.now() + 180_000 }),
+    });
+    const api = stubApi({ background });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"] });
+    try {
+      await openDiscovery(el);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flush(el);
+      expect(q(el, "[data-test=printer-refresh-error]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(background.renewPrinterDiscovery).toHaveBeenCalledTimes(2);
+    } finally {
+      el.remove();
+      vi.useRealTimers();
+    }
+  });
+
   it("registers Bluetooth devices from the same discovered table", async () => {
     const api = stubApi({
       listDiscoveredPrinters: vi.fn().mockResolvedValue([
@@ -3218,7 +3350,7 @@ it("keeps pairing open, polls passively, and makes Scan usable again after liste
   vi.useFakeTimers();
   try {
     q(el, "[data-test=open-add-agent]")!.click();
-    await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS);
+    await vi.advanceTimersByTimeAsync(AGENT_SCAN_LISTEN_MS);
     await el.updateComplete;
     await settleTree(el.shadowRoot!);
     expect(background.joinRequests).toHaveBeenCalledWith("print_agent");
@@ -3928,7 +4060,7 @@ describe("printers-screen agent joining edges", () => {
       await flush(el);
       expect(api.openPairingMode).toHaveBeenCalledOnce();
 
-      await vi.advanceTimersByTimeAsync(SCAN_LISTEN_MS + SCAN_POLL_MS);
+      await vi.advanceTimersByTimeAsync(AGENT_SCAN_LISTEN_MS + SCAN_POLL_MS);
       await flush(el);
       q(el, "[data-test=scan-agents]")!.click();
       await flush(el);

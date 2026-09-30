@@ -147,8 +147,11 @@ interface EditablePrinter {
 }
 
 /** Discovery reports arrive on later agent polls, so a scan listens beyond its initial read. */
-export const SCAN_LISTEN_MS = 10_000;
+export const SCAN_LISTEN_MS = 30_000;
+export const AGENT_SCAN_LISTEN_MS = 10_000;
 export const SCAN_POLL_MS = 2_000;
+/** Well inside the server's three-minute discovery window, so one failed renewal loses nothing. */
+export const DISCOVERY_RENEW_MS = 60_000;
 
 @customElement("dashboard-printers-screen")
 export class PrintersScreen extends LitElement {
@@ -569,6 +572,7 @@ export class PrintersScreen extends LitElement {
   #scanUntil = 0;
   #scanInFlight = false;
   #scanEpoch = 0;
+  #renewTimer?: ReturnType<typeof setInterval>;
   #registeredDevices = new Set<string>();
   #editTrigger?: HTMLButtonElement;
 
@@ -609,6 +613,7 @@ export class PrintersScreen extends LitElement {
 
   override disconnectedCallback(): void {
     this.#endScan();
+    this.#stopRenewing();
     this.#stopAgentModal();
     this.#stopCommandPoll();
     this.#resetPair();
@@ -755,7 +760,7 @@ export class PrintersScreen extends LitElement {
     if (this.scanningAgents) return;
     this.errorKey = null;
     this.scanningAgents = true;
-    this.#agentScanUntil = Date.now() + SCAN_LISTEN_MS;
+    this.#agentScanUntil = Date.now() + AGENT_SCAN_LISTEN_MS;
     const epoch = this.#agentEpoch;
     await this.#setPairing(true);
     if (epoch === this.#agentEpoch) await this.#agentTick();
@@ -951,6 +956,7 @@ export class PrintersScreen extends LitElement {
       if (epoch !== this.#scanEpoch) return;
       this.#probeTarget = target;
       if (!this.isConnected || !this.addingPrinter) return this.#endScan();
+      if (!address) this.#renewTimer ??= setInterval(() => void this.#renew(), DISCOVERY_RENEW_MS);
       await this.#loadDiscovered(epoch);
       if (epoch !== this.#scanEpoch) return;
       if (!this.isConnected || !this.addingPrinter) return this.#endScan();
@@ -993,6 +999,16 @@ export class PrintersScreen extends LitElement {
     }
     if (epoch !== this.#scanEpoch) return;
     if (Date.now() >= this.#scanUntil) this.#endScan();
+  }
+
+  /** A failure is not shown: the next renewal retries well before the window lapses. */
+  async #renew(): Promise<void> {
+    await (this.api.background ?? this.api).renewPrinterDiscovery().catch(() => undefined);
+  }
+
+  #stopRenewing(): void {
+    clearInterval(this.#renewTimer);
+    this.#renewTimer = undefined;
   }
 
   #endScan(): void {
@@ -2997,6 +3013,7 @@ export class PrintersScreen extends LitElement {
         this.namingPrinter = null;
         this.armedForgetDevice = null;
         this.#endScan();
+        this.#stopRenewing();
         this.commands = Object.fromEntries(
           Object.entries(this.commands).filter(([, command]) => command.kind !== "pair"),
         );
@@ -3104,7 +3121,7 @@ export class PrintersScreen extends LitElement {
         .columns=${columns}
         .rows=${[...rows, ...lost]}
         .rowKey=${(d: DiscoveredPrinter) => this.#deviceKey(d)}
-        .emptyMessage=${this.scanning ? t("printers.scan_loading") : t("printers.no_discovered")}
+        .emptyMessage=${this.scanning ? "" : t("printers.no_discovered")}
       ></wt-data-table>
       <wt-form-actions
         slot="footer"
