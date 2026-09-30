@@ -1265,6 +1265,79 @@ describe("a cancel (menus §11.5)", () => {
     expect(await priced(billId)).toEqual([["Steak", "1.000", "25.00", null, "25.00"]]);
     expect((await recordedOn(billId))[0]).toMatchObject({ quantity: 2000, reduction: 5000 });
   });
+
+  it("cancels 1 of Pizza ×2 with two olives each: the olives follow the dish, the kitchen is told, and the bill's drop is recorded", async () => {
+    const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 2 }]);
+    const pizza = await lineIdOf(venue, billId, 1);
+    const ticket = await ticketOf(venue, billId, 1);
+    const before = total(await rowsOf(venue, billId));
+    const ask = { lineId: pizza, action: "cancel", quantity: "1" } as const;
+    const previewed = await preview(billId, ask);
+
+    await adjust(billId, ask);
+
+    expect(await priced(billId)).toEqual([
+      ["Pizza", "1.000", "9.00", null, "9.00"],
+      ["Olives", "2.000", "1.50", null, "3.00"],
+    ]);
+    const [item] = await inTx(venue, (tx) =>
+      tx
+        .select({ quantity: ticketItems.quantity })
+        .from(ticketItems)
+        .where(eq(ticketItems.id, ticket.id)),
+    );
+    expect(item!.quantity).toBe(1000);
+    expect((await noticesAtStation()).slice(-1)).toEqual([
+      { kind: "void", lineName: "PIZZA", quantity: "1.000", wasStarted: false },
+    ]);
+    const drop = subtractDecimal(decimal(before), decimal(total(await rowsOf(venue, billId))));
+    expect(drop).toBe("12.00");
+    expect((await recordedOn(billId))[0]).toMatchObject({
+      action: "cancel",
+      quantity: 1000,
+      lineQuantity: 2000,
+      beforeAmount: 1200,
+      afterAmount: 0,
+      reduction: 1200,
+      nominalValue: 1200,
+    });
+    expect(previewed).toMatchObject({
+      reduction: "12.00",
+      nominalValue: "12.00",
+      lines: [{ lineId: pizza, reduction: "12.00", rows: [] }],
+    });
+  });
+
+  it("records a part cancel of a discounted Pizza with olives at what the bill loses, and its list value as nominal", async () => {
+    const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
+    const pizza = await lineIdOf(venue, billId, 1);
+    await adjust(billId, { lineId: pizza, action: "discount_percent", percentBp: 1000 });
+    expect(await priced(billId)).toEqual([
+      ["Pizza", "3.000", "8.10", "9.00", "24.30"],
+      ["Olives", "3.000", "1.35", "1.50", "4.05"],
+    ]);
+    const before = total(await rowsOf(venue, billId));
+    const ask = { lineId: pizza, action: "cancel", quantity: "1" } as const;
+    const previewed = await preview(billId, ask);
+
+    await adjust(billId, ask);
+
+    expect(await priced(billId)).toEqual([
+      ["Pizza", "2.000", "8.10", "9.00", "16.20"],
+      ["Olives", "2.000", "1.35", "1.50", "2.70"],
+    ]);
+    const drop = subtractDecimal(decimal(before), decimal(total(await rowsOf(venue, billId))));
+    expect(drop).toBe("9.45");
+    expect((await recordedOn(billId))[1]).toMatchObject({
+      action: "cancel",
+      quantity: 1000,
+      beforeAmount: 945,
+      afterAmount: 0,
+      reduction: 945,
+      nominalValue: 1050,
+    });
+    expect(previewed).toMatchObject({ reduction: "9.45", nominalValue: "10.50" });
+  });
 });
 
 describe("the bill's own rules", () => {

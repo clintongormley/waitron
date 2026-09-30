@@ -3433,10 +3433,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       part of a line to another group starts with no percentage history (lines record no source line); a row a comp or discount carves keeps
       its source line's history. **Next action:**
       decide whether the per-line cap should see bill discounts.
-    - **Not offered:** part of a dish with extras (`adjustment.partial_with_extras`), part of a
-      weighed line (`adjustment.quantity_invalid`, a controller ruling during the build: its two
-      rounded parts need not add up to the line), and counter orders (the route takes a table's bill
-      only, as the old void does). A run-it review found that exactly representable weighed cases
+    - **Not offered:** a comp or a discount of part of a dish with extras
+      (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
+      following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
+      during the build: its two rounded parts need not add up to the line), and counter orders (the
+      route takes a table's bill only). A run-it review found that exactly representable weighed cases
       are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
       decides whether exactly representable partial weighed adjustments should be allowed.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's

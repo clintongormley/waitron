@@ -2027,16 +2027,7 @@ export async function removeFromLine(
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.parentLineId, target.id));
-  const dishQuantity = thousandthsToDecimal(target.quantity);
-  await reduceLine(
-    tx,
-    target,
-    removed,
-    children.map((child) => ({
-      child: { id: child.id, unitPriceGross: centsToDecimal(child.unitPriceGross) },
-      perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dishQuantity),
-    })),
-  );
+  await reduceLine(tx, target, removed, keptExtrasOf(children, target.quantity));
   await assertBillInvariant(tx, [tabId]);
   await partyAfterEdit(tx, tabId, [], operatorId);
 }
@@ -2059,9 +2050,26 @@ export async function partyAfterEdit(
 }
 
 /** A dish's extras child, and how many of it go with one of the dish. */
-interface KeptExtra {
+export interface KeptExtra {
   child: { id: string; unitPriceGross: Decimal };
   perDish: number;
+}
+
+/** The stored extras children of a dish of `dishQuantity` thousandths, as a reduction keeps them. */
+export function keptExtrasOf(
+  children: readonly { id: string; quantity: number; unitPriceGross: number }[],
+  dishQuantity: number,
+): KeptExtra[] {
+  const dish = thousandthsToDecimal(dishQuantity);
+  return children.map((child) => ({
+    child: { id: child.id, unitPriceGross: centsToDecimal(child.unitPriceGross) },
+    perDish: perDishOptionQuantity(thousandthsToDecimal(child.quantity), dish),
+  }));
+}
+
+/** An extras child's quantity once its dish is `dishQuantity`. */
+export function extraQuantityFor(perDish: number, dishQuantity: Decimal): Decimal {
+  return multiplyDecimal(dishQuantity, decimal(String(perDish)));
 }
 
 /** Each child's quantity and total follow its dish to `dishQuantity`, at the child's stored gross
@@ -2072,7 +2080,7 @@ async function rescaleExtras(
   dishQuantity: Decimal,
 ): Promise<void> {
   for (const { child, perDish } of kept) {
-    const quantity = multiplyDecimal(dishQuantity, decimal(String(perDish)));
+    const quantity = extraQuantityFor(perDish, dishQuantity);
     await tx
       .update(workingOrderLines)
       .set({
