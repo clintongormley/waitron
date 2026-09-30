@@ -555,10 +555,11 @@ async function priorsOf(
 /**
  * The bill's discount and its price before adjustments, over its rows at `quantityOf`, each row
  * priced by `priceOf`. The discount is each row's list price less its price, none for a row priced
- * above its list price, and left out for the rows this bill's own comp records prove comped. A
- * comped row that has moved to another bill is not proven comped there, so there it counts as
- * discount, which errs toward asking for a manager. `priceOf` is `gross` for the cents the bill
- * shows, or `exactly` for the unrounded price a cancel's rise is also judged on.
+ * above its list price, and left out for the rows this bill's own records prove comped
+ * ({@link readCompedLines}). A comped row that has moved to another bill is not proven comped
+ * there, so there it counts as discount, which errs toward asking for a manager. `priceOf` is
+ * `gross` for the cents the bill shows, or `exactly` for the unrounded price a cancel's rise is also
+ * judged on.
  */
 function shareOf(
   rows: readonly Row[],

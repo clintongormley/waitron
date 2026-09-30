@@ -1798,6 +1798,30 @@ describe("the venue's limit on a bill's total discount (B11b)", () => {
     }
   });
 
+  it("leaves out the copy of a comped olive a later discount carved off with its pizza", async () => {
+    await setLimit(800);
+    // €23.50 in all, limit €1.88: the €3.00 olives comped, then 10% off 1 pizza, whose carved part
+    // takes a copy of one comped olive, then 10% off the bread: €0.90 and €0.25 of discount.
+    const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }, { name: "Bread" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 2),
+      action: "comp",
+      ...byStaff(),
+    });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      quantity: "1",
+      ...billPercent(1000),
+    });
+    const ask = { lineId: await lineIdOf(venue, billId, 3), ...billPercent(1000) };
+
+    expect(await preview(billId, ask)).toMatchObject({
+      reduction: "0.25",
+      needsApproval: null,
+      overBillDiscountLimit: false,
+    });
+  });
+
   it("still counts a line discounted to nothing", async () => {
     await setLimit(4000);
     // €40.00 in all, limit €16.00: €10.00 off the salad, which is then free, and €6.01 more.

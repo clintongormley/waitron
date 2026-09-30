@@ -362,10 +362,48 @@ describe("readCompedLines", () => {
     expect(await read(order)).toEqual({ rows: [part.to], dishes: [whole] });
   });
 
-  it("reads the bill's comps through the index that leads with the working order", async () => {
+  it("follows each later split of a comped row, or of a dish comped whole, to its copy, at any remove", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const [part, copy, copyOfCopy, dish, dishCopy, other, otherCopy] = Array.from(
+      { length: 7 },
+      () => randomUUID(),
+    );
+    const partFrom = randomUUID();
+    await record(
+      comp(order, reason, {
+        line: { ...comp(order, reason).line!, id: partFrom },
+        splits: [{ from: partFrom, to: part }],
+      }),
+    );
+    await record(comp(order, reason, { line: { ...comp(order, reason).line!, id: dish } }));
+    // Discounts made afterwards carve copies off the comped rows, and off a row nobody comped.
+    await record(
+      percent(order, reason, randomUUID(), 1000, [
+        { from: part, to: copy },
+        { from: dish, to: dishCopy },
+        { from: other, to: otherCopy },
+      ]),
+    );
+    await record(percent(order, reason, randomUUID(), 1000, [{ from: copy, to: copyOfCopy }]));
+
+    expect(await read(order)).toEqual({ rows: [part, copy, copyOfCopy], dishes: [dish, dishCopy] });
+  });
+
+  it("does not count a copy split off a row before the row was comped", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const [line, earlierCopy] = [randomUUID(), randomUUID()];
+    await record(percent(order, reason, line, 1000, [{ from: line, to: earlierCopy }]));
+    await record(comp(order, reason, { line: { ...comp(order, reason).line!, id: line } }));
+
+    expect(await read(order)).toEqual({ rows: [], dishes: [line] });
+  });
+
+  it("reads the bill's adjustments through the index that leads with the working order", async () => {
     const plan = await db.execute<{ detail: string }>(
-      sql`explain query plan select line_id, splits from adjustments
-        where working_order_id = ${randomUUID()} and action = 'comp'`,
+      sql`explain query plan select line_id, splits, action from adjustments
+        where working_order_id = ${randomUUID()} order by rowid`,
     );
     expect(plan.rows.map((row) => row.detail).join("\n")).toContain(
       "USING INDEX adjustments_order_reason_idx (working_order_id=?)",

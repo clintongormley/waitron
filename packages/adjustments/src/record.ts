@@ -131,27 +131,35 @@ export async function readLinePercents(
 }
 
 /** The rows a bill's own comps priced at zero: the rows each part comp split off (a dish and its
- * extras), and the line of each whole comp, a dish's extras rows comped with it. */
+ * extras), and the line of each whole comp, a dish's extras rows comped with it. Each also names
+ * the copies later adjustments on the bill split off those rows, at any remove. */
 export interface CompedLines {
   rows: string[];
   dishes: string[];
 }
 
-/** The rows this bill's comp records name; a comp recorded on another bill is not read. */
+/** The rows this bill's adjustments prove comped; a comp recorded on another bill is not read. */
 export async function readCompedLines(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<CompedLines> {
-  const comps = await tx
-    .select({ lineId: adjustments.lineId, splits: adjustments.splits })
+  // In the order they were written: a copy split off a row before the row was comped keeps the
+  // price it had.
+  const written = await tx
+    .select({ lineId: adjustments.lineId, splits: adjustments.splits, action: adjustments.action })
     .from(adjustments)
-    .where(and(eq(adjustments.workingOrderId, workingOrderId), eq(adjustments.action, "comp")));
-  const comped: CompedLines = { rows: [], dishes: [] };
-  for (const { lineId, splits } of comps) {
-    if (splits.length === 0) comped.dishes.push(lineId!);
-    else comped.rows.push(...splits.map((split) => split.to));
+    .where(eq(adjustments.workingOrderId, workingOrderId))
+    .orderBy(sql`rowid`);
+  const rows = new Set<string>();
+  const dishes = new Set<string>();
+  for (const { lineId, splits, action } of written) {
+    if (action === "comp" && splits.length === 0) dishes.add(lineId!);
+    for (const { from, to } of splits) {
+      if (action === "comp" || rows.has(from)) rows.add(to);
+      if (dishes.has(from)) dishes.add(to);
+    }
   }
-  return comped;
+  return { rows: [...rows], dishes: [...dishes] };
 }
 
 /** A comp or discount still standing on a bill. `lineId` is null for one on the whole bill. */
