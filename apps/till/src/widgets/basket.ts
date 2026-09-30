@@ -1,10 +1,18 @@
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { MONEY_SCALE, formatMoney, grossOf, sumDecimals, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  type Decimal,
+  decimal,
+  formatMoney,
+  grossOf,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -294,6 +302,11 @@ export class TillBasket extends LitElement {
   /** A pay, place or hold of the basket's order is out, so no adjustment is offered. */
   @property({ type: Boolean }) orderInFlight = false;
 
+  /** Built when {@link storedLines} changes, not searched for line by line on every render. */
+  #listedById = new Map<string, TabLine>();
+  #listedExtras = new Map<number, TabLine[]>();
+  #listedTotal: Decimal = decimal("0");
+
   /** The line whose note editor is open, by the line itself rather than its place: other lines move
    * under it (a remove elsewhere, another basket showing the same order), and a note, which can
    * carry allergy information, must never reattach to the line that slid into its place. */
@@ -383,6 +396,21 @@ export class TillBasket extends LitElement {
       : { addAllergens: item.addAllergens, suitableFor: item.suitableFor };
   }
 
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!changed.has("storedLines")) return;
+    const rows = this.storedLines?.lines ?? [];
+    this.#listedById = new Map(rows.map((row) => [row.id, row]));
+    this.#listedExtras = new Map();
+    for (const row of rows) {
+      const parent = row.parentLineNo;
+      if (parent === null || parent === undefined) continue;
+      const siblings = this.#listedExtras.get(parent);
+      if (siblings === undefined) this.#listedExtras.set(parent, [row]);
+      else siblings.push(row);
+    }
+    this.#listedTotal = toScale(sumDecimals(rows.map(tabLineGross)), MONEY_SCALE);
+  }
+
   override render() {
     const lines = this.store.lines;
     if (lines.length === 0) {
@@ -464,7 +492,7 @@ export class TillBasket extends LitElement {
               return html`
                 <div class="option">
                   <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
-                  ${this.#extraTotal(line, extra, this.#listedExtra(listed, extra, listing))}
+                  ${this.#extraTotal(line, extra, this.#listedExtra(listed, extra))}
                 </div>
                 ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
               `;
@@ -488,7 +516,7 @@ export class TillBasket extends LitElement {
           <div class="line-after"><slot name=${`after-${index}`}></slot></div>
         `;
       })}
-      ${adjustable === null ? nothing : this.#billAdjust(adjustable)}
+      ${adjustable === null ? nothing : this.#billAdjust()}
       ${
         this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
@@ -590,23 +618,15 @@ export class TillBasket extends LitElement {
   #listed(line: OrderLine, listing: StoredLines | null): TabLine | undefined {
     const id = line.workingOrderLineId;
     if (id === undefined || listing === null) return undefined;
-    return listing.lines.find((row) => row.id === id);
+    return this.#listedById.get(id);
   }
 
-  /** An extras pick as listed: the dish's child row of the same product from the same list. A
-   * listed dish comes from `listing`, so it is set whenever `dish` is. */
-  #listedExtra(
-    dish: TabLine | undefined,
-    extra: SelectedExtra,
-    listing: StoredLines | null,
-  ): TabLine | undefined {
+  /** An extras pick as listed: the dish's child row of the same product from the same list. */
+  #listedExtra(dish: TabLine | undefined, extra: SelectedExtra): TabLine | undefined {
     if (dish === undefined) return undefined;
-    return listing!.lines.find(
-      (row) =>
-        row.parentLineNo === dish.lineNo &&
-        row.productId === extra.productId &&
-        row.listId === extra.listId,
-    );
+    return this.#listedExtras
+      .get(dish.lineNo)
+      ?.find((row) => row.productId === extra.productId && row.listId === extra.listId);
   }
 
   /** The dish's total, and before it the total at its listed price when an adjustment changed it. */
@@ -667,8 +687,8 @@ export class TillBasket extends LitElement {
     </div>`;
   }
 
-  #billAdjust(listing: StoredLines) {
-    const total = toScale(sumDecimals(listing.lines.map(tabLineGross)), MONEY_SCALE);
+  #billAdjust() {
+    const total = this.#listedTotal;
     return html`<div class="bill-adjust">
       <wt-button
         size="sm"
