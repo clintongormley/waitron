@@ -100,8 +100,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pedido sin enviar ya no está en esta mesa. Vuelve a cargar la mesa e inténtalo de nuevo",
   },
   "bill.payments_received": {
-    en: "Money has already been taken on this bill. Take the rest from the bill's payments. To discard or merge the bill, give that money back first",
-    es: "Ya se ha cobrado dinero en esta cuenta. Cobra el resto desde los pagos de la cuenta. Para descartar o juntar la cuenta, devuelve primero ese dinero",
+    en: "A bill that has taken payments cannot be merged, and items cannot be transferred between it and another bill. Take the rest from the bill's payments. If an empty bill still holds money, give it back before finishing the table",
+    es: "Una cuenta que ya ha recibido pagos no se puede juntar con otra, ni se pueden transferir artículos entre ella y otra cuenta. Cobra el resto desde los pagos de la cuenta. Si una cuenta vacía aún tiene dinero, devuélvelo antes de cerrar la mesa",
   },
   "bill.presented": {
     en: "This bill has been presented, so it cannot be changed",
