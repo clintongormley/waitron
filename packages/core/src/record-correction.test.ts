@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { AppError, seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { FiscalBackend, SaleForFiscalRecord, TrustedClock } from "@waitron/fiscal";
 import {
   CORE_MIGRATIONS,
   incidents,
@@ -12,6 +12,7 @@ import {
   sales,
   withTransaction,
 } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, hashPin, loginWithPin, persons } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
@@ -165,6 +166,24 @@ function correctionInput(
     // own role.
     authz: { sessionId: supervisorSessionId },
     ...overrides,
+  };
+}
+
+/** A one-line credit: `base` plus its tax at `vatRate`, rounded to the cent, is `total`'s magnitude. */
+function credit(base: string, total: string, vatRate = "21.00"): Partial<RecordCorrectionInput> {
+  return {
+    total,
+    lines: [
+      {
+        lineNo: 1,
+        name: "Discount",
+        descriptions: { "es-ES": "Descuento" },
+        quantity: "-1",
+        unitPrice: base,
+        vatRate,
+        lineTotal: `-${base}`,
+      },
+    ],
   };
 }
 
@@ -381,13 +400,206 @@ describe("recordCorrection — a sale may be corrected more than once", () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
 
-    const first = await correct(backend, originalId);
-    const second = await correct(backend, originalId);
+    // Two partial credits: two full reversals would take the invoice below zero, which
+    // `sale.correction_exceeds_total` refuses. 0.83 at 21% is 1.00.
+    const partial: Partial<RecordCorrectionInput> = {
+      total: "-1.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Coffee",
+          descriptions: { "es-ES": "Coffee" },
+          quantity: "-1",
+          unitPrice: "0.83",
+          vatRate: "21.00",
+          lineTotal: "-0.83",
+        },
+      ],
+    };
+    const first = await correct(backend, originalId, partial);
+    const second = await correct(backend, originalId, partial);
 
     const rows = await suite.db.select().from(sales).where(eq(sales.correctsSaleId, originalId));
     expect(rows.map((r) => r.id).sort()).toEqual([first.saleId, second.saleId].sort());
     const numbers = rows.map((r) => r.invoiceNumber).sort();
     expect(numbers).toEqual([1, 2]);
+  });
+});
+
+describe("recordCorrection — never below zero", () => {
+  /** The fake refuses to correct anything but a sale; the `none` backend (fiscal-none) records a
+   * correction of a credit note, which this stands in for. */
+  class CorrectsCreditNotesBackend extends FakeFiscalBackend {
+    override recordCorrection(
+      tx: Transaction,
+      sale: SaleForFiscalRecord,
+      // Kept so the override matches the interface's signature, as in the parent fake.
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- see comment above
+      _correction: { correctsSaleId: SaleId },
+    ) {
+      return this.recordSale(tx, sale);
+    }
+  }
+
+  async function rectSeriesNext(): Promise<number | undefined> {
+    const [series] = await suite.db
+      .select({ n: invoiceSeries.nextNumber })
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.id, rectSeriesId));
+    return series?.n;
+  }
+
+  it("refuses a correction one cent larger than the invoice, and writes nothing", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // 11.92 at 21% is 14.42: one cent more than the 14.41 invoice.
+    await expect(correct(backend, originalId, credit("11.92", "-14.42"))).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: originalId, remaining: "14.41", correction: "-14.42" },
+    });
+
+    expect(await countCorrectives(originalId)).toBe(0);
+    expect(await rectSeriesNext()).toBe(1);
+    expect((await backend.recordsFor(nodeId)).map((r) => r.kind)).toEqual(["sale"]);
+  });
+
+  it("counts the corrections already recorded against the invoice", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    // 9.09 at 10% is 10.00, leaving 4.41 on the invoice.
+    await correct(backend, originalId, credit("9.09", "-10.00", "10.00"));
+
+    // 4.02 at 10% is 4.42.
+    await expect(
+      correct(backend, originalId, credit("4.02", "-4.42", "10.00")),
+    ).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: originalId, remaining: "4.41", correction: "-4.42" },
+    });
+
+    expect(await countCorrectives(originalId)).toBe(1);
+    expect(await rectSeriesNext()).toBe(2);
+  });
+
+  it("records a correction that takes the invoice to exactly zero", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    await correct(backend, originalId, credit("9.09", "-10.00", "10.00"));
+
+    // 4.01 at 10% is 4.41, everything left on the invoice.
+    const { saleId: correctiveId } = await correct(
+      backend,
+      originalId,
+      credit("4.01", "-4.41", "10.00"),
+    );
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.total).toBe(-441);
+    expect(await countCorrectives(originalId)).toBe(2);
+  });
+
+  it("still records a correction that raises an invoice already at zero", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    await correct(backend, originalId);
+
+    // 0.83 at 21% is 1.00.
+    const { saleId: correctiveId } = await correct(backend, originalId, {
+      total: "1.00",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Coffee",
+          descriptions: { "es-ES": "Coffee" },
+          quantity: "1",
+          unitPrice: "0.83",
+          vatRate: "21.00",
+          lineTotal: "0.83",
+        },
+      ],
+    });
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.total).toBe(100);
+  });
+
+  it("records a correction whose total rounds to exactly what is left on the invoice", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // -14.414 is stored as -14.41, the whole 14.41 invoice.
+    const { saleId: correctiveId } = await correct(backend, originalId, credit("11.91", "-14.414"));
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.total).toBe(-1441);
+  });
+
+  it("refuses a correction whose total rounds to one cent more than what is left", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // -14.415 is stored as -14.42.
+    await expect(correct(backend, originalId, credit("11.92", "-14.415"))).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: originalId, remaining: "14.41", correction: "-14.42" },
+    });
+    expect(await countCorrectives(originalId)).toBe(0);
+  });
+
+  it("still records a positive correction of a credit note", async () => {
+    const backend = new CorrectsCreditNotesBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const { saleId: creditId } = await correct(backend, originalId);
+
+    // 0.41 at 21% is 0.50.
+    const { saleId: correctiveId } = await correct(backend, creditId, {
+      total: "0.50",
+      lines: [
+        {
+          lineNo: 1,
+          name: "Coffee",
+          descriptions: { "es-ES": "Coffee" },
+          quantity: "1",
+          unitPrice: "0.41",
+          vatRate: "21.00",
+          lineTotal: "0.41",
+        },
+      ],
+    });
+
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.total).toBe(50);
+    expect(row?.correctsSaleId).toBe(creditId);
+  });
+
+  it("refuses a negative correction of a credit note, which is already below zero", async () => {
+    const backend = new CorrectsCreditNotesBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+    const { saleId: creditId } = await correct(backend, originalId);
+
+    // 0.41 at 21% is 0.50.
+    await expect(correct(backend, creditId, credit("0.41", "-0.50"))).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: creditId, remaining: "-14.41", correction: "-0.50" },
+    });
+    expect(await countCorrectives(creditId)).toBe(0);
+  });
+
+  it("refuses before allocating a number, even when the caller catches the refusal and commits", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // Caught inside the transaction, so the transaction commits and a number allocated before the
+    // refusal would stay allocated.
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(tx, backend, correctionInput(originalId, credit("11.92", "-14.42"))),
+      ).rejects.toMatchObject({ code: "sale.correction_exceeds_total" });
+    });
+
+    expect(await rectSeriesNext()).toBe(1);
+    expect(await countCorrectives(originalId)).toBe(0);
   });
 });
 
@@ -446,6 +658,19 @@ describe("recordCorrection — authorization", () => {
     await expect(
       correct(backend, saleId, { seriesId, authz: { sessionId: staffSessionId } }),
     ).rejects.toMatchObject({ code: "sale.series_wrong_purpose" });
+  });
+
+  it("answers an unauthorised session with the permission refusal, not the invoice's amounts", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // 11.92 at 21% is 14.42, more than the 14.41 invoice.
+    await expect(
+      correct(backend, originalId, {
+        ...credit("11.92", "-14.42"),
+        authz: { sessionId: staffSessionId },
+      }),
+    ).rejects.toMatchObject({ code: "authorization.not_permitted" });
   });
 });
 

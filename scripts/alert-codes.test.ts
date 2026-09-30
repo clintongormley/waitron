@@ -43,6 +43,7 @@ const NOT_RECORDED = new Set([
   "fiscal.record_invalid",
   "sale.already_substituted",
   "sale.already_voided",
+  "sale.correction_exceeds_total",
   "sale.not_found",
   "sale.rectify",
   "sale.series_not_found",
