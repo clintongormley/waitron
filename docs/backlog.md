@@ -763,8 +763,10 @@ table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
 (`apps/server/src/working-order.ts`) calls `assertPartyBillOpen`. It lets through an open bill
 that belongs to a party whether or not a table points at it, and a split check carries its party
 ("can have a line voided", `apps/server/src/party-main-bill.test.ts`). _(2026-09-30, B11a:
-`voidTabLine` is deleted; a cancel through the adjustment route makes the same `assertPartyBillOpen`
-check, and that case now cancels through it.)_ An open order of no party
+`voidTabLine` is deleted; `applyAdjustment` (`apps/server/src/adjustments-apply.ts`) makes the same
+`assertPartyBillOpen` check, and that case now cancels by calling it directly, through the
+`cancelLine` test helper in `apps/server/src/testing/cancel-line.ts`, not through the route.)_
+An open order of no party
 that no table points at is still refused `tab.not_open`. Before Task 2 the server refused a void
 on a check no table pointed at (`assertAnchoredTabOpen`). Since menus Task 7b (owner decision
 2026-09-26), a part of a line the kitchen has started can be split onto a check. A check can be
@@ -3418,14 +3420,23 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     migrated with the branch's `applyMigrations`; every pre-existing table kept its row count, and
     `pragma foreign_key_check` printed nothing. The golden huella test and `inmutabilidad` pass
     unedited. Left open:
-    - **The till's Cancel still takes no reason** and records no adjustment: it calls the old
-      `DELETE /api/working-orders/:id/lines/:lineNo`. Moving it onto the adjustment route (the dialog
-      already carries a cancel) changes assertions in tests that predate the branch — the one-press
-      cancel dialog and `api.voidLine` cases in `apps/till/src/screens/till-table-order-screen.test.ts`,
-      `apps/till/src/till-app.test.ts`, `apps/till/src/till-app-table-service.test.ts` and
-      `apps/till/src/till-app-parties.test.ts` — which needs the owner's word (lane B item B11a). The
-      reasonless route stays reachable from the API until then. **Next action:** the owner rules;
-      then move the Cancel and retire the old route.
+    - _Done by lane B item B11a (2026-09-30):_ the till's Cancel asks for a reason, and an
+      approver's PIN when the reason needs one, and records the cancel as an adjustment through
+      `POST /api/working-orders/:id/adjustments` (`action: "cancel"`). The reasonless
+      `DELETE /api/working-orders/:id/lines/:lineNo`, `voidTabLine` and the code
+      `tab.void_quantity_invalid` are gone. Part of a dish with extras can be cancelled, its extras
+      following the dish. An extras row cannot be cancelled on its own
+      (`adjustment.line_not_adjustable`); the old route took the whole of one, but the till offers
+      no Cancel on an extras row. Left open:
+      - **A newly set-up venue has no adjustment reasons, so its till cannot cancel anything** until
+        a manager adds a reason that allows a cancel, in the dashboard under Adjustment reasons; the
+        dialog says so (`adjust.no_reasons`). Outside tests, reasons are created only by the
+        dashboard's reasons route (`packages/adjustments/src/routes.ts`), the demo seed
+        (`apps/server/scripts/demo-seed/seed-adjustments.ts`), and a configuration imported at
+        setup, which copies another venue's reasons
+        (`packages/adjustments/src/configuration-transfer.ts`);
+        no migration inserts one. **Next action:** decide whether setup should create a default
+        cancel reason.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
@@ -3712,7 +3723,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       The moving site serves both `transferLines` and un-joining a table with items. _(2026-09-30,
       Task 13: the moving and splitting sites are deleted with `transferLines`, `unjoinTable` and
       `splitOffCheck`; `assertPartyBillOpen` is now called in `sendLines`, `recallLines`,
-      `priceTabRound`, `voidTabLine` and `setLineCourse`.)_ The round
+      `priceTabRound`, `voidTabLine` and `setLineCourse`.)_ _(2026-09-30, B11a: `voidTabLine` is
+      deleted; a cancel's check is now in `applyAdjustment`.)_ The round
       site serves `addTabRound`; `placeGroups` skips it, because the bill it chose has already
       been checked open and the party's. `assertPartyBillOpen` lets through an open
       bill that belongs to a party, whether or not a table points at it. An open order of no
