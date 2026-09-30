@@ -5112,9 +5112,28 @@ ongoing overhaul listed at the top of Track A.
   in this tab's memory only, and hands it back to the rebuilt form (`connectRequest` in
   `apps/setup/src/setup-app.ts`, the screen's `request`), as the restore screens already did; leaving
   the screen or a successful Connect drops it. Tests: "what the operator typed on the connect form"
-  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case. Open, for the
-  owner: the refilled form brings back the one-time code too, which has usually expired by the next
-  try — whether to leave that one field blank instead; (6) the setup
+  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case.
+  **DONE (C87, #918, owner decision 2026-09-30):** the refilled form leaves the one-time code empty
+  and keeps every other field; a refusal naming the code (`credential.totp`) puts its sentence
+  under the empty field and focuses it (the screen's `request` in
+  `apps/setup/src/screens/connect-screen.ts`; tests:
+  "leaves the one-time code blank when the request the shell hands back carries one" in its suite,
+  and "shows a refusal of the one-time code under that field, empty and focused" in
+  `apps/setup/src/setup-app.test.ts`). A refused code is not such a refusal: the primary refuses it
+  as `totp.invalid`, and this box's fetch turns any refused answer into
+  `mirror.bundle_fetch_failed`, which names no field (`apps/server/src/mirror-bundle-fetch.ts`), so
+  it shows beside Connect with the code field empty and unmarked. Today that includes a CORRECT
+  code: the primary's mirror-bundle route calls `loginManagerById` without the key ring that
+  decrypts a stored authenticator secret (`apps/server/src/mirror-bundle-api.ts`), so an admin with
+  an authenticator set up cannot connect a standby at all. Measured 2026-09-30 with a temporary case
+  in `apps/server/src/mirror-bundle-api.test.ts`: a correct current code drew 401 `totp.invalid`,
+  and 400 `mirror.no_relay` (the login succeeded) once the route passed the ring the server builds
+  in `apps/server/src/boot.ts`. It dates from #298, which began encrypting the secret; C87 does not
+  change it. Still open, a defect: pass the ring in that route, with a test that signs in with a
+  real code. Still open, for the owner: whether a refused code should be marked under its field.
+  Still open, seen while looking at C87 at 390 by 900 px: the wizard's floating language button sits
+  over the bottom of the connect form, covering part of the refusal message beside Connect and, in
+  the English dark-theme screenshot, part of the Connect button; (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also

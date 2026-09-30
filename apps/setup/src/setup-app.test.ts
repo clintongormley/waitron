@@ -1501,7 +1501,7 @@ describe("setup-app", () => {
       ],
       ["names no field", { code: "mirror.bundle_fetch_failed", params: {} }],
     ])(
-      "is still in every field after a refusal that %s, and Connect sends it again",
+      "is still in every field but the one-time code after a refusal that %s, and Connect sends it with a new code",
       async (_label, refusal) => {
         const adopt = vi
           .fn()
@@ -1512,23 +1512,28 @@ describe("setup-app", () => {
         expect(adopt).toHaveBeenCalledWith(sentBody);
 
         const connect = await screenHost(el, "connect");
-        for (const [field, value] of Object.entries(TYPED)) {
-          expect(input(connect, field).value).toBe(value);
+        for (const field of ["primaryUrl", "personId", "password"] as const) {
+          expect(input(connect, field).value).toBe(TYPED[field]);
         }
+        expect(input(connect, "totp").value).toBe("");
         const button = connect.shadowRoot!.querySelector("[data-test=connect]") as HTMLElement & {
           disabled: boolean;
         };
         expect(button.disabled).toBe(false);
 
+        await userEvent.fill(input(connect, "totp"), "654321");
         button.click();
         await flush(el);
         expect(adopt).toHaveBeenCalledTimes(2);
-        expect(adopt).toHaveBeenLastCalledWith(sentBody);
+        expect(adopt).toHaveBeenLastCalledWith({
+          ...sentBody,
+          credential: { ...sentBody.credential, totp: "654321" },
+        });
         expect(el.shadowRoot!.querySelector("[data-test=screen-done]")).not.toBeNull();
       },
     );
 
-    it("shows a refusal naming a field under that field, with the typed values kept", async () => {
+    it("shows a refusal naming a field under that field, with the typed password kept", async () => {
       const adopt = vi.fn().mockRejectedValue({
         code: "setup.request_invalid",
         params: { field: "credential.password" },
@@ -1540,6 +1545,23 @@ describe("setup-app", () => {
       expect(connect.shadowRoot!.querySelector("[data-test=password]")!.getAttribute("error")).toBe(
         "Check the admin password.",
       );
+      expect(input(connect, "password").value).toBe(TYPED.password);
+    });
+
+    it("shows a refusal of the one-time code under that field, empty and focused", async () => {
+      const adopt = vi.fn().mockRejectedValue({
+        code: "setup.request_invalid",
+        params: { field: "credential.totp" },
+        status: 400,
+      });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      await new Promise((resolve) => setTimeout(resolve));
+      const connect = await screenHost(el, "connect");
+      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
+      expect(totp.getAttribute("error")).toBe("Check the authenticator code (if required).");
+      expect(input(connect, "totp").value).toBe("");
+      expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp"));
       expect(input(connect, "password").value).toBe(TYPED.password);
     });
 
