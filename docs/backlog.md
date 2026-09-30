@@ -3517,6 +3517,25 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         while it has read the order's lines; when they cannot be read, it shows both on every
         line. **Next action:** decide whether the edit should refuse dropping a sent line, as the
         table's Cancel requires a reason.
+      - **Retrieving the same order again while it is being read again ends the basket's lock
+        early.** After an adjustment the counter reads the order again and takes no edit meanwhile
+        (`#reloadCounterOrder`, `apps/till/src/till-app.ts`). Retrieving that same order from the
+        held orders list in that moment loads it and ends the lock (`loadFrom` ends it whichever
+        load calls it). An edit made after that retrieve is replaced when the earlier read lands,
+        because the order's id has not changed. **Next action:** decide whether a retrieve should
+        cancel a read that is still out, or accept the window.
+      - **Two basket changes the app makes by itself do not check the lock:** the menu poll's
+        price-version update of the basket's lines (`adoptLines`) and the order's label
+        (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). Neither checked `sending`
+        before this change. A version update made while the order is being read again is replaced
+        by the order as read. The till sends no prices when it saves (`#currentSaleLines`), so
+        what is lost is the basket's own copy of the new prices. **Next action:** decide whether
+        the two should wait for the lock.
+      - **Nothing on screen shows the lock.** A tap on `+` or on the menu does nothing until the
+        order and its lines have been read, and the basket shows no sign why. The lock ends at once
+        on Hold, New sale, a retrieve or a sign-out, and at the latest after the till's request
+        limit (150 s). How long it lasts on a real network is not measured. **Next action:** dim
+        the basket, or show a one-line note, while `editsLocked` is set.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
