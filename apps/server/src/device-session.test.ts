@@ -831,13 +831,38 @@ describe("reading the device beside the write lock", () => {
       sql`update devices set last_seen_at = ${at.toISOString()} where id = ${deviceId}`,
     );
 
-  /** Holds the venue's write lock open until the returned `release` is called. */
-  function holdWriteLock(): { release: () => void; done: Promise<void> } {
+  /**
+   * Holds the venue's write lock open until the returned `release` is called. `during` runs inside
+   * the held transaction first, so what it writes commits only on release.
+   */
+  function holdWriteLock(during?: () => Promise<unknown>): {
+    release: () => void;
+    done: Promise<void>;
+  } {
     let release!: () => void;
     const opened = new Promise<void>((resolve) => {
       release = resolve;
     });
-    return { release: () => release(), done: withTransaction(suite.db, () => opened) };
+    const done = withTransaction(suite.db, async () => {
+      await during?.();
+      await opened;
+    });
+    return { release: () => release(), done };
+  }
+
+  /** Resolves once a caller has asked `suite.db` for the write lock; `restore` puts it back. */
+  function watchLockRequest(): { requested: Promise<void>; restore: () => void } {
+    const original = suite.db.withWriteLock;
+    let resolve!: () => void;
+    const requested = new Promise<void>((done) => {
+      resolve = done;
+    });
+    const spy = vi.spyOn(suite.db, "withWriteLock").mockImplementation((body) => {
+      const queued = original(body);
+      resolve();
+      return queued;
+    });
+    return { requested, restore: () => spy.mockRestore() };
   }
 
   /** The read's device id, or "still waiting" if it has not resolved within two seconds. */
@@ -892,6 +917,57 @@ describe("reading the device beside the write lock", () => {
       again.release();
       await again.done;
     }
+  });
+
+  // The change is written inside the held transaction, so the lock-free reads cannot see it; it
+  // commits on release, after the read has queued for the lock to record its sighting.
+  it.each([
+    ["revoked", { active: false }],
+    ["re-keyed", { tokenHash: hashSecret("replacement") }],
+  ] as const)(
+    "refuses a device %s while it waits for the lock to record a sighting",
+    async (_label, change) => {
+      const { deviceId, token } = await enrolDeviceFixture();
+      const stale = new Date(Date.now() - 90_000);
+      await setLastSeen(deviceId, stale);
+      const lock = holdWriteLock(() =>
+        suite.db.update(devices).set(change).where(eq(devices.id, deviceId)),
+      );
+      const watch = watchLockRequest();
+      let read: Promise<DeviceBinding | null> | undefined;
+      try {
+        read = probeTry(`${deviceId}.${token}`);
+        expect(await Promise.race([watch.requested.then(() => "queued"), read])).toBe("queued");
+      } finally {
+        watch.restore();
+        lock.release();
+        await lock.done;
+      }
+      expect(await read).toBeNull();
+      expect(await lastSeenAt(deviceId)).toBe(stale.toISOString());
+    },
+  );
+
+  it("returns the profile the device was moved to while it waits for the lock to record a sighting", async () => {
+    const { deviceId, token } = await enrolDeviceFixture();
+    const movedTo = await seedDeviceProfile("Pantalla nueva", "kds", []);
+    const stale = new Date(Date.now() - 90_000);
+    await setLastSeen(deviceId, stale);
+    const lock = holdWriteLock(() =>
+      suite.db.update(devices).set({ deviceProfileId: movedTo }).where(eq(devices.id, deviceId)),
+    );
+    const watch = watchLockRequest();
+    let read: Promise<DeviceBinding | null> | undefined;
+    try {
+      read = probeTry(`${deviceId}.${token}`);
+      expect(await Promise.race([watch.requested.then(() => "queued"), read])).toBe("queued");
+    } finally {
+      watch.restore();
+      lock.release();
+      await lock.done;
+    }
+    expect((await read)?.deviceProfileId).toBe(movedTo);
+    expect(Date.parse((await lastSeenAt(deviceId))!)).toBeGreaterThan(Date.now() - 10_000);
   });
 
   it("resolves a dev-override device while another caller holds the write lock", async () => {
