@@ -23,7 +23,7 @@ import {
 import type { AvailableProduct } from "@waitron/catalogue";
 import { VerifactuBackend, registrosFacturacion } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { createPinThrottle, hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import { createPrinter, updatePrinter } from "@waitron/printing";
@@ -852,6 +852,134 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "authorization.not_permitted" },
     });
+  });
+});
+
+describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
+  /** The drawer route with a wrong-PIN limit on a clock the case moves. */
+  function throttledApp(cfg: TillConfig) {
+    const clockAt = { now: 1_000_000 };
+    const app = new Hono();
+    mountTillApi(
+      app,
+      { ...apiDeps(cfg), pinThrottle: createPinThrottle({ now: () => clockAt.now }) },
+      noopLog,
+    );
+    return { app, clockAt };
+  }
+
+  /** Signs `personId` in on an already enrolled till device, so several sessions share one till. */
+  async function loginOn(app: Hono, deviceCookie: string, personId: string): Promise<string> {
+    const res = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie },
+      body: JSON.stringify({ personId, pin: "5555" }),
+    });
+    expect(res.status).toBe(200);
+    return res.headers.get("set-cookie")!;
+  }
+
+  function openWith(app: Hono, cookie: string, override: { personId: string; pin: string }) {
+    return app.request("/api/drawer/open", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({ override }),
+    });
+  }
+
+  it("after four wrong PINs even the right one is 429 pin.throttled and writes nothing, until the wait is over", async () => {
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const { app, clockAt } = throttledApp(cfg);
+    const cookie = await login(app, cfg, operatorId);
+
+    for (let i = 0; i < 4; i += 1) {
+      const wrong = await openWith(app, cookie, { personId: supervisorId, pin: "0000" });
+      expect(wrong.status).toBe(401);
+      expect(await wrong.json()).toMatchObject({ error: { code: "pin.invalid" } });
+    }
+    const throttled = await openWith(app, cookie, { personId: supervisorId, pin: "5555" });
+
+    expect(throttled.status).toBe(429);
+    expect(await throttled.json()).toEqual({
+      error: { code: "pin.throttled", params: { retryAfterSeconds: 2 } },
+    });
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+    expect(await printJobsFor(cfg)).toEqual([]);
+
+    clockAt.now += 2_001;
+    const opened = await openWith(app, cookie, { personId: supervisorId, pin: "5555" });
+    expect(opened.status).toBe(200);
+    expect(await drawerOpensFor(cfg)).toMatchObject([
+      { personId: operatorId, authorizedBy: supervisorId, viaOverride: true },
+    ]);
+  });
+
+  it("a right PIN before the limit opens the drawer and starts the count again", async () => {
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const { app } = throttledApp(cfg);
+    const cookie = await login(app, cfg, operatorId);
+    const wrongThrice = async () => {
+      for (let i = 0; i < 3; i += 1) {
+        const wrong = await openWith(app, cookie, { personId: supervisorId, pin: "0000" });
+        expect(wrong.status).toBe(401);
+      }
+    };
+
+    await wrongThrice();
+    expect((await openWith(app, cookie, { personId: supervisorId, pin: "5555" })).status).toBe(200);
+    await wrongThrice();
+    expect((await openWith(app, cookie, { personId: supervisorId, pin: "5555" })).status).toBe(200);
+    expect(await drawerOpensFor(cfg)).toHaveLength(2);
+  });
+
+  it("signing in again on the same till does not start the count again", async () => {
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const { app } = throttledApp(cfg);
+    const device = await enrolTillCookie(cfg);
+    const first = await loginOn(app, device, operatorId);
+
+    for (let i = 0; i < 4; i += 1) {
+      expect((await openWith(app, first, { personId: supervisorId, pin: "0000" })).status).toBe(
+        401,
+      );
+    }
+    const fresh = await loginOn(app, device, operatorId);
+    const still = await openWith(app, fresh, { personId: supervisorId, pin: "5555" });
+
+    expect(still.status).toBe(429);
+    expect(await still.json()).toMatchObject({ error: { code: "pin.throttled" } });
+  });
+
+  it("an override sent by an operator who may open the drawer is never checked, so it neither counts nor clears", async () => {
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const { app } = throttledApp(cfg);
+    const device = await enrolTillCookie(cfg);
+    const staff = await loginOn(app, device, operatorId);
+    const supervisor = await loginOn(app, device, supervisorId);
+
+    // Wrong PINs carried by the supervisor's own requests are not tried, so none of them counts.
+    for (let i = 0; i < 5; i += 1) {
+      const own = await openWith(app, supervisor, { personId: supervisorId, pin: "0000" });
+      expect(own.status).toBe(200);
+    }
+    expect((await openWith(app, staff, { personId: supervisorId, pin: "0000" })).status).toBe(401);
+
+    for (let i = 0; i < 3; i += 1) {
+      expect((await openWith(app, staff, { personId: supervisorId, pin: "0000" })).status).toBe(
+        401,
+      );
+    }
+    // The right PIN carried by a request that never checks it does not clear the back-off.
+    expect((await openWith(app, supervisor, { personId: supervisorId, pin: "5555" })).status).toBe(
+      200,
+    );
+    const still = await openWith(app, staff, { personId: supervisorId, pin: "5555" });
+    expect(still.status).toBe(429);
+    expect(await still.json()).toMatchObject({ error: { code: "pin.throttled" } });
   });
 });
 

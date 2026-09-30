@@ -15,7 +15,7 @@ export interface OverrideConfirmDetail {
 
 /** It NEVER surfaces the raw code — a domain code is an internal contract, not UI copy. */
 function overrideErrorKey(code: string): StringKey {
-  return code === "pin.invalid" ? "pin.invalid" : "override.error";
+  return code === "pin.invalid" || code === "pin.throttled" ? code : "override.error";
 }
 
 /**

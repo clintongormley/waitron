@@ -1,6 +1,7 @@
 export { IDENTITY_MIGRATIONS } from "./migrations.js";
 export { authorize } from "./authorize.js";
-export { verifyPersonCredential } from "./credential.js";
+export { verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
+export type { PinAttempts } from "./credential.js";
 // Exported for the writers OUTSIDE this package that create a person, which must fold the same way.
 export { foldForUniqueness } from "./fold.js";
 export type { Authorization, AuthzInput, Override } from "./authorize.js";
@@ -90,7 +91,7 @@ export {
   PIN_THROTTLE_FREE_ATTEMPTS,
   PIN_THROTTLE_FULL_RETRY_SECONDS,
   PIN_THROTTLE_IDLE_MS,
-  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
+  PIN_THROTTLE_MAX_KEYS_PER_SLOT,
   PIN_THROTTLE_MAX_WAIT_SECONDS,
   createPinThrottle,
 } from "./pin-throttle.js";

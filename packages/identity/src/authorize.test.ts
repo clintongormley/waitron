@@ -2,11 +2,12 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { authorize } from "./authorize.js";
 import { endSession, loginWithPin } from "./login.js";
-import { codeOf, openSession, seedPerson, seedTill } from "../test/fixtures.js";
+import { createPinThrottle } from "./pin-throttle.js";
+import { codeOf, openSession, refusalOf, seedPerson, seedTill } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -167,5 +168,85 @@ describe("authorize", () => {
       ),
     );
     expect(code).toBe("pin.invalid");
+  });
+});
+
+describe("authorize with a limit on wrong override PINs", () => {
+  function attemptsOn() {
+    const real = createPinThrottle({ now: () => 1_000_000 });
+    const throttle = {
+      check: vi.fn(real.check),
+      recordFailure: vi.fn(real.recordFailure),
+      clear: vi.fn(real.clear),
+    };
+    return { throttle, slot: "override:till-1" };
+  }
+
+  it("counts wrong override PINs and refuses pin.throttled after four, even the right PIN", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const supervisorId = await seedPerson(suite.db, "supervisor");
+    const sessionId = await openSession(suite.db, tillId, staffId);
+    const attempts = attemptsOn();
+    const overrideWith = (pin: string) =>
+      run((tx) =>
+        authorize(
+          tx,
+          { sessionId, permission: "sale.void", override: { personId: supervisorId, pin } },
+          attempts,
+        ),
+      );
+
+    for (let i = 0; i < 4; i += 1)
+      expect(await codeOf(() => overrideWith("9999"))).toBe("pin.invalid");
+
+    expect(await refusalOf(() => overrideWith("1234"))).toMatchObject({
+      code: "pin.throttled",
+      params: { retryAfterSeconds: 2 },
+    });
+  });
+
+  it("clears the count when the override PIN is right", async () => {
+    const tillId = await seedTill(suite.db);
+    const staffId = await seedPerson(suite.db, "staff");
+    const supervisorId = await seedPerson(suite.db, "supervisor");
+    const sessionId = await openSession(suite.db, tillId, staffId);
+    const attempts = attemptsOn();
+
+    const result = await run((tx) =>
+      authorize(
+        tx,
+        { sessionId, permission: "sale.void", override: { personId: supervisorId, pin: "1234" } },
+        attempts,
+      ),
+    );
+
+    expect(result.viaOverride).toBe(true);
+    expect(attempts.throttle.clear).toHaveBeenCalledWith("override:till-1", supervisorId);
+  });
+
+  it("neither counts nor clears an override it never checks, because the operator holds the permission", async () => {
+    const tillId = await seedTill(suite.db);
+    const managerId = await seedPerson(suite.db, "manager");
+    const supervisorId = await seedPerson(suite.db, "supervisor");
+    const sessionId = await openSession(suite.db, tillId, managerId);
+    const attempts = attemptsOn();
+
+    const result = await run((tx) =>
+      authorize(
+        tx,
+        { sessionId, permission: "sale.void", override: { personId: supervisorId, pin: "9999" } },
+        attempts,
+      ),
+    );
+
+    expect(result).toEqual({
+      authorizedBy: managerId,
+      permission: "sale.void",
+      viaOverride: false,
+    });
+    expect(attempts.throttle.check).not.toHaveBeenCalled();
+    expect(attempts.throttle.recordFailure).not.toHaveBeenCalled();
+    expect(attempts.throttle.clear).not.toHaveBeenCalled();
   });
 });

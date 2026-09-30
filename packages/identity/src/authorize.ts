@@ -5,7 +5,11 @@ import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
 import { sessions } from "./schema/sessions.js";
 import { roleHasPermission, type Permission, type PersonRoleValue } from "./permissions.js";
-import { verifyPersonCredential } from "./credential.js";
+import {
+  verifyPersonCredential,
+  verifyThrottledCredential,
+  type PinAttempts,
+} from "./credential.js";
 
 export interface Override {
   personId: string;
@@ -25,12 +29,16 @@ export interface Authorization {
  * Satisfied EITHER by the session's operator holding `permission`, OR by a supervisor `override` (a
  * second person's PIN, who must hold it). Returns the authorizing person for the caller to record.
  *
- * Throws `session.not_open`, `pin.invalid` (for any override that cannot sign in),
- * `authorization.not_permitted`.
+ * With `attempts`, the override's PIN is checked under that wrong-PIN limit; an override that is never
+ * checked, because the operator holds the permission, neither counts nor clears it.
+ *
+ * Throws `session.not_open`, `pin.invalid` (for any override that cannot sign in), `pin.throttled`
+ * (only with `attempts`), `authorization.not_permitted`.
  */
 export async function authorize(
   tx: Transaction,
   args: { sessionId: string; permission: Permission; override?: Override },
+  attempts?: PinAttempts,
 ): Promise<Authorization> {
   // `sessions` declares no key to `persons` (why: `schema/sessions.ts`), so a session whose person
   // row is gone is absent from this join and reads as `session.not_open`, which fails closed.
@@ -48,7 +56,10 @@ export async function authorize(
   if (args.override === undefined) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }
-  const cred = await verifyPersonCredential(tx, args.override.personId, args.override.pin);
+  const { personId, pin } = args.override;
+  const cred = await (attempts === undefined
+    ? verifyPersonCredential(tx, personId, pin)
+    : verifyThrottledCredential(tx, personId, pin, attempts));
   if (!roleHasPermission(cred.role, args.permission)) {
     throw new AppError("authorization.not_permitted", { permission: args.permission });
   }

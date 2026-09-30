@@ -30,7 +30,9 @@ import {
   persons,
   roleAtLeast,
   verifyPersonCredential,
+  verifyThrottledCredential,
   type PersonRoleValue,
+  type PinAttempts,
 } from "@waitron/identity";
 import {
   AppError,
@@ -682,11 +684,15 @@ async function approvedBy(
   tx: Transaction,
   approverRole: PersonRoleValue | null,
   approver: AdjustmentArgs["approver"],
+  attempts: PinAttempts | undefined,
 ): Promise<string | null> {
   if (approverRole === null) return null;
   const refused = () => new AppError("adjustment.approval_required", { approverRole });
   if (approver === undefined) throw refused();
-  const { role } = await verifyPersonCredential(tx, approver.personId, approver.pin);
+  const { personId, pin } = approver;
+  const { role } = await (attempts === undefined
+    ? verifyPersonCredential(tx, personId, pin)
+    : verifyThrottledCredential(tx, personId, pin, attempts));
   if (!roleAtLeast(role, approverRole)) throw refused();
   return approver.personId;
 }
@@ -763,13 +769,16 @@ async function reprice(
  * extra tells it nothing); a comp or a discount lowers the prices by plan D4 and D15, and tells the
  * kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
  * adjustment. The PIN never enters the recorded command. `venueLocale` is the venue's display
- * language, which names the reason for an operator with no language of their own.
+ * language, which names the reason for an operator with no language of their own. `attempts`, when
+ * given, puts the approver's PIN under that wrong-PIN limit; it is kept apart from `args` because
+ * `args` is recorded.
  */
 export async function applyAdjustment(
   tx: Transaction,
   cfg: TillConfig,
   args: AdjustmentArgs,
   venueLocale: string,
+  attempts?: PinAttempts,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
   const { submissionId, approver, ...command } = args;
   return runServiceCommand(
@@ -780,7 +789,7 @@ export async function applyAdjustment(
     { ...command, approverId: approver?.personId },
     async () => {
       const plan = await planAdjustment(tx, args, venueLocale);
-      const approved = await approvedBy(tx, plan.approverRole, approver);
+      const approved = await approvedBy(tx, plan.approverRole, approver, attempts);
       let splits: AdjustmentSplit[] = [];
       if (args.action === "cancel") {
         await removeFromLine(

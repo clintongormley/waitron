@@ -1723,6 +1723,25 @@ describe("till-app", () => {
     expect(openDrawer).not.toHaveBeenCalled();
   });
 
+  it("too many wrong override PINs keep the dialog open, telling the operator to wait", async () => {
+    const openDrawer = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce({ code: "pin.throttled", params: { retryAfterSeconds: 2 } });
+    const { el } = await mountApp({ openDrawer });
+    await toTicket(el);
+    emit(ticket(el)!, "open-drawer");
+    await flush(el);
+
+    emit(overrideDialog(el)!, "override-confirm", { personId: "sup-1", pin: "4321" });
+    await flush(el);
+
+    const dialog = overrideDialog(el);
+    expect(dialog).not.toBeNull();
+    expect(dialog!.error).toBe("pin.throttled");
+    expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
+  });
+
   it.each([
     ["drawer.no_printer", "No se pudo abrir el cajón, inténtalo de nuevo"],
     ["drawer.not_attached", "Esta impresora no tiene un cajón conectado"],

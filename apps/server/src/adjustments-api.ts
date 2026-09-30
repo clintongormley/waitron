@@ -7,6 +7,7 @@ import {
   personRole,
   persons,
   type PersonRoleValue,
+  type PinThrottle,
 } from "@waitron/identity";
 import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
 import { decimal } from "@waitron/shared";
@@ -27,6 +28,7 @@ import {
 import type { Logger } from "./logger.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import {
+  overridePinAttempts,
   parseDrawerOverride,
   requireRevision,
   requireTabParam,
@@ -93,13 +95,19 @@ function requireRole(value: string | undefined): PersonRoleValue {
  * cancel, comp or discount to an open bill, a table's or a counter order, preview what it would
  * do, and the reasons and approvers the till offers.
  */
-export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
+export function mountAdjustmentsApi(
+  app: Hono,
+  deps: TillApiDeps,
+  log: Logger,
+  run: Run,
+  pinThrottle: PinThrottle,
+): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
 
   // One that leaves the bill exactly paid files its invoice on the requesting device's till.
   app.post("/api/working-orders/:id/adjustments", (c) =>
     run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
+      const { personId, tillId } = await requireSession(deps, c);
       const id = requireBill(c.req.param("id"));
       const body = asObject(await readRawJsonBody<unknown>(c));
       const ask = parseAsk(id, personId, body);
@@ -114,6 +122,7 @@ export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, r
             deps.cfg,
             { ...ask, submissionId, ...(approver === undefined ? {} : { approver }) },
             deps.venueLocale,
+            overridePinAttempts(pinThrottle, tillId),
           );
           await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
           return { ...applied, party: await partyRevisionOfOrder(tx, id) };

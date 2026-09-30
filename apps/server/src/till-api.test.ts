@@ -21,7 +21,7 @@ import { departments, preparationRoutes } from "@waitron/venue-service";
 import {
   createPinThrottle,
   endSession,
-  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
+  PIN_THROTTLE_MAX_KEYS_PER_SLOT,
   hashPin,
   hashSessionToken,
   loginWithPin,
@@ -773,7 +773,7 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
 
     // Filled through the route's own throttle rather than thousands of requests; "counts an unknown
     // person's wrong attempts" below shows the route records exactly this failure for a made-up id.
-    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_DEVICE; i++) {
+    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_SLOT; i++) {
       pinThrottle.recordFailure(deviceIdOf(flooder), randomUUID());
     }
     const refused = await post(flooder, randomUUID(), "0000");
@@ -875,16 +875,20 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
     return app;
   }
 
-  it("ACCEPTS an open session and returns the operator's personId + sessionId", async () => {
+  it("ACCEPTS an open session and returns the operator's personId, sessionId and the session's till", async () => {
     const token = await openSession(suite.db);
-    const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
+    const { rows } = await suite.db.execute<{ id: string; till_id: string }>(
+      sql`select id, till_id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ personId: ana.id, sessionId: rows[0]!.id });
+    expect(await res.json()).toEqual({
+      personId: ana.id,
+      sessionId: rows[0]!.id,
+      tillId: rows[0]!.till_id,
+    });
   });
 
   // Only the row id is presented here. The stored hash is 64 hex characters, which the guard's
@@ -892,8 +896,8 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   // lookup did, and it is left out.
   it("REJECTS (401 session.required) the row's own id — what a copy of the database holds", async () => {
     const token = await openSession(suite.db);
-    const { rows } = await suite.db.execute<{ id: string }>(
-      sql`select id from sessions where token_hash = ${hashSessionToken(token)}`,
+    const { rows } = await suite.db.execute<{ id: string; till_id: string }>(
+      sql`select id, till_id from sessions where token_hash = ${hashSessionToken(token)}`,
     );
     const res = await guardApp(suite.db).request("/whoami", {
       headers: { cookie: `${SESSION_COOKIE}=${rows[0]!.id}` },
@@ -905,7 +909,11 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
       headers: { cookie: `${SESSION_COOKIE}=${token}` },
     });
     expect(ok.status).toBe(200);
-    expect(await ok.json()).toEqual({ personId: ana.id, sessionId: rows[0]!.id });
+    expect(await ok.json()).toEqual({
+      personId: ana.id,
+      sessionId: rows[0]!.id,
+      tillId: rows[0]!.till_id,
+    });
   });
 
   it("REJECTS (401 session.required) when no cookie is present", async () => {

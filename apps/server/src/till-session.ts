@@ -56,16 +56,16 @@ export function readSessionToken(c: Context): string | null {
 export async function requireSession(
   deps: { db: Database },
   c: Context,
-): Promise<{ personId: string; sessionId: string }> {
+): Promise<{ personId: string; sessionId: string; tillId: string }> {
   const token = readSessionToken(c);
   if (token === null || !isUuid(token)) throw new AppError("session.required", {});
   const row = await withTransaction(deps.db, async (tx) => {
     const [found] = await tx
-      .select({ id: sessions.id, personId: sessions.personId })
+      .select({ id: sessions.id, personId: sessions.personId, tillId: sessions.tillId })
       .from(sessions)
       .where(and(eq(sessions.tokenHash, hashSessionToken(token)), isNull(sessions.endedAt)));
     return found ?? null;
   });
   if (row === null) throw new AppError("session.required", {});
-  return { personId: row.personId, sessionId: row.id };
+  return { personId: row.personId, sessionId: row.id, tillId: row.tillId };
 }

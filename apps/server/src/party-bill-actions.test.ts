@@ -12,7 +12,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { loginWithPin } from "@waitron/identity";
+import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { mergeBills, requireUntouched, splitBill, transferItems } from "./bill-actions.js";
 import { takeBillPayment } from "./bill-payments.js";
@@ -42,6 +42,7 @@ import {
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { joinTables } from "./table-actions.js";
+import { overridePinAttempts } from "./till-api.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 // Split, merge and transfer between a party's bills (table actions plan, Task 5; spec §7, §9, §15).
@@ -541,7 +542,11 @@ describe("merge bills", () => {
       second,
       paymentId,
       { submissionId: randomUUID(), appliedAmount: "5.00", tipAmount: "0.00", reason: "error" },
-      { personId: adminId, sessionId: session.id },
+      {
+        personId: adminId,
+        sessionId: session.id,
+        attempts: overridePinAttempts(createPinThrottle(), v.cfg.tillId),
+      },
     );
     const before = await snapshot(partyId, [main, second]);
 

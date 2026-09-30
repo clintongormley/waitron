@@ -439,7 +439,12 @@ interface Adjusting {
 }
 
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
-const APPROVER_REFUSALS = new Set(["pin.invalid", "person.not_found", "person.suspended"]);
+const APPROVER_REFUSALS = new Set([
+  "pin.invalid",
+  "pin.throttled",
+  "person.not_found",
+  "person.suspended",
+]);
 
 /** Refusals about the reason chosen, after which the reasons are read again. */
 const REASON_REFUSALS = new Set([
@@ -2488,7 +2493,8 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** `pin.invalid` keeps the dialog open for a retry. The PIN is never stored on the app or logged. */
+  /** A wrong or throttled PIN keeps the dialog open for a retry. The PIN is never stored on the app
+   * or logged. */
   async #onOverrideConfirm(event: Event): Promise<void> {
     const { personId, pin } = (event as CustomEvent<{ personId: string; pin: string }>).detail;
     this.overrideError = null; // fresh attempt: clear any prior error so a repeat re-shows
@@ -2496,14 +2502,12 @@ export class TillApp extends LitElement {
       await this.api.openDrawer({ personId, pin });
       this.#closeOverrideDialog();
     } catch (error) {
-      if ((error as { code?: string }).code === "pin.invalid") {
-        this.overrideError = "pin.invalid";
+      const code = (error as { code?: string }).code;
+      if (code === "pin.invalid" || code === "pin.throttled") {
+        this.overrideError = code;
       } else {
         this.#closeOverrideDialog();
-        this.errorKey =
-          (error as { code?: string }).code === "drawer.not_attached"
-            ? "drawer.not_attached"
-            : "drawer.error";
+        this.errorKey = code === "drawer.not_attached" ? "drawer.not_attached" : "drawer.error";
       }
     }
   }

@@ -3,7 +3,7 @@ import { hasCode, isAppError } from "@waitron/shared";
 import {
   createPinThrottle,
   PIN_THROTTLE_IDLE_MS,
-  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
+  PIN_THROTTLE_MAX_KEYS_PER_SLOT,
 } from "./pin-throttle.js";
 import "./errors.js";
 
@@ -25,7 +25,7 @@ function retryAfter(fn: () => void): number | undefined {
   return undefined;
 }
 
-describe("the per-(device,person) PIN-attempt throttle", () => {
+describe("the per-(slot, person) PIN-attempt throttle", () => {
   it("allows the 3 free failures, then throttles from the 4th with an escalating window", () => {
     let now = 1_000;
     const throttle = createPinThrottle({ now: () => now });
@@ -102,7 +102,7 @@ describe("the per-(device,person) PIN-attempt throttle", () => {
     expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
   });
 
-  it("keys on (device, person): a different person or a different device is independent", () => {
+  it("keys on (slot, person): a different person or a different slot is independent", () => {
     let now = 1_000;
     const throttle = createPinThrottle({ now: () => now });
 
@@ -123,21 +123,21 @@ describe("the per-(device,person) PIN-attempt throttle", () => {
   });
 });
 
-describe("the PIN throttle's per-device bound on how many pairs it holds", () => {
+describe("the PIN throttle's per-slot bound on how many pairs it holds", () => {
   function fill(throttle: ReturnType<typeof createPinThrottle>, count: number, prefix = "p"): void {
     for (let i = 0; i < count; i++) throttle.recordFailure(DEVICE, `${prefix}-${i}`);
   }
 
   it("refuses a device's new pair for 60 seconds once that device holds its cap of live pairs", () => {
     const throttle = createPinThrottle({ now: () => 1_000 });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE);
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT);
 
     expect(retryAfter(() => throttle.check(DEVICE, "newcomer"))).toBe(60);
   });
 
   it("does not add a new pair's failure while full, so that pair stays refused", () => {
     const throttle = createPinThrottle({ now: () => 1_000 });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE);
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT);
 
     throttle.recordFailure(DEVICE, "newcomer");
     expect(retryAfter(() => throttle.check(DEVICE, "newcomer"))).toBe(60);
@@ -145,7 +145,7 @@ describe("the PIN throttle's per-device bound on how many pairs it holds", () =>
 
   it("still counts a pair it already holds while full", () => {
     const throttle = createPinThrottle({ now: () => 1_000 });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE);
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT);
 
     expect(caught(() => throttle.check(DEVICE, "p-0"))).toBeUndefined();
     for (let i = 0; i < 3; i++) throttle.recordFailure(DEVICE, "p-0"); // 4th failure → 2s window
@@ -155,7 +155,7 @@ describe("the PIN throttle's per-device bound on how many pairs it holds", () =>
   it("makes room by dropping idle pairs, keeping the live ones", () => {
     let now = 0;
     const throttle = createPinThrottle({ now: () => now });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE - 1); // all idle by the time the newcomer arrives
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT - 1); // all idle by the time the newcomer arrives
     now = PIN_THROTTLE_IDLE_MS / 2;
     for (let i = 0; i < 4; i++) throttle.recordFailure(DEVICE, PERSON); // live, and at the cap
 
@@ -167,7 +167,7 @@ describe("the PIN throttle's per-device bound on how many pairs it holds", () =>
 
   it("frees a device's slot when one of its pairs is cleared, and not for a pair it never held", () => {
     const throttle = createPinThrottle({ now: () => 1_000 });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE);
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT);
 
     throttle.clear(DEVICE, "never-seen");
     expect(retryAfter(() => throttle.check(DEVICE, "newcomer"))).toBe(60);
@@ -177,7 +177,7 @@ describe("the PIN throttle's per-device bound on how many pairs it holds", () =>
 
   it("does not refuse another device's new pair while one device is full", () => {
     const throttle = createPinThrottle({ now: () => 1_000 });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE);
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT);
 
     expect(retryAfter(() => throttle.check(DEVICE, "newcomer"))).toBe(60);
     expect(caught(() => throttle.check("device-2", "newcomer"))).toBeUndefined();
@@ -188,7 +188,7 @@ describe("the PIN throttle's per-device bound on how many pairs it holds", () =>
   it("makes room even when the oldest pair was used again recently", () => {
     let now = 0;
     const throttle = createPinThrottle({ now: () => now });
-    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_DEVICE); // "p-0" first
+    fill(throttle, PIN_THROTTLE_MAX_KEYS_PER_SLOT); // "p-0" first
     now = PIN_THROTTLE_IDLE_MS / 2;
     throttle.recordFailure(DEVICE, "p-0"); // the first pair added is now the most recently used
 
