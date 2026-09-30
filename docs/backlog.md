@@ -5396,8 +5396,12 @@ ongoing overhaul listed at the top of Track A.
   `apps/server/src/mirror-bundle-fetch.test.ts`, "answers the primary's refusal %s from adopt…" in
   `apps/server/src/setup-api.test.ts`, and "shows the primary's refusal of the one-time code under
   that field…" and "shows the primary's person.not_found…" in `apps/setup/src/setup-app.test.ts`).
-  Open, a question to the owner from #924's review: whether a suspended admin should get its own
-  sentence under the person-ID field; today it shows the general message beside Connect.
+  **REVERSED (C95, owner decision 2026-09-30):** a login's refusal must not say whether the
+  account exists, so both pass-throughs are gone. The primary now refuses every credential cause
+  (unknown id, suspended, wrong password, wrong or missing code) as `password.invalid`; the box
+  relays that one code (401, rebuilt with no params) and the wizard shows one "the login failed"
+  sentence beside Connect, marking no field (`shell.adopt.login_failed`). The suspended-admin
+  question above is answered by the same decision. See "Every login failure is one answer" below.
   A CORRECT code
   was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
   without the key ring that decrypts a stored authenticator secret, so an admin with an
@@ -5407,7 +5411,7 @@ ongoing overhaul listed at the top of Track A.
   a correct current code" in `apps/server/src/mirror-bundle-api.test.ts` enrols an authenticator
   through the profile's own two enrolment calls and joins with a current code; before the fix it
   drew 401 `totp.invalid`, after it 200, and deleting the ring from the route turns it red again. A
-  wrong code is still refused `totp.invalid` (the case beside it). The peer membership read
+  wrong code is still refused (the case beside it; `password.invalid` since C95). The peer membership read
   (`GET /management-api/membership`, `apps/server/src/management-api.ts`) had the same gap and now
   passes the ring too, with the same two cases in
   `apps/server/src/management-api.membership.test.ts`. The promote route
@@ -5417,7 +5421,7 @@ ongoing overhaul listed at the top of Track A.
   which `boot.ts` fills with the same ring. Test: "signs in with a correct current code and
   promotes" in `apps/server/src/promote-api.authenticator.test.ts` (real database, the promote
   itself stubbed) drew 401 `totp.invalid` before the fix and 200 after, and a wrong code is still
-  refused (the case beside it); with the ring deleted from the route, both cases answer 500.
+  refused (the case beside it; `password.invalid` since C95); with the ring deleted from the route, both cases answer 500.
   The ring is now a required argument everywhere the sign-in takes it, so a caller that leaves it
   out no longer compiles (with the route's line deleted, `tsc` reports TS2741 at `promote-api.ts`):
   `loginManager` and `loginManagerById` (`packages/identity/src/manager-login.ts`),
@@ -5468,6 +5472,35 @@ ongoing overhaul listed at the top of Track A.
   **Next action:** the other open points, and the delete dialog's message noted above, still wait
   for the owner to say which are worth doing.
 
+- **Every login failure is one answer — DONE (C95, owner decision 2026-09-30).** The owner's rule:
+  "reasons for login shouldn't expose the existence or non existence of a user. so any failure should
+  just report that the login failed." A password login (`loginManager` and `loginManagerById`,
+  `packages/identity/src/manager-login.ts`: the dashboard, standby connect, membership and promote)
+  refuses an unknown account, a suspended or pending one, one with no password, a wrong password, a
+  wrong or missing authenticator code and a wrong recovery code as 401 `password.invalid` with no
+  params, each after one password-hash check. A PIN login (`verifyPersonCredential`,
+  `packages/identity/src/credential.ts`: the till's sign-in, the drawer, refund and adjustment
+  overrides, payment attest) refuses every cause as 401 `pin.invalid`, each after one PIN-hash
+  check; a malformed person id is `pin.invalid` too. On the till every refused sign-in now counts
+  toward the wrong-PIN back-off, so an unknown id reaches `pin.throttled` as a known one does, and
+  the back-off table is capped (`PIN_THROTTLE_MAX_KEYS`, `packages/identity/src/pin-throttle.ts`).
+  The real cause reaches the server log only: an `AppError` can carry a `reason` that is not
+  enumerable, and the route error boundary logs it as `logReason`
+  (`packages/server-kit/src/error-boundary.ts`). The dashboard login and the setup wizard's Connect
+  show one "the login failed" sentence beside the action and mark no field; the till keeps "Wrong
+  PIN, try again", the PIN being the only thing typed. Guards: the one-answer cases in
+  `packages/identity/src/manager-login.test.ts`, `login.test.ts` and the route suites
+  (`till-api.test.ts`, `till-api.receipt.test.ts`, `mirror-bundle-api.test.ts`,
+  `promote-api.authenticator.test.ts`, `management-api.test.ts`, `setup-api.test.ts`). Kept on purpose, both
+  reachable only after a credential was proved: `totp.required` (the dashboard's code step, after a
+  right password) and `google.second_factor_required` (after a valid Google sign-in); a signed-in
+  person's re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
+  a password-reset request for a known address writes a token row and one for an unknown address
+  does not, so its response time may differ (read in `packages/identity/src/account-action.ts`, not
+  measured); the override PINs have no wrong-try limit (C89); refusals thrown in `apps/server`
+  itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
+  (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
+  approval routes no longer send.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
@@ -6483,8 +6516,8 @@ approved.
     `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
     until it learns of the removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather
     than the primary's reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx
-    answer into that code except the two refusals C92 passes through so the wizard can place them
-    under their field — this predates A63, and
+    answer into that code except a refused login, which it relays as `password.invalid` (C95) —
+    this predates A63, and
     `mirror.standby_removed` has the same gap; (vii)
     if A61's removal ever mis-classifies a live standby that an operator later promotes, the old
     primary refuses the new primary's charts (`signer_removed`) and keeps selling; the refusal is
@@ -6972,7 +7005,8 @@ approved.
     (`packages/db/src/testing/schema-conformance.ts`).
   - Identity code, found by #559: `setEmail` in `packages/identity/src/staff.ts`,
     unlike `updatePersonDetails`, never checks the new email against other people's pending
-    emails; `manager-login.ts` reports an authenticator secret it cannot decrypt as `totp.invalid`.
+    emails; `manager-login.ts` reports an authenticator secret it cannot decrypt as a failed login
+    (`password.invalid`, logged with the reason `unreadable_secret` since C95), like a wrong code.
     Identity's coverage reads 99.85 statements / 99.75 branches, not 100: the
     `management_session.required` throw in `profile.ts`'s `ownSession`, as it stands since #554,
     is reached by no test.
