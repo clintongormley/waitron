@@ -14,6 +14,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
+import { currentBusinessDay } from "@waitron/reporting";
 import { AppError, decimal } from "@waitron/shared";
 import {
   createAdjustmentReason,
@@ -118,23 +119,32 @@ function requireRequester(
   return { personId: requireBodyUuid(person, "person").toLowerCase() };
 }
 
+/** `undefined` when neither end is given: the report then covers the venue's current business day. */
+function requireOptionalRange(
+  from: string | undefined,
+  to: string | undefined,
+): { from: string; to: string } | undefined {
+  return from === undefined && to === undefined ? undefined : requireRange(from, to);
+}
+
+function oneDay(day: string): { from: string; to: string } {
+  return { from: day, to: day };
+}
+
 /** The range on the clock of the module's location, with `day_cutover` trimmed to HH:MM. */
 async function reportInput(
   tx: Transaction,
   locationId: string,
-  range: { from: string; to: string },
+  asked: { from: string; to: string } | undefined,
 ): Promise<AdjustmentReportInput> {
   const [location] = await tx
     .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
     .from(locations)
     .where(eq(locations.id, locationId));
   if (location === undefined) throw new Error(`adjustments: no location ${locationId}`);
-  return {
-    fromBusinessDay: range.from,
-    toBusinessDay: range.to,
-    timeZone: location.timeZone,
-    dayCutover: location.dayCutover.slice(0, 5),
-  };
+  const clock = { timeZone: location.timeZone, dayCutover: location.dayCutover.slice(0, 5) };
+  const range = asked ?? oneDay(currentBusinessDay(clock));
+  return { fromBusinessDay: range.from, toBusinessDay: range.to, ...clock };
 }
 
 export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
@@ -154,7 +164,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
     app.get("/management-api/adjustments/report", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const range = requireRange(c.req.query("from"), c.req.query("to"));
+        const range = requireOptionalRange(c.req.query("from"), c.req.query("to"));
         const report = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
           computeAdjustmentReport(tx, await reportInput(tx, ctx.cfg.locationId, range)),
         );
@@ -165,7 +175,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
     app.get("/management-api/adjustments/report/entries", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const range = requireRange(c.req.query("from"), c.req.query("to"));
+        const range = requireOptionalRange(c.req.query("from"), c.req.query("to"));
         const requester = requireRequester(c.req.query("person"), c.req.query("guests"));
         const entries = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
           listAdjustmentEntries(tx, {

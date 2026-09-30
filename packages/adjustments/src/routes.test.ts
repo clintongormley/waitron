@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
@@ -499,7 +499,8 @@ describe("adjustment report routes", () => {
   });
 
   it.each<[string, string]>([
-    ["from", ""],
+    ["from", "to=2026-09-15"],
+    ["from", "from=&to="],
     ["from", "from=2026-02-30&to=2026-03-01"],
     ["to", "from=2026-09-15"],
     ["to", "from=2026-09-15&to=15-09-2026"],
@@ -526,6 +527,42 @@ describe("adjustment report routes", () => {
     expect(await response.json()).toEqual({
       error: { code: "management.request_invalid", params: { field } },
     });
+  });
+
+  describe("with no range asked for", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Only `Date`: the database and the request still run on real timers. */
+    function nowIs(instant: string): void {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(instant));
+    }
+
+    it.each<[string, string, string, number]>([
+      ["22:00 in Madrid", "2026-09-15T20:00:00.000Z", "2026-09-15", 2],
+      ["04:30 in Madrid, before the 05:00 cutover", "2026-09-16T02:30:00.000Z", "2026-09-15", 2],
+      ["05:30 in Madrid, after the cutover", "2026-09-16T03:30:00.000Z", "2026-09-16", 0],
+    ])(
+      "reads the venue's current business day at %s",
+      async (_when, instant, businessDay, count) => {
+        const fx = await reportFixture();
+        nowIs(instant);
+
+        const report = await send(fx.app, "GET", REPORT, fx.cookie.supervisor);
+        const entries = await send(fx.app, "GET", ENTRIES, fx.cookie.supervisor);
+
+        expect(report.status).toBe(200);
+        expect(await report.json()).toMatchObject({
+          fromBusinessDay: businessDay,
+          toBusinessDay: businessDay,
+          overall: { count },
+        });
+        expect(entries.status).toBe(200);
+        expect(((await entries.json()) as { entries: unknown[] }).entries).toHaveLength(count);
+      },
+    );
   });
 
   it("answers a server fault when the module's location is not in the database", async () => {
