@@ -22,9 +22,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
 
-const categories: CategorySummary[] = [
-  { id: "c1", name: "Entrantes", image: null, color: null, parentId: null },
-];
+const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes", parentId: null }];
 
 const products: Product[] = [
   {

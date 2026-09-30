@@ -22,8 +22,8 @@ import { packageDirOf } from "../packages/module/src/module.js";
  * under a kept name passes. It reads a check's name out of the built schema's `CREATE TABLE` TEXT.
  * And it says nothing about indexes that are not unique.
  *
- * THREE KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)`,
- * `category_details(image)` and `sections(image)`, all referencing `media_images`. `packages/media`
+ * TWO KEYS ARE DELIBERATELY ABSENT from the foreign-key list: `products(image)` and
+ * `sections(image)`, both referencing `media_images`. `packages/media`
  * depends on `@waitron/catalogue` and `@waitron/db`, so neither owning package may depend on media
  * to name the column: that dependency would close a loop `scripts/workspace-cycles.test.ts` refuses, and that
  * guard reads each `package.json`, not source imports.

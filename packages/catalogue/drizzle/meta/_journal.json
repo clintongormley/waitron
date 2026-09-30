@@ -92,6 +92,20 @@
       "when": 1790799877333,
       "tag": "0012_drop_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1790801434921,
+      "tag": "0013_drop_category_image_triggers",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1790801442605,
+      "tag": "0014_drop_category_image_color",
+      "breakpoints": true
     }
   ]
 }

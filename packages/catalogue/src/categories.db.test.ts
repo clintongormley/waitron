@@ -107,17 +107,6 @@ it("refuses a blank category name", async () => {
   });
   expect((await app((tx) => readCategory(tx, made.id))).name).toBe("Kept");
 });
-it("stores and validates a category colour", async () => {
-  await seedTenant(suite.db);
-  await seedLegacySellingUnits(suite.db);
-  const made = await app((tx) => createCategory(tx, { name: "Hot", color: "#b12525" }));
-  expect(made.color).toBe("#b12525");
-  const cleared = await app((tx) => updateCategory(tx, made.id, { color: null }));
-  expect(cleared.color).toBeNull();
-  await expect(
-    app((tx) => createCategory(tx, { name: "Bad", color: "#FFF" })),
-  ).rejects.toMatchObject({ code: "category.color_invalid" });
-});
 const unpricedVariant = (name: string) => ({
   name,
   customerName: null,

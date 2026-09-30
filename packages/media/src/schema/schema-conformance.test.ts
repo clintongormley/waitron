@@ -6,9 +6,8 @@
 // `drizzle/0000_baseline.sql` are written with a `CONSTRAINT <name>` clause, so `checksInDdl`'s
 // blindness to an anonymous check reaches nothing here. The one `unique()` declaration in
 // `images.ts` is given a name, so the unnamed-constraint refusal reaches nothing either. And the
-// factory never reads a trigger, so the eight `drizzle/0001_image_references.sql` creates are
-// outside this suite; they stand in for the two foreign keys `products.image` and
-// `category_details.image` cannot declare, and their guard is `../image-references.test.ts`.
+// factory never reads a trigger, so the ones the media migrations create are outside this suite;
+// their guard is `../image-references.test.ts`.
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { describeSchemaConformance } from "@waitron/db/testing/schema-conformance.js";

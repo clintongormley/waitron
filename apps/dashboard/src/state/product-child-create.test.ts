@@ -36,7 +36,7 @@ async function fixture() {
       if (kind === "category")
         el.categories = [
           ...el.categories,
-          { id: value.id, name: value.name.en ?? "", image: null, color: null, parentId: null },
+          { id: value.id, name: value.name.en ?? "", parentId: null },
         ];
       el.selectRelated(kind, value.id);
     },

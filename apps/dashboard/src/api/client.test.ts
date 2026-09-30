@@ -495,7 +495,7 @@ describe("DashboardApi", () => {
   });
 
   it("listCategories GETs the categories with credentials", async () => {
-    const categories = [{ id: "cat1", name: "Entrantes", image: null, parentId: null }];
+    const categories = [{ id: "cat1", name: "Entrantes", parentId: null }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(categories));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCategories()).toEqual(categories);
@@ -506,7 +506,7 @@ describe("DashboardApi", () => {
   });
 
   it("createCategory POSTs the category and returns the created category", async () => {
-    const input = { name: "Principales", image: "food.jpg", parentId: "cat1" };
+    const input = { name: "Principales", parentId: "cat1" };
     const created = { id: "cat2", ...input };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -520,7 +520,7 @@ describe("DashboardApi", () => {
   });
 
   it("uses the category hierarchy and main-category endpoints with their response shapes", async () => {
-    const category = { id: "cat1", name: "Entrantes", image: null, parentId: null };
+    const category = { id: "cat1", name: "Entrantes", parentId: null };
     const product = {
       id: "p1",
       catalogueId: "menu1",
@@ -542,7 +542,7 @@ describe("DashboardApi", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(category))
-      .mockResolvedValueOnce(jsonResponse({ ...category, image: "food.jpg" }))
+      .mockResolvedValueOnce(jsonResponse({ ...category, name: "Comida" }))
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(emptyResponse())
       .mockResolvedValueOnce(jsonResponse([listed]))
@@ -551,9 +551,9 @@ describe("DashboardApi", () => {
       .mockResolvedValueOnce(jsonResponse({ primaryCategoryId: null }));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.getCategory("cat1")).toEqual(category);
-    expect(await api.updateCategory("cat1", { image: "food.jpg" })).toEqual({
+    expect(await api.updateCategory("cat1", { name: "Comida" })).toEqual({
       ...category,
-      image: "food.jpg",
+      name: "Comida",
     });
     await api.deleteCategory("cat1");
     await api.deleteCategory("cat1", { productsTo: "cat0", childrenTo: null });
@@ -566,7 +566,7 @@ describe("DashboardApi", () => {
     expect(await api.setMainCategory("p1", null)).toEqual({ primaryCategoryId: null });
     expect(fetchImpl.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
       ["/management-api/categories/cat1", "GET", undefined],
-      ["/management-api/categories/cat1", "PATCH", JSON.stringify({ image: "food.jpg" })],
+      ["/management-api/categories/cat1", "PATCH", JSON.stringify({ name: "Comida" })],
       ["/management-api/categories/cat1", "DELETE", undefined],
       [
         "/management-api/categories/cat1",

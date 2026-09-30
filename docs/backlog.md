@@ -1022,7 +1022,9 @@ What it left open:
 - **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
   till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
   has decided whether or how one should. _2026-09-30: decided — categories lose their colour and
-  image ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §2.1)._
+  image ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §2.1). Closed
+  2026-09-30: both columns are dropped from `category_details` (product-folders slice 1, Task 5), so
+  there is no colour left to show._
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.

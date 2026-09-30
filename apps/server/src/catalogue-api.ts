@@ -135,17 +135,6 @@ function categoryInput(body: Record<string, unknown>, creating: boolean): Partia
     result.name = body.name;
   }
   if (body.parentId !== undefined) result.parentId = nullOrUuid(body.parentId, "parentId");
-  if (body.image !== undefined) {
-    if (body.image !== null && typeof body.image !== "string")
-      throw new AppError("management.request_invalid", { field: "image" });
-    result.image = body.image as string | null;
-  }
-  // Shape screen only — `createCategory`/`updateCategory` own the `#rrggbb` format check.
-  if (body.color !== undefined) {
-    if (body.color !== null && typeof body.color !== "string")
-      throw new AppError("management.request_invalid", { field: "color" });
-    result.color = body.color as string | null;
-  }
   return result;
 }
 
@@ -215,7 +204,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "catalogue.not_found": 404,
   "category.not_found": 404,
   "category.invalid": 400,
-  "category.color_invalid": 400,
   "category.reassign_invalid": 400,
   "menu_item.not_found": 404,
   // A menu offer asked for a variant, which follows its parent onto the menu instead.

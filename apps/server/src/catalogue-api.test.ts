@@ -532,10 +532,9 @@ describe("mountCatalogueApi — categories", () => {
     const body = (await res.json()) as {
       id: string;
       name: string;
-      image: string | null;
       parentId: string | null;
     };
-    expect(body).toMatchObject({ name: "Bebidas", image: null, parentId: null });
+    expect(body).toMatchObject({ name: "Bebidas", parentId: null });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
   });
 
@@ -583,40 +582,6 @@ describe("mountCatalogueApi — categories", () => {
     expect(res.status).toBe(200);
     const rows = (await res.json()) as { name: string }[];
     expect(rows.some((r) => r.name === "Postres")).toBe(true);
-  });
-
-  it("creates and repaints a category with a colour", async () => {
-    const app = mountApp();
-    const created = await send(app, "POST", "/management-api/categories", {
-      body: { name: "Picante", color: "#b12525" },
-    });
-    expect(created.status).toBe(201);
-    const category = (await created.json()) as { id: string; color: string | null };
-    expect(category.color).toBe("#b12525");
-    const repainted = await send(app, "PATCH", `/management-api/categories/${category.id}`, {
-      body: { color: "#0a0a0a" },
-    });
-    expect(repainted.status).toBe(200);
-    expect(((await repainted.json()) as { color: string | null }).color).toBe("#0a0a0a");
-    const cleared = await send(app, "PATCH", `/management-api/categories/${category.id}`, {
-      body: { color: null },
-    });
-    expect(((await cleared.json()) as { color: string | null }).color).toBeNull();
-  });
-
-  // A colour the operation refuses is `category.color_invalid`; a non-string never reaches the
-  // operation — the body screen refuses it as `management.request_invalid` naming the field.
-  it.each([
-    ["red", "category.color_invalid"],
-    ["#B12525", "category.color_invalid"],
-    ["#b125", "category.color_invalid"],
-    [42, "management.request_invalid"],
-  ])("rejects the colour %j with %s (400)", async (color, code) => {
-    const res = await send(mountApp(), "POST", "/management-api/categories", {
-      body: { name: "Picante", color },
-    });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: { code } });
   });
 
   it("returns a category's dependants for the delete confirmation", async () => {
@@ -3854,7 +3819,7 @@ it("authors a hierarchy and sets a product's main category through the API", asy
   const app = mountApp("en-GB");
   await suite.db.execute(sql`delete from content_languages`);
   const created = await send(app, "POST", "/management-api/categories", {
-    body: { name: "Food", parentId: null, image: null },
+    body: { name: "Food", parentId: null },
   });
   expect(created.status).toBe(201);
   const category = (await created.json()) as { id: string };
@@ -3863,8 +3828,6 @@ it("authors a hierarchy and sets a product's main category through the API", asy
     id: category.id,
     name: "Food",
     parentId: null,
-    image: null,
-    color: null,
   });
   expect((await send(app, "PATCH", path, { body: { parentId: category.id } })).status).toBe(400);
   const catalogueId = await createCatalogueVia(app, "Main category menu");

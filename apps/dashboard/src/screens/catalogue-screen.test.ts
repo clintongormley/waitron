@@ -30,9 +30,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-a", name: "Comida", active: true, version: 1 },
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
-const categories: CategorySummary[] = [
-  { id: "c1", name: "Entrantes", image: null, color: null, parentId: null },
-];
+const categories: CategorySummary[] = [{ id: "c1", name: "Entrantes", parentId: null }];
 const units: Unit[] = [
   { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
 ];
@@ -609,7 +607,6 @@ describe("catalogue-screen", () => {
         .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
       createCategory: vi
         .fn()
-        .mockRejectedValueOnce({ code: "category.color_invalid", params: {}, status: 400 })
         .mockRejectedValueOnce({ code: "category.parent_cycle", params: {}, status: 400 })
         .mockRejectedValueOnce({
           code: "category.invalid",
@@ -619,25 +616,14 @@ describe("catalogue-screen", () => {
     });
     const el = await openNested(api, "category");
     const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    const input = {
-      name: "Postres",
-      parentId: "c1",
-      image: null,
-      color: "#abcdef",
-    };
+    const input = { name: "Postres", parentId: "c1" };
     await submitNested(el, form, input);
     expect(form.open).toBe(true);
-    expect(form.shadowRoot!.querySelector("#category-color-error")?.textContent).toBe(
-      codeMessage("category.color_invalid"),
-    );
-    expect(await bottomOf(form)).toBe(t("form.fix_fields"));
-    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
-
-    await submitNested(el, form, input);
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
       codeMessage("category.parent_cycle"),
     );
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
+    expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
 
     await submitNested(el, form, input);
     expect(errorBeside(form, "wt-input[name=name]")).toBe(codeMessage("category.invalid"));
@@ -691,8 +677,6 @@ describe("catalogue-screen", () => {
     await submitNested(el, form, {
       name: { es: "Postres", en: "" },
       parentId: "c1",
-      image: null,
-      color: null,
     });
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe(
       codeMessage("category.not_found"),

@@ -1,17 +1,9 @@
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import {
-  CORE_MIGRATIONS,
-  catalogues,
-  categories,
-  products,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, products, withTransaction, type Database } from "@waitron/db";
 import {
   addMember,
   CATALOGUE_MIGRATIONS,
-  categoryDetails,
   createCatalogue,
   createProduct,
   createSection,
@@ -30,9 +22,8 @@ import { mediaImages } from "./schema/images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 
 /**
- * `products.image`, `category_details.image`, `sections.image` and `menu_version_images.filename`
- * may only name a photo that exists, and a photo one of the first three still names cannot be
- * deleted or renamed. Nor can a photo a LIVE menu version names. The rules are triggers, not keys
+ * `products.image`, `sections.image` and `menu_version_images.filename` may only name a photo
+ * that exists, and a photo one of the first two still names cannot be deleted or renamed. Nor can a photo a LIVE menu version names. The rules are triggers, not keys
  * (`packages/media/drizzle/0001_image_references.sql`, whose header carries why,
  * `0002_section_image_references.sql` for `sections.image`, and
  * `0003_published_image_references.sql` for a published version's photos).
@@ -55,11 +46,10 @@ const ABSENT = `${"b".repeat(64)}.jpg`;
 interface Fixture {
   catalogueId: string;
   productId: string;
-  categoryId: string;
   sectionId: string;
 }
 
-/** One image, one catalogue with a product, one category with its details row, and one section. */
+/** One image, one catalogue with a product, and one section. */
 async function fixture(db: Database): Promise<Fixture> {
   await db
     .insert(mediaImages)
@@ -77,11 +67,6 @@ async function fixture(db: Database): Promise<Fixture> {
       vatClass: "general",
     })
     .returning({ id: products.id });
-  const [category] = await db
-    .insert(categories)
-    .values({ name: "Bakery" })
-    .returning({ id: categories.id });
-  await db.insert(categoryDetails).values({ categoryId: category!.id });
   const [section] = await db
     .insert(sections)
     .values({ internalName: "Bakery" })
@@ -89,7 +74,6 @@ async function fixture(db: Database): Promise<Fixture> {
   return {
     catalogueId: menu!.id,
     productId: product!.id,
-    categoryId: category!.id,
     sectionId: section!.id,
   };
 }
@@ -117,10 +101,6 @@ it("creates the triggers that stand in for the foreign keys", async () => {
     select name from sqlite_master where type = 'trigger' and name glob '*media_image_fk*'
     order by name`);
   expect(rows.rows.map((row) => row.name)).toEqual([
-    "category_details_media_image_fk_insert",
-    "category_details_media_image_fk_parent_delete",
-    "category_details_media_image_fk_parent_rename",
-    "category_details_media_image_fk_update",
     "menu_version_images_media_image_fk_insert",
     "menu_version_images_media_image_fk_parent_delete",
     "menu_version_images_media_image_fk_parent_rename",
@@ -133,6 +113,17 @@ it("creates the triggers that stand in for the foreign keys", async () => {
     "sections_media_image_fk_parent_rename",
     "sections_media_image_fk_update",
   ]);
+});
+
+it("gives category_details no image or colour column and no trigger naming it", async () => {
+  const cols = await suite.db.execute<{ name: string }>(
+    sql`select name from pragma_table_info('category_details')`,
+  );
+  expect(cols.rows.map((c) => c.name).sort()).toEqual(["category_id", "parent_id"]);
+  const triggers = await suite.db.execute<{ name: string }>(
+    sql`select name from sqlite_master where type = 'trigger' and name like 'category_details_media_image_fk_%'`,
+  );
+  expect(triggers.rows).toEqual([]);
 });
 
 describe("a written image filename", () => {
@@ -174,40 +165,6 @@ describe("a written image filename", () => {
     await update(PRESENT);
     const rows = await suite.db.execute<{ image: string }>(
       sql`select image from products where id = ${ids.productId}`,
-    );
-    expect(rows.rows[0]!.image).toBe(PRESENT);
-  });
-
-  it("is refused on a category_details insert unless an image carries it", async () => {
-    const [second] = await suite.db
-      .insert(categories)
-      .values({ name: "Drinks" })
-      .returning({ id: categories.id });
-    const insert = async (image: string): Promise<void> => {
-      await suite.db.insert(categoryDetails).values({ categoryId: second!.id, image });
-    };
-    await expect(insert(ABSENT)).rejects.toMatchObject({
-      message: "category_details_media_image_fk",
-    });
-    await insert(PRESENT);
-    const rows = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from category_details where image = ${PRESENT}`,
-    );
-    expect(rows.rows[0]!.n).toBe(1);
-  });
-
-  it("is refused on a category_details update unless an image carries it", async () => {
-    const update = async (image: string): Promise<void> => {
-      await suite.db.execute(
-        sql`update category_details set image = ${image} where category_id = ${ids.categoryId}`,
-      );
-    };
-    await expect(update(ABSENT)).rejects.toMatchObject({
-      message: "category_details_media_image_fk",
-    });
-    await update(PRESENT);
-    const rows = await suite.db.execute<{ image: string }>(
-      sql`select image from category_details where category_id = ${ids.categoryId}`,
     );
     expect(rows.rows[0]!.image).toBe(PRESENT);
   });
@@ -266,21 +223,6 @@ describe("an image a catalogue row still names", () => {
       message: "products_media_image_fk",
     });
     await suite.db.execute(sql`update products set image = null`);
-    await removeImages();
-    expect(await imageCount()).toBe(0);
-  });
-
-  it("cannot be deleted or renamed while a category names it, and can once the category lets go", async () => {
-    await suite.db.execute(
-      sql`update category_details set image = ${PRESENT} where category_id = ${ids.categoryId}`,
-    );
-    await expect(removeImages()).rejects.toMatchObject({
-      message: "category_details_media_image_fk",
-    });
-    await expect(renameImages()).rejects.toMatchObject({
-      message: "category_details_media_image_fk",
-    });
-    await suite.db.execute(sql`update category_details set image = null`);
     await removeImages();
     expect(await imageCount()).toBe(0);
   });

@@ -47,8 +47,6 @@ describe("category authoring", () => {
     expect(food).toEqual({
       id: food.id,
       name: "Food",
-      image: null,
-      color: null,
       parentId: null,
     });
     expect(await app((tx) => setMainReportingCategory(tx, product.id, food.id))).toEqual({
@@ -172,24 +170,4 @@ it("updateProduct's categoryId sets the main category, with no membership coupli
   await expect(
     app((tx) => updateProduct(tx, product.id, { categoryId: crypto.randomUUID() })),
   ).rejects.toMatchObject({ code: "category.not_found" });
-});
-
-it("rejects an image reference with a category error when media is not installed", async () => {
-  const { app, food } = await fixture();
-  await expect(
-    app((tx) =>
-      createCategory(tx, {
-        name: "New",
-        image: "missing.jpg",
-      }),
-    ),
-  ).rejects.toMatchObject({ code: "category.image_not_found" });
-  await expect(
-    app((tx) =>
-      updateCategory(tx, food.id, {
-        image: "missing.jpg",
-      }),
-    ),
-  ).rejects.toMatchObject({ code: "category.image_not_found" });
-  expect((await app((tx) => readCategory(tx, food.id))).image).toBeNull();
 });

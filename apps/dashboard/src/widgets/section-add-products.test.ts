@@ -16,8 +16,6 @@ afterEach(() => {
 const category = (id: string, name: string, parentId: string | null): CategorySummary => ({
   id,
   name,
-  image: null,
-  color: null,
   parentId,
 });
 

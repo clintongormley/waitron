@@ -277,10 +277,9 @@ describe("configuration transfer database path", () => {
       await tx
         .insert(categories)
         .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: "Panadería" });
-      await tx.insert(categoryDetails).values({
-        categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
-        image: uploaded.image.filename,
-      });
+      await tx
+        .insert(categoryDetails)
+        .values({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" });
       await tx
         .update(products)
         .set({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" })
@@ -438,8 +437,8 @@ describe("configuration transfer database path", () => {
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
       const named = await tx.select({ name: categories.name }).from(categories);
       expect(named).toEqual([{ name: "Panadería" }]);
-      const category = await tx.execute<{ image: string; primary: number }>(sql`
-        select d.image,
+      const category = await tx.execute<{ primary: number }>(sql`
+        select
           -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is
           -- refused with near "primary": syntax error while the quoted form returns the column.
           -- Measured on node:sqlite, Node v26.7.0, with "as member" as the control that needs no
@@ -452,7 +451,7 @@ describe("configuration transfer database path", () => {
       `);
       // 1, not `true`: an SQL expression, which the `flag` helper's boolean mapping never
       // reaches. A category that is not the product's main one would answer 0.
-      expect(category.rows).toEqual([{ image: metadata!.filename, primary: 1 }]);
+      expect(category.rows).toEqual([{ primary: 1 }]);
     });
     const sourceSales = await suite.db.execute<{ count: number }>(
       sql`select count(*) as count from sales `,

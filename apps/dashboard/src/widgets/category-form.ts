@@ -1,5 +1,5 @@
 import { LocaleChangeController } from "../state/locale-controller.js";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -7,9 +7,6 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
-import "./image-upload.js";
-import { colorField, colorFieldStyles } from "./color-field.js";
-import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
@@ -65,14 +62,10 @@ export function categoryWithDescendants(
 const FIELD_BY_CODE = new Map([
   ["category.invalid", "name"],
   ["category.parent_cycle", "parent"],
-  ["category.image_not_found", "image"],
-  ["category.color_invalid", "color"],
 ]);
 const FIELD_BY_REQUEST_FIELD = new Map([
   ["name", "name"],
   ["parentId", "parent"],
-  ["image", "image"],
-  ["color", "color"],
 ]);
 
 /** A refused category write, keyed by the form's fields; `_form` is shown in the bottom message alone.
@@ -102,18 +95,10 @@ export class CategoryForm extends LitElement {
 
   static override styles = [
     baseStyles,
-    colorFieldStyles,
     css`
       .fields {
         display: grid;
         gap: var(--wt-space-4);
-      }
-      .field-error {
-        color: var(--wt-color-danger);
-      }
-      label {
-        display: grid;
-        gap: var(--wt-space-2);
       }
     `,
   ];
@@ -121,16 +106,12 @@ export class CategoryForm extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ attribute: false }) value: CategorySummary | null = null;
   @property({ attribute: false }) categories: readonly CategorySummary[] = [];
-  @property({ attribute: false }) api?: ImageUploader;
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
   @state() private name = "";
   @state() private parentId: string | null = null;
-  @state() private image: string | null = null;
-  @state() private color: string | null = null;
   @state() private attempted = false;
   /** Refusal keys the operator has since changed the field of, or submitted past. */
   @state() private dismissed = new Set<string>();
-  @state() private pickerOpen = false;
   protected override willUpdate(changes: PropertyValues<this>): void {
     if (
       (changes.has("open") && this.open) ||
@@ -139,8 +120,6 @@ export class CategoryForm extends LitElement {
     ) {
       this.name = this.value?.name ?? "";
       this.parentId = this.value?.parentId ?? null;
-      this.image = this.value?.image ?? null;
-      this.color = this.value?.color ?? null;
       this.attempted = false;
       this.dismissed = new Set();
     }
@@ -158,7 +137,7 @@ export class CategoryForm extends LitElement {
   }
   /** The keys of `errors` that a field this form shows displays. */
   #fieldKeys(errors: Record<string, string>): string[] {
-    const shown = new Set(["name", "parent", "color", "image"]);
+    const shown = new Set(["name", "parent"]);
     return Object.entries(errors)
       .filter(([key, message]) => Boolean(message) && shown.has(key))
       .map(([key]) => key);
@@ -179,21 +158,14 @@ export class CategoryForm extends LitElement {
   }
   #submit(event: Event): void {
     event.stopPropagation();
-    if (this.busy || this.pickerOpen) return;
+    if (this.busy) return;
     this.attempted = true;
     this.#dismiss(...Object.keys(this.fieldErrors));
     if (Object.keys(this.#validate()).length > 0) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    this.#emit(event, "wt-submit", {
-      value: {
-        name: this.name,
-        parentId: this.parentId,
-        image: this.image,
-        color: this.color,
-      },
-    });
+    this.#emit(event, "wt-submit", { value: { name: this.name, parentId: this.parentId } });
   }
   #parents(): readonly CategorySummary[] {
     if (!this.value) return this.categories;
@@ -219,7 +191,7 @@ export class CategoryForm extends LitElement {
       @wt-close=${(event: Event) => {
         // The dialog also reports a close it was told to make, a task later; by then the screen has
         // closed this form and a second cancel would be about nothing.
-        if (!this.busy && !this.pickerOpen && this.open) this.#emit(event, "wt-cancel", {});
+        if (!this.busy && this.open) this.#emit(event, "wt-cancel", {});
         else event.stopPropagation();
       }}
     >
@@ -264,33 +236,6 @@ export class CategoryForm extends LitElement {
             this.#dismiss("parent");
           }}
         ></wt-combobox>
-        ${colorField({
-          color: this.color,
-          busy: this.busy,
-          error: errors.color ?? "",
-          name: "category-color",
-          errorId: "category-color-error",
-          change: (color) => {
-            this.color = color;
-            this.#dismiss("color");
-          },
-        })}
-        <dashboard-image-upload
-          aria-describedby="category-image-error"
-          .api=${this.api}
-          .invalid=${Boolean(errors.image)}
-          .image=${this.image}
-          @image-picker-state=${(event: CustomEvent<{ open: boolean }>) => {
-            event.stopPropagation();
-            this.pickerOpen = event.detail.open;
-          }}
-          @image-changed=${(event: CustomEvent<{ image: string | null }>) => {
-            event.stopPropagation();
-            this.image = event.detail.image;
-            this.#dismiss("image");
-          }}
-        ></dashboard-image-upload>
-        <span class="field-error" id="category-image-error">${errors.image ?? nothing}</span>
       </div>
       <wt-form-actions slot="footer" .error=${bottom}
         ><wt-button
@@ -303,7 +248,7 @@ export class CategoryForm extends LitElement {
         <wt-button
           data-test="save"
           variant="primary"
-          .disabled=${this.busy || this.pickerOpen || invalid}
+          .disabled=${this.busy || invalid}
           @click=${(event: Event) => this.#submit(event)}
           >${t("action.save")}</wt-button
         ></wt-form-actions

@@ -7,8 +7,6 @@ afterEach(cleanupWidgets);
 const category = {
   id: "food",
   name: "Food",
-  image: null,
-  color: null,
   parentId: null,
 };
 describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
@@ -22,10 +20,7 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
           categories: [category],
           value: state === "edit" ? category : null,
           busy: state === "busy",
-          fieldErrors:
-            state === "server-error"
-              ? { parent: "Choose another parent.", image: "Choose an existing image." }
-              : {},
+          fieldErrors: state === "server-error" ? { parent: "Choose another parent." } : {},
         },
         theme,
       );
@@ -36,25 +31,6 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
       await expectNoA11yViolations(host);
     },
   );
-  it("names the colour radiogroup and every one of its options", async () => {
-    const { el } = await mountWidget<CategoryForm>(
-      "dashboard-category-form",
-      {
-        open: true,
-        categories: [category],
-      },
-      theme,
-    );
-    const group = el.shadowRoot!.querySelector('[role="radiogroup"]')!;
-    expect(group.getAttribute("aria-label")).toBeTruthy();
-    const options = [...group.querySelectorAll('[role="radio"]')];
-    expect(options.length).toBeGreaterThan(1);
-    for (const option of options) {
-      const name = option.getAttribute("aria-label") ?? option.textContent?.trim();
-      expect(name).toBeTruthy();
-    }
-  });
-
   it.each(["none", "chosen", "invalid", "disabled"] as const)(
     "renders the main-category field %s accessibly",
     async (state) => {

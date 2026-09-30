@@ -23,22 +23,16 @@ type Combobox = HTMLElement & {
 const food: CategorySummary = {
   id: "food",
   name: "Comida",
-  image: null,
-  color: null,
   parentId: null,
 };
 const tapas: CategorySummary = {
   id: "tapas",
   name: "Tapas",
-  image: null,
-  color: null,
   parentId: "food",
 };
 const drinks: CategorySummary = {
   id: "drinks",
   name: "Bebidas",
-  image: null,
-  color: null,
   parentId: null,
 };
 
@@ -81,8 +75,6 @@ it("orders numbered category paths by value, as the tables do", async () => {
   const named = (id: string, name: string): CategorySummary => ({
     id,
     name: name,
-    image: null,
-    color: null,
     parentId: null,
   });
   const combobox = await mount(

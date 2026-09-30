@@ -9,15 +9,11 @@ const categories: CategorySummary[] = [
   {
     id: "c-drinks",
     name: "Drinks",
-    image: null,
-    color: null,
     parentId: null,
   },
   {
     id: "c-beer",
     name: "Beer",
-    image: null,
-    color: null,
     parentId: "c-drinks",
   },
 ];

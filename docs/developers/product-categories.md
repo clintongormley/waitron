@@ -244,7 +244,7 @@ refused with `management.request_invalid`, naming the field.
 | Route | Input or response |
 | --- | --- |
 | `GET /management-api/categories` | `Category[]` |
-| `POST /management-api/categories` | `{ name, image?, color?, parentId? }` → `Category` |
+| `POST /management-api/categories` | `{ name, parentId? }` → `Category` |
 | `GET /management-api/categories/:id` | `Category` |
 | `PATCH /management-api/categories/:id` | Any supplied fields from create → `Category` |
 | `DELETE /management-api/categories/:id` | Optional `{ productsTo?, childrenTo? }` → 204 |
@@ -259,9 +259,7 @@ refused with `management.request_invalid`, naming the field.
 | `GET /management-api/products/:id/labels` | `{ labelIds }` |
 | `PUT /management-api/products/:id/labels` | `{ labelIds }` replaces the product's labels → `{ labelIds }` |
 
-`Category` is
-`{ id, name: string, image: string | null, color: string | null, parentId: string | null }`.
-A colour is lower-case `#rrggbb` or null; anything else is refused as `category.color_invalid` (400).
+`Category` is `{ id, name: string, parentId: string | null }`; a category has no image or colour.
 A category's name is one plain internal name, not a set of translations. It is stored trimmed; a
 name that is not a string is refused as `management.request_invalid` (400), and a blank one as
 `category.invalid` (400).
@@ -306,8 +304,7 @@ list silently ignored, so a caller still on the old contract finds out at once.
 
 ## Storage and migration
 
-`categories` (core) holds the name. `category_details` (catalogue) holds the parent, image
-and colour. `labels` holds each label, with the unique index `labels_name_uq` on its name, and
+`categories` (core) holds the name. `category_details` (catalogue) holds the parent. `labels` holds each label, with the unique index `labels_name_uq` on its name, and
 `product_labels` joins products to labels; both cascade when a product or a label is deleted. All
 the catalogue tables are classified `state`. All but the three that hold published menus
 (`menu_versions`, `menu_publications` and `menu_version_images`) travel in the configuration
@@ -331,14 +328,19 @@ cannot overlap however they are started. `packages/catalogue/src/categories.ts` 
 `packages/catalogue/test/fixtures.ts`, which carries the measurement and a control, used by the
 three `serializes …` cases in `packages/catalogue/src/categories.db.test.ts`.
 
-The media set protects `category_details.image` with four triggers named
-`category_details_media_image_fk_*`, created in `packages/media/drizzle/0001_image_references.sql`,
-whose header explains why a real foreign key could not be used. The refusal arrives as errcode 1811,
-not 787, and `pragma foreign_key_list('category_details')` does not list the rule. Attaching an image
-does not lock the image's row: `validateImage` reads it through `mediaImageExists`, which relies on
-there being no concurrent writer and says so at the read. A section's image is guarded the same way,
-by the four `sections_media_image_fk_*` triggers of
-`packages/media/drizzle/0002_section_image_references.sql`.
+The media set protects `sections.image` with the four `sections_media_image_fk_*` triggers of
+`packages/media/drizzle/0002_section_image_references.sql`; the header of
+`packages/media/drizzle/0001_image_references.sql` explains why a real foreign key could not be
+used. Attaching an image does not lock the image's row: the section writes read it through
+`mediaImageExists` (`packages/catalogue/src/sections.ts`), which relies on there being no concurrent
+writer and says so at the read.
+
+`category_details` once had `image` and `color` columns, and `0001_image_references.sql` created
+four `category_details_media_image_fk_*` triggers naming `image`. SQLite refuses to drop a column a
+trigger names, so catalogue's `0013_drop_category_image_triggers.sql` drops the triggers before
+`0014_drop_category_image_color.sql` drops the columns, and media's
+`0004_drop_category_image_triggers.sql` drops them again, because on a fresh database media's `0001`
+creates them after the column is already gone.
 
 Schema changes drop and recreate, with no translation and no backfill (`CLAUDE.md` §3). Follow the
 existing preproduction reset workflow for a populated database, and do not reset a populated shared

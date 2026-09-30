@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { expectRowMenusOnScreen, formMessageOf } from "@waitron/ui/src/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { CategoriesScreen } from "./categories-screen.js";
 import type { CategoryDependants, DashboardApi, CategorySummary, Product } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
@@ -19,15 +19,11 @@ beforeEach(() => {
 const food: CategorySummary = {
   id: "food",
   name: "Food",
-  image: null,
-  color: null,
   parentId: null,
 };
 const drink: CategorySummary = {
   id: "drink",
   name: "Drinks",
-  image: null,
-  color: null,
   parentId: null,
 };
 const product: Product = {
@@ -193,8 +189,8 @@ it("keeps the confirmation open and explains a rejected delete, then closes on s
   )!;
   await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await vi.waitFor(async () => expect(await saveMessage(modal)).not.toBeNull());
-  expect(await saveMessage(modal)).not.toBe("");
+  await vi.waitFor(() => expect(modal.querySelector('p[role="alert"]')).not.toBeNull());
+  expect(modal.querySelector('p[role="alert"]')!.textContent!.trim()).not.toBe("");
   expect(modal.open).toBe(true);
   // Retrying the same delete succeeds, and the dialog closes itself.
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -210,7 +206,7 @@ it("opens the products modal from the name and lists members with lozenges", asy
     name: "Napkin",
     primaryCategoryId: "food",
   };
-  fx.api.listCategories.mockResolvedValue([{ ...food, color: "#2244aa" }, drink]);
+  fx.api.listCategories.mockResolvedValue([food, drink]);
   fx.api.listLibraryProducts.mockResolvedValue([product, lone]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
@@ -422,8 +418,6 @@ it("shows one red warning at the top combining every consequence, and drops the 
   const meals: CategorySummary = {
     id: "meals",
     name: "Meals",
-    image: null,
-    color: null,
     parentId: null,
   };
   const foodUnderMeals: CategorySummary = { ...food, parentId: "meals" };
@@ -622,50 +616,38 @@ it("ignores a stale preview response from an earlier open of the same category",
   expect(deleteButton.disabled).toBe(true);
 });
 
-it.each([
-  ["category.parent_cycle", "parent", "wt-combobox[name=category-parent]"],
-  ["category.image_not_found", "image", "dashboard-image-upload"],
-  ["category.color_invalid", "color", "input[type=color]"],
-])(
-  "explains %s beside the rejected field, and says to correct it in the bottom message, leaving Save working",
-  async (code, field, selector) => {
-    const { el, api } = await mount();
-    el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
-    await el.updateComplete;
-    const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-    api.createCategory.mockRejectedValueOnce({ code });
-    form.dispatchEvent(
-      new CustomEvent("wt-submit", {
-        detail: { value: { name: "New", parentId: "food", image: "photo.jpg" } },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    await vi.waitFor(() => expect(form.fieldErrors[field]).toBeTruthy());
-    await form.updateComplete;
-    const control = form.shadowRoot!.querySelector(selector)!;
-    // The parent field is a wt-combobox, which renders its own error inside its shadow root; the
-    // other two keep their describedby error span in the form's shadow root.
-    if (control.tagName.toLowerCase() === "wt-combobox") {
-      const combo = control as HTMLElementTagNameMap["wt-combobox"];
-      await combo.updateComplete;
-      const errorId = combo
-        .shadowRoot!.querySelector(".trigger")!
-        .getAttribute("aria-describedby")!;
-      expect(combo.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
-    } else {
-      const errorId = control.getAttribute("aria-describedby")!;
-      expect(form.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors[field]);
-    }
-    const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-    expect((await formMessageOf(actions))!.textContent!.trim()).toBe(t("form.fix_fields"));
-    expect(
-      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
-        .disabled,
-    ).toBe(false);
-    expect(form.open).toBe(true);
-  },
-);
+it("explains a parent cycle beside the parent field, and says to correct it beside a Save that still works", async () => {
+  const { el, api } = await mount();
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
+  await el.updateComplete;
+  const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
+  api.createCategory.mockRejectedValueOnce({ code: "category.parent_cycle" });
+  form.dispatchEvent(
+    new CustomEvent("wt-submit", {
+      detail: { value: { name: "New", parentId: "food" } },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await vi.waitFor(() => expect(form.fieldErrors.parent).toBeTruthy());
+  await form.updateComplete;
+  const combo = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+    "wt-combobox[name=category-parent]",
+  )!;
+  await combo.updateComplete;
+  const errorId = combo.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-describedby")!;
+  expect(combo.shadowRoot!.getElementById(errorId)!.textContent).toBe(form.fieldErrors.parent);
+  const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
+  await actions.updateComplete;
+  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
+    t("form.fix_fields"),
+  );
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!
+      .disabled,
+  ).toBe(false);
+  expect(form.open).toBe(true);
+});
 
 it("puts a missing parent beside the parent field when it is the parent the save named", async () => {
   const { el, api } = await mount();
@@ -678,7 +660,7 @@ it("puts a missing parent beside the parent field when it is the parent the save
   });
   form.dispatchEvent(
     new CustomEvent("wt-submit", {
-      detail: { value: { name: "New", parentId: "food", image: null, color: null } },
+      detail: { value: { name: "New", parentId: "food" } },
       bubbles: true,
       composed: true,
     }),
@@ -722,8 +704,6 @@ it("defaults to tree mode and nests children", async () => {
   const breakfast: CategorySummary = {
     id: "breakfast",
     name: "Breakfast",
-    image: null,
-    color: null,
     parentId: "food",
   };
   fx.api.listCategories.mockResolvedValue([food, breakfast]);
@@ -782,15 +762,11 @@ it("filters by name keeping ancestors in tree mode", async () => {
   const breakfast: CategorySummary = {
     id: "breakfast",
     name: "Breakfast",
-    image: null,
-    color: null,
     parentId: "food",
   };
   const eggs: CategorySummary = {
     id: "eggs",
     name: "Eggs",
-    image: null,
-    color: null,
     parentId: "breakfast",
   };
   fx.api.listCategories.mockResolvedValue([food, breakfast, eggs, drink]);
@@ -816,84 +792,11 @@ it("filters by name keeping ancestors in tree mode", async () => {
   expect(muted("eggs")).toBe(false);
 });
 
-// These two suites assert RENDERED style, not just markup. The name cell's markup is handed to
-// wt-data-table as a callback, so it lands in the table's shadow root, where this screen's stylesheet
-// does not reach; presence and attribute assertions pass either way.
-it("renders each name with its colour square, sized and bordered from tokens", async () => {
-  const fx = apiFixture();
-  fx.api.listCategories.mockResolvedValue([{ ...food, color: "#b12525" }]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await vi.waitFor(() => expect(table.rows.length).toBe(1));
-  await table.updateComplete;
-  const swatch = table.shadowRoot!.querySelector<HTMLElement>('[part~="swatch"]')!;
-  expect(swatch.getAttribute("style")).toContain("#b12525");
-
-  // The colour is data, applied inline, so it survives even unstyled — the box around it does not.
-  const styles = getComputedStyle(swatch);
-  expect(styles.backgroundColor).toBe("rgb(177, 37, 37)");
-  const space4 = getComputedStyle(el).getPropertyValue("--wt-space-4").trim();
-  expect(styles.width).toBe(space4);
-  expect(styles.height).toBe(space4);
-  expect(styles.borderTopWidth).toBe("1px");
-  const box = swatch.getBoundingClientRect();
-  expect(box.width).toBeGreaterThan(0);
-  expect(box.height).toBeGreaterThan(0);
-
-  // The thumbnail placeholder shares the same cell and the same failure mode.
-  const placeholder = table.shadowRoot!.querySelector<HTMLElement>(
-    '[part~="thumbnail-placeholder"]',
-  )!;
-  const tapMin = getComputedStyle(el).getPropertyValue("--wt-tap-min").trim();
-  expect(getComputedStyle(placeholder).width).toBe(tapMin);
-  expect(placeholder.getBoundingClientRect().height).toBeGreaterThan(0);
-});
-
-// The stored colour is interpolated into an inline style, so the screen checks it rather than
-// trusting it. An unusable value draws the empty swatch.
-it("draws the empty swatch for a colour that is not #rrggbb", async () => {
-  const fx = apiFixture();
-  fx.api.listCategories.mockResolvedValue([{ ...food, color: "red; background-image: url(x)" }]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await vi.waitFor(() => expect(table.rows.length).toBe(1));
-  await table.updateComplete;
-  const swatch = table.shadowRoot!.querySelector<HTMLElement>('[part~="swatch"]')!;
-  expect(swatch.getAttribute("part")).toContain("swatch-none");
-  expect(swatch.getAttribute("style")).toBeNull();
-  expect(getComputedStyle(swatch).backgroundImage).toBe("none");
-});
-
-// The placeholder and a real image are different elements under different rules, so each is proven
-// separately. The src 404s here; only the box is under test.
-it("sizes a category's thumbnail image from tokens", async () => {
-  const fx = apiFixture();
-  fx.api.listCategories.mockResolvedValue([{ ...food, image: "cheese.png" }]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await vi.waitFor(() => expect(table.rows.length).toBe(1));
-  await table.updateComplete;
-  const thumbnail = table.shadowRoot!.querySelector<HTMLElement>('[part~="thumbnail"]')!;
-  expect(thumbnail.tagName).toBe("IMG");
-  const tapMin = getComputedStyle(el).getPropertyValue("--wt-tap-min").trim();
-  expect(getComputedStyle(thumbnail).width).toBe(tapMin);
-  expect(getComputedStyle(thumbnail).height).toBe(tapMin);
-  expect(getComputedStyle(thumbnail).objectFit).toBe("cover");
-});
-
 it("paints a tree-mode ancestor row's name in the muted colour", async () => {
   const fx = apiFixture();
   const breakfast: CategorySummary = {
     id: "breakfast",
     name: "Breakfast",
-    image: null,
-    color: null,
     parentId: "food",
   };
   fx.api.listCategories.mockResolvedValue([food, breakfast]);
@@ -1201,8 +1104,6 @@ it("offers only categories something refers to in the Parent and Main category f
   const breakfast: CategorySummary = {
     id: "breakfast",
     name: "Breakfast",
-    image: null,
-    color: null,
     parentId: "food",
   };
   const eggs: CategorySummary = {
@@ -1248,8 +1149,6 @@ it("offers only categories something refers to in the Parent and Main category f
 const breakfastUnderFood: CategorySummary = {
   id: "breakfast",
   name: "Breakfast",
-  image: null,
-  color: null,
   parentId: "food",
 };
 const juiceUnderDrink: CategorySummary = {
@@ -1407,7 +1306,7 @@ async function rowAction(el: CategoriesScreen, id: string, index: number): Promi
 function submitCategory(el: CategoriesScreen, name: string): void {
   el.shadowRoot!.querySelector("dashboard-category-form")!.dispatchEvent(
     new CustomEvent("wt-submit", {
-      detail: { value: { name, parentId: null, image: null, color: null } },
+      detail: { value: { name, parentId: null } },
       bubbles: true,
       composed: true,
     }),
@@ -1443,10 +1342,11 @@ async function openMainCategory(el: CategoriesScreen, remove: boolean) {
   await mainCategoryCombobox(el).updateComplete;
   return dialog;
 }
-/** A dialog's one message about a failed action, from the action row in its footer. */
-async function saveMessage(dialog: Element): Promise<string | null> {
+/** The main-category dialog's one message, drawn beside Save inside its action row. */
+async function besideSave(dialog: Element): Promise<string | null> {
   const actions = dialog.querySelector("wt-form-actions")!;
-  return (await formMessageOf(actions))?.textContent?.trim() ?? null;
+  await actions.updateComplete;
+  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? null;
 }
 function mainCategoryCombobox(el: CategoriesScreen) {
   return el.shadowRoot!.querySelector<
@@ -1532,8 +1432,6 @@ it("saves an edited category through the update call and refreshes the list", as
   expect(api.updateCategory).toHaveBeenCalledWith("food", {
     name: "Meals",
     parentId: null,
-    image: null,
-    color: null,
   });
   expect(api.createCategory).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(api.listCategories.mock.calls.length).toBe(loads + 1));
@@ -1558,7 +1456,7 @@ it("puts a blank-name refusal beside the name field", async () => {
 
 // `categoryInput` in apps/server/src/catalogue-api.ts refuses a malformed parent as
 // `management.request_invalid` with `field: "parentId"`.
-it("puts a refused parent beside the parent field, and says to correct it above the actions", async () => {
+it("puts a refused parent beside the parent field, and says to correct it beside the actions", async () => {
   setLocale("en-GB");
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
@@ -1576,7 +1474,10 @@ it("puts a refused parent beside the parent field, and says to correct it above 
   };
   await vi.waitFor(() => expect(besideParent()).toBe("Check the form and try again"));
   const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
-  expect((await formMessageOf(actions))!.textContent!.trim()).toBe(t("form.fix_fields"));
+  await actions.updateComplete;
+  expect(actions.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
+    t("form.fix_fields"),
+  );
   expect(form.open).toBe(true);
 });
 
@@ -1732,8 +1633,10 @@ it("explains a refused add and keeps the add list and its picks open", async () 
   add.click();
   await confirmMove(el);
   const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
-  await vi.waitFor(async () =>
-    expect(await saveMessage(products)).toBe(codeMessage("product.not_found")),
+  await vi.waitFor(() =>
+    expect(products.querySelector('p[role="alert"]')?.textContent).toBe(
+      codeMessage("product.not_found"),
+    ),
   );
   expect(
     el.shadowRoot!.querySelector('wt-data-table[data-test="category-add-products"]'),
@@ -1787,7 +1690,7 @@ it("explains a refused main-category save and keeps its dialog open", async () =
   const dialog = await openMainCategory(el, true);
   dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
   await vi.waitFor(async () =>
-    expect(await saveMessage(dialog)).toBe(codeMessage("category.not_found")),
+    expect(await besideSave(dialog)).toBe(codeMessage("category.not_found")),
   );
   expect(alertTexts(dialog)).toEqual([]);
   expect(dialog.open).toBe(true);
@@ -1910,13 +1813,13 @@ it.each(["Cancel", "a close"])(
     await openProducts(el, "food");
     const dialog = await openMainCategory(el, true);
     dialog.querySelector<HTMLElement>('[data-test="save-main-category"]')!.click();
-    await vi.waitFor(async () => expect(await saveMessage(dialog)).not.toBeNull());
+    await vi.waitFor(async () => expect(await besideSave(dialog)).not.toBeNull());
     if (way === "Cancel") dialog.querySelector<HTMLElement>('wt-button[slot="cancel"]')!.click();
     else dialog.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(dialog.open).toBe(false);
     const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
-    expect(await saveMessage(products)).toBeNull();
+    expect(products.querySelector('p[role="alert"]')).toBeNull();
   },
 );
 
@@ -2138,7 +2041,7 @@ it.each([
     await vi.waitFor(() => expect(picker.error).toBe(codeMessage(refusal.code)));
     await el.updateComplete;
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await saveMessage(dialog)).toBe(t("form.fix_fields"));
+    expect(await besideSave(dialog)).toBe(t("form.fix_fields"));
     await vi.waitFor(() => expect(holdsFocus(picker)).toBe(true));
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2148,7 +2051,7 @@ it.each([
     await el.updateComplete;
     expect(picker.error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await saveMessage(dialog)).toBeNull();
+    expect(await besideSave(dialog)).toBeNull();
     await save.updateComplete;
     expect(save.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },
@@ -2174,8 +2077,7 @@ it.each([
     remove.click();
     await vi.waitFor(() => expect(picker(name).error).toBe(codeMessage(code)));
     await el.updateComplete;
-    expect(alertTexts(dialog)).toEqual([]);
-    expect(await saveMessage(dialog)).toBe(t("form.fix_fields"));
+    expect(alertTexts(dialog)).toEqual([t("form.fix_fields")]);
     await vi.waitFor(() => expect(holdsFocus(picker(name))).toBe(true));
     await remove.updateComplete;
     expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2185,13 +2087,12 @@ it.each([
     await el.updateComplete;
     expect(picker(name).error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
-    expect(await saveMessage(dialog)).toBeNull();
     await remove.updateComplete;
     expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },
 );
 
-it("keeps a delete refusal that names no picker in the dialog's bottom message", async () => {
+it("keeps a delete refusal that names no picker in the dialog's alert", async () => {
   const { el, api } = await mount();
   api.getCategoryDependants.mockResolvedValue(everything);
   api.deleteCategory.mockRejectedValueOnce({
@@ -2200,10 +2101,7 @@ it("keeps a delete refusal that names no picker in the dialog's bottom message",
   });
   const { dialog, picker, remove } = await openFoodDelete(el);
   remove.click();
-  await vi.waitFor(async () =>
-    expect(await saveMessage(dialog)).toBe(codeMessage("category.not_found")),
-  );
-  expect(alertTexts(dialog)).toEqual([]);
+  await vi.waitFor(() => expect(alertTexts(dialog)).toEqual([codeMessage("category.not_found")]));
   expect(picker("products-to").error).toBe("");
   expect(picker("children-to").error).toBe("");
 });
@@ -2463,32 +2361,4 @@ describe("at phone width", () => {
       });
     },
   );
-});
-
-it("lines each name up with the text beside it, with a thumbnail, a placeholder or a swatch", async () => {
-  const fx = apiFixture();
-  fx.api.listCategories.mockResolvedValue([
-    { ...food, color: "#b12525" },
-    { ...drink, image: "cheese.png" },
-    { ...food, id: "breakfast", name: { en: "Breakfast" }, parentId: "food" },
-  ]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  const table = el.shadowRoot!.querySelector("wt-data-table")!;
-  await vi.waitFor(() => expect(table.rows.length).toBe(3));
-  await table.updateComplete;
-  const bottom = (parent: Element) => {
-    const text = [...parent.childNodes].find(
-      (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
-    )!;
-    const range = document.createRange();
-    range.selectNodeContents(text);
-    return range.getBoundingClientRect().bottom;
-  };
-  for (const id of ["food", "drink", "breakfast"]) {
-    const name = table.shadowRoot!.querySelector(`[data-category="${id}"]`)!;
-    const beside = table.shadowRoot!.querySelectorAll(`tr[data-row-key="${id}"] td`)[1]!;
-    expect(Math.abs(bottom(name) - bottom(beside)), id).toBeLessThanOrEqual(1);
-  }
 });

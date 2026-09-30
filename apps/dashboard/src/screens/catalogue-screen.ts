@@ -706,7 +706,6 @@ export class CatalogueScreen extends LitElement {
         .open=${this.#child.kind === "category"}
         .busy=${this.#child.busy}
         .categories=${this.categories}
-        .api=${this.api}
         .fieldErrors=${refusals.category}
         @wt-submit=${this.#submitCategory}
         @wt-cancel=${() => this.#cancelChild("category")}

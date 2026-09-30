@@ -2,14 +2,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { keyed } from "lit/directives/keyed.js";
-import {
-  baseStyles,
-  focusFirstInvalid,
-  isHexColor,
-  selectStyles,
-  setContentLanguages,
-  type DataTableColumn,
-} from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, selectStyles, type DataTableColumn } from "@waitron/ui";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   CategoryDependants,
@@ -90,32 +83,10 @@ export class CategoriesScreen extends LitElement {
          the nodes are parented in THAT element's shadow root, not this screen's. A class selector in
          this stylesheet can never reach them; a part= attribute on the markup plus ::part() here
          crosses exactly that one boundary — the pattern printers-screen.ts uses for its cell markup. */
-      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
-         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
-      wt-data-table::part(thumbnail),
-      wt-data-table::part(thumbnail-placeholder),
-      wt-data-table::part(swatch) {
-        display: inline-block;
-        vertical-align: middle;
-        margin-inline-end: var(--wt-space-2);
-      }
-      wt-data-table::part(thumbnail),
-      wt-data-table::part(thumbnail-placeholder) {
-        width: var(--wt-tap-min);
-        height: var(--wt-tap-min);
-      }
-      wt-data-table::part(thumbnail) {
-        object-fit: cover;
-        border-radius: var(--wt-radius-sm);
-      }
-      wt-data-table::part(swatch) {
-        width: var(--wt-space-4);
-        height: var(--wt-space-4);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-sm);
-      }
-      wt-data-table::part(swatch-none) {
-        background: transparent;
+      wt-data-table::part(name-cell) {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--wt-space-2);
       }
       wt-data-table::part(name) {
         overflow-wrap: anywhere;
@@ -193,8 +164,6 @@ export class CategoriesScreen extends LitElement {
     this.loadError = false;
     try {
       await Promise.all([
-        // The image picker names each photo in the content languages.
-        this.#queries.watch("getContentLanguages", [], setContentLanguages),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
@@ -383,9 +352,9 @@ export class CategoriesScreen extends LitElement {
       ...(fieldMarked ? [t("form.fix_fields")] : []),
     ].join(" ");
   }
-  /** While the main-category window is open over the products window, a refusal is that window's. */
-  #productsMessage(): string {
-    return this.mainCategoryProduct ? "" : this.saveError;
+  #dialogMessage(fieldMarked: boolean) {
+    const message = this.#dialogError(fieldMarked);
+    return message ? html`<p role="alert">${message}</p>` : nothing;
   }
   #focusRefused(dialog: "delete-dialog" | "main-category-dialog"): void {
     void this.updateComplete.then(() => {
@@ -398,29 +367,13 @@ export class CategoriesScreen extends LitElement {
   }
   #rowParent = (category: CategorySummary): string | null => category.parentId;
   // `part=` rather than `class=` throughout this cell: see the ::part() block in static styles.
-  /** The colour goes into an inline `style`, so it is checked here rather than trusted: anything
-   * that is not a lower-case `#rrggbb` draws the empty swatch, exactly as a category with no colour
-   * does. `wt-lozenge` guards its own colour the same way. */
-  #swatch(color: string | null) {
-    return color !== null && isHexColor(color)
-      ? html`<span part="swatch" style=${`background:${color}`} aria-hidden="true"></span>`
-      : html`<span part="swatch swatch-none" aria-hidden="true"></span>`;
-  }
   #nameCell(category: CategorySummary, ancestorOnly: boolean) {
     // In tree mode a row can be present only to keep a matching descendant's ancestor chain
     // visible; the table reports that through the cell's `ancestorOnly` context. Mute those so
     // the match itself stands out.
     const muted = this.mode === "tree" && ancestorOnly;
-    return html`<span>
-      ${
-        category.image
-          ? html`<img
-              part="thumbnail"
-              src=${`/media/${encodeURIComponent(category.image)}`}
-              alt=""
-            />`
-          : html`<span part="thumbnail-placeholder" aria-hidden="true"></span>`
-      }${this.#swatch(category.color)}<wt-button
+    return html`<span part="name-cell">
+      <wt-button
         part=${muted ? "name name-muted" : "name"}
         variant="ghost"
         data-category=${category.id}
@@ -440,7 +393,7 @@ export class CategoriesScreen extends LitElement {
     return categoryPath(category, this.categories);
   }
   #lozenge(category: CategorySummary) {
-    return html`<wt-lozenge color=${category.color ?? ""}>${this.#path(category)}</wt-lozenge>`;
+    return html`<wt-lozenge>${this.#path(category)}</wt-lozenge>`;
   }
   #parentPath(category: CategorySummary): string | null {
     const parent = this.categories.find((item) => item.id === category.parentId);
@@ -763,7 +716,7 @@ export class CategoriesScreen extends LitElement {
           )}
         ></wt-data-table>`,
       )}
-      <wt-form-actions slot="footer" .error=${this.#productsMessage()}
+      <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
           data-test="close-products"
@@ -796,7 +749,7 @@ export class CategoriesScreen extends LitElement {
         .rowKey=${(product: Product) => product.id}
         .emptyMessage=${t("categories.no_products_to_add")}
       ></wt-data-table>
-      <wt-form-actions slot="footer" .error=${this.#productsMessage()}
+      <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -849,6 +802,7 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.#closeProducts();
         }}
       >
+        ${this.saveError && !mainProduct ? html`<p role="alert">${this.saveError}</p>` : nothing}
         ${
           this.selected === null
             ? nothing
@@ -892,7 +846,6 @@ export class CategoriesScreen extends LitElement {
         .busy=${this.busy}
         .value=${this.edited}
         .categories=${this.categories}
-        .api=${this.api}
         .fieldErrors=${this.fieldErrors}
         @wt-submit=${(event: CustomEvent<{ value: CategoryInput }>) => void this.#save(event)}
         @wt-cancel=${(event: Event) => {
@@ -914,11 +867,8 @@ export class CategoriesScreen extends LitElement {
         }}
       >
         ${this.deleting ? this.#renderDependants(this.deleting) : nothing}
-        <wt-form-actions
-          slot="footer"
-          .error=${
-            this.deleting ? this.#dialogError(Object.values(this.reassignErrors).some(Boolean)) : ""
-          }
+        ${this.#dialogMessage(Object.values(this.reassignErrors).some(Boolean))}
+        <wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
             variant="secondary"

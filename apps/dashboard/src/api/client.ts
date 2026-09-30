@@ -267,14 +267,10 @@ export interface LocationCatalogueSummary extends CatalogueSummary {
 export interface CategorySummary {
   id: string;
   name: string;
-  image: string | null;
-  color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
   name: string;
-  image?: string | null;
-  color?: string | null;
   parentId?: string | null;
 }
 export interface CategoryDependants {

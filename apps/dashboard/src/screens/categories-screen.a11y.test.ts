@@ -12,10 +12,7 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
   it.each(["empty", "populated", "failed", "loading"] as const)(
     "renders the %s state accessibly",
     async (state) => {
-      const categories =
-        state === "empty"
-          ? []
-          : [{ id: "food", name: "Food", image: null, color: null, parentId: null }];
+      const categories = state === "empty" ? [] : [{ id: "food", name: "Food", parentId: null }];
       const api = {
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
         listLibraryProducts: async () => [],
@@ -43,8 +40,8 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
 
   it("renders nested tree rows with a colour swatch, then the flat toggle, accessibly", async () => {
     const categories: CategorySummary[] = [
-      { id: "food", name: "Food", image: null, color: "#b12525", parentId: null },
-      { id: "breakfast", name: "Breakfast", image: null, color: null, parentId: "food" },
+      { id: "food", name: "Food", parentId: null },
+      { id: "breakfast", name: "Breakfast", parentId: "food" },
     ];
     const api = {
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
@@ -65,9 +62,9 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
 
   function membersApi(): DashboardApi {
     const categories: CategorySummary[] = [
-      { id: "food", name: "Food", image: null, color: null, parentId: null },
-      { id: "drink", name: "Drinks", image: null, color: "#2244aa", parentId: null },
-      { id: "breakfast", name: "Breakfast", image: null, color: null, parentId: "food" },
+      { id: "food", name: "Food", parentId: null },
+      { id: "drink", name: "Drinks", parentId: null },
+      { id: "breakfast", name: "Breakfast", parentId: "food" },
     ];
     return {
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),

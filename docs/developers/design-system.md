@@ -126,8 +126,9 @@ in `packages/ui-core/src/tokens/colors.test.ts` holds both.
 `--wt-color-warning` is the amber for a warning that is not yet an error, such as the alerts count
 badge when no open alert is an error. Text on it uses `--wt-color-on-warning`.
 
-A user-chosen data colour (a category's colour, so far) is the one deliberate exception to "no
-hex, no hardcoded chrome": `wt-lozenge` fills its background with that colour directly and computes
+A user-chosen data colour is the one deliberate exception to "no hex, no hardcoded chrome" (no
+screen passes `wt-lozenge` one today: categories, its first user, lost their colour on 2026-09-30):
+`wt-lozenge` fills its background with that colour directly and computes
 black or white text for contrast, because the label still carries the meaning and the colour is
 never the only signal. This is a different idiom from the one the floor plan and service statuses
 already use for a data colour — a neutral chip with the colour shown only as a border and a dot —

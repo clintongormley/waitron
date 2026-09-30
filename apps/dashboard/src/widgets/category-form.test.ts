@@ -1,11 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  customSquarePixels,
-  mountWidget,
-} from "./test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   CategoryForm,
@@ -16,22 +11,17 @@ import {
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
-import { CATEGORY_PALETTE } from "@waitron/ui";
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
 const food: CategorySummary = {
   id: "food",
   name: "Food",
   parentId: null,
-  image: null,
-  color: null,
 };
 const child: CategorySummary = {
   id: "child",
   name: "Sandwiches",
   parentId: "food",
-  image: null,
-  color: null,
 };
 
 async function bottomOf(el: CategoryForm): Promise<string> {
@@ -51,14 +41,6 @@ function typeName(el: CategoryForm, value: string): void {
   );
 }
 
-async function savedColor(el: CategoryForm): Promise<string | null> {
-  const saved = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
-  );
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  return (await saved).detail.value.color as string | null;
-}
-
 it("renders one name field holding the name, and excludes self and descendants from parent choices", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
@@ -67,6 +49,9 @@ it("renders one name field holding the name, and excludes self and descendants f
   });
   expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
   expect(nameOf(el).value).toBe("Food");
+  expect(el.shadowRoot!.querySelector("dashboard-image-upload")).toBeNull();
+  expect(el.shadowRoot!.querySelector('[role="radiogroup"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('input[type="color"]')).toBeNull();
   const combo = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     'wt-combobox[name="category-parent"]',
   )!;
@@ -101,22 +86,16 @@ it("lists parent options alphabetically by their displayed label, with No parent
     id: "zebra",
     name: "Zebra",
     parentId: null,
-    image: null,
-    color: null,
   };
   const apple: CategorySummary = {
     id: "apple",
     name: "Apple",
     parentId: null,
-    image: null,
-    color: null,
   };
   const mango: CategorySummary = {
     id: "mango",
     name: "Mango",
     parentId: null,
-    image: null,
-    color: null,
   };
   // Two numeric names to pin the same collation the tables on this screen use: "Salsa 2" sorts
   // before "Salsa 10", not after it as a plain string compare would put it.
@@ -124,15 +103,11 @@ it("lists parent options alphabetically by their displayed label, with No parent
     id: "salsa10",
     name: "Salsa 10",
     parentId: null,
-    image: null,
-    color: null,
   };
   const salsa2: CategorySummary = {
     id: "salsa2",
     name: "Salsa 2",
     parentId: null,
-    image: null,
-    color: null,
   };
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
@@ -178,202 +153,9 @@ it("retains the draft during lookup refreshes, validates and emits the reusable 
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   expect(count).toBe(1);
   expect(submitted).toEqual({
-    value: { name: "Breakfast", image: null, parentId: null, color: null },
+    value: { name: "Breakfast", parentId: null },
   });
 });
-it("uses the existing image picker and keeps the name in an edit", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-  });
-  const saved = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
-  );
-  el.shadowRoot!.querySelector("dashboard-image-upload")!.dispatchEvent(
-    new CustomEvent("image-changed", {
-      detail: { image: "photo.jpg" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  expect((await saved).detail).toEqual({
-    value: { name: food.name, image: "photo.jpg", parentId: null, color: null },
-  });
-});
-
-it("submits the chosen colour", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-  });
-  const saved = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
-  );
-  el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.click();
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  expect((await saved).detail.value.color).toBe("#b12525");
-});
-
-it("lays out every palette hue as a column of three tones", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-  });
-  const swatches = [
-    ...el.shadowRoot!.querySelectorAll<HTMLElement>('.swatches [data-color]:not([data-color=""])'),
-  ];
-  expect(swatches).toHaveLength(24);
-
-  const boxes = swatches.slice(0, 4).map((swatch) => swatch.getBoundingClientRect());
-  expect(boxes[1]!.left).toBe(boxes[0]!.left);
-  expect(boxes[2]!.left).toBe(boxes[0]!.left);
-  expect(boxes[1]!.top).toBeGreaterThan(boxes[0]!.top);
-  expect(boxes[2]!.top).toBeGreaterThan(boxes[1]!.top);
-  expect(boxes[3]!.left).toBeGreaterThan(boxes[0]!.left);
-  expect(boxes[3]!.top).toBe(boxes[0]!.top);
-  const secondHalf = swatches[12]!.getBoundingClientRect();
-  expect(secondHalf.left).toBeGreaterThan(boxes[3]!.left);
-  expect(secondHalf.top).toBe(boxes[0]!.top);
-
-  const yellow = el.shadowRoot!.querySelector<HTMLElement>('[data-color="#dddd5f"]')!;
-  expect(yellow).not.toBeNull();
-  expect(getComputedStyle(yellow).backgroundColor).toBe("rgb(221, 221, 95)");
-});
-
-it("edits from an existing colour and can clear it", async () => {
-  const coloredFood: CategorySummary = { ...food, color: "#256bb1" };
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: coloredFood,
-  });
-  const saved = new Promise<CustomEvent>((resolve) =>
-    el.addEventListener("wt-submit", (event) => resolve(event as CustomEvent), { once: true }),
-  );
-  el.shadowRoot!.querySelector<HTMLElement>('[data-color=""]')!.click();
-  await el.updateComplete;
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  expect((await saved).detail.value.color).toBeNull();
-});
-
-it("submits a custom colour picked via the native colour input", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-  });
-  const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
-  input.value = "#123456";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  await el.updateComplete;
-  expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual([0x12, 0x34, 0x56, 255]);
-  expect(await savedColor(el)).toBe("#123456");
-});
-
-it.each(["light", "dark"] as const)(
-  "draws the Custom square as an empty bordered box, not black, while no colour is chosen (%s)",
-  async (theme) => {
-    const { el } = await mountWidget<CategoryForm>(
-      "dashboard-category-form",
-      { open: true, value: food },
-      theme,
-    );
-    const { inside, border, borderColor, beside } = await customSquarePixels(el.shadowRoot!);
-    expect(inside).not.toEqual([0, 0, 0, 255]);
-    expect(inside).toEqual(beside);
-    expect(border).toEqual(borderColor);
-    expect(border).not.toEqual(beside);
-    expect(await savedColor(el)).toBeNull();
-  },
-);
-
-it.each([
-  ["#123456", [0x12, 0x34, 0x56, 255]],
-  ["#000000", [0, 0, 0, 255]],
-])("paints a chosen custom colour %s in the Custom square and submits it", async (color, rgba) => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: { ...food, color },
-  });
-  expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual(rgba);
-  expect(await savedColor(el)).toBe(color);
-});
-
-it.each(["light", "dark"] as const)(
-  "rings the Custom square as selected while a custom colour is chosen (%s)",
-  async (theme) => {
-    const { el } = await mountWidget<CategoryForm>(
-      "dashboard-category-form",
-      {
-        open: true,
-        value: { ...food, color: "#123456" },
-      },
-      theme,
-    );
-    const { row, column, ringColor } = await customSquarePixels(el.shadowRoot!);
-    expect([row[0], row[1], column[0], column[1]]).toEqual(Array(4).fill(ringColor));
-    expect(el.shadowRoot!.querySelectorAll('[role="radio"][aria-checked="true"]')).toHaveLength(0);
-  },
-);
-
-it.each([
-  ["a palette colour", CATEGORY_PALETTE[0], "light"],
-  ["no colour", null, "light"],
-  ["a palette colour", CATEGORY_PALETTE[0], "dark"],
-  ["no colour", null, "dark"],
-] as const)("does not ring the Custom square while %s is chosen (%s)", async (_, color, theme) => {
-  const { el } = await mountWidget<CategoryForm>(
-    "dashboard-category-form",
-    {
-      open: true,
-      value: { ...food, color },
-    },
-    theme,
-  );
-  const { row, column, borderColor, ringColor } = await customSquarePixels(el.shadowRoot!);
-  expect(borderColor).not.toEqual(ringColor);
-  expect([row[0], column[0]]).toEqual([borderColor, borderColor]);
-  const checked = el.shadowRoot!.querySelectorAll('[role="radio"][aria-checked="true"]');
-  expect([...checked].map((radio) => radio.getAttribute("data-color"))).toEqual([color ?? ""]);
-});
-
-it.each(["light", "dark"] as const)(
-  "fills the Custom square with a chosen custom colour right up to its ring, with no rim (%s)",
-  async (theme) => {
-    const { el } = await mountWidget<CategoryForm>(
-      "dashboard-category-form",
-      {
-        open: true,
-        value: { ...food, color: "#123456" },
-      },
-      theme,
-    );
-    const { row, column } = await customSquarePixels(el.shadowRoot!);
-    const within = [...row.slice(2), ...column.slice(2)];
-    expect(within).toEqual(within.map(() => [0x12, 0x34, 0x56, 255]));
-  },
-);
-
-it.each(["light", "dark"] as const)(
-  "fills the Custom square right up to its border while a palette colour is chosen, with no rim (%s)",
-  async (theme) => {
-    const { el } = await mountWidget<CategoryForm>(
-      "dashboard-category-form",
-      {
-        open: true,
-        value: { ...food, color: CATEGORY_PALETTE[0] },
-      },
-      theme,
-    );
-    const hex = CATEGORY_PALETTE[0];
-    const expected = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).concat(255);
-    const { row, column } = await customSquarePixels(el.shadowRoot!);
-    const within = [...row.slice(1), ...column.slice(1)];
-    expect(within).toEqual(within.map(() => expected));
-  },
-);
-
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
@@ -534,46 +316,6 @@ it("emits a bubbling, composed wt-cancel with an empty detail from Cancel", asyn
   expect(cancel.mock.calls[0]![0].detail).toEqual({});
 });
 
-it("neither saves nor cancels while the image library is open over it", async () => {
-  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-  });
-  const seen = vi.fn();
-  host.addEventListener("wt-submit", seen);
-  host.addEventListener("wt-cancel", seen);
-  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
-  upload.dispatchEvent(
-    new CustomEvent("image-picker-state", {
-      detail: { open: true },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await el.updateComplete;
-  const save = el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
-    '[data-test="save"]',
-  )!;
-  expect(save.disabled).toBe(true);
-  save.click();
-  const modal = el.shadowRoot!.querySelector("wt-modal")!;
-  modal.dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
-  expect(seen).not.toHaveBeenCalled();
-
-  upload.dispatchEvent(
-    new CustomEvent("image-picker-state", {
-      detail: { open: false },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await el.updateComplete;
-  expect(save.disabled).toBe(false);
-  save.click();
-  expect(seen).toHaveBeenCalledOnce();
-  expect(seen.mock.calls[0]![0].type).toBe("wt-submit");
-});
-
 it("neither saves nor cancels while a save is in flight", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
@@ -593,11 +335,7 @@ it("neither saves nor cancels while a save is in flight", async () => {
 const refusal = (code: string, params?: Record<string, unknown>) => ({ code, params, status: 400 });
 
 it("puts a refused category write beside the form field it concerns", () => {
-  for (const [code, field] of [
-    ["category.parent_cycle", "parent"],
-    ["category.image_not_found", "image"],
-    ["category.color_invalid", "color"],
-  ])
+  for (const [code, field] of [["category.parent_cycle", "parent"]])
     expect(categoryRefusalErrors(refusal(code, {}))).toEqual({ [field]: codeMessage(code) });
   expect(categoryRefusalErrors(refusal("category.invalid", { field: "name" }))).toEqual({
     name: codeMessage("category.invalid"),
@@ -605,8 +343,6 @@ it("puts a refused category write beside the form field it concerns", () => {
   for (const [field, key] of [
     ["name", "name"],
     ["parentId", "parent"],
-    ["image", "image"],
-    ["color", "color"],
   ])
     expect(categoryRefusalErrors(refusal("management.request_invalid", { field }))).toEqual({
       [key]: codeMessage("management.request_invalid"),
@@ -623,6 +359,8 @@ it("keeps a refused category write that names no field of the form for the botto
     refusal("content.translation_required", {}),
     refusal("content.translation_required", { language: "en" }),
     refusal("management.request_invalid", { field: "toString" }),
+    refusal("management.request_invalid", { field: "image" }),
+    refusal("management.request_invalid", { field: "color" }),
     refusal("management.request_invalid"),
     refusal("toString"),
     refusal("server.internal"),
@@ -714,33 +452,6 @@ it("keeps a field's refusal until that field changes, with Save working througho
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
 
-it("clears a refused colour or image when that field changes", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-    fieldErrors: {
-      color: codeMessage("category.color_invalid"),
-      image: codeMessage("category.image_not_found"),
-    },
-  });
-  const said = (id: string) => el.shadowRoot!.getElementById(id)!.textContent!.trim();
-  expect(said("category-color-error")).toBe(codeMessage("category.color_invalid"));
-  expect(said("category-image-error")).toBe(codeMessage("category.image_not_found"));
-
-  el.shadowRoot!.querySelector<HTMLElement>('[data-color="#b12525"]')!.click();
-  await el.updateComplete;
-  expect(said("category-color-error")).toBe("");
-  expect(said("category-image-error")).toBe(codeMessage("category.image_not_found"));
-  expect(saveOf(el).disabled).toBe(false);
-
-  el.shadowRoot!.querySelector("dashboard-image-upload")!.dispatchEvent(
-    new CustomEvent("image-changed", { detail: { image: null }, bubbles: true, composed: true }),
-  );
-  await el.updateComplete;
-  expect(said("category-image-error")).toBe("");
-  expect(saveOf(el).hasAttribute("disabled")).toBe(false);
-});
-
 it("submits past a field's refusal, which goes until the next refusal arrives", async () => {
   const message = codeMessage("category.parent_cycle");
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
@@ -772,20 +483,6 @@ it("focuses the field a refusal names when the refusal arrives", async () => {
   await new Promise((resolve) => setTimeout(resolve));
 
   expect(nameOf(el).shadowRoot!.activeElement).toBe(nameOf(el).shadowRoot!.querySelector("input"));
-});
-
-it("focuses Choose image when a refusal names the image", async () => {
-  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    value: food,
-  });
-  el.fieldErrors = { image: codeMessage("category.image_not_found") };
-  await el.updateComplete;
-  const upload = el.shadowRoot!.querySelector("dashboard-image-upload")!;
-  const choose = upload.shadowRoot!.querySelector("[data-test=choose-image]")!;
-
-  await vi.waitFor(() => expect(upload.shadowRoot!.activeElement).toBe(choose));
-  expect(choose.getAttribute("aria-invalid")).toBe("true");
 });
 
 it("leaves Save working on a refusal that names no field, and drops it on the next submission", async () => {

@@ -9,14 +9,10 @@ import "./errors.js";
 export interface Category {
   id: string;
   name: string;
-  image: string | null;
-  color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
   name: string;
-  image?: string | null;
-  color?: string | null;
   parentId?: string | null;
 }
 /** Where a deleted category's products and direct children go. An absent key takes the default: the
@@ -29,8 +25,6 @@ export interface CategoryReassignment {
 const columns = {
   id: categories.id,
   name: categories.name,
-  image: categoryDetails.image,
-  color: categoryDetails.color,
   parentId: categoryDetails.parentId,
 };
 
@@ -65,19 +59,6 @@ async function validateParent(tx: Transaction, id: string, parentId: string | nu
     parentId = (await readCategory(tx, parentId)).parentId;
   }
 }
-/** Does the media library hold this file? Never, where the media module is not installed. */
-export async function mediaImageExists(tx: Transaction, filename: string): Promise<boolean> {
-  if (!(await tablePresent(tx, "media_images"))) return false;
-  // The media module owns the reference. The row cannot be deleted between this read and the
-  // write that depends on it: one write transaction runs on the venue file at a time, so there is
-  // no concurrent deleter to hold the reference against.
-  const image = await tx.execute(sql`select 1 from media_images where filename = ${filename}`);
-  return image.rows.length > 0;
-}
-async function validateImage(tx: Transaction, filename: string | null): Promise<void> {
-  if (filename !== null && !(await mediaImageExists(tx, filename)))
-    throw new AppError("category.image_not_found", {});
-}
 /**
  * Has an optional module's table been migrated into this database?
  *
@@ -86,18 +67,11 @@ async function validateImage(tx: Transaction, filename: string | null): Promise<
  * this is a raw statement, so no drizzle column mapping runs over the result and SQLite has no
  * boolean type — a `... is not null` expression comes back as the number 1 or 0.
  */
-async function tablePresent(tx: Transaction, name: string): Promise<boolean> {
+export async function tablePresent(tx: Transaction, name: string): Promise<boolean> {
   const found = await tx.execute<{ n: number }>(
     sql`select count(*) as n from sqlite_master where type = 'table' and name = ${name}`,
   );
   return found.rows[0]!.n > 0;
-}
-export function isHexColor(value: unknown): value is string {
-  return typeof value === "string" && /^#[0-9a-f]{6}$/.test(value);
-}
-function validateColor(color: string | null | undefined): void {
-  if (color === undefined || color === null) return;
-  if (!isHexColor(color)) throw new AppError("category.color_invalid", {});
 }
 function categoryName(name: unknown): string {
   const trimmed = typeof name === "string" ? name.trim() : "";
@@ -106,17 +80,10 @@ function categoryName(name: unknown): string {
 }
 export async function createCategory(tx: Transaction, input: CategoryInput): Promise<Category> {
   const name = categoryName(input.name);
-  validateColor(input.color);
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
-  await validateImage(tx, input.image ?? null);
   await tx.insert(categories).values({ id, name });
-  await tx.insert(categoryDetails).values({
-    categoryId: id,
-    parentId: input.parentId ?? null,
-    image: input.image ?? null,
-    color: input.color ?? null,
-  });
+  await tx.insert(categoryDetails).values({ categoryId: id, parentId: input.parentId ?? null });
   return readCategory(tx, id);
 }
 export async function updateCategory(
@@ -127,22 +94,15 @@ export async function updateCategory(
   const name = patch.name === undefined ? undefined : categoryName(patch.name);
   const current = await readCategory(tx, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
-  const image = patch.image === undefined ? current.image : patch.image;
-  const color = patch.color === undefined ? current.color : patch.color;
   await validateParent(tx, id, parentId);
-  await validateImage(tx, image);
-  validateColor(color);
   await tx
     .update(categories)
     .set({ name: name ?? current.name, updatedAt: now() })
     .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
-    .values({ categoryId: id, parentId, image, color })
-    .onConflictDoUpdate({
-      target: categoryDetails.categoryId,
-      set: { parentId, image, color },
-    });
+    .values({ categoryId: id, parentId })
+    .onConflictDoUpdate({ target: categoryDetails.categoryId, set: { parentId } });
   return readCategory(tx, id);
 }
 /** Every category below `id` in the tree, at any depth; not `id` itself. */

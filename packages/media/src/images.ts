@@ -1,5 +1,4 @@
 import {
-  categoryDetails,
   menuPublications,
   menuVersionImages,
   menuVersions,
@@ -10,7 +9,7 @@ import {
   staffPresentationName,
   validateContentTranslations,
 } from "@waitron/catalogue";
-import { catalogues, categories, products, type Transaction } from "@waitron/db";
+import { catalogues, products, type Transaction } from "@waitron/db";
 import {
   AppError,
   contentLanguageCode,
@@ -37,14 +36,13 @@ export interface ImageRecord extends ImageMetadataInput {
   filename: string;
   createdAt: Date;
   updatedAt: Date;
-  /** How many products (variants among them), categories, sections and live menu versions
+  /** How many products (variants among them), sections and live menu versions
    * reference this photo. `readImage` uses `listImageUsagesForFilename` and `listImages` uses
    * `countUsages`; the counters must stay in step or the library shows a free photo that then
    * refuses to delete. */
   usageCount: number;
 }
 export type ImageUsage =
-  | { kind: "category"; id: string; name: string }
   /** Any section, a list a menu owns included; `internalName` is the staff-facing name. */
   | { kind: "section"; id: string; internalName: string }
   | {
@@ -178,12 +176,6 @@ async function listImageUsagesForFilename(
     .where(eq(products.image, filename))
     // Products before variants, each in id order.
     .orderBy(isNotNull(products.parentId), products.id);
-  const categoryRows = await tx
-    .select({ id: categories.id, name: categories.name })
-    .from(categoryDetails)
-    .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
-    .where(eq(categoryDetails.image, filename))
-    .orderBy(categories.id);
   const sectionRows = await tx
     .select({ id: sections.id, internalName: sections.internalName })
     .from(sections)
@@ -221,7 +213,6 @@ async function listImageUsagesForFilename(
         };
   return [
     ...productRows.map(usage),
-    ...categoryRows.map((row): ImageUsage => ({ kind: "category", ...row })),
     ...sectionRows.map((row): ImageUsage => ({ kind: "section", ...row })),
     ...versionRows.map((row): ImageUsage => ({ kind: "menu_version", ...row })),
   ];
@@ -577,7 +568,7 @@ export async function listImages(
 }
 
 /**
- * How many products (variants among them), categories, sections and live menu versions name each
+ * How many products (variants among them), sections and live menu versions name each
  * of `filenames`.
  *
  * The reads are the same scans `listImageUsages` makes, and a source added there is added here too
@@ -598,12 +589,6 @@ async function countUsages(
     .select({ image: products.image })
     .from(products)
     .where(inArray(products.image, wanted))) {
-    tally(row.image);
-  }
-  for (const row of await tx
-    .select({ image: categoryDetails.image })
-    .from(categoryDetails)
-    .where(inArray(categoryDetails.image, wanted))) {
     tally(row.image);
   }
   for (const row of await tx

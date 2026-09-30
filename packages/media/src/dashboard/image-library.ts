@@ -26,7 +26,6 @@ import { t } from "./strings.js";
 
 /** Where a blocking use sends the operator: a variant opens its own product page. */
 function usageHref(use: ImageUsage): string {
-  if (use.kind === "category") return `/manage/categories?category=${encodeURIComponent(use.id)}`;
   if (use.kind === "section") return `/manage/sections?section=${encodeURIComponent(use.id)}`;
   if (use.kind === "menu_version") return `/manage/menus/menu/${encodeURIComponent(use.menuId)}`;
   return `/manage/catalogue/product/${encodeURIComponent(use.id)}`;
@@ -214,13 +213,11 @@ export class ImageLibrary extends LitElement {
   }
   #usage(use: ImageUsage) {
     const name =
-      use.kind === "category"
-        ? use.name
-        : use.kind === "section"
-          ? use.internalName
-          : use.kind === "menu_version"
-            ? `${use.menuName} (${t("image.published_menu")})`
-            : use.name;
+      use.kind === "section"
+        ? use.internalName
+        : use.kind === "menu_version"
+          ? `${use.menuName} (${t("image.published_menu")})`
+          : use.name;
     const inactive = "active" in use && !use.active ? ` (${t("image.inactive")})` : "";
     return html`<a href=${usageHref(use)}>${name}${inactive}</a>`;
   }
