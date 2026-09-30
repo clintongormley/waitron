@@ -5605,6 +5605,22 @@ ongoing overhaul listed at the top of Track A.
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
   a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
+- **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, owner
+  2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
+  the current password now carries a hidden, read-only `autocomplete="username"` field holding the
+  signed-in email (`autofillUsername`, `apps/dashboard/src/widgets/autofill-username.ts`); a person
+  with no email gets none. Measured in Chromium 153 (Playwright 1.63, logins saved through its own
+  password manager, against the dev stack): with ONE saved login the field was already filled before
+  the change, so the owner's empty field was not reproduced; with TWO saved logins, the other one
+  saved first and a sign-in the password manager did not see, the Add passkey and Change password
+  steps were filled with the OTHER login's password and the nav's page search with its email, and
+  after the change both filled the signed-in owner's password and the search stayed empty. Still
+  open: the sign-in page keeps its own copy of the field (`login-screen.ts`), to move onto the
+  helper once lane A's footer change there (C93) lands; the payments screen's attest prompt
+  (`apps/dashboard/src/screens/payments-screen.ts`) asks for the manager's PIN but marks it
+  `autocomplete="current-password"`, which invites the browser to offer the dashboard password there
+  — left unchanged, question to the owner; and which browser and address the owner saw the empty
+  field in. **Next action:** the owner answers the PIN-field question.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
