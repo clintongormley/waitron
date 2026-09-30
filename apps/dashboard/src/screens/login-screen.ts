@@ -151,6 +151,22 @@ export class LoginScreen extends LitElement {
         margin-inline-start: auto;
       }
 
+      /* Without this, the buttons wrap below the list when they do not fit beside its WIDEST link.
+         On a form at its full width only the first link must fit beside them: it never breaks, and
+         a longer later link breaks inside the list instead. The query repeats .screen's max-width
+         because a container query cannot read a --wt-* token. */
+      .links-and-actions {
+        container-type: inline-size;
+      }
+      @container (min-width: 30rem) {
+        .links-and-actions .alternative-list {
+          flex: 1 1 0;
+        }
+        .links-and-actions .alternative-list li:first-child {
+          white-space: nowrap;
+        }
+      }
+
       .alternative-hint {
         margin: 0;
         color: var(--wt-color-text-muted);

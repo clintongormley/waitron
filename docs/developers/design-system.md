@@ -875,7 +875,9 @@ Cancel or Forget button.
 On password, passkey, Google and code screens, a step's other ways in are ONE persistent bulleted list of links, directly
 after the step's field or hint. On the password screen **I've forgotten my password** is its first
 item, then the other ways to log in. The step's buttons sit on the row of the list's first item, at
-the right; where that row is too narrow for both, they wrap below the list, still at the right. So
+the right; where that row is too narrow for both, they wrap below the list, still at the right. On
+a form at its full width only the first link has to fit beside the buttons, and a longer later link
+breaks inside the list; on a narrower form the row is sized by the widest link. So
 on the code screen Back sits beside Log in at the right, an exception to the Forms rule that
 puts Back bottom left. A refusal's message sits beside the action, so a message too long to share
 the row takes the buttons below the list with it.

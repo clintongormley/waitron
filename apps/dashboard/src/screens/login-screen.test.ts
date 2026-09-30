@@ -3041,6 +3041,44 @@ describe("login-screen: a step's links are one bulleted list with its buttons on
     },
   );
 
+  // Verdana with extra letter spacing stands in for the wider sans-serif a Linux desktop falls
+  // back to: with it, the widest link plus the button is wider than the form, while the first
+  // link plus the button is not.
+  it.each([
+    ["passkey", openPasskey],
+    ["Google", openGoogle],
+  ] as const)(
+    "the %s step keeps its button on the first item's row at desktop width in a wide font, however long a later link is",
+    async (_step, open) => {
+      setLocale("es-ES");
+      await page.viewport(1280, 900);
+      const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+      el.style.setProperty("--wt-font-family", "Verdana");
+      el.style.letterSpacing = "1px";
+      await flush(el);
+      await open(el);
+      expectButtonsOnFirstRow(el);
+    },
+  );
+
+  it("at desktop width, where even the first link and the button do not fit, the button wraps below an unbroken first link", async () => {
+    setLocale("es-ES");
+    await page.viewport(1280, 900);
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
+    el.style.setProperty("--wt-font-family", "Verdana");
+    el.style.letterSpacing = "6px";
+    await flush(el);
+    await openGoogle(el);
+    const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
+    const button = el.shadowRoot!.querySelector("wt-form-actions wt-button")!;
+    expect(button.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      list.getBoundingClientRect().bottom,
+    );
+    // An inline link broken across lines has one box per line.
+    expect(list.querySelector("li a")!.getClientRects()).toHaveLength(1);
+    expectButtonsOnFirstRow(el, true);
+  });
+
   it.each(widths)(
     "the code step's link is one list with Back and Log in on its row, or below it on a phone (%s, %i px)",
     async (locale, width, height) => {

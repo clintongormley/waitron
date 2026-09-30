@@ -5637,9 +5637,14 @@ ongoing overhaul listed at the top of Track A.
   privacy-notice link under every step stays where it was). At 390 px the password step keeps Log
   in on the first row in English and Spanish, and the code step keeps Back and Log in there in
   English; the code step in Spanish and the passkey and Google steps wrap their buttons below the
-  list, right-aligned. A refusal's message sits beside the action, so a message too long to share
-  the row takes the buttons below the list with it; C97, queued next, is to move it to the bottom
-  of the form. Layout only, `apps/dashboard/src/screens/login-screen.ts`.
+  list, right-aligned. On a form at its full width (30rem), only the first link has to fit beside
+  the buttons: a longer later link breaks onto a second line inside the list instead. CI's Linux
+  Chromium falls back to a wider font than macOS and first wrapped the Google step's button below
+  the list at 1280 px in Spanish, because the row was then sized by the widest link; a test standing
+  in Verdana with extra letter spacing for that font reproduces it on macOS. A refusal's message
+  sits beside the action, so a message too long to share the row takes the buttons below the list
+  with it; C97, queued next, is to move it to the bottom of the form. Layout only,
+  `apps/dashboard/src/screens/login-screen.ts`.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
