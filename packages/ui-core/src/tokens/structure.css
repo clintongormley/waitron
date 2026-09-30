@@ -28,6 +28,9 @@
   --wt-opacity-disabled: 0.5;
   --wt-opacity-hover: 0.85;
 
+  /* How long a notice that goes by itself takes to fade out (wt-notice). */
+  --wt-duration-fade: 400ms;
+
   --wt-modal-max-width: 64rem;
   --wt-dialog-max-width: min(90vw, 48rem);
 

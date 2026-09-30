@@ -19,6 +19,7 @@ import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-toast.js";
+import "../src/components/wt-notice.js";
 import "../src/components/wt-language-footer.js";
 
 registerIcons({
@@ -64,6 +65,7 @@ const panel = (theme: "light" | "dark") => `
     </div>
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
+    <p><wt-notice duration="0">Unpaired</wt-notice></p>
     <wt-card raised>
       <span slot="header">Ticket</span>
       <wt-input label="Peso (kg)" value="1.25"></wt-input>
