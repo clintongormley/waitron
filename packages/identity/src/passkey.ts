@@ -92,7 +92,7 @@ export async function beginPasskeyRegistration(
 ): Promise<{ challengeHandle: string; options: PublicKeyCredentialCreationOptionsJSON }> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
   const [person] = await tx
-    .select({ displayName: persons.displayName })
+    .select({ displayName: persons.displayName, email: persons.email })
     .from(persons)
     .where(eq(persons.id, personId));
   // Exclude the person's existing passkeys so the authenticator refuses to enroll a duplicate.
@@ -107,7 +107,10 @@ export async function beginPasskeyRegistration(
     rpID: input.rpId,
     rpName: input.rpName,
     userID: textToBytes(personId),
-    userName: person!.displayName,
+    // WebAuthn's `user.name` is what a password manager lists the passkey under; the dashboard
+    // signs in by email.
+    userName: person!.email ?? person!.displayName,
+    userDisplayName: person!.displayName,
     excludeCredentials: existing.map((c) => ({
       id: c.credentialId,
       transports: parseTransports(c.transports),

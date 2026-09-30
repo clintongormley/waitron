@@ -159,6 +159,43 @@ describe("passkey registration", () => {
     expect(chal).toHaveLength(0);
   });
 
+  it("names the passkey's user by the person's email, shown under their display name", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const [person] = await run((tx) =>
+      tx
+        .select({ email: persons.email, displayName: persons.displayName })
+        .from(persons)
+        .where(eq(persons.id, personId)),
+    );
+    // The fixture gives the id, email and display name three different values, so each assertion
+    // fails if the field is read from either of the other two.
+    expect(new Set([personId, person!.email, person!.displayName]).size).toBe(3);
+
+    const begun = await begin(token);
+
+    expect(begun.options.user).toEqual({
+      id: Buffer.from(personId).toString("base64url"),
+      name: person!.email,
+      displayName: person!.displayName,
+    });
+  });
+
+  it("names the passkey's user by the display name when the person has no email", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await run((tx) => tx.update(persons).set({ email: null }).where(eq(persons.id, personId)));
+    const [person] = await run((tx) =>
+      tx.select({ displayName: persons.displayName }).from(persons).where(eq(persons.id, personId)),
+    );
+
+    const begun = await begin(token);
+
+    expect(begun.options.user).toEqual({
+      id: Buffer.from(personId).toString("base64url"),
+      name: person!.displayName,
+      displayName: person!.displayName,
+    });
+  });
+
   it("pins userVerification to 'required' in the registration options (phishing-resistant primary login)", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     const begun = await begin(token);
