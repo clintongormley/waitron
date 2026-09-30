@@ -3457,6 +3457,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       - `readTenderBlock` in `apps/server/src/till-sale.ts` (the one tender the till's on-screen
         ticket shows). Guard: "shows the tender taken first when two were taken in the same
         millisecond" in `apps/server/src/till-sale-tender-block.test.ts`.
+      **OPEN, not checked:** A136's search found no other payment or refund read breaking a tie
+      with an id, but several order by a timestamp with no tie-break at all, so which of two rows
+      from one millisecond comes first is whatever order SQLite reads them in; nobody has checked
+      whether that can differ from the writing order. They are `apps/server/src/payments-api.ts`
+      (the payments list, and the pending bill payments and refunds), `apps/server/src/bill-payments-loop.ts`
+      (pending bill payments and refunds), and `packages/payments/src/store.ts`: its lists of
+      payments and refunds, and `selectCapturedForWorkingOrder`, which keeps the most recently
+      settled of two captured payments for one order, a case its own comment says should not arise.
     - **Dashboard recovery for a bill's unsettled card payment or refund is done** (lane D item
       B14b): the Payments screen (`apps/dashboard/src/screens/payments-screen.ts`) lists both kinds,
       can ask the provider to resolve one, and lets a manager record a provider-confirmed outcome
