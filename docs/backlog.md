@@ -5551,8 +5551,8 @@ approved.
   - **Reloading at boot — tried 2026-09-29 on the owner's box, and it works:** after a restart
     `.env` still named the profile and `docker compose exec print-agent bluetoothctl list` showed
     the controller, so the boot-time `apparmor.service` reloaded `/etc/apparmor.d/waitron-print-agent`.
-  - **DONE (A131): a failed Bluetooth scan keeps the USB and network printers found in the same
-    scan.** `createLinuxDevices`'s `scan()` (`apps/print-agent/src/linux-devices.ts`) now
+  - **DONE (A131, #915): a failed Bluetooth scan keeps the USB and network printers found in the
+    same scan.** `createLinuxDevices`'s `scan()` (`apps/print-agent/src/linux-devices.ts`) now
     catches the Bluetooth part, keeps the USB and network results, and logs
     `bluetooth scan failed` with the error; the two `scan()` cases in `linux-devices.test.ts`
     whose Bluetooth fake fails both fail with the catch deleted. A scan failure still does not
@@ -5561,6 +5561,9 @@ approved.
     no Bluetooth sightings, so while Bluetooth scans keep failing, an unpaired Bluetooth printer
     drops off the dashboard's list 15 seconds after the last pass that saw it, as if it were out
     of range.
+    Left open: `bluetooth scan failed` is logged on every pass, where the agent's other Bluetooth
+    failure lines are logged once while the same failure repeats, so a box with no adapter logs
+    one line per pass while a discovery window is open (the old `scan failed` line did the same).
   - **On the LAN the Bluetooth report is visible only before joining or while out of touch.** Once
     the agent has joined and is not out of touch, `/status.json` answers only loopback callers
     (`networkRefused`, `apps/print-agent/src/setup-page.ts`).
