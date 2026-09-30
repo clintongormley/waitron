@@ -193,7 +193,7 @@ describe("setup-connect-screen", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("fills every field but the one-time code from the request the shell hands back", async () => {
+  it("fills every field from a request the shell hands back that carries no one-time code", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       request: {
         primaryUrl: "https://primary.example",
