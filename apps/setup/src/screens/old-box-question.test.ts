@@ -64,3 +64,18 @@ it("writes the time the old server wrote in the wizard's language", () => {
     new Date(iso).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" }),
   );
 });
+
+it("shows the server's refusal under the checkbox and points the checkbox at it", () => {
+  const host = mount({ invalid: false, refusal: "Check your answer about the old server." });
+  expect(text(host.querySelector("#old-box-gone-error")!)).toBe(
+    "Check your answer about the old server.",
+  );
+  const box = host.querySelector("[data-test=old-box-gone]")!;
+  expect(box.getAttribute("aria-invalid")).toBe("true");
+  expect(box.getAttribute("aria-describedby")).toBe("old-box-gone-error");
+});
+
+it("says the question is unanswered rather than repeating the server's refusal", () => {
+  const host = mount({ invalid: true, refusal: "Check your answer about the old server." });
+  expect(text(host.querySelector("#old-box-gone-error")!)).toBe(OLD_BOX_PROBLEM);
+});

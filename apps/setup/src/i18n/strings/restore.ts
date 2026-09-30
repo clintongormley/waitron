@@ -58,6 +58,8 @@ export const restoreEn = {
   "restore_bucket.fix_fields": "Correct the highlighted fields to continue.",
   "restore_bucket.check.kit": "Check the recovery kit.",
   "restore_bucket.check.environment": "Check the environment.",
+  "restore_bucket.check.old_box": "Check your answer about the old server.",
+  "restore_bucket.check.venue": "Check the confirmation that this is your business.",
   "restore_bucket.back": "Back",
   "restore_bucket.submit": "Restore from my bucket",
 
@@ -188,6 +190,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.fix_fields": "Corrige los campos marcados para continuar.",
   "restore_bucket.check.kit": "Revisa el kit de recuperación.",
   "restore_bucket.check.environment": "Revisa el entorno.",
+  "restore_bucket.check.old_box": "Revisa tu respuesta sobre el servidor anterior.",
+  "restore_bucket.check.venue": "Revisa la confirmación de que este es tu negocio.",
   "restore_bucket.back": "Volver",
   "restore_bucket.submit": "Restaurar desde mi bucket",
 

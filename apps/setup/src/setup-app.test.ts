@@ -2821,6 +2821,110 @@ describe("restore from my bucket", () => {
     expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
   });
 
+  it.each([
+    [
+      "oldBoxGone",
+      {
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        status: 409,
+      },
+      "old-box-gone",
+      "Check your answer about the old server.",
+    ],
+    [
+      "venueConfirmed",
+      { code: "restore.stream_venue_unconfirmed", params: VENUE, status: 409 },
+      "venue-confirmed",
+      "Check the confirmation that this is your business.",
+    ],
+  ])(
+    "says to check the %s tick box under it when the server's request check names it",
+    async (field, question, box, message) => {
+      const restoreFromBucket = vi
+        .fn()
+        .mockRejectedValueOnce(question)
+        .mockRejectedValueOnce({ code: "setup.request_invalid", params: { field }, status: 400 });
+      const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+      bucketRequest(el);
+      await flush(el);
+      bucketRequest(el);
+      await flush(el);
+      await flush(el);
+      const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+      await screen.updateComplete;
+      const input = screen.shadowRoot!.querySelector(`[data-test=${box}]`)!;
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(screen.shadowRoot!.querySelector(`#${box}-error`)!.textContent).toBe(message);
+      expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(button.disabled).toBe(false);
+      await vi.waitFor(() => expect(screen.shadowRoot!.activeElement).toBe(input));
+    },
+  );
+
+  it.each([
+    ["oldBoxGone", "Check your answer about the old server."],
+    ["venueConfirmed", "Check the confirmation that this is your business."],
+  ])(
+    "says to check the %s tick box beside Restore when that tick box is not on the screen",
+    async (field, message) => {
+      const screen = await refusedWith({
+        code: "setup.request_invalid",
+        params: { field },
+        status: 400,
+      });
+      expect(await bottomOf(screen)).toBe(message);
+      expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+    },
+  );
+
+  it.each([
+    [
+      "oldBoxGone",
+      {
+        code: "restore.stream_source_live",
+        params: { lastChangeAt: "2026-09-23T11:58:00.000Z" },
+        status: 409,
+      },
+      "old-box-gone",
+    ],
+    [
+      "venueConfirmed",
+      { code: "restore.stream_venue_unconfirmed", params: VENUE, status: 409 },
+      "venue-confirmed",
+    ],
+  ])("drops the %s tick box's refusal once the owner changes it", async (field, question, box) => {
+    const restoreFromBucket = vi
+      .fn()
+      .mockRejectedValueOnce(question)
+      .mockRejectedValueOnce({ code: "setup.request_invalid", params: { field }, status: 400 });
+    const el = await mountSetupApp(stubApi({ restoreFromBucket }));
+    bucketRequest(el);
+    await flush(el);
+    bucketRequest(el);
+    await flush(el);
+    await flush(el);
+    const screen = (await screenHost(el, "restore-bucket")) as SetupRestoreBucketScreen;
+    await screen.updateComplete;
+    const input = screen.shadowRoot!.querySelector<HTMLInputElement>(`[data-test=${box}]`)!;
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    input.click();
+    await screen.updateComplete;
+    expect(screen.shadowRoot!.querySelector(`#${box}-error`)).toBeNull();
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("says the server rejected the details, naming no field, when its request check names none", async () => {
+    const screen = await refusedWith({ code: "setup.request_invalid", params: {}, status: 400 });
+    expect(await bottomOf(screen)).toBe(
+      "The server rejected the details. Check your entries, then try again.",
+    );
+    expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
+  });
+
   // Review Focus 5, the wizard's half.
   it("says the disk filled during the download", async () => {
     const screen = await refusedWith({ code: "restore.stream_disk_full", status: 507 });

@@ -59,6 +59,38 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
+    it("has no violations with the server's refusal under a tick box", async () => {
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+        "setup-restore-bucket-screen",
+        {
+          liveSince: "2026-09-23T11:58:00.000Z",
+          errorMessage: "Check your answer about the old server.",
+          invalidField: "oldBoxGone",
+        },
+        theme,
+      );
+      expect(el.shadowRoot!.querySelector("#old-box-gone-error")!.textContent).toBe(
+        "Check your answer about the old server.",
+      );
+      await expectNoA11yViolations(host);
+    });
+
+    it("has no violations with the server's refusal under the venue tick box", async () => {
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+        "setup-restore-bucket-screen",
+        {
+          venue: { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" },
+          errorMessage: "Check the confirmation that this is your business.",
+          invalidField: "venueConfirmed",
+        },
+        theme,
+      );
+      expect(el.shadowRoot!.querySelector("#venue-confirmed-error")!.textContent).toBe(
+        "Check the confirmation that this is your business.",
+      );
+      await expectNoA11yViolations(host);
+    });
+
     it("has no violations with a server error shown", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",

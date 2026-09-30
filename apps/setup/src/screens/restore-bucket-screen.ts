@@ -21,7 +21,7 @@ export interface RestoredVenue {
   locationName: string;
 }
 
-export type BucketField = "kit" | "environment";
+export type BucketField = "kit" | "environment" | "oldBoxGone" | "venueConfirmed";
 
 /**
  * Rebuild this server from the owner's bucket. It asks for the recovery kit and
@@ -70,7 +70,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
-  /** The field `errorMessage` is about; the message then shows under it, not beside Restore. */
+  /** The field `errorMessage` is about. */
   @property() invalidField?: BucketField;
   /** When the old server last wrote to its bucket (`restore.stream_source_live`). */
   @property() liveSince?: string;
@@ -118,9 +118,19 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   /** The field showing the server's refusal, if any. */
   #refusalUnder(): BucketField | undefined {
-    return this.errorMessage === undefined || this.refusalDismissed || this.fieldRefusalDismissed
+    return this.errorMessage === undefined ||
+      this.refusalDismissed ||
+      this.fieldRefusalDismissed ||
+      !this.#shows(this.invalidField)
       ? undefined
       : this.invalidField;
+  }
+
+  /** Whether `field` is on the screen. */
+  #shows(field: BucketField | undefined): boolean {
+    if (field === "oldBoxGone") return this.#askingOldBox;
+    if (field === "venueConfirmed") return this.#venue !== undefined;
+    return field !== undefined;
   }
 
   #edited(field: BucketField): void {
@@ -149,6 +159,8 @@ export class SetupRestoreBucketScreen extends LitElement {
     if (this.#kitReplaced) {
       this.oldBoxGone = false;
       this.venueConfirmed = false;
+      this.#edited("oldBoxGone");
+      this.#edited("venueConfirmed");
     }
   }
 
@@ -193,7 +205,12 @@ export class SetupRestoreBucketScreen extends LitElement {
   #renderVenue(): TemplateResult | typeof nothing {
     const venue = this.#venue;
     if (venue === undefined) return nothing;
-    const invalid = this.attempted && this.#venueUnconfirmed;
+    const error =
+      this.attempted && this.#venueUnconfirmed
+        ? t("restore_bucket.venue_missing")
+        : this.#refusalUnder() === "venueConfirmed"
+          ? this.errorMessage
+          : undefined;
     return html`<p data-test="venue">
         ${t("restore_bucket.venue_owner")} <strong>${venue.legalName}</strong>
         ${format("restore_bucket.venue_details", { taxId: venue.taxId, location: venue.locationName })}
@@ -204,16 +221,17 @@ export class SetupRestoreBucketScreen extends LitElement {
           type="checkbox"
           required
           data-test="venue-confirmed"
-          aria-invalid=${invalid ? "true" : "false"}
-          aria-describedby=${invalid ? "venue-confirmed-error" : nothing}
+          aria-invalid=${error === undefined ? "false" : "true"}
+          aria-describedby=${error === undefined ? nothing : "venue-confirmed-error"}
           .checked=${this.venueConfirmed}
           @change=${(e: Event) => {
             this.venueConfirmed = (e.currentTarget as HTMLInputElement).checked;
+            this.#edited("venueConfirmed");
           }}
         />
         ${t("restore_bucket.venue_confirm")}
       </label>
-      ${invalid ? html`<p class="error" id="venue-confirmed-error">${t("restore_bucket.venue_missing")}</p>` : nothing}`;
+      ${error === undefined ? nothing : html`<p class="error" id="venue-confirmed-error">${error}</p>`}`;
   }
 
   override render(): TemplateResult {
@@ -230,7 +248,8 @@ export class SetupRestoreBucketScreen extends LitElement {
     const bottom = [
       ...(this.errorMessage !== undefined &&
       !this.refusalDismissed &&
-      this.invalidField === undefined
+      !this.fieldRefusalDismissed &&
+      !this.#shows(this.invalidField)
         ? [this.errorMessage]
         : []),
       ...(fieldsInvalid || refused !== undefined ? [t("restore_bucket.fix_fields")] : []),
@@ -317,8 +336,10 @@ export class SetupRestoreBucketScreen extends LitElement {
         liveUnknown: this.#askingOldBox && this.liveUnknown,
         checked: this.oldBoxGone,
         invalid: this.attempted && this.#oldBoxUnanswered,
+        refusal: refused === "oldBoxGone" ? this.errorMessage : undefined,
         onChange: (checked) => {
           this.oldBoxGone = checked;
+          this.#edited("oldBoxGone");
         },
       })}
       ${this.#renderVenue()}

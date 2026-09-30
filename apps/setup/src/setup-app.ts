@@ -151,8 +151,8 @@ const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 /**
- * The field a refusal is about, when the screen that sent the request shows it: named by the code
- * itself, or by `setup.request_invalid`'s `params.field` (the server's path for the field).
+ * The field a refusal is about: named by the code itself, or by `setup.request_invalid`'s
+ * `params.field` (the server's path for the field).
  */
 function refusedField<F extends string>(
   code: unknown,
@@ -199,7 +199,12 @@ const BUCKET_FIELD_CODES: Record<string, BucketField> = {
   "restore.environment_mismatch": "environment",
 };
 
-const BUCKET_FIELD_PATHS: Record<string, BucketField> = { kit: "kit", environment: "environment" };
+const BUCKET_FIELD_PATHS: Record<string, BucketField> = {
+  kit: "kit",
+  environment: "environment",
+  oldBoxGone: "oldBoxGone",
+  venueConfirmed: "venueConfirmed",
+};
 
 const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
   artifact: "restore.check.backup_file",
@@ -210,6 +215,8 @@ const RESTORE_FIELD_CHECKS: Record<RestoreField, StringKey> = {
 const BUCKET_FIELD_CHECKS: Record<BucketField, StringKey> = {
   kit: "restore_bucket.check.kit",
   environment: "restore_bucket.check.environment",
+  oldBoxGone: "restore_bucket.check.old_box",
+  venueConfirmed: "restore_bucket.check.venue",
 };
 
 function describeThrottle(params: Record<string, unknown> | undefined): Message {
