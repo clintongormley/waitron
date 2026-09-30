@@ -2510,9 +2510,39 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   (ii) the owner's Spanish wording for the action, "Desvincular" instead of "Olvidar
   emparejamiento" (`printers.bluetooth_forget` and its siblings in
   `apps/dashboard/src/i18n/strings.ts`).
+- **A print job for a Bluetooth printer waited with no reason (A139, owner 2026-09-29: _"i tried
+  to print the character set block, but nothing printed, the jobs just get stuck"_) — FIXED where
+  the tests reach (this branch, not yet a pull request); the printing itself is A140.** The cause,
+  run on 2026-09-30 through the real agent loop, the print agent's own device layer with a fake
+  radio, and the real server routes (the Bluetooth case in
+  `apps/server/src/print-agent-e2e.test.ts`, red before the fix): the character-table print stayed
+  `queued`, with no attempt and no error. It was never retried and never failed, because no agent
+  was ever handed it: the server hands a USB or Bluetooth printer's job only to an agent that lists
+  the printer among the devices it can print to (`claimPrintJobs`,
+  `packages/printing/src/runtime.ts`), and the agent's device layer leaves out every paired
+  Bluetooth device while `liveBtDevicePath` refuses to name a device path (the catch in
+  `visibleDevices`, `apps/print-agent/src/linux-devices.ts`). Now each job pull also says whether
+  the agent can print over Bluetooth (a new optional `bluetoothPrinting` field; the box's agent sends
+  `false` while `liveBtDevicePath` is unbuilt, and an agent that predates the field sends nothing and
+  changes nothing), and when it says it cannot, the server ends the waiting jobs of every Bluetooth
+  printer that agent reports paired, unless the printer is disabled: failed, with no attempts left,
+  so they are not retried (`failUnprintableBluetoothJobs`, `packages/printing/src/runtime.ts`),
+  recording `printer.bluetooth_printing_unavailable`, which the dashboard shows as "Printing to a
+  Bluetooth printer is not available yet." / "Aún no se puede imprimir en una impresora Bluetooth."
+  A paired report alone still changes no job, as P2c's "never claims its jobs" case in
+  `apps/server/src/print-api.test.ts` holds. On the Printers screen the edit and calibration dialog
+  shows the last print it sent that failed, as "Not printed: <reason>" / "No se ha impreso:
+  <reason>" (an agent's own text for any other failure); that dialog and a Bluetooth printer's row in
+  the printers list say Bluetooth printing is not available yet; and the jobs list shows "—", not
+  the stored attempt count, for such a job, whose Reprint makes a new job that ends the same way
+  (read, not run). **Not covered:** a Bluetooth printer no agent reports paired still waits with no
+  reason on the job, as a USB printer no agent sees does; with two agents, one that has the printer paired but cannot print over Bluetooth ends
+  the job even if the other could — which no agent can today; and A140 must have the agent send
+  `true`, or stop sending the field, once it can print. Not run on the box.
 - **Bluetooth delivery from a paired printer remains separate.** `liveBtDevicePath` still refuses
   every Bluetooth job because no real per-printer radio path has been established on the box; the
-  pairing plan must not make a paired device claim work or say that it can print.
+  pairing plan must not make a paired device claim work or say that it can print. Until A140 builds
+  the sending, a paired printer's jobs end failed with a reason (A139, above).
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
