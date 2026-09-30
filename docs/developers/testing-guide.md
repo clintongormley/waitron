@@ -716,7 +716,8 @@ per run waited 20 ms or more.
   and lasted through that checkpoint and the snapshot Litestream takes right after it.
 - Under the variant SQLite's own automatic checkpoint, still on, did not restart the side file
   (Litestream keeps a read transaction open "to prevent checkpointing", `db.go` line 1183 at tag
-  v0.5.17): the file grew by about 226 KiB per one-line cash sale, about 1,150 sales to 256 MiB. On
+  v0.5.17): the file grew by 224–228 KiB per one-line cash sale on either disk, 1,138–1,156 sales from the
+  start of selling to 256 MiB. On
   the normal disk, past 499,999,112 bytes (Litestream's default `truncate-page-n`), Litestream ran
   an emergency PASSIVE checkpoint and, when that did not restart the file, an emergency TRUNCATE
   one. The server measures the file against its 256 MiB limit once a minute (`TICK_MS`,

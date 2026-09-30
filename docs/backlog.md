@@ -8688,7 +8688,7 @@ it. Left open:
     delayed disk and failed it on the normal disk. In CI, three 300 s runs of each
     on each disk: on the delayed disk the variant removed the waits (none over 1 ms, against 12–13
     per run at 829–831 ms) and the slowest sale fell from about 1.08 s to 0.57–0.65 s; on the
-    runner's normal disk the side file grew by about 230 KiB a sale and reached Litestream's
+    runner's normal disk the side file grew by 226–228 KiB a sale up to 256 MiB and reached Litestream's
     emergency threshold (about 477 MiB) before the server's once-a-minute size measurement; 10
     writes per run waited 20 ms or more, the longest 430–729 ms per run, against 129–179 ms with the
     product's settings. Each of those 30 waits contained one of Litestream's emergency checkpoints:
