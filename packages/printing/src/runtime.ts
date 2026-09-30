@@ -157,6 +157,37 @@ export async function failUnprintableBluetoothJobs(
   return ended.map(({ id }) => id);
 }
 
+/** The `last_error` of a job {@link endUnpairedPrinterJobs} ended. */
+export const PRINTER_UNPAIRED = "printer.unpaired";
+
+/**
+ * Ends failed, with no attempts left, every waiting job of the Bluetooth printers at `addresses`,
+ * switched on or off, so none prints when the printer is added again. Waiting means due, or
+ * `printing` under `agentId`'s own claim: that agent sends a pull's jobs before its next pull, so
+ * none of its claims is mid-send while it reports the unpairing. Drawer kicks end too, since one
+ * left waiting would open the drawer on the re-add; `drawer_opens` holds no job id, so its audit
+ * row is unchanged. Unbatched, unlike `failUnprintableBluetoothJobs`: the pull that carries an
+ * Unpair's outcome acts on it once, so no later pull would end the rest.
+ */
+export async function endUnpairedPrinterJobs(
+  tx: Transaction,
+  agentId: string,
+  addresses: string[],
+): Promise<string[]> {
+  if (addresses.length === 0) return [];
+  const { claimedAt, due } = dueNow();
+  const ended = await tx.execute<{ id: string }>(sql`
+    update print_jobs as j
+    set status = 'failed', last_error = ${PRINTER_UNPAIRED}, attempts = ${MAX_DELIVERY_ATTEMPTS},
+      claimed_at = ${claimedAt}, claimed_by = ${agentId}
+    where j.printer_id in (
+        select p.id from printers p
+        where p.transport = 'bluetooth' and p.local_key in ${addresses})
+      and (${due} or (j.status = 'printing' and j.claimed_by = ${agentId}))
+    returning id`);
+  return ended.rows.map(({ id }) => id);
+}
+
 /**
  * Records one job's outcome. Only the agent that claimed the job may report it, and only while it is
  * `printing`, so a retried report on a finished job is a no-op rather than a second `attempts` bump.

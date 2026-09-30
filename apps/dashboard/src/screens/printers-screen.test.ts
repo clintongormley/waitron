@@ -7695,4 +7695,28 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
     expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
   });
+
+  it("words a job ended because its printer was unpaired, and counts no attempts for it", async () => {
+    const before = currentLocale();
+    setLocale("en");
+    try {
+      const unpaired = job({
+        status: "failed",
+        canResend: true,
+        attempts: 5,
+        lastError: "printer.unpaired",
+      });
+      const { el } = await mountWith({
+        listRecentJobs: vi.fn().mockResolvedValue([unpaired, jobs[0]]),
+      });
+
+      expect(text(el, "[data-test=job-error-j11]")).toBe(
+        "The printer was unpaired before this job printed.",
+      );
+      expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
+      expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
+    } finally {
+      setLocale(before);
+    }
+  });
 });
