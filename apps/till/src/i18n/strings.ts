@@ -921,7 +921,7 @@ export const es: Record<StringKey, string> = {
   "table.reminder_at": "Aviso para marchar a las {time}",
   "table.reminder_due": "Es hora de marchar este grupo",
   "table.reminder_snooze": "Posponer {n} min",
-  "table.reminder_clear_snooze": "Quitar aplazamiento",
+  "table.reminder_clear_snooze": "Cancelar posponer",
   "table.print_problem": "Problema de impresión",
   "table.print_problem_detail": "Un ticket de cocina no se ha impreso: {stations}",
   "table.print_problem_reprint": "Reimprimir",
