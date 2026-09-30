@@ -48,6 +48,7 @@ import {
   placeOrder,
   readOrderRevision,
   recallLines,
+  splitLinesWithinOrder,
   updateHeldOrder,
   updateOrderLine,
 } from "./working-order.js";
@@ -2394,9 +2395,10 @@ describe("part of a dish with extras (B11d)", () => {
     },
   );
 
-  it("refuses part of a dish whose extra is not a whole count a dish, rather than let the bill drift", async () => {
+  /** Pizza ×3 with 2 olives, written by hand: no product path is known to store an extra that is
+   * not a whole count a dish. */
+  async function unevenOlives() {
     const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
-    // Written by hand: no product path is known to store an extra that is not a whole count a dish.
     await inTx(venue, (tx) =>
       tx
         .update(workingOrderLines)
@@ -2404,18 +2406,41 @@ describe("part of a dish with extras (B11d)", () => {
         .where(and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 2))),
     );
     expect(total(await rowsOf(venue, billId))).toBe("30.00");
+    return billId;
+  }
 
-    await refusedWith(
-      billId,
-      {
-        lineId: await lineIdOf(venue, billId, 1),
-        action: "discount_percent",
-        percentBp: 1000,
-        quantity: "1",
-      },
-      "tab.transfer_modifier_line",
-      { tabId: billId, lineNo: 1 },
-    );
+  it("refuses part of a dish whose extra is not a whole count a dish, rather than let the bill drift", async () => {
+    const billId = await unevenOlives();
+    const ask = {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+      quantity: "1",
+    } as const;
+    const refusal = { workingOrderId: billId, lineNo: 1, quantity: "1" };
+
+    await expect(preview(billId, ask)).rejects.toMatchObject({
+      code: "adjustment.quantity_invalid",
+      params: refusal,
+    });
+    await refusedWith(billId, ask, "adjustment.quantity_invalid", refusal);
+  });
+
+  it("has splitLinesWithinOrder refuse the same split, for a caller that did not check first", async () => {
+    const billId = await unevenOlives();
+    const before = await stateOf(billId);
+
+    await expect(
+      inTx(venue, (tx) =>
+        splitLinesWithinOrder(tx, venue.cfg, billId, [{ lineNo: 1, quantity: "1" }], {
+          splitExtras: true,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "tab.transfer_modifier_line",
+      params: { tabId: billId, lineNo: 1 },
+    });
+    expect(await stateOf(billId)).toEqual(before);
   });
 
   it("prints the carved pizza's olives on the VOID slip when the carved pizza is cancelled", async () => {

@@ -3622,10 +3622,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         to get past the cap through it. **Next action:** none unless staff find it gets in the way.
       - **Only give-aways and discounts split a dish's extras with it.** Splitting a bill,
         transferring items and moving part of a dish to another group still refuse part of a dish
-        with extras (`tab.transfer_modifier_line`). The same code now also refuses a give-away or
-        discount of part of a dish whose extra is not a whole count for each dish, which no
-        product path is known to store. **Next action:** decide whether those moves should split
-        extras too.
+        with extras (`tab.transfer_modifier_line`). A give-away or discount of part of a dish
+        whose extra is not a whole count for each dish, which no product path is known to store,
+        is refused `adjustment.quantity_invalid`, in the preview as well as when it is applied.
+        **Next action:** decide whether those moves should split extras too.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
       close report arrives with the next animation frame): "saves on Enter and cancels on Escape from
       a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and `pressEscape`'s fixed

@@ -435,6 +435,7 @@ async function planAdjustment(
     } else {
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
+      // Refused even when exactly representable: the owner's decision of 2026-09-30, docs/backlog.md.
       if (partial && weighed) {
         throw new AppError("adjustment.weighed_partial", {
           workingOrderId: orderId,
@@ -445,6 +446,15 @@ async function planAdjustment(
       if (partial) {
         carve = { lineNo: target.lineNo, quantity: covered };
         const carved = familyAt(family, covered);
+        const kept = familyAt(family, target.quantity - covered);
+        // An extra that is not a whole count a dish would split into parts that do not add up to it.
+        if (family.some((row) => carved.get(row.id)! + kept.get(row.id)! !== row.quantity)) {
+          throw new AppError("adjustment.quantity_invalid", {
+            workingOrderId: orderId,
+            lineNo: target.lineNo,
+            quantity: ask.quantity!,
+          });
+        }
         subjects = family.map((row) => ({
           row,
           quantity: carved.get(row.id)!,

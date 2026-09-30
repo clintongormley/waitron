@@ -25,7 +25,8 @@ declare module "@waitron/shared" {
      * only whole; a cancel can take part of it. */
     "adjustment.weighed_partial": { workingOrderId: string; lineNo: number };
     /** Not a positive quantity in the line's unit, no larger than the line, or part of an extras
-     * row, whose quantity follows its dish. */
+     * row, whose quantity follows its dish; or, for a give-away or a discount, part of a dish with
+     * an extra that is not a whole count for each dish. `lineNo` is the line asked about. */
     "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
   }
 }
