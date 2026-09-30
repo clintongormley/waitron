@@ -2791,12 +2791,14 @@ export class TillApp extends LitElement {
   }
 
   /** Takes the order's party from the floor just read, before the order's lines and bills are read
-   * after it. A floor that does not list the table keeps the party known. The floor's copy is taken
-   * without comparing revisions, so a floor kept after a failed {@link #refreshFloor} can put back
-   * an older copy than the screen's. */
+   * after it. A floor that does not list the table keeps the party known, and so does one listing
+   * the same party at a lower revision, as a floor kept after a failed {@link #refreshFloor} can. */
   #rememberOrderParty(): void {
     const row = this.tables.find((table) => table.id === this.activeTableId);
-    if (row !== undefined) this.orderParty = row.party;
+    const floor = row?.party ?? null;
+    const held = this.orderParty;
+    const older = floor !== null && floor.id === held?.id && floor.revision < held.revision;
+    if (row !== undefined && !older) this.orderParty = floor;
     this.#followPartyDraft();
   }
 
