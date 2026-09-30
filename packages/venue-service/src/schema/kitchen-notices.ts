@@ -71,5 +71,9 @@ export const kitchenNotices = table(
       "kitchen_notices_direction_kind_ck",
       sql`${t.kind} = 'changed' or ${t.direction} is null`,
     ),
+    check(
+      "kitchen_notices_cancelled_extra_kind_ck",
+      sql`${t.kind} = 'changed' or ${t.cancelledExtra} is null`,
+    ),
   ],
 );

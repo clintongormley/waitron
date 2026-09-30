@@ -3877,7 +3877,17 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         of a fired dish, or of a held dish whose HOLD ticket printed, now records a `changed`
         kitchen notice naming the extra and prints a CHANGED (or HOLD CHANGED) slip of the dish as
         it now stands with a `CANCEL:` line (`tellKitchenOfCancelledExtra`,
-        `apps/server/src/working-order.ts`). Left open: for an extra of a held dish whose HOLD
+        `apps/server/src/working-order.ts`). Venue-service `0011` adds
+        `kitchen_notices.cancelled_extra` and `0012` rebuilds the table to add
+        `kitchen_notices_cancelled_extra_kind_ck`, which refuses a cancelled extra on a notice that
+        is not `changed`: two drizzle generations, because one copied the new column out of the
+        old table and failed `scripts/migration-upgrade.test.ts` with `no such column`. No foreign
+        key in any migration set points at `kitchen_notices`, and its only triggers are the change
+        feed's, removed before migrating and reinstalled at boot. A throwaway probe upgraded a
+        venue at `0010` holding a notice of each kind: every row read back equal,
+        `pragma foreign_key_check` returned nothing, the change feed's three triggers came back and
+        logged an update, and a cancelled extra on a `void` notice was refused by the new check.
+        Left open: for an extra of a held dish whose HOLD
         ticket printed, the kitchen is told but the till's cancel dialog still says only that it
         comes off the bill, because the till cannot see whether the HOLD ticket printed.
         **Next action:** decide whether the till should be told that.
