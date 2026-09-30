@@ -355,7 +355,11 @@ describe("the route's own rules", () => {
     const answer = await post(orderId, { lineId: rows[0]!.id, action: "comp" });
 
     expect(answer.status).toBe(200);
-    expect(answer.json).toMatchObject({ revision: revision + 1, party: null });
+    expect(answer.json).toEqual({
+      adjustmentIds: [expect.any(String)],
+      revision: revision + 1,
+      party: null,
+    });
     expect(await recordedOn(orderId)).toMatchObject([
       { action: "comp", lineId: rows[0]!.id, reduction: 1200 },
     ]);
