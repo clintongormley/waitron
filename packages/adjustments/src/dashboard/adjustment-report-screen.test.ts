@@ -884,6 +884,19 @@ describe("more of a long list", () => {
     liveData.clear();
   });
 
+  it("shows a row read below the whole list, and goes on where the read says", async () => {
+    const { el, liveData, api, refresh } = await watchedList(
+      pagesAfter({ "": { entries: alexEntries(), next: null } }),
+      pagesAfter({ "": { entries: [...alexEntries(), samEntry()], next: "c9" } }),
+    );
+    expect(part(el, "show-more")).toBeNull();
+    await refreshed(el, liveData, refresh, 1);
+    expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
+    part(el, "show-more")!.click();
+    expect(api.listEntries).toHaveBeenLastCalledWith(...EVERYONE, { after: "c9" });
+    liveData.clear();
+  });
+
   it("offers no more once a further page comes back empty and the last", async () => {
     const el = await mount(
       fakeApi({ listEntries: twoPages(() => Promise.resolve({ entries: [], next: null })) }),

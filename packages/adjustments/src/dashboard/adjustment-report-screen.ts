@@ -370,8 +370,9 @@ export class AdjustmentReportScreen extends LitElement {
   }
 
   /**
-   * Adjustments are never changed or removed, so between two reads a list gains rows only at the
-   * top, unless the location's day cutover or time zone moved the range. A refresh reads from the
+   * Adjustments are never changed or removed, so between two reads a new row almost always arrives
+   * at the top; a server clock stepping back, two adjustments saved in the same millisecond, or a
+   * change to the location's day cutover or time zone can place one lower. A refresh reads from the
    * top until it meets a row already shown, at most a largest page of rows.
    */
   async #readList(api: AdjustmentsApi, from: string, to: string, of: EntriesOf): Promise<ListRead> {
@@ -402,8 +403,11 @@ export class AdjustmentReportScreen extends LitElement {
 
   /**
    * A read that met the list replaces it down to the last row both hold; the rows below, and the
-   * cursor after them, stay, so a Show more on its way still continues the list. Any other read
-   * starts the list again.
+   * cursor after them, stay, so a Show more on its way still continues the list. Rows read past
+   * the last row both hold are dropped while a next page exists, because Show more's cursor brings
+   * them back; when that row ends the list and there is no next page, the whole read and its cursor
+   * are taken, since Show more can be loading only while a next page exists. Any other read starts
+   * the list again.
    */
   #listRead({ entries, next, met }: ListRead): void {
     this.entriesError = undefined;
@@ -417,6 +421,11 @@ export class AdjustmentReportScreen extends LitElement {
     const read = new Set(entries.map((entry) => entry.id));
     let last = shown.length - 1;
     while (!read.has(shown[last]!.id)) last -= 1;
+    if (last === shown.length - 1 && this.entriesNext === null) {
+      this.entries = entries;
+      this.entriesNext = next;
+      return;
+    }
     const upTo = entries.findIndex((entry) => entry.id === shown[last]!.id);
     this.entries = [...entries.slice(0, upTo + 1), ...shown.slice(last + 1)];
   }
