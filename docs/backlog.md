@@ -1994,7 +1994,7 @@ What it left open:
 
 - **Saving a product reads the same tenant configuration once per variant.** `setProductVariants`
   calls `validateContentTranslations` inside its loop and `saveProductEditor` calls it again for the
-  product. **Done since (2026-09-30, A149):** `saveProductEditor` reads the content-language
+  product. **Done since (2026-09-30, A149, #943):** `saveProductEditor` reads the content-language
   setting once and checks the product's customer name and every Active variant's against it
   (`writeProductVariants`, `packages/catalogue/src/variants.ts`); `setProductVariants` called on its
   own reads it once for all its variants.
@@ -8862,7 +8862,7 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   The extras and options contracts, and a unit save, ask `findContentTranslationGap` ONCE with every
   map, which is the shape this entry is asking for. That is the shape `CLAUDE.md` §3's "resolve
   shared catalogue data once before a basket's line loop" rule exists to prevent. **Done since
-  (2026-09-30, A149):** a product save reads it once; see "Saving a product reads the same tenant
+  (2026-09-30, A149, #943):** a product save reads it once; see "Saving a product reads the same tenant
   configuration once per variant".
 
 **Payments:**
