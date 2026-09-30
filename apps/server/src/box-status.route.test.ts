@@ -16,6 +16,7 @@ import { buildBackend } from "./local-fs-backend.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // Exercise box-status authorization and the composed status read over a manager login. The full
 // manifest is migrated because the route composes cells several modules own.
@@ -111,6 +112,7 @@ function buildApp(
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

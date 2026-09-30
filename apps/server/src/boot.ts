@@ -1457,7 +1457,6 @@ async function bootServer(
       googleOidc: config.googleOidc,
       venueLocale,
       privacyNoticeUrl: config.privacyNoticeUrl,
-      accountActionCodeKey: accountPurposeKey(accountKey, "account-action-code"),
       credentialKeyRing: totpKeyRing,
       // Resolved on every send, so a newly configured or rotated SMTP gateway takes effect at once.
       sendAccountEmail: async (message) => {
@@ -1862,7 +1861,11 @@ async function bootServer(
     return { alreadyPrimary: true, restarting: false };
   };
 
-  mountPromoteApi(app, { appDb: db, nodeId: till.nodeId, run: promoteRun }, log);
+  mountPromoteApi(
+    app,
+    { appDb: db, nodeId: till.nodeId, credentialKeyRing: totpKeyRing, run: promoteRun },
+    log,
+  );
 
   // The built front-ends, mounted LAST so the till's root catch-all cannot shadow an API route.
   // Dashboard first so `/manage/*` wins; the till's origin-root catch-all last

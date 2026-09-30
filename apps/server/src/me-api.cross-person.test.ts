@@ -19,6 +19,7 @@ import { mountMeApi } from "./me-api.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "./modules.js";
 import "./errors.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * The cross-person identity property on the me routes: a person may only read or change their own
@@ -200,6 +201,7 @@ function mountApp(): Hono {
       cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
       venueLocale: "es-ES",
       modules: [],
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

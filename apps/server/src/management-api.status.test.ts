@@ -9,6 +9,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * The `/management-api/service-statuses` surface end to end: create, list, edit, deactivate, the
@@ -111,6 +112,7 @@ function mountApp(): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

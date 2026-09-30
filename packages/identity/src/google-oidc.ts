@@ -76,7 +76,7 @@ export async function beginGoogleLink(
     managementSessionId: string;
     currentPassword?: string;
     totp?: string;
-    keyRing?: TotpKeyRing;
+    keyRing: TotpKeyRing;
   },
 ) {
   const person = await verifyOwnCredentials(tx, input);

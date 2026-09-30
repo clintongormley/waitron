@@ -11,6 +11,7 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * The layout-canvas CRUD and theme routes end to end, over HTTP, with the manager and staff
@@ -121,6 +122,7 @@ function mountApp(): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

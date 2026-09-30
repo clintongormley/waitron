@@ -29,6 +29,7 @@ import { isUnset } from "./env-value.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
@@ -135,6 +136,7 @@ function buildApp(
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

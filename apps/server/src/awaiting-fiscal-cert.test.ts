@@ -18,6 +18,7 @@ import { createLogger } from "./logger.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountManagementApi } from "./management-api.js";
 import { runPass, DRAIN_DUTY } from "./pass.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const NOW = new Date("2026-07-26T09:00:00Z");
 const PASSWORD = "correct horse";
@@ -62,6 +63,7 @@ function buildApp(nodeId: string, awaitingCert: { current: boolean }): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

@@ -25,6 +25,7 @@ vi.mock("@simplewebauthn/server", async (orig) => ({
 
 import { verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
 import { ALL_MODULES } from "./modules.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const mockVerifyReg = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
@@ -145,6 +146,7 @@ function mountApp(): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );
@@ -161,6 +163,7 @@ function mountAppWithMe(): Hono {
       cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       venueLocale: LOCALE,
       modules: [],
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

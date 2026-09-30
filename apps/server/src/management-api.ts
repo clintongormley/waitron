@@ -2,7 +2,6 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
-import { randomBytes } from "node:crypto";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError, isAppError } from "@waitron/shared";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
@@ -151,8 +150,7 @@ export interface ManagementApiDeps {
     passwordReset: AccountActionRateLimiter;
     completion: AccountActionRateLimiter;
   };
-  accountActionCodeKey?: Buffer;
-  credentialKeyRing?: TotpKeyRing;
+  credentialKeyRing: TotpKeyRing;
   googleOidc?: GoogleOidcConfig;
   googleCodeExchange?: typeof exchangeGoogleCode;
 }
@@ -414,10 +412,7 @@ async function parsePasskeyVerifyBody(
 }
 
 export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logger): void {
-  const accountActionCodeKey = deps.accountActionCodeKey ?? randomBytes(32);
-  const credentialKeyRing = deps.credentialKeyRing ?? {
-    current: { version: 1, key: accountActionCodeKey },
-  };
+  const credentialKeyRing = deps.credentialKeyRing;
   const passwordThrottle = deps.passwordThrottle ?? createPasswordThrottle();
   const credentialChangeThrottle = createPasswordThrottle();
   const acceptPasswordReset = createPasswordResetCooldown();

@@ -24,6 +24,7 @@ import {
   openSession,
   seedPerson,
   seedTill,
+  TOTP_KEY_RING,
 } from "../test/fixtures.js";
 
 // Reset per test (the default), deliberately: the last-admin guard counts every admin in the
@@ -175,6 +176,7 @@ describe("invited person lifecycle", () => {
           loginManager(tx, {
             email: "pending-login@example.com",
             password: "correct horse",
+            totpKeyRing: TOTP_KEY_RING,
           }),
         ),
       ),

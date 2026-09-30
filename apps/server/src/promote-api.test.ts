@@ -38,6 +38,7 @@ vi.mock("@waitron/identity", async (importOriginal) => {
 vi.mock("./break-glass.js", () => ({ verifyBreakGlass }));
 
 import { mountPromoteApi } from "./promote-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const fakeDb = {} as Database;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -49,7 +50,7 @@ function appWith(
   })),
 ): { app: Hono; run: typeof run } {
   const app = new Hono();
-  mountPromoteApi(app, { appDb: fakeDb, nodeId: NODE, run });
+  mountPromoteApi(app, { appDb: fakeDb, nodeId: NODE, run, credentialKeyRing: TOTP_KEY_RING });
   return { app, run };
 }
 
@@ -138,6 +139,7 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
       personId: PERSON,
       password: "pw",
       totp: "123456",
+      totpKeyRing: TOTP_KEY_RING,
     });
     expect(run).toHaveBeenCalledWith({ oldNodeNeutralised: false });
   });

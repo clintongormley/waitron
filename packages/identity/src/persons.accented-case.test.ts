@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { createPerson, setEmail } from "./staff.js";
 import { saveOwnProfile } from "./profile.js";
-import { openManagementSession, seedManager, seedPerson } from "../test/fixtures.js";
+import { openManagementSession, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 import { foldForUniqueness } from "./fold.js";
 import { persons } from "./schema/persons.js";
 import { PERSONS_LIVE_DISPLAY_NAME } from "./person-constraints.js";
@@ -133,6 +133,7 @@ describe("an unproven replacement address is taken whichever way its accent is e
         email: requested,
         locale: "en-GB",
         currentPassword: "correct horse",
+        keyRing: TOTP_KEY_RING,
       }),
     );
   }

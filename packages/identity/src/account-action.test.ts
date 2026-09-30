@@ -18,7 +18,7 @@ import { loginManager } from "./manager-login.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { updatePersonDetails } from "./staff.js";
 import { hashSessionToken } from "./session-token.js";
-import { codeOf, seedManager, seedPerson } from "../test/fixtures.js";
+import { codeOf, seedManager, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
@@ -166,6 +166,7 @@ describe("management account actions", () => {
       loginManager(tx, {
         email: "new-person@x.com",
         password: "correct horse",
+        totpKeyRing: TOTP_KEY_RING,
       }),
     );
     await makePending(personId);
@@ -193,6 +194,7 @@ describe("management account actions", () => {
         loginManager(tx, {
           email: "new-person@x.com",
           password: "a new secure password",
+          totpKeyRing: TOTP_KEY_RING,
         }),
       ),
     ).resolves.toMatchObject({ personId });
@@ -651,10 +653,20 @@ describe("completing an account action whose person changed after it was issued"
       }),
     );
     await expect(
-      run((tx) => loginManager(tx, { email, password: "a replacement secure password" })),
+      run((tx) =>
+        loginManager(tx, {
+          email,
+          password: "a replacement secure password",
+          totpKeyRing: TOTP_KEY_RING,
+        }),
+      ),
     ).resolves.toMatchObject({ personId });
     expect(
-      await codeOf(() => run((tx) => loginManager(tx, { email, password: "correct horse" }))),
+      await codeOf(() =>
+        run((tx) =>
+          loginManager(tx, { email, password: "correct horse", totpKeyRing: TOTP_KEY_RING }),
+        ),
+      ),
     ).toBe("password.invalid");
   });
 

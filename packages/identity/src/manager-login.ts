@@ -40,7 +40,7 @@ async function completeManagerLogin(
     password: string;
     totp?: string;
     recoveryCode?: string;
-    totpKeyRing?: TotpKeyRing;
+    totpKeyRing: TotpKeyRing;
   },
   person: PersonLoginRow,
   missingFactorCode: "totp.required" | "totp.invalid",
@@ -85,7 +85,7 @@ export async function loginManager(
     password: string;
     totp?: string;
     recoveryCode?: string;
-    totpKeyRing?: TotpKeyRing;
+    totpKeyRing: TotpKeyRing;
   },
 ): Promise<ManagementSession> {
   // `loginEmailKey()` is the SAME expression `persons_tenant_email_uq` is declared over, so the
@@ -114,7 +114,7 @@ export async function loginManagerById(
     password: string;
     totp?: string;
     recoveryCode?: string;
-    totpKeyRing?: TotpKeyRing;
+    totpKeyRing: TotpKeyRing;
   },
 ): Promise<ManagementSession> {
   // For trusted server-to-server flows, not a public login form: there is no enumeration surface to

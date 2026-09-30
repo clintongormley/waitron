@@ -11,6 +11,7 @@ import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountManagementApi } from "./management-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // Exercise route authorization, refusal-to-status mapping and success responses over a migrated
 // venue database. Retirement semantics are covered by retire.test.ts.
@@ -97,6 +98,7 @@ function buildApp(nodeId: string): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

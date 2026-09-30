@@ -5,6 +5,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountMeApi } from "./me-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // A database with no `tenants` row: the boot configuration named no taxpayer.
 const suite = useVenueDb({
@@ -25,6 +26,7 @@ describe("mountMeApi — a database holding no tenant", () => {
         cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
         venueLocale: "en-GB",
         modules: ["core"],
+        credentialKeyRing: TOTP_KEY_RING,
       },
       log,
     );

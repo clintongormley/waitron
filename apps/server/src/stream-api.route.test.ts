@@ -27,6 +27,7 @@ import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountStreamApi, type StreamApiDeps } from "./stream-api.js";
 import { readStreamSettings, streamSettingsPayload, type StreamSettings } from "./stream-host.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 // The route calls `putCredential` itself, so the harness sees the credential write through this
 // pass-through wrapper.
@@ -207,6 +208,7 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

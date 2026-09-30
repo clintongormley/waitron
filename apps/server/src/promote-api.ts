@@ -9,7 +9,12 @@ import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { AppError } from "@waitron/shared";
 import { withTransaction, type Database } from "@waitron/db";
-import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
+import {
+  authorizeManager,
+  endManagementSession,
+  loginManagerById,
+  type TotpKeyRing,
+} from "@waitron/identity";
 import type { FenceAttestation } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
 import { createErrorBoundary, readJsonBody } from "@waitron/server-kit";
@@ -30,6 +35,8 @@ export interface PromoteApiDeps {
   appDb: Database;
   /** This node's id — whose break-glass verifier is checked. */
   nodeId: string;
+  /** Unlocks a stored authenticator secret, so an admin who has one can sign in. */
+  credentialKeyRing: TotpKeyRing;
   run: (attestation: FenceAttestation) => Promise<PromoteRunResult>;
 }
 
@@ -78,6 +85,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
             personId,
             password,
             totp,
+            totpKeyRing: deps.credentialKeyRing,
           });
           await authorizeManager(tx, {
             managementSessionId: session.token,

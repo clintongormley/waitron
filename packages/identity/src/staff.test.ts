@@ -27,6 +27,7 @@ import {
   openSession,
   seedPerson,
   seedTill,
+  TOTP_KEY_RING,
 } from "../test/fixtures.js";
 
 const suite = useVenueDb({
@@ -400,7 +401,11 @@ describe("setPassword", () => {
       }),
     );
     const session = await run((tx) =>
-      loginManager(tx, { email: "granted@x.com", password: "second horse" }),
+      loginManager(tx, {
+        email: "granted@x.com",
+        password: "second horse",
+        totpKeyRing: TOTP_KEY_RING,
+      }),
     );
     expect(session.personId).toBe(target);
   });

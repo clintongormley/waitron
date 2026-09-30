@@ -15,6 +15,7 @@ import { ALL_MODULES } from "./modules.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { decryptBundle } from "./recovery-bundle.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const LOCALE = "es-ES";
 const PASSWORD = "correct horse";
@@ -101,6 +102,7 @@ function buildApp(stateDir: string, log: Logger = () => {}): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );

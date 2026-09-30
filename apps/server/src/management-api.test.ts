@@ -19,6 +19,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { mountManagementApi } from "./management-api.js";
+import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 /**
  * Floor zones, dining tables, table placement, kitchen stations and kitchen courses on the
@@ -136,6 +137,7 @@ function mountApp(venue: VenueResult): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     noopLog,
   );

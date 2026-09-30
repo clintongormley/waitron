@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { generateSync } from "otplib";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
-import { codeOf, seedManager, seedTill } from "../test/fixtures.js";
+import { codeOf, seedManager, seedTill, TOTP_KEY_RING } from "../test/fixtures.js";
 import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
@@ -68,7 +68,9 @@ describe("your profile", () => {
       email: f.email,
       locale: "en-GB",
     };
-    await withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...f, ...details }));
+    await withTransaction(suite.db, (tx) =>
+      saveOwnProfile(tx, { ...f, ...details, keyRing: TOTP_KEY_RING }),
+    );
     await expect(
       withTransaction(suite.db, (tx) =>
         saveOwnProfile(tx, {
@@ -76,6 +78,7 @@ describe("your profile", () => {
           ...details,
           email: "changed@example.com",
           currentPassword: "wrong",
+          keyRing: TOTP_KEY_RING,
         }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
@@ -87,6 +90,7 @@ describe("your profile", () => {
         email: " CHANGED@example.com ",
         currentPassword: "correct horse",
         emailCodeKey: codeKey,
+        keyRing: TOTP_KEY_RING,
       }),
     );
     expect(emailChange).toMatchObject({ email: "changed@example.com", code: expect.any(String) });
@@ -150,7 +154,9 @@ describe("your profile", () => {
       [{ email: "taken@example.com" }, "person.email_taken"],
     ] as const) {
       await expect(
-        withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...details, ...patch })),
+        withTransaction(suite.db, (tx) =>
+          saveOwnProfile(tx, { ...details, ...patch, keyRing: TOTP_KEY_RING }),
+        ),
       ).rejects.toMatchObject({ code });
     }
   });
@@ -181,7 +187,9 @@ describe("your profile", () => {
       [{ lastNames: "  " }, "lastNames"],
     ] as const) {
       await expect(
-        withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...details, ...patch })),
+        withTransaction(suite.db, (tx) =>
+          saveOwnProfile(tx, { ...details, ...patch, keyRing: TOTP_KEY_RING }),
+        ),
       ).rejects.toMatchObject({ code: "profile.invalid", params: { field } });
     }
   });
@@ -198,17 +206,21 @@ describe("your profile", () => {
       currentPassword: "correct horse",
     };
     await withTransaction(suite.db, (tx) =>
-      saveOwnProfile(tx, { ...base, telephone: "  +34 600 000 000  " }),
+      saveOwnProfile(tx, { ...base, telephone: "  +34 600 000 000  ", keyRing: TOTP_KEY_RING }),
     );
     expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       telephone: "+34 600 000 000",
     });
-    await withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...base, telephone: null }));
+    await withTransaction(suite.db, (tx) =>
+      saveOwnProfile(tx, { ...base, telephone: null, keyRing: TOTP_KEY_RING }),
+    );
     expect(await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).toMatchObject({
       telephone: null,
     });
     await expect(
-      withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...base, telephone: "123" })),
+      withTransaction(suite.db, (tx) =>
+        saveOwnProfile(tx, { ...base, telephone: "123", keyRing: TOTP_KEY_RING }),
+      ),
     ).rejects.toMatchObject({ code: "person.telephone_invalid" });
   });
 
@@ -225,6 +237,7 @@ describe("your profile", () => {
           displayName: " already here ",
           email: f.email,
           locale: "en-GB",
+          keyRing: TOTP_KEY_RING,
         }),
       ),
     ).rejects.toMatchObject({ code: "person.display_name_taken" });
@@ -235,20 +248,37 @@ describe("your profile", () => {
     const other = await withTransaction(suite.db, (tx) => startManagementSession(tx, f));
     await expect(
       withTransaction(suite.db, (tx) =>
-        changeOwnPassword(tx, { ...f, currentPassword: "wrong", password: "new password" }),
+        changeOwnPassword(tx, {
+          ...f,
+          currentPassword: "wrong",
+          password: "new password",
+          keyRing: TOTP_KEY_RING,
+        }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     // Omitting the current password entirely is refused the same way a wrong one is.
     await expect(
-      withTransaction(suite.db, (tx) => changeOwnPassword(tx, { ...f, password: "new password" })),
+      withTransaction(suite.db, (tx) =>
+        changeOwnPassword(tx, { ...f, password: "new password", keyRing: TOTP_KEY_RING }),
+      ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     await expect(
       withTransaction(suite.db, (tx) =>
-        changeOwnPassword(tx, { ...f, currentPassword: "correct horse", password: "short" }),
+        changeOwnPassword(tx, {
+          ...f,
+          currentPassword: "correct horse",
+          password: "short",
+          keyRing: TOTP_KEY_RING,
+        }),
       ),
     ).rejects.toMatchObject({ code: "password.too_short" });
     await withTransaction(suite.db, (tx) =>
-      changeOwnPassword(tx, { ...f, currentPassword: "correct horse", password: "new password" }),
+      changeOwnPassword(tx, {
+        ...f,
+        currentPassword: "correct horse",
+        password: "new password",
+        keyRing: TOTP_KEY_RING,
+      }),
     );
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -259,7 +289,9 @@ describe("your profile", () => {
       hasPassword: true,
     });
     await expect(
-      withTransaction(suite.db, (tx) => loginManager(tx, { ...f, password: "new password" })),
+      withTransaction(suite.db, (tx) =>
+        loginManager(tx, { ...f, password: "new password", totpKeyRing: TOTP_KEY_RING }),
+      ),
     ).resolves.toMatchObject({ personId: f.personId });
   });
 
@@ -272,11 +304,21 @@ describe("your profile", () => {
     );
     await expect(
       withTransaction(suite.db, (tx) =>
-        changeOwnPin(tx, { ...f, currentPassword: "correct horse", pin: "12" }),
+        changeOwnPin(tx, {
+          ...f,
+          currentPassword: "correct horse",
+          pin: "12",
+          keyRing: TOTP_KEY_RING,
+        }),
       ),
     ).rejects.toMatchObject({ code: "pin.too_short" });
     await withTransaction(suite.db, (tx) =>
-      changeOwnPin(tx, { ...f, currentPassword: "correct horse", pin: "9876" }),
+      changeOwnPin(tx, {
+        ...f,
+        currentPassword: "correct horse",
+        pin: "9876",
+        keyRing: TOTP_KEY_RING,
+      }),
     );
     const rows = await suite.db.execute<{ ended_at: string | null }>(
       sql`select ended_at from sessions where id = ${till.rows[0]!.id}`,
@@ -299,11 +341,21 @@ describe("your profile", () => {
     ]);
     await expect(
       withTransaction(suite.db, (tx) =>
-        removeOwnPasskey(tx, { ...f, id: otherId, currentPassword: "correct horse" }),
+        removeOwnPasskey(tx, {
+          ...f,
+          id: otherId,
+          currentPassword: "correct horse",
+          keyRing: TOTP_KEY_RING,
+        }),
       ),
     ).rejects.toMatchObject({ code: "passkey.not_registered" });
     await withTransaction(suite.db, (tx) =>
-      removeOwnPasskey(tx, { ...f, id: credentialId, currentPassword: "correct horse" }),
+      removeOwnPasskey(tx, {
+        ...f,
+        id: credentialId,
+        currentPassword: "correct horse",
+        keyRing: TOTP_KEY_RING,
+      }),
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([]);
   });
@@ -313,7 +365,12 @@ describe("your profile", () => {
     await suite.db.execute(sql`update persons set password_hash=null where id=${f.personId}`);
     await expect(
       withTransaction(suite.db, (tx) =>
-        changeOwnPassword(tx, { ...f, currentPassword: "", password: "new password" }),
+        changeOwnPassword(tx, {
+          ...f,
+          currentPassword: "",
+          password: "new password",
+          keyRing: TOTP_KEY_RING,
+        }),
       ),
     ).rejects.toMatchObject({ code: "password.invalid" });
     const g = await fixture();
@@ -438,7 +495,7 @@ describe("your profile", () => {
       sql`update persons set google_subject = 'google-subject' where id = ${f.personId}`,
     );
     await withTransaction(suite.db, (tx) =>
-      unlinkOwnGoogle(tx, { ...f, currentPassword: "correct horse" }),
+      unlinkOwnGoogle(tx, { ...f, currentPassword: "correct horse", keyRing: TOTP_KEY_RING }),
     );
     const rows = await suite.db.execute<{ google_subject: string | null }>(
       sql`select google_subject from persons where id = ${f.personId}`,
@@ -509,6 +566,7 @@ describe("your profile", () => {
             email: contested,
             locale: "en-GB",
             currentPassword: "correct horse",
+            keyRing: TOTP_KEY_RING,
           }),
         ),
       ).rejects.toMatchObject({ code: "person.email_taken", params: { email: contested } });
@@ -529,10 +587,16 @@ describe("your profile", () => {
       currentPassword: "correct horse",
     };
     const issued = await withTransaction(suite.db, (tx) =>
-      saveOwnProfile(tx, { ...details, email: `${randomUUID()}@example.com` }),
+      saveOwnProfile(tx, {
+        ...details,
+        email: `${randomUUID()}@example.com`,
+        keyRing: TOTP_KEY_RING,
+      }),
     );
     await expect(
-      withTransaction(suite.db, (tx) => saveOwnProfile(tx, { ...details, email: f.email })),
+      withTransaction(suite.db, (tx) =>
+        saveOwnProfile(tx, { ...details, email: f.email, keyRing: TOTP_KEY_RING }),
+      ),
     ).resolves.toBeNull();
     const action = await suite.db.execute<{ used_at: string | null }>(
       sql`select used_at from management_account_actions where id = ${issued!.id}`,
