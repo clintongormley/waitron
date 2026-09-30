@@ -5996,9 +5996,12 @@ approved.
   often. Removing that would need the server to accept port 0 and report the port it bound
   (`WAITRON_HTTP_PORT` refuses `"0"` today). `bench/sqlite-failover/src/unreachable-store.ts`'s
   `reservePort` and the inline copy in `apps/server/scripts/cloud-integration-fixture.ts` have the
-  same release-then-use shape and were not changed. (2026-09-30: that gap took the S3 test server's
-  port once in CI, and `startS3TestServer` now recovers from it; see C88, "the pause test's bucket
-  control failed once on `main`". The Waitron servers' own ports still have it.)
+  same release-then-use shape and were not changed. (2026-09-30: this gap is the mechanism C88
+  reproduced behind one CI failure of the pause test, not proven from that run's log, and
+  `startS3TestServer` now recovers from it; see C88, "the pause test's bucket control failed once
+  on `main`". C88 also measured one drawing pattern: two processes each drawing 20,000 ports back
+  to back in `node:24-slim` drew the other's latest port 0 times. The Waitron servers' own ports
+  still have the gap.)
 
 - **`scripts/waitron-sh.test.mjs` failed at random when its temporary folder's name held a word it
   matched — DONE (lane A's A31b, **PR #661**).** The docker stub now drops `compose` and one leading
@@ -8964,16 +8967,20 @@ it. Left open:
   drew the other's latest port 0 times, so it is rare per draw. **The fix, in the harness only:**
   each server gets random credentials and is ready only once a listing signed with them is
   answered; one that exits with `address already in use` is started again on a fresh port, up to
-  five, within the one `READY_TIMEOUT_MS`; and `pause()`/`resume()` throw, with the server's log,
-  once its process has exited, where they did nothing. **Tests:**
-  `apps/server/src/testing/s3-test-server.test.ts`, which needs versitygw and so runs in
+  five, within the one `READY_TIMEOUT_MS`, each readiness probe cut to the time left in it; and
+  `pause()`/`resume()` throw, with the server's log, once its process has exited, where they did
+  nothing. **Tests:** `apps/server/src/testing/s3-test-server.test.ts`, which runs in
   `test-server-stream` and is excluded from the server shards (`scripts/ci-workflow.test.mjs`
-  pins both). Before the fix three of its four cases failed (the second server's endpoint equal to
-  the first's; a start whose every port is taken resolving; `pause()` on an exited server not
-  throwing). With the fix, each failed again with its own part taken out: the same credentials for
-  every server (the first two cases), no retry on a lost port (the first two, the second by its
+  pins both). Its first three cases start versitygw; the other four run without it, three of them
+  on a stub program. Before the fix three of the first four failed (the second server's endpoint
+  equal to the first's; a start whose every port is taken resolving; `pause()` on an exited server
+  not throwing). With the fix, each failed again with its own part taken out: the same credentials
+  for every server (the first two cases), no retry on a lost port (the first two, the second by its
   draw count), and `pause()` silent on an exited server (the third). The fourth, a server that
-  exits for another reason, is not retried; it passed before and after. **Left:** the Waitron
+  exits for another reason, is not retried; it passed before and after. The three stub cases each
+  fail with one part taken out: the deadline reset per port, `exit` observed in place of `close`
+  (so a bind error written after the exit is missed), or a probe allowed to run past the deadline.
+  **Left:** the Waitron
   servers' own ports in the loop and pause tests are drawn the same way, and a lost one fails the
   boot loudly (`server.listen_failed`) rather than silently; not changed.
 - **Open, left by #668 (A37): two things about the pause test and its deadline.** (1) The test's

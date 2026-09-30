@@ -795,9 +795,10 @@ jobs:
           retention-days: 1
 
   # apps/server's stream loop and pause tests, and the suite of the S3 test server they start, on a
-  # runner of their own beside the server shards. They run the pinned Litestream and versitygw as
-  # child processes, and fail rather than skip without them in CI, so only this job downloads the
-  # two binaries. Downloaded, not cached: the Actions cache is at its budget
+  # runner of their own beside the server shards. The loop and pause tests run the pinned
+  # Litestream and versitygw as child processes, and the S3 test server's suite runs versitygw in
+  # some of its cases; each fails rather than skips in CI without what it runs, so only this job
+  # downloads the two binaries. Downloaded, not cached: the Actions cache is at its budget
   # (docs/developers/ci-and-gates.md). Its blob joins the shards' in test-server-merge, so the
   # coverage gate counts what these tests reach.
   test-server-stream:
@@ -819,7 +820,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Install the stream loop and pause tests' pinned binaries
+      - name: Install the pinned Litestream and versitygw
         run: |
           set -euo pipefail
           node scripts/setup-litestream.mjs
@@ -829,7 +830,7 @@ jobs:
       # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
       # commit for about a second and put a sale past the pause test's 1000 ms bound (testing-guide.md,
       # "In CI their temporary files are in memory").
-      - name: Run the stream loop and pause tests
+      - name: Run the stream loop and pause tests and the S3 test server's suite
         env:
           TMPDIR: /dev/shm
         run: |

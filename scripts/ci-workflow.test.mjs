@@ -806,10 +806,11 @@ describe("the sharded jobs", () => {
 
 /**
  * The stream loop and pause tests, and the S3 test server's own suite, run in a job of their own,
- * beside the apps/server shards: they need two downloaded binaries. Their blob joins the server's coverage merge. Read from ci.yml as
- * TEXT, so a step an `if:` switches off still passes.
+ * beside the apps/server shards: between them they need two downloaded binaries. Their blob joins
+ * the server's coverage merge. Read from ci.yml as TEXT, so a step an `if:` switches off still
+ * passes.
  */
-describe("the stream loop and pause tests' own job", () => {
+describe("the stream loop and pause tests' and the S3 test server suite's own job", () => {
   const stream = () => job(STREAM_JOB);
   const streamText = () => stream().body.join("\n");
 

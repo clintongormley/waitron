@@ -763,7 +763,8 @@ browser test** — most of these rules exist because a test passed while proving
   `WAITRON_REQUIRE_STREAM_BINARIES=1` a missing one fails the case. **Vitest's default reporter
   prints a skipped run as `1 skipped` and nothing else** — the reason shows only under
   `--reporter=verbose` — so a local green run of `apps/server` may not have run them. CI runs both in
-  `test-server-stream`. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the
+  `test-server-stream`, beside `apps/server/src/testing/s3-test-server.test.ts`, whose versitygw
+  cases skip and fail the same way. Guard: `scripts/ci-workflow.test.mjs`, which reads `ci.yml` as TEXT, so the
   install commands left only in a YAML comment, or in a step an `if:` switches off, pass it. See
   [testing-guide.md](docs/developers/testing-guide.md).
 - **Under an AI agent (`AI_AGENT` or `CLAUDECODE` set), Vitest hides a passing test's console
