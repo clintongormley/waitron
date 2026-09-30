@@ -21,7 +21,11 @@ import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { Logger } from "./logger.js";
 import type { AccountEmailSender } from "./account-email.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
-import { mountManagementApi, type ManagementApiDeps } from "./management-api.js";
+import {
+  mountManagementApi,
+  type ManagementApiDeps,
+  type MountedManagementApi,
+} from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
 
@@ -129,9 +133,10 @@ function mountApp(
   google?: {
     exchange: Mock<typeof exchangeGoogleCode>;
   },
-): Hono {
+  log: Logger = noopLog,
+): Hono & MountedManagementApi {
   const app = new Hono();
-  mountManagementApi(
+  const mounted = mountManagementApi(
     app,
     {
       db: suite.db,
@@ -153,9 +158,9 @@ function mountApp(
             googleCodeExchange: google.exchange,
           }),
     },
-    noopLog,
+    log,
   );
-  return app;
+  return Object.assign(app, mounted);
 }
 
 /** Returns only the session cookie pair; asserts the 200 so no caller carries an absent cookie. */
@@ -177,6 +182,43 @@ async function countPersonsNamed(displayName: string): Promise<number> {
     return r.rows;
   });
   return rows.length;
+}
+
+/** Holds the write lock until `release` is called; resolves once it is held. */
+async function holdWriteLock(): Promise<{ release: () => Promise<void> }> {
+  let open!: () => void;
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  let holding!: () => void;
+  const held = new Promise<void>((resolve) => (holding = resolve));
+  const holder = withTransaction(suite.db, async () => {
+    holding();
+    await gate;
+  });
+  await held;
+  return {
+    release: async () => {
+      open();
+      await holder;
+    },
+  };
+}
+
+async function resetTokensFor(personId: string): Promise<number> {
+  const rows = await suite.db.execute<{ id: string }>(
+    sql`select id from management_account_actions
+        where person_id = ${personId} and purpose = 'password_reset'`,
+  );
+  return rows.rows.length;
+}
+
+function requestReset(app: Hono, email: string): Promise<Response> {
+  return Promise.resolve(
+    app.request("/management-api/password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    }),
+  );
 }
 
 describe("Management API staff + session routes", () => {
@@ -521,6 +563,7 @@ describe("Management API staff + session routes", () => {
       body: JSON.stringify({ email: "unknown@x.com" }),
     });
     expect(unknown.status).toBe(202);
+    await app.settle();
     expect(sent).toHaveLength(0);
 
     const requested = await app.request("/management-api/password-reset", {
@@ -529,6 +572,7 @@ describe("Management API staff + session routes", () => {
       body: JSON.stringify({ email: STAFF_EMAIL }),
     });
     expect(requested.status).toBe(202);
+    await app.settle();
     expect(sent).toHaveLength(1);
     expect(sent[0]!.purpose).toBe("password_reset");
     const repeated = await app.request("/management-api/password-reset", {
@@ -537,6 +581,7 @@ describe("Management API staff + session routes", () => {
       body: JSON.stringify({ email: `  ${STAFF_EMAIL.toUpperCase()}  ` }),
     });
     expect(repeated.status).toBe(202);
+    await app.settle();
     expect(sent).toHaveLength(1);
     const token = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
     const purpose = new URL(sent[0]!.actionUrl).searchParams.get("purpose")!;
@@ -575,13 +620,157 @@ describe("Management API staff + session routes", () => {
     expect(unknown.status).toBe(202);
     expect(await pending.text()).toBe(await unknown.text());
     expect(pending.headers.get("set-cookie")).toBeNull();
+    await app.settle();
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({ purpose: "invitation", email: STAFF_EMAIL });
     expect(sent[0]!.code).toBeUndefined();
     expect(new URL(sent[0]!.actionUrl).searchParams.get("purpose")).toBe("invitation");
     const repeated = await request(` ${STAFF_EMAIL.toUpperCase()} `);
     expect(repeated.status).toBe(202);
+    await app.settle();
     expect(sent).toHaveLength(1);
+  });
+
+  it("answers a known address's reset request while another transaction holds the write lock", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    await setupTenant();
+    const app = mountApp(async (message) => {
+      sent.push(message);
+    });
+    const lock = await holdWriteLock();
+    try {
+      const answered = await Promise.race([
+        requestReset(app, STAFF_EMAIL).then((response) => response.status),
+        new Promise((resolve) => setTimeout(() => resolve("still waiting"), 2_000)),
+      ]);
+      expect(answered).toBe(202);
+      expect(sent).toEqual([]);
+    } finally {
+      await lock.release();
+    }
+    await vi.waitFor(() => expect(sent).toHaveLength(1));
+    expect(sent[0]).toMatchObject({ purpose: "password_reset", email: STAFF_EMAIL });
+  });
+
+  it("settles an answered reset only once its token is written", async () => {
+    const { staffId } = await setupTenant();
+    const app = mountApp(async () => {});
+    const lock = await holdWriteLock();
+    let settled = false;
+    let settling: Promise<void> | undefined;
+    try {
+      expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
+      settling = app.settle().then(() => {
+        settled = true;
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+    } finally {
+      await lock.release();
+    }
+    await settling;
+    expect(await resetTokensFor(staffId)).toBe(1);
+  });
+
+  it("settles an answered reset without waiting for its email to be sent", async () => {
+    await setupTenant();
+    let sending!: () => void;
+    const started = new Promise<void>((resolve) => (sending = resolve));
+    let deliver!: () => void;
+    const delivered = new Promise<void>((resolve) => (deliver = resolve));
+    const app = mountApp(async () => {
+      sending();
+      await delivered;
+    });
+    try {
+      expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
+      const outcome = await Promise.race([
+        app.settle().then(() => "settled"),
+        new Promise((resolve) => setTimeout(() => resolve("still waiting"), 10_000)),
+      ]);
+      expect(outcome).toBe("settled");
+      await started;
+    } finally {
+      deliver();
+    }
+  });
+
+  it("answers 202 and logs when a known address's reset cannot be written", async () => {
+    const sent: Parameters<AccountEmailSender>[0][] = [];
+    const log = vi.fn<Logger>();
+    await setupTenant();
+    await suite.db.execute(sql`
+      create trigger refuse_account_action before insert on management_account_actions
+      begin select raise(abort, 'refused for the test'); end
+    `);
+    try {
+      const app = mountApp(
+        async (message) => {
+          sent.push(message);
+        },
+        undefined,
+        undefined,
+        log,
+      );
+      const response = await app.request("/management-api/password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: STAFF_EMAIL }),
+      });
+      expect(response.status).toBe(202);
+      await vi.waitFor(() =>
+        expect(log).toHaveBeenCalledWith("error", "account_action.request_failed", {
+          errorCode: "unknown",
+        }),
+      );
+      expect(sent).toEqual([]);
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_account_action`);
+    }
+  });
+
+  it("settles, and settles again, when logging a refused reset write throws", async () => {
+    await setupTenant();
+    const log = vi.fn<Logger>((_level, event) => {
+      if (event === "account_action.request_failed") throw new Error("log sink failed");
+    });
+    await suite.db.execute(sql`
+      create trigger refuse_account_action before insert on management_account_actions
+      begin select raise(abort, 'refused for the test'); end
+    `);
+    try {
+      const app = mountApp(async () => {}, undefined, undefined, log);
+      expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
+      await expect(app.settle()).resolves.toBeUndefined();
+      expect(log).toHaveBeenCalledWith("error", "account_action.request_failed", {
+        errorCode: "unknown",
+      });
+      await expect(app.settle()).resolves.toBeUndefined();
+    } finally {
+      await suite.db.execute(sql`drop trigger refuse_account_action`);
+    }
+  });
+
+  it("leaves nothing unhandled when logging a reset email that failed throws", async () => {
+    await setupTenant();
+    const log = vi.fn<Logger>((_level, event) => {
+      if (event === "account_email.send_failed") throw new Error("log sink failed");
+    });
+    const app = mountApp(
+      async () => {
+        throw new Error("smtp refused");
+      },
+      undefined,
+      undefined,
+      log,
+    );
+    expect((await requestReset(app, STAFF_EMAIL)).status).toBe(202);
+    await app.settle();
+    await vi.waitFor(() =>
+      expect(log).toHaveBeenCalledWith("error", "account_email.send_failed", expect.anything()),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
   });
 
   it("removes public invitation replacement and rejects code-only account actions", async () => {
@@ -1366,6 +1555,7 @@ describe("Management API — Google sign-in edges, credential checks and staff l
       headers: json,
       body: JSON.stringify({ email: STAFF_EMAIL }),
     });
+    await app.settle();
     const token = new URL(sent[0]!.actionUrl).searchParams.get("token")!;
     const inspect = (purpose: string) =>
       app.request("/management-api/account-actions/inspect", {

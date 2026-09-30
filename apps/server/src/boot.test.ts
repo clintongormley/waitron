@@ -8,6 +8,7 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import type { Hono } from "hono";
 import { randomUUID, X509Certificate } from "node:crypto";
 import { createConnection, createServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
@@ -185,6 +186,41 @@ vi.mock("./box-secrets.js", async (importOriginal) => {
   return {
     ...actual,
     tightenTlsDir: vi.fn(actual.tightenTlsDir),
+  };
+});
+
+/**
+ * Passes through to the real `mountManagementApi`, keeping the app the latest boot mounted it on so a
+ * test can send it a request in-process.
+ */
+const managementMount = vi.hoisted(() => ({ app: undefined as Hono | undefined }));
+vi.mock("./management-api.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./management-api.js")>();
+  return {
+    ...actual,
+    mountManagementApi: (...args: Parameters<typeof actual.mountManagementApi>) => {
+      managementMount.app = args[0];
+      return actual.mountManagementApi(...args);
+    },
+  };
+});
+
+/**
+ * Passes through to the real credential reads, holding a read of the mail settings inside its
+ * transaction for `delayMs` while a test sets it.
+ */
+const mailSettingsRead = vi.hoisted(() => ({ delayMs: undefined as number | undefined }));
+vi.mock("@waitron/credentials", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/credentials")>();
+  return {
+    ...actual,
+    tryGetCredential: async (...args: Parameters<typeof actual.tryGetCredential>) => {
+      const delayMs = mailSettingsRead.delayMs;
+      if (delayMs !== undefined && args[2].purpose === "email.smtp") {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+      return actual.tryGetCredential(...args);
+    },
   };
 });
 
@@ -3398,6 +3434,62 @@ describe("startServer — background listeners and sinks that fail or close", ()
         await server.close();
       }
     });
+  }, 60_000);
+
+  it("writes an answered password reset's token and reads the mail settings before close() closes the venue store, then sends its email", async () => {
+    const smtp = await startFakeSmtp();
+    const venue = await freshVenue();
+    try {
+      const db = venue.store.venue;
+      await seedTradingVenue(db);
+      await db.insert(persons).values({
+        displayName: "Reset Person",
+        pinHash: hashPin("1234"),
+        passwordHash: hashPassword("resetPass123"),
+        email: "reset-person@example.test",
+        role: "staff",
+      });
+      await withTransaction(db, (tx) =>
+        putCredential(tx, loadKeyRing(KEY_ENV), {
+          purpose: "email.smtp",
+          value: {
+            url: `smtp://127.0.0.1:${smtp.port}`,
+            from: "Waitron <no-reply@example.test>",
+          },
+        }),
+      );
+      const port = await freePort();
+      const server = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venue.directory,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "preproduction",
+      });
+      try {
+        await awaitListening(port);
+        mailSettingsRead.delayMs = 50;
+        // In-process, so close() starts before the reset's work does.
+        const response = await managementMount.app!.request("/management-api/password-reset", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "reset-person@example.test" }),
+        });
+        expect(response.status).toBe(202);
+        await server.close();
+        await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), {
+          timeout: POLL_TRIES * POLL_INTERVAL_MS,
+        });
+        expect(smtp.messages[0]).toMatch(/^To: reset-person@example\.test$/m);
+      } finally {
+        mailSettingsRead.delayMs = undefined;
+        await server.close();
+      }
+    } finally {
+      await smtp.close();
+      await venue.store.close();
+      await rm(venue.directory, { recursive: true, force: true });
+    }
   }, 60_000);
 });
 

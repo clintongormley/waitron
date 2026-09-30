@@ -238,8 +238,9 @@ export interface StartedServer {
    */
   promoteMirrorToPrimary?: (attestation: FenceAttestation) => Promise<MirrorPromotionResult>;
   /**
-   * Resolves once background work has stopped, the listeners are closed and the venue store is
-   * closed; rejects if any of that fails.
+   * Resolves once background work has stopped, the listeners are closed, every password reset the
+   * management API answered has written its token and read the mail settings for its email (the send
+   * itself is not waited for) and the venue store is closed; rejects if any of that fails.
    */
   close(): Promise<void>;
 }
@@ -247,6 +248,11 @@ export interface StartedServer {
 /** The mode-specific half of `close()` (see `makeStartedServer`). */
 interface BootTeardown {
   stopWork: () => Promise<void>;
+  /**
+   * Waits for the token writes of the password resets the management API answered and for their
+   * emails' mail-settings reads, not for the sends.
+   */
+  settleRequests: () => Promise<void>;
   closePools: () => Promise<void>;
 }
 
@@ -631,6 +637,7 @@ function makeStartedServer(
         // closeListener drops idle keep-alive sockets (then all, after a grace) so this resolves —
         // Node's server.close() otherwise waits forever on the setup page's poll connection.
         () => closeListener(server),
+        teardown.settleRequests,
         () => landing?.close().catch(() => {}),
         teardown.closePools,
       ]);
@@ -1052,6 +1059,7 @@ async function bootServer(
       log,
       {
         stopWork: () => Promise.resolve(),
+        settleRequests: () => Promise.resolve(),
         closePools: () => store.close(),
       },
       mdns,
@@ -1114,6 +1122,7 @@ async function bootServer(
         stopWork: async () => {
           await finishWorker.catch(() => {});
         },
+        settleRequests: () => Promise.resolve(),
         closePools: () => store.close(),
       },
       mdns,
@@ -1445,7 +1454,7 @@ async function bootServer(
   const resolveAccountEmail = () =>
     resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
   mountLocationSettingsApi(app, { db, cfg: till, fiscal: enabledFiscal }, log);
-  mountManagementApi(
+  const managementApi = mountManagementApi(
     app,
     {
       db,
@@ -1467,6 +1476,12 @@ async function bootServer(
     },
     log,
   );
+  const settleManagementRequests = async (): Promise<void> => {
+    await managementApi.settle();
+    // An answered reset's mail-settings read joined the write queue before `settle` resolved.
+    await withTransaction(db, async () => {});
+  };
+  undoOnFailure.push(settleManagementRequests);
   if (config.onboardingIntent === "prepare") {
     mountConfigurationExportApi(
       app,
@@ -2057,6 +2072,7 @@ async function bootServer(
           () => streamHost.stop(),
         ]);
       },
+      settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },
     mdns,

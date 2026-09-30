@@ -5696,10 +5696,24 @@ ongoing overhaul listed at the top of Track A.
   route, or a PIN override after a right PIN: the drawer and refund overrides and the manual-refund
   confirmer), and the adjustment approver's `adjustment.approval_required` for a right PIN whose
   role is too low; a signed-in
-  person's re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
-  a password-reset request for a known address writes a token row and one for an unknown address
-  does not, so its response time may differ (read in `packages/identity/src/account-action.ts`, not
-  measured); the override PINs have no wrong-try limit (C89); refusals thrown in `apps/server`
+  person's re-check of their OWN password or code (`profile.ts`) still names the field. A
+  password-reset request for a known address wrote a token row before answering and one for an
+  unknown address did not; measured in-process through the route (`app.request` on a Mac, no
+  network) 200 times each, known answered at a median 0.307 ms against 0.091 ms. It now answers 202
+  first and does the lookup, the write and the email afterwards, logging a failure as
+  `account_action.request_failed` (A147): re-measured the same way, 0.025 ms against 0.026 ms.
+  Still open: that later work still shows in the answer time of a second password-reset request for
+  the same address sent as soon as the first answered (other routes, and requests sent later, were
+  not measured), and whether that difference is acceptable is the owner's call. Measured 2026-09-30
+  on a Mac: a separate Node process sent pairs of password-reset requests over loopback HTTP to the
+  management routes served by `@hono/node-server`, both requests of a pair for the SAME address, the
+  first to a newly mounted copy of the routes (fresh rate-limit and repeat-request state) and the
+  second, sent as soon as the first answered, to that same copy; every answer was 202. After 40
+  warm-up pairs, 200 pairs of each kind, interleaved: the first request answered at a median
+  0.864 ms for a known address against 0.862 ms for an unknown one, and the second at 1.065 ms
+  against 0.326 ms. In the control the route did no later work at all (no lookup, write or email):
+  the second request answered at 0.251 ms against 0.258 ms. The override PINs have no wrong-try
+  limit (C89); refusals thrown in `apps/server`
   itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
   (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
   approval routes no longer send for an approver — left for lane B, whose file it is; the setup
