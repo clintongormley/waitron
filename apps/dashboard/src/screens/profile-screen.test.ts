@@ -45,7 +45,15 @@ function apiStub(overrides: Record<string, unknown> = {}) {
       hasPassword: true,
       hasTotp: false,
       hasGoogle: false,
-      passkeys: [{ id: "credential", name: null, createdAt: "2026-09-09T12:00:00Z" }],
+      passkeys: [
+        {
+          id: "credential",
+          name: null,
+          createdAt: "2026-09-09T12:00:00Z",
+          lastUsedAt: null,
+          provider: null,
+        },
+      ],
     }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [
@@ -252,6 +260,125 @@ describe("your profile", () => {
       setLocale(before);
     }
   });
+  describe("each passkey's provider and last use", () => {
+    const used = {
+      id: "used",
+      name: "Phone",
+      createdAt: "2026-09-09T12:00:00Z",
+      lastUsedAt: "2026-09-28T08:30:00Z",
+      provider: "Google Password Manager",
+    };
+    const neverUsed = {
+      id: "never",
+      name: "Spare key",
+      createdAt: "2026-09-10T12:00:00Z",
+      lastUsedAt: null,
+      provider: null,
+    };
+    async function rows(passkeys: unknown[]): Promise<string[]> {
+      const profile = await apiStub().getProfile();
+      const { el } = await mount({
+        getProfile: vi.fn().mockResolvedValue({ ...profile, passkeys }),
+      });
+      return [...el.shadowRoot!.querySelectorAll(".passkey-item")].map((row) => row.textContent!);
+    }
+
+    it.each([
+      ["en-GB", "Last used 28/09/2026, 08:30"],
+      ["es-ES", "Último uso: 28/9/2026, 08:30"],
+    ])("says when a passkey last signed in, or that it never has (%s)", async (locale, text) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const [first, second] = await rows([used, neverUsed]);
+        expect(first).toContain(text);
+        expect(first).not.toContain(t("profile.passkey_never_used"));
+        expect(second).toContain(t("profile.passkey_never_used"));
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it.each([
+      ["en-GB", "Last used 30/09/2026, 09:05", "Last used 30/09/2026, 17:40"],
+      ["es-ES", "Último uso: 30/9/2026, 09:05", "Último uso: 30/9/2026, 17:40"],
+    ])(
+      "tells apart two passkeys from one password manager used on the same day (%s)",
+      async (locale, morning, evening) => {
+        const before = currentLocale();
+        setLocale(locale);
+        try {
+          const sameDay = {
+            createdAt: "2026-09-30T08:00:00Z",
+            provider: "Google Password Manager",
+          };
+          const [first, second] = await rows([
+            { ...sameDay, id: "replaced", name: null, lastUsedAt: "2026-09-30T09:05:00Z" },
+            { ...sameDay, id: "current", name: null, lastUsedAt: "2026-09-30T17:40:00Z" },
+          ]);
+          expect(first).toContain(`Google Password Manager · ${morning}`);
+          expect(second).toContain(`Google Password Manager · ${evening}`);
+          expect(first).not.toContain(evening);
+          expect(second).not.toContain(morning);
+        } finally {
+          setLocale(before);
+        }
+      },
+    );
+
+    it.each([
+      ["en-GB", "Last used 30/09/2026, 17:40"],
+      ["es-ES", "Último uso: 30/9/2026, 17:40"],
+    ])("keeps the last-use phrase on one line at phone width (%s)", async (locale, phrase) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const profile = await apiStub().getProfile();
+        const { el, host } = await mount({
+          getProfile: vi.fn().mockResolvedValue({
+            ...profile,
+            passkeys: [{ ...used, lastUsedAt: "2026-09-30T17:40:00Z" }],
+          }),
+        });
+        host.style.width = "390px";
+        const tabs = el.shadowRoot!.querySelector("wt-tabs")!;
+        tabs.shadowRoot!.querySelector<HTMLElement>("[role=tab][data-key=security]")!.click();
+        await flush(el);
+        const meta = el.shadowRoot!.querySelector(".passkey-item .field-meta")!;
+        const range = document.createRange();
+        const walker = document.createTreeWalker(meta, NodeFilter.SHOW_TEXT);
+        let found = false;
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const at = node.textContent!.indexOf(phrase);
+          if (at === -1) continue;
+          range.setStart(node, at);
+          range.setEnd(node, at + phrase.length);
+          found = true;
+        }
+        expect(found).toBe(true);
+        expect(new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size).toBe(
+          1,
+        );
+        expect(meta.getBoundingClientRect().height).toBeGreaterThan(
+          range.getBoundingClientRect().height,
+        );
+      } finally {
+        setLocale(before);
+      }
+    });
+
+    it("names the password manager that holds a passkey, and none it does not know", async () => {
+      const [first, second] = await rows([used, neverUsed]);
+      expect(first).toContain("Google Password Manager");
+      expect(second).not.toContain("Google Password Manager");
+    });
+
+    it("names the password manager once when the passkey is already named after it", async () => {
+      const [row] = await rows([{ ...used, name: "Google Password Manager" }]);
+      expect(row!.split("Google Password Manager")).toHaveLength(2);
+    });
+  });
+
   it("explains an overlong passkey name before starting registration", async () => {
     const { el, api } = await mount();
     await click(el, "add-passkey");

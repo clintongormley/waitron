@@ -35,15 +35,19 @@ import {
 const mockVerify = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
+const NO_PROVIDER = "00000000-0000-0000-0000-000000000000";
+const GOOGLE = "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4";
+
 function verified(
   id: string,
   transports?: string[],
+  aaguid = NO_PROVIDER,
 ): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
   return {
     verified: true,
     registrationInfo: {
       fmt: "none",
-      aaguid: "00000000-0000-0000-0000-000000000000",
+      aaguid,
       credential: { id, publicKey: new Uint8Array([1, 2, 3]), counter: 0, transports },
       credentialType: "public-key",
       attestationObject: new Uint8Array(),
@@ -229,6 +233,45 @@ describe("passkey registration", () => {
       tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
     );
     expect(credential).toHaveProperty("name", expected);
+  });
+
+  it("keeps the identifier of the password manager that made the passkey", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    mockVerify.mockResolvedValue(verified("cred-google", undefined, GOOGLE));
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle, "Work laptop");
+    const [credential] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+    );
+    expect(credential).toHaveProperty("aaguid", GOOGLE);
+    expect(credential).toHaveProperty("name", "Work laptop");
+  });
+
+  it.each([["   "], [undefined]])(
+    "names a passkey given the name %j after the password manager that made it",
+    async (name) => {
+      const { personId, token } = await openManagementSession(suite.db, "admin");
+      mockVerify.mockResolvedValue(verified("cred-unnamed", undefined, GOOGLE));
+      const begun = await begin(token);
+      await finish(token, begun.challengeHandle, name);
+      const [credential] = await run((tx) =>
+        tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+      );
+      expect(credential).toHaveProperty("name", "Google Password Manager");
+    },
+  );
+
+  it("leaves an unnamed passkey unnamed when its password manager is not on the list", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const unknown = "12345678-1234-1234-1234-123456789abc";
+    mockVerify.mockResolvedValue(verified("cred-unknown-provider", undefined, unknown));
+    const begun = await begin(token);
+    await finish(token, begun.challengeHandle, "");
+    const [credential] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.personId, personId)),
+    );
+    expect(credential).toHaveProperty("aaguid", unknown);
+    expect(credential).toHaveProperty("name", null);
   });
 
   it.each(["x".repeat(81), 123, null])(
@@ -458,6 +501,41 @@ describe("passkey authentication", () => {
       expectedRPID: "localhost",
       credential: { id: "cred-abc", counter: 0 },
     });
+  });
+
+  it("records when a passkey signed in, on that passkey only", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const usedId = await seedCredential(personId, "cred-abc", 0);
+    const otherId = await seedCredential(personId, "cred-other", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+    const begun = await beginAuth();
+    const before = new Date().toISOString();
+    await authenticate(begun.challengeHandle, "cred-abc");
+    const after = new Date().toISOString();
+
+    const rows = await run((tx) =>
+      tx
+        .select({ id: webauthnCredentials.id, lastUsedAt: webauthnCredentials.lastUsedAt })
+        .from(webauthnCredentials)
+        .where(eq(webauthnCredentials.personId, personId)),
+    );
+    const used = rows.find((r) => r.id === usedId)!;
+    expect(used.lastUsedAt! >= before && used.lastUsedAt! <= after).toBe(true);
+    expect(rows.find((r) => r.id === otherId)!.lastUsedAt).toBeNull();
+  });
+
+  // An authenticator without a signature counter reports 0 every time.
+  it("records the sign-in when the authenticator's counter does not advance", async () => {
+    const personId = await seedPerson(suite.db, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(0));
+    const begun = await beginAuth();
+    await authenticate(begun.challengeHandle, "cred-abc");
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.lastUsedAt).toEqual(expect.any(String));
+    expect(cred!.counter).toBe(0);
   });
 
   it("pins userVerification to 'required' in the authentication options", async () => {

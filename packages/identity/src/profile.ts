@@ -13,6 +13,7 @@ import {
   type IssuedAccountAction,
 } from "./account-action.js";
 import { webauthnCredentials } from "./schema/webauthn.js";
+import { passkeyProviderName } from "./passkey-providers.js";
 import { sessions } from "./schema/sessions.js";
 import { resolveManagementSession } from "./management-session.js";
 import {
@@ -173,15 +174,21 @@ async function invalidateLinks(tx: Transaction, personId: string): Promise<void>
 
 export async function readOwnProfile(tx: Transaction, input: Owner) {
   const person = await ownPerson(tx, input);
-  const passkeys = await tx
+  const rows = await tx
     .select({
       id: webauthnCredentials.id,
       name: webauthnCredentials.name,
       createdAt: webauthnCredentials.createdAt,
+      lastUsedAt: webauthnCredentials.lastUsedAt,
+      aaguid: webauthnCredentials.aaguid,
     })
     .from(webauthnCredentials)
     .where(eq(webauthnCredentials.personId, person.id))
     .orderBy(webauthnCredentials.createdAt, webauthnCredentials.id);
+  const passkeys = rows.map(({ aaguid, ...passkey }) => ({
+    ...passkey,
+    provider: passkeyProviderName(aaguid),
+  }));
   return {
     displayName: person.displayName,
     firstNames: person.firstNames,

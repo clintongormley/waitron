@@ -337,7 +337,13 @@ describe("your profile", () => {
       sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name,created_at) values (${credentialId},${f.personId},'own','public','Work laptop',${stamp}),(${otherId},${colleague},'other','public','Colleague laptop',${stamp})`,
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([
-      { id: credentialId, name: "Work laptop", createdAt: expect.any(String) },
+      {
+        id: credentialId,
+        name: "Work laptop",
+        createdAt: expect.any(String),
+        lastUsedAt: null,
+        provider: null,
+      },
     ]);
     await expect(
       withTransaction(suite.db, (tx) =>
@@ -358,6 +364,32 @@ describe("your profile", () => {
       }),
     );
     expect((await withTransaction(suite.db, (tx) => readOwnProfile(tx, f))).passkeys).toEqual([]);
+  });
+
+  it("says which password manager holds each passkey and when it last signed in", async () => {
+    const f = await fixture();
+    const used = randomUUID();
+    const neverUsed = randomUUID();
+    const created = "2026-09-01T10:00:00.000Z";
+    const lastUsed = "2026-09-29T08:30:00.000Z";
+    await suite.db.execute(
+      sql`insert into webauthn_credentials (id,person_id,credential_id,public_key,name,aaguid,created_at,last_used_at) values (${used},${f.personId},'used','public','Phone','ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4',${created},${lastUsed}),(${neverUsed},${f.personId},'never','public',null,'00000000-0000-0000-0000-000000000000',${created},null)`,
+    );
+    const { passkeys } = await withTransaction(suite.db, (tx) => readOwnProfile(tx, f));
+    expect(passkeys.find((p) => p.id === used)).toEqual({
+      id: used,
+      name: "Phone",
+      createdAt: created,
+      lastUsedAt: lastUsed,
+      provider: "Google Password Manager",
+    });
+    expect(passkeys.find((p) => p.id === neverUsed)).toEqual({
+      id: neverUsed,
+      name: null,
+      createdAt: created,
+      lastUsedAt: null,
+      provider: null,
+    });
   });
 
   it("requires recovery without a password and a TOTP code when enrolled", async () => {

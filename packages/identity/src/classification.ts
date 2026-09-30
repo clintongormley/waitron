@@ -54,7 +54,6 @@ export const IDENTITY_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
 ];
 
-// Authentication challenges and session activity do not invalidate displayed profile data.
 export const IDENTITY_CHANGE_SOURCES: readonly ChangeSource[] = [
   { table: "persons", type: "persons" },
   {

@@ -31,12 +31,15 @@ const mockVerifyReg = vi.mocked(verifyRegistrationResponse);
 const mockVerifyAuth = vi.mocked(verifyAuthenticationResponse);
 
 /** Built in full so the mock stays honest against the library's `VerifiedRegistrationResponse`. */
-function regVerified(id: string): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
+function regVerified(
+  id: string,
+  aaguid = "00000000-0000-0000-0000-000000000000",
+): Awaited<ReturnType<typeof verifyRegistrationResponse>> {
   return {
     verified: true,
     registrationInfo: {
       fmt: "none",
-      aaguid: "00000000-0000-0000-0000-000000000000",
+      aaguid,
       credential: { id, publicKey: new Uint8Array([1, 2, 3]), counter: 0 },
       credentialType: "public-key",
       attestationObject: new Uint8Array(),
@@ -201,7 +204,12 @@ function readCredentials(): Promise<
   );
 }
 
-async function registerPasskey(app: Hono, cookie: string, credentialId: string): Promise<void> {
+async function registerPasskey(
+  app: Hono,
+  cookie: string,
+  credentialId: string,
+  extra: { aaguid?: string; name?: string } = {},
+): Promise<void> {
   const options = await app.request("/management-api/passkey/register/options", {
     method: "POST",
     headers: { cookie, "content-type": "application/json" },
@@ -210,11 +218,11 @@ async function registerPasskey(app: Hono, cookie: string, credentialId: string):
   expect(options.status).toBe(200);
   const { challengeHandle } = (await options.json()) as { challengeHandle: string };
 
-  mockVerifyReg.mockResolvedValue(regVerified(credentialId));
+  mockVerifyReg.mockResolvedValue(regVerified(credentialId, extra.aaguid));
   const verify = await app.request("/management-api/passkey/register/verify", {
     method: "POST",
     headers: { "content-type": "application/json", cookie },
-    body: JSON.stringify({ challengeHandle, response: {} }),
+    body: JSON.stringify({ challengeHandle, response: {}, name: extra.name }),
   });
   expect(verify.status).toBe(200);
 }
@@ -459,6 +467,44 @@ describe("Management API passkey routes (mocked ceremony)", () => {
 
     expect(mockVerifyReg).not.toHaveBeenCalled();
     expect(await readCredentials()).toHaveLength(0);
+  });
+});
+
+describe("the profile's passkey list", () => {
+  it("says which password manager holds each passkey and when it last signed someone in", async () => {
+    await setupTenant();
+    const app = mountAppWithMe();
+    const cookie = await login(app, MANAGER_EMAIL);
+    await registerPasskey(app, cookie, "cred-abc", {
+      aaguid: "ea9b8d66-4d01-1d21-3ce4-b6b48cb575d4",
+    });
+    await registerPasskey(app, cookie, "cred-spare", {
+      aaguid: "12345678-1234-1234-1234-123456789abc",
+      name: "Spare key",
+    });
+
+    const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
+    const { challengeHandle } = (await options.json()) as { challengeHandle: string };
+    mockVerifyAuth.mockResolvedValue(authVerified(0));
+    const before = new Date().toISOString();
+    const signedIn = await app.request("/management-api/passkey/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeHandle, response: { id: "cred-abc" } }),
+    });
+    expect(signedIn.status).toBe(200);
+
+    const res = await app.request("/management-api/session/me/profile", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const { passkeys } = (await res.json()) as {
+      passkeys: { name: string | null; lastUsedAt: string | null; provider: string | null }[];
+    };
+    const byName = new Map(passkeys.map((p) => [p.name, p]));
+    expect(byName.get("Google Password Manager")).toMatchObject({
+      provider: "Google Password Manager",
+    });
+    expect(byName.get("Google Password Manager")!.lastUsedAt! >= before).toBe(true);
+    expect(byName.get("Spare key")).toMatchObject({ provider: null, lastUsedAt: null });
   });
 });
 

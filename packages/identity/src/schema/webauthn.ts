@@ -3,8 +3,8 @@ import { bigCount, id, label, newId, nowIso, table, tsString } from "@waitron/db
 import { persons } from "./persons.js";
 
 /**
- * Deliberately MUTABLE, not an audit trail: authentication may advance `counter`, and a stale or
- * revoked passkey is removed outright.
+ * Deliberately MUTABLE, not an audit trail: authentication records `last_used_at` and may advance
+ * `counter`, and a stale or revoked passkey is removed outright.
  */
 export const webauthnCredentials = table(
   "webauthn_credentials",
@@ -20,7 +20,14 @@ export const webauthnCredentials = table(
     counter: bigCount("counter").notNull().default(0),
     /** JSON array string of the authenticator's transports ("usb", "internal", …). */
     transports: label("transports"),
+    /**
+     * The authenticator's AAGUID as registration reported it; all zeros when the authenticator or
+     * the browser names no provider.
+     */
+    aaguid: label("aaguid"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    /** null until the passkey first signs someone in. */
+    lastUsedAt: tsString("last_used_at"),
   },
   (t) => [
     // restrict, not cascade: removing a person must never silently discard a registered passkey.

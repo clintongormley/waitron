@@ -503,6 +503,8 @@ export const en = {
   "profile.passkey_name_too_long": "Use 80 characters or fewer for the passkey name.",
   "profile.passkey_number": "Passkey {number}",
   "profile.remove_passkey_name": "Remove {name}",
+  "profile.passkey_last_used": "Last used {time}",
+  "profile.passkey_never_used": "Never used",
   "account.offer_passkey": "Set up a passkey?",
   "account.passkey_optional":
     "A passkey lets you log in using your device or security key. You can also add one later in your profile.",
@@ -2441,6 +2443,8 @@ export const es: Record<StringKey, string> = {
     "Usa un máximo de 80 caracteres para el nombre de la llave de acceso.",
   "profile.passkey_number": "Passkey {number}",
   "profile.remove_passkey_name": "Eliminar {name}",
+  "profile.passkey_last_used": "Último uso: {time}",
+  "profile.passkey_never_used": "Nunca usada",
   "account.offer_passkey": "¿Configurar una passkey?",
   "account.passkey_optional":
     "Una passkey te permite iniciar sesión con tu dispositivo o llave de seguridad. También puedes añadirla más tarde en tu perfil.",
