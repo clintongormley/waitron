@@ -3793,8 +3793,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
       still recorded when it takes nothing off.)_ Left open after B11d (#946, main `c9f0b7317`):
-      - ~~**A discount can escape the bill's discount limit when the dish above it was given away
-        whole.**~~ **Fixed by B11f** (branch `feat/service-giveaway-covered-rows`). A whole
+      - _Fixed by lane B item B11f (2026-10-01):_ a discount on an extra could escape the bill's
+        discount limit when the extra was added after its dish was given away whole. A whole
         give-away now records the extras rows it priced at zero (the adjustments column
         `comped_extras`, migration `packages/adjustments/drizzle/0003_comped_extras.sql`), and the
         limit (`shareOf`, `apps/server/src/adjustments-apply.ts`) leaves out only the rows the
