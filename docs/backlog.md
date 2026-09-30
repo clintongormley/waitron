@@ -3428,23 +3428,43 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     lines on an abandoned bill are not sales. `requireRange` moved to `@waitron/server-kit` for
     both this route and `apps/server/src/report-api.ts`. A dashboard module can now contribute
     further screens beside its first (`moreScreens`, `packages/dashboard-kit/src/contract.ts`).
-    Core migration `0051_opened_at_index` indexes `working_orders.opened_at`, which both report
-    queries now search. **The upgrade was measured** on 2026-09-30 on `node:sqlite`, Node
-    v26.7.0, with a throwaway Vitest file under `scripts/` (not committed): it migrated a scratch
-    venue through core `0050`, inserted 20,000 bills straight through `node:sqlite`, then ran
-    `applyMigrations` again. That added `working_orders_opened_at_idx` and kept all 20,000 bills,
-    in 16 ms on that run (a second run by the review, on a venue that also had its triggers
-    installed, took 51 ms); `explain query plan` on both report queries showed
-    `SEARCH working_orders USING INDEX working_orders_opened_at_idx`. Added by the review fixes:
+    Core migration `0051_opened_at_index` indexes `working_orders.opened_at`. **The upgrade was
+    measured** on 2026-09-30 on `node:sqlite`, Node v26.7.0, with a throwaway Vitest file under
+    `scripts/` (not committed): it migrated a scratch venue through core `0050`, inserted 20,000
+    bills straight through `node:sqlite`, then ran `applyMigrations` again. That added
+    `working_orders_opened_at_idx` and kept all 20,000 bills, in 16 ms on that run (a second run by
+    the review, on a venue that also had its triggers installed, took 51 ms). **The report's three
+    queries were measured** on 2026-09-30 on `node:sqlite`, Node v26.7.0, with a throwaway Vitest
+    file (not committed) that seeded a scratch venue through `useVenueDb` with 8,000 bills, 24,000
+    lines and 20,000 adjustments over September 2026 and ran each read seven times. `explain query
+    plan` showed each of the three — the totals (`readReportRows`), the credited sales
+    (`readCreditedSales`) and the list (`readEntryRows`: a first and a later page, for everyone and
+    for one person) — reading the bills through `SEARCH working_orders USING INDEX
+    working_orders_opened_at_idx`, and both adjustment reads sorting in a `USE TEMP B-TREE FOR
+    ORDER BY`. Over the whole month the medians were 125 ms for the report, 32 ms for the list's
+    first page and 29 ms for its 21st, and 20 ms for one person's page; over one day, 5 ms for the
+    report and under 2 ms for any page. No index was added for the list. One on
+    `adjustments (created_at, id)` left every plan unchanged and every median within 2 ms: no code
+    under `packages/`, `apps/`, `scripts/` or `deploy/` runs `ANALYZE`, and without its statistics
+    the planner still starts from the bills. One on `adjustments (requested_by, created_at, id)`
+    was used for one person's page, and on a year of data (96,000 bills, 240,000 adjustments) took
+    that page from about 25 ms to 0.8 ms over the newest month, but from about 1 ms to about 39 ms
+    over a single day. Added by the review fixes:
     the list of single adjustments comes one page at a time (200 by default, with a "Show more"
     button under the list; the route takes `limit` and `after` and answers `{ entries, next }`),
-    and its person is chosen with `?personId=`. Choosing a person or the guests shows that
-    person's own totals by action, by stage and by reason; otherwise the totals are everyone's.
+    and its person is chosen with `?personId=`. When the open list is read again (every minute, or
+    when something it shows changes), it reads on until it holds every row it showed, stopping
+    early if a further page brings back none of them; so rows loaded with "Show more" stay and a
+    new adjustment appears at the top. A new range or person starts from the first page. Choosing
+    a person or the guests shows that person's own totals by action, by stage and by reason;
+    otherwise the totals are everyone's.
     `@waitron/reporting` gained `validatedRangeWindow` (one call that checks a range's time zone,
     cutover and days and builds its window, used by top sellers, category sales, the VAT summary
     and this report) and `readLocationClock` (used by this report and the kitchen notices list).
-    `formatIsoMinute` moved to `@waitron/dashboard-kit`. A module screen may not reuse any screen
-    id, built-in ones included (`CORE_SCREENS`, `apps/dashboard/src/dashboard-app.ts`). Left open:
+    `formatIsoMinute` now lives in `@waitron/dashboard-kit`; `apps/dashboard/src/date-utils.ts`
+    re-exports it for the app's screens and for main's `date-utils.test.ts`. A module screen may
+    not reuse any screen id, built-in ones included (`CORE_SCREENS`,
+    `apps/dashboard/src/dashboard-app.ts`). Left open:
     - A weighed item cancelled in part can differ by a cent between the cancel's list value and
       what stays on the line, so a rate can be a cent's share off. **Next action:** none unless
       someone sees it matter.
