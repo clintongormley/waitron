@@ -3884,6 +3884,64 @@ describe("till-app: the order's groups", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-check");
   });
 
+  it("keeps the party on screen, not the older copy on the kept floor, when a send from another bill got no answer and the floor cannot be read", async () => {
+    const { el } = await mountApp({
+      submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+    });
+    const order = await openMesa(el);
+    emit(order, "fire-group", { groupId: "g3" });
+    await flush(el);
+    expect(tableOrder(el)!.party?.revision).toBe(4);
+    emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
+    await ringRound(el, tableOrder(el)!);
+
+    emit(
+      tableOrder(el)!,
+      "submit-draft",
+      roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
+    await flush(el);
+
+    expect(api.submitDraft).toHaveBeenCalledTimes(3);
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.party).toEqual({ ...mesa4.party, revision: 4 });
+    emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
+    await flush(el);
+    expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
+      expectedPartyRevision: 4,
+      otherPartyId: null,
+    });
+  });
+
+  it("takes the party from the floor read after a send from another bill landed on the main bill, when the floor has it at a later revision", async () => {
+    let landed = false;
+    const later = seated({}, { revision: 6, name: "Ana" });
+    const { el } = await mountApp({
+      getTablesState: vi.fn(async () => [landed ? later : mesa4, mesa7, mesa9]),
+      submitDraft: vi.fn(async (...args: SubmitArgs) => {
+        landed = true;
+        return { ...drafts.apply(...args), tabId: "wo-4", revision: 4, groups: [] };
+      }),
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    await ringRound(el, tableOrder(el)!);
+
+    emit(
+      tableOrder(el)!,
+      "submit-draft",
+      roundDetail(tableOrder(el)!, [{ release: "fire", lineIndexes: [0, 1] }]),
+    );
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.party).toEqual(later.party);
+  });
+
   it("shows a refusal of the chosen bill in its own words", async () => {
     const { el } = await mountApp({
       submitDraft: vi
