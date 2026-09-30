@@ -411,6 +411,8 @@ export type IntegratedPayDeps = TillSaleDeps & {
  *     price.
  *  5. `open` (RETRIEVED) → file the STORED locked lines (`priceStoredOrderForIssuance`), never a
  *     re-price of `req.lines`.
+ *  Steps 4 and 5, in a pay-first context, give the kitchen the dishes it has not been given, a
+ *  later course's dish held for its course, in the same transaction (`firePrepayOrder`).
  *  6. A unique violation is replayed in a FRESH transaction, filing nothing. Step 1 already
  *     serialises pays in this process; the backstop stays because `sales_working_order_id_key`
  *     refuses a second sale for one working order whatever wrote it.
@@ -453,42 +455,22 @@ export async function payWorkingOrder(
         throw new AppError("sale.unsupported_tender", { method: req.tender.method });
       }
 
-      // A walk-up files the gross lines `createOpenOrder` built its line rows from; a retrieved
-      // order ignores `req.lines` and files its stored locked lines.
       let order: GrossOrder;
-      let newlyCreatedLines: Awaited<ReturnType<typeof createOpenOrder>>["lineRows"] = [];
       if (locked === undefined) {
         // Walk-up only, because a retrieved order ignores `req.lines`.
         if (req.lines.length === 0) {
           throw new AppError("sale.empty_basket", {});
         }
-        const created = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
+        order = await createOpenOrder(tx, cfg, req.id, req.lines, null, {
           deliveryTableId: req.deliveryTableId,
           zoneId: req.zoneId,
           creditedTo: operatorId,
         });
-        order = created;
-        newlyCreatedLines = created.lineRows;
       } else {
         order = await priceStoredOrderForIssuance(tx, req.id);
       }
 
-      const serviceContext = await VENUE_SERVICE.findOrderContext(tx, cfg, req.id);
-      if (locked === undefined && (serviceContext?.serviceMode ?? cfg.orderFlow) === "prepay") {
-        await fireLines(
-          tx,
-          cfg,
-          req.id,
-          newlyCreatedLines.map((line) => ({
-            id: line.id!,
-            productId: line.productId ?? null,
-            courseId: line.courseId ?? null,
-            parentLineId: line.parentLineId ?? null,
-            note: line.note ?? null,
-            quantity: line.quantity,
-          })),
-        );
-      }
+      await firePrepayOrder(tx, cfg, req.id);
 
       return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId);
     });

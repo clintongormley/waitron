@@ -3901,6 +3901,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       dishes cannot be sold now, as placing an order refuses it. A bill already in table service
       has no dish newly sent when it moves, so a
       no-preparation dish waiting for a later course keeps waiting.
+      _(2026-09-30, lane A's A132: "when the pay-first bill is paid" above held only for the
+      card-reader route and a bill payment. A pay-first order parked at the till and then paid in
+      cash or by manual card through `POST /api/sales` sent no dish to the kitchen at all, because
+      `payWorkingOrder` (`apps/server/src/till-sale.ts`) sent dishes only for a walk-up it had just
+      created, and the till never calls the separate send-to-kitchen route. Found by Task 7's
+      review, checked and FIXED: `POST /api/sales` now gives the kitchen the dishes it has not
+      been given, a later course's dish held for its course, through `firePrepayOrder`, as the
+      card-reader route does. New cases in `apps/server/src/till-api.fiscal-sale-paths.test.ts`
+      park a pay-first order, pay it in cash and by manual card, and find its dish sent once, and
+      still once after a repeated payment; both found nothing sent before the fix. New cases in
+      `apps/server/src/till-api.move-bill.test.ts` move a table bill whose dish was sent to a
+      pay-first counter and pay it the same way: one invoice and no second send. Made to send
+      every dish rather than the unsent ones, those two failed and the parked ones still passed.)_
     - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
       otherwise), and the party's next order then starts a new one. A table the bill's own party
       holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is

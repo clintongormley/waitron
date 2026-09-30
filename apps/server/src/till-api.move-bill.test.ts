@@ -266,6 +266,26 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
   });
 
+  it.each(["cash", "card"] as const)(
+    "settles a table bill whose dish was sent, moved to a pay-first counter, by a %s sale with one invoice and no second send",
+    async (method) => {
+      const ana = await seatedWith(venue, "Pulpo");
+
+      const moved = await toCounter(ana, prepayZone);
+      const paid = await post("/api/sales", {
+        workingOrderId: ana.tabId,
+        lines: [],
+        tender: { method, amount: "20.00" },
+      });
+
+      expect(moved.status).toBe(200);
+      expect(paid.status).toBe(200);
+      expect(await statusOf(venue, ana.tabId)).toBe("settled");
+      expect(registroCount(venue, ana.tabId)).toBe(1);
+      expect(kitchenItems(ana.tabId)).toEqual({ items: 1, fired: 1 });
+    },
+  );
+
   it("places a table bill whose dish was sent, moved to an invoice-first counter, issuing its one invoice", async () => {
     const ana = await seatedWith(venue, "Pulpo");
 
