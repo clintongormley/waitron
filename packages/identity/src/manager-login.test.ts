@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import {
   codeOf,
+  refusalOf,
   seedManager,
   seedPerson,
   seedPersonWithPassword,
@@ -188,31 +189,36 @@ describe("loginManager", () => {
   });
 });
 
-describe("loginManager's timing equalization", () => {
+describe("the manager logins' timing equalization", () => {
   // A refusal that settled before its KDF finished would be told apart from a wrong password by its
   // time, which is the oracle the dummy check exists to close.
-  async function refusalWaitsForTheKdf(email: string) {
+  async function refusalWaitsForTheKdf(login: (tx: Transaction) => Promise<unknown>) {
     const spy = vi.mocked(verifyPassword);
-    let finish!: (matched: boolean) => void;
+    let finish: ((matched: boolean) => void) | undefined;
     spy.mockImplementationOnce(() => new Promise<boolean>((resolve) => (finish = resolve)));
     let settled = false;
-    const refused = run((tx) =>
-      codeOf(() =>
-        loginManager(tx, { email, password: "some password", totpKeyRing: TOTP_KEY_RING }),
-      ),
-    ).finally(() => (settled = true));
-    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(settled).toBe(false);
-    finish(false);
+    const refused = run((tx) => codeOf(() => login(tx))).finally(() => (settled = true));
+    try {
+      await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+    } finally {
+      // Release the held check, or drop it unused, so no later login waits on it.
+      if (finish === undefined) spy.mockReset();
+      else finish(false);
+    }
     expect(await refused).toBe("password.invalid");
   }
+  const byEmail = (email: string) => (tx: Transaction) =>
+    loginManager(tx, { email, password: "some password", totpKeyRing: TOTP_KEY_RING });
+  const byId = (personId: string) => (tx: Transaction) =>
+    loginManagerById(tx, { personId, password: "some password", totpKeyRing: TOTP_KEY_RING });
   it("waits for the KDF before refusing an unknown email", async () => {
-    await refusalWaitsForTheKdf("nobody-waits@x.com");
+    await refusalWaitsForTheKdf(byEmail("nobody-waits@x.com"));
   });
   it("waits for the KDF before refusing a suspended account", async () => {
     await seedManager(suite.db, { email: "owner-suspended-waits@x.com", status: "suspended" });
-    await refusalWaitsForTheKdf("owner-suspended-waits@x.com");
+    await refusalWaitsForTheKdf(byEmail("owner-suspended-waits@x.com"));
   });
   it("waits for the KDF before refusing a pending account", async () => {
     const personId = await seedPerson(suite.db, "manager");
@@ -221,19 +227,146 @@ describe("loginManager's timing equalization", () => {
         sql`update persons set email = 'owner-pending-waits@x.com', status = 'pending' where id = ${personId}`,
       ),
     );
-    await refusalWaitsForTheKdf("owner-pending-waits@x.com");
+    await refusalWaitsForTheKdf(byEmail("owner-pending-waits@x.com"));
   });
   it("waits for the KDF before refusing an account with no password", async () => {
     const personId = await seedPerson(suite.db, "manager");
     await run((tx) =>
       tx.execute(sql`update persons set email = 'owner-nopw-waits@x.com' where id = ${personId}`),
     );
-    await refusalWaitsForTheKdf("owner-nopw-waits@x.com");
+    await refusalWaitsForTheKdf(byEmail("owner-nopw-waits@x.com"));
+  });
+  it("waits for the KDF before refusing an unknown id", async () => {
+    await refusalWaitsForTheKdf(byId(crypto.randomUUID()));
+  });
+  it("waits for the KDF before refusing a suspended account by id", async () => {
+    await refusalWaitsForTheKdf(
+      byId(await seedManager(suite.db, { email: "id-suspended-waits@x.com", status: "suspended" })),
+    );
   });
 });
 
-// A trusted server-to-server path: it keeps the suspension error that the public email path folds
-// away.
+interface LoginAttempt {
+  personId: string;
+  email: string;
+  password: string;
+  totp?: string;
+  recoveryCode?: string;
+}
+
+async function withAuthenticator(personId: string): Promise<string> {
+  const secret = generateSecret();
+  await run((tx) =>
+    tx.execute(
+      sql`update persons set totp_secret = ${encryptTotpSecret(secret, TOTP_KEY_RING.current)} where id = ${personId}`,
+    ),
+  );
+  return secret;
+}
+
+// A well-formed six-digit code that is not the one the authenticator shows now.
+function wrongCodeFor(secret: string): string {
+  return String((Number(generateSync({ secret })) + 500_000) % 1_000_000).padStart(6, "0");
+}
+
+// Each refusal cause, with the right password wherever the account has one, so only the cause
+// differs.
+async function refusalCauses(): Promise<Record<string, LoginAttempt>> {
+  const account = async (status: "active" | "pending" | "suspended" = "active") => {
+    const email = `refusal-${crypto.randomUUID()}@x.com`;
+    const personId = await seedManager(suite.db, { email, status });
+    return { personId, email, password: "correct horse" };
+  };
+  const noPassword = await account();
+  await run((tx) =>
+    tx.execute(sql`update persons set password_hash = null where id = ${noPassword.personId}`),
+  );
+  const wrongCode = await account();
+  const wrongRecoveryCode = await account();
+  await withAuthenticator(wrongRecoveryCode.personId);
+  const unreadableSecret = await account();
+  await run((tx) =>
+    tx.execute(
+      sql`update persons set totp_secret = 'v1.not-a-secret' where id = ${unreadableSecret.personId}`,
+    ),
+  );
+  return {
+    unknown: {
+      personId: crypto.randomUUID(),
+      email: `nobody-${crypto.randomUUID()}@x.com`,
+      password: "correct horse",
+    },
+    suspended: await account("suspended"),
+    pending: await account("pending"),
+    noPassword,
+    wrongPassword: { ...(await account()), password: "wrong" },
+    wrongCode: { ...wrongCode, totp: wrongCodeFor(await withAuthenticator(wrongCode.personId)) },
+    wrongRecoveryCode: { ...wrongRecoveryCode, recoveryCode: "AAAA-BBBB-CCCC-DDDD" },
+    unreadableSecret: { ...unreadableSecret, totp: "123456" },
+  };
+}
+
+const PASSWORD_INVALID = { code: "password.invalid", params: {} };
+
+describe("the manager logins' refusals", () => {
+  it("are one answer by email, whatever the cause", async () => {
+    const refusals: Record<string, unknown> = {};
+    for (const [cause, { email, password, totp, recoveryCode }] of Object.entries(
+      await refusalCauses(),
+    )) {
+      refusals[cause] = await refusalOf(() =>
+        run((tx) =>
+          loginManager(tx, { email, password, totp, recoveryCode, totpKeyRing: TOTP_KEY_RING }),
+        ),
+      );
+    }
+    expect(refusals).toEqual({
+      unknown: PASSWORD_INVALID,
+      suspended: PASSWORD_INVALID,
+      pending: PASSWORD_INVALID,
+      noPassword: PASSWORD_INVALID,
+      wrongPassword: PASSWORD_INVALID,
+      wrongCode: PASSWORD_INVALID,
+      wrongRecoveryCode: PASSWORD_INVALID,
+      unreadableSecret: PASSWORD_INVALID,
+    });
+  });
+
+  it("are one answer by id, whatever the cause, a missing authenticator code included", async () => {
+    const missingCode = await seedPersonWithPassword(suite.db, "admin");
+    await withAuthenticator(missingCode);
+    const causes: Record<string, LoginAttempt> = {
+      ...(await refusalCauses()),
+      missingCode: { personId: missingCode, email: "", password: "correct horse" },
+    };
+    const refusals: Record<string, unknown> = {};
+    for (const [cause, { personId, password, totp, recoveryCode }] of Object.entries(causes)) {
+      refusals[cause] = await refusalOf(() =>
+        run((tx) =>
+          loginManagerById(tx, {
+            personId,
+            password,
+            totp,
+            recoveryCode,
+            totpKeyRing: TOTP_KEY_RING,
+          }),
+        ),
+      );
+    }
+    expect(refusals).toEqual({
+      unknown: PASSWORD_INVALID,
+      suspended: PASSWORD_INVALID,
+      pending: PASSWORD_INVALID,
+      noPassword: PASSWORD_INVALID,
+      wrongPassword: PASSWORD_INVALID,
+      wrongCode: PASSWORD_INVALID,
+      wrongRecoveryCode: PASSWORD_INVALID,
+      unreadableSecret: PASSWORD_INVALID,
+      missingCode: PASSWORD_INVALID,
+    });
+  });
+});
+
 describe("loginManagerById", () => {
   it("logs in a low-level fixture by id + password without depending on email", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");
@@ -242,7 +375,9 @@ describe("loginManagerById", () => {
     );
     expect(session.personId).toBe(personId);
   });
-  it("rejects an unknown id with person.not_found", async () => {
+  it("rejects an unknown id with password.invalid, after one KDF", async () => {
+    const spy = vi.mocked(verifyPassword);
+    spy.mockClear();
     const code = await run((tx) =>
       codeOf(() =>
         loginManagerById(tx, {
@@ -252,7 +387,8 @@ describe("loginManagerById", () => {
         }),
       ),
     );
-    expect(code).toBe("person.not_found");
+    expect(code).toBe("password.invalid");
+    expect(spy).toHaveBeenCalledTimes(1);
   });
   it("rejects a wrong password with password.invalid", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");
@@ -263,17 +399,37 @@ describe("loginManagerById", () => {
     );
     expect(code).toBe("password.invalid");
   });
-  it("rejects a suspended person with person.suspended", async () => {
+  it("rejects a suspended person with password.invalid, after one KDF, starting no session", async () => {
     const personId = await seedPersonWithPassword(suite.db, "admin");
     await run((tx) =>
       tx.execute(sql`update persons set status = 'suspended' where id = ${personId}`),
     );
+    const spy = vi.mocked(verifyPassword);
+    spy.mockClear();
     const code = await run((tx) =>
       codeOf(() =>
         loginManagerById(tx, { personId, password: "correct horse", totpKeyRing: TOTP_KEY_RING }),
       ),
     );
-    expect(code).toBe("person.suspended");
+    expect(code).toBe("password.invalid");
+    expect(spy).toHaveBeenCalledTimes(1);
+    const sessions = await suite.db.execute<{ n: number }>(
+      sql`select count(*) as n from management_sessions where person_id = ${personId}`,
+    );
+    expect(sessions.rows[0]!.n).toBe(0);
+  });
+  it("logs in with the right password and authenticator code", async () => {
+    const personId = await seedPersonWithPassword(suite.db, "admin");
+    const secret = await withAuthenticator(personId);
+    const session = await run((tx) =>
+      loginManagerById(tx, {
+        personId,
+        password: "correct horse",
+        totp: generateSync({ secret }),
+        totpKeyRing: TOTP_KEY_RING,
+      }),
+    );
+    expect(session.personId).toBe(personId);
   });
 });
 

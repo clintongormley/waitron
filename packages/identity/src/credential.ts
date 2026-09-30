@@ -3,13 +3,17 @@ import { eq } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { persons } from "./schema/persons.js";
-import { verifyPin } from "./verify-pin.js";
+import { hashPin, verifyPin } from "./verify-pin.js";
 import type { PersonRoleValue } from "./permissions.js";
 
+// Checked against when there is no real PIN hash to check, so every refusal costs one PIN check:
+// a faster refusal would tell an unknown or suspended account from a wrong PIN.
+const DUMMY_PIN_HASH = hashPin("timing-equalization-dummy");
+
 /**
- * Both `loginWithPin` and `authorize`'s OVERRIDE branch call this, so the guard ORDER and its error
- * codes are declared in exactly one place. Throws `person.not_found`, `person.suspended`,
- * `pin.invalid`.
+ * Both `loginWithPin` and `authorize`'s OVERRIDE branch call this. Every refusal is `pin.invalid`
+ * with no params, whatever the cause, so the answer never says whether the person exists or why
+ * they cannot sign in.
  */
 export async function verifyPersonCredential(
   tx: Transaction,
@@ -25,14 +29,10 @@ export async function verifyPersonCredential(
     })
     .from(persons)
     .where(eq(persons.id, personId));
-  if (person === undefined) throw new AppError("person.not_found", { personId });
-  if (person.status === "suspended") throw new AppError("person.suspended", { personId });
-  if (
-    person.status === "pending" ||
-    person.pinHash === null ||
-    !(await verifyPin(pin, person.pinHash))
-  ) {
+  if (person?.status !== "active" || person.pinHash === null) {
+    await verifyPin(pin, DUMMY_PIN_HASH);
     throw new AppError("pin.invalid", {});
   }
+  if (!(await verifyPin(pin, person.pinHash))) throw new AppError("pin.invalid", {});
   return { role: person.role as PersonRoleValue, locale: person.locale };
 }

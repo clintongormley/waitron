@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
-import { createPinThrottle } from "./pin-throttle.js";
+import { createPinThrottle, PIN_THROTTLE_IDLE_MS, PIN_THROTTLE_MAX_KEYS } from "./pin-throttle.js";
 import "./errors.js";
 
 const DEVICE = "device-1";
@@ -116,5 +116,59 @@ describe("the per-(device,person) PIN-attempt throttle", () => {
     const throttle = createPinThrottle();
     throttle.recordFailure(DEVICE, PERSON);
     expect(caught(() => throttle.check(DEVICE, PERSON))).toBeUndefined();
+  });
+});
+
+describe("the PIN throttle's bound on how many (device, person) pairs it holds", () => {
+  function fill(throttle: ReturnType<typeof createPinThrottle>, count: number, prefix = "p"): void {
+    for (let i = 0; i < count; i++) throttle.recordFailure(DEVICE, `${prefix}-${i}`);
+  }
+
+  it("refuses a new pair for 60 seconds once it holds its cap of live pairs", () => {
+    const throttle = createPinThrottle({ now: () => 1_000 });
+    fill(throttle, PIN_THROTTLE_MAX_KEYS);
+
+    expect(retryAfter(() => throttle.check(DEVICE, "newcomer"))).toBe(60);
+  });
+
+  it("does not add a new pair's failure while full, so that pair stays refused", () => {
+    const throttle = createPinThrottle({ now: () => 1_000 });
+    fill(throttle, PIN_THROTTLE_MAX_KEYS);
+
+    throttle.recordFailure(DEVICE, "newcomer");
+    expect(retryAfter(() => throttle.check(DEVICE, "newcomer"))).toBe(60);
+  });
+
+  it("still counts a pair it already holds while full", () => {
+    const throttle = createPinThrottle({ now: () => 1_000 });
+    fill(throttle, PIN_THROTTLE_MAX_KEYS);
+
+    expect(caught(() => throttle.check(DEVICE, "p-0"))).toBeUndefined();
+    for (let i = 0; i < 3; i++) throttle.recordFailure(DEVICE, "p-0"); // 4th failure → 2s window
+    expect(retryAfter(() => throttle.check(DEVICE, "p-0"))).toBe(2);
+  });
+
+  it("makes room by dropping idle pairs, keeping the live ones", () => {
+    let now = 0;
+    const throttle = createPinThrottle({ now: () => now });
+    fill(throttle, PIN_THROTTLE_MAX_KEYS - 1); // all idle by the time the newcomer arrives
+    now = PIN_THROTTLE_IDLE_MS / 2;
+    for (let i = 0; i < 4; i++) throttle.recordFailure(DEVICE, PERSON); // live, and at the cap
+
+    now = PIN_THROTTLE_IDLE_MS;
+    expect(caught(() => throttle.check(DEVICE, "newcomer"))).toBeUndefined();
+    throttle.recordFailure(DEVICE, PERSON); // PERSON's streak survived: 5th failure → 4s
+    expect(retryAfter(() => throttle.check(DEVICE, PERSON))).toBe(4);
+  });
+
+  it("makes room even when the oldest pair was used again recently", () => {
+    let now = 0;
+    const throttle = createPinThrottle({ now: () => now });
+    fill(throttle, PIN_THROTTLE_MAX_KEYS); // "p-0" first
+    now = PIN_THROTTLE_IDLE_MS / 2;
+    throttle.recordFailure(DEVICE, "p-0"); // the first pair added is now the most recently used
+
+    now = PIN_THROTTLE_IDLE_MS;
+    expect(caught(() => throttle.check(DEVICE, "newcomer"))).toBeUndefined();
   });
 });

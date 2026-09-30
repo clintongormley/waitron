@@ -20,7 +20,7 @@ export interface Session {
   locale: string | null;
 }
 
-/** Throws `person.not_found`, `person.suspended`, `pin.invalid`. */
+/** Throws `pin.invalid`, whatever the reason the person cannot sign in. */
 export async function loginWithPin(
   tx: Transaction,
   input: { tillId: string; personId: string; pin: string },

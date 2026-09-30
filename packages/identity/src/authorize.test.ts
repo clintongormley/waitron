@@ -83,7 +83,7 @@ describe("authorize", () => {
     expect(code).toBe("pin.invalid");
   });
 
-  it("throws person.not_found when the override personId is unknown", async () => {
+  it("throws pin.invalid when the override personId is unknown", async () => {
     const tillId = await seedTill(suite.db);
     const staffId = await seedPerson(suite.db, "staff");
     const sessionId = await openSession(suite.db, tillId, staffId);
@@ -97,7 +97,7 @@ describe("authorize", () => {
         }),
       ),
     );
-    expect(code).toBe("person.not_found");
+    expect(code).toBe("pin.invalid");
   });
 
   it("throws authorization.not_permitted when the override person also lacks the permission", async () => {
@@ -149,11 +149,11 @@ describe("authorize", () => {
     expect(code).toBe("session.not_open");
   });
 
-  it("throws person.suspended when the override targets a suspended person", async () => {
+  it("throws pin.invalid when the override targets a suspended person", async () => {
     const tillId = await seedTill(suite.db);
     const staffId = await seedPerson(suite.db, "staff");
     // A suspended SUPERVISOR with the right PIN: the person would both hold sale.void and pass the
-    // PIN check, so only the suspended gate — checked before both — can be the cause.
+    // PIN check, so only the suspended gate can be the cause.
     const suspendedSupervisorId = await seedPerson(suite.db, "supervisor", "suspended");
     const sessionId = await openSession(suite.db, tillId, staffId);
 
@@ -166,6 +166,6 @@ describe("authorize", () => {
         }),
       ),
     );
-    expect(code).toBe("person.suspended");
+    expect(code).toBe("pin.invalid");
   });
 });

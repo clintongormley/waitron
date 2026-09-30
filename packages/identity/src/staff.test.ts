@@ -488,7 +488,7 @@ describe("suspendPerson / reactivatePerson", () => {
     const suspended = await codeOf(() =>
       run((tx) => loginWithPin(tx, { tillId, personId: targetId, pin: "1234" })),
     );
-    expect(suspended).toBe("person.suspended");
+    expect(suspended).toBe("pin.invalid");
 
     await run((tx) => reactivatePerson(tx, { managementSessionId: token, personId: targetId }));
     const session = await run((tx) =>
