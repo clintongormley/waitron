@@ -3462,10 +3462,14 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     (the largest page): the new rows go on top, the rows it read again are shown as they now read,
     and the rows below them and the "Show more" position stay as they were, so rows loaded with
     "Show more" stay and a "Show more" on its way still adds its page. If 500 new rows come before
-    any row on screen, the list starts again from those 500 and a "Show more" on its way is
-    dropped. The cost: rows below those read again are not read again, so a person's changed
-    name on them, or a change to the location's day cutover or time zone that moves rows into or
-    out of the range, shows only when the list is opened again. A new range or person starts from
+    any row on screen, or the list ends before reaching one, the list starts again from what it
+    read and a "Show more" on its way is dropped. The cost: rows below those read again are not
+    read again, so they keep an old name, or an old range after a change to the location's day
+    cutover or time zone, until the list is opened again. A row that now sorts below the rows on
+    screen (the server clock stepping back, two adjustments saved in the same millisecond, or a
+    changed cutover or time zone) shows up through "Show more", or at once when there is no
+    further page and the read reached the last row on screen; a list longer than one page with no
+    further page shows it only when opened again. A new range or person starts from
     the first page. Choosing a person or the guests shows that person's own totals by action, by
     stage and by reason; otherwise the totals are everyone's.
     `@waitron/reporting` gained `validatedRangeWindow` (one call that checks a range's time zone,
