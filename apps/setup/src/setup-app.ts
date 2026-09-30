@@ -173,6 +173,8 @@ const RESET_FIELD_PATHS: Record<string, ResetField> = {
 
 const ADOPT_FIELD_CODES: Record<string, ConnectField> = {
   "mirror.primary_url_invalid": "primaryUrl",
+  "person.not_found": "personId",
+  "totp.invalid": "totp",
 };
 
 const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {

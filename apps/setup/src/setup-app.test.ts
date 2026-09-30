@@ -1548,6 +1548,33 @@ describe("setup-app", () => {
       expect(input(connect, "password").value).toBe(TYPED.password);
     });
 
+    it("shows the primary's refusal of the one-time code under that field, empty and focused", async () => {
+      const adopt = vi.fn().mockRejectedValue({ code: "totp.invalid", params: {}, status: 401 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      await new Promise((resolve) => setTimeout(resolve));
+      const connect = await screenHost(el, "connect");
+      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
+      expect(totp.getAttribute("error")).toBe("Check the authenticator code (if required).");
+      expect(input(connect, "totp").value).toBe("");
+      expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp"));
+      expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
+    });
+
+    it("shows the primary's person.not_found under the person ID field", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "person.not_found", params: { personId: "op-7" }, status: 404 });
+      const el = await mountSetupApp(stubApi({ adopt }));
+      await typeAndConnect(el);
+      const connect = await screenHost(el, "connect");
+      expect(connect.shadowRoot!.querySelector("[data-test=personId]")!.getAttribute("error")).toBe(
+        "Check the admin login (person id).",
+      );
+      expect(input(connect, "personId").value).toBe(TYPED.personId);
+      expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
+    });
+
     it("shows a refusal of the one-time code under that field, empty and focused", async () => {
       const adopt = vi.fn().mockRejectedValue({
         code: "setup.request_invalid",

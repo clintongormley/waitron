@@ -5309,10 +5309,28 @@ ongoing overhaul listed at the top of Track A.
   "leaves the one-time code blank when the request the shell hands back carries one" in its suite,
   and "shows a refusal of the one-time code under that field, empty and focused" in
   `apps/setup/src/setup-app.test.ts`). A refused code is not such a refusal: the primary refuses it
-  as `totp.invalid`, and this box's fetch turns any refused answer into
+  as `totp.invalid`, and this box's fetch turned any refused answer into
   `mirror.bundle_fetch_failed`, which names no field (`apps/server/src/mirror-bundle-fetch.ts`), so
-  it shows beside Connect with the code field empty and unmarked (owner 2026-09-30: pass
-  `totp.invalid` through so it sits under the code field; queued as lane C's C92). A CORRECT code
+  it showed beside Connect with the code field empty and unmarked (owner 2026-09-30: pass
+  `totp.invalid` through so it sits under the code field; queued as lane C's C92). **DONE (C92,
+  2026-09-30):** the box's fetch passes two of the primary's refusals through under their own
+  codes, rebuilt on the box so nothing else the primary sent travels on: `totp.invalid` (the box
+  answers it 401) and `person.not_found` (404, naming the person id the box sent) — the only two of
+  the primary's refusals that the operator can fix by retyping one field of the connect form
+  (`STATUS` in `apps/server/src/mirror-bundle-api.ts`; `person.suspended` names the person id too,
+  but the id is right, so it stays `mirror.bundle_fetch_failed`; `password.invalid` also answers a
+  malformed person id there, so it names no one field and stays `mirror.bundle_fetch_failed`, as
+  does everything else). `person.not_found` passes through only when the typed id is UUID-shaped,
+  the only shape the primary answers it for, so the box never repeats an arbitrary typed string
+  back. The wizard puts the first under the code field, empty and focused, and the second under
+  the person-ID field (`refusalFrom` in `apps/server/src/mirror-bundle-fetch.ts`, `ADOPT_STATUS`
+  in `apps/server/src/setup-api.ts`, `ADOPT_FIELD_CODES` in `apps/setup/src/setup-app.ts`; tests:
+  "passes the primary's refusal of the one-time code through…", "does not pass person.not_found
+  through for a person id that is not UUID-shaped" and the cases beside them in
+  `apps/server/src/mirror-bundle-fetch.test.ts`, "answers the primary's refusal %s from adopt…" in
+  `apps/server/src/setup-api.test.ts`, and "shows the primary's refusal of the one-time code under
+  that field…" and "shows the primary's person.not_found…" in `apps/setup/src/setup-app.test.ts`).
+  A CORRECT code
   was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
   without the key ring that decrypts a stored authenticator secret, so an admin with an
   authenticator set up could not connect a standby at all. **DONE (C91, #921, 2026-09-30):** the route
@@ -6386,7 +6404,9 @@ approved.
     `mirror.membership_full` for a full chart) and the mint's size refusals; (v) a receiver whose held chart predates a removal accepts the removed machine's charts
     until it learns of the removal; (vi) a joining standby sees `mirror.bundle_fetch_failed` rather
     than the primary's reason, because `apps/server/src/mirror-bundle-fetch.ts` turns every non-2xx
-    answer into that code — this predates A63, and `mirror.standby_removed` has the same gap; (vii)
+    answer into that code except the two refusals C92 passes through so the wizard can place them
+    under their field — this predates A63, and
+    `mirror.standby_removed` has the same gap; (vii)
     if A61's removal ever mis-classifies a live standby that an operator later promotes, the old
     primary refuses the new primary's charts (`signer_removed`) and keeps selling; the refusal is
     logged at warn and raises no alert. No adopt can finish today (`finish-adoption.ts`), so no such
