@@ -26,8 +26,11 @@ Last revised **2026-09-30**, checked against the backlog, the owner's decisions 
 - **Q25** re-checked: still no route voids an invoice.
 - *Notes for the conversation* now open with which questions to send first. The old note calling
   Q16 the live question is marked out of date.
-- A separate standalone copy for the advisor, written 2026-09-23 and kept outside the repository,
-  does not have these changes.
+- The standalone copy for the advisor, written 2026-09-23 and kept outside the repository (an
+  English and a Spanish Word file), was updated the same day with these changes. Its section numbers
+  are not the Q numbers here; every section names its Q number. The new sections are 1.7 to 1.9
+  (Q27 to Q29), 2.2 (Q26), 3.3 (Q31), 3.4 (Q25) and 4.6 (Q30). Sections 1.1, 1.4, 3.1 and 4.3
+  changed, and 4.3 now carries Q5(d) and Q5(e).
 
 Before that, **2026-09-29**: Q5(c) answered on primary source. RD 1619/2012 art. 7.1.a) requires
 separate series for simplified and full invoices issued in the same calendar year. Q5(d) added to
@@ -996,9 +999,11 @@ so there is nothing on the document that says who each *duplicado* belongs to.
   `apps/server/src/till-sale.ts`). In a venue that does not print automatically (Q22), the till
   first offers a Print receipt button, which prints the ticket as an original. The till hides that
   button once one print has been queued (`#onPrintReceipt`, `apps/till/src/till-app.ts`); the server
-  does not refuse a second original. Resending a job from the print queue, for example after a
-  printer failure, sends the same bytes again, so an original that failed to print comes out as an
-  original. That is the case (d) asks the advisor to confirm.
+  does not refuse a second original. A person with `print.resend` can resend a job from the
+  dashboard's Printers screen once its automatic delivery has ended, whether it failed or
+  succeeded (`canResendPrintJob`, `packages/printing/src/outbox.ts`). A resend sends the same bytes
+  again, so an original that failed to print comes out as an original. That is the case (d) asks
+  the advisor to confirm. Resending a print that succeeded also prints another original.
 - **(e)** Staff can print a slip for each card payment on its own: *JUSTIFICANTE DE PAGO — Este
   documento no es una factura*, with no invoice number, series or QR code
   (`apps/server/src/payment-slip.ts`).
