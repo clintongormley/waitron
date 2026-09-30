@@ -224,6 +224,23 @@ describe("setup-connect-screen", () => {
     ]);
   });
 
+  it("leaves the one-time code blank when the request the shell hands back carries one", async () => {
+    const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
+      request: {
+        primaryUrl: "https://primary.example",
+        credential: { personId: "op-7", password: " secret ", totp: "123456" },
+      },
+    });
+    const value = (field: string) =>
+      (q(el, `[data-test=${field}]`) as HTMLElement & { value: string }).value;
+    expect([value("primaryUrl"), value("personId"), value("password"), value("totp")]).toEqual([
+      "https://primary.example",
+      "op-7",
+      " secret ",
+      "",
+    ]);
+  });
+
   it("drops a field refusal on the next press and sends the form", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       invalidField: "totp",

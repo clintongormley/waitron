@@ -74,7 +74,10 @@ export class SetupConnectScreen extends LitElement {
   /** A field the shell found an adopt refusal to be about. It never disables Connect. */
   @property() invalidField?: ConnectField;
 
-  /** The body the shell last sent, returned with a refusal so the operator's entries are kept. */
+  /**
+   * The body the shell last sent, returned with a refusal so the operator's entries are kept — all
+   * but the one-time code, which has usually expired by the next try.
+   */
   @property({ attribute: false }) request?: AdoptBody;
 
   @state() private values: Record<ConnectField, string> = {
@@ -105,7 +108,7 @@ export class SetupConnectScreen extends LitElement {
         primaryUrl,
         personId: credential.personId,
         password: credential.password,
-        totp: credential.totp ?? "",
+        totp: "",
       };
     }
   }

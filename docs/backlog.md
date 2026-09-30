@@ -5112,9 +5112,16 @@ ongoing overhaul listed at the top of Track A.
   in this tab's memory only, and hands it back to the rebuilt form (`connectRequest` in
   `apps/setup/src/setup-app.ts`, the screen's `request`), as the restore screens already did; leaving
   the screen or a successful Connect drops it. Tests: "what the operator typed on the connect form"
-  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case. Open, for the
-  owner: the refilled form brings back the one-time code too, which has usually expired by the next
-  try — whether to leave that one field blank instead; (6) the setup
+  in `apps/setup/src/setup-app.test.ts`, and the connect screen's own `request` case. **DONE (C87,
+  2026-09-30, the owner's "b"):** the refilled form leaves the one-time code empty, since it has
+  usually expired by the next try, and keeps every other field; a refusal naming the code
+  (`credential.totp`) puts its sentence under the empty field and focuses it (the screen's `request`
+  in `apps/setup/src/screens/connect-screen.ts`; tests: "leaves the one-time code blank when the
+  request the shell hands back carries one" in its suite, and "shows a refusal of the one-time code
+  under that field, empty and focused" in `apps/setup/src/setup-app.test.ts`). Seen while looking at
+  C87 at 390 by 900 px, and not changed by it: the wizard's floating language button sits over the
+  bottom of the connect form, covering part of the refusal message beside Connect and, in the
+  English dark shot, part of the Connect button; (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also
