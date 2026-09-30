@@ -1024,6 +1024,16 @@ export class PrintersScreen extends LitElement {
     );
   }
 
+  /** A Bluetooth device registered to a switched-on printer that no agent reports paired, such as
+   * one whose pairing was forgotten: it is offered Pair, which adds nothing. */
+  #canPairOnly(device: DiscoveredPrinter): boolean {
+    const printer =
+      device.transport === "bluetooth"
+        ? this.printers.find(({ id, active }) => id === device.printerId && active)
+        : undefined;
+    return printer !== undefined && !this.#pairedReports.has(printer.id);
+  }
+
   async #registerDiscovered(device: DiscoveredPrinter): Promise<void> {
     if (this.submitting || !this.#canAdd(device)) return;
     const key = this.#deviceKey(device);
@@ -1177,8 +1187,9 @@ export class PrintersScreen extends LitElement {
   }
 
   /** Carries a successful pairing straight on into the form to add the device, unless another dialog
-   * is in the way (its row then offers Add) or the device can no longer be added. Returns whether the
-   * form opened. */
+   * is in the way (its row then offers Add) or the device can no longer be added — which includes a
+   * pair-only device (`#canPairOnly`), so its pairing never opens the form. Returns whether the form
+   * opened. */
   #addPaired(key: string, tracked: TrackedCommand): boolean {
     const device = this.#listedDevice(key) ?? tracked.device!;
     if (this.namingPrinter !== null || this.pairingDevice !== null || !this.#canAdd(device))
@@ -1296,9 +1307,9 @@ export class PrintersScreen extends LitElement {
     }
   }
 
-  /** The agent's current pairing report for a switched-off Bluetooth printer, which Forget needs. */
+  /** The agent's current pairing report for a Bluetooth printer, which Forget needs. */
   #pairedReport(p: Printer): DiscoveredPrinter | undefined {
-    return p.transport !== "bluetooth" || p.active ? undefined : this.#pairedReports.get(p.id);
+    return p.transport === "bluetooth" ? this.#pairedReports.get(p.id) : undefined;
   }
 
   #onForget(p: Printer, device: DiscoveredPrinter): void {
@@ -1332,6 +1343,16 @@ export class PrintersScreen extends LitElement {
     }
   }
 
+  /** A pairing whose device cannot be added opens no form afterwards (`#addPaired`), so its pending
+   * text does not promise one. */
+  #commandText(key: string, command: TrackedCommand): StringKey {
+    return command.kind === "pair" &&
+      command.state === "pending" &&
+      !this.#canAdd(this.#listedDevice(key) ?? command.device!)
+      ? "printers.bluetooth_pairing_only"
+      : COMMAND_TEXT[command.kind][command.state];
+  }
+
   #renderCommand(key: string, command: TrackedCommand | undefined, test: string) {
     if (command === undefined) return nothing;
     const problem = command.state === "failed" || command.state === "no_answer";
@@ -1339,7 +1360,7 @@ export class PrintersScreen extends LitElement {
       part=${problem ? "bluetooth-status bluetooth-problem" : "bluetooth-status"}
       role="status"
       data-test=${test}
-      >${t(COMMAND_TEXT[command.kind][command.state])}${command.error === undefined ? "" : `: ${command.error}`}</span
+      >${t(this.#commandText(key, command))}${command.error === undefined ? "" : `: ${command.error}`}</span
     >`;
     if (command.kind === "pair" && command.state === "pending")
       return html`<span part="bluetooth-progress"
@@ -2835,7 +2856,7 @@ export class PrintersScreen extends LitElement {
           ?loading=${this.pairSubmitting}
           ?disabled=${pinInvalid}
           @click=${() => void this.#pair(d)}
-          >${t("printers.bluetooth_pair")}</wt-button
+          >${this.#canPairOnly(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
         >
       </wt-form-actions>
     </wt-modal>`;
@@ -2863,14 +2884,15 @@ export class PrintersScreen extends LitElement {
 
   #renderNewPrinter(): TemplateResult | typeof nothing {
     if (!this.addingPrinter) return nothing;
-    const addable = this.discovered.filter((d) => this.#canAdd(d));
+    const pairOnly = new Set(this.discovered.filter((d) => this.#canPairOnly(d)));
+    const addable = this.discovered.filter((d) => pairOnly.has(d) || this.#canAdd(d));
+    // A device registered to a switched-on printer is a printer, whatever the scan decoded.
+    const shown = (d: DiscoveredPrinter) =>
+      d.transport !== "bluetooth" || d.printerLike === true || pairOnly.has(d);
     const rows = addable
       .filter(
         (d) =>
-          d.transport !== "bluetooth" ||
-          d.printerLike === true ||
-          this.showAllBluetooth ||
-          this.commands[this.#commandKeyOf(d)] !== undefined,
+          shown(d) || this.showAllBluetooth || this.commands[this.#commandKeyOf(d)] !== undefined,
       )
       .sort(
         (a, b) => Number(this.#unsupportedPagePrinter(a)) - Number(this.#unsupportedPagePrinter(b)),
@@ -2939,8 +2961,9 @@ export class PrintersScreen extends LitElement {
             `discovered-command-${this.#deviceKey(d)}`,
           );
           if (lost.has(d)) return html`<div part="bluetooth-actions">${status}</div>`;
-          // A succeeded pairing counts as paired before the agent's own paired report arrives.
-          const paired = d.paired === true || key in this.pairedDevices;
+          // A succeeded pairing counts as paired before the agent's own paired report arrives, except
+          // on a pair-only row, which keeps Pair so a pairing the agent never confirms can be retried.
+          const paired = !pairOnly.has(d) && (d.paired === true || key in this.pairedDevices);
           return html`<div part="bluetooth-actions">
             ${
               paired
@@ -2952,7 +2975,7 @@ export class PrintersScreen extends LitElement {
                     @click=${() => {
                       this.pairingDevice = d;
                     }}
-                    >${t("printers.bluetooth_pair")}</wt-button
+                    >${pairOnly.has(d) ? t("printers.bluetooth_pair_only") : t("printers.bluetooth_pair")}</wt-button
                   >`
             }
             ${status}
@@ -2961,7 +2984,7 @@ export class PrintersScreen extends LitElement {
       },
     ];
     const bluetooth = addable.some((d) => d.transport === "bluetooth");
-    const otherDevices = addable.some((d) => d.transport === "bluetooth" && d.printerLike !== true);
+    const otherDevices = addable.some((d) => !shown(d));
     const probeChecked = this.probeAttempted ? this.#probeValidate() : {};
     const probeErrors = { ...this.probeRefused, ...probeChecked };
     const probeInvalid = Object.keys(probeChecked).length > 0;

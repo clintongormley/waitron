@@ -672,6 +672,37 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     }
   });
 
+  it("renders the Pair offered for a switched-on printer whose pairing was forgotten, and its dialog, accessibly", async () => {
+    const forgotten: DiscoveredPrinter = {
+      ...bluetooth[0]!,
+      localKey: "22:22:22:22:22:22",
+      name: "Old bar printer",
+      alreadyRegistered: true,
+      printerId: "p4",
+    };
+    const { el, host } = await mountWidget<PrintersScreen>(
+      "dashboard-printers-screen",
+      {
+        api: bluetoothApi({
+          listPrinters: vi
+            .fn()
+            .mockResolvedValue([...printers, { ...bluetoothPrinter, active: true }]),
+          listDiscoveredPrinters: vi.fn().mockResolvedValue([forgotten]),
+        }),
+      },
+      theme,
+    );
+    await flush(el);
+    await openDiscovery(el);
+    const pair = q(el, '[data-test="pair-22:22:22:22:22:22"]')!;
+    expect(pair.textContent!.trim()).toBe(t("printers.bluetooth_pair_only"));
+    await expectNoA11yViolations(host);
+    pair.click();
+    await flush(el);
+    expect(q(el, "[data-test=pair-printer-modal]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("renders a switched-off Bluetooth printer's Forget pairing and its outcome accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",
