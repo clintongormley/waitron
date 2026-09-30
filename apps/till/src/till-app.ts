@@ -3751,9 +3751,9 @@ export class TillApp extends LitElement {
    * ({@link #rereadAdjusted}). With no answer at all while the dialog is open, it closes, the order
    * is read again too, and unless the waiter has left the order by then the message says the change
    * may have been made; when that read failed or its answer was dropped, it also says to hold and
-   * retrieve the order to check. Once the dialog is gone, no answer on a table's bill only reads the
-   * floor again and takes the party from it ({@link #retakePartyFromFloor}) while the operator
-   * session that sent it lasts, and a refusal changes nothing. On the counter nothing is sent once
+   * retrieve the order to check, unless the order has gone. Once the dialog is gone, no answer on a
+   * table's bill only reads the floor again and takes the party from it
+   * ({@link #retakePartyFromFloor}) while the operator session that sent it lasts, and a refusal changes nothing. On the counter nothing is sent once
    * the basket no longer holds the order as the dialog opened on it: the dialog closes and says so.
    */
   async #applyAdjustment(
@@ -3821,7 +3821,8 @@ export class TillApp extends LitElement {
     if ((stage === "apply" || stage === "approved") && isNetworkFailure(error)) {
       this.#closeAdjust();
       const read = await this.#rereadAdjusted(open);
-      if (!this.#hasLeftAdjusted(open))
+      // An order that has gone cannot be retrieved to check it, so its `held.stale` stays.
+      if (!this.#hasLeftAdjusted(open) && this.errorKey !== "held.stale")
         this.errorKey = read ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
       return;
     }
