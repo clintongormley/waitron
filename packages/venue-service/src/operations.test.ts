@@ -1132,6 +1132,84 @@ describe("resolvePreparationRoutes", () => {
     });
   });
 
+  it("falls back past a switched-off station to the next matching route whose station is on", async () => {
+    const { cfg, zoneId } = await seedRoutingVenue();
+    await scoped(async (tx) => {
+      const at = (name: string) => insertStation(tx, cfg.locationId, name);
+      const closedGrill = await at("Closed grill");
+      const kitchen = await at("Kitchen");
+      const bar = await at("Bar");
+      const pastry = await at("Pastry");
+      const menu = await createCatalogue(tx, { name: "Fallbacks" });
+      // (a) the zone's product route is off; the venue's category route is on.
+      const steak = await productWithCategory(tx, menu.id, "Steak");
+      // (b) the next route is no-preparation, and an active station route sits below it.
+      const soup = await productWithCategory(tx, menu.id, "Soup");
+      // (c) the only other route is no-preparation: nothing is left to fall back to.
+      const salad = await productWithCategory(tx, menu.id, "Salad");
+      // (d) two routes below the switched-off one are on: the higher-ranked of them wins.
+      const cake = await productWithCategory(tx, menu.id, "Cake");
+      const route = (input: Parameters<typeof createPreparationRoute>[2]) =>
+        createPreparationRoute(tx, cfg, input);
+
+      await route({ zoneId, productId: steak.id, target: station(closedGrill) });
+      await route({ categoryId: steak.categoryId, target: station(kitchen) });
+
+      await route({ zoneId, productId: soup.id, target: station(closedGrill) });
+      await route({ zoneId, categoryId: soup.categoryId, target: { kind: "no_preparation" } });
+      await route({ categoryId: soup.categoryId, target: station(kitchen) });
+
+      await route({ zoneId, productId: salad.id, target: station(closedGrill) });
+      await route({ productId: salad.id, target: { kind: "no_preparation" } });
+
+      await route({ zoneId, productId: cake.id, target: station(closedGrill) });
+      await route({ productId: cake.id, target: station(pastry) });
+      await route({ categoryId: cake.categoryId, target: station(bar) });
+
+      await tx.execute(sql`update kitchen_stations set active = false where id = ${closedGrill}`);
+
+      await expect(
+        resolvePreparationRoutes(tx, cfg, zoneId, [steak.id, soup.id, cake.id]),
+      ).resolves.toEqual(
+        new Map<string, unknown>([
+          [steak.id, station(kitchen)],
+          [soup.id, station(kitchen)],
+          [cake.id, station(pastry)],
+        ]),
+      );
+      await expect(
+        rejection(resolvePreparationRoutes(tx, cfg, zoneId, [salad.id])),
+      ).resolves.toEqual({ code: "route.station_inactive", params: { stationId: closedGrill } });
+    });
+  });
+
+  it("does not report a zone's product whose switched-off route has a fallback that is on", async () => {
+    const { cfg, zoneId, otherZoneId } = await seedRoutingVenue();
+    await scoped(async (tx) => {
+      const closedBar = await insertStation(tx, cfg.locationId, "Closed bar");
+      const bar = await insertStation(tx, cfg.locationId, "Bar");
+      const menu = await createCatalogue(tx, { name: "Dining" });
+      const cocktail = await productWithCategory(tx, menu.id, "Cocktail");
+      await addProductToMenu(tx, { menuId: menu.id, productId: cocktail.id, grossPrice: "5.00" });
+      await allowMenuInZone(tx, cfg, zoneId, menu.id, { makeDefault: true });
+      await publish(tx, menu.id);
+      await createPreparationRoute(tx, cfg, {
+        zoneId,
+        productId: cocktail.id,
+        target: station(closedBar),
+      });
+      await createPreparationRoute(tx, cfg, {
+        categoryId: cocktail.categoryId,
+        target: station(bar),
+      });
+      await tx.execute(sql`update kitchen_stations set active = false where id = ${closedBar}`);
+
+      await expect(listVenueReadiness(tx, cfg)).resolves.toEqual([
+        { code: "zone.menu_missing", zoneId: otherZoneId, zoneName: "Terrace" },
+      ]);
+    });
+  });
+
   it("ignores another location's routes and stations", async () => {
     const { cfg, zoneId, otherLocationId } = await seedRoutingVenue();
     await scoped(async (tx) => {
