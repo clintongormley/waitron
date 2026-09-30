@@ -2371,7 +2371,7 @@ export class TillApp extends LitElement {
   /** Staff edits are locked while the order is read, so the load cannot replace a staff edit made
    * meanwhile; an answer the basket has moved past (cleared, or loaded again, the same order
    * included) is dropped. `unread` when the order or its lines could not be read, or the answer was
-   * dropped; `gone` when the order no longer exists. */
+   * dropped; `gone` when the order no longer exists and that has been said. */
   async #reloadCounterOrder(orderId: string, session: number): Promise<Reread> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const unlock = this.#store.lockEdits();
@@ -2395,10 +2395,11 @@ export class TillApp extends LitElement {
       limit.done();
       unlock();
     }
-    if (failure !== undefined && !movedOn()) this.errorKey = failure;
+    const said = failure !== undefined && !movedOn();
+    if (said) this.errorKey = failure;
     await this.#refreshHeldOrders();
     if (failure === undefined) return "read";
-    return failure === "held.stale" ? "gone" : "unread";
+    return said && failure === "held.stale" ? "gone" : "unread";
   }
 
   /** A discard already made on another till is a non-fatal `held.stale`; the list refreshes on both paths. */

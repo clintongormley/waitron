@@ -488,7 +488,7 @@ describe("till-app: a stored counter order changed elsewhere", () => {
     expect(banner(el)!.textContent).toBe(t("adjust.unconfirmed"));
   });
 
-  it("says the change may have been made and the order could not be read again, when no answer comes and the read fails", async () => {
+  it("says the change may have been made and to check the order, when no answer comes and the read fails", async () => {
     const applyAdjustment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await retrieved({
       applyAdjustment,
