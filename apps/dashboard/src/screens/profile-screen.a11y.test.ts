@@ -16,7 +16,22 @@ function stubApi(): DashboardApi {
       hasPassword: true,
       hasTotp: false,
       hasGoogle: false,
-      passkeys: [{ id: "credential", name: null, createdAt: "2026-09-09T12:00:00Z" }],
+      passkeys: [
+        {
+          id: "credential",
+          name: null,
+          createdAt: "2026-09-09T12:00:00Z",
+          lastUsedAt: "2026-09-28T08:30:00Z",
+          provider: "Google Password Manager",
+        },
+        {
+          id: "spare",
+          name: "Spare key",
+          createdAt: "2026-09-10T12:00:00Z",
+          lastUsedAt: null,
+          provider: null,
+        },
+      ],
     }),
     getLocales: vi.fn().mockResolvedValue({
       locales: [{ code: "en-GB", label: "English" }],

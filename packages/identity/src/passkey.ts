@@ -12,9 +12,10 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { AppError } from "@waitron/shared";
-import { isUniqueViolation } from "@waitron/db";
+import { isUniqueViolation, nowIso } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { and, eq, lt } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { passkeyProviderName } from "./passkey-providers.js";
 import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
 import {
@@ -168,12 +169,13 @@ export async function finishPasskeyRegistration(
     throw new AppError("passkey.verification_failed", {});
   }
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
-  const cred = verification.registrationInfo.credential;
+  const { credential: cred, aaguid } = verification.registrationInfo;
   try {
     await tx.insert(webauthnCredentials).values({
       personId,
       credentialId: cred.id,
-      name,
+      name: name ?? passkeyProviderName(aaguid),
+      aaguid,
       publicKey: b64url(cred.publicKey),
       counter: cred.counter,
       transports: serializeTransports(cred.transports),
@@ -262,11 +264,12 @@ export async function finishPasskeyAuthentication(
   if (!verification.verified) throw new AppError("passkey.verification_failed", {});
 
   // Never LOWER the counter: a regressed counter would blind the cloned-authenticator check on later
-  // assertions.
+  // assertions. The sign-in time is recorded whether or not the counter moves: an authenticator
+  // without a signature counter reports 0 every time.
   const { newCounter } = verification.authenticationInfo;
   await tx
     .update(webauthnCredentials)
-    .set({ counter: newCounter })
-    .where(and(eq(webauthnCredentials.id, cred.id), lt(webauthnCredentials.counter, newCounter)));
+    .set({ counter: sql`max(${webauthnCredentials.counter}, ${newCounter})`, lastUsedAt: nowIso() })
+    .where(eq(webauthnCredentials.id, cred.id));
   return startManagementSession(tx, { personId: cred.personId });
 }

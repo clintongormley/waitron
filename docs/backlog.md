@@ -5787,6 +5787,42 @@ ongoing overhaul listed at the top of Track A.
   browser, and Waitron does not call it. Nor does it call `@simplewebauthn/browser`'s
   `sendSignal()`, which wraps these signal methods (see "The version-14 browser helpers are
   unused"); campaign item C101 is to call them.
+- **The passkey list says when each passkey was last used and which password manager holds it — DONE
+  (C100, owner 2026-09-30: "if i add a passkey then delete it in google password manager, then add
+  another one, i have two passkeys listed in waitron but only one in google, and i'm not sure which
+  one it is").** Each passkey on the Profile screen's Security tab now has a second line: the
+  password manager that holds it ("Google Password Manager", "1Password", …) and "Last used
+  <date and time>", or "Never used" (Spanish: "Último uso: <date and time>", "Nunca usada"), in
+  the dashboard's chosen language; the time of day is shown so two passkeys used on the same day
+  can be told apart, while the created date beside the name stays a date only. A passkey deleted
+  in the password manager is expected to stop signing in, so its "Last used" time stops moving
+  (not tried with a real password manager). Signing in with a passkey records the time on that
+  passkey in the same statement that keeps its counter from going backwards
+  (`finishPasskeyAuthentication`, `packages/identity/src/passkey.ts`) — also for a passkey whose
+  authenticator keeps no signature counter, which reports 0 every time. Every passkey sign-in now
+  writes the passkey's row, so it refreshes any open screen that reads people — Your profile,
+  Users, Shifts, Approvals, My schedule and others; before, a sign-in whose counter did not move
+  wrote nothing. Registration now keeps
+  the authenticator's identifier (its AAGUID) in a new `aaguid` column, and a passkey given no
+  name is named after its password manager; one whose password manager is not known keeps the old
+  "Passkey 1" fallback. The server turns the identifier into a name (`passkeyProviderName`,
+  `packages/identity/src/passkey-providers.ts`), so the dashboard never sees the raw identifier;
+  an all-zero or unknown one shows no name. The password-manager naming was not tried with a real
+  browser either: the tests stand in for the WebAuthn library. The WebAuthn spec's Level 3 change
+  list (github.com/w3c/webauthn, `index.bs` on main at commit
+  `9d88b7681b10926a41fd18b78e206a01804ed855`, fetched 2026-09-30) says the AAGUID "is no longer
+  zeroed when attestation preference is none" — so a browser following the older Level 2 rules
+  zeroes it under `@simplewebauthn/server`'s default "none" attestation preference, which Waitron
+  does not override, and the passkey then shows no password manager. The names are a copy of the
+  community list at github.com/passkeydeveloper/passkey-authenticator-aaguids
+  (commit `3ff200d`, fetched 2026-09-30), names only; that repository states no licence, which is
+  recorded at the top of the file. Two things an owner will see: a passkey added before this
+  change shows no password manager (its identifier was never kept) and says "Never used" until it
+  next signs someone in; and security keys such as a YubiKey show no name, because only the
+  community list was copied, not the FIDO Alliance's metadata it is combined with upstream. The
+  list is a snapshot: nothing refreshes it, so a password manager added upstream later shows no
+  name until someone copies the list again. Migration `packages/identity/drizzle/0004_passkey_provider_last_used.sql`
+  only adds the two columns.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and

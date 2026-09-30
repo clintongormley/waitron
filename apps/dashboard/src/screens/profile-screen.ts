@@ -65,6 +65,11 @@ const emptyFields = (): Record<Field, string> => ({
   passkeyName: "",
 });
 
+const DAY = { year: "numeric", month: "numeric", day: "numeric" } as const;
+const DAY_AND_TIME = { ...DAY, hour: "2-digit", minute: "2-digit" } as const;
+const inLocale = (iso: string, form: Intl.DateTimeFormatOptions): string =>
+  new Date(iso).toLocaleString(currentLocale(), form);
+
 @customElement("dashboard-profile-screen")
 export class ProfileScreen extends LitElement {
   static override styles = [
@@ -87,13 +92,17 @@ export class ProfileScreen extends LitElement {
       }
       /* Each passkey is a member of the "Passkeys" row above it, not a setting in its own right —
          inset and in the muted/normal-weight voice (vs. the bold field-value every other row here
-         uses) so the list reads as subordinate detail, one line per key. */
+         uses) so the list reads as subordinate detail. */
       .passkey-item {
         padding-left: var(--wt-space-5);
       }
       .passkey-text {
         font-weight: var(--wt-font-weight-normal);
         color: var(--wt-color-text-muted);
+      }
+      /* When the row is too narrow, the last-use phrase moves to the next line whole. */
+      .passkey-use {
+        display: inline-block;
       }
       .row,
       .action-row {
@@ -797,9 +806,23 @@ export class ProfileScreen extends LitElement {
               : p.passkeys.map((key, index) => {
                   const name =
                     key.name ?? t("profile.passkey_number").replace("{number}", String(index + 1));
-                  const created = new Date(key.createdAt).toLocaleDateString(currentLocale());
+                  const created = inLocale(key.createdAt, DAY);
+                  const lastUsed =
+                    key.lastUsedAt === null
+                      ? t("profile.passkey_never_used")
+                      : t("profile.passkey_last_used").replace(
+                          "{time}",
+                          inLocale(key.lastUsedAt, DAY_AND_TIME),
+                        );
+                  const provider =
+                    key.provider === null || key.provider === name ? nothing : `${key.provider} · `;
                   return html`<div class="action-row passkey-item">
-                    <span class="passkey-text">${name} · ${created}</span>
+                    <div class="text">
+                      <span class="passkey-text">${name} · ${created}</span>
+                      <span class="field-meta"
+                        >${provider}<span class="passkey-use">${lastUsed}</span></span
+                      >
+                    </div>
                     ${
                       p.hasPassword
                         ? html`<wt-button

@@ -120,7 +120,14 @@ export interface OwnProfile {
   hasPassword: boolean;
   hasTotp: boolean;
   hasGoogle: boolean;
-  passkeys: Array<{ id: string; name: string | null; createdAt: string }>;
+  passkeys: Array<{
+    id: string;
+    name: string | null;
+    createdAt: string;
+    lastUsedAt: string | null;
+    /** The password manager holding the passkey; null when its authenticator is not on the list. */
+    provider: string | null;
+  }>;
 }
 export interface ProfileCredentials {
   currentPassword?: string;
