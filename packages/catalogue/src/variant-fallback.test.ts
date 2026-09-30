@@ -85,8 +85,8 @@ beforeEach(async () => {
   f = await run(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Bar" });
     const other = await createCatalogue(tx, { name: "Terrace" });
-    const wines = await createCategory(tx, { name: { en: "Wines" } });
-    const bottles = await createCategory(tx, { name: { en: "Bottles" } });
+    const wines = await createCategory(tx, { name: "Wines" });
+    const bottles = await createCategory(tx, { name: "Bottles" });
     const glass = await createUnit(
       tx,
       { name: { en: "glass" }, precision: 0, abbreviation: { en: "gl" } },

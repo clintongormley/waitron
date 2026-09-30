@@ -68,10 +68,10 @@ const large: EditorVariant = {
 // Named in the venue's own content language (the harness mounts a Spanish venue), so a chip shows
 // a real word rather than falling back to its id.
 const categories: CategorySummary[] = [
-  { id: "drinks", name: { es: "Bebidas" }, image: null, color: "#112233", parentId: null },
-  { id: "snacks", name: { es: "Aperitivos" }, image: null, color: "#aa4455", parentId: null },
+  { id: "drinks", name: "Bebidas", image: null, color: "#112233", parentId: null },
+  { id: "snacks", name: "Aperitivos", image: null, color: "#aa4455", parentId: null },
   // A category with no colour of its own: the reporting mark has to survive this one being chosen.
-  { id: "plates", name: { es: "Platos" }, image: null, color: null, parentId: null },
+  { id: "plates", name: "Platos", image: null, color: null, parentId: null },
 ];
 const reduced = [{ id: "reduced" as const, rate: "10.00", label: "Reduced" }];
 

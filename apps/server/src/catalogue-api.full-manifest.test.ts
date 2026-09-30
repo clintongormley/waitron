@@ -130,11 +130,7 @@ async function createCatalogue(app: Hono, cookie: string, name: string): Promise
   return ((await res.json()) as { id: string }).id;
 }
 
-async function createCategory(
-  app: Hono,
-  cookie: string,
-  name: Record<string, string>,
-): Promise<string> {
+async function createCategory(app: Hono, cookie: string, name: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/categories", cookie, { name });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
@@ -162,7 +158,7 @@ describe("category dependants and bulk add", () => {
   it("reads a category's preparation routes and cascades them away on delete", async () => {
     const v = await setupVenue();
     const app = mountApp();
-    const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Frituras" });
+    const categoryId = await createCategory(app, v.managerCookie, "Frituras");
     // Fixture rows, seeded through the table definitions for the `$defaultFn` reason `setupVenue`
     // states.
     const [zone] = await suite.db
@@ -225,7 +221,7 @@ describe("category dependants and bulk add", () => {
     const v = await setupVenue();
     const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
-    const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Tapas" });
+    const categoryId = await createCategory(app, v.managerCookie, "Tapas");
     const first = await createProduct(app, v.managerCookie, catalogueId, "Croquetas");
     const second = await createProduct(app, v.managerCookie, catalogueId, "Boquerones");
     const path = `/management-api/categories/${categoryId}/products`;
@@ -391,7 +387,7 @@ describe("sections and the reporting and routing they do not touch", () => {
     const v = await setupVenue();
     const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
-    const categoryId = await createCategory(app, v.managerCookie, { [LOCALE]: "Bebidas" });
+    const categoryId = await createCategory(app, v.managerCookie, "Bebidas");
     const productId = await createProduct(app, v.managerCookie, catalogueId, "Agua");
     expect(
       (

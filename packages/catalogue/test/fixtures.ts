@@ -106,8 +106,8 @@ export async function seedCatalogueFixture(
   venue: { locationId: string },
 ): Promise<SeededCatalogue> {
   const catalogue = await createCatalogue(tx, { name: "Deli" });
-  const food = await createCategory(tx, { name: { en: "Food" } });
-  const drinks = await createCategory(tx, { name: { en: "Drinks" } });
+  const food = await createCategory(tx, { name: "Food" });
+  const drinks = await createCategory(tx, { name: "Drinks" });
   const eachUnitId = (
     await createUnit(tx, { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } }, "en")
   ).id;

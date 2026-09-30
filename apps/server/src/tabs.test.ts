@@ -133,7 +133,7 @@ async function setupVenue(): Promise<Seeded> {
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId, offers } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const bebidas = await createCategory(tx, { name: "Bebidas" });
       const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,

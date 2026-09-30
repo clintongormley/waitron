@@ -130,14 +130,9 @@ function nullOrUuid(value: unknown, field: string): string | null {
 function categoryInput(body: Record<string, unknown>, creating: boolean): Partial<CategoryInput> {
   const result: Partial<CategoryInput> = {};
   if (creating || body.name !== undefined) {
-    if (
-      !body.name ||
-      typeof body.name !== "object" ||
-      Array.isArray(body.name) ||
-      Object.values(body.name).some((value) => typeof value !== "string")
-    )
+    if (typeof body.name !== "string")
       throw new AppError("management.request_invalid", { field: "name" });
-    result.name = body.name as Record<string, string>;
+    result.name = body.name;
   }
   if (body.parentId !== undefined) result.parentId = nullOrUuid(body.parentId, "parentId");
   if (body.image !== undefined) {
@@ -219,6 +214,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "shared.decimal_overflow": 400,
   "catalogue.not_found": 404,
   "category.not_found": 404,
+  "category.invalid": 400,
   "category.color_invalid": 400,
   "category.reassign_invalid": 400,
   "menu_item.not_found": 404,
@@ -1047,9 +1043,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const input = categoryInput(body, true) as CategoryInput;
-      const created = await gated(sessionId, (tx) =>
-        createCategory(tx, input, deps.venueLocale ?? FALLBACK_LOCALE),
-      );
+      const created = await gated(sessionId, (tx) => createCategory(tx, input));
       return c.json(created, 201);
     }),
   );
@@ -1066,11 +1060,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const session = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "CategoryId");
       const input = categoryInput(await readJsonBody<Record<string, unknown>>(c), false);
-      return c.json(
-        await gated(session, (tx) =>
-          updateCategory(tx, id, input, deps.venueLocale ?? FALLBACK_LOCALE),
-        ),
-      );
+      return c.json(await gated(session, (tx) => updateCategory(tx, id, input)));
     }),
   );
   // An optional body says where the products and subcategories go; an absent key, or no body at

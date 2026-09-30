@@ -10,7 +10,6 @@ import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   CategoryForm,
   categoryAncestors,
-  categoryPath,
   categoryRefusalErrors,
   categoryWithDescendants,
 } from "./category-form.js";
@@ -22,14 +21,14 @@ afterEach(cleanupWidgets);
 afterEach(() => setLocale("es-ES"));
 const food: CategorySummary = {
   id: "food",
-  name: { en: "Food", fr: "Cuisine" },
+  name: "Food",
   parentId: null,
   image: null,
   color: null,
 };
 const child: CategorySummary = {
   id: "child",
-  name: { en: "Sandwiches" },
+  name: "Sandwiches",
   parentId: "food",
   image: null,
   color: null,
@@ -40,16 +39,14 @@ async function bottomOf(el: CategoryForm): Promise<string> {
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
-const nameOf = (el: CategoryForm, locale: string) =>
-  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    `wt-input[name="category-name-${locale}"]`,
-  )!;
+const nameOf = (el: CategoryForm) =>
+  el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="name"]')!;
 
 const saveOf = (el: CategoryForm): HTMLElementTagNameMap["wt-button"] =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="save"]')!;
 
-function typeName(el: CategoryForm, locale: string, value: string): void {
-  nameOf(el, locale).dispatchEvent(
+function typeName(el: CategoryForm, value: string): void {
+  nameOf(el).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
   );
 }
@@ -62,61 +59,61 @@ async function savedColor(el: CategoryForm): Promise<string | null> {
   return (await saved).detail.value.color as string | null;
 }
 
-it("renders translated fields and excludes self and descendants from parent choices", async () => {
+it("renders one name field holding the name, and excludes self and descendants from parent choices", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
     value: food,
     categories: [food, child],
   });
-  expect(el.shadowRoot!.querySelector('[name="category-name-en"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelector('[name="category-name-fr"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
+  expect(nameOf(el).value).toBe("Food");
   const combo = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     'wt-combobox[name="category-parent"]',
   )!;
   expect(combo.options.map((o) => o.value)).toEqual([""]);
 });
-it("shows parent names in the reader's language, not the default content language", async () => {
-  setLocale("en-GB"); // reader English; venue default is Spanish
-  const parent: CategorySummary = {
-    id: "p",
-    name: { es: "Bebidas", en: "Drinks" },
-    image: null,
-    color: null,
-    parentId: null,
-  };
-  const el = await mountWidget<CategoryForm>("dashboard-category-form", {
+it("renders exactly one name field whatever content languages the venue has enabled", async () => {
+  // `languages` is what the form took when it had a field per language; it is ignored now.
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "es", languages: ["es", "en"] },
-    categories: [parent],
-    value: null,
+    languages: { defaultLanguage: "es", languages: ["es", "en", "fr"] },
+  } as Partial<CategoryForm>);
+  expect(el.shadowRoot!.querySelectorAll('wt-input[name="name"]')).toHaveLength(1);
+  expect(el.shadowRoot!.querySelectorAll("wt-input")).toHaveLength(1);
+});
+it("names a parent option by the path of names down to it", async () => {
+  const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
+    open: true,
+    categories: [food, child],
   });
-  const combo = el.el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+  const combo = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
     'wt-combobox[name="category-parent"]',
   )!;
-  const labels = combo.options.map((o) => o.label);
-  expect(labels).toContain("Drinks");
-  expect(labels).not.toContain("Bebidas");
+  expect(combo.options.map((o) => o.label)).toEqual([
+    t("categories.no_parent"),
+    "Food",
+    "Food / Sandwiches",
+  ]);
 });
 it("lists parent options alphabetically by their displayed label, with No parent pinned first", async () => {
   setLocale("en-GB");
   const zebra: CategorySummary = {
     id: "zebra",
-    name: { en: "Zebra" },
+    name: "Zebra",
     parentId: null,
     image: null,
     color: null,
   };
   const apple: CategorySummary = {
     id: "apple",
-    name: { en: "Apple" },
+    name: "Apple",
     parentId: null,
     image: null,
     color: null,
   };
   const mango: CategorySummary = {
     id: "mango",
-    name: { en: "Mango" },
+    name: "Mango",
     parentId: null,
     image: null,
     color: null,
@@ -125,21 +122,20 @@ it("lists parent options alphabetically by their displayed label, with No parent
   // before "Salsa 10", not after it as a plain string compare would put it.
   const salsa10: CategorySummary = {
     id: "salsa10",
-    name: { en: "Salsa 10" },
+    name: "Salsa 10",
     parentId: null,
     image: null,
     color: null,
   };
   const salsa2: CategorySummary = {
     id: "salsa2",
-    name: { en: "Salsa 2" },
+    name: "Salsa 2",
     parentId: null,
     image: null,
     color: null,
   };
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     categories: [zebra, apple, mango, salsa10, salsa2],
     value: null,
   });
@@ -158,7 +154,6 @@ it("lists parent options alphabetically by their displayed label, with No parent
 it("retains the draft during lookup refreshes, validates and emits the reusable submit contract once", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
     categories: [food, child],
   });
   let submitted: { value: CategoryInput } | undefined;
@@ -169,33 +164,26 @@ it("retains the draft during lookup refreshes, validates and emits the reusable 
   });
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
   await el.updateComplete;
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      'wt-input[name="category-name-en"]',
-    )!.error,
-  ).not.toBe("");
+  expect(nameOf(el).error).not.toBe("");
   expect(count).toBe(0);
-  el.shadowRoot!.querySelector('[name="category-name-en"]')!.dispatchEvent(
+  nameOf(el).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Breakfast" }, bubbles: true, composed: true }),
   );
   el.categories = [...el.categories];
   await el.updateComplete;
-  const input = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    'wt-input[name="category-name-en"]',
-  )!;
+  const input = nameOf(el);
   await input.updateComplete;
   input
     .shadowRoot!.querySelector("input")!
     .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
   expect(count).toBe(1);
   expect(submitted).toEqual({
-    value: { name: { en: "Breakfast", fr: "" }, image: null, parentId: null, color: null },
+    value: { name: "Breakfast", image: null, parentId: null, color: null },
   });
 });
-it("uses the existing image picker and preserves disabled translations in an edit", async () => {
+it("uses the existing image picker and keeps the name in an edit", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -218,7 +206,6 @@ it("uses the existing image picker and preserves disabled translations in an edi
 it("submits the chosen colour", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -233,7 +220,6 @@ it("submits the chosen colour", async () => {
 it("lays out every palette hue as a column of three tones", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const swatches = [
@@ -261,7 +247,6 @@ it("edits from an existing colour and can clear it", async () => {
   const coloredFood: CategorySummary = { ...food, color: "#256bb1" };
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: coloredFood,
   });
   const saved = new Promise<CustomEvent>((resolve) =>
@@ -276,7 +261,6 @@ it("edits from an existing colour and can clear it", async () => {
 it("submits a custom colour picked via the native colour input", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const input = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="color"]')!;
@@ -292,7 +276,7 @@ it.each(["light", "dark"] as const)(
   async (theme) => {
     const { el } = await mountWidget<CategoryForm>(
       "dashboard-category-form",
-      { open: true, languages: { defaultLanguage: "en", languages: ["en"] }, value: food },
+      { open: true, value: food },
       theme,
     );
     const { inside, border, borderColor, beside } = await customSquarePixels(el.shadowRoot!);
@@ -310,7 +294,6 @@ it.each([
 ])("paints a chosen custom colour %s in the Custom square and submits it", async (color, rgba) => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: { ...food, color },
   });
   expect((await customSquarePixels(el.shadowRoot!)).inside).toEqual(rgba);
@@ -324,7 +307,6 @@ it.each(["light", "dark"] as const)(
       "dashboard-category-form",
       {
         open: true,
-        languages: { defaultLanguage: "en", languages: ["en"] },
         value: { ...food, color: "#123456" },
       },
       theme,
@@ -345,7 +327,6 @@ it.each([
     "dashboard-category-form",
     {
       open: true,
-      languages: { defaultLanguage: "en", languages: ["en"] },
       value: { ...food, color },
     },
     theme,
@@ -364,7 +345,6 @@ it.each(["light", "dark"] as const)(
       "dashboard-category-form",
       {
         open: true,
-        languages: { defaultLanguage: "en", languages: ["en"] },
         value: { ...food, color: "#123456" },
       },
       theme,
@@ -382,7 +362,6 @@ it.each(["light", "dark"] as const)(
       "dashboard-category-form",
       {
         open: true,
-        languages: { defaultLanguage: "en", languages: ["en"] },
         value: { ...food, color: CATEGORY_PALETTE[0] },
       },
       theme,
@@ -398,7 +377,6 @@ it.each(["light", "dark"] as const)(
 it("creates inside a host draft, selects the saved category and leaves the draft intact", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     categories: [food],
   });
   const draft = document.createElement("input");
@@ -422,7 +400,7 @@ it("creates inside a host draft, selects the saved category and leaves the draft
       { once: true },
     ),
   );
-  el.shadowRoot!.querySelector('[name="category-name-en"]')!.dispatchEvent(
+  nameOf(el).dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "Breakfast" }, bubbles: true, composed: true }),
   );
   await el.updateComplete;
@@ -437,7 +415,6 @@ it("creates inside a host draft, selects the saved category and leaves the draft
 it("emits cancellation across the host boundary when Escape closes the modal", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
   });
   let detail: unknown;
   host.addEventListener("wt-cancel", (event) => {
@@ -454,7 +431,6 @@ it("emits cancellation across the host boundary when Escape closes the modal", a
 it("sends one wt-cancel when the dialog reports its close after the form has been closed", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
   });
   let cancels = 0;
   el.addEventListener("wt-cancel", () => cancels++);
@@ -471,7 +447,6 @@ it("sends one wt-cancel when the dialog reports its close after the form has bee
 it("sends one wt-cancel when its dialog is dismissed with Escape while the form is open", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
   });
   let cancels = 0;
   el.addEventListener("wt-cancel", () => cancels++);
@@ -488,24 +463,12 @@ it("keeps the editor open when Escape is pressed during a save", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
     busy: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const modal = el.shadowRoot!.querySelector("wt-modal")!;
   await modal.updateComplete;
   await userEvent.keyboard("{Escape}");
   expect(modal.shadowRoot!.querySelector("dialog")!.open).toBe(true);
-});
-
-it("names a category in a path by its id when it has no name in any enabled language", () => {
-  const unnamed: CategorySummary = {
-    id: "untitled",
-    name: {},
-    parentId: "food",
-    image: null,
-    color: null,
-  };
-  expect(categoryPath(unnamed, [food, unnamed], "en")).toBe("Food / untitled");
 });
 
 it("gathers a category and every category below it, whatever order the list is in", () => {
@@ -534,7 +497,6 @@ it("walks up from a category to the top, stopping at a missing parent or a loop"
 it("submits the chosen parent and returns to no parent when None is chosen", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: child,
     categories: [food, child],
   });
@@ -563,7 +525,6 @@ it("submits the chosen parent and returns to no parent when None is chosen", asy
 it("emits a bubbling, composed wt-cancel with an empty detail from Cancel", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const cancel = vi.fn();
@@ -576,7 +537,6 @@ it("emits a bubbling, composed wt-cancel with an empty detail from Cancel", asyn
 it("neither saves nor cancels while the image library is open over it", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const seen = vi.fn();
@@ -618,7 +578,6 @@ it("neither saves nor cancels while a save is in flight", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
     busy: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   const seen = vi.fn();
@@ -631,20 +590,6 @@ it("neither saves nor cancels while a save is in flight", async () => {
   expect(seen).not.toHaveBeenCalled();
 });
 
-it("refuses to save with the name-required message when no content language is configured", async () => {
-  const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
-    open: true,
-    languages: { defaultLanguage: "en", languages: [] },
-  });
-  const submit = vi.fn();
-  host.addEventListener("wt-submit", submit);
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]')!.click();
-  await el.updateComplete;
-  expect(submit).not.toHaveBeenCalled();
-  expect(await bottomOf(el)).toBe(t("categories.name_required"));
-  expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
-});
-
 const refusal = (code: string, params?: Record<string, unknown>) => ({ code, params, status: 400 });
 
 it("puts a refused category write beside the form field it concerns", () => {
@@ -653,52 +598,50 @@ it("puts a refused category write beside the form field it concerns", () => {
     ["category.image_not_found", "image"],
     ["category.color_invalid", "color"],
   ])
-    expect(categoryRefusalErrors(refusal(code, {}), "es")).toEqual({ [field]: codeMessage(code) });
-  expect(
-    categoryRefusalErrors(refusal("content.translation_required", { language: "en" }), "es"),
-  ).toEqual({ "name-en": codeMessage("content.translation_required") });
-  // The request's own field names, translated to the form's: `name` is a whole map of translations,
-  // and the default language's is the one the form requires.
+    expect(categoryRefusalErrors(refusal(code, {}))).toEqual({ [field]: codeMessage(code) });
+  expect(categoryRefusalErrors(refusal("category.invalid", { field: "name" }))).toEqual({
+    name: codeMessage("category.invalid"),
+  });
   for (const [field, key] of [
-    ["name", "name-es"],
+    ["name", "name"],
     ["parentId", "parent"],
     ["image", "image"],
     ["color", "color"],
   ])
-    expect(categoryRefusalErrors(refusal("management.request_invalid", { field }), "es")).toEqual({
+    expect(categoryRefusalErrors(refusal("management.request_invalid", { field }))).toEqual({
       [key]: codeMessage("management.request_invalid"),
     });
   // A missing category is the chosen parent only when it is the one the write named as parent.
-  expect(
-    categoryRefusalErrors(refusal("category.not_found", { categoryId: "c1" }), "es", "c1"),
-  ).toEqual({ parent: codeMessage("category.not_found") });
+  expect(categoryRefusalErrors(refusal("category.not_found", { categoryId: "c1" }), "c1")).toEqual({
+    parent: codeMessage("category.not_found"),
+  });
 });
 
 it("keeps a refused category write that names no field of the form for the bottom message alone", () => {
   for (const error of [
     refusal("content.translation_invalid", {}),
     refusal("content.translation_required", {}),
+    refusal("content.translation_required", { language: "en" }),
     refusal("management.request_invalid", { field: "toString" }),
     refusal("management.request_invalid"),
     refusal("toString"),
     refusal("server.internal"),
     refusal("category.not_found", { categoryId: "c1" }),
   ])
-    expect(categoryRefusalErrors(error, "es")).toEqual({ _form: codeMessage(error.code) });
-  expect(
-    categoryRefusalErrors(refusal("category.not_found", { categoryId: "c2" }), "es", "c1"),
-  ).toEqual({ _form: codeMessage("category.not_found") });
+    expect(categoryRefusalErrors(error)).toEqual({ _form: codeMessage(error.code) });
+  expect(categoryRefusalErrors(refusal("category.not_found", { categoryId: "c2" }), "c1")).toEqual({
+    _form: codeMessage("category.not_found"),
+  });
 });
 
 it("says nothing about errors before the first submission, and Save works", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
   });
-  typeName(el, "en", "");
+  typeName(el, "");
   await el.updateComplete;
 
-  expect(nameOf(el, "en").error).toBe("");
+  expect(nameOf(el).error).toBe("");
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });
@@ -706,43 +649,38 @@ it("says nothing about errors before the first submission, and Save works", asyn
 it("on an invalid submission shows the field and bottom messages, focuses the name and disables Save", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
   });
   const submit = vi.fn();
   host.addEventListener("wt-submit", submit);
-  typeName(el, "fr", "Cuisine");
+  typeName(el, "  ");
   await el.updateComplete;
   saveOf(el).click();
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
 
   expect(submit).not.toHaveBeenCalled();
-  expect(nameOf(el, "en").error).toBe(t("categories.name_required"));
+  expect(nameOf(el).error).toBe(t("categories.name_required"));
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
-  expect(nameOf(el, "en").shadowRoot!.activeElement).toBe(
-    nameOf(el, "en").shadowRoot!.querySelector("input"),
-  );
+  expect(nameOf(el).shadowRoot!.activeElement).toBe(nameOf(el).shadowRoot!.querySelector("input"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
-  expect(nameOf(el, "fr").value).toBe("Cuisine");
 });
 
 it("re-checks every change after a failed submission, and Save works again once fixed", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
   });
   saveOf(el).click();
   await el.updateComplete;
 
-  typeName(el, "en", "Breakfast");
+  typeName(el, "Breakfast");
   await el.updateComplete;
-  expect(nameOf(el, "en").error).toBe("");
+  expect(nameOf(el).error).toBe("");
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 
-  typeName(el, "en", " ");
+  typeName(el, " ");
   await el.updateComplete;
-  expect(nameOf(el, "en").error).toBe(t("categories.name_required"));
+  expect(nameOf(el).error).toBe(t("categories.name_required"));
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveOf(el).hasAttribute("disabled")).toBe(true);
 });
@@ -751,7 +689,6 @@ it("keeps a field's refusal until that field changes, with Save working througho
   const message = codeMessage("category.parent_cycle");
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: child,
     categories: [food, child],
     fieldErrors: { parent: message },
@@ -763,7 +700,7 @@ it("keeps a field's refusal until that field changes, with Save working througho
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
   expect(saveOf(el).disabled).toBe(false);
 
-  typeName(el, "en", "Toasties");
+  typeName(el, "Toasties");
   await el.updateComplete;
   expect(parent.error).toBe(message);
   expect(saveOf(el).disabled).toBe(false);
@@ -780,7 +717,6 @@ it("keeps a field's refusal until that field changes, with Save working througho
 it("clears a refused colour or image when that field changes", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
     fieldErrors: {
       color: codeMessage("category.color_invalid"),
@@ -809,7 +745,6 @@ it("submits past a field's refusal, which goes until the next refusal arrives", 
   const message = codeMessage("category.parent_cycle");
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: child,
     categories: [food, child],
     fieldErrors: { parent: message },
@@ -830,22 +765,18 @@ it("submits past a field's refusal, which goes until the next refusal arrives", 
 it("focuses the field a refusal names when the refusal arrives", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en", "fr"] },
     value: food,
   });
-  el.fieldErrors = { "name-fr": codeMessage("content.translation_required") };
+  el.fieldErrors = { name: codeMessage("category.invalid") };
   await el.updateComplete;
   await new Promise((resolve) => setTimeout(resolve));
 
-  expect(nameOf(el, "fr").shadowRoot!.activeElement).toBe(
-    nameOf(el, "fr").shadowRoot!.querySelector("input"),
-  );
+  expect(nameOf(el).shadowRoot!.activeElement).toBe(nameOf(el).shadowRoot!.querySelector("input"));
 });
 
 it("focuses Choose image when a refusal names the image", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
   });
   el.fieldErrors = { image: codeMessage("category.image_not_found") };
@@ -860,7 +791,6 @@ it("focuses Choose image when a refusal names the image", async () => {
 it("leaves Save working on a refusal that names no field, and drops it on the next submission", async () => {
   const { el, host } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     value: food,
     fieldErrors: { _form: codeMessage("server.internal") },
   });
@@ -878,7 +808,6 @@ it("leaves Save working on a refusal that names no field, and drops it on the ne
 it("shows the refusal and the generic sentence together when both apply", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
     fieldErrors: {
       _form: codeMessage("server.internal"),
       parent: codeMessage("category.parent_cycle"),
@@ -890,7 +819,6 @@ it("shows the refusal and the generic sentence together when both apply", async 
 it("starts again when reopened: no messages and Save working", async () => {
   const { el } = await mountWidget<CategoryForm>("dashboard-category-form", {
     open: true,
-    languages: { defaultLanguage: "en", languages: ["en"] },
   });
   saveOf(el).click();
   await el.updateComplete;
@@ -899,7 +827,7 @@ it("starts again when reopened: no messages and Save working", async () => {
   el.open = true;
   await el.updateComplete;
 
-  expect(nameOf(el, "en").error).toBe("");
+  expect(nameOf(el).error).toBe("");
   expect(await bottomOf(el)).toBe("");
   expect(saveOf(el).hasAttribute("disabled")).toBe(false);
 });

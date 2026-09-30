@@ -86,7 +86,7 @@ describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
       // Seed a catalogue: one weight-priced product ("sliced ham") in a "Food" category. English
       // strings only — this is a generic package under the english-only guard.
       const cat = await createCatalogue(tx, { name: "Deli" });
-      const food = await createCategory(tx, { name: { en: "Food" } });
+      const food = await createCategory(tx, { name: "Food" });
       const kgUnitId = (
         await createUnit(tx, { name: { en: "kg" }, precision: 3, abbreviation: { en: "u" } }, "en")
       ).id;

@@ -150,8 +150,8 @@ async function main(): Promise<void> {
 
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Delicatessen" });
-      const comida = await createCategory(tx, { name: { en: "Comida" } });
-      const postres = await createCategory(tx, { name: { en: "Postres" } });
+      const comida = await createCategory(tx, { name: "Comida" });
+      const postres = await createCategory(tx, { name: "Postres" });
 
       await createProduct(tx, {
         catalogueId: cat.id,

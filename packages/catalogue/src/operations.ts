@@ -1,16 +1,9 @@
 import { isDeepStrictEqual } from "node:util";
 import { readOfferedModifiers } from "./offered-modifiers.js";
 import { readProductModifiers } from "./product-modifiers.js";
-import { and, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
-import {
-  AppError,
-  centsToDecimal,
-  resolveContentText,
-  FALLBACK_LOCALE,
-  stringToCents,
-} from "@waitron/shared";
+import { and, eq, inArray, isNotNull, or } from "drizzle-orm";
+import { AppError, centsToDecimal, stringToCents } from "@waitron/shared";
 import { catalogues, categories, locationCatalogues, locations, now, products } from "@waitron/db";
-import { readContentLanguages } from "./content-languages.js";
 import { readCategory, setMainReportingCategory } from "./categories.js";
 export { createCategory, listCategories, updateCategory } from "./categories.js";
 export type { Category } from "./categories.js";
@@ -29,7 +22,7 @@ import {
 import type { PricingUnit } from "./pricing.js";
 import type { ProductOrdering } from "./product-ordering.js";
 import type { VatClass } from "./vat-rates.js";
-import { contentLanguages, menuItems } from "./schema/menu.js";
+import { menuItems } from "./schema/menu.js";
 import { sections } from "./schema/sections.js";
 import {
   createMenuShell,
@@ -407,7 +400,7 @@ interface OfferLineRow {
   courseId: ProductRow["courseId"];
 }
 
-function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
+function offerLineValues(row: OfferLineRow) {
   return {
     unit: sellableUnit(
       row.unitId,
@@ -418,10 +411,7 @@ function offerLineValues(row: OfferLineRow, defaultLanguage: string) {
     ),
     pricingUnit: row.pricingUnit as PricingUnit,
     vatClass: row.vatClass as VatClass,
-    category:
-      row.category === null
-        ? null
-        : resolveContentText(row.category, defaultLanguage, defaultLanguage),
+    category: row.category,
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
     dietDerivation: row.dietDerivation as DietDerivation | null,
@@ -564,7 +554,6 @@ async function offersOn(
 ): Promise<MenuOffer[]> {
   const { rows: offered, placementsOf } = await offerRowsOn(tx, roots, graph, options);
   if (offered.length === 0) return [];
-  const content = await readContentLanguages(tx, FALLBACK_LOCALE);
   // The extras/options walk, keyed by MENU-ITEM id: on an offer each extras list is the version
   // this offer publishes, while the order stays the product's own.
   const offeredByItem = await readOfferedModifiers(
@@ -575,7 +564,6 @@ async function offersOn(
   const variantsByItem = await readOfferVariants(
     tx,
     offered.map((row) => row.id),
-    content.defaultLanguage,
   );
   return offered.map((row) => {
     const { override, unitPrice } = offerPrices(row);
@@ -592,7 +580,7 @@ async function offersOn(
       customerName: row.customerName,
       kitchenName: row.kitchenName,
       ordering: row.ordering,
-      ...offerLineValues(row, content.defaultLanguage),
+      ...offerLineValues(row),
       offeredModifiers: offeredByItem.get(row.id) ?? [],
       variants: variantsByItem.get(row.id) ?? [],
     };
@@ -642,7 +630,6 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
 async function readOfferVariants(
   tx: Transaction,
   menuItemIds: readonly string[],
-  defaultLanguage: string,
 ): Promise<Map<string, MenuOfferVariant[]>> {
   const rows = await tx
     .select({
@@ -696,7 +683,7 @@ async function readOfferVariants(
       menuPrice: priceOrNull(row.menuPrice),
       offered,
       available: row.available && offered,
-      ...offerLineValues(row, defaultLanguage),
+      ...offerLineValues(row),
     });
     grouped.set(row.menuItemId, held);
   }
@@ -1235,7 +1222,6 @@ export async function listAvailableProducts(
       unitPrice: effective.unitPrice,
       vatClass: effective.vatClass,
       category: categories.name,
-      categoryLanguage: contentLanguages.defaultLanguage,
       allergens: effective.allergens,
       diet: effective.diet,
       dietDerivation: effective.dietDerivation,
@@ -1251,7 +1237,6 @@ export async function listAvailableProducts(
     .leftJoin(productUnits, unitOwnerJoin)
     .leftJoin(units, eq(units.id, productUnits.unitId))
     .leftJoin(categories, eq(categories.id, effective.categoryId))
-    .leftJoin(contentLanguages, sql`true`)
     .where(
       and(
         inArray(catalogues.id, accessible),
@@ -1286,14 +1271,7 @@ export async function listAvailableProducts(
     pricingUnit: row.pricingUnit as PricingUnit,
     unitPrice: centsToDecimal(row.unitPrice),
     vatClass: row.vatClass as VatClass,
-    category:
-      row.category === null
-        ? null
-        : resolveContentText(
-            row.category,
-            row.categoryLanguage ?? FALLBACK_LOCALE,
-            row.categoryLanguage ?? FALLBACK_LOCALE,
-          ),
+    category: row.category,
     allergens: row.allergens,
     diet: row.diet as DietProfile | null,
     dietDerivation: row.dietDerivation as DietDerivation | null,

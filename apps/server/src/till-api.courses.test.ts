@@ -87,7 +87,7 @@ const suite = useVenueDb({
       entCourseId = ent.id;
       priCourseId = pri.id;
       const catalogue = await createCatalogue(tx, { name: "Carta" });
-      const category = await createCategory(tx, { name: { en: "Comida" } });
+      const category = await createCategory(tx, { name: "Comida" });
       const mk = async (description: string): Promise<string> => {
         const p = await createProduct(tx, {
           catalogueId: catalogue.id,

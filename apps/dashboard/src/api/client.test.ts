@@ -495,7 +495,7 @@ describe("DashboardApi", () => {
   });
 
   it("listCategories GETs the categories with credentials", async () => {
-    const categories = [{ id: "cat1", name: { es: "Entrantes" }, image: null, parentId: null }];
+    const categories = [{ id: "cat1", name: "Entrantes", image: null, parentId: null }];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(categories));
     const api = new DashboardApi("", fetchImpl);
     expect(await api.listCategories()).toEqual(categories);
@@ -505,8 +505,8 @@ describe("DashboardApi", () => {
     });
   });
 
-  it("createCategory POSTs localized metadata and returns the created category", async () => {
-    const input = { name: { es: "Principales" }, image: "food.jpg", parentId: "cat1" };
+  it("createCategory POSTs the category and returns the created category", async () => {
+    const input = { name: "Principales", image: "food.jpg", parentId: "cat1" };
     const created = { id: "cat2", ...input };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(created, true, 201));
     const api = new DashboardApi("", fetchImpl);
@@ -520,7 +520,7 @@ describe("DashboardApi", () => {
   });
 
   it("uses the category hierarchy and main-category endpoints with their response shapes", async () => {
-    const category = { id: "cat1", name: { es: "Entrantes" }, image: null, parentId: null };
+    const category = { id: "cat1", name: "Entrantes", image: null, parentId: null };
     const product = {
       id: "p1",
       catalogueId: "menu1",

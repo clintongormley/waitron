@@ -16,7 +16,7 @@ const sections: LibrarySection[] = [
   { id: "s-beer", internalName: "Beer", names: {}, image: null, color: null, members: [] },
 ];
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
+  { id: "c-drinks", name: "Bebidas", image: null, color: null, parentId: null },
 ];
 const lemonade = {
   id: "p-lemonade",

@@ -401,7 +401,7 @@ describe("a variant's id is not a product's id to the product-by-id functions bu
     const [w125] = await app((tx) =>
       setProductVariants(tx, f.parentId, [wine("Wine 125", "4.75")], "en"),
     );
-    const category = await app((tx) => createCategory(tx, { name: { en: "Wines" } }, "en"));
+    const category = await app((tx) => createCategory(tx, { name: "Wines" }));
     return { ...f, variantId: w125!.id, categoryId: category.id };
   }
   const notFound = (productId: string) => ({ code: "product.not_found", params: { productId } });

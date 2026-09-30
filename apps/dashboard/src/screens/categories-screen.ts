@@ -10,7 +10,6 @@ import {
   setContentLanguages,
   type DataTableColumn,
 } from "@waitron/ui";
-import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   CategoryDependants,
@@ -20,7 +19,7 @@ import type {
   DashboardApi,
   Product,
 } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { codeOf, codeMessage } from "../i18n/codes.js";
 import {
   categoryPath,
@@ -136,7 +135,6 @@ export class CategoriesScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @state() private categories: CategorySummary[] = [];
   @state() private products: Product[] = [];
-  @state() private languages: ContentLanguages = { defaultLanguage: "en", languages: ["en"] };
   @state() private loading = true;
   @state() private loadError = false;
   @state() private saveError = "";
@@ -195,10 +193,8 @@ export class CategoriesScreen extends LitElement {
     this.loadError = false;
     try {
       await Promise.all([
-        this.#queries.watch("getContentLanguages", [], (value) => {
-          this.languages = value;
-          setContentLanguages(value);
-        }),
+        // The image picker names each photo in the content languages.
+        this.#queries.watch("getContentLanguages", [], setContentLanguages),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
@@ -222,9 +218,6 @@ export class CategoriesScreen extends LitElement {
       this.loading = false;
     }
   }
-  #text(name: Record<string, string>): string {
-    return resolveEnabledContentText(name, currentLocale(), this.languages);
-  }
   #error(error: unknown): string {
     return codeMessage(codeOf(error));
   }
@@ -243,11 +236,7 @@ export class CategoriesScreen extends LitElement {
       else await this.api.createCategory(event.detail.value);
       this.editorOpen = false;
     } catch (error) {
-      this.fieldErrors = categoryRefusalErrors(
-        error,
-        this.languages.defaultLanguage,
-        event.detail.value.parentId ?? null,
-      );
+      this.fieldErrors = categoryRefusalErrors(error, event.detail.value.parentId ?? null);
       return;
     } finally {
       this.busy = false;
@@ -443,12 +432,12 @@ export class CategoriesScreen extends LitElement {
           this.saveError = "";
           this.includeDescendants = false;
         }}
-        >${this.#text(category.name)}</wt-button
+        >${category.name}</wt-button
       >
     </span>`;
   }
   #path(category: CategorySummary): string {
-    return categoryPath(category, this.categories, currentLocale(), this.languages);
+    return categoryPath(category, this.categories);
   }
   #lozenge(category: CategorySummary) {
     return html`<wt-lozenge color=${category.color ?? ""}>${this.#path(category)}</wt-lozenge>`;
@@ -462,8 +451,8 @@ export class CategoriesScreen extends LitElement {
       {
         key: "name",
         label: t("categories.name"),
-        searchValue: (category) => this.#text(category.name),
-        sortValue: (category) => this.#text(category.name),
+        searchValue: (category) => category.name,
+        sortValue: (category) => category.name,
         cell: (category, context) => this.#nameCell(category, context.ancestorOnly),
       },
       {
@@ -494,7 +483,7 @@ export class CategoriesScreen extends LitElement {
         label: t("categories.actions"),
         pinned: "end",
         cell: (category) =>
-          html`<wt-row-actions label=${`${t("categories.actions")}: ${this.#text(category.name)}`}
+          html`<wt-row-actions label=${`${t("categories.actions")}: ${category.name}`}
             ><wt-button align="start" variant="ghost" @click=${() => this.#edit(category)}
               >${t("action.edit")}</wt-button
             ><wt-button align="start" variant="ghost" @click=${() => this.#openDelete(category)}
@@ -608,7 +597,6 @@ export class CategoriesScreen extends LitElement {
       name: field === "productsTo" ? "products-to" : "children-to",
       label,
       categories: this.categories,
-      languages: this.languages,
       value: this.reassign[field],
       noneLabel,
       exclude,
@@ -667,7 +655,7 @@ export class CategoriesScreen extends LitElement {
               (child) =>
                 html`<li>
                   <a href=${`/manage/categories?category=${encodeURIComponent(child.id)}`}
-                    >${this.#text(child.name)}</a
+                    >${child.name}</a
                   >
                 </li>`,
             )}
@@ -830,7 +818,7 @@ export class CategoriesScreen extends LitElement {
   }
   #moveHeading(selected: CategorySummary | undefined): string {
     const count = this.picked.size;
-    const name = selected ? this.#text(selected.name) : "";
+    const name = selected ? selected.name : "";
     return (count === 1 ? t("categories.move_heading_one") : t("categories.move_heading"))
       .replace("{count}", String(count))
       .replace("{name}", name);
@@ -854,7 +842,7 @@ export class CategoriesScreen extends LitElement {
       <wt-modal
         data-test="products-modal"
         .open=${this.selected !== null}
-        heading=${selected ? `${this.#text(selected.name)} · ${t("categories.products_modal")}` : ""}
+        heading=${selected ? `${selected.name} · ${t("categories.products_modal")}` : ""}
         @keydown=${this.#guardEscape}
         @wt-close=${(event: Event) => {
           event.stopPropagation();
@@ -879,9 +867,7 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.confirmingMove = false;
         }}
       >
-        <p>
-          ${t("categories.move_body").replace("{name}", selected ? this.#text(selected.name) : "")}
-        </p>
+        <p>${t("categories.move_body").replace("{name}", selected ? selected.name : "")}</p>
         <wt-form-actions slot="footer"
           ><wt-button
             slot="cancel"
@@ -904,7 +890,6 @@ export class CategoriesScreen extends LitElement {
       <dashboard-category-form
         .open=${this.editorOpen}
         .busy=${this.busy}
-        .languages=${this.languages}
         .value=${this.edited}
         .categories=${this.categories}
         .api=${this.api}
@@ -920,7 +905,7 @@ export class CategoriesScreen extends LitElement {
         .open=${this.deleting !== null}
         heading=${t("categories.delete_named").replace(
           "{name}",
-          this.deleting ? this.#text(this.deleting.name) : "",
+          this.deleting ? this.deleting.name : "",
         )}
         @keydown=${this.#guardEscape}
         @wt-close=${(event: Event) => {
@@ -965,7 +950,6 @@ export class CategoriesScreen extends LitElement {
                   name: "main-category",
                   label: t("editor.main_category"),
                   categories: this.categories,
-                  languages: this.languages,
                   value: this.mainCategory,
                   noneLabel: t("categories.uncategorised"),
                   error: this.mainCategoryError,

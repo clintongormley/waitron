@@ -276,7 +276,7 @@ describe("configuration transfer database path", () => {
         .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
       await tx
         .insert(categories)
-        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: { es: "Panadería" } });
+        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: "Panadería" });
       await tx.insert(categoryDetails).values({
         categoryId: "23232323-aaaa-aaaa-aaaa-232323232323",
         image: uploaded.image.filename,
@@ -436,10 +436,8 @@ describe("configuration transfer database path", () => {
       expect(bytes?.bytes).toEqual(photo.bytes);
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
-      // Read through the TABLE, not the raw select below: `name` is a `json` column, and a raw
-      // select hands back the stored text.
       const named = await tx.select({ name: categories.name }).from(categories);
-      expect(named).toEqual([{ name: { es: "Panadería" } }]);
+      expect(named).toEqual([{ name: "Panadería" }]);
       const category = await tx.execute<{ image: string; primary: number }>(sql`
         select d.image,
           -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is

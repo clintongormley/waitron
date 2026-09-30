@@ -2,7 +2,6 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
-import { resolveEnabledContentText, type ContentLanguages } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -13,7 +12,7 @@ import { colorField, colorFieldStyles } from "./color-field.js";
 import type { ImageUploader } from "./image-upload.js";
 import type { CategoryInput, CategorySummary } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t, currentLocale } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 
 /** The category, then each category above it, stopping at a parent the list lacks or a loop. */
 export function categoryAncestors(
@@ -34,11 +33,9 @@ export function categoryAncestors(
 export function categoryPath(
   category: CategorySummary,
   categories: readonly CategorySummary[],
-  language: string,
-  config: ContentLanguages = { defaultLanguage: language, languages: [language] },
 ): string {
   return categoryAncestors(category, categories)
-    .map(({ id, name }) => resolveEnabledContentText(name, language, config) || id)
+    .map(({ name }) => name)
     .reverse()
     .join(" / ");
 }
@@ -66,11 +63,13 @@ export function categoryWithDescendants(
 }
 
 const FIELD_BY_CODE = new Map([
+  ["category.invalid", "name"],
   ["category.parent_cycle", "parent"],
   ["category.image_not_found", "image"],
   ["category.color_invalid", "color"],
 ]);
 const FIELD_BY_REQUEST_FIELD = new Map([
+  ["name", "name"],
   ["parentId", "parent"],
   ["image", "image"],
   ["color", "color"],
@@ -80,24 +79,16 @@ const FIELD_BY_REQUEST_FIELD = new Map([
  * `parentId` is the parent the refused write named. */
 export function categoryRefusalErrors(
   error: unknown,
-  defaultLanguage: string,
   parentId: string | null = null,
 ): Record<string, string> {
   const code = codeOf(error);
   const message = codeMessage(code);
-  const params =
-    (error as { params?: { field?: unknown; language?: unknown; categoryId?: unknown } }).params ??
-    {};
+  const params = (error as { params?: { field?: unknown; categoryId?: unknown } }).params ?? {};
   let field = FIELD_BY_CODE.get(code);
   if (code === "category.not_found" && parentId !== null && params.categoryId === parentId)
     field = "parent";
-  if (code === "content.translation_required" && typeof params.language === "string")
-    field = `name-${params.language}`;
   if (code === "management.request_invalid" && typeof params.field === "string")
-    field =
-      params.field === "name"
-        ? `name-${defaultLanguage}`
-        : FIELD_BY_REQUEST_FIELD.get(params.field);
+    field = FIELD_BY_REQUEST_FIELD.get(params.field);
   return { [field ?? "_form"]: message };
 }
 
@@ -128,15 +119,11 @@ export class CategoryForm extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
-  @property({ attribute: false }) languages: ContentLanguages = {
-    defaultLanguage: "en",
-    languages: ["en"],
-  };
   @property({ attribute: false }) value: CategorySummary | null = null;
   @property({ attribute: false }) categories: readonly CategorySummary[] = [];
   @property({ attribute: false }) api?: ImageUploader;
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
-  @state() private names: Record<string, string> = {};
+  @state() private name = "";
   @state() private parentId: string | null = null;
   @state() private image: string | null = null;
   @state() private color: string | null = null;
@@ -150,8 +137,7 @@ export class CategoryForm extends LitElement {
       (changes.has("value") &&
         this.value?.id !== (changes.get("value") as CategorySummary | null | undefined)?.id)
     ) {
-      this.names = { ...this.value?.name };
-      for (const locale of this.languages.languages) this.names[locale] ??= "";
+      this.name = this.value?.name ?? "";
       this.parentId = this.value?.parentId ?? null;
       this.image = this.value?.image ?? null;
       this.color = this.value?.color ?? null;
@@ -168,19 +154,11 @@ export class CategoryForm extends LitElement {
     this.dismissed = new Set([...this.dismissed, ...keys]);
   }
   #validate(): Record<string, string> {
-    const language = this.languages.languages[0];
-    return !language || !this.names[language]?.trim()
-      ? { [`name-${language ?? ""}`]: t("categories.name_required") }
-      : {};
+    return this.name.trim() ? {} : { name: t("categories.name_required") };
   }
   /** The keys of `errors` that a field this form shows displays. */
   #fieldKeys(errors: Record<string, string>): string[] {
-    const shown = new Set([
-      "parent",
-      "color",
-      "image",
-      ...this.languages.languages.map((locale) => `name-${locale}`),
-    ]);
+    const shown = new Set(["name", "parent", "color", "image"]);
     return Object.entries(errors)
       .filter(([key, message]) => Boolean(message) && shown.has(key))
       .map(([key]) => key);
@@ -210,7 +188,7 @@ export class CategoryForm extends LitElement {
     }
     this.#emit(event, "wt-submit", {
       value: {
-        name: { ...this.names },
+        name: this.name,
         parentId: this.parentId,
         image: this.image,
         color: this.color,
@@ -250,22 +228,19 @@ export class CategoryForm extends LitElement {
         class="fields"
         @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>('[data-test="save"]'))}
       >
-        ${this.languages.languages.map(
-          (locale) =>
-            html`<wt-input
-              name=${`category-name-${locale}`}
-              label=${`${t("categories.name")} (${locale})`}
-              .required=${locale === this.languages.languages[0]}
-              .disabled=${this.busy}
-              .value=${this.names[locale] ?? ""}
-              .error=${errors[`name-${locale}`] ?? ""}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                event.stopPropagation();
-                this.names = { ...this.names, [locale]: event.detail.value };
-                this.#dismiss(`name-${locale}`);
-              }}
-            ></wt-input>`,
-        )}
+        <wt-input
+          name="name"
+          label=${t("categories.name")}
+          required
+          .disabled=${this.busy}
+          .value=${this.name}
+          .error=${errors.name ?? ""}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.name = event.detail.value;
+            this.#dismiss("name");
+          }}
+        ></wt-input>
         <wt-combobox
           name="category-parent"
           label=${t("categories.parent")}
@@ -275,7 +250,7 @@ export class CategoryForm extends LitElement {
             ...this.#parents()
               .map((category) => ({
                 value: category.id,
-                label: categoryPath(category, this.categories, currentLocale(), this.languages),
+                label: categoryPath(category, this.categories),
               }))
               .sort((a, b) => byLabel(a.label, b.label)),
           ]}

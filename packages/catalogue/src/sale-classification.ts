@@ -1,34 +1,25 @@
 import { eq, inArray } from "drizzle-orm";
 import { categories, products, type Transaction } from "@waitron/db";
-import {
-  AppError,
-  resolveContentText,
-  type ClassificationEntry,
-  type SaleLineClassification,
-} from "@waitron/shared";
+import { AppError, type ClassificationEntry, type SaleLineClassification } from "@waitron/shared";
 import { categoryDetails } from "./schema/categories.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 import "./errors.js";
 
 /** The reporting tree, and the listed products' main categories, read once for a sale. */
 export interface LoadedClassification {
-  /** Every reporting category: its name in every language it has, and its parent. */
-  categories: ReadonlyMap<string, { name: Record<string, string>; parentId: string | null }>;
-  /** The language a walked category's name is resolved in. */
-  language: string;
+  /** Every reporting category: its name and its parent. */
+  categories: ReadonlyMap<string, { name: string; parentId: string | null }>;
   /** Each loaded product: its main category after the variant fallback. */
   products: ReadonlyMap<string, { categoryId: string | null }>;
 }
 
 /**
  * Reads what `classifyLine` needs for every product in `productIds`, in two queries however many
- * products there are. A category's name is resolved only when `classifyLine` walks it, in
- * `defaultLanguage`, the language the line's free-text `category` is resolved in.
+ * products there are.
  */
 export async function loadClassification(
   tx: Transaction,
   productIds: readonly string[],
-  defaultLanguage: string,
 ): Promise<LoadedClassification> {
   const productRows = await tx
     .select({ id: products.id, categoryId: effectiveProductColumns.categoryId })
@@ -43,7 +34,6 @@ export async function loadClassification(
     categories: new Map(
       categoryRows.map((row) => [row.id, { name: row.name, parentId: row.parentId }]),
     ),
-    language: defaultLanguage,
     products: new Map(productRows.map((row) => [row.id, { categoryId: row.categoryId }])),
   };
 }
@@ -69,11 +59,7 @@ export function classifyLine(c: LoadedClassification, productId: string): SaleLi
     id !== null && reporting.length <= c.categories.size;
     id = c.categories.get(id)?.parentId ?? null
   ) {
-    const category = c.categories.get(id);
-    reporting.unshift({
-      id,
-      name: category === undefined ? "" : resolveContentText(category.name, c.language, c.language),
-    });
+    reporting.unshift({ id, name: c.categories.get(id)?.name ?? "" });
   }
   const snapshot = { reporting };
   validateSnapshot(c, productId, snapshot);

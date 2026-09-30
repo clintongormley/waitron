@@ -102,9 +102,8 @@ type Entry = { id: string; name: string };
 
 /**
  * A venue whose reporting tree is Bebidas > Bebidas alcohólicas > Cócteles, with Licores and Cafés
- * also under Bebidas, and Comida and Añadidos at the top. Every category's `es` and `en` names
- * differ, and the venue's default content language is `es`, so a snapshot read in the wrong
- * language fails. Every product's staff, customer and kitchen names differ too.
+ * also under Bebidas, and Comida and Añadidos at the top. Every product's staff, customer and
+ * kitchen names differ.
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay") {
   const venue = await applyVenue(
@@ -154,15 +153,15 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
 
   const seeded = await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });
-    const category = (es: string, en: string, parentId?: string) =>
-      createCategory(tx, { name: { es, en }, ...(parentId ? { parentId } : {}) });
-    const bebidas = await category("Bebidas", "Drinks");
-    const alcoholicas = await category("Bebidas alcohólicas", "Alcoholic drinks", bebidas.id);
-    const cocteles = await category("Cócteles", "Cocktails", alcoholicas.id);
-    const licores = await category("Licores", "Spirits", bebidas.id);
-    const cafes = await category("Cafés", "Hot drinks", bebidas.id);
-    const comida = await category("Comida", "Food");
-    const anadidos = await category("Añadidos", "Extras");
+    const category = (name: string, parentId?: string) =>
+      createCategory(tx, { name, ...(parentId ? { parentId } : {}) });
+    const bebidas = await category("Bebidas");
+    const alcoholicas = await category("Bebidas alcohólicas", bebidas.id);
+    const cocteles = await category("Cócteles", alcoholicas.id);
+    const licores = await category("Licores", bebidas.id);
+    const cafes = await category("Cafés", bebidas.id);
+    const comida = await category("Comida");
+    const anadidos = await category("Añadidos");
     const product = (name: string, categoryId: string | null, unitPrice: string) =>
       createProduct(tx, {
         catalogueId: menu.id,
@@ -233,10 +232,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
 
 type Venue = Awaited<ReturnType<typeof setupVenue>>;
 
-const entry = (c: { id: string; name: Record<string, string> }): Entry => ({
-  id: c.id,
-  name: c.name.es!,
-});
+const entry = (c: { id: string; name: string }): Entry => ({ id: c.id, name: c.name });
 
 /** The chain Cócteles records before and after it moves from Bebidas alcohólicas to Licores. */
 const underAlcoholic = (v: Venue) =>
@@ -470,7 +466,7 @@ describe("what a filed sale line records about its product", () => {
 
     await withTransaction(suite.db, (tx) =>
       updateCategory(tx, v.categories.cocteles.id, {
-        name: { es: "Combinados", en: "Mixed drinks" },
+        name: "Mixed drinks",
         parentId: v.categories.licores.id,
       }),
     );

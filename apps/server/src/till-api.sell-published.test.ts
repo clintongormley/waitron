@@ -181,7 +181,7 @@ async function setupLunch(): Promise<Lunch> {
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
     const lunch = await createCatalogue(tx, { name: "Lunch" });
-    const category = await createCategory(tx, { name: { [LOCALE]: "Carta" } });
+    const category = await createCategory(tx, { name: "Carta" });
     const product = (name: string, unitPrice: string, vatClass: "general" | "reduced") =>
       createProduct(tx, {
         catalogueId: lunch.id,

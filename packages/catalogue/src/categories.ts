@@ -1,21 +1,20 @@
 import { categories, now, products, type Transaction } from "@waitron/db";
-import { AppError, FALLBACK_LOCALE, isUuid } from "@waitron/shared";
+import { AppError, isUuid } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { batches } from "./batches.js";
 import { categoryDetails } from "./schema/categories.js";
-import { validateContentTranslations } from "./content-languages.js";
 import { isTopLevelProduct, productWithId, type ProductScope } from "./variant-fallback.js";
 import "./errors.js";
 
 export interface Category {
   id: string;
-  name: Record<string, string>;
+  name: string;
   image: string | null;
   color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
-  name: Record<string, string>;
+  name: string;
   image?: string | null;
   color?: string | null;
   parentId?: string | null;
@@ -100,17 +99,18 @@ function validateColor(color: string | null | undefined): void {
   if (color === undefined || color === null) return;
   if (!isHexColor(color)) throw new AppError("category.color_invalid", {});
 }
-export async function createCategory(
-  tx: Transaction,
-  input: CategoryInput,
-  fallbackLanguage: string = FALLBACK_LOCALE,
-): Promise<Category> {
-  await validateContentTranslations(tx, input.name, fallbackLanguage);
+function categoryName(name: unknown): string {
+  const trimmed = typeof name === "string" ? name.trim() : "";
+  if (trimmed === "") throw new AppError("category.invalid", { field: "name" });
+  return trimmed;
+}
+export async function createCategory(tx: Transaction, input: CategoryInput): Promise<Category> {
+  const name = categoryName(input.name);
   validateColor(input.color);
   const id = crypto.randomUUID();
   await validateParent(tx, id, input.parentId ?? null);
   await validateImage(tx, input.image ?? null);
-  await tx.insert(categories).values({ id, name: input.name });
+  await tx.insert(categories).values({ id, name });
   await tx.insert(categoryDetails).values({
     categoryId: id,
     parentId: input.parentId ?? null,
@@ -123,9 +123,8 @@ export async function updateCategory(
   tx: Transaction,
   id: string,
   patch: Partial<CategoryInput>,
-  fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<Category> {
-  if (patch.name !== undefined) await validateContentTranslations(tx, patch.name, fallbackLanguage);
+  const name = patch.name === undefined ? undefined : categoryName(patch.name);
   const current = await readCategory(tx, id);
   const parentId = patch.parentId === undefined ? current.parentId : patch.parentId;
   const image = patch.image === undefined ? current.image : patch.image;
@@ -135,7 +134,7 @@ export async function updateCategory(
   validateColor(color);
   await tx
     .update(categories)
-    .set({ name: patch.name ?? current.name, updatedAt: now() })
+    .set({ name: name ?? current.name, updatedAt: now() })
     .where(eq(categories.id, id));
   await tx
     .insert(categoryDetails)
@@ -192,7 +191,7 @@ export async function deleteCategory(
 export interface CategoryDependants {
   /** Every product, variants included, whose OWN main category is this one. */
   products: { id: string; name: string }[];
-  children: { id: string; name: Record<string, string> }[];
+  children: { id: string; name: string }[];
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
 }

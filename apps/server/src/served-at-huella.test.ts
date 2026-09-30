@@ -187,7 +187,7 @@ async function seedShop(db: Database, emisorNif: string): Promise<Shop> {
   );
   const seeded = await withTransaction(db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
     const agua = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,

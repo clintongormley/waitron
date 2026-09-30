@@ -44,7 +44,7 @@ export interface ImageRecord extends ImageMetadataInput {
   usageCount: number;
 }
 export type ImageUsage =
-  | { kind: "category"; id: string; names: Record<string, string> }
+  | { kind: "category"; id: string; name: string }
   /** Any section, a list a menu owns included; `internalName` is the staff-facing name. */
   | { kind: "section"; id: string; internalName: string }
   | {
@@ -179,7 +179,7 @@ async function listImageUsagesForFilename(
     // Products before variants, each in id order.
     .orderBy(isNotNull(products.parentId), products.id);
   const categoryRows = await tx
-    .select({ id: categories.id, names: categories.name })
+    .select({ id: categories.id, name: categories.name })
     .from(categoryDetails)
     .innerJoin(categories, eq(categories.id, categoryDetails.categoryId))
     .where(eq(categoryDetails.image, filename))

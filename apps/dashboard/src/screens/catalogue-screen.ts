@@ -483,12 +483,8 @@ export class CatalogueScreen extends LitElement {
     if (this.#childRefusals?.error === error) return this.#childRefusals.errors;
     const errors: ChildRefusals = { unit: {}, category: {}, lists: {} };
     if (error !== null && this.#child.kind === "unit") errors.unit = unitRefusalErrors(error);
-    if (error !== null && this.#child.kind === "category" && this.contentLanguages)
-      errors.category = categoryRefusalErrors(
-        error,
-        this.contentLanguages.defaultLanguage,
-        this.#submittedParent,
-      );
+    if (error !== null && this.#child.kind === "category")
+      errors.category = categoryRefusalErrors(error, this.#submittedParent);
     if (error !== null && (this.#child.kind === "extras" || this.#child.kind === "options")) {
       // Keyed by the field path the server named, or `_form` when it names none.
       const params = (error as { params?: { field?: unknown } }).params ?? {};
@@ -706,25 +702,18 @@ export class CatalogueScreen extends LitElement {
         @wt-submit=${this.#submitUnit}
         @wt-cancel=${() => this.#cancelChild("unit")}
       ></dashboard-unit-form>
+      <dashboard-category-form
+        .open=${this.#child.kind === "category"}
+        .busy=${this.#child.busy}
+        .categories=${this.categories}
+        .api=${this.api}
+        .fieldErrors=${refusals.category}
+        @wt-submit=${this.#submitCategory}
+        @wt-cancel=${() => this.#cancelChild("category")}
+      ></dashboard-category-form>
       ${
-        // The form's name fields follow the content languages, so it waits for them rather than
-        // offering a field in a guessed language.
-        this.contentLanguages
-          ? html`<dashboard-category-form
-              .open=${this.#child.kind === "category"}
-              .busy=${this.#child.busy}
-              .languages=${this.contentLanguages}
-              .categories=${this.categories}
-              .api=${this.api}
-              .fieldErrors=${refusals.category}
-              @wt-submit=${this.#submitCategory}
-              @wt-cancel=${() => this.#cancelChild("category")}
-            ></dashboard-category-form>`
-          : nothing
-      }
-      ${
-        // Both list forms carry translated name fields, so like the category form they wait for the
-        // content languages rather than offering a field in a guessed language.
+        // Both list forms carry translated name fields, so they wait for the content languages
+        // rather than offering a field in a guessed language.
         this.contentLanguages
           ? html`<dashboard-extra-list-form
                 .open=${this.#child.kind === "extras"}

@@ -22,26 +22,25 @@ type Combobox = HTMLElement & {
 
 const food: CategorySummary = {
   id: "food",
-  name: { es: "Comida" },
+  name: "Comida",
   image: null,
   color: null,
   parentId: null,
 };
 const tapas: CategorySummary = {
   id: "tapas",
-  name: { es: "Tapas" },
+  name: "Tapas",
   image: null,
   color: null,
   parentId: "food",
 };
 const drinks: CategorySummary = {
   id: "drinks",
-  name: { es: "Bebidas" },
+  name: "Bebidas",
   image: null,
   color: null,
   parentId: null,
 };
-const languages = { defaultLanguage: "es", languages: ["es"] };
 
 async function mount(template: TemplateResult): Promise<Combobox> {
   render(template, host);
@@ -60,7 +59,6 @@ it("offers none and then every category by its path, sorted, with the chosen one
       name: "primary",
       label: "Main category",
       categories: [tapas, food, drinks],
-      languages,
       value: "tapas",
       noneLabel: "Uncategorised",
       disabled: false,
@@ -82,7 +80,7 @@ it("offers none and then every category by its path, sorted, with the chosen one
 it("orders numbered category paths by value, as the tables do", async () => {
   const named = (id: string, name: string): CategorySummary => ({
     id,
-    name: { es: name },
+    name: name,
     image: null,
     color: null,
     parentId: null,
@@ -92,7 +90,6 @@ it("orders numbered category paths by value, as the tables do", async () => {
       name: "primary",
       label: "Main category",
       categories: [named("c10", "Cat 10"), named("c9", "Cat 9")],
-      languages,
       value: null,
       noneLabel: "Uncategorised",
       disabled: false,
@@ -112,7 +109,6 @@ it("leaves out the excluded categories and shows the error it is given", async (
       name: "children-to",
       label: "Subcategories go to",
       categories: [food, tapas, drinks],
-      languages,
       value: null,
       noneLabel: "Top level",
       exclude: new Set(["food", "tapas"]),
@@ -136,7 +132,6 @@ it("reports a picked category, and none as null, without letting the combobox's 
       name: "primary",
       label: "Main category",
       categories: [food],
-      languages,
       value: null,
       noneLabel: "Uncategorised",
       disabled: false,

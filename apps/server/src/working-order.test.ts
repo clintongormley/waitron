@@ -171,7 +171,7 @@ async function setupVenue(orderFlow: TillConfig["orderFlow"] = "prepay"): Promis
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: { en: "Bebidas" } });
+      const bebidas = await createCategory(tx, { name: "Bebidas" });
       const cafe = await createProduct(tx, {
         catalogueId: cat.id,
         categoryId: bebidas.id,
@@ -2789,7 +2789,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
       const barra = await createStation(tx, cfg, { name: "Barra" });
-      const drinks = await createCategory(tx, { name: { en: "Copas" } });
+      const drinks = await createCategory(tx, { name: "Copas" });
       await setCategoryStation(tx, cfg, drinks.id, barra.id);
       const cana = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id }); // → barra (category)
       const cafe = await makeProduct(tx, cfg, catalogueId, {
@@ -2816,8 +2816,8 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
     await withTransaction(db, async (tx) => {
       const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const bar = await createStation(tx, cfg, { name: "Bar" });
-      const drinks = await createCategory(tx, { name: { en: "Drinks" } });
-      const food = await createCategory(tx, { name: { en: "Food" } });
+      const drinks = await createCategory(tx, { name: "Drinks" });
+      const food = await createCategory(tx, { name: "Food" });
       await setCategoryStation(tx, cfg, drinks.id, bar.id);
       await setCategoryStation(tx, cfg, food.id, kitchen.id);
       const product = await makeProduct(tx, cfg, catalogueId, { categoryId: drinks.id });
@@ -2834,7 +2834,7 @@ describe("fireLines (KDS-1 routing resolver + snapshot)", () => {
       expect(before).toEqual({ category: "Drinks" });
 
       await updateCategory(tx, drinks.id, {
-        name: { en: "Cocktails" },
+        name: "Cocktails",
         parentId: food.id,
       });
       const [after] = await tx
@@ -6770,7 +6770,7 @@ describe("editing a saved order prices only what the edit adds", () => {
     const venue = await setupVenue();
     const { cfg, catalogueId } = venue;
     const seeded = await withTransaction(db, async (tx) => {
-      const mains = await createCategory(tx, { name: { en: "Mains" } });
+      const mains = await createCategory(tx, { name: "Mains" });
       const product = (name: string, unitPrice: string, categoryId: string | null = null) =>
         createProduct(tx, {
           catalogueId,
@@ -7054,8 +7054,8 @@ describe("editing a saved order prices only what the edit adds", () => {
  * allergens and dietary declarations, so a reader of the parent's value gets it wrong.
  */
 async function seedWine(tx: Transaction, cfg: TillConfig, catalogueId: string) {
-  const vinos = await createCategory(tx, { name: { en: "Vinos" } });
-  const copas = await createCategory(tx, { name: { en: "Copas" } });
+  const vinos = await createCategory(tx, { name: "Vinos" });
+  const copas = await createCategory(tx, { name: "Copas" });
   const primero = await createCourse(tx, cfg, { name: "Primero", displayOrder: 1 });
   const segundo = await createCourse(tx, cfg, { name: "Segundo", displayOrder: 2 });
   const parent = await createProduct(tx, {

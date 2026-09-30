@@ -107,7 +107,7 @@ export async function seedCatalogues(
     if (existingMenuId !== undefined) await renameCatalogue(tx, existingMenuId, data.name[locale]);
     const rootSectionId = await requireMenuRoot(tx, catalogue.id);
     for (const cat of data.categories) {
-      const category = await createCategory(tx, { name: cat.name });
+      const category = await createCategory(tx, { name: cat.name.en });
       if (cat.station !== null) {
         // The create op takes no station.
         await tx.execute(

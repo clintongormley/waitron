@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages, type DataTableColumn } from "@waitron/ui";
+import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
@@ -127,9 +127,7 @@ export class ProductList extends LitElement {
   #category(id: string | null): string {
     if (id === null) return "";
     const category = this.categories.find((candidate) => candidate.id === id);
-    return category
-      ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
-      : t("editor.missing_choice");
+    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
   }
 
   /** A variant's row reads the main category it is reported under, which the server resolves: its

@@ -163,8 +163,8 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         extraLists,
         optionLists,
         categories: [
-          { id: "drinks", name: { en: "Drinks" }, image: null, color: "#3355aa", parentId: null },
-          { id: "food", name: { en: "Food" }, image: null, color: null, parentId: null },
+          { id: "drinks", name: "Drinks", image: null, color: "#3355aa", parentId: null },
+          { id: "food", name: "Food", image: null, color: null, parentId: null },
         ],
         stations: [{ id: "bar", name: "Bar" }],
         courses: [{ id: "starters", name: "Starters" }],

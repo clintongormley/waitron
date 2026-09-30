@@ -202,7 +202,7 @@ describe("POST /api/tables/:id/seat", () => {
     await seedLegacySellingUnits(suite.db);
     const { menuItemId, tableId } = await withTransaction(suite.db, async (tx) => {
       const catalogue = await createCatalogue(tx, { name: "Carta" });
-      const drinks = await createCategory(tx, { name: { en: "Bebidas" } });
+      const drinks = await createCategory(tx, { name: "Bebidas" });
       const coffee = await createProduct(tx, {
         catalogueId: catalogue.id,
         categoryId: drinks.id,

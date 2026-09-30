@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { keyed } from "lit/directives/keyed.js";
 import { repeat } from "lit/directives/repeat.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, currentContentLanguages, selectStyles, submitOnEnter } from "@waitron/ui";
+import { baseStyles, selectStyles, submitOnEnter } from "@waitron/ui";
 import { resolveContentText } from "@waitron/shared";
 import { DIETARY_LABELS } from "@waitron/catalogue/src/dietary-declarations.js";
 import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
@@ -624,9 +624,7 @@ export class ProductEditor extends LitElement {
   }
   private categoryLabel(id: string) {
     const category = this.categories.find((category) => category.id === id);
-    return category
-      ? categoryPath(category, this.categories, currentLocale(), currentContentLanguages())
-      : t("editor.missing_choice");
+    return category ? categoryPath(category, this.categories) : t("editor.missing_choice");
   }
   private text(value: LocalizedText) {
     return resolveContentText(value, this.language, this.language);
@@ -791,7 +789,6 @@ export class ProductEditor extends LitElement {
         name: "primary",
         label: t("editor.main_category"),
         categories: this.categories,
-        languages: currentContentLanguages(),
         value: this.draft.primaryCategoryId,
         noneLabel: parent ? this.sameAs(parentCategory) : t("categories.uncategorised"),
         error: this.error("primary"),

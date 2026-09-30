@@ -170,7 +170,7 @@ async function setupVenue(): Promise<Venue> {
   };
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
-    const category = await createCategory(tx, { name: { en: "Platos" } });
+    const category = await createCategory(tx, { name: "Platos" });
     const courseIds: Record<string, string> = {};
     let displayOrder = 1;
     for (const [key, name] of Object.entries(COURSES)) {

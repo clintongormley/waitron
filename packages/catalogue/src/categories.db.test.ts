@@ -14,7 +14,6 @@ import {
   addProductsToCategory,
   listCategoryProducts,
 } from "./categories.js";
-import { writeContentLanguages } from "./content-languages.js";
 import { createCatalogue, createProduct } from "./operations.js";
 import { setProductVariants } from "./variants.js";
 import { racePair, seedLegacySellingUnits } from "../test/fixtures.js";
@@ -29,8 +28,8 @@ const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suit
 async function fixture() {
   await seedTenant(suite.db);
   await seedLegacySellingUnits(suite.db);
-  const a = await app((tx) => createCategory(tx, { name: { en: "A" } }));
-  const b = await app((tx) => createCategory(tx, { name: { en: "B" } }));
+  const a = await app((tx) => createCategory(tx, { name: "A" }));
+  const b = await app((tx) => createCategory(tx, { name: "B" }));
   return { a, b };
 }
 const race = (
@@ -83,52 +82,40 @@ it.each(["attach", "delete"] as const)(
   },
 );
 
-it.each(["category", "language"] as const)(
-  "serializes a name/hierarchy edit against default-language changes with %s first",
-  async (winner) => {
-    const { a, b } = await fixture();
-    await app(async (tx) => {
-      await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "fr"] });
-      await updateCategory(tx, a.id, { name: { en: "A", fr: "Un" } });
-      await updateCategory(tx, b.id, { name: { en: "B", fr: "Deux" } });
-    });
-    const edit = (tx: Transaction) =>
-      updateCategory(tx, a.id, {
-        name: { en: "Changed" },
-        parentId: b.id,
-      });
-    const language = (tx: Transaction) =>
-      writeContentLanguages(tx, {
-        defaultLanguage: "fr",
-        languages: ["fr", "en"],
-      });
-    const result = await race(
-      winner === "category" ? edit : language,
-      winner === "category" ? language : edit,
-    );
-    expect(result[0]!.status).toBe("fulfilled");
-    expect(result[1]).toMatchObject({
-      status: "rejected",
-      reason: {
-        code: winner === "category" ? "content.default_missing" : "content.translation_required",
-      },
-    });
-    expect(await app((tx) => readCategory(tx, a.id))).toEqual({
-      ...a,
-      name: winner === "category" ? { en: "Changed" } : { en: "A", fr: "Un" },
-      parentId: winner === "category" ? b.id : null,
-    });
-  },
-);
+it("stores a category's name as one trimmed string", async () => {
+  await seedTenant(suite.db);
+  const created = await app((tx) => createCategory(tx, { name: "  Drinks  " }));
+  expect(created.name).toBe("Drinks");
+  expect((await app((tx) => readCategory(tx, created.id))).name).toBe("Drinks");
+  const renamed = await app((tx) => updateCategory(tx, created.id, { name: " Bar " }));
+  expect(renamed.name).toBe("Bar");
+});
+it("refuses a blank category name", async () => {
+  await seedTenant(suite.db);
+  await expect(app((tx) => createCategory(tx, { name: "   " }))).rejects.toMatchObject({
+    code: "category.invalid",
+    params: { field: "name" },
+  });
+  // A caller outside the route's shape check, handing over something that is not text at all.
+  await expect(
+    app((tx) => createCategory(tx, { name: { en: "Drinks" } as unknown as string })),
+  ).rejects.toMatchObject({ code: "category.invalid", params: { field: "name" } });
+  const made = await app((tx) => createCategory(tx, { name: "Kept" }));
+  await expect(app((tx) => updateCategory(tx, made.id, { name: "" }))).rejects.toMatchObject({
+    code: "category.invalid",
+    params: { field: "name" },
+  });
+  expect((await app((tx) => readCategory(tx, made.id))).name).toBe("Kept");
+});
 it("stores and validates a category colour", async () => {
   await seedTenant(suite.db);
   await seedLegacySellingUnits(suite.db);
-  const made = await app((tx) => createCategory(tx, { name: { en: "Hot" }, color: "#b12525" }));
+  const made = await app((tx) => createCategory(tx, { name: "Hot", color: "#b12525" }));
   expect(made.color).toBe("#b12525");
   const cleared = await app((tx) => updateCategory(tx, made.id, { color: null }));
   expect(cleared.color).toBeNull();
   await expect(
-    app((tx) => createCategory(tx, { name: { en: "Bad" }, color: "#FFF" })),
+    app((tx) => createCategory(tx, { name: "Bad", color: "#FFF" })),
   ).rejects.toMatchObject({ code: "category.color_invalid" });
 });
 const unpricedVariant = (name: string) => ({
@@ -164,7 +151,7 @@ async function mainCategoryOf(productId: string): Promise<string | null> {
 it("a product's main category may be any category, with no membership", async () => {
   const { a, b } = await fixture();
   const productId = await seedProduct();
-  const child = await app((tx) => createCategory(tx, { name: { en: "A1" }, parentId: a.id }));
+  const child = await app((tx) => createCategory(tx, { name: "A1", parentId: a.id }));
   for (const categoryId of [child.id, b.id, a.id, null]) {
     expect(await app((tx) => setMainReportingCategory(tx, productId, categoryId))).toEqual({
       primaryCategoryId: categoryId,
@@ -190,7 +177,7 @@ it("sets a variant's own main category only on the variant scope", async () => {
 });
 it("deleting a category moves its products, variants included, to its parent by default", async () => {
   const { a, b } = await fixture();
-  const child = await app((tx) => createCategory(tx, { name: { en: "A1" }, parentId: a.id }));
+  const child = await app((tx) => createCategory(tx, { name: "A1", parentId: a.id }));
   const product1 = await seedProduct();
   const product2 = await seedProduct();
   const variantId = await app(async (tx) => {
@@ -214,9 +201,9 @@ it("deleting a category moves its products and children where the call says", as
   const { a, b } = await fixture();
   const productId = await seedProduct();
   const made = await app(async (tx) => {
-    const child = await createCategory(tx, { name: { en: "A1" }, parentId: a.id });
-    const grandchild = await createCategory(tx, { name: { en: "A1a" }, parentId: child.id });
-    const other = await createCategory(tx, { name: { en: "A2" }, parentId: a.id });
+    const child = await createCategory(tx, { name: "A1", parentId: a.id });
+    const grandchild = await createCategory(tx, { name: "A1a", parentId: child.id });
+    const other = await createCategory(tx, { name: "A2", parentId: a.id });
     await setMainReportingCategory(tx, productId, child.id);
     return { child, grandchild, other };
   });
@@ -229,7 +216,7 @@ it("deleting a category moves its products and children where the call says", as
   // deleted category has a parent.
   await app((tx) => setMainReportingCategory(tx, productId, made.grandchild.id));
   const leaf = await app((tx) =>
-    createCategory(tx, { name: { en: "Leaf" }, parentId: made.grandchild.id }),
+    createCategory(tx, { name: "Leaf", parentId: made.grandchild.id }),
   );
   await app((tx) => deleteCategory(tx, made.grandchild.id, { productsTo: null, childrenTo: null }));
   expect(await mainCategoryOf(productId)).toBeNull();
@@ -239,8 +226,8 @@ it("refuses a reassignment to the deleted category, below it or to no category, 
   const { a, b } = await fixture();
   const productId = await seedProduct();
   const made = await app(async (tx) => {
-    const child = await createCategory(tx, { name: { en: "A1" }, parentId: a.id });
-    const grandchild = await createCategory(tx, { name: { en: "A1a" }, parentId: child.id });
+    const child = await createCategory(tx, { name: "A1", parentId: a.id });
+    const grandchild = await createCategory(tx, { name: "A1a", parentId: child.id });
     await setMainReportingCategory(tx, productId, a.id);
     return { child, grandchild };
   });
@@ -272,13 +259,13 @@ it("refuses a reassignment to the deleted category, below it or to no category, 
 it("deleting a category reparents its children to its parent", async () => {
   await seedTenant(suite.db);
   await app(async (tx) => {
-    const food = await createCategory(tx, { name: { en: "Food" } });
+    const food = await createCategory(tx, { name: "Food" });
     const breakfast = await createCategory(tx, {
-      name: { en: "Breakfast" },
+      name: "Breakfast",
       parentId: food.id,
     });
     const eggs = await createCategory(tx, {
-      name: { en: "Eggs" },
+      name: "Eggs",
       parentId: breakfast.id,
     });
     await deleteCategory(tx, breakfast.id);
@@ -288,9 +275,9 @@ it("deleting a category reparents its children to its parent", async () => {
 it("deleting a top-level category makes its children top-level", async () => {
   await seedTenant(suite.db);
   await app(async (tx) => {
-    const breakfast = await createCategory(tx, { name: { en: "Breakfast" } });
+    const breakfast = await createCategory(tx, { name: "Breakfast" });
     const eggs = await createCategory(tx, {
-      name: { en: "Eggs" },
+      name: "Eggs",
       parentId: breakfast.id,
     });
     await deleteCategory(tx, breakfast.id);
@@ -301,9 +288,9 @@ async function dependantsFixture() {
   await seedTenant(suite.db);
   await seedLegacySellingUnits(suite.db);
   const made = await app(async (tx) => {
-    const food = await createCategory(tx, { name: { en: "Food" } });
-    const x = await createCategory(tx, { name: { en: "X" }, parentId: food.id });
-    const eggs = await createCategory(tx, { name: { en: "Eggs" }, parentId: x.id });
+    const food = await createCategory(tx, { name: "Food" });
+    const x = await createCategory(tx, { name: "X", parentId: food.id });
+    const eggs = await createCategory(tx, { name: "Eggs", parentId: x.id });
     const menu = await createCatalogue(tx, { name: "M" });
     const p1 = await createProduct(tx, {
       catalogueId: menu.id,

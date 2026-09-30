@@ -260,20 +260,20 @@ refused with `management.request_invalid`, naming the field.
 | `PUT /management-api/products/:id/labels` | `{ labelIds }` replaces the product's labels → `{ labelIds }` |
 
 `Category` is
-`{ id, name: Record<string, string>, image: string | null, color: string | null, parentId: string | null }`.
+`{ id, name: string, image: string | null, color: string | null, parentId: string | null }`.
 A colour is lower-case `#rrggbb` or null; anything else is refused as `category.color_invalid` (400).
-Category names require text in your default content language, and they take part in the
-translation-gap check. Keep disabled translations in an edit payload: changing the enabled languages
-does not delete them.
+A category's name is one plain internal name, not a set of translations. It is stored trimmed; a
+name that is not a string is refused as `management.request_invalid` (400), and a blank one as
+`category.invalid` (400).
 
 `Label` is `{ id, name }`. A blank name is refused with `label.invalid` (400), a name another label
 already has with `label.name_taken` (409), and an unknown label id with `label.not_found` (404).
 
 `CategoryDependants` is `{ products, children, parentId, routes }`. `products` lists `{ id, name }`
 for every product, variants included, whose own main category is this one; `name` is the plain
-staff-facing product name. `children` lists `{ id, name }` for each direct subcategory, where `name`
-is a language map. `routes` lists `{ id, station, zone }` per preparation route, and is always empty
-when the venue-service module, which owns that table, is not installed.
+staff-facing product name. `children` lists `{ id, name }` for each direct subcategory. `routes`
+lists `{ id, station, zone }` per preparation route, and is always empty when the venue-service
+module, which owns that table, is not installed.
 
 The category product list returns `{ id, name, active, primaryCategoryId, labelIds }` for each
 product. It lists top-level products only: a variant appears under its parent in the product list,
@@ -306,7 +306,7 @@ list silently ignored, so a caller still on the old contract finds out at once.
 
 ## Storage and migration
 
-`categories` (core) holds the translated name. `category_details` (catalogue) holds the parent, image
+`categories` (core) holds the name. `category_details` (catalogue) holds the parent, image
 and colour. `labels` holds each label, with the unique index `labels_name_uq` on its name, and
 `product_labels` joins products to labels; both cascade when a product or a label is deleted. All
 the catalogue tables are classified `state`. All but the three that hold published menus

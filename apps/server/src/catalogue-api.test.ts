@@ -269,7 +269,7 @@ async function offerVia(
   return itemId;
 }
 
-async function createCategoryVia(app: Hono, name: Record<string, string>): Promise<string> {
+async function createCategoryVia(app: Hono, name: string): Promise<string> {
   const res = await send(app, "POST", "/management-api/categories", { body: { name } });
   expect(res.status).toBe(201);
   return ((await res.json()) as { id: string }).id;
@@ -526,17 +526,44 @@ describe("mountCatalogueApi — location menus", () => {
 describe("mountCatalogueApi — categories", () => {
   it("POST /management-api/categories creates one (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/categories", {
-      body: { name: { es: "Bebidas" } },
+      body: { name: " Bebidas " },
     });
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
       id: string;
-      name: Record<string, string>;
+      name: string;
       image: string | null;
       parentId: string | null;
     };
-    expect(body).toMatchObject({ name: { es: "Bebidas" }, image: null, parentId: null });
+    expect(body).toMatchObject({ name: "Bebidas", image: null, parentId: null });
     expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("refuses a translated-object category name", async () => {
+    const res = await send(mountApp(), "POST", "/management-api/categories", {
+      body: { name: { en: "Drinks" } },
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "name" } },
+    });
+  });
+
+  it("refuses a blank category name on create and on rename with category.invalid (400)", async () => {
+    const app = mountApp();
+    const blank = await send(app, "POST", "/management-api/categories", { body: { name: "  " } });
+    expect(blank.status).toBe(400);
+    expect(await blank.json()).toMatchObject({
+      error: { code: "category.invalid", params: { field: "name" } },
+    });
+    const id = await createCategoryVia(app, "Kept");
+    const renamed = await send(app, "PATCH", `/management-api/categories/${id}`, {
+      body: { name: "" },
+    });
+    expect(renamed.status).toBe(400);
+    expect(await renamed.json()).toMatchObject({
+      error: { code: "category.invalid", params: { field: "name" } },
+    });
   });
 
   it("POST /management-api/categories with a missing name → management.request_invalid 400", async () => {
@@ -550,18 +577,18 @@ describe("mountCatalogueApi — categories", () => {
   it("GET /management-api/categories lists them (200)", async () => {
     const app = mountApp();
     await send(app, "POST", "/management-api/categories", {
-      body: { name: { es: "Postres" } },
+      body: { name: "Postres" },
     });
     const res = await send(app, "GET", "/management-api/categories");
     expect(res.status).toBe(200);
-    const rows = (await res.json()) as { name: Record<string, string> }[];
-    expect(rows.some((r) => r.name.es === "Postres")).toBe(true);
+    const rows = (await res.json()) as { name: string }[];
+    expect(rows.some((r) => r.name === "Postres")).toBe(true);
   });
 
   it("creates and repaints a category with a colour", async () => {
     const app = mountApp();
     const created = await send(app, "POST", "/management-api/categories", {
-      body: { name: { es: "Picante" }, color: "#b12525" },
+      body: { name: "Picante", color: "#b12525" },
     });
     expect(created.status).toBe(201);
     const category = (await created.json()) as { id: string; color: string | null };
@@ -586,7 +613,7 @@ describe("mountCatalogueApi — categories", () => {
     [42, "management.request_invalid"],
   ])("rejects the colour %j with %s (400)", async (color, code) => {
     const res = await send(mountApp(), "POST", "/management-api/categories", {
-      body: { name: { es: "Picante" }, color },
+      body: { name: "Picante", color },
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code } });
@@ -594,9 +621,9 @@ describe("mountCatalogueApi — categories", () => {
 
   it("returns a category's dependants for the delete confirmation", async () => {
     const app = mountApp();
-    const parent = await createCategoryVia(app, { es: "Bebidas" });
+    const parent = await createCategoryVia(app, "Bebidas");
     const child = await send(app, "POST", "/management-api/categories", {
-      body: { name: { es: "Vinos" }, parentId: parent },
+      body: { name: "Vinos", parentId: parent },
     });
     const childId = ((await child.json()) as { id: string }).id;
     const productId = await createNamedProductVia(app, "Rioja");
@@ -612,7 +639,7 @@ describe("mountCatalogueApi — categories", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       products: [{ id: productId, name: "Rioja" }],
-      children: [{ id: childId, name: { es: "Vinos" } }],
+      children: [{ id: childId, name: "Vinos" }],
       parentId: null,
       // The venue-service module is not migrated in this suite, so the optional route table is
       // absent and the read answers with an empty list.
@@ -622,7 +649,7 @@ describe("mountCatalogueApi — categories", () => {
 
   it("gates the dependants read and refuses a foreign or malformed id", async () => {
     const app = mountApp();
-    const id = await createCategoryVia(app, { es: "Bebidas" });
+    const id = await createCategoryVia(app, "Bebidas");
     const path = `/management-api/categories/${id}/dependants`;
     expect((await send(app, "GET", path, { cookie: null })).status).toBe(401);
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
@@ -640,8 +667,8 @@ describe("mountCatalogueApi — categories", () => {
 
   it("bulk-adds products to a category in one write, moving each from where it was", async () => {
     const app = mountApp();
-    const id = await createCategoryVia(app, { es: "Tapas" });
-    const elsewhere = await createCategoryVia(app, { es: "Raciones" });
+    const id = await createCategoryVia(app, "Tapas");
+    const elsewhere = await createCategoryVia(app, "Raciones");
     const first = await createNamedProductVia(app, "Croquetas");
     const second = await createNamedProductVia(app, "Boquerones");
     await send(app, "PUT", `/management-api/products/${second}/categories`, {
@@ -668,11 +695,11 @@ describe("mountCatalogueApi — categories", () => {
 
   it("lists a category's products, and with descendants=1 the products of the categories below it", async () => {
     const app = mountApp();
-    const parent = await createCategoryVia(app, { es: "Bebidas" });
+    const parent = await createCategoryVia(app, "Bebidas");
     const child = (
       (await (
         await send(app, "POST", "/management-api/categories", {
-          body: { name: { es: "Vinos" }, parentId: parent },
+          body: { name: "Vinos", parentId: parent },
         })
       ).json()) as { id: string }
     ).id;
@@ -702,13 +729,13 @@ describe("mountCatalogueApi — categories", () => {
 
   it("deletes a category, moving its products and children to its parent unless the body says otherwise", async () => {
     const app = mountApp();
-    const top = await createCategoryVia(app, { es: "Comida" });
-    const other = await createCategoryVia(app, { es: "Postres" });
+    const top = await createCategoryVia(app, "Comida");
+    const other = await createCategoryVia(app, "Postres");
     const make = async (name: string, parentId: string) =>
       (
         (await (
           await send(app, "POST", "/management-api/categories", {
-            body: { name: { es: name }, parentId },
+            body: { name, parentId },
           })
         ).json()) as { id: string }
       ).id;
@@ -758,7 +785,7 @@ describe("mountCatalogueApi — categories", () => {
 
   it("screens the bulk-add body and gates the write", async () => {
     const app = mountApp();
-    const id = await createCategoryVia(app, { es: "Tapas" });
+    const id = await createCategoryVia(app, "Tapas");
     const path = `/management-api/categories/${id}/products`;
     const productId = await createNamedProductVia(app, "Croquetas");
     // An empty selection is a legitimate no-op the screen lets through, not a 400.
@@ -790,7 +817,7 @@ describe("mountCatalogueApi — categories", () => {
 
   it("sets and clears a product's main category on the PUT, and screens its body", async () => {
     const app = mountApp();
-    const food = await createCategoryVia(app, { es: "Comida" });
+    const food = await createCategoryVia(app, "Comida");
     const productId = await createNamedProductVia(app, "Vermut");
     const path = `/management-api/products/${productId}/categories`;
     const set = await send(app, "PUT", path, { body: { primaryCategoryId: food } });
@@ -934,7 +961,7 @@ describe("mountCatalogueApi — products", () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Product catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
-      body: { name: { es: "Cafés" } },
+      body: { name: "Cafés" },
     });
     const categoryId = ((await catRes.json()) as { id: string }).id;
 
@@ -993,7 +1020,7 @@ describe("mountCatalogueApi — products", () => {
       await suite.db.execute<{ id: string }>(sql`select id from units where seed_key = 'each'`)
     ).rows[0]!.id;
     const category = await send(app, "POST", "/management-api/categories", {
-      body: { name: { es: "Cafés" } },
+      body: { name: "Cafés" },
     });
     const categoryId = ((await category.json()) as { id: string }).id;
     const optionList = await send(app, "POST", "/management-api/modifiers/options", {
@@ -1159,7 +1186,7 @@ describe("mountCatalogueApi — products", () => {
   it("refuses a variant's id on every product-by-id route but its own page, and accepts its parent's", async () => {
     const app = mountApp("es-ES");
     const catalogueId = await createCatalogueVia(app, "Variant ids");
-    const categoryId = await createCategoryVia(app, { es: `Vinos ${crypto.randomUUID()}` });
+    const categoryId = await createCategoryVia(app, `Vinos ${crypto.randomUUID()}`);
     const variant = {
       name: "Copa",
       customerName: null,
@@ -1270,8 +1297,8 @@ describe("mountCatalogueApi — products", () => {
     ownCategoryId: string;
   }> {
     const catalogueId = await createCatalogueVia(app, "Variant page");
-    const categoryId = await createCategoryVia(app, { es: `Cafés ${crypto.randomUUID()}` });
-    const ownCategoryId = await createCategoryVia(app, { es: `Solos ${crypto.randomUUID()}` });
+    const categoryId = await createCategoryVia(app, `Cafés ${crypto.randomUUID()}`);
+    const ownCategoryId = await createCategoryVia(app, `Solos ${crypto.randomUUID()}`);
     const created = await send(
       app,
       "POST",
@@ -2394,7 +2421,7 @@ describe("mountCatalogueApi — product request-shape screens", () => {
     const app = mountApp();
     const catalogueId = await createCatalogueVia(app, "Full-patch catalogue");
     const catRes = await send(app, "POST", "/management-api/categories", {
-      body: { name: { es: "Tapas" } },
+      body: { name: "Tapas" },
     });
     const categoryId = ((await catRes.json()) as { id: string }).id;
     const createRes = await send(app, "POST", "/management-api/products", {
@@ -3823,18 +3850,18 @@ describe("publishing a menu", () => {
   });
 });
 
-it("authors translated hierarchy and sets a product's main category through the API", async () => {
+it("authors a hierarchy and sets a product's main category through the API", async () => {
   const app = mountApp("en-GB");
   await suite.db.execute(sql`delete from content_languages`);
   const created = await send(app, "POST", "/management-api/categories", {
-    body: { name: { en: "Food", fr: "Cuisine" }, parentId: null, image: null },
+    body: { name: "Food", parentId: null, image: null },
   });
   expect(created.status).toBe(201);
   const category = (await created.json()) as { id: string };
   const path = `/management-api/categories/${category.id}`;
   expect(await (await send(app, "GET", path)).json()).toEqual({
     id: category.id,
-    name: { en: "Food", fr: "Cuisine" },
+    name: "Food",
     parentId: null,
     image: null,
     color: null,

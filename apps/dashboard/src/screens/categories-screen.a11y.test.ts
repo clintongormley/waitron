@@ -15,7 +15,7 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
       const categories =
         state === "empty"
           ? []
-          : [{ id: "food", name: { en: "Food" }, image: null, color: null, parentId: null }];
+          : [{ id: "food", name: "Food", image: null, color: null, parentId: null }];
       const api = {
         getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
         listLibraryProducts: async () => [],
@@ -43,8 +43,8 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
 
   it("renders nested tree rows with a colour swatch, then the flat toggle, accessibly", async () => {
     const categories: CategorySummary[] = [
-      { id: "food", name: { en: "Food" }, image: null, color: "#b12525", parentId: null },
-      { id: "breakfast", name: { en: "Breakfast" }, image: null, color: null, parentId: "food" },
+      { id: "food", name: "Food", image: null, color: "#b12525", parentId: null },
+      { id: "breakfast", name: "Breakfast", image: null, color: null, parentId: "food" },
     ];
     const api = {
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
@@ -65,9 +65,9 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
 
   function membersApi(): DashboardApi {
     const categories: CategorySummary[] = [
-      { id: "food", name: { en: "Food" }, image: null, color: null, parentId: null },
-      { id: "drink", name: { en: "Drinks" }, image: null, color: "#2244aa", parentId: null },
-      { id: "breakfast", name: { en: "Breakfast" }, image: null, color: null, parentId: "food" },
+      { id: "food", name: "Food", image: null, color: null, parentId: null },
+      { id: "drink", name: "Drinks", image: null, color: "#2244aa", parentId: null },
+      { id: "breakfast", name: "Breakfast", image: null, color: null, parentId: "food" },
     ];
     return {
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
@@ -248,7 +248,7 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
       ...membersApi(),
       getCategoryDependants: async () => ({
         products: [{ id: "p", name: "Toast" }],
-        children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+        children: [{ id: "breakfast", name: "Breakfast" }],
         parentId: null,
         routes: [{ id: "r1", station: "Grill", zone: null }],
       }),

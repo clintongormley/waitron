@@ -23,25 +23,22 @@ const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, f
 const sessionOf = (tx: Transaction) =>
   (tx as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
 
-/**
- * Drinks > Alcoholic drinks > Cocktails, and a separate top-level Extras. Every category's English
- * and Spanish names differ, so a snapshot read in the wrong language fails.
- */
+/** Drinks > Alcoholic drinks > Cocktails, and a separate top-level Extras. */
 async function fixture() {
   await seedTenant(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Bar" });
-    const drinks = await createCategory(tx, { name: { en: "Drinks", es: "Bebidas" } });
+    const drinks = await createCategory(tx, { name: "Drinks" });
     const alcoholic = await createCategory(tx, {
-      name: { en: "Alcoholic drinks", es: "Bebidas alcohólicas" },
+      name: "Alcoholic drinks",
       parentId: drinks.id,
     });
     const cocktails = await createCategory(tx, {
-      name: { en: "Cocktails", es: "Cócteles" },
+      name: "Cocktails",
       parentId: alcoholic.id,
     });
-    const extras = await createCategory(tx, { name: { en: "Extras", es: "Añadidos" } });
+    const extras = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string | null) =>
       createProduct(tx, {
         catalogueId: menu.id,
@@ -89,15 +86,12 @@ async function fixture() {
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 
-function chain(f: Fixture, language: "en" | "es", ...which: (keyof Fixture["categories"])[]) {
-  return which.map((key) => ({
-    id: f.categories[key].id,
-    name: f.categories[key].name[language]!,
-  }));
+function chain(f: Fixture, ...which: (keyof Fixture["categories"])[]) {
+  return which.map((key) => ({ id: f.categories[key].id, name: f.categories[key].name }));
 }
 
-async function loaded(f: Fixture, language = "en"): Promise<LoadedClassification> {
-  return app((tx) => loadClassification(tx, Object.values(f.products), language));
+async function loaded(f: Fixture): Promise<LoadedClassification> {
+  return app((tx) => loadClassification(tx, Object.values(f.products)));
 }
 
 describe("classifyLine", () => {
@@ -106,16 +100,8 @@ describe("classifyLine", () => {
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.mojito)).toEqual({
-      reporting: chain(f, "en", "drinks", "alcoholic", "cocktails"),
+      reporting: chain(f, "drinks", "alcoholic", "cocktails"),
     });
-  });
-
-  it("names each category in the default content language it is loaded with", async () => {
-    const f = await fixture();
-
-    expect(classifyLine(await loaded(f, "es"), f.products.mojito).reporting).toEqual(
-      chain(f, "es", "drinks", "alcoholic", "cocktails"),
-    );
   });
 
   it("gives a variant with no main category its parent's chain", async () => {
@@ -123,7 +109,7 @@ describe("classifyLine", () => {
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.wine125)).toEqual({
-      reporting: chain(f, "en", "drinks", "alcoholic"),
+      reporting: chain(f, "drinks", "alcoholic"),
     });
   });
 
@@ -132,7 +118,7 @@ describe("classifyLine", () => {
     const c = await loaded(f);
 
     expect(classifyLine(c, f.products.wine175)).toEqual({
-      reporting: chain(f, "en", "drinks", "alcoholic", "cocktails"),
+      reporting: chain(f, "drinks", "alcoholic", "cocktails"),
     });
   });
 
@@ -146,13 +132,13 @@ describe("classifyLine", () => {
     const f = await fixture();
 
     expect(classifyLine(await loaded(f), f.products.lemon)).toEqual({
-      reporting: chain(f, "en", "extras"),
+      reporting: chain(f, "extras"),
     });
   });
 
   it("refuses a product that was not loaded", async () => {
     const f = await fixture();
-    const c = await app((tx) => loadClassification(tx, [f.products.mojito], "en"));
+    const c = await app((tx) => loadClassification(tx, [f.products.mojito]));
 
     const error = await captureError(async () => classifyLine(c, f.products.water));
 
@@ -164,8 +150,7 @@ describe("classifyLine", () => {
 
   it("refuses to build a chain through a category that was not loaded", () => {
     const c: LoadedClassification = {
-      categories: new Map([["leaf", { name: { en: "Leaf" }, parentId: "gone" }]]),
-      language: "en",
+      categories: new Map([["leaf", { name: "Leaf", parentId: "gone" }]]),
       products: new Map([["p", { categoryId: "leaf" }]]),
     };
 
@@ -180,10 +165,9 @@ describe("classifyLine", () => {
   it("refuses to build a chain round a loop in the tree, rather than walking it forever", () => {
     const c: LoadedClassification = {
       categories: new Map([
-        ["a", { name: { en: "A" }, parentId: "b" }],
-        ["b", { name: { en: "B" }, parentId: "a" }],
+        ["a", { name: "A", parentId: "b" }],
+        ["b", { name: "B", parentId: "a" }],
       ]),
-      language: "en",
       products: new Map([["p", { categoryId: "a" }]]),
     };
 
@@ -201,20 +185,16 @@ describe("loadClassification", () => {
     const f = await fixture();
     const counts = await app(async (tx) => {
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
-      await loadClassification(tx, [f.products.mojito], "en");
+      await loadClassification(tx, [f.products.mojito]);
       const one = prepared.mock.calls.length;
       prepared.mockClear();
-      const basket = await loadClassification(
-        tx,
-        [
-          f.products.mojito,
-          f.products.wine125,
-          f.products.wine175,
-          f.products.beer,
-          f.products.lemon,
-        ],
-        "en",
-      );
+      const basket = await loadClassification(tx, [
+        f.products.mojito,
+        f.products.wine125,
+        f.products.wine175,
+        f.products.beer,
+        f.products.lemon,
+      ]);
       const five = prepared.mock.calls.length;
       prepared.mockRestore();
       return { one, five, loadedProducts: basket.products.size };
@@ -227,11 +207,11 @@ describe("loadClassification", () => {
 
   it("loads nothing for an empty basket but still answers", async () => {
     const f = await fixture();
-    const c = await app((tx) => loadClassification(tx, [], "en"));
+    const c = await app((tx) => loadClassification(tx, []));
 
     expect(c.products.size).toBe(0);
     expect(c.categories.get(f.categories.drinks.id)).toEqual({
-      name: { en: "Drinks", es: "Bebidas" },
+      name: "Drinks",
       parentId: null,
     });
   });
@@ -301,10 +281,7 @@ describe("validateSnapshot", () => {
       (_f, s) => ({ ...s, reporting: s.reporting.slice(0, 2) }),
     ],
     ["an empty chain for a categorised product", (_f, s) => ({ ...s, reporting: [] })],
-    [
-      "a chain ending in another category",
-      (f, s) => ({ ...s, reporting: chain(f, "en", "extras") }),
-    ],
+    ["a chain ending in another category", (f, s) => ({ ...s, reporting: chain(f, "extras") })],
   ])("refuses %s", async (_case, corrupt) => {
     const { f, c, snapshot } = await classified();
 
@@ -321,7 +298,7 @@ describe("validateSnapshot", () => {
 
     expect(
       await captureError(() =>
-        validateSnapshot(c, f.products.water, { reporting: chain(f, "en", "extras") }),
+        validateSnapshot(c, f.products.water, { reporting: chain(f, "extras") }),
       ),
     ).toMatchObject({
       code: "sale_classification.invalid",

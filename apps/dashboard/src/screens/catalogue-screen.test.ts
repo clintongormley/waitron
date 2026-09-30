@@ -31,7 +31,7 @@ const catalogues: CatalogueSummary[] = [
   { id: "cat-b", name: "Bebidas", active: true, version: 1 },
 ];
 const categories: CategorySummary[] = [
-  { id: "c1", name: { es: "Entrantes" }, image: null, color: null, parentId: null },
+  { id: "c1", name: "Entrantes", image: null, color: null, parentId: null },
 ];
 const units: Unit[] = [
   { id: "u1", name: { es: "unidad" }, abbreviation: { es: "u" }, precision: 0 },
@@ -232,7 +232,6 @@ describe("catalogue-screen", () => {
     expect(api.listProducts).toHaveBeenCalledWith("cat-a");
     expect(api.listProducts).toHaveBeenCalledWith("cat-b");
     expect(list(el).products).toEqual(products);
-    expect(el.shadowRoot!.querySelector("dashboard-category-manager")).toBeNull();
     expect(el.shadowRoot!.querySelector('select[name="product-catalogue"]')).toBeNull();
   });
 
@@ -613,15 +612,15 @@ describe("catalogue-screen", () => {
         .mockRejectedValueOnce({ code: "category.color_invalid", params: {}, status: 400 })
         .mockRejectedValueOnce({ code: "category.parent_cycle", params: {}, status: 400 })
         .mockRejectedValueOnce({
-          code: "content.translation_required",
-          params: { language: "es" },
+          code: "category.invalid",
+          params: { field: "name" },
           status: 400,
         }),
     });
     const el = await openNested(api, "category");
     const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
     const input = {
-      name: { es: "Postres", en: "" },
+      name: "Postres",
       parentId: "c1",
       image: null,
       color: "#abcdef",
@@ -641,10 +640,7 @@ describe("catalogue-screen", () => {
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
 
     await submitNested(el, form, input);
-    expect(errorBeside(form, "wt-input[name=category-name-es]")).toBe(
-      codeMessage("content.translation_required"),
-    );
-    expect(errorBeside(form, "wt-input[name=category-name-en]")).toBe("");
+    expect(errorBeside(form, "wt-input[name=name]")).toBe(codeMessage("category.invalid"));
     expect(errorBeside(form, "wt-combobox[name=category-parent]")).toBe("");
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
@@ -1133,27 +1129,21 @@ describe("catalogue-screen", () => {
     expect(editor(el).currentValue.unitId).toBe("u2");
   });
 
-  it("waits for the content languages before offering the new-category form", async () => {
-    let languagesLoaded!: (value: { defaultLanguage: string; languages: string[] }) => void;
+  it("offers the new-category form, with its one name field, before the content languages load", async () => {
     const api = stubApi({
-      getContentLanguages: vi.fn().mockReturnValue(new Promise((done) => (languagesLoaded = done))),
+      getContentLanguages: vi.fn().mockReturnValue(new Promise(() => {})),
     });
     const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", { api });
     await flush(el);
     emit(editor(el), "wt-create-related", { kind: "category" });
     await el.updateComplete;
-    // No name field in a guessed language: nothing could be submitted under a language the venue
-    // may not use.
-    expect(el.shadowRoot!.querySelector("dashboard-category-form")).toBeNull();
-    languagesLoaded({ defaultLanguage: "es", languages: ["es"] });
-    await flush(el);
     const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
     expect(form.open).toBe(true);
     await form.updateComplete;
     const names = [...form.shadowRoot!.querySelectorAll("wt-input")].map((input) =>
       input.getAttribute("name"),
     );
-    expect(names).toEqual(["category-name-es"]);
+    expect(names).toEqual(["name"]);
   });
 
   it("ignores a late product response after the editor is cancelled", async () => {

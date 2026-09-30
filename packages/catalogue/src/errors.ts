@@ -8,6 +8,8 @@ import type { MemberRef } from "./section-types.js";
 declare module "@waitron/shared" {
   interface ErrorParams {
     "category.not_found": { categoryId: string };
+    /** A category's name is blank once trimmed. */
+    "category.invalid": { field: "name" };
     "category.parent_cycle": Record<string, never>;
     "category.image_not_found": Record<string, never>;
     /** A category colour is neither null nor a lower-case `#rrggbb` string. */

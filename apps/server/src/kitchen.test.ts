@@ -255,7 +255,7 @@ async function productCourse(productId: string): Promise<string | null> {
 async function seedCategory(): Promise<string> {
   const [row] = await db
     .insert(categories)
-    .values({ name: { en: "Food" } })
+    .values({ name: "Food" })
     .returning({ id: categories.id });
   return row!.id;
 }

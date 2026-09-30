@@ -850,7 +850,7 @@ describe("a menu's prices", () => {
   it("names the product's reporting category by id", async () => {
     const f = await fixture();
     const cheese = await app(async (tx) => {
-      const category = await createCategory(tx, { name: { en: "Cheese" } });
+      const category = await createCategory(tx, { name: "Cheese" });
       const created = await createProduct(tx, {
         catalogueId: f.lunch,
         categoryId: category.id,

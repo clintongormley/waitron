@@ -712,7 +712,7 @@ it("links category-only image usage to its category without an inactive-product 
   const client = api();
   client.getImage.mockResolvedValue({
     image,
-    uses: [{ kind: "category", id: "food", names: { es: "Comida" } }],
+    uses: [{ kind: "category", id: "food", name: "Comida" }],
   });
   await mount(client);
   click("[data-test=delete-one]");

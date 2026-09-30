@@ -1,12 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  baseStyles,
-  currentContentLanguages,
-  focusFirstInvalid,
-  submitOnEnter,
-  type DataTableColumn,
-} from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, submitOnEnter, type DataTableColumn } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -20,7 +14,7 @@ import type {
   MenuVariant,
   Product,
 } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 import { byLabel, categoryAncestors, categoryPath } from "./category-form.js";
 import {
   priceField,
@@ -252,13 +246,8 @@ export class MenuPricesTable extends LitElement {
   }
 
   #readCategories(): void {
-    const language = currentLocale();
-    const config = currentContentLanguages();
     this.#categoryPaths = new Map(
-      this.categories.map((category) => [
-        category.id,
-        categoryPath(category, this.categories, language, config),
-      ]),
+      this.categories.map((category) => [category.id, categoryPath(category, this.categories)]),
     );
     this.#categoryChains = new Map(
       this.categories.map((category) => [

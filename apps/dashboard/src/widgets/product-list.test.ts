@@ -416,8 +416,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "reporting", name: { es: "Comida" }, image: null, color: null, parentId: null },
-        { id: "seasonal", name: { es: "Temporada" }, image: null, color: null, parentId: null },
+        { id: "reporting", name: "Comida", image: null, color: null, parentId: null },
+        { id: "seasonal", name: "Temporada", image: null, color: null, parentId: null },
       ],
       extraLists: [{ id: "ex-1", name: "Salsas" }],
       optionLists: [
@@ -874,8 +874,8 @@ describe("product-list", () => {
         }),
       ],
       categories: [
-        { id: "food", name: { es: "Comida" }, image: null, color: null, parentId: null },
-        { id: "drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
+        { id: "food", name: "Comida", image: null, color: null, parentId: null },
+        { id: "drinks", name: "Bebidas", image: null, color: null, parentId: null },
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;

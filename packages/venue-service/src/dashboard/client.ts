@@ -82,7 +82,7 @@ export interface VenueServiceSettings {
 export type KitchenTicketGrouping = "combined" | "separate";
 export interface VenueServiceChoices {
   menus: (NamedRow & { active: boolean })[];
-  categories: { id: string; name: Record<string, string> }[];
+  categories: { id: string; name: string }[];
   stations: (NamedRow & { isDefault?: boolean })[];
   floorZones: FloorZone[];
   products: Product[];
@@ -114,7 +114,7 @@ export class VenueServiceApi {
     const [model, menus, categories, stations, floorZones] = await Promise.all([
       this.#read<VenueServiceModel>("/management-api/venue-service"),
       this.#read<VenueServiceChoices["menus"]>("/management-api/catalogues"),
-      this.#read<{ id: string; name: Record<string, string> }[]>("/management-api/categories"),
+      this.#read<{ id: string; name: string }[]>("/management-api/categories"),
       this.#read<VenueServiceChoices["stations"]>("/management-api/stations"),
       this.#read<FloorZone[]>("/management-api/zones"),
     ]);

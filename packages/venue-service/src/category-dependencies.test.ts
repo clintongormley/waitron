@@ -42,7 +42,7 @@ async function venue() {
 it("deleting a category removes its preparation routes and the category", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: { en: "Drinks" } });
+    const category = await createCategory(tx, { name: "Drinks" });
     await createPreparationRoute(
       tx,
       { locationId },
@@ -67,7 +67,7 @@ it("an open order keeps its copied category label after the category is deleted"
       .values({ locationId, name: "Till" })
       .returning({ id: tills.id });
     const catalogue = await createCatalogue(tx, { name: "Menu" });
-    const category = await createCategory(tx, { name: { en: "Bakery" } });
+    const category = await createCategory(tx, { name: "Bakery" });
     const unit = await createUnit(
       tx,
       { name: { en: "each" }, precision: 0, abbreviation: { en: "ea" } },
@@ -114,7 +114,7 @@ it("an open order keeps its copied category label after the category is deleted"
 it("dependants lists a category's preparation routes with station and zone names", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: { en: "Grill" } });
+    const category = await createCategory(tx, { name: "Grill" });
     const [zone] = await tx
       .insert(floorZones)
       .values({ locationId, name: "Terrace" })
@@ -147,7 +147,7 @@ it("dependants lists a category's preparation routes with station and zone names
 it("dependants reports a no-preparation route with a null station", async () => {
   const { locationId } = await venue();
   await withTransaction(suite.db, async (tx) => {
-    const category = await createCategory(tx, { name: { en: "Drinks" } });
+    const category = await createCategory(tx, { name: "Drinks" });
     const routeId = await createPreparationRoute(
       tx,
       { locationId },

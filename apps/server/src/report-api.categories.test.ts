@@ -204,18 +204,10 @@ const suite = useVenueDb({
       .values({ id: 1, defaultLanguage: "es", languages: ["es", "en"] });
     await withTransaction(db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
-      const drinks = await createCategory(tx, { name: { es: "Bebidas", en: "Drinks" } }, "es");
-      const softs = await createCategory(
-        tx,
-        { name: { es: "Refrescos", en: "Softs" }, parentId: drinks.id },
-        "es",
-      );
-      const loopA = await createCategory(tx, { name: { es: "Bucle A", en: "Loop A" } }, "es");
-      const loopB = await createCategory(
-        tx,
-        { name: { es: "Bucle B", en: "Loop B" }, parentId: loopA.id },
-        "es",
-      );
+      const drinks = await createCategory(tx, { name: "Bebidas" });
+      const softs = await createCategory(tx, { name: "Refrescos", parentId: drinks.id });
+      const loopA = await createCategory(tx, { name: "Bucle A" });
+      const loopB = await createCategory(tx, { name: "Bucle B", parentId: loopA.id });
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {

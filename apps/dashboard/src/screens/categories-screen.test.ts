@@ -18,14 +18,14 @@ beforeEach(() => {
 });
 const food: CategorySummary = {
   id: "food",
-  name: { en: "Food" },
+  name: "Food",
   image: null,
   color: null,
   parentId: null,
 };
 const drink: CategorySummary = {
   id: "drink",
-  name: { en: "Drinks" },
+  name: "Drinks",
   image: null,
   color: null,
   parentId: null,
@@ -138,7 +138,7 @@ it("closes after a successful write even when refreshing fails and preserves fai
   api.createCategory.mockRejectedValueOnce(new Error("save"));
   form.dispatchEvent(
     new CustomEvent("wt-submit", {
-      detail: { value: { name: { en: "New" } } },
+      detail: { value: { name: "New" } },
       bubbles: true,
       composed: true,
     }),
@@ -148,7 +148,7 @@ it("closes after a successful write even when refreshing fails and preserves fai
   api.listCategories.mockRejectedValueOnce(new Error("refresh"));
   form.dispatchEvent(
     new CustomEvent("wt-submit", {
-      detail: { value: { name: { en: "New" } } },
+      detail: { value: { name: "New" } },
       bubbles: true,
       composed: true,
     }),
@@ -159,10 +159,9 @@ it("closes after a successful write even when refreshing fails and preserves fai
   );
 });
 
-it("searches the translated name displayed in the table", async () => {
+it("searches the name displayed in the table", async () => {
   const fx = apiFixture();
-  fx.api.getContentLanguages.mockResolvedValue({ defaultLanguage: "en", languages: ["en", "es"] });
-  fx.api.listCategories.mockResolvedValue([{ ...food, name: { en: "Food", es: "Comida" } }]);
+  fx.api.listCategories.mockResolvedValue([{ ...food, name: "Comida" }]);
   const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
     api: fx.client,
   });
@@ -397,7 +396,7 @@ it("shows the delete preview with the affected products and child links, disabli
   expect(deleteButton.disabled).toBe(true);
   resolveDependants({
     products: [{ id: "p", name: "Toast" }],
-    children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+    children: [{ id: "breakfast", name: "Breakfast" }],
     parentId: null,
     routes: [{ id: "r1", station: "Grill", zone: "Bar" }],
   });
@@ -422,7 +421,7 @@ it("shows one red warning at the top combining every consequence, and drops the 
   const fx = apiFixture();
   const meals: CategorySummary = {
     id: "meals",
-    name: { en: "Meals" },
+    name: "Meals",
     image: null,
     color: null,
     parentId: null,
@@ -431,7 +430,7 @@ it("shows one red warning at the top combining every consequence, and drops the 
   fx.api.listCategories.mockResolvedValue([meals, foodUnderMeals, drink]);
   fx.api.getCategoryDependants.mockResolvedValue({
     products: [{ id: "p", name: "Toast" }],
-    children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+    children: [{ id: "breakfast", name: "Breakfast" }],
     parentId: "meals",
     routes: [],
   });
@@ -623,24 +622,6 @@ it("ignores a stale preview response from an earlier open of the same category",
   expect(deleteButton.disabled).toBe(true);
 });
 
-it("does not search disabled translations that are absent from the displayed category name", async () => {
-  const fx = apiFixture();
-  fx.api.getContentLanguages.mockResolvedValue({ defaultLanguage: "en", languages: ["en"] });
-  fx.api.listCategories.mockResolvedValue([{ ...food, name: { en: "Food", es: "Comida" } }]);
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")!.rows.length).toBe(1),
-  );
-  await typeTableSearch(el, "Comida");
-  // "Comida" is a disabled translation, so the displayed name never exposes it and nothing matches.
-  expect(
-    el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!.querySelectorAll("tr[data-row-key]")
-      .length,
-  ).toBe(0);
-});
-
 it.each([
   ["category.parent_cycle", "parent", "wt-combobox[name=category-parent]"],
   ["category.image_not_found", "image", "dashboard-image-upload"],
@@ -655,7 +636,7 @@ it.each([
     api.createCategory.mockRejectedValueOnce({ code });
     form.dispatchEvent(
       new CustomEvent("wt-submit", {
-        detail: { value: { name: { en: "New" }, parentId: "food", image: "photo.jpg" } },
+        detail: { value: { name: "New", parentId: "food", image: "photo.jpg" } },
         bubbles: true,
         composed: true,
       }),
@@ -697,7 +678,7 @@ it("puts a missing parent beside the parent field when it is the parent the save
   });
   form.dispatchEvent(
     new CustomEvent("wt-submit", {
-      detail: { value: { name: { en: "New" }, parentId: "food", image: null, color: null } },
+      detail: { value: { name: "New", parentId: "food", image: null, color: null } },
       bubbles: true,
       composed: true,
     }),
@@ -740,7 +721,7 @@ it("defaults to tree mode and nests children", async () => {
   const fx = apiFixture();
   const breakfast: CategorySummary = {
     id: "breakfast",
-    name: { en: "Breakfast" },
+    name: "Breakfast",
     image: null,
     color: null,
     parentId: "food",
@@ -800,14 +781,14 @@ it("filters by name keeping ancestors in tree mode", async () => {
   const fx = apiFixture();
   const breakfast: CategorySummary = {
     id: "breakfast",
-    name: { en: "Breakfast" },
+    name: "Breakfast",
     image: null,
     color: null,
     parentId: "food",
   };
   const eggs: CategorySummary = {
     id: "eggs",
-    name: { en: "Eggs" },
+    name: "Eggs",
     image: null,
     color: null,
     parentId: "breakfast",
@@ -910,7 +891,7 @@ it("paints a tree-mode ancestor row's name in the muted colour", async () => {
   const fx = apiFixture();
   const breakfast: CategorySummary = {
     id: "breakfast",
-    name: { en: "Breakfast" },
+    name: "Breakfast",
     image: null,
     color: null,
     parentId: "food",
@@ -1219,7 +1200,7 @@ it("offers only categories something refers to in the Parent and Main category f
   const fx = apiFixture();
   const breakfast: CategorySummary = {
     id: "breakfast",
-    name: { en: "Breakfast" },
+    name: "Breakfast",
     image: null,
     color: null,
     parentId: "food",
@@ -1227,7 +1208,7 @@ it("offers only categories something refers to in the Parent and Main category f
   const eggs: CategorySummary = {
     ...breakfast,
     id: "eggs",
-    name: { en: "Eggs" },
+    name: "Eggs",
     parentId: "breakfast",
   };
   fx.api.listCategories.mockResolvedValue([food, breakfast, eggs, drink]);
@@ -1266,7 +1247,7 @@ it("offers only categories something refers to in the Parent and Main category f
 
 const breakfastUnderFood: CategorySummary = {
   id: "breakfast",
-  name: { en: "Breakfast" },
+  name: "Breakfast",
   image: null,
   color: null,
   parentId: "food",
@@ -1274,7 +1255,7 @@ const breakfastUnderFood: CategorySummary = {
 const juiceUnderDrink: CategorySummary = {
   ...breakfastUnderFood,
   id: "juice",
-  name: { en: "Juice" },
+  name: "Juice",
   parentId: "drink",
 };
 /** Mounts the screen over two parents with one child each, waiting for all four rows. */
@@ -1423,7 +1404,7 @@ async function rowAction(el: CategoriesScreen, id: string, index: number): Promi
     [index]!.click();
   await el.updateComplete;
 }
-function submitCategory(el: CategoriesScreen, name: Record<string, string>): void {
+function submitCategory(el: CategoriesScreen, name: string): void {
   el.shadowRoot!.querySelector("dashboard-category-form")!.dispatchEvent(
     new CustomEvent("wt-submit", {
       detail: { value: { name, parentId: null, image: null, color: null } },
@@ -1546,10 +1527,10 @@ it("saves an edited category through the update call and refreshes the list", as
   expect(form.open).toBe(true);
   expect(form.value).toEqual(food);
   const loads = api.listCategories.mock.calls.length;
-  submitCategory(el, { en: "Meals" });
+  submitCategory(el, "Meals");
   await vi.waitFor(() => expect(form.open).toBe(false));
   expect(api.updateCategory).toHaveBeenCalledWith("food", {
-    name: { en: "Meals" },
+    name: "Meals",
     parentId: null,
     image: null,
     color: null,
@@ -1558,32 +1539,21 @@ it("saves an edited category through the update call and refreshes the list", as
   await vi.waitFor(() => expect(api.listCategories.mock.calls.length).toBe(loads + 1));
 });
 
-// content.translation_required names only a LANGUAGE, so the refusal belongs beside that
-// language's name field; with no language it can only be a form-level error.
-it("puts a missing-translation refusal beside the name field for the language it names", async () => {
+it("puts a blank-name refusal beside the name field", async () => {
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
-  const message = codeMessage("content.translation_required");
-  api.createCategory.mockRejectedValueOnce({
-    code: "content.translation_required",
-    params: { language: "fr" },
-  });
-  submitCategory(el, { en: "New" });
-  await vi.waitFor(() => expect(form.fieldErrors).toEqual({ "name-fr": message }));
+  const message = codeMessage("category.invalid");
+  api.createCategory.mockRejectedValueOnce({ code: "category.invalid", params: { field: "name" } });
+  submitCategory(el, "New");
+  await vi.waitFor(() => expect(form.fieldErrors).toEqual({ name: message }));
   expect(form.open).toBe(true);
   await form.updateComplete;
-  const field = (locale: string) =>
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      `wt-input[name="category-name-${locale}"]`,
-    )!.error;
-  expect(field("fr")).toBe(message);
-  expect(field("en")).toBe("");
-
-  api.createCategory.mockRejectedValueOnce({ code: "content.translation_required" });
-  submitCategory(el, { en: "New" });
-  await vi.waitFor(() => expect(form.fieldErrors).toEqual({ _form: message }));
+  expect(
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="name"]')!
+      .error,
+  ).toBe(message);
 });
 
 // `categoryInput` in apps/server/src/catalogue-api.ts refuses a malformed parent as
@@ -1598,7 +1568,7 @@ it("puts a refused parent beside the parent field, and says to correct it above 
     code: "management.request_invalid",
     params: { field: "parentId" },
   });
-  submitCategory(el, { en: "New" });
+  submitCategory(el, "New");
   const combo = form.shadowRoot!.querySelector("wt-combobox[name=category-parent]")!;
   const besideParent = () => {
     const errorId = combo.shadowRoot!.querySelector(".trigger")!.getAttribute("aria-describedby");
@@ -1610,17 +1580,9 @@ it("puts a refused parent beside the parent field, and says to correct it above 
   expect(form.open).toBe(true);
 });
 
-it("puts a refused name beside the default language's name field", async () => {
+it("puts a refused name beside the name field", async () => {
   setLocale("en-GB");
-  const fx = apiFixture();
-  fx.api.getContentLanguages.mockResolvedValue({ defaultLanguage: "fr", languages: ["en", "fr"] });
-  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
-    api: fx.client,
-  });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("wt-data-table")?.rows.length).toBe(2),
-  );
-  const { api } = fx;
+  const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
   await el.updateComplete;
   const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
@@ -1628,13 +1590,11 @@ it("puts a refused name beside the default language's name field", async () => {
     code: "management.request_invalid",
     params: { field: "name" },
   });
-  submitCategory(el, { fr: "Nouveau" });
-  const field = (locale: string) =>
-    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      `wt-input[name="category-name-${locale}"]`,
-    )!.error;
-  await vi.waitFor(() => expect(field("fr")).toBe("Check the form and try again"));
-  expect(field("en")).toBe("");
+  submitCategory(el, "Nouveau");
+  const field = () =>
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('wt-input[name="name"]')!
+      .error;
+  await vi.waitFor(() => expect(field()).toBe("Check the form and try again"));
 });
 
 it("sends one create when the editor submits twice before the first save settles", async () => {
@@ -1643,8 +1603,8 @@ it("sends one create when the editor submits twice before the first save settles
   api.createCategory.mockReturnValueOnce(save.promise);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();
   await el.updateComplete;
-  submitCategory(el, { en: "New" });
-  submitCategory(el, { en: "New" });
+  submitCategory(el, "New");
+  submitCategory(el, "New");
   save.resolve({ ...food, id: "new" });
   const form = el.shadowRoot!.querySelector("dashboard-category-form")!;
   await vi.waitFor(() => expect(form.open).toBe(false));
@@ -1928,8 +1888,8 @@ it("counts more than one product and subcategory in the plural in the delete war
       { id: "q", name: "Jam" },
     ],
     children: [
-      { id: "breakfast", name: { en: "Breakfast" } },
-      { id: "lunch", name: { en: "Lunch" } },
+      { id: "breakfast", name: "Breakfast" },
+      { id: "lunch", name: "Lunch" },
     ],
     parentId: null,
     routes: [],
@@ -1984,14 +1944,14 @@ async function openFoodDelete(el: CategoriesScreen) {
 }
 const everything: CategoryDependants = {
   products: [{ id: "p", name: "Toast" }],
-  children: [{ id: "breakfast", name: { en: "Breakfast" } }],
+  children: [{ id: "breakfast", name: "Breakfast" }],
   parentId: null,
   routes: [],
 };
 
 it("prefills the delete dialog's two pickers with the category's parent", async () => {
   const fx = apiFixture();
-  const meals: CategorySummary = { ...drink, id: "meals", name: { en: "Meals" } };
+  const meals: CategorySummary = { ...drink, id: "meals", name: "Meals" };
   fx.api.listCategories.mockResolvedValue([
     meals,
     { ...food, parentId: "meals" },
@@ -2375,7 +2335,7 @@ it("lists the products below the category too once its toggle is on", async () =
 it("confirms how many products Add moves, naming the category, before moving them", async () => {
   setLocale("en-GB");
   const fx = apiFixture();
-  const cocktails: CategorySummary = { ...drink, id: "cocktails", name: { en: "Cocktails" } };
+  const cocktails: CategorySummary = { ...drink, id: "cocktails", name: "Cocktails" };
   fx.api.listCategories.mockResolvedValue([food, cocktails]);
   fx.api.listLibraryProducts.mockResolvedValue([
     product,
@@ -2441,7 +2401,7 @@ it("shows the categories without a tab bar or a Labels tab", async () => {
 describe("at phone width", () => {
   const longFood: CategorySummary = {
     ...food,
-    name: { en: "Entrantes-calientes-y-fríos-para-compartir-en-la-mesa" },
+    name: "Entrantes-calientes-y-fríos-para-compartir-en-la-mesa",
   };
   const longToast: Product = {
     ...product,

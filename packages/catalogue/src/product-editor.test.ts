@@ -399,7 +399,7 @@ it("round-trips real category, extras and options associations in the order they
       "en",
     );
     return {
-      category: await createCategory(tx, { name: { en: "Drinks" } }, "en"),
+      category: await createCategory(tx, { name: "Drinks" }),
       sauces: await createExtraList(
         tx,
         { name: "Sauces", items: [{ productId: topping.id }] },
@@ -549,8 +549,8 @@ describe("a variant's own page", () => {
         .insert(kitchenCourses)
         .values({ locationId: location!.id, name: "Drinks" })
         .returning({ id: kitchenCourses.id });
-      const parentCategory = await createCategory(tx, { name: { en: "Coffee" } }, "en");
-      const ownCategory = await createCategory(tx, { name: { en: "Espresso" } }, "en");
+      const parentCategory = await createCategory(tx, { name: "Coffee" });
+      const ownCategory = await createCategory(tx, { name: "Espresso" });
       const kg = await createUnit(
         tx,
         { name: { en: "kg" }, precision: 3, abbreviation: { en: "kg" } },

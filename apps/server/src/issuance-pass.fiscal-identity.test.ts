@@ -146,12 +146,12 @@ async function fileOneSale(db: Database) {
   };
   const seeded = await withTransaction(db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Carta" });
-    const bebidas = await createCategory(tx, { name: { es: "Bebidas", en: "Drinks" } });
+    const bebidas = await createCategory(tx, { name: "Drinks" });
     const cocteles = await createCategory(tx, {
-      name: { es: "Cócteles", en: "Cocktails" },
+      name: "Cocktails",
       parentId: bebidas.id,
     });
-    const anadidos = await createCategory(tx, { name: { es: "Añadidos", en: "Extras" } });
+    const anadidos = await createCategory(tx, { name: "Extras" });
     const product = (name: string, categoryId: string, unitPrice: string) =>
       createProduct(tx, {
         catalogueId: menu.id,

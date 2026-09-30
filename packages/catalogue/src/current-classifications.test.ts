@@ -11,21 +11,18 @@ import { currentClassifications } from "./current-classifications.js";
 const fx = useCatalogueDb();
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 
-/**
- * Drinks > Softs, and a top-level Spirits. Every category's English and Spanish names differ, so a
- * classification read in the wrong language fails.
- */
+/** Drinks > Softs, and a top-level Spirits. */
 async function fixture() {
   await seedTenant(fx.db);
   await seedLegacySellingUnits(fx.db);
   return app(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Bar" });
-    const drinks = await createCategory(tx, { name: { en: "Drinks", es: "Bebidas" } });
+    const drinks = await createCategory(tx, { name: "Drinks" });
     const softs = await createCategory(tx, {
-      name: { en: "Softs", es: "Refrescos" },
+      name: "Softs",
       parentId: drinks.id,
     });
-    const spirits = await createCategory(tx, { name: { en: "Spirits", es: "Licores" } });
+    const spirits = await createCategory(tx, { name: "Spirits" });
     const product = (name: string, categoryId: string | null) =>
       createProduct(tx, {
         catalogueId: menu.id,
@@ -66,7 +63,7 @@ async function fixture() {
 }
 
 describe("currentClassifications", () => {
-  it("classifies each listed product by today's chain, named in the default language", async () => {
+  it("classifies each listed product by today's chain, by each category's one name, whatever the content language", async () => {
     const f = await fixture();
     await app((tx) =>
       writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "en"] }),
@@ -77,32 +74,21 @@ describe("currentClassifications", () => {
     expect(Object.fromEntries(map)).toEqual({
       [f.cola]: {
         reporting: [
-          { id: f.drinks.id, name: "Bebidas" },
-          { id: f.softs.id, name: "Refrescos" },
+          { id: f.drinks.id, name: "Drinks" },
+          { id: f.softs.id, name: "Softs" },
         ],
       },
       [f.water]: { reporting: [] },
       // A variant with no main category of its own follows its parent's.
-      [f.double]: { reporting: [{ id: f.spirits.id, name: "Licores" }] },
+      [f.double]: { reporting: [{ id: f.spirits.id, name: "Spirits" }] },
     });
-  });
-
-  it("names categories in the fallback language when no content language is saved", async () => {
-    const f = await fixture();
-
-    const map = await app((tx) => currentClassifications(tx, [f.cola]));
-
-    expect(map.get(f.cola)?.reporting).toEqual([
-      { id: f.drinks.id, name: "Drinks" },
-      { id: f.softs.id, name: "Softs" },
-    ]);
   });
 
   it("follows a move and a rename made since, rather than any earlier state", async () => {
     const f = await fixture();
     await app(async (tx) => {
       await updateCategory(tx, f.softs.id, {
-        name: { en: "Soft drinks", es: "Bebidas sin alcohol" },
+        name: "Soft drinks",
         parentId: f.spirits.id,
       });
       await setMainReportingCategory(tx, f.water, f.drinks.id);

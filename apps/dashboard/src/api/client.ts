@@ -266,13 +266,13 @@ export interface LocationCatalogueSummary extends CatalogueSummary {
 
 export interface CategorySummary {
   id: string;
-  name: Record<string, string>;
+  name: string;
   image: string | null;
   color: string | null;
   parentId: string | null;
 }
 export interface CategoryInput {
-  name: Record<string, string>;
+  name: string;
   image?: string | null;
   color?: string | null;
   parentId?: string | null;
@@ -280,7 +280,7 @@ export interface CategoryInput {
 export interface CategoryDependants {
   /** Every product whose own main category is this one, variants included. */
   products: { id: string; name: string }[];
-  children: { id: string; name: Record<string, string> }[];
+  children: { id: string; name: string }[];
   parentId: string | null;
   routes: { id: string; station: string | null; zone: string | null }[];
 }

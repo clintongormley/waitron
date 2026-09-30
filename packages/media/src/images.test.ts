@@ -748,7 +748,7 @@ it("protects an image used only by a category and releases it after clearing the
       {},
     );
     const category = await createCategory(tx, {
-      name: { en: "Food" },
+      name: "Food",
       image: image.filename,
     });
     const [menu] = await tx.insert(catalogues).values({ name: "Lunch" }).returning({
@@ -773,7 +773,7 @@ it("protects an image used only by a category and releases it after clearing the
         name: "Bread",
         active: true,
       },
-      { kind: "category" as const, id: category.id, names: category.name },
+      { kind: "category" as const, id: category.id, name: category.name },
     ];
     expect(await listImageUsages(tx, image.id)).toEqual(uses);
     expect((await readImage(tx, image.id)).usageCount).toBe(2);

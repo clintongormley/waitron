@@ -34,7 +34,10 @@ async function fixture() {
     (kind: "unit" | "category", value: { id: string; name: Record<string, string> }) => {
       if (kind === "unit") el.units = [...el.units, { ...value, abbreviation: {} }];
       if (kind === "category")
-        el.categories = [...el.categories, { ...value, image: null, color: null, parentId: null }];
+        el.categories = [
+          ...el.categories,
+          { id: value.id, name: value.name.en ?? "", image: null, color: null, parentId: null },
+        ];
       el.selectRelated(kind, value.id);
     },
   );

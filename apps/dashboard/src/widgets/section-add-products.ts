@@ -1,13 +1,13 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { baseStyles, currentContentLanguages, disabledStyles, selectStyles } from "@waitron/ui";
+import { baseStyles, disabledStyles, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { byLabel, categoryPath, categoryWithDescendants } from "./category-form.js";
 import type { CategorySummary } from "../api/client.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { t } from "../i18n/t.js";
 
 export interface AddableProduct {
   id: string;
@@ -134,7 +134,6 @@ export class SectionAddProducts extends LitElement {
   @state() private error = false;
   #sorted: AddableProduct[] = [];
   #options: { id: string; path: string }[] = [];
-  #optionsLanguage = "";
   /** Null when no category is chosen. */
   #within: ReadonlySet<string> | null = null;
 
@@ -148,18 +147,9 @@ export class SectionAddProducts extends LitElement {
       !this.categories.some((category) => category.id === this.categoryId)
     )
       this.categoryId = "";
-    const language = currentLocale();
-    const config = currentContentLanguages();
-    // The paths are resolved in the display and content languages, which can change without the
-    // categories changing.
-    const optionsLanguage = JSON.stringify([language, config]);
-    if (changed.has("categories") || optionsLanguage !== this.#optionsLanguage) {
-      this.#optionsLanguage = optionsLanguage;
+    if (changed.has("categories")) {
       this.#options = this.categories
-        .map((category) => ({
-          id: category.id,
-          path: categoryPath(category, this.categories, language, config),
-        }))
+        .map((category) => ({ id: category.id, path: categoryPath(category, this.categories) }))
         .sort((a, b) => byLabel(a.path, b.path));
     }
     if (changed.has("categories") || changed.has("categoryId"))

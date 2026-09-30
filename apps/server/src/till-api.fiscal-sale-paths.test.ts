@@ -165,8 +165,8 @@ async function setupVenue(): Promise<{
   const cfg = tillConfigFromVenue(venue);
   const { catalogueId, available, operatorId } = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const comida = await createCategory(tx, { name: { [LOCALE]: "Comida" } });
-    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const comida = await createCategory(tx, { name: "Comida" });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
     const seededUnits = await tx.execute<{ id: string; seed_key: string }>(sql`
       select id, seed_key from units where seed_key = 'kg'`);
     const kgId = seededUnits.rows.find((unit) => unit.seed_key === "kg")!.id;

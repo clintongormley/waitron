@@ -215,7 +215,7 @@ export class ImageLibrary extends LitElement {
   #usage(use: ImageUsage) {
     const name =
       use.kind === "category"
-        ? this.#text(use.names)
+        ? use.name
         : use.kind === "section"
           ? use.internalName
           : use.kind === "menu_version"

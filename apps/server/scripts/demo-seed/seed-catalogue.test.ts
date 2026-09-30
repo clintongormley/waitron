@@ -152,12 +152,12 @@ describe("seedCatalogues", () => {
         select ks.name as station_name
         from categories c
         left join kitchen_stations ks on ks.id = c.station_id
-        where c.name->>'en' = 'Drinks'`);
+        where c.name = 'Drinks'`);
       const { rows: charcuterieRoute } = await tx.execute<{ station_name: string | null }>(sql`
         select ks.name as station_name
         from categories c
         left join kitchen_stations ks on ks.id = c.station_id
-        where c.name->>'en' = 'Charcuterie'`);
+        where c.name = 'Charcuterie'`);
       const { rows: editorDemoRaw } = await tx.execute<{
         description: string | null;
         kitchen_name: string | null;
@@ -167,7 +167,7 @@ describe("seedCatalogues", () => {
         menu_overrides: number;
       }>(sql`
         select p.description, p.kitchen_name, p.dietary_declarations,
-          c.name->>'en' as primary_category,
+          c.name as primary_category,
           -- unit_price counts whole cents, so these are counts, not amounts. Each ELEMENT is cast
           -- to text while the ORDER BY stays on the uncast column: element-wise text ordering would
           -- put 1400 before 210, and this keeps the ordering numeric with text elements.

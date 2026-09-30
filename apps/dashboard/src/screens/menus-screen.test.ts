@@ -88,9 +88,9 @@ const products: Product[] = [
 ];
 
 const categories: CategorySummary[] = [
-  { id: "c-drinks", name: { es: "Bebidas" }, image: null, color: null, parentId: null },
-  { id: "c-beer", name: { es: "Cerveza" }, image: null, color: null, parentId: "c-drinks" },
-  { id: "c-mains", name: { es: "Principales" }, image: null, color: null, parentId: null },
+  { id: "c-drinks", name: "Bebidas", image: null, color: null, parentId: null },
+  { id: "c-beer", name: "Cerveza", image: null, color: null, parentId: "c-drinks" },
+  { id: "c-mains", name: "Principales", image: null, color: null, parentId: null },
 ];
 
 const menus: CatalogueSummary[] = [

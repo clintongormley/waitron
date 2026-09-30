@@ -387,10 +387,7 @@ describe("the catalogue foreign keys refuse a missing or mismatched target", () 
     const productId = await product("Soup");
     const otherProductId = await product("Bread");
     const categoryId = (
-      await db
-        .insert(coreCategories)
-        .values({ name: { en: "Food" } })
-        .returning({ id: coreCategories.id })
+      await db.insert(coreCategories).values({ name: "Food" }).returning({ id: coreCategories.id })
     )[0]!.id;
     const unitId = (
       await db

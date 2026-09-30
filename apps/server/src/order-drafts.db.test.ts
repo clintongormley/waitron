@@ -130,7 +130,7 @@ async function setupVenue(): Promise<Venue> {
   ]);
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
-    const category = await createCategory(tx, { name: { en: "Platos" } });
+    const category = await createCategory(tx, { name: "Platos" });
     const { id: courseId } = await createCourse(tx, cfg, { name: "Mains", displayOrder: 1 });
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {

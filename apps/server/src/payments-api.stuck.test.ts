@@ -171,7 +171,7 @@ async function setup(
   };
   const seeded = await withTransaction(suite.db, async (tx) => {
     const cat = await createCatalogue(tx, { name: "Delicatessen" });
-    const bebidas = await createCategory(tx, { name: { [LOCALE]: "Bebidas" } });
+    const bebidas = await createCategory(tx, { name: "Bebidas" });
     await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: bebidas.id,

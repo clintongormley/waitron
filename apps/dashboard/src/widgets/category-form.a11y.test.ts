@@ -6,7 +6,7 @@ import { categoryField } from "./classification-fields.js";
 afterEach(cleanupWidgets);
 const category = {
   id: "food",
-  name: { en: "Food", fr: "Cuisine" },
+  name: "Food",
   image: null,
   color: null,
   parentId: null,
@@ -19,7 +19,6 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
         "dashboard-category-form",
         {
           open: true,
-          languages: { defaultLanguage: "en", languages: ["en", "fr"] },
           categories: [category],
           value: state === "edit" ? category : null,
           busy: state === "busy",
@@ -42,7 +41,6 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
       "dashboard-category-form",
       {
         open: true,
-        languages: { defaultLanguage: "en", languages: ["en"] },
         categories: [category],
       },
       theme,
@@ -66,7 +64,6 @@ describe.each(["light", "dark"] as const)("category forms (%s)", (theme) => {
           name: "primary",
           label: "Main category",
           categories: [category],
-          languages: { defaultLanguage: "en", languages: ["en"] },
           value: state === "chosen" ? category.id : null,
           noneLabel: "Uncategorised",
           error: state === "invalid" ? "Choose another category." : "",

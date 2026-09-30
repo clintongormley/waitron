@@ -79,7 +79,7 @@ async function fixture(db: Database): Promise<Fixture> {
     .returning({ id: products.id });
   const [category] = await db
     .insert(categories)
-    .values({ name: { en: "Bakery" } })
+    .values({ name: "Bakery" })
     .returning({ id: categories.id });
   await db.insert(categoryDetails).values({ categoryId: category!.id });
   const [section] = await db
@@ -181,7 +181,7 @@ describe("a written image filename", () => {
   it("is refused on a category_details insert unless an image carries it", async () => {
     const [second] = await suite.db
       .insert(categories)
-      .values({ name: { en: "Drinks" } })
+      .values({ name: "Drinks" })
       .returning({ id: categories.id });
     const insert = async (image: string): Promise<void> => {
       await suite.db.insert(categoryDetails).values({ categoryId: second!.id, image });

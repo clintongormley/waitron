@@ -42,7 +42,7 @@ describe("categories.station_id / products.station_id routing FKs", () => {
     stationA = station!.id;
     const [catA] = await db
       .insert(categories)
-      .values({ name: { es: "Comida" } })
+      .values({ name: "Comida" })
       .returning({ id: categories.id });
     categoryA = catA!.id;
     const [cat] = await db

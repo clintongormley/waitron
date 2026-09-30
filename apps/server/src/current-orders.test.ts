@@ -171,7 +171,7 @@ async function setupVenue(): Promise<Venue> {
   };
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
-    const category = await createCategory(tx, { name: { [LOCALE]: "Platos" } });
+    const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     // Three different names, so a row showing the customer's or the kitchen's name fails.
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {

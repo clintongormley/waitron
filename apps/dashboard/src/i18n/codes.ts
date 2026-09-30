@@ -55,6 +55,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This category no longer exists. Refresh the list.",
     es: "Esta categoría ya no existe. Actualiza la lista.",
   },
+  "category.invalid": {
+    en: "Enter a name for the category.",
+    es: "Introduce un nombre para la categoría.",
+  },
   "category.parent_cycle": {
     en: "Choose a parent outside this category and its descendants.",
     es: "Elige una categoría superior fuera de esta categoría y sus descendientes.",
@@ -165,8 +169,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Introduce el texto obligatorio en el idioma predeterminado del sitio.",
   },
   "content.default_missing": {
-    en: "Some products, categories, units, menu sections, modifiers or images need translating before this can become the default language.",
-    es: "Debes traducir algunos productos, categorías, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
+    en: "Some products, units, menu sections, modifiers or images need translating before this can become the default language.",
+    es: "Debes traducir algunos productos, unidades, secciones de la carta, modificadores o imágenes antes de usar este idioma como predeterminado.",
   },
   "unit.precision_invalid": {
     en: "Choose between 0 and 3 decimal places.",

@@ -13,23 +13,18 @@ afterEach(() => {
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
 });
 
-const category = (
-  id: string,
-  en: string,
-  es: string,
-  parentId: string | null,
-): CategorySummary => ({
+const category = (id: string, name: string, parentId: string | null): CategorySummary => ({
   id,
-  name: { en, es },
+  name,
   image: null,
   color: null,
   parentId,
 });
 
 const categories = [
-  category("c-drinks", "Drinks", "Bebidas", null),
-  category("c-beer", "Beer", "Cerveza", "c-drinks"),
-  category("c-mains", "Mains", "Principales", null),
+  category("c-drinks", "Bebidas", null),
+  category("c-beer", "Cerveza", "c-drinks"),
+  category("c-mains", "Principales", null),
 ];
 
 const products = [
@@ -240,16 +235,16 @@ it("widens the chosen filter when a category is added beneath it", async () => {
   });
   await filterBy(el, "c-drinks");
   expect(listed(el)).toEqual(["p-ipa", "p-lager", "p-lemonade"]);
-  el.categories = [...categories, category("c-cider", "Cider", "Sidra", "c-drinks")];
+  el.categories = [...categories, category("c-cider", "Sidra", "c-drinks")];
   await el.updateComplete;
   expect(listed(el)).toEqual(["p-cider", "p-ipa", "p-lager", "p-lemonade"]);
   expect(q(el, 'option[value="c-cider"]').textContent!.trim()).toBe("Bebidas / Sidra");
 });
 
-it("names the categories in the language in force when it next renders", async () => {
+it("names the categories by their one name whatever language is in force", async () => {
   const el = await mount();
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
   setLocale("en");
   await search(el, "a");
-  expect(q(el, 'option[value="c-beer"]').textContent!.trim()).toBe("Drinks / Beer");
+  expect(q(el, 'option[value="c-beer"]').textContent!.trim()).toBe("Bebidas / Cerveza");
 });
