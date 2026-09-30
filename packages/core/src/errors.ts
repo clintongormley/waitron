@@ -35,9 +35,10 @@ declare module "@waitron/shared" {
     /** The series is retired: a restore retired it and opened a replacement, so numbering from it
      * would re-issue an invoice identity the tax agency may already hold. */
     "sale.series_retired": { seriesId: string; retiredAt: string };
-    /** Thrown by `recordCorrection` when the correction would take the invoice below zero:
+    /** Thrown by `recordCorrection` when a negative correction would take the invoice below zero:
      * `remaining` is the invoice's total net of the corrections already recorded against it, and
-     * a correction down to exactly zero is accepted. Refused before a number is allocated. */
+     * `correction` is the amount the row would store, rounded to the cent. A correction down to
+     * exactly zero, and any positive one, is accepted. Refused before a number is allocated. */
     "sale.correction_exceeds_total": { saleId: string; remaining: string; correction: string };
     /** Registered, but nothing throws it: no path translates a `sales_series_invoice_number_key`
      * violation into this code. */

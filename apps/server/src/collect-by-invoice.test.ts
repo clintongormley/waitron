@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  allocateInvoiceNumber,
   drawerOpens,
   invoiceSeries,
   saleSettlements,
@@ -303,5 +304,48 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     await collectCash(billId);
     expect(await tendersOf(issued!.id)).toEqual([{ method: "cash", amount: 1800, cash: 2000 }]);
     expect(await statusOf(venue, billId)).toBe("settled");
+  });
+
+  it("refuses to close a bill already corrected below zero, with the domain code, and leaves it open", async () => {
+    const billId = await placedTarta(invoiceFirstZone);
+    const [issued] = await salesOf(billId);
+    // Written straight to `sales`: `recordCorrection` refuses a correction this large, but a
+    // bill below zero must still be refused at collection.
+    await inTx(venue, async (tx) => {
+      const [series] = await tx
+        .select({ id: invoiceSeries.id })
+        .from(invoiceSeries)
+        .where(
+          and(
+            eq(invoiceSeries.nodeId, venue.cfg.nodeId),
+            eq(invoiceSeries.purpose, "rectificative"),
+          ),
+        );
+      await tx.insert(sales).values({
+        tillId: venue.cfg.tillId,
+        nodeId: venue.cfg.nodeId,
+        seriesId: series!.id,
+        invoiceNumber: await allocateInvoiceNumber(tx, series!.id),
+        issuedAt: new Date().toISOString(),
+        issuedOffsetMinutes: 60,
+        total: -2000,
+        vatBreakdown: [{ rate: "21.00", base: "-16.53", tax: "-3.47" }],
+        locale: venue.cfg.locale,
+        invoiceLocales: [venue.cfg.locale],
+        fiscalBackend: venue.backend.id,
+        fiscalState: "recorded",
+        correctsSaleId: issued!.id,
+      });
+    });
+
+    await expect(collectCash(billId)).rejects.toMatchObject({
+      code: "sale.tender_shortfall",
+      params: { due: "-2.00", charged: "0" },
+    });
+
+    expect(await tendersOf(issued!.id)).toEqual([]);
+    expect(await salesOf(billId)).toEqual([{ id: issued!.id, total: 1800, settledAt: null }]);
+    expect(await collectedAtOf(billId)).toBeNull();
+    expect(await statusOf(venue, billId)).toBe("placed");
   });
 });

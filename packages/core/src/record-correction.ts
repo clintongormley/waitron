@@ -29,6 +29,8 @@ import type { IncidentSeverity } from "./incidents.js";
 import { buildVatBreakdown } from "./record-sale.js";
 import type { RecordSaleLine } from "./record-sale.js";
 
+const ZERO = decimal("0");
+
 export interface RecordCorrectionInput {
   /** Where the corrective invoice rings; not checked against the series (`nodeId` is). */
   tillId: TillId;
@@ -143,15 +145,20 @@ export async function recordCorrection(
   });
 
   // After the gate, so a session that may not correct is not told what is left on the invoice.
+  // Compared at the cent amount the row stores, not the unrounded input.
+  const correction = centsToDecimal(stringToCents(input.total));
   const remaining = sumDecimals([
     centsToDecimal(original.total),
     rawCentsToDecimal(original.corrections),
   ]);
-  if (compareDecimal(sumDecimals([remaining, decimal(input.total)]), decimal("0")) < 0) {
+  if (
+    compareDecimal(correction, ZERO) < 0 &&
+    compareDecimal(sumDecimals([remaining, correction]), ZERO) < 0
+  ) {
     throw new AppError("sale.correction_exceeds_total", {
       saleId: input.correctsSaleId,
       remaining,
-      correction: input.total,
+      correction,
     });
   }
 
