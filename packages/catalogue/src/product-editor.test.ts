@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { kitchenCourses, kitchenStations, locations, products, withTransaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   applyRecipeDerivation,
@@ -14,6 +15,8 @@ import { createCategory } from "./categories.js";
 import { createLabel } from "./labels.js";
 import { createExtraList } from "./extras.js";
 import { createOptionList } from "./options.js";
+import { setProductVariants } from "./variants.js";
+import { contentLanguages } from "./schema/menu.js";
 import { useCatalogueDb } from "../test/fixtures.js";
 
 const fx = useCatalogueDb();
@@ -69,6 +72,69 @@ beforeEach(async () => {
     allergens: null,
     dietaryDeclarations: ["vegan"],
   };
+});
+
+/** `tx`, counting the `select … from content_languages` queries built on it. */
+function countingSettingsReads(tx: Transaction): { tx: Transaction; reads: () => number } {
+  let reads = 0;
+  const counted = new Proxy(tx, {
+    get(target, prop) {
+      const value: unknown = Reflect.get(target, prop, target);
+      if (prop !== "select") return typeof value === "function" ? value.bind(target) : value;
+      return (...args: Parameters<Transaction["select"]>) => {
+        const builder = target.select(...args);
+        const from = builder.from.bind(builder);
+        builder.from = ((source: Parameters<typeof from>[0]) => {
+          if (source === contentLanguages) reads += 1;
+          return from(source);
+        }) as typeof builder.from;
+        return builder;
+      };
+    },
+  });
+  return { tx: counted, reads: () => reads };
+}
+
+describe("one save builds one query on the content-language setting", () => {
+  const named = (name: string) => ({
+    name,
+    customerName: { en: name },
+    kitchenName: null,
+    image: null,
+    unitPrice: "2.00",
+    available: true,
+    active: true,
+  });
+
+  it("by the product editor, for a product with three named variants", async () => {
+    const reads = await withTransaction(fx.db, async (tx) => {
+      const counting = countingSettingsReads(tx);
+      await saveProductEditor(
+        counting.tx,
+        null,
+        catalogueId,
+        { ...input, variants: [named("Small"), named("Medium"), named("Large")] },
+        "en",
+      );
+      return counting.reads();
+    });
+    expect(reads).toBe(1);
+  });
+
+  it("by a variant save of three named variants", async () => {
+    const reads = await withTransaction(fx.db, async (tx) => {
+      const { id } = await saveProductEditor(tx, null, catalogueId, input, "en");
+      const counting = countingSettingsReads(tx);
+      await setProductVariants(
+        counting.tx,
+        id,
+        [named("Small"), named("Medium"), named("Large")],
+        "en",
+      );
+      return counting.reads();
+    });
+    expect(reads).toBe(1);
+  });
 });
 
 it("reads a product with no unit as unitId null", async () => {

@@ -27,16 +27,32 @@ export async function findContentTranslationGap(
   maps: readonly Readonly<Record<string, string>>[],
   fallbackLanguage: string,
 ): Promise<{ index: number; language: string } | null> {
+  return contentTranslationGap(maps, await readContentLanguages(tx, fallbackLanguage));
+}
+
+/** {@link findContentTranslationGap} over a setting the caller has already read. */
+export function contentTranslationGap(
+  maps: readonly Readonly<Record<string, string>>[],
+  config: ContentLanguages,
+): { index: number; language: string } | null {
   for (const map of maps)
     for (const [language, value] of Object.entries(map)) {
       contentLanguageCode(language);
       if (typeof value !== "string") throw new AppError("content.translation_invalid", {});
     }
-  const config = await readContentLanguages(tx, fallbackLanguage);
   const index = maps.findIndex(
     (map) => resolveContentText(map, config.defaultLanguage, config.defaultLanguage) === "",
   );
   return index === -1 ? null : { index, language: config.defaultLanguage };
+}
+
+/** {@link contentTranslationGap}, with the gap thrown rather than reported. */
+export function assertContentTranslations(
+  maps: readonly Readonly<Record<string, string>>[],
+  config: ContentLanguages,
+): void {
+  const gap = contentTranslationGap(maps, config);
+  if (gap) throw new AppError("content.translation_required", { language: gap.language });
 }
 
 /** The single-map form: the gap is thrown rather than reported. */
@@ -45,8 +61,7 @@ export async function validateContentTranslations(
   translations: Readonly<Record<string, string>>,
   fallbackLanguage: string,
 ): Promise<void> {
-  const gap = await findContentTranslationGap(tx, [translations], fallbackLanguage);
-  if (gap) throw new AppError("content.translation_required", { language: gap.language });
+  assertContentTranslations([translations], await readContentLanguages(tx, fallbackLanguage));
 }
 
 /** A variant's gap names the product it belongs to, whose editor holds it. */

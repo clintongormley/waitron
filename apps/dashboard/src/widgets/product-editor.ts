@@ -129,7 +129,7 @@ export function productEditorField(field: string, defaultLanguage: string): stri
  * reports whatever is still missing.
  *
  * A variant's names are edited in its own window, so a variant's problem belongs to its ROW. The
- * server checks only the variants saved Active (`setProductVariants`,
+ * server checks only the variants saved Active (`writeProductVariants`,
  * packages/catalogue/src/variants.ts), so an Inactive one is never blamed.
  */
 export function productEditorTranslationField(

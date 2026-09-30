@@ -1998,9 +1998,10 @@ What it left open:
 
 - **Saving a product reads the same tenant configuration once per variant.** `setProductVariants`
   calls `validateContentTranslations` inside its loop and `saveProductEditor` calls it again for the
-  product, each doing two round trips for a value that changes once per transaction. Pre-existing —
-  only the field name changed here. **Next action:** hoist one read to the top of the save and thread
-  the resolved config down.
+  product. **Done since (2026-09-30, A149):** `saveProductEditor` reads the content-language
+  setting once and checks the product's customer name and every Active variant's against it
+  (`writeProductVariants`, `packages/catalogue/src/variants.ts`); `setProductVariants` called on its
+  own reads it once for all its variants.
 
 - **Smaller things this work surfaced and did not take.** The kitchen screens show a kitchen-resolved
   dish name above modifier text resolved in the device's own locale, because a modifier has only one
@@ -8850,7 +8851,9 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   `packages/catalogue/src/variants.ts` calls it once per variant, inside the normalisation loop.
   The extras and options contracts, and a unit save, ask `findContentTranslationGap` ONCE with every
   map, which is the shape this entry is asking for. That is the shape `CLAUDE.md` §3's "resolve
-  shared catalogue data once before a basket's line loop" rule exists to prevent.
+  shared catalogue data once before a basket's line loop" rule exists to prevent. **Done since
+  (2026-09-30, A149):** a product save reads it once; see "Saving a product reads the same tenant
+  configuration once per variant".
 
 **Payments:**
 
