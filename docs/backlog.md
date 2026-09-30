@@ -4286,21 +4286,30 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       wording ("The box's database could not be updated…") with the failure's cause in its log
       tail (read in `apps/server/src/recovery-surface.ts`, `node-entry.ts` and
       `recovery-state.ts`, not run on a box).
-  - **Done: a sent order with no answer could put back an older copy of the party.** When a sent
-    order gets no answer, the till calls `#retakePartyFromFloor()`, whose floor read can fail and
-    keep the last floor, and then, when the order landed on a different bill from the one it was
-    sent from, `#followDraft` → `#rememberOrderParty()`, which copied the party from that floor
-    without comparing revisions (`apps/till/src/till-app.ts`). Found by reading during Task 12's
-    review (2026-09-29); the same calls are on `main` before that branch (a6de0cde3). Task 12 fixed
-    the same shape in `#onMoveBill` (7f82c958a) by taking the party only when the floor read
-    worked. _(Campaign item C84, branch `fix/till-sent-order-stale-party`, 2026-09-30: reproduced
-    by "keeps the party on screen, not the older copy on the kept floor, when a send from another
-    bill got no answer and the floor cannot be read" in `apps/till/src/till-app-parties.test.ts` —
-    on the old code the screen went back from revision 4 to the floor's 3 and the next Move guests
-    sent 3. `#rememberOrderParty()` now keeps the party on screen when the floor lists the same
-    party at a lower revision; a different party, no party, or the same one at an equal or higher
-    revision is still taken. The answered-but-landed-elsewhere path was tried too and did not
-    reproduce: its `#reloadTables()` empties the floor on a failed read, so the party was kept.)_
+  - **DONE (C84, 2026-09-30): a sent order with no answer could put back an older copy of the
+    party.** When a sent order gets no answer, the till calls `#retakePartyFromFloor()`, whose floor
+    read can fail and keep the last floor, and then, when the order landed on a different bill from
+    the one it was sent from, `#followDraft` → `#rememberOrderParty()`, which copied the party from
+    that floor without comparing revisions (`apps/till/src/till-app.ts`). Found by reading during
+    Task 12's review (2026-09-29); the same calls are on `main` before that branch (a6de0cde3).
+    Task 12 fixed the same shape in `#onMoveBill` (7f82c958a) by taking the party only when the
+    floor read worked. _(Campaign item C84, branch `fix/till-sent-order-stale-party`, 2026-09-30:
+    reproduced by "keeps the party on screen, not the older copy on the kept floor, when a send from
+    another bill got no answer and the floor cannot be read" in
+    `apps/till/src/till-app-parties.test.ts` — on the old code the screen went back from revision 4
+    to the floor's 3 and the next Move guests sent 3. `#rememberOrderParty()` now keeps the party on
+    screen when the floor lists the same party at a lower revision; a different party, no party, or
+    the same one at an equal or higher revision is still taken. The answered-but-landed-elsewhere
+    path was tried too and did not reproduce: its `#reloadTables()` empties the floor on a failed
+    read, so the party was kept.)_
+    **Open:** when a void or line change gets no answer, `#rereadAmounts()` can put on screen what
+    the party still owes, taken from its bills after its own floor read failed, while the revision
+    on screen stays where it was. A later floor read that also fails keeps a floor listing the same
+    party at that EQUAL revision, which `#retakePartyFromFloor()` takes, and `#followDraft` →
+    `#rememberOrderParty()` after a send with no answer takes too, putting the floor's older amount
+    back. A change that is answered moves the revision on (`partyAfterEdit` in
+    `apps/server/src/working-order.ts`), so its kept floor is lower and refused. Found by reading
+    during C84's review; the path was traced in the code, not reproduced.
 - **A paid party's bill cannot be merged with another or have items moved onto it (plan Task 2,
   2026-09-26).** Once a party has paid, it can still be moved to another table or have a table
   joined to it, but merging another table's bill into its paid bill, or moving items to or from
