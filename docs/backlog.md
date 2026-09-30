@@ -5701,10 +5701,11 @@ ongoing overhaul listed at the top of Track A.
   unknown address did not; measured in-process through the route (`app.request` on a Mac, no
   network) 200 times each, known answered at a median 0.307 ms against 0.091 ms. It now answers 202
   first and does the lookup, the write and the email afterwards, logging a failure as
-  `account_action.request_failed` (A147): re-measured the same way, 0.025 ms against 0.026 ms.
+  `account_action.request_failed` (A147, #942): re-measured the same way, 0.025 ms against 0.026 ms.
   Still open: that later work still shows in the answer time of a second password-reset request for
   the same address sent as soon as the first answered (other routes, and requests sent later, were
-  not measured), and whether that difference is acceptable is the owner's call. Measured 2026-09-30
+  not measured); the owner chose on 2026-09-30 to close it by giving an unknown address equivalent
+  background database work, queued as A159. Measured 2026-09-30
   on a Mac: a separate Node process sent pairs of password-reset requests over loopback HTTP to the
   management routes served by `@hono/node-server`, both requests of a pair for the SAME address, the
   first to a newly mounted copy of the routes (fresh rate-limit and repeat-request state) and the
