@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   floorZones,
@@ -17,7 +17,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/catalogue";
 import { hashPin, persons } from "@waitron/identity";
-import { SimulatorPaymentProvider, insertCapturedPayment } from "@waitron/payments";
+import { SimulatorPaymentProvider, insertCapturedPayment, payments } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { createPreparationRoute } from "@waitron/venue-service";
 import { takeBillPayment } from "./bill-payments.js";
@@ -32,9 +32,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { parkOrder } from "./working-order.js";
 
 // A pay-first order is sent to the kitchen when it is paid. A dish no station can take (its route's
-// station switched off with no fallback, or no route at all) no longer refuses the payment: the
+// station switched off with no fallback, or no route at all) does not refuse the payment: the
 // money is taken and filed, that dish is not sent, and one `route.dish_not_sent` alert per sale
-// names it and the zone.
+// names it and the zone — or, if the database refuses that alert, a log line under that code does.
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -364,11 +364,9 @@ describe("paying a pay-first order whose dish no kitchen station can take", () =
     expect(await filedFor(id)).toBe(1);
     expect(await statusOf(id)).toBe("settled");
     expect(await kitchenItems(id)).toEqual([]);
-    const [alert] = await alertsFor(await saleOf(id));
-    expect(alert).toMatchObject({
-      code: "route.dish_not_sent",
-      params: { zoneId: v.counter.zoneId, zoneName: counterZoneName, dishes: made.name },
-    });
+    expect(await alertsFor(await saleOf(id))).toEqual([
+      expect.objectContaining(dishNotSent(id, made.name, await orderNumberOf(id), null)),
+    ]);
   });
 
   it("sends the dishes a station can take and names only the others", async () => {
@@ -515,6 +513,203 @@ describe("paying a pay-first order whose dish no kitchen station can take", () =
 
     const [alert] = await alertsFor(await saleOf(id));
     expect(alert!.params).toMatchObject({ dishes: made.productId });
+  });
+
+  describe("when the alert cannot be written", () => {
+    /**
+     * Runs `pay` while a trigger runs `body` on every `route.dish_not_sent` incident. The default
+     * refuses the insert with `raise(abort)`, which backs out that statement alone.
+     */
+    async function withAlertRefused<T>(
+      pay: () => Promise<T>,
+      body = "select raise(abort, 'alert refused')",
+    ): Promise<T> {
+      await suite.db.execute(
+        sql.raw(`
+          create trigger refuse_dish_not_sent before insert on incidents
+          when new.code = 'route.dish_not_sent'
+          begin ${body}; end
+        `),
+      );
+      try {
+        return await pay();
+      } finally {
+        await suite.db.execute(sql`drop trigger refuse_dish_not_sent`);
+      }
+    }
+
+    async function expectSettledWithoutAlert(workingOrderId: string): Promise<void> {
+      expect(await statusOf(workingOrderId)).toBe("settled");
+      expect(await filedFor(workingOrderId)).toBe(1);
+      expect(await kitchenItems(workingOrderId)).toEqual([]);
+      expect(await alertsFor(await saleOf(workingOrderId))).toEqual([]);
+    }
+
+    async function filedTotal(): Promise<number> {
+      const { rows } = await suite.db.execute<{ n: number }>(
+        sql`select count(*) as n from registros_facturacion`,
+      );
+      return Number(rows[0]!.n);
+    }
+
+    async function expectNothingSold(workingOrderId: string, filedBefore: number): Promise<void> {
+      expect(await statusOf(workingOrderId)).toBe("open");
+      const sold = await inTx(v, (tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, workingOrderId)),
+      );
+      expect(sold).toEqual([]);
+      expect(await filedTotal()).toBe(filedBefore);
+      expect(await kitchenItems(workingOrderId)).toEqual([]);
+    }
+
+    async function paymentSaleIds(workingOrderId: string) {
+      return inTx(v, (tx) =>
+        tx
+          .select({ state: payments.state, saleId: payments.saleId })
+          .from(payments)
+          .where(eq(payments.workingOrderId, workingOrderId)),
+      );
+    }
+
+    it("still takes and files a cash payment", async () => {
+      const made = await strandedDish("Refused cash");
+      const till = await enrolTill();
+      const id = randomUUID();
+      await park(id, [made]);
+
+      const res = await withAlertRefused(() => payCash(till, id));
+
+      expect(res.status).toBe(200);
+      await expectSettledWithoutAlert(id);
+    });
+
+    it("refuses a cash payment when writing the alert ends the transaction", async () => {
+      const made = await strandedDish("Rolled back cash");
+      const till = await enrolTill();
+      const id = randomUUID();
+      await park(id, [made]);
+      const filedBefore = await filedTotal();
+
+      const res = await withAlertRefused(
+        () => payCash(till, id),
+        "select raise(rollback, 'alert refused')",
+      );
+
+      expect(res.status).toBe(500);
+      await expectNothingSold(id, filedBefore);
+    });
+
+    it("refuses a cash payment when the alert fails for a reason other than a refusal", async () => {
+      const made = await strandedDish("Broken alert cash");
+      const till = await enrolTill();
+      const id = randomUUID();
+      await park(id, [made]);
+      const filedBefore = await filedTotal();
+
+      // Naming a missing table fails when the trigger fires, and is not a refusal.
+      const res = await withAlertRefused(
+        () => payCash(till, id),
+        "insert into no_such_table values (1)",
+      );
+
+      expect(res.status).toBe(500);
+      await expectNothingSold(id, filedBefore);
+    });
+
+    it("still records a card-reader capture against its sale, and logs the failure", async () => {
+      const made = await strandedDish("Refused card");
+      const id = randomUUID();
+      await park(id, [made]);
+      const log = vi.fn<Logger>();
+
+      const out = await withAlertRefused(() =>
+        payWorkingOrderIntegrated(
+          {
+            db: suite.db,
+            backend: v.backend,
+            clock: v.clock,
+            log,
+            provider: new SimulatorPaymentProvider(suite.db),
+          },
+          v.cfg,
+          { id, lines: [], simulationOutcome: "captured" },
+        ),
+      );
+
+      expect(out.outcome).toBe("captured");
+      await expectSettledWithoutAlert(id);
+      expect(await paymentSaleIds(id)).toEqual([{ state: "captured", saleId: await saleOf(id) }]);
+      expect(log).toHaveBeenCalledWith(
+        "error",
+        "route.dish_not_sent",
+        expect.objectContaining({
+          workingOrderId: id,
+          saleId: await saleOf(id),
+          productIds: [made.productId],
+          error: expect.stringContaining("alert refused"),
+        }),
+      );
+    });
+
+    it("still recovers a card payment captured before its sale was filed", async () => {
+      const made = await strandedDish("Refused recovery");
+      const id = randomUUID();
+      await park(id, [made], "Barra");
+      const provider = new SimulatorPaymentProvider(suite.db);
+      await inTx(v, (tx) =>
+        insertCapturedPayment(tx, {
+          workingOrderId: id,
+          provider: provider.provider,
+          paymentRef: `sim-${randomUUID()}`,
+          amount: decimal("4.00"),
+          settledAt: new Date(),
+          externalRef: `sim-${randomUUID()}`,
+        }),
+      );
+
+      const out = await withAlertRefused(() =>
+        payWorkingOrderIntegrated(
+          { db: suite.db, backend: v.backend, clock: v.clock, provider },
+          v.cfg,
+          { id, lines: [] },
+        ),
+      );
+
+      expect(out.outcome).toBe("captured");
+      await expectSettledWithoutAlert(id);
+      expect(await paymentSaleIds(id)).toEqual([{ state: "captured", saleId: await saleOf(id) }]);
+    });
+
+    it("still takes a bill payment that pays the order off", async () => {
+      const made = await strandedDish("Refused bill");
+      const id = randomUUID();
+      await parkOrder({ db: suite.db }, v.cfg, {
+        id,
+        lines: [{ menuItemId: made.counterOffer, quantity: "1" }],
+        label: "Barra",
+        zoneId: v.counter.zoneId,
+      });
+
+      await withAlertRefused(() =>
+        takeBillPayment(
+          { db: v.db, backend: v.backend, clock: v.clock },
+          v.cfg,
+          id,
+          {
+            submissionId: randomUUID(),
+            kind: "contribution",
+            amount: "4.00",
+            method: "cash",
+            tendered: "4.00",
+            applied: "4.00",
+            tip: "0.00",
+          },
+          OPERATOR,
+        ),
+      );
+
+      await expectSettledWithoutAlert(id);
+    });
   });
 
   it("still refuses a table round with a dish no station can take", async () => {

@@ -707,7 +707,15 @@ async function issueWhenFullyPaid(
     .where(eq(workingOrders.id, workingOrderId));
   await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
   if (notSent !== null) {
-    await raiseDishesNotSent(tx, cfg, saleId, workingOrderId, notSent, deps.clock.now().instant);
+    await raiseDishesNotSent(
+      tx,
+      cfg,
+      saleId,
+      workingOrderId,
+      notSent,
+      deps.clock.now().instant,
+      deps.log,
+    );
   }
 
   const ticket: TillSaleResult = {
