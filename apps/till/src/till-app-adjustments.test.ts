@@ -809,6 +809,85 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     }
   });
 
+  it("closes the cancel dialog when a finish pressed before it answers and the till leaves the table", async () => {
+    const finished = deferred<void>();
+    const { el } = await mountApp({ finishTable: vi.fn(() => finished.promise) });
+    const order = await openMesa4(el);
+    emit(order, "finish-table");
+    await flush(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="1"]')!);
+    expect(dialog(el)!.kind).toBe("cancel");
+
+    finished.resolve();
+    await flush(el);
+
+    expect(tableOrder(el)).toBeNull();
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("closes a dialog whose apply is out when the till leaves the table, and that apply's answer closes no dialog opened after", async () => {
+    const finished = deferred<void>();
+    const answer = deferred<unknown>();
+    const { el } = await mountApp({
+      finishTable: vi.fn(() => finished.promise),
+      applyAdjustment: vi.fn(() => answer.promise),
+    });
+    const order = await openMesa4(el);
+    emit(order, "finish-table");
+    await flush(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    finished.resolve();
+    await flush(el);
+    expect(dialog(el)).toBeNull();
+
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const reopened = tableOrder(el);
+    await press(el, reopened.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!);
+    await press(el, reopened.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    answer.resolve({ adjustmentIds: ["a-1"], revision: 7, party: null });
+    await flush(el);
+
+    expect(api.applyAdjustment).toHaveBeenCalledOnce();
+    expect(dialog(el)!.kind).toBe("comp");
+  });
+
+  it(
+    "reads the floor again when an apply out as the till leaves the table never gets an answer",
+    { timeout: 10_000 },
+    async () => {
+      const answer = deferred<unknown>();
+      const landed: TableState = {
+        ...mesa4,
+        tabTotal: "0.00",
+        party: { ...party, revision: 5, outstanding: "0.00" },
+      };
+      const applyAdjustment = vi
+        .fn()
+        .mockImplementationOnce(() => answer.promise)
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockImplementationOnce(async () => {
+          vi.mocked(api.getTablesState).mockResolvedValue([landed]);
+          throw new TypeError("Failed to fetch");
+        });
+      const { el } = await mountApp({ applyAdjustment });
+      const order = await openMesa4(el);
+      await previewComp(el, order);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+      emit(order, "back-to-floor");
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+
+      answer.reject(new TypeError("Failed to fetch"));
+      // The resends wait real time; the poll returns once the floor is read after the last one.
+      await vi.waitFor(() => expect(floor(el).tables).toEqual([landed]), { timeout: 5_000 });
+
+      expect(applyAdjustment).toHaveBeenCalledTimes(3);
+      expect(banner(el)).toBeNull();
+    },
+  );
+
   it("says the bill changed when the dish it named is as it was", async () => {
     const { el } = await mountApp({
       applyAdjustment: vi.fn().mockRejectedValue({ code: "working_order.out_of_date" }),

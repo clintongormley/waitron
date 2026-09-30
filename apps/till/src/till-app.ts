@@ -1156,6 +1156,10 @@ export class TillApp extends LitElement {
       this.#affordanceList = this.#affordances();
     // `router` may be assigned after `connectedCallback`.
     if (changed.has("router")) this.#subscribeRouter();
+    // An answer can move the app off the order while the dialog is open. An apply already out
+    // carries on without the dialog; #applyAdjustment says what its answer does then.
+    const open = this.adjusting;
+    if (open !== null && this.#hasLeftOrder(open.orderId, open.visit)) this.#closeAdjust();
   }
 
   #contentLanguageGeneration = 0;
@@ -3626,9 +3630,13 @@ export class TillApp extends LitElement {
 
   /**
    * A fresh submission id for each confirmation, sent again unchanged only while a request gets no
-   * answer (plan D8). Applied, the dialog closes and the bill, its party and what it owes are read
-   * again; with no answer at all, they are read again too and the message says the change may have
-   * been made.
+   * answer (plan D8). Applied, the dialog closes if still open, the party's new revision is noted
+   * ({@link #noteBillParty}) and, unless the waiter has left the order, the bill, its party and
+   * what it owes are read again. With no answer at all while the dialog is open, it closes, they
+   * are read again too, and the message says the change may have been made unless the waiter has
+   * left the order by then. Once the dialog is gone, no answer only reads the floor again and
+   * takes the party from it ({@link #retakePartyFromFloor}) while the operator session that sent
+   * it lasts, and a refusal changes nothing.
    */
   async #applyAdjustment(
     open: Adjusting,
@@ -3649,12 +3657,16 @@ export class TillApp extends LitElement {
         () => session === this.#operatorSession,
       );
       this.#noteBillParty(answer.party);
-      this.#closeAdjust();
+      if (this.#adjustingNow(open.id) !== null) this.#closeAdjust();
       if (this.errorKey === open.offer) this.errorKey = undefined;
       if (this.#hasLeftOrder(open.orderId, open.visit)) return;
       await this.#rereadAmounts(open.orderId, open.visit);
     } catch (error) {
-      if (this.#adjustingNow(open.id) === null) return;
+      if (this.#adjustingNow(open.id) === null) {
+        if (isNetworkFailure(error) && session === this.#operatorSession)
+          await this.#retakePartyFromFloor();
+        return;
+      }
       await this.#onAdjustRefused(error, approver === undefined ? "apply" : "approved");
     } finally {
       limit.done();
