@@ -583,7 +583,7 @@ describe("setup-venue-screen form errors", () => {
     await fillValid(el, { province: "" });
     next(el).click();
     await el.updateComplete;
-    const province = q<HTMLSelectElement>(el, "[data-test=province]")!;
+    const province = q(el, "[data-test=province]")!;
     expect(province.getAttribute("aria-invalid")).toBe("true");
     expect(getComputedStyle(province).borderColor).toBe("rgb(4, 5, 6)");
   });
