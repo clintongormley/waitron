@@ -2373,6 +2373,15 @@ export class DashboardApi {
     );
   }
 
+  /** The route leaves the session's idle clock alone; call it through `background` so the
+   * dashboard's own sign-out timer stays put too. */
+  renewPrinterDiscovery(): Promise<{ discoveryUntil: number }> {
+    return this.#request<{ discoveryUntil: number }>(
+      "/management-api/printer-discovery/renew",
+      "POST",
+    );
+  }
+
   probePrinterAddress(input: { host: string; port: number }): Promise<PrinterAddressProbe> {
     return this.#request<PrinterAddressProbe>(
       "/management-api/printer-discovery/probe",

@@ -18,6 +18,7 @@ import {
   hashPin,
   hashSessionToken,
   persons,
+  resolveManagementSession,
   startManagementSession,
 } from "@waitron/identity";
 import {
@@ -675,6 +676,61 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     expect(discoveryUntil).toBeGreaterThan(Date.now());
 
     expect((await pull(app, token)).discoveryUntil).toBe(discoveryUntil);
+  });
+
+  /** A session of its own, so ageing it cannot expire the shared manager cookie. */
+  async function ownManagerSession(
+    minutesIdle: number,
+  ): Promise<{ cookie: string; token: string }> {
+    const token = await withTransaction(suite.db, async (tx) => {
+      const [mgr] = await tx
+        .insert(persons)
+        .values({
+          displayName: `Renewing Manager ${randomUUID()}`,
+          pinHash: hashPin("1234"),
+          role: "manager",
+        })
+        .returning({ id: persons.id });
+      return (await startManagementSession(tx, { personId: mgr!.id })).token;
+    });
+    const seenAt = new Date(Date.now() - minutesIdle * 60_000).toISOString();
+    await suite.db.execute(sql`
+      update management_sessions set last_seen_at = ${seenAt}
+      where token_hash = ${hashSessionToken(token)}`);
+    return { cookie: `${MANAGEMENT_COOKIE}=${token}`, token };
+  }
+
+  it("renews the discovery window without extending the dashboard session, while opening it does", async () => {
+    const app = mountApp();
+    const { token: agentToken } = await joinAndAccept(app);
+    const { cookie, token } = await ownManagerSession(10);
+    const session = () =>
+      withTransaction(suite.db, (tx) => resolveManagementSession(tx, token, { touch: false }));
+    const before = await session();
+
+    const renewed = await send(app, "POST", "/management-api/printer-discovery/renew", { cookie });
+    expect(renewed.status).toBe(200);
+    const { discoveryUntil } = (await renewed.json()) as { discoveryUntil: number };
+    expect(discoveryUntil).toBeGreaterThan(Date.now());
+    expect((await pull(app, agentToken)).discoveryUntil).toBe(discoveryUntil);
+    expect((await session()).expiresAt).toBe(before.expiresAt);
+
+    const started = await send(app, "POST", "/management-api/printer-discovery/start", { cookie });
+    expect(started.status).toBe(200);
+    expect(Date.parse((await session()).expiresAt)).toBeGreaterThan(Date.parse(before.expiresAt));
+  });
+
+  it("refuses to renew the discovery window once the dashboard session has expired, leaving it shut", async () => {
+    const app = mountApp();
+    const { token: agentToken } = await joinAndAccept(app);
+    const { cookie } = await ownManagerSession(60);
+
+    const renewed = await send(app, "POST", "/management-api/printer-discovery/renew", { cookie });
+    expect(renewed.status).toBe(401);
+    expect(((await renewed.json()) as { error: { code: string } }).error.code).toBe(
+      "management_session.expired",
+    );
+    expect((await pull(app, agentToken)).discoveryUntil).toBeNull();
   });
 
   it("GET /management-api/discovered-printers lists reported devices, marking registered ones", async () => {
@@ -2592,7 +2648,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(portless).toMatchObject({ pagePrinter: true });
   });
 
-  it("drops a reported device once its last report is older than fifteen seconds", async () => {
+  it("drops a reported device once its last report is older than fifteen seconds, with no discovery window open", async () => {
     const app = mountApp();
     const { token } = await joinAndAccept(app);
     const serial = `SN-${randomUUID()}`;
@@ -2810,7 +2866,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(forget.status).toBe(202);
   });
 
-  it("accepts Pair up to fifteen seconds after the scan, the window the discovered list shows", async () => {
+  it("accepts Pair up to fifteen seconds after the scan, the window the discovered list shows when no discovery window is open", async () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
@@ -2822,6 +2878,59 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect((await discoveredRows(app)).filter((r) => r.localKey === mac)).toHaveLength(1);
     const res = await command(app, agentId, "pair", { address: mac, pin: PIN });
     expect(res.status).toBe(202);
+  });
+
+  it("keeps listing devices reported once per slow scan pass for as long as the window is renewed", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const scannedOnly = randomMac();
+    const paired = randomMac();
+    const host = `10.77.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250) + 1}`;
+    const start = Date.now();
+    vi.spyOn(Date, "now").mockReturnValue(start);
+    const opened = await send(app, "POST", "/management-api/printer-discovery/start", {
+      cookie: managerCookie,
+    });
+    expect(opened.status).toBe(200);
+    const listed = async () =>
+      (await discoveredRows(app))
+        .filter((r) => r.localKey === scannedOnly || r.localKey === paired || r.host === host)
+        .map((r) => ({ key: r.localKey ?? r.host, paired: r.paired ?? false }))
+        .sort((a, b) => String(a.key).localeCompare(String(b.key)));
+    const everything = [
+      { key: scannedOnly, paired: false },
+      { key: paired, paired: true },
+      { key: host, paired: false },
+    ].sort((a, b) => a.key.localeCompare(b.key));
+
+    // Twelve passes of 20 s each: longer than one 15 s report lifetime, and four minutes in all,
+    // past the three-minute window one start opens.
+    const PASS_MS = 20_000;
+    for (let pass = 0; pass < 12; pass++) {
+      const reportedAt = start + pass * PASS_MS;
+      vi.spyOn(Date, "now").mockReturnValue(reportedAt);
+      if (pass > 0 && pass % 3 === 0) {
+        const renewed = await send(app, "POST", "/management-api/printer-discovery/renew", {
+          cookie: managerCookie,
+        });
+        expect(renewed.status).toBe(200);
+      }
+      await pull(app, token, {
+        scanned: [scannedMac(scannedOnly), { transport: "network_tcp", host, port: 9100 }],
+        pairedBluetooth: [{ localKey: paired }],
+      });
+      vi.spyOn(Date, "now").mockReturnValue(reportedAt + PASS_MS - 1);
+      expect(await listed()).toEqual(everything);
+    }
+    const lastReport = start + 11 * PASS_MS;
+    vi.spyOn(Date, "now").mockReturnValue(lastReport + 45_000);
+    expect(await listed()).toEqual(everything);
+    expect((await command(app, agentId, "pair", { address: scannedOnly, pin: PIN })).status).toBe(
+      202,
+    );
+    expect((await command(app, agentId, "forget", { address: paired })).status).toBe(202);
+    vi.spyOn(Date, "now").mockReturnValue(lastReport + 45_001);
+    expect(await listed()).toEqual([]);
   });
 
   it("refuses the ninth distinct address for one agent with printer.bluetooth_command_busy", async () => {

@@ -382,9 +382,19 @@ describe("Print API — the agent lifecycle end to end", () => {
     const app = mountApp(tenantA);
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
+      { method: "POST", path: "/management-api/printer-discovery/renew" },
       { method: "POST", path: "/management-api/printer-discovery/probe" },
       { method: "GET", path: "/management-api/discovered-printers" },
     ] as const;
+
+    const { token } = await joinAndAccept(app, "Discovery gate");
+    const refusedRenew = await send(app, "POST", "/management-api/printer-discovery/renew", {
+      cookie: staffCookie,
+    });
+    expect(refusedRenew.status).toBe(403);
+    const pulled = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
+    expect(pulled.status).toBe(200);
+    expect(((await pulled.json()) as { discoveryUntil: number | null }).discoveryUntil).toBeNull();
 
     for (const { method, path } of routes) {
       const body = path.endsWith("/probe") ? { host: "192.168.20.247", port: 9100 } : undefined;

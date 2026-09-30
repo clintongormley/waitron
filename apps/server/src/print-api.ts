@@ -43,7 +43,7 @@ import {
   type CreatePrinterInput,
   type UpdatePrinterInput,
 } from "@waitron/printing";
-import { authorizeManager, type Permission } from "@waitron/identity";
+import { authorizeManager, withPassiveManagementRead, type Permission } from "@waitron/identity";
 import {
   BLUETOOTH_COMMAND_LIMIT,
   isBluetoothAddress,
@@ -346,15 +346,21 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   let discoveryUntil = 0; // epoch ms; 0 = closed
   const DISCOVERY_WINDOW_MS = 3 * 60_000;
   const DISCOVERED_TTL_MS = 15_000;
+  // While the window is open an agent reports once per scan pass rather than every 2 s, and a pass
+  // whose Bluetooth `info` call the agent kills at its 15 s limit runs past 15 s.
+  const SCANNING_TTL_MS = 45_000;
   const isFresh = (at: number | undefined, now: number): boolean =>
     at !== undefined && now - at <= DISCOVERED_TTL_MS;
+  /** The discovered list's own freshness, which also bounds the Pair and Forget it offers. */
+  const isListed = (at: number | undefined, now: number): boolean =>
+    at !== undefined && now - at <= (now < discoveryUntil ? SCANNING_TTL_MS : DISCOVERED_TTL_MS);
   const keyOf = (agentId: string, transport: string, locator: string): string =>
     `${agentId}:${transport}:${locator}`;
   const reportedFresh = (
     agentId: string,
     address: string,
     stamp: "scannedAt" | "pairedAt",
-  ): boolean => isFresh(discovered.get(keyOf(agentId, "bluetooth", address))?.[stamp], Date.now());
+  ): boolean => isListed(discovered.get(keyOf(agentId, "bluetooth", address))?.[stamp], Date.now());
   const requireAgentRow = async (tx: Transaction, id: string): Promise<void> => {
     const [row] = await tx
       .select({ id: printAgents.id })
@@ -656,8 +662,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // Fresh is the discovered list's own window, `DISCOVERED_TTL_MS`: a report too old to keep a row
-  // listed no longer authorizes a command. Pair needs this agent's Bluetooth scan; Forget needs this
+  // Fresh is the discovered list's own window, `isListed`: a report too old to keep a row listed no
+  // longer authorizes a command. Pair needs this agent's Bluetooth scan; Forget needs this
   // agent's pairing report.
   app.post("/management-api/print-agents/:id/bluetooth/pair", (c) =>
     run(c, log, async () => {
@@ -706,6 +712,17 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
+  // Called on a timer while Add a printer is open, so it must not keep an unattended dashboard
+  // signed in; the window's own expiry stops scanning once the dialog stops renewing it.
+  app.post("/management-api/printer-discovery/renew", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      await withPassiveManagementRead(() => gated(sessionId, async () => {}));
+      discoveryUntil = Date.now() + DISCOVERY_WINDOW_MS;
+      return c.json({ discoveryUntil });
+    }),
+  );
+
   app.post("/management-api/printer-discovery/probe", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -719,7 +736,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const now = Date.now();
-      for (const [k, e] of discovered) if (!isFresh(e.lastSeenAt, now)) discovered.delete(k);
+      for (const [k, e] of discovered) if (!isListed(e.lastSeenAt, now)) discovered.delete(k);
       const { registered, agents } = await gated(sessionId, async (tx) => ({
         registered: await tx
           .select({
@@ -768,7 +785,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                 ? (true as const)
                 : undefined,
             printerLike: address === undefined ? undefined : e.printerLike,
-            paired: address !== undefined && isFresh(e.pairedAt, now) ? (true as const) : undefined,
+            paired:
+              address !== undefined && isListed(e.pairedAt, now) ? (true as const) : undefined,
             bluetoothCommand:
               address === undefined ? undefined : bluetoothCommands.latest(e.agentId, address),
             alreadyRegistered: printerId !== null,
