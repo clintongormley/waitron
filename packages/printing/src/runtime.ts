@@ -38,8 +38,9 @@ export interface AgentRuntimeDeps {
   agentId: string;
   /** A `network_tcp` printer is claimable by any agent reporting its venue. */
   locationId: string;
-  /** The device keys (USB serials, Bluetooth MACs) the agent currently sees. A usb/bluetooth printer
-   * is eligible only when its `local_key` is one of these. */
+  /** The device keys (USB serials, Bluetooth MACs) the agent reports it can deliver a job to now
+   * (its `visible` list). A usb/bluetooth printer is eligible only when its `local_key` is one of
+   * these. */
   visibleKeys: string[];
   transport: Transport;
 }

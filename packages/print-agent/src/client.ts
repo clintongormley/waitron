@@ -8,7 +8,10 @@ import type {
 } from "./host.js";
 import type { PrintTransport } from "./transport.js";
 
-/** Every pull reports local presence (`visible`) and active scan or address-check results (`scanned`). */
+/**
+ * Every pull reports the devices it can deliver a job to now (`visible`) and active scan or
+ * address-check results (`scanned`).
+ */
 export interface AgentInventory {
   host?: string;
   setupUrl?: string | null;

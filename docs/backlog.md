@@ -2508,15 +2508,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   offers Forget pairing only while the printer is disabled and an agent reports it paired
   (`#forgetAction` and `#pairedReport`, `apps/dashboard/src/screens/printers-screen.ts`); since
   A138 a paired device with no printer row offers it in the new-printer list
-  (`#forgetDeviceAction`). Open: (i) find the actual cause first — the suspect, not yet checked, is
-  that the agent's paired listing drops every paired Bluetooth device while `liveBtDevicePath`
-  throws (the comment above `visibleDevices`' catch in `apps/print-agent/src/linux-devices.ts`);
+  (`#forgetDeviceAction`). Open: (i) find the actual cause first. The first suspect was that the
+  agent's paired listing drops every paired Bluetooth device while `liveBtDevicePath` throws (the
+  comment above `visibleDevices`' catch in `apps/print-agent/src/linux-devices.ts`); with a fake
+  radio, the A139 end-to-end case shows the paired listing still reports the device while
+  `liveBtDevicePath` throws, because that catch covers only the visible list. What the real radio's
+  listing returns on the box is still unchecked;
   (ii) the owner's Spanish wording for the action, "Desvincular" instead of "Olvidar
   emparejamiento" (`printers.bluetooth_forget` and its siblings in
   `apps/dashboard/src/i18n/strings.ts`).
 - **A print job for a Bluetooth printer waited with no reason (A139, owner 2026-09-29: _"i tried
   to print the character set block, but nothing printed, the jobs just get stuck"_) — FIXED where
-  the tests reach (this branch, not yet a pull request); the printing itself is A140.** The cause,
+  the tests reach (#904); the printing itself is A140.** The cause,
   run on 2026-09-30 through the real agent loop, the print agent's own device layer with a fake
   radio, and the real server routes (the Bluetooth case in
   `apps/server/src/print-agent-e2e.test.ts`, red before the fix): the character-table print stayed
@@ -2552,7 +2555,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   printer; that report is held only in the server's memory, so after a server restart, until the
   other agent's first pull, the first agent still ends the job (a throwaway route test on
   2026-09-30 mounted the print routes a second time over the same database, standing in for a
-  restart, and the job ended; the same pull against the first mount left it waiting). A140 must
+  restart, and the job ended; the same pull against the first mount left it waiting). The same
+  protection also lapses for a pull made more than 15 seconds after the other agent's latest report
+  that it can print to the printer (`DISCOVERED_TTL_MS`), as happens when that agent goes longer
+  than that between pulls. A140 must
   have the agent send `true`, or stop sending the field, once it can print; must close that restart
   gap if it matters then; and must remove, or key on something other than
   the transport or the stored code, each place the dashboard says Bluetooth printing is not
@@ -2568,7 +2574,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   for every paired device, because no real per-printer radio path has been established on the box,
   so `visibleDevices` leaves every paired device out and no Bluetooth job is handed to the box's
   agent; the pairing plan must not make a paired device claim work or say that it can print. Until
-  A140 builds the sending, a paired printer's jobs end failed with a reason (A139, above).
+  A140 builds the sending, a paired printer's jobs end failed with a reason under the conditions
+  A139 lists (above).
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a

@@ -39,9 +39,10 @@ export interface HostLog {
   error(msg: string, fields?: Record<string, unknown>): void;
 }
 
-/** A device the agent already has a stable local handle for — a USB printer at a known serial, or a
- * paired Bluetooth printer. Reported to the server on every pull (`local_key` is the printer's
- * identity across reboots and re-plugs) so the admin can bind a configured printer to real hardware. */
+/** A device the agent can deliver a job to now — a USB printer at a known serial, or a paired
+ * Bluetooth printer only once it has a device path. Reported to the server on every pull
+ * (`local_key` is the printer's identity across reboots and re-plugs) so the admin can bind a
+ * configured printer to real hardware. */
 export interface VisibleDevice {
   transport: "usb" | "bluetooth";
   localKey: string;
@@ -108,7 +109,7 @@ export interface Host {
   sleep(ms: number): Promise<void>;
   log: HostLog;
   status(status: AgentStatus): void;
-  /** Devices with a stable local handle right now — reported to the server on every pull. */
+  /** Devices the agent can deliver a job to now — reported to the server on every pull. */
   visibleDevices(): Promise<VisibleDevice[]>;
   /** An active discovery pass over the given transports (all discoverable kinds when omitted); run
    * only while the server holds a discovery window open. */
