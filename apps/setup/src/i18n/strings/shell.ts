@@ -103,7 +103,7 @@ export const shellEn = {
   "shell.bucket.already_provisioning":
     "Setup is already in progress on this server. Wait for it to finish, then reload this page.",
   "shell.bucket.request_invalid":
-    "The server rejected the details. Check the kit and the environment, then try again.",
+    "The server rejected the details. Check your entries, then try again.",
 
   "shell.cloud.newer_software":
     "This snapshot was made by newer Waitron software than this server has. Update this server, then try again.",
@@ -226,7 +226,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.already_provisioning":
     "La configuración ya está en curso en este servidor. Espera a que termine y recarga esta página.",
   "shell.bucket.request_invalid":
-    "El servidor ha rechazado los datos. Revisa el kit y el entorno, e inténtalo de nuevo.",
+    "El servidor ha rechazado los datos. Revisa lo que has introducido e inténtalo de nuevo.",
 
   "shell.cloud.newer_software":
     "Esta instantánea la hizo una versión de Waitron más nueva que la de este servidor. Actualiza este servidor e inténtalo de nuevo.",

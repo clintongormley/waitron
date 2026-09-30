@@ -5507,10 +5507,22 @@ ongoing overhaul listed at the top of Track A.
   — "Check your answer about the old server." / "Revisa tu respuesta sobre el servidor anterior."
   and "Check the confirmation that this is your business." / "Revisa la confirmación de que este es
   tu negocio." It shows under the tick box, which is marked, when the tick box is on the screen; the
-  two appear only once the server has asked, so when it is not, the same sentence shows beside
-  Restore and no field is marked (tests in `apps/setup/src/setup-app.test.ts`). The server refuses
-  those two only when they are the wrong type (`apps/server/src/setup-api.ts`), which the wizard's
-  own request never sends, so only a client bug or a request built outside the wizard reaches it.
+  two appear only once the server has asked, so when the server has not asked, the same sentence
+  shows beside Restore and no field is marked. Changing the tick box drops the refusal, and so does
+  replacing the recovery kit, which also hides both tick boxes. A `setup.request_invalid` naming no
+  field now says "The server rejected the details. Check your entries, then try again."
+  (`shell.bucket.request_invalid`) rather than naming the kit and the environment. Tests in
+  `apps/setup/src/setup-app.test.ts` check the English sentences, where each shows, that changing
+  the tick box drops the refusal, and the no-field sentence;
+  `apps/setup/src/screens/restore-bucket-screen.test.ts` checks that replacing the kit drops it,
+  whether it showed under the tick box or beside Restore, and that one already dropped by changing
+  the tick box does not reappear beside Restore; none checks the Spanish wording. The server
+  refuses those two only when they are the wrong type
+  (`apps/server/src/setup-api.ts`), which the wizard's own request never sends: the wizard types
+  them `boolean` and `string | null` (`BucketRestoreRequestDetail`, `apps/setup/src/events.ts`),
+  and the client leaves out a null `venueConfirmed` (`restoreFromBucket`,
+  `apps/setup/src/api/client.ts`). So only a client bug or a request built outside the wizard
+  reaches it.
   Still OPEN: (2) controls with no place for an error keep their refusal in the
   bottom message — `wt-switch` (`active` on the ingredient, extras, options and menu-price forms;
   `available` on the product editor), the allergen and dietary-origin pickers on the ingredient
@@ -5662,7 +5674,13 @@ ongoing overhaul listed at the top of Track A.
   highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`
   and `apps/dashboard/src/screens/categories-screen.a11y.test.ts`. Still open there, read and not
   run: the same screen's delete dialog draws its message in the dialog's body, below the preview,
-  rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`).
+  rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`);
+  (14) on the Cloud restore screen a `setup.request_invalid` naming `oldBoxGone` or `pointId` (the
+  server raises both, through the Cloud restore route's `invalidRequest` calls in
+  `apps/server/src/setup-api.ts`) shows "Cloud recovery is unavailable. Check the connection or
+  request expiry, then try again." (`shell.cloud.unavailable`), because `#onCloudRestoreAction` in
+  `apps/setup/src/setup-app.ts` places no field and `CLOUD_ERROR_MESSAGES` has no
+  `setup.request_invalid` entry. It predates A152; found in A152's review, read and not run.
   **Next action:** the other open points, and the delete dialog's message noted above, still wait
   for the owner to say which are worth doing.
 

@@ -2857,6 +2857,11 @@ describe("restore from my bucket", () => {
       expect(input.getAttribute("aria-invalid")).toBe("true");
       expect(screen.shadowRoot!.querySelector(`#${box}-error`)!.textContent).toBe(message);
       expect(await bottomOf(screen)).toBe("Correct the highlighted fields to continue.");
+      const button = screen.shadowRoot!.querySelector("[data-test=restore]") as HTMLElement & {
+        disabled: boolean;
+      };
+      expect(button.disabled).toBe(false);
+      await vi.waitFor(() => expect(screen.shadowRoot!.activeElement).toBe(input));
     },
   );
 
@@ -2910,6 +2915,14 @@ describe("restore from my bucket", () => {
     await screen.updateComplete;
     expect(screen.shadowRoot!.querySelector(`#${box}-error`)).toBeNull();
     expect(input.getAttribute("aria-invalid")).toBe("false");
+  });
+
+  it("says the server rejected the details, naming no field, when its request check names none", async () => {
+    const screen = await refusedWith({ code: "setup.request_invalid", params: {}, status: 400 });
+    expect(await bottomOf(screen)).toBe(
+      "The server rejected the details. Check your entries, then try again.",
+    );
+    expect(screen.shadowRoot!.querySelector("[aria-invalid=true]")).toBeNull();
   });
 
   // Review Focus 5, the wizard's half.

@@ -70,7 +70,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
-  /** The field `errorMessage` is about; the message then shows under it, not beside Restore. */
+  /** The field `errorMessage` is about. */
   @property() invalidField?: BucketField;
   /** When the old server last wrote to its bucket (`restore.stream_source_live`). */
   @property() liveSince?: string;
@@ -126,7 +126,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       : this.invalidField;
   }
 
-  /** Whether `field` is on the screen: the two tick boxes appear only when the server asks. */
+  /** Whether `field` is on the screen. */
   #shows(field: BucketField | undefined): boolean {
     if (field === "oldBoxGone") return this.#askingOldBox;
     if (field === "venueConfirmed") return this.#venue !== undefined;
@@ -159,6 +159,8 @@ export class SetupRestoreBucketScreen extends LitElement {
     if (this.#kitReplaced) {
       this.oldBoxGone = false;
       this.venueConfirmed = false;
+      this.#edited("oldBoxGone");
+      this.#edited("venueConfirmed");
     }
   }
 
@@ -246,6 +248,7 @@ export class SetupRestoreBucketScreen extends LitElement {
     const bottom = [
       ...(this.errorMessage !== undefined &&
       !this.refusalDismissed &&
+      !this.fieldRefusalDismissed &&
       !this.#shows(this.invalidField)
         ? [this.errorMessage]
         : []),

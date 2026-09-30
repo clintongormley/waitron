@@ -402,6 +402,78 @@ describe("SetupRestoreBucketScreen", () => {
       expect(fieldMessages(el)).toEqual([]);
       expect(await bottomOf(el)).toBe("");
     });
+
+    const TICK_BOXES = [
+      [
+        "oldBoxGone",
+        { liveSince: "2026-09-23T11:58:00.000Z" },
+        "old-box-gone",
+        "Check your answer about the old server.",
+      ],
+      [
+        "venueConfirmed",
+        { venue: VENUE },
+        "venue-confirmed",
+        "Check the confirmation that this is your business.",
+      ],
+    ] as const;
+
+    it.each(TICK_BOXES)(
+      "keeps the %s tick box's dismissed refusal away from Restore once another kit hides the box",
+      async (field, question, box, message) => {
+        const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+          request: REQUEST,
+          errorMessage: message,
+          invalidField: field,
+          ...question,
+        });
+        tick(el, `[data-test=${box}]`);
+        await el.updateComplete;
+        expect(fieldMessages(el)).toEqual([]);
+        paste(el, "WAITRON-RECOVERY-KIT-1:def");
+        await el.updateComplete;
+        expect(q(el, `[data-test=${box}]`)).toBeNull();
+        expect(await bottomOf(el)).toBe("");
+        expect(q(el, "[aria-invalid=true]")).toBeNull();
+      },
+    );
+
+    it.each(TICK_BOXES)(
+      "drops the %s tick box's refusal when another kit hides the box",
+      async (field, question, box, message) => {
+        const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+          request: REQUEST,
+          errorMessage: message,
+          invalidField: field,
+          ...question,
+        });
+        expect(q(el, `[data-test=${box}]`)!.getAttribute("aria-invalid")).toBe("true");
+        expect(fieldMessages(el)).toEqual([message]);
+        paste(el, "WAITRON-RECOVERY-KIT-1:def");
+        await el.updateComplete;
+        expect(q(el, `[data-test=${box}]`)).toBeNull();
+        expect(fieldMessages(el)).toEqual([]);
+        expect(await bottomOf(el)).toBe("");
+        expect(q(el, "[aria-invalid=true]")).toBeNull();
+      },
+    );
+
+    it.each(TICK_BOXES)(
+      "shows the %s refusal beside Restore while its tick box is not on screen, and drops it when another kit is pasted",
+      async (field, _question, box, message) => {
+        const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
+          request: REQUEST,
+          errorMessage: message,
+          invalidField: field,
+        });
+        expect(q(el, `[data-test=${box}]`)).toBeNull();
+        expect(await bottomOf(el)).toBe(message);
+        paste(el, "WAITRON-RECOVERY-KIT-1:def");
+        await el.updateComplete;
+        expect(await bottomOf(el)).toBe("");
+        expect(q(el, "[aria-invalid=true]")).toBeNull();
+      },
+    );
   });
 
   describe("messages beside Restore (owner's forms rule, 2026-09-28)", () => {

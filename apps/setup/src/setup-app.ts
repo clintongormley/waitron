@@ -151,8 +151,8 @@ const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
 };
 
 /**
- * The field a refusal is about, when the screen that sent the request shows it: named by the code
- * itself, or by `setup.request_invalid`'s `params.field` (the server's path for the field).
+ * The field a refusal is about: named by the code itself, or by `setup.request_invalid`'s
+ * `params.field` (the server's path for the field).
  */
 function refusedField<F extends string>(
   code: unknown,
