@@ -152,7 +152,7 @@ describe("AdjustmentsApi", () => {
   });
 
   it("marks each report read passive on the background client", async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [] }));
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [], next: null }));
     const client = api(fetchImpl, true);
     await client.getReport();
     await client.getReport({ from: "2026-09-01", to: "2026-09-01" });

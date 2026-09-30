@@ -30,7 +30,7 @@ export interface DashboardScreenPlacement {
   requiresPermission: string;
 }
 
-/** A screen a module contributes beside its primary one. */
+/** A contributed screen: where it sits and how it is built. */
 export interface DashboardFurtherScreen {
   screen: DashboardScreenPlacement;
   create(ctx: DashboardModuleContext): DashboardScreenHandle;
