@@ -153,12 +153,14 @@ import {
   copyKitchenJobLines,
   copyKitchenPrintLinks,
   enqueueCorrectionSlips,
+  enqueueExtraCancelled,
   enqueueKitchenTickets,
   firedQuantity,
   isStarted,
   ordersWithPrintProblem,
+  readCancelledExtra,
 } from "./kitchen-print.js";
-import type { CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
+import type { CancelledExtra, CorrectionItem, FiredItem, TicketState } from "./kitchen-print.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
@@ -1937,7 +1939,8 @@ export interface VoidTarget {
  * and the party's revisions on. A line that had already fired records a VOID kitchen notice for what
  * was removed — marked started when the cook had started it — and gets a VOID correction slip where
  * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
- * notice for what was removed and gets a HOLD CANCELLED slip instead.
+ * notice for what was removed and gets a HOLD CANCELLED slip instead. An extra, which has no
+ * kitchen item of its own, tells the kitchen about its dish ({@link tellKitchenOfCancelledExtra}).
  */
 export async function removeFromLine(
   tx: Transaction,
@@ -1948,6 +1951,7 @@ export async function removeFromLine(
   operatorId: string | undefined,
 ): Promise<void> {
   const wasStarted = isStarted(target.state);
+  const extra = target.parentLineId === null ? null : await readCancelledExtra(tx, target.id);
   const voided =
     target.firedAt !== null
       ? [
@@ -1993,6 +1997,7 @@ export async function removeFromLine(
           or(eq(workingOrderLines.id, target.id), eq(workingOrderLines.parentLineId, target.id)),
         ),
       );
+    if (extra !== null) await tellKitchenOfCancelledExtra(tx, cfg, tabId, extra);
     await assertBillInvariant(tx, [tabId]);
     await partyAfterEdit(tx, tabId, target.groupId === null ? [] : [target.groupId], operatorId);
     return;
@@ -2008,6 +2013,35 @@ export async function removeFromLine(
   await reduceLine(tx, target, removed, keptExtrasOf(children, target.quantity));
   await assertBillInvariant(tx, [tabId]);
   await partyAfterEdit(tx, tabId, [], operatorId);
+}
+
+/**
+ * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
+ * dish, or a held one whose group's HOLD ticket was queued. A dish never sent, held with no HOLD
+ * ticket queued, or going to no station tells it nothing.
+ */
+async function tellKitchenOfCancelledExtra(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  extra: CancelledExtra,
+): Promise<void> {
+  const { item } = extra;
+  if (item === null || item.stationId === null) return;
+  const correction: CorrectionItem = {
+    workingOrderLineId: extra.dishLineId,
+    stationId: item.stationId,
+    quantity: item.firedQuantity,
+    wasStarted: isStarted(item.state),
+  };
+  if (item.firedAt !== null) {
+    await enqueueExtraCancelled(tx, cfg, tabId, correction, extra.label);
+    return;
+  }
+  if (extra.dishGroupId === null) return;
+  const group = (await printedHeldGroups(tx, [extra.dishGroupId])).get(extra.dishGroupId);
+  if (group === undefined) return;
+  await enqueueExtraCancelled(tx, cfg, tabId, { ...correction, group }, extra.label);
 }
 
 /**
