@@ -963,14 +963,15 @@ Adding a database test to a new package: give it `useVenueDb` and the migration 
   never inline.
 - **The bucket stream never makes a sale wait on the BUCKET and never fails `/health` — but a sale
   can wait behind Litestream's own local checkpoint, for as long as that checkpoint holds the write
-  lock.** Litestream 0.5.17 holds the write lock through its PASSIVE checkpoints, and writes also
-  waited through the TRUNCATE checkpoint it forces when the side file has passed about 477 MiB and
-  a PASSIVE one could not restart it. Cost: measured 2026-09-29, one seller's writes waited up to
-  831 ms to begin on a slowed disk and up to 629 ms on a CI runner's normal disk. Switching off its
-  timed checkpoint and moving its page-count one out of reach removed the wait on a slowed disk but
-  not on a CI runner's normal disk at about 80 sales a second, where writes still waited up to
-  729 ms through the checkpoints Litestream forces once the side file passes about 477 MiB
-  (measured 2026-09-30). Receipt (the figures, and what was not measured):
+  lock.** Litestream 0.5.17 holds the write lock through its PASSIVE checkpoints; with its routine
+  checkpoints out of the way, writes also waited through the TRUNCATE checkpoint it forces when the
+  side file has passed about 477 MiB and a PASSIVE one did not restart it, and through the snapshot
+  it takes right after. Cost: measured 2026-09-29, one seller's writes waited up to 831 ms to begin
+  on a slowed disk and up to 629 ms on a CI runner's normal disk. Switching off Litestream's timed
+  checkpoint and moving its regular page-count one out of reach removed every wait over 1 ms on a
+  slowed disk, but not on a CI runner's normal disk at about 80 sales a second, and whether to ship
+  that is the owner's open decision (`docs/backlog.md`, A130's entry, A135). Receipt (the figures,
+  and what was not measured):
   [testing-guide.md](docs/developers/testing-guide.md#a-sale-can-wait-behind-litestreams-own-checkpoint).
   A copy fifteen minutes behind raises
   `backup.stream_behind`, unless a stopped, refused or unusable-settings alert already explains it

@@ -8671,8 +8671,9 @@ it. Left open:
     held one, and the box's own disk. CLAUDE.md §5 now says a sale can wait behind the checkpoint;
     no Litestream setting has changed. Since A142 (#898) the full figures sit in
     [testing-guide.md](developers/testing-guide.md), "A sale can wait behind Litestream's own
-    checkpoint", and §5 keeps the rule, the longest wait on each disk and a link there.
-  - **MEASURED (lane C's A135, 2026-09-30, run 36657175716, probe commit `bc3b94671` on the
+    checkpoint", and §5 keeps the rule, the longest wait on each disk and a link there; since A135
+    (#907) it also says in one clause what A135 found and points to the owner's open decision.
+  - **MEASURED (lane C's A135, #907, 2026-09-30, run 36657175716, probe commit `bc3b94671` on the
     throwaway branch `probe/a135-litestream-checkpoints`): switching off Litestream's timed
     checkpoint and setting its page-count one to a billion pages removed the wait on the delayed
     disk, but not on the runner's normal disk at about 80 sales a second. No setting has
@@ -8687,12 +8688,14 @@ it. Left open:
     unchanged — writes wait under 20 ms to begin with streaming on — the variant met it on the
     delayed disk and failed it on the normal disk. In CI, three 300 s runs of each
     on each disk: on the delayed disk the variant removed the waits (none over 1 ms, against 12–13
-    per run at 829–831 ms) and the slowest sale fell from about 1.08 s to 0.57–0.65 s; on the
-    runner's normal disk the side file grew by 226–228 KiB a sale up to 256 MiB and reached Litestream's
+    per run at 829–831 ms) and the slowest sale fell from about 1.08 s to 0.57–0.65 s, while the
+    server paused the stream there and its own fold-back held the write queue for 278–294 ms per
+    run; on the runner's normal disk the side file grew by 226–228 KiB a sale up to 256 MiB
+    (1,138–1,155 sales; the testing guide gives how it was measured) and reached Litestream's
     emergency threshold (about 477 MiB) before the server's once-a-minute size measurement; 10
     writes per run waited 20 ms or more, the longest 430–729 ms per run, against 129–179 ms with the
     product's settings. Each of those 30 waits contained one of Litestream's emergency checkpoints:
-    the 20 behind a PASSIVE one lasted 33–179 ms; every wait of 229–729 ms began just after
+    the 20 behind a PASSIVE one lasted 33–179 ms; every wait of 229–729 ms began 21–205 ms after
     Litestream logged `forcing truncate checkpoint` and lasted through that checkpoint and the
     snapshot Litestream takes right after it. The server
     paused the stream one to three times per run under the variant. The stream loop and stream
