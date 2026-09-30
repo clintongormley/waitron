@@ -53,6 +53,7 @@ export async function resolveManagementSession(
   personId: string;
   role: PersonRoleValue;
   email: string | null;
+  displayName: string;
   locale: string | null;
   expiresAt: string;
 }> {
@@ -64,6 +65,7 @@ export async function resolveManagementSession(
       role: persons.role,
       status: persons.status,
       email: persons.email,
+      displayName: persons.displayName,
       locale: persons.locale,
     })
     .from(managementSessions)
@@ -94,6 +96,7 @@ export async function resolveManagementSession(
     personId: row.personId,
     role: row.role as PersonRoleValue,
     email: row.email,
+    displayName: row.displayName,
     locale: row.locale,
     expiresAt: new Date(
       (touch ? Date.now() : Date.parse(row.lastSeenAt)) + IDLE_TIMEOUT_MS,

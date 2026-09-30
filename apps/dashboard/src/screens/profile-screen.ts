@@ -17,6 +17,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError } from "../passkey-errors.js";
+import { signalAcceptedPasskeys } from "../passkey-signals.js";
 import { autofillUsername, autofillUsernameStyles } from "../widgets/autofill-username.js";
 
 type Mode =
@@ -586,6 +587,7 @@ export class ProfileScreen extends LitElement {
       } else if (this.mode === "email") {
         await this.api.confirmProfileEmail(f.setupCode);
       }
+      if (this.mode === "passkey" || this.mode === "remove") void signalAcceptedPasskeys(this.api);
       if (!this.isConnected) return;
       this.#closeModal();
       this.saved = true;

@@ -5836,17 +5836,14 @@ ongoing overhaul listed at the top of Track A.
   for both. The name a person gives the passkey ("Laptop") still
   lives only in Waitron's own list. What was checked: the two cases in
   `packages/identity/src/passkey.test.ts` check the options the server sends; the result has not
-  yet been seen in a password manager. Still open: nothing in Waitron updates a passkey's username
-  or display name after it is created, so a passkey created before this change, or any passkey after
-  the person's email or display name later changes, is expected to keep showing the old values in
-  the password manager (not observed); removing it and adding it again should replace them. WebAuthn
-  Level 3 (a W3C Recommendation since 25 August 2026, §5.1.10.4) defines
-  `PublicKeyCredential.signalCurrentUserDetails`, which asks the password manager to update a
-  passkey's name and display name, but "Clients provide this functionality opportunistically" and
-  "signal methods do not indicate whether the operation succeeded"; it has not been tried in a
-  browser, and Waitron does not call it. Nor does it call `@simplewebauthn/browser`'s
-  `sendSignal()`, which wraps these signal methods (see "The version-14 browser helpers are
-  unused"); campaign item C101 is to call them.
+  yet been seen in a password manager. Still open: WebAuthn Level 3 (a W3C Recommendation since
+  25 August 2026, §5.1.10.4) defines `PublicKeyCredential.signalCurrentUserDetails`, which asks the
+  password manager to update a passkey's name and display name, but "Clients provide this
+  functionality opportunistically" and "signal methods do not indicate whether the operation
+  succeeded". Since C101 (next entry but one) the dashboard calls it, where the browser has it,
+  after every sign-in and after a passkey is added or removed, but not after the email or display
+  name is changed on the Profile screen; nobody has yet seen whether a real password manager then
+  shows the new names.
 - **The passkey list says when each passkey was last used and which password manager holds it — DONE
   (C100, #945, owner 2026-09-30: "if i add a passkey then delete it in google password manager, then add
   another one, i have two passkeys listed in waitron but only one in google, and i'm not sure which
@@ -5883,6 +5880,39 @@ ongoing overhaul listed at the top of Track A.
   list is a snapshot: nothing refreshes it, so a password manager added upstream later shows no
   name until someone copies the list again. Migration `packages/identity/drizzle/0004_passkey_provider_last_used.sql`
   only adds the two columns.
+- **The browser's password manager is told which passkeys Waitron still accepts, and a passkey
+  Waitron no longer holds says so — DONE (C101, owner 2026-09-30, "yes all three", and ~16:10 on the
+  unknown-passkey answer: "i think this is a valid error message").** After every dashboard sign-in
+  (password, code, passkey, Google, account set-up) and after a passkey is added or removed on the
+  Profile screen, the dashboard reads `GET /management-api/passkey/signals` (signed-in only:
+  the relying party, the person's user handle, the ids of every passkey they hold, their email and
+  display name, `readPasskeySignals` in `packages/identity/src/passkey.ts`) and hands them to the
+  browser's `PublicKeyCredential.signalAllAcceptedCredentials` and `signalCurrentUserDetails`,
+  each only where the browser has it (`apps/dashboard/src/passkey-signals.ts`). Opening a page on
+  a session that already existed sends nothing. A passkey sign-in presenting a credential Waitron
+  has no row for now answers `passkey.not_registered` (it was the generic
+  `passkey.verification_failed` since #305); the login screen then calls
+  `signalUnknownCredential` with that credential's id and says "This passkey is no longer
+  registered with Waitron, so this browser has been asked to remove it. Use another way to log in.",
+  or, where the browser has no such method or refused the call, only "This passkey is no longer
+  registered with Waitron. Use another way to log in." (Spanish in `strings.ts`). This is the
+  owner-approved exception to C95's one answer, written beside the rule in
+  `docs/developers/conventions-ui.md` and CLAUDE.md §3: a suspended person's passkey still gets
+  the generic answer, because suspension keeps it; a manager's login reset or a reactivation
+  deletes the person's passkeys, so an old one then answers "no longer registered" like one the
+  person removed. The browser's own methods are called directly rather than through
+  `@simplewebauthn/browser`'s `sendSignal()`, which adds only renamed errors and throws where a
+  method is missing. **Not observed in a real password manager:** the tests replace the browser's
+  methods, and Chrome's feature entry says it acts "Initially ... only for Google Password Manager
+  (GPM) credentials", which a test browser does not hold. What the sources say (fetched raw 2026-09-30): WebAuthn Level 3 (W3C Recommendation,
+  2026-08-25, §5.1.10) — a credential missing from the accepted list is "removed or hidden,
+  potentially irreversibly", and "signal methods do not indicate whether the operation succeeded";
+  MDN's compatibility data (`@mdn/browser-compat-data` 8.1.3) lists all three methods in Chrome and
+  Edge 132 and Safari 26, and not in Firefox; Chrome's feature entry (chromestatus 5101778518147072)
+  gives Android as 144, where MDN copies desktop's 132 — which is right was not established;
+  Chrome's article (developer.chrome.com/docs/identity/webauthn-signal-api) says Google Password
+  Manager hides rather than deletes a passkey missing from the list, restores it if it is listed
+  again, and keeps a username the person edited there over one the site sends.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
@@ -8762,9 +8792,8 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   is one decision for every manifest, not one per bump.
 - **The version-14 browser helpers are unused.** `sendSignal()`, `browserSupportsPasskeys()` and
   `getBrowserCapabilities()` are new in 14.0.0 and nothing in the tree calls them. `sendSignal()`
-  wraps the three signal methods, `signalCurrentUserDetails` among them, which could let an existing
-  passkey pick up the username and display name C99 changed (C99's entry); whether it does has not
-  been tried. `browserSupportsPasskeys()` is adjacent to something the dashboard already does: the
+  wraps the three signal methods, which the dashboard calls directly since C101 (its entry says
+  why). `browserSupportsPasskeys()` is adjacent to something the dashboard already does: the
   login screen gates on `browserSupportsWebAuthnAutofill()`, and whether `browserSupportsPasskeys()`
   would improve that gate has not been assessed.
 - **`verifyAuthenticationResponse` has no algorithm list to pin.** The registration ceremony now

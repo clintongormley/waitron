@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { applyTokens, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { html } from "lit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -155,6 +155,13 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
+    passkeySignals: vi.fn().mockResolvedValue({
+      rpId: "localhost",
+      userId: "cDE",
+      credentialIds: [],
+      name: "manager@example.com",
+      displayName: "Manager",
+    }),
     ...overrides,
   } as unknown as DashboardApi;
 }
@@ -370,6 +377,20 @@ afterEach(() => {
 // `setLocale` is module-global state that outlives a test.
 beforeEach(() => setLocale("es-ES"));
 afterEach(() => setLocale("es-ES"));
+let signalAll: MockInstance<typeof PublicKeyCredential.signalAllAcceptedCredentials>;
+let signalDetails: MockInstance<typeof PublicKeyCredential.signalCurrentUserDetails>;
+beforeEach(() => {
+  signalAll = vi
+    .spyOn(PublicKeyCredential, "signalAllAcceptedCredentials")
+    .mockResolvedValue(undefined);
+  signalDetails = vi
+    .spyOn(PublicKeyCredential, "signalCurrentUserDetails")
+    .mockResolvedValue(undefined);
+});
+afterEach(() => {
+  signalAll.mockRestore();
+  signalDetails.mockRestore();
+});
 
 describe("dashboard-app", () => {
   it("waits for content languages before mounting an editable screen", async () => {
@@ -4569,4 +4590,75 @@ describe("the nav search", () => {
       expect(focused?.textContent!.trim()).toBe("Printers");
     });
   }
+});
+
+describe("telling the password manager which passkeys are accepted after a sign-in", () => {
+  const SIGNALS = {
+    rpId: "localhost",
+    userId: "cDE",
+    credentialIds: ["cred-1"],
+    name: "manager@example.com",
+    displayName: "Manager",
+  };
+  const signedOutThenIn = () =>
+    vi
+      .fn()
+      .mockRejectedValueOnce({ code: "management_session.required" })
+      .mockResolvedValue({ ...meResponse });
+
+  it("sends the accepted passkeys once the sign-in's identity probe succeeds", async () => {
+    const api = stubApi({
+      getMe: signedOutThenIn(),
+      passkeySignals: vi.fn().mockResolvedValue(SIGNALS),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(api.passkeySignals).not.toHaveBeenCalled();
+    emitLoggedIn(login(el)!);
+    await vi.waitFor(() => expect(signalAll).toHaveBeenCalledOnce());
+    expect(signalAll).toHaveBeenCalledWith({
+      rpId: "localhost",
+      userId: "cDE",
+      allAcceptedCredentialIds: ["cred-1"],
+    });
+    expect(signalDetails).toHaveBeenCalledExactlyOnceWith({
+      rpId: "localhost",
+      userId: "cDE",
+      name: "manager@example.com",
+      displayName: "Manager",
+    });
+  });
+
+  it("sends them after a Google sign-in returns", async () => {
+    history.replaceState(null, "", "/manage/?login=google");
+    const api = stubApi({ passkeySignals: vi.fn().mockResolvedValue(SIGNALS) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await vi.waitFor(() => expect(signalAll).toHaveBeenCalledOnce());
+  });
+
+  it("sends nothing when a page opens on a session that already existed", async () => {
+    const api = stubApi({ passkeySignals: vi.fn().mockResolvedValue(SIGNALS) });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    await flush(el);
+    expect(api.passkeySignals).not.toHaveBeenCalled();
+    expect(signalAll).not.toHaveBeenCalled();
+    expect(signalDetails).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the sign-in's identity probe fails", async () => {
+    const api = stubApi({
+      getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      passkeySignals: vi.fn().mockResolvedValue(SIGNALS),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    emitLoggedIn(login(el)!);
+    await flush(el);
+    await flush(el);
+    expect(api.passkeySignals).not.toHaveBeenCalled();
+    expect(signalAll).not.toHaveBeenCalled();
+    expect(signalDetails).not.toHaveBeenCalled();
+  });
 });

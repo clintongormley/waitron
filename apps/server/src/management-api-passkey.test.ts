@@ -615,3 +615,70 @@ describe("passkey registration's own-credential check", () => {
     expect(((await withCode.json()) as { challengeHandle: string }).challengeHandle).toBeTruthy();
   });
 });
+
+describe("what the browser's password manager is told", () => {
+  it("hands a signed-in person the relying party, their user handle, their accepted passkeys and their names", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    await registerPasskey(app, cookie, "cred-one");
+    await registerPasskey(app, cookie, "cred-two");
+
+    const res = await app.request("/management-api/passkey/signals", { headers: { cookie } });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { credentialIds: string[] };
+    expect({ ...body, credentialIds: [...body.credentialIds].sort() }).toEqual({
+      rpId: "localhost",
+      userId: Buffer.from(managerId).toString("base64url"),
+      credentialIds: ["cred-one", "cred-two"],
+      name: MANAGER_EMAIL,
+      displayName: expect.any(String),
+    });
+  });
+
+  it("hands nothing to a request without a session", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const res = await app.request("/management-api/passkey/signals");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
+  });
+
+  it("answers a sign-in with a passkey nobody holds as not registered, and opens no session", async () => {
+    await setupTenant();
+    const app = mountApp();
+    const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
+    const { challengeHandle } = (await options.json()) as { challengeHandle: string };
+
+    const verify = await app.request("/management-api/passkey/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeHandle, response: { id: "cred-removed" } }),
+    });
+    expect(verify.status).toBe(401);
+    expect(await verify.json()).toEqual({ error: { code: "passkey.not_registered", params: {} } });
+    expect(verify.headers.get("set-cookie")).toBeNull();
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("answers a suspended person's own passkey with the generic refusal, not as unknown", async () => {
+    const { managerId } = await setupTenant();
+    const app = mountApp();
+    const cookie = await login(app, MANAGER_EMAIL);
+    await registerPasskey(app, cookie, "cred-abc");
+    await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, managerId));
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const options = await app.request("/management-api/passkey/auth/options", { method: "POST" });
+    const { challengeHandle } = (await options.json()) as { challengeHandle: string };
+    const verify = await app.request("/management-api/passkey/auth/verify", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeHandle, response: { id: "cred-abc" } }),
+    });
+    expect(verify.status).toBe(401);
+    expect(await verify.json()).toEqual({
+      error: { code: "passkey.verification_failed", params: {} },
+    });
+  });
+});

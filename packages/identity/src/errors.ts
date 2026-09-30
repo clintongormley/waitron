@@ -60,6 +60,8 @@ declare module "@waitron/shared" {
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
+    /** A passkey sign-in whose response has no string id or whose credential id has no row, or removing
+     * one of the signed-in person's own passkeys by an id not found among them. */
     "passkey.not_registered": Record<string, never>;
     "passkey.verification_failed": Record<string, never>;
     /** The challenge was not returned within `CHALLENGE_TTL_MS`. */

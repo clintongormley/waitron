@@ -334,9 +334,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   suspended, pending, wrong password or PIN and wrong code all answer one code (`password.invalid`
   or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, naming no
   field as the wrong one; identity's refusals carry the real cause as a log-only `reason`, which
-  `createErrorBoundary` logs. Guards: the one-answer cases in identity's login suites and the route
-  suites conventions-ui.md names, weaker than the set looks — some sign-in routes have no case of
-  their own, and a new one is seen by none. See [conventions-ui.md](docs/developers/conventions-ui.md).
+  `createErrorBoundary` logs. One owner-approved exception: a passkey Waitron holds no row for
+  answers `passkey.not_registered` so the browser can be told to forget it — it says only whether
+  that credential id has a row; a suspended owner's passkey stays generic. Guards: the one-answer
+  cases in identity's login suites and the route suites conventions-ui.md names, weaker than the
+  set looks — some sign-in routes have no case of their own, and a new one is seen by none. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the

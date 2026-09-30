@@ -35,6 +35,7 @@ import {
   issueAccountAction,
   invitePerson,
   reactivatePersonForInvitation,
+  readPasskeySignals,
   resolveManagementSession,
   resetPersonLogin,
   shouldOfferPasskey,
@@ -1974,6 +1975,16 @@ export function mountManagementApi(
     }),
   );
 
+  app.get("/management-api/passkey/signals", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const out = await withTransaction(deps.db, (tx) =>
+        readPasskeySignals(tx, { managementSessionId: sessionId }),
+      );
+      return c.json({ rpId: deps.rpId, ...out });
+    }),
+  );
+
   app.post("/management-api/passkey/auth/options", (c) =>
     run(c, log, async () => {
       const out = await withTransaction(deps.db, async (tx) => {
@@ -1983,9 +1994,6 @@ export function mountManagementApi(
     }),
   );
 
-  // `finishPasskeyAuthentication` answers a bad assertion, an unknown credential and a non-active
-  // owner with the same `passkey.verification_failed`; a non-string response id is
-  // `passkey.not_registered`.
   app.post("/management-api/passkey/auth/verify", (c) =>
     run(c, log, async () => {
       const { challengeHandle, response } = await parsePasskeyVerifyBody(c);
