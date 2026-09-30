@@ -189,9 +189,9 @@ password or PIN and a wrong authenticator or recovery code with ONE code, the sa
 same status — `password.invalid` for a password login, `pin.invalid` for a PIN — each after the
 same hashing work, and a screen shows it as one sentence for every cause — "the login failed"
 beside the action on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
-the PIN is the only thing typed. It marks no field, with one exception: the setup wizard's Reset
-form marks its person-ID and password fields together (`apps/setup/src/screens/reset-screen.ts`),
-naming neither as the wrong one.
+the PIN is the only thing typed. A refused login marks no field anywhere, the setup wizard's Reset
+form included (`apps/setup/src/screens/reset-screen.ts`); a field is marked only when its value is
+missing or malformed (owner, 2026-09-30, A153).
 Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey whose
 owner is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
 `google.invalid` for a Google account linked to nobody or to a person who is not active

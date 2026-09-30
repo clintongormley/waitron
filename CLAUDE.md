@@ -332,11 +332,12 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   and the successful method only with Remember selected, never in tab storage.
 - **A login's refusal never says whether the account exists** (owner, 2026-09-30): unknown,
   suspended, pending, wrong password or PIN and wrong code all answer one code (`password.invalid`
-  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, naming no
-  field as the wrong one; identity's refusals carry the real cause as a log-only `reason`, which
-  `createErrorBoundary` logs. One owner-approved exception: a passkey Waitron holds no row for
-  answers `passkey.not_registered` so the browser can be told to forget it — it says only whether
-  that credential id has a row; a suspended owner's passkey stays generic. Guards: the one-answer
+  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, marking no
+  field — only a missing or malformed value is marked (owner, 2026-09-30); identity's refusals
+  carry the real cause as a log-only `reason`, which `createErrorBoundary` logs. One
+  owner-approved exception: a passkey Waitron holds no row for answers `passkey.not_registered` so
+  the browser can be told to forget it — it says only whether that credential id has a row; a
+  suspended owner's passkey stays generic. Guards: the one-answer
   cases in identity's login suites and the route suites conventions-ui.md names, weaker than the
   set looks — some sign-in routes have no case of their own, and a new one is seen by none. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A `wt-data-table` row-menu column is keyed `actions` and declared `pinned: "end"`**, so the

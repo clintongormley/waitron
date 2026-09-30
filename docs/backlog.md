@@ -5797,17 +5797,16 @@ ongoing overhaul listed at the top of Track A.
   limit (C89); refusals thrown in `apps/server`
   itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
   (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
-  approval routes no longer send for an approver — left for lane B, whose file it is; the setup
-  wizard's `shell.adopt.bundle_fetch_failed` sentence (`apps/setup/src/i18n/strings/shell.ts`,
-  English and Spanish) still names "it refused the login" among its causes, though a refused login
-  now arrives as `password.invalid` and shows `shell.adopt.login_failed`, so that sentence is
-  reached only for an account without the permission, another refusal from the primary, or a
-  fetch that failed; the setup wizard's Reset form still marks both its person-ID and password
-  fields on `password.invalid` (`resetCredentialsRejected`, `apps/setup/src/setup-app.ts`;
-  `apps/setup/src/screens/reset-screen.ts`), naming neither as the wrong one; and the dashboard's
+  approval routes no longer send for an approver — left for lane B, whose file it is; and the dashboard's
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
-  a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
+  a flood of made-up addresses delays the sign-in of anyone it is not already tracking. Done since
+  (A153): the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
+  (`apps/setup/src/i18n/strings/shell.ts`, English and Spanish) no longer names a refused login among
+  its causes, a refused login now arriving as `password.invalid` and showing
+  `shell.adopt.login_failed`; and the setup wizard's Reset form no longer marks its person-ID and
+  password fields on `password.invalid` (`apps/setup/src/screens/reset-screen.ts`) — it marks no
+  field and moves the cursor to the password.
 - **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the
