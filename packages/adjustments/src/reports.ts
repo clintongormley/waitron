@@ -1,12 +1,7 @@
 import { and, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
 import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import {
-  businessDayRangeWindow,
-  validateBusinessDayRange,
-  validateCutover,
-  validateTimeZone,
-} from "@waitron/reporting";
+import { validatedRangeWindow } from "@waitron/reporting";
 import {
   addDecimal,
   centsToDecimal,
@@ -129,10 +124,7 @@ const STAGE_GROUP: Record<AdjustmentStage, AdjustmentStageGroup> = {
 };
 
 function validated(input: AdjustmentReportInput): SQL {
-  validateBusinessDayRange(input);
-  validateTimeZone(input.timeZone);
-  validateCutover(input.dayCutover);
-  return businessDayRangeWindow(input)(sql`${workingOrders.openedAt}`);
+  return validatedRangeWindow(input)(sql`${workingOrders.openedAt}`);
 }
 
 function emptyTally(): AdjustmentTally {

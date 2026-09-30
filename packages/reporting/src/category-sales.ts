@@ -3,13 +3,10 @@ import type { Transaction } from "@waitron/db";
 import { centsToDecimal, decimalToCents, rawCentsToDecimal } from "@waitron/shared";
 import type { Decimal, SaleLineClassification } from "@waitron/shared";
 import {
-  businessDayRangeWindow,
   issuedSalesClause,
   nodeScopeClause,
   reversedSalesClause,
-  validateBusinessDayRange,
-  validateCutover,
-  validateTimeZone,
+  validatedRangeWindow,
 } from "./business-day.js";
 import type { PeriodVatInput } from "./types.js";
 
@@ -208,9 +205,7 @@ export async function computeCategorySales(
   input: CategorySalesInput,
   classifyCurrent?: CurrentClassifier,
 ): Promise<CategoryReport> {
-  validateTimeZone(input.timeZone);
-  validateCutover(input.dayCutover);
-  validateBusinessDayRange(input);
+  const window = validatedRangeWindow(input);
   if (!(CATEGORY_REPORT_MODES as readonly string[]).includes(input.mode)) {
     throw new Error(`reporting: unknown category report mode: ${JSON.stringify(input.mode)}`);
   }
@@ -218,7 +213,6 @@ export async function computeCategorySales(
     throw new Error("reporting: a current-categories report needs a classifier");
   }
   const nodeClause = nodeScopeClause(input.nodeId);
-  const window = businessDayRangeWindow(input);
   const { rows } = await tx.execute<LineRow>(sql`
     select s.id as sale_id, s.issued_at, sl.line_no,
       cast(sl.line_total as text) as net, cast(sl.line_gross as text) as gross,

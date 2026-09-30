@@ -1,6 +1,5 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { eq } from "drizzle-orm";
-import { locations, withTransaction, type Transaction } from "@waitron/db";
+import { withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, personRole, type Permission } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
@@ -14,7 +13,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
-import { currentBusinessDay } from "@waitron/reporting";
+import { currentBusinessDay, readLocationClock } from "@waitron/reporting";
 import { AppError, decimal } from "@waitron/shared";
 import {
   createAdjustmentReason,
@@ -131,18 +130,13 @@ function oneDay(day: string): { from: string; to: string } {
   return { from: day, to: day };
 }
 
-/** The range on the clock of the module's location, with `day_cutover` trimmed to HH:MM. */
+/** The range on the clock of the module's location. */
 async function reportInput(
   tx: Transaction,
   locationId: string,
   asked: { from: string; to: string } | undefined,
 ): Promise<AdjustmentReportInput> {
-  const [location] = await tx
-    .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  if (location === undefined) throw new Error(`adjustments: no location ${locationId}`);
-  const clock = { timeZone: location.timeZone, dayCutover: location.dayCutover.slice(0, 5) };
+  const clock = await readLocationClock(tx, locationId);
   const range = asked ?? oneDay(currentBusinessDay(clock));
   return { fromBusinessDay: range.from, toBusinessDay: range.to, ...clock };
 }

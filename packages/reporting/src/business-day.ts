@@ -1,5 +1,6 @@
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { locations, type Transaction } from "@waitron/db";
 import type { NodeId } from "@waitron/shared";
 import type { DailyCloseInput, PeriodVatInput } from "./types.js";
 
@@ -175,6 +176,19 @@ export function businessDayOf(
   return new Date(shifted).toISOString().slice(0, 10);
 }
 
+/** A location's zone and business-day cutover, the cutover as the `"HH:MM"` this file reads. */
+export async function readLocationClock(
+  tx: Transaction,
+  locationId: string,
+): Promise<{ timeZone: string; dayCutover: string }> {
+  const [location] = await tx
+    .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  if (location === undefined) throw new Error(`reporting: no location ${locationId}`);
+  return { timeZone: location.timeZone, dayCutover: location.dayCutover.slice(0, 5) };
+}
+
 /**
  * Today's venue-local business day (cutover-shifted) as `"YYYY-MM-DD"`. Anchors the `/reports`
  * overview's default period. Invalid inputs are a caller precondition and throw a plain `Error`
@@ -217,6 +231,17 @@ export function businessDayWindow(input: DailyCloseInput): WindowClause {
  */
 export function businessDayRangeWindow(input: PeriodVatInput): WindowClause {
   return windowBetween(input.fromBusinessDay, input.toBusinessDay, input);
+}
+
+/**
+ * {@link businessDayRangeWindow} over a range whose zone, cutover and days are checked first.
+ * Invalid inputs are a caller precondition and throw a plain `Error` before anything is computed.
+ */
+export function validatedRangeWindow(input: PeriodVatInput): WindowClause {
+  validateTimeZone(input.timeZone);
+  validateCutover(input.dayCutover);
+  validateBusinessDayRange(input);
+  return businessDayRangeWindow(input);
 }
 
 /** F3-canje substitutes are never counted: their VAT is already in the F2 tickets they replace. */

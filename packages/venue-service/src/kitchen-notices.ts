@@ -1,15 +1,8 @@
 import { and, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
-import {
-  kitchenStations,
-  locations,
-  nowIso,
-  tills,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { kitchenStations, nowIso, tills, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { kitchenPresentationName } from "@waitron/catalogue";
-import { businessDayStart } from "@waitron/reporting";
+import { businessDayStart, readLocationClock } from "@waitron/reporting";
 import {
   AppError,
   decimalToThousandths,
@@ -173,14 +166,7 @@ export async function listStationNotices(
   cfg: VenueScope,
   stationId: string,
 ): Promise<KitchenNotice[]> {
-  const [clock] = await tx
-    .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
-  const since = businessDayStart(new Date(), {
-    timeZone: clock!.timeZone,
-    dayCutover: clock!.dayCutover.slice(0, 5),
-  });
+  const since = businessDayStart(new Date(), await readLocationClock(tx, cfg.locationId));
   const rows = await tx
     .select({
       id: kitchenNotices.id,
