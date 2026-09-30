@@ -144,7 +144,7 @@ export class AdjustmentsApi {
   async listEntries(from: string, to: string, of: EntriesOf): Promise<AdjustmentEntry[]> {
     const query = new URLSearchParams({ from, to });
     if (of === "guests") query.set("guests", "true");
-    else if (of !== "everyone") query.set("person", of.personId);
+    else if (of !== "everyone") query.set("personId", of.personId);
     const body = await this.request<{ entries: AdjustmentEntry[] }>(
       `/management-api/adjustments/report/entries?${query}`,
       "GET",

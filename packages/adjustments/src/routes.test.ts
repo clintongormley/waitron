@@ -459,7 +459,7 @@ describe("adjustment report routes", () => {
     };
 
     const everyone = await read("");
-    const supervisor = await read(`&person=${fx.supervisorId.toUpperCase()}`);
+    const supervisor = await read(`&personId=${fx.supervisorId.toUpperCase()}`);
     const guests = await read("&guests=true");
     const notGuests = await read("&guests=false");
 
@@ -516,10 +516,23 @@ describe("adjustment report routes", () => {
     }
   });
 
+  it("refuses a drill-down whose person id is not a UUID", async () => {
+    const fx = await reportFixture();
+    const response = await send(
+      fx.app,
+      "GET",
+      `${ENTRIES}?${DAY}&personId=not-a-uuid`,
+      fx.cookie.manager,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "PersonId", value: "not-a-uuid" } },
+    });
+  });
+
   it.each<[string, string]>([
-    ["person", "&person=not-a-uuid"],
     ["guests", "&guests=yes"],
-    ["guests", `&guests=true&person=${MISSING}`],
+    ["guests", `&guests=true&personId=${MISSING}`],
   ])("refuses a drill-down whose %s is malformed (%s)", async (field, query) => {
     const fx = await reportFixture();
     const response = await send(fx.app, "GET", `${ENTRIES}?${DAY}${query}`, fx.cookie.manager);

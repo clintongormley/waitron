@@ -34,7 +34,6 @@ import {
 import "./errors.js";
 
 const [{ permission: MANAGE_ADJUSTMENTS }] = ADJUSTMENTS_PERMISSIONS;
-/** The permission every other report asks for. */
 const VIEW_REPORTS: Permission = "report.view";
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
@@ -104,18 +103,18 @@ function requireIds(value: unknown): string[] {
   return value.map((id) => requireBodyUuid(id, "ids"));
 }
 
-/** Everyone's rows when neither is given; `person` and `guests=true` exclude each other. */
+/** Everyone's rows when neither is given; `personId` and `guests=true` exclude each other. */
 function requireRequester(
-  person: string | undefined,
+  personId: string | undefined,
   guests: string | undefined,
 ): AdjustmentRequester | undefined {
   if (guests !== undefined && guests !== "true" && guests !== "false") throw invalid("guests");
   if (guests === "true") {
-    if (person !== undefined) throw invalid("guests");
+    if (personId !== undefined) throw invalid("guests");
     return "guests";
   }
-  if (person === undefined) return undefined;
-  return { personId: requireBodyUuid(person, "person").toLowerCase() };
+  if (personId === undefined) return undefined;
+  return { personId: requireUuidParam(personId, "PersonId").toLowerCase() };
 }
 
 /** `undefined` when neither end is given: the report then covers the venue's current business day. */
@@ -170,7 +169,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const range = requireOptionalRange(c.req.query("from"), c.req.query("to"));
-        const requester = requireRequester(c.req.query("person"), c.req.query("guests"));
+        const requester = requireRequester(c.req.query("personId"), c.req.query("guests"));
         const entries = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
           listAdjustmentEntries(tx, {
             ...(await reportInput(tx, ctx.cfg.locationId, range)),

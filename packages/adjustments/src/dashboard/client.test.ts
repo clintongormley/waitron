@@ -129,7 +129,7 @@ describe("AdjustmentsApi", () => {
     await client.listEntries("2026-09-01", "2026-09-02", "guests");
     expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
       "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-01",
-      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&person=5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b",
+      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&personId=5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b",
       "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&guests=true",
     ]);
   });
