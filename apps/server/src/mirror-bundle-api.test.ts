@@ -16,7 +16,8 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
+import { generateSync } from "otplib";
 import {
   canonicalize,
   endorseKey,
@@ -34,6 +35,7 @@ import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { mountMirrorBundleApi } from "./mirror-bundle-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { clearRemovedMachine, removeUnjoinedStandby } from "./membership-removal.js";
+import { enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
 
 // Pause points for the cases that land a removal part-way through a request. Each runs once and
 // clears itself; unset, the wrapped function behaves as the real one.
@@ -78,6 +80,7 @@ const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xc).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 // A real key, so the endorsement's signature can be verified.
 const STANDBY_PUB = generateNodeKeyPair().publicKey;
@@ -177,6 +180,7 @@ function mountApp(designated: AdoptResult, relayUrl: string | undefined, log?: L
       boxHostname: "waitron.local",
       designated,
       accountKey: Buffer.alloc(32, 9).toString("base64"),
+      credentialKeyRing: TOTP_KEY_RING,
     },
     log,
   );
@@ -544,6 +548,35 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     const res = await post(app, { personId: adminPersonId, password: ADMIN_PASSWORD, totp: 123 });
     expect(res.status).toBe(401);
     expect((await res.json()).error.code).toBe("password.invalid");
+  });
+
+  it("signs in an admin with an authenticator who sends a correct current code", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      totp: generateSync({ secret }),
+      ...validStandby(),
+    });
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+  });
+
+  it("refuses an admin with an authenticator who sends a wrong code with 401 totp.invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const app = mountApp(designated, "https://relay.example:9000/");
+
+    const res = await post(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      totp: wrongTotpCode(secret),
+      ...validStandby(),
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("totp.invalid");
   });
 
   it("refuses mirror.no_relay (400) when no relay is configured, AFTER authorizing", async () => {

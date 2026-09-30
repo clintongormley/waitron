@@ -10,11 +10,13 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, persons, type TotpKeyRing } from "@waitron/identity";
+import { generateSync } from "otplib";
 import { applyVenue, planVenue, type AdoptResult } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
 import { mountManagementApi } from "./management-api.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { enrolAuthenticator, wrongTotpCode } from "./testing/authenticator.js";
 
 /**
  * GET /management-api/membership returns this node's held signed membership chart to a peer
@@ -23,6 +25,7 @@ import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
  */
 const ADMIN_PASSWORD = "dashPass123";
 const STAFF_PASSWORD = "staffPass123";
+const TOTP_KEY_RING: TotpKeyRing = { current: { version: 1, key: Buffer.alloc(32, 0x5) } };
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -113,6 +116,7 @@ function mountApp(designated: AdoptResult): Hono {
       secureCookies: false,
       rpId: "localhost",
       origin: "http://localhost:5191",
+      credentialKeyRing: TOTP_KEY_RING,
     },
     () => {},
   );
@@ -152,6 +156,33 @@ describe("GET /management-api/membership", () => {
     const res = await getMembership(app, { personId: adminPersonId, password: ADMIN_PASSWORD });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ document: doc });
+  });
+
+  it("serves an admin with an authenticator who sends a correct current code", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const app = mountApp(designated);
+
+    const res = await getMembership(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      totp: generateSync({ secret }),
+    });
+    expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
+  });
+
+  it("refuses an admin with an authenticator who sends a wrong code with 401 totp.invalid", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const app = mountApp(designated);
+
+    const res = await getMembership(app, {
+      personId: adminPersonId,
+      password: ADMIN_PASSWORD,
+      totp: wrongTotpCode(secret),
+    });
+    expect(res.status).toBe(401);
+    expect((await res.json()).error.code).toBe("totp.invalid");
   });
 
   it("refuses a non-admin (staff) credential with 403", async () => {

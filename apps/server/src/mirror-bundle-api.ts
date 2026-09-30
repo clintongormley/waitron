@@ -11,7 +11,12 @@ import {
   type Database,
 } from "@waitron/db";
 import { withMember } from "@waitron/membership";
-import { authorizeManager, endManagementSession, loginManagerById } from "@waitron/identity";
+import {
+  authorizeManager,
+  endManagementSession,
+  loginManagerById,
+  type TotpKeyRing,
+} from "@waitron/identity";
 import type { KeyRing } from "@waitron/credentials";
 import type { AdoptResult } from "@waitron/provisioning";
 import { assembleMirrorBundle, refuseFullChart, refuseRemovedStandby } from "./mirror-bundle.js";
@@ -35,6 +40,7 @@ export interface MirrorBundleApiDeps {
   boxHostname: string;
   designated: AdoptResult;
   accountKey: string;
+  credentialKeyRing: TotpKeyRing;
 }
 
 // `person.not_found` is a 404, unlike the email login, which folds an unknown person into
@@ -102,6 +108,7 @@ export function mountMirrorBundleApi(
           personId,
           password,
           totp,
+          totpKeyRing: deps.credentialKeyRing,
         });
         await authorizeManager(tx, {
           managementSessionId: session.token,

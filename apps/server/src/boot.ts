@@ -1803,6 +1803,7 @@ async function bootServer(
         boxHostname: BOX_HOSTNAME,
         designated: config.till,
         accountKey: accountKey.toString("base64"),
+        credentialKeyRing: totpKeyRing,
       },
       log,
     );

@@ -738,6 +738,7 @@ export function mountManagementApi(app: Hono, deps: ManagementApiDeps, log: Logg
           personId,
           password,
           totp,
+          totpKeyRing: credentialKeyRing,
         });
         await authorizeManager(tx, {
           managementSessionId: session.token,
