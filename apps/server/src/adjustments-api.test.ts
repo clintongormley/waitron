@@ -491,6 +491,46 @@ describe("what the till reads", () => {
     expect((await recordedOn(billId))[0]!.reasonName).toBe("Complaint");
   });
 
+  it("gives the price a comped or discounted line had before, and nothing on a line never adjusted", async () => {
+    const { billId } = await billWith(venue, [
+      { name: "Burger" },
+      { name: "Steak", quantity: "2" },
+      { name: "Bread" },
+    ]);
+    const [burgerId, steakId] = [
+      await lineIdOf(venue, billId, 1),
+      await lineIdOf(venue, billId, 2),
+    ];
+    expect((await post(billId, { lineId: burgerId, action: "comp" })).status).toBe(200);
+    expect((await post(billId, { lineId: steakId, action: "comp", quantity: "1" })).status).toBe(
+      200,
+    );
+
+    const answer = await send(
+      venue.app,
+      venue.cookie.staff,
+      "GET",
+      `/api/working-orders/${billId}/lines`,
+    );
+
+    const lines = (
+      answer.json as unknown as {
+        lines: { name: string; unitPriceGross: string; listUnitPriceGross?: string }[];
+      }
+    ).lines.map(({ name, unitPriceGross, listUnitPriceGross }) => ({
+      name,
+      unitPriceGross,
+      ...(listUnitPriceGross === undefined ? {} : { listUnitPriceGross }),
+    }));
+    expect(lines).toEqual([
+      { name: "Burger", unitPriceGross: "0.00", listUnitPriceGross: "12.00" },
+      // The part of the Steak not comped kept its price, and still names the price it had.
+      { name: "Steak", unitPriceGross: "25.00", listUnitPriceGross: "25.00" },
+      { name: "Bread", unitPriceGross: "2.50" },
+      { name: "Steak", unitPriceGross: "0.00", listUnitPriceGross: "25.00" },
+    ]);
+  });
+
   it("lists who can approve at a role, and refuses a role that is not one", async () => {
     const managers = await send(
       venue.app,

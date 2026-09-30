@@ -2611,6 +2611,9 @@ export interface TabLine {
   /** Decimal places the line's unit takes, frozen at add time (0 = sold by the unit). */
   unitPrecision: number | null;
   unitPriceGross: string;
+  /** The unit price the line had before a comp or a discount changed it; absent on a line no
+   * adjustment has touched. */
+  listUnitPriceGross?: string;
   servedAt: string | null;
   courseId: string | null;
   /** When the line was first released: fired, or for a no-preparation line, when it would have
@@ -2655,6 +2658,7 @@ export async function readTabLines(
       quantity: workingOrderLines.quantity,
       unitPrecision: workingOrderLines.unitPrecision,
       unitPriceGross: workingOrderLines.unitPriceGross,
+      listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       servedAt: workingOrderLines.servedAt,
       courseId: workingOrderLines.courseId,
       sentAt: workingOrderLines.sentAt,
@@ -2690,6 +2694,9 @@ export async function readTabLines(
       quantity: thousandthsToDecimal(row.quantity),
       unitPrecision: row.unitPrecision,
       unitPriceGross: centsToDecimal(row.unitPriceGross),
+      ...(row.listUnitPriceGross === null
+        ? {}
+        : { listUnitPriceGross: centsToDecimal(row.listUnitPriceGross) }),
       servedAt: row.servedAt,
       courseId: row.courseId,
       sentAt: row.sentAt,
