@@ -1,6 +1,10 @@
 # Menus, reusable categories and service home layouts
 
 **Status:** product decisions agreed with the owner on 2026-09-20; implementation deferred.
+**2026-09-30:** the [folders, menus and routing design](2026-09-30-catalogue-menus-routing-design.md)
+replaces parts of this document: reusable library sections and the Sections screen, labels
+(§10.1), the kitchen-routing outline (§10.5), and plan decision D13's dropping of a shortcut tile
+whose target has gone. Where the two disagree, the newer design wins.
 Further owner decisions, 2026-09-25, are in §9, §10 and §11; a later section wins over an earlier one where they differ (§11, after the second outside review, wins over all).
 **2026-09-25:** the owner lifted the wait on SQLite slice 2 and the dependency upgrades (the latter
 are finished); the implementation plan is

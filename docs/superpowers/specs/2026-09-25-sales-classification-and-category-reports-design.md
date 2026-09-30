@@ -7,6 +7,9 @@ separates reporting categories, menu sections and labels, and this document spec
 side; its §11.4 states the same issuance rule for VAT.
 **2026-09-27:** the owner's decision of 2026-09-26 moves the snapshot to when the line is added;
 see the dated note under §3's timing bullet and §7 example 10.
+**2026-09-30:** the [folders, menus and routing design](2026-09-30-catalogue-menus-routing-design.md)
+removes labels, including a line's recorded labels and the report's label totals, and gives each
+category one untranslated name. Where the two disagree, the newer design wins.
 
 Facts about the code are from reading `main` on 2026-09-25. They are not measurements. Each fact
 names its file, so it can be re-checked before building.

@@ -1,0 +1,504 @@
+# Product folders, menus that include menus, and prep station routing
+
+**Status:** owner decisions of 2026-09-30, from one brainstorm covering categories, menu sections,
+labels and kitchen routing together, so the four agree with each other. Not built. It is built in
+three slices (§6), each with its own plan and pull request.
+
+**What this replaces.** Where this document disagrees with an earlier one, this one wins:
+
+- [The menus design](2026-09-20-menus-categories-and-home-layouts-design.md): reusable library
+  sections and the Sections screen (§1–§3, §10.1), labels (§10.1), the kitchen-routing outline
+  (§10.5), and publishing's rule that drops a shortcut tile whose target has gone (plan decision
+  D13).
+- [The sales classification design](2026-09-25-sales-classification-and-category-reports-design.md):
+  everything about labels, and translated category names.
+
+Facts about today's code were read from `main` on 2026-09-30. They are readings, not measurements.
+Each names its file so it can be re-checked before building.
+
+---
+
+## 1. The idea in one page
+
+- **Categories are for reporting only.** They are folders in the products screen. Each has one
+  internal name, with no translations, no image and no colour. The Categories screen goes.
+- **Folders also decide where things are made.** On one new screen, **Prep Stations**, each station
+  claims folders. Ordered exceptions sit above the claims, and the venue's default station catches
+  the rest.
+- **A menu is built from sections that belong to it.** Sharing between menus works one way only: a
+  menu can **include another menu**, which arrives with its own sections, products and prices. The
+  Sections screen goes.
+- **Every price and on/off switch follows one rule.** A menu's own setting wins. Otherwise
+  everywhere the product appears must agree, and a disagreement blocks publishing until the menu
+  sets its own.
+- **Labels are removed.** Folders now do everything they were meant to do.
+
+---
+
+## 2. Categories: the products screen as a file browser
+
+### 2.1 What a category is
+
+A category is a reporting folder. It has one internal name (not translated) and at most one parent.
+A product has at most one category. A product with no category sits at the top level, which is
+what "Uncategorised" means today. Reports roll up along the tree, as now.
+
+**Removed from categories:**
+
+- the translated name, which becomes one plain name;
+- the image and the colour;
+- the kitchen station.
+
+Today's schema for reference: `categories` (`packages/db/src/schema/catalogue.ts:25`) holds a
+translated `name` and `station_id`, and `category_details`
+(`packages/catalogue/src/schema/categories.ts:4`) holds `parent_id`, `image` and `color`. Nothing
+outside the Categories screen reads the image or the colour (`docs/backlog.md`, "A category's
+colour is stored but shown nowhere"). The image is also tracked by the media library's usage
+records (`packages/media/src/images.ts`), so removing it touches media's triggers (§6, risks).
+
+What stays the same: the tree rule, which refuses a loop (`validateParent`,
+`packages/catalogue/src/categories.ts`), and the recording of each sale line's category chain when
+the line is added.
+
+### 2.2 The products screen
+
+The products screen shows products and folders together.
+
+- **Folder view.** You open a folder and see its subfolders and products. A breadcrumb shows where
+  you are. You can add a product or a folder at the current level.
+- **Flat view.** A toggle switches between "Folders" and "All products". The flat view lists every
+  product with its folder path. It is for sorting by name or price, and for finding products that
+  are switched off or missing something. Today's product list already shows every product in one
+  table, with a category-path column and variants as child rows
+  (`apps/dashboard/src/widgets/product-list.ts`). The shared table component can already switch
+  between tree and flat display, as the Categories screen does. So this view largely keeps what
+  exists.
+- **Search** covers every folder and shows each result with its path, as a file browser's search
+  does.
+- **Variants** sit under their product, as today. They move with it and cannot be moved on their
+  own.
+- **Selection mode** is the main way to move or delete things. You tick products and folders, then
+  choose an action from a bar: "Move to…" (pick a folder, or the top level) or "Delete". It works in
+  both views. On a touch screen, and from the keyboard, it is the only way.
+- **Drag and drop** is a shortcut: drag selected items onto a folder. This is new work. Today's
+  drag code (`apps/dashboard/src/widgets/reorder-table.ts`) only reorders rows within one list.
+- **Where each product is made** shows read-only, for example "Made at: Bar", with a link to Prep
+  Stations. Routing is never edited here (§5.12).
+
+### 2.3 Deleting a folder that still holds things
+
+The screen asks which of these to do:
+
+- **(a) Delete everything inside,** subfolders included. Products are switched off, as deleting a
+  product already does (`products.active`, `packages/db/src/schema/catalogue.ts`). The rows stay, so
+  sales history still points at them.
+- **(b) Move the contents up** to the parent folder, or to the top level for a top-level folder.
+
+An empty folder is deleted without asking.
+
+---
+
+## 3. Labels are removed
+
+Labels (`labels`, `product_labels`, `packages/catalogue/src/schema/labels.ts`) are removed
+completely:
+
+- the Labels tab (`apps/dashboard/src/screens/labels-panel.ts`);
+- the product editor's labels field;
+- the product list's labels column;
+- the label part of each line's recorded classification (`packages/shared/src/sale-line-classification.ts`);
+- the per-label totals in the category sales report (`packages/reporting/src/category-sales.ts`);
+- labels as a planned routing condition.
+
+Waitron is not live, so no data is carried over (CLAUDE.md §3, "No backwards-compatibility or
+data-migration code until Waitron is in production").
+
+**Not touched:** `option_labels`, which holds the choices inside an options list ("rare / medium /
+well done"). The name is shared by accident; it is unrelated.
+
+---
+
+## 4. Menus
+
+### 4.1 A section belongs to one menu
+
+A section is a folder inside one menu. It is never shared. Products are placed in it like
+shortcuts, so one product can sit in several sections of the same menu.
+
+A section has:
+
+- an internal name;
+- a customer-facing name, with translations;
+- an optional image;
+- an optional colour.
+
+There is no description until something shows one. The till does not yet show a section's image or
+colour (`apps/till/src/widgets/menu-browser.ts` shows a folder icon and the name), though the
+published menu carries both.
+
+**Retired:** library sections (`sections.role = 'library'`, `packages/catalogue/src/schema/sections.ts`)
+and the Sections screen (`apps/dashboard/src/screens/sections-screen.ts`). A menu's sections are
+edited only in that menu's editor. That editor must therefore edit every section field; today
+"New section here" asks only for the internal name (`docs/backlog.md`, menus Task 4's entry).
+
+### 4.2 A menu can include another menu
+
+- Any menu can include any other menu, as long as no menu ends up including itself, directly or
+  through others.
+- An included menu appears in the including menu as **one folder**, placed anywhere in its
+  structure. For example, Evening's top level reads "Starters, Mains, Drinks", and Drinks opens to
+  its own Beers, Wines and Cocktails. Its sections are not laid out at the including menu's level.
+- So a menu needs the same presentation fields as a section: a customer-facing name with
+  translations, and an optional image and colour. These are what the folder shows.
+- A menu that is included elsewhere is still a menu in its own right. A bar till can run on Drinks
+  alone.
+
+### 4.3 One product, one price, in a combined menu
+
+A **combined menu** is a menu plus everything it includes, directly or through other menus.
+
+**Duplicates are merged.** The same product can arrive through several places. For example,
+Afternoon's own Specials section and the included Drinks menu might both hold the house lager. It
+is still one item, with one price and one on/off state, wherever it is tapped.
+
+**The price rule.** A menu's price for a product is worked out as follows:
+
+1. If the menu has its **own override** for the product, that is the price. It wins over everything
+   the menu includes.
+2. Otherwise, collect a price from **every place the product appears**. For the menu's own
+   sections, that is the product's own price. For each included menu, it is that menu's price,
+   worked out by this same rule. If they all agree, that is the price.
+3. If they disagree, that is a **clash**. The menu cannot be published until it sets its own
+   override.
+
+**Worked example.** Drinks overrides lager to €3.50. Afternoon includes Drinks and also puts lager
+in its own Specials section, where it carries the product's own €3. Afternoon shows a clash:
+"Lager is €3 in Specials and €3.50 in Drinks. Set Afternoon's price." Evening includes Drinks and
+places lager nowhere else, so it sells lager at €3.50 with no clash.
+
+**On/off follows the same rule.** A menu's own setting wins. Otherwise the sources must agree, and
+a disagreement is a clash. Evening can switch off lemonade without touching Drinks. This is not
+"sold out tonight", which the till handles during service.
+
+**Where prices are stored today.** Every product has its own price (`products.unit_price`). Every
+menu can override it (`menu_items.gross_price`, empty meaning "use the product's price";
+`packages/catalogue/src/schema/menu.ts:74`), and switch it off (`menu_items.active`). The new part
+is how these combine across included menus.
+
+**Clashes are warnings while editing, and block publishing.** An edit anywhere can create a clash
+somewhere else. A price change in Drinks can create one in Afternoon, and nobody editing Drinks is
+looking at Afternoon. So the edit is allowed, but:
+
+- the editor of every affected menu shows its clashes, each with a one-step fix: "Set this menu's
+  price" or "Set this menu's on/off";
+- publishing an affected menu is refused until its clashes are resolved;
+- editing an included menu can warn the editor, for example "This creates a clash in Afternoon".
+
+This is safe because nothing reaches a till until a menu is published (§4.4).
+
+**The editor shows each menu's own decisions**, for example "Evening sets its own price for 2 items
+and switches off 1 item from Drinks". An override then reads as a visible exception, not a hidden
+difference.
+
+### 4.4 Publishing
+
+A till sells from a menu's published, frozen copy (`menu_versions`, `menu_publications`). When an
+included menu changes, **every menu that includes it**, directly or through others, shows
+"unpublished changes". Each is published separately. Publishing the included menu does not
+republish the menus that include it.
+
+### 4.5 Home layouts
+
+A home layout is the grid of shortcut tiles a device shows first. Each menu owns its layouts: one
+default plus any named alternatives. Each device profile picks one layout per menu. This is
+unchanged, apart from three points:
+
+1. **Tiles can point into included menus.** Any section or product the combined menu reaches can be
+   a tile, for example Drinks › Beers.
+2. **Layouts are never inherited.** A device uses the layouts of the menu it runs. A menu does not
+   pick up the layouts of the menus it includes.
+3. **A tile whose target has gone becomes an empty slot.** An edit to an included menu can remove
+   what an including menu's tile pointed at.
+   - Today, publishing leaves such a tile out (plan decision D13, `docs/backlog.md`, menus Task 8's
+     entry), and every later tile moves up one place.
+   - Instead, publishing keeps an **empty slot** in its place. The till draws an empty space there,
+     which cannot be tapped, so no other tile moves. Staff tap by position during service.
+   - The editor shows the slot as "Missing: Drinks › Beers", with Remove and Replace.
+   - The editor warns before and after publishing, for example "2 shortcuts on Evening's Counter
+     layout point at things no longer in this menu".
+   - The empty slot is a new kind of tile, on the till and in the published menu.
+
+A deliberate blank tile, for spacing, is left out.
+
+---
+
+## 5. Routing: the Prep Stations screen
+
+### 5.1 How routing works today
+
+- **Stations** are managed on the dashboard's Kitchen screen (`apps/dashboard/src/screens/kitchen-screen.ts`):
+  - name;
+  - lateness thresholds;
+  - the venue default station;
+  - courses, bump mode and who fires courses.
+- **A station can have printers and a screen.**
+  - A station's printers are listed in `station_printers` (`packages/db/src/schema/station-printers.ts`).
+  - A kitchen screen device is bound to one station (`devices.station_id`).
+  - A printer can print one ticket per station, or one per whole order (`printTicketScope`,
+    `packages/db/src/schema/printers.ts`).
+- **Routing rules** are edited on a different screen: Venue operations › Preparation routing
+  (`packages/venue-service/src/dashboard/venue-operations-screen.ts:730`, table
+  `preparation_routes`). A rule matches a zone (or all zones) together with a product or a category,
+  and names either a station or "no preparation".
+- **Order of decision** (`apps/server/src/working-order.ts:1300-1303`):
+  1. a matching zone rule;
+  2. the product's own station;
+  3. its own category's station;
+  4. the venue default.
+
+  A category's station does not pass down to its subfolders.
+- **Each item goes to exactly one station.**
+- **The expediter** is a till screen (`apps/till/src/screens/till-expo-screen.ts`) plus the venue's
+  fire-control setting (`fireControlMode`, `packages/db/src/schema/tenants.ts`). It is not a
+  station that receives items.
+
+### 5.2 One maker, any number of watchers
+
+- **Each item has exactly one maker:** the station that prepares it. The maker is chosen by the
+  rules in §5.3, so nothing is lost and nothing is made twice.
+- **Watchers get copies and make nothing.** A watcher is a screen or printer that follows either or
+  both of these (§5.9):
+  - **stations**, like an expediter watching the grill, fryer and cold stations;
+  - **delivery areas**, like a runner watching the terrace.
+
+### 5.3 How the maker is chosen
+
+The first of these steps that gives an answer wins:
+
+1. **Exceptions:** an ordered list, where the first match wins (§5.6).
+2. **Station claims:** the nearest claimed folder above the product (§5.5).
+3. **The venue default station.**
+
+Then **opening hours and fallbacks** apply to the chosen station (§5.7). If it is closed, or its
+printer or screen is down, the item goes to the station's fallback, then to that station's
+fallback, and so on. The chain ends at the venue default.
+
+The chosen station is **recorded when the work is sent**, as today. Changing a rule never moves
+work that has already been sent.
+
+### 5.4 Delivery area
+
+Exceptions match on **where the finished item is delivered**. That single condition replaces
+separate conditions for order type and ordering device. The delivery area is found as follows:
+
+- **An order with a table** uses the table's area (its zone), whatever device took the order.
+- **An order with no table** uses the ordering device's default area. Devices already have one
+  (`device_zone_defaults`, `packages/venue-service/src/schema/service.ts`). A bar till is set to
+  "Bar counter", for example.
+- **A takeaway or delivery order** uses its own area, such as "Pickup", whatever device took it.
+  That is how "takeaway goes to the packing station" becomes an ordinary exception.
+
+### 5.5 Station claims
+
+- **A station claims folders.** A claim covers everything inside the folder, including products
+  added later.
+- **Each folder has at most one claiming station.** Claiming a folder that another station holds
+  moves the claim, after a confirmation.
+- **A subfolder can be claimed by a different station**, and the nearest claim wins. For example,
+  Bar claims Drinks and Cocktail bar claims Drinks › Cocktails.
+- **"No preparation" is a built-in entry** that can claim folders like a station. For example,
+  "Bottled drinks" needs nothing made.
+- **The unassigned list** shows:
+  - top-level folders that nobody claims;
+  - top-level products outside any folder.
+
+  These go to the venue default station, and the list makes that visible. A new top-level folder
+  appears here until someone assigns it.
+
+### 5.6 Exceptions
+
+An exception reads as a sentence, for example "Delivered to **Terrace**, from **Cocktails** →
+**Main bar**".
+
+- **Conditions.** Every condition given must hold:
+  - **delivery area** (§5.4);
+  - **folder or product.** A folder includes its subfolders.
+- **Outcome:** a station, or "no preparation".
+- **Order:** first match wins, and the list is reordered by dragging.
+- **A product-specific route is an exception naming the product.** Products no longer carry a
+  station field.
+- **Warnings:**
+  - "Can never match": an earlier exception catches everything this one would.
+  - Each destination is checked. A station that is switched off, for example, is flagged.
+
+**The three examples this design was tested against:**
+
+| Rule wanted | How it is written |
+| ----------- | ----------------- |
+| All drinks go to the bar. | Bar claims Drinks. |
+| Drinks ordered upstairs go to the upstairs bar between 7 and 9pm; otherwise to the downstairs bar. | Exception "Upstairs + Drinks → Upstairs bar". The upstairs bar opens 19:00–21:00, with Downstairs bar as its fallback. |
+| Drinks ordered on the terrace go to the terrace bar, except cocktails, which go to the main bar. | Two exceptions, in this order: "Terrace + Cocktails → Main bar", then "Terrace + Drinks → Terrace bar". |
+
+### 5.7 Opening hours and fallbacks
+
+- **Opening hours.** Each station has a weekly schedule, for example Upstairs bar, 19:00–21:00 on
+  Fridays and Saturdays.
+- **Manual open and close.** A manager can open or close a station by hand for today, for example
+  closing the upstairs bar early because it is quiet.
+- **Fallback.** Each station names a fallback station. While a station is closed, its work goes to
+  the fallback, following the chain.
+- **Printer or screen down.** The same fallback applies when a station's printer or screen is not
+  reachable, and someone is alerted. Nothing disappears without anyone knowing.
+- **Rules never mention time.** Time lives on stations.
+
+### 5.8 Extras
+
+- **Extras are products** (`extra_list_items.product_id`, `packages/catalogue/src/schema/extras.ts:40`),
+  so they have folders.
+- **An extra follows its dish** unless its own folder is claimed by a station. Fries in Extras ›
+  Sides, claimed by the Fryer, split off to the fryer. Extra cheese in unclaimed Extras › Toppings
+  stays on the grill ticket with the burger. An extra never falls through to the venue default on
+  its own.
+- **A split-off extra stays linked to its dish** (§5.10).
+- **Plain options** ("rare / medium / well done") are not products. They always follow the dish.
+
+### 5.9 Watchers
+
+A watcher is a screen or printer that follows stations, delivery areas, or both.
+
+- **Following stations** works like a kitchen display. An expediter at the pass follows Grill,
+  Fryer and Cold, and sees every item they make, from any area.
+- **Following delivery areas** works like the table plan. A runner follows Terrace and sees every
+  item for terrace tables, food and drinks together. This may turn out to be the till's and
+  handheld's existing table plan showing each table's progress, rather than a new screen (§8).
+
+A watcher shows each item's progress (queued, being made, done), and it can mark its own copy done,
+for example "plated and sent out". When the venue's fire-control setting is "expo", the fire
+action appears on the expediter's watcher screen.
+
+### 5.10 What a ticket shows
+
+- **A dish and its split-off extras always mention each other,** on screen and on paper. For
+  example, "Burger — with chips from Extras station", and "Chips — for the burger at Grill".
+- **"Show the rest of the order"** is a setting per station, off by default. It adds the rest of the
+  order under a clearly marked heading, "Also on this order (not for this station)", with each
+  line's station:
+  - on a **screen**, each line shows its progress;
+  - on **paper**, it is a plain list. Many kitchens work from print alone.
+
+### 5.11 "Made here, no ticket"
+
+A till can be set to say that items for certain stations are made on the spot. For example, on the
+bar till: "Items for these stations are made here: [Bar]". Those items get no ticket. The bar is
+still their maker. This is a **device setting, not routing**. Left empty, the bar gets tickets as
+usual. Watchers do not see these items either.
+
+### 5.12 The screen
+
+**Prep Stations** replaces two things: the Kitchen screen's station list, and Venue operations ›
+Preparation routing. It holds:
+
+- **Stations:**
+  - name;
+  - printers and screen;
+  - opening hours;
+  - fallback;
+  - lateness thresholds;
+  - what the station watches, if it is a watcher;
+  - "Show the rest of the order";
+  - the folders it claims.
+
+  Claims are added by picking from the unassigned list.
+- **The unassigned list** (§5.5).
+- **Exceptions** (§5.6).
+- **A preview before a routing change is saved.** It lists the products whose station would change.
+  This carries forward the menus design's §10.5 requirement: a claim moved during service reroutes
+  tonight's orders, and the preview is the protection.
+- **The tester.** Pick a product, the extras chosen, a delivery area, a time and an order type. It
+  shows the maker, the watchers, and which step decided (which exception, which claim, the default
+  or a fallback). It can also be opened from a product in the products screen, already filled in
+  with that product.
+
+Courses, bump mode and fire control stay where they are.
+
+---
+
+## 6. Build slices
+
+Each slice gets its own plan and pull request. Slice 3 needs slice 1, because stations claim
+folders. Slice 2 is independent of both.
+
+**Slice 1: products and categories.**
+
+- The file-browser products screen: folder view, flat view, search, selection mode, "Move to…",
+  drag and drop, the folder-delete choice, and variants.
+- Categories lose translations, image and colour.
+- The Categories screen goes.
+- Labels are removed (§3).
+- The "Made at" column waits for slice 3.
+
+**Slice 2: menus.**
+
+- Sections belong to one menu.
+- A menu can include another menu, with its presentation fields.
+- The combined-menu price and on/off rule, with clashes.
+- Republish marking.
+- Home-layout tiles into included menus, and the empty slot.
+- The Sections screen and library sections go.
+
+**Slice 3: routing.**
+
+- Prep Stations: claims, the unassigned list, exceptions, opening hours and fallbacks, watchers,
+  split-off extras, ticket cross-references and "Show the rest of the order", "Made here, no
+  ticket", the change preview and the tester.
+- Removed: `preparation_routes` in its current form, the product and category station fields, and
+  the old routing table on Venue operations.
+
+**Risks every plan must check** (CLAUDE.md §3):
+
+- **Removing a column may make drizzle rebuild the table,** and on this engine the rebuild's
+  `DROP TABLE` silently deletes the rows of every child table that cascades from it. Before any
+  rebuild of `products`, `categories` or `sections`, list the foreign keys pointing at the table
+  (`docs/developers/conventions-data.md`). Slices 1 and 3 remove columns from `products` and
+  `categories`.
+- **Media's triggers name the catalogue tables:** `category_details.image` in
+  `packages/media/drizzle/0001_image_references.sql`, and `sections.image` in
+  `0002_section_image_references.sql`. Removing category images must remove those triggers in the
+  same change. Slice 2 must keep the section ones working through any change to `sections`.
+- **Configuration export and import carry all of this.** Routing is in
+  `packages/venue-service/src/configuration-transfer.ts`. Labels and sections are in
+  `packages/catalogue/src/configuration-transfer.ts`. Each slice updates what it changes.
+- **Trace every consumer** before changing a field's meaning. The category name becomes one plain
+  string. The sale-line classification loses its labels. The category report loses label totals.
+
+---
+
+## 7. Settled while writing — for the owner to check
+
+These were not discussed. Each is the default this document takes.
+
+1. **The venue default station has no opening hours and no fallback.** It is always open, because
+   it is the end of every chain. If its printer is down, the alert is raised and the work waits on
+   its screen, or in its print queue if it has no screen.
+2. **The price rule applies to every price a menu can set:** a product's price, a variant's price
+   override (`menu_item_variant_overrides`) and an extra's price on the menu
+   (`menu_item_extra_items`). Each is merged and clash-checked the same way.
+3. **An included menu's folder shows the included menu's customer-facing name.** The including menu
+   cannot rename it. To show a different name, include it inside a section of your own.
+4. **A folder with a claim that is deleted** takes its claim with it. Its products then fall to the
+   nearest claim above, or appear on the unassigned list. Deleting it shows this in the routing
+   preview (§5.12).
+
+---
+
+## 8. Left open for planning
+
+- **Whether following a delivery area is a new screen, or the till's table plan** showing each
+  table's progress.
+- **What the whole-order printer becomes.** A printer that prints one ticket per whole order
+  (`printTicketScope = 'order'`) may be a watcher of a delivery area, or of every station. The
+  routing plan decides and states why.
+- **Fixed-price set menus whose parts are made at different stations.** The menus design's §10.5
+  asked for an early check. Split-off extras (§5.8) may cover it, or may not.
+- **Whether an included menu's clashes can be seen from the included menu's own editor,** as a
+  list of "menus this change affects", or only from each including menu.

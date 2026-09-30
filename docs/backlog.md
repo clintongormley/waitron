@@ -175,6 +175,25 @@ What staff and the operator touch: `apps/till`, `apps/dashboard`, `apps/setup`, 
 the current ranking is *What to work on next*. The small items at the end of each area live in
 Track C.
 
+**Product folders, menus that include menus, and prep station routing — designed, not built
+(owner, 2026-09-30).** The
+[design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) is built in three
+slices, each with its own plan and pull request:
+
+1. **Products and categories.** The products screen becomes a file browser of products and
+   folders. Categories lose their translations, image and colour. The Categories screen and labels
+   are removed.
+2. **Menus.** Sections belong to one menu, and a menu can include another. Price and on/off follow
+   one rule, and a clash blocks publishing. A home-layout tile whose target has gone becomes an
+   empty slot. The Sections screen and library sections are removed.
+3. **Routing.** A new Prep Stations screen: stations claim folders, ordered exceptions match on
+   delivery area, stations have opening hours and fallbacks, watchers get copies, and extras can
+   split off to another station.
+
+Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are overtaken by this
+design, and each carries a dated note. **Next action:** write slice 1's plan; slice 2's can be
+written beside it.
+
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside
 reviews: the [menus design](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md)
@@ -194,6 +213,11 @@ top-level category, products become Uncategorised and subcategories top-level); 
 should ignore capitals (today "Alcoholic" and "alcoholic" can both exist — a small migration if so);
 `Product.categoryId` and `primaryCategoryId` now always hold the same value; and the per-product
 label routes and `?descendants=1` on a category's products have no dashboard caller yet.
+_2026-09-30: labels are to be removed, and so are category names' translations (the
+[folders, menus and routing design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md),
+§2.1 and §3). The question about capitals in label names and the per-product label routes go with
+them. The deletion defaults are replaced by the design's §2.3: the screen asks whether to delete
+the contents or move them up._
 **Classification Task 2 landed as #648 (2026-09-25):**
 every till filing path records each sale line's product, a variant's parent, its menu, its gross
 and its reporting chain and labels when the record is issued. Since menus Task 7,
@@ -242,6 +266,10 @@ screen), landed as #654 (2026-09-25):** **Products and recipes**,
 **Sections** lists every library section with where it is used (one batch read,
 `GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
 and deletes sections and their members.
+_2026-09-30: the Sections screen and library sections are to be removed; each section will belong
+to one menu, and menus share by including another menu
+([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4). The items #654
+left below go with the screen._
 Left by #654, none blocking: opening a nested section from the editor drops unsaved edits to the
 open one without a warning; the "Used in" filter's two choices (Used in a menu, Not used) leave a
 section held only by sections that are on no menu findable only under Any; the screen
@@ -592,7 +620,9 @@ as removed with "Use the default". Choices are stored in the catalogue's new
 `device_profile_home_layouts` table (class `state`, carried by configuration export and import);
 `layout_id` has no key on purpose (plan D14). A tile is accepted when the menu's structure reaches
 its target, whether or not the product is switched on, active, or the menu active; publishing still
-leaves such a tile out and Preview warns (D13). **Upgrading** (measured: the new catalogue migration
+leaves such a tile out and Preview warns (D13). _2026-09-30: publishing is to keep an empty slot
+in the tile's place instead, so later tiles do not move
+([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4.5)._ **Upgrading** (measured: the new catalogue migration
 applied over a database at main's migration state with rows in place): it adds one table and the rows
 survive. **Left open, none blocking:** nothing on a till reads the
 layouts or the device's choice yet — that is Task 9, which also resolves a deleted layout against the
@@ -975,10 +1005,13 @@ What it left open:
   before anyone widens category authoring to more concurrent editors, rather than assuming it is fine.
 - **Routing to several destinations is still not designed** — that item sits under A9 below. The
   memberships it was first written about are gone (2026-09-25); labels are to be the conditions for
-  kitchen routing rules instead (menus spec §10.5).
+  kitchen routing rules instead (menus spec §10.5). _2026-09-30: now designed, without labels:
+  one maker station per item, any number of watchers
+  ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §5)._
 - **A category's colour is stored but shown nowhere outside the categories screen.** Nothing on the
   till, in menus or in reports reads it yet. The colour is data a future consumer can follow; nobody
-  has decided whether or how one should.
+  has decided whether or how one should. _2026-09-30: decided — categories lose their colour and
+  image ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §2.1)._
 - **No "category dependants" seat exists on the module contract.** The delete-preview route
   (`GET .../:id/dependants`) is core-catalogue-specific; a module that wants its own kind of
   dependant (beyond products, child categories and preparation routes) has nowhere to plug in one.
