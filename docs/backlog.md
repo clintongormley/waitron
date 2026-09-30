@@ -4176,7 +4176,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the old tab join and merge raise it, which the till no longer calls; it goes with Task 13
     _(Task 13: gone)_. A table the server lists with no party opens no bill any more. On a
     390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines). _(Campaign
-    item C82: on the floor map the party's name now stays on one line and ends in an ellipsis
+    item C82, #911: on the floor map the party's name now stays on one line and ends in an ellipsis
     instead of breaking inside a word; the list card's wrapping is unchanged (it breaks inside a
     word only when the word is wider than the card).)_ Open (seen by C82 at 390 and 1280 px, not
     measured further): a token for four seats or fewer, or with no seat count set (the map's two
