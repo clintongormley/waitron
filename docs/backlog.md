@@ -3423,7 +3423,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     migrated with the branch's `applyMigrations`; every pre-existing table kept its row count, and
     `pragma foreign_key_check` printed nothing. The golden huella test and `inmutabilidad` pass
     unedited. Left open:
-    - _Done by lane B item B11a (2026-09-30):_ the till's Cancel asks for a reason, and an
+    - _Done by lane B item B11a (2026-09-30, #927):_ the till's Cancel asks for a reason, and an
       approver's PIN when the reason needs one, and records the cancel as an adjustment through
       `POST /api/working-orders/:id/adjustments` (`action: "cancel"`). The reasonless
       `DELETE /api/working-orders/:id/lines/:lineNo`, `voidTabLine` and the code
