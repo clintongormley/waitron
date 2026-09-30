@@ -1,6 +1,7 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Transaction } from "@waitron/db";
-import { authorizeManager, personRole } from "@waitron/identity";
+import { eq } from "drizzle-orm";
+import { locations, withTransaction, type Transaction } from "@waitron/db";
+import { authorizeManager, personRole, type Permission } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
   createErrorBoundary,
@@ -8,6 +9,7 @@ import {
   requireBodyUuid,
   requireEnum,
   requireManagementSession,
+  requirePeriod,
   requireString,
   requireUuidParam,
 } from "@waitron/server-kit";
@@ -23,9 +25,17 @@ import {
 } from "./operations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
 import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
+import {
+  computeAdjustmentReport,
+  listAdjustmentEntries,
+  type AdjustmentReportInput,
+  type AdjustmentRequester,
+} from "./reports.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_ADJUSTMENTS }] = ADJUSTMENTS_PERMISSIONS;
+/** The permission every other report asks for. */
+const VIEW_REPORTS: Permission = "report.view";
 const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.required": 401,
   "management_session.expired": 401,
@@ -94,16 +104,85 @@ function requireIds(value: unknown): string[] {
   return value.map((id) => requireBodyUuid(id, "ids"));
 }
 
+/** Both ends passed `requirePeriod`'s fixed "YYYY-MM-DD" shape, so a string compare orders them. */
+function requireRange(from: unknown, to: unknown): { from: string; to: string } {
+  const range = { from: requirePeriod(from, "from"), to: requirePeriod(to, "to") };
+  if (range.from > range.to) throw invalid("range");
+  return range;
+}
+
+/** Everyone's rows when neither is given; `person` and `guests=true` exclude each other. */
+function requireRequester(
+  person: string | undefined,
+  guests: string | undefined,
+): AdjustmentRequester | undefined {
+  if (guests !== undefined && guests !== "true" && guests !== "false") throw invalid("guests");
+  if (guests === "true") {
+    if (person !== undefined) throw invalid("guests");
+    return "guests";
+  }
+  if (person === undefined) return undefined;
+  return { personId: requireBodyUuid(person, "person").toLowerCase() };
+}
+
+/** The range on the clock of the module's location, with `day_cutover` trimmed to HH:MM. */
+async function reportInput(
+  tx: Transaction,
+  locationId: string,
+  range: { from: string; to: string },
+): Promise<AdjustmentReportInput> {
+  const [location] = await tx
+    .select({ timeZone: locations.timeZone, dayCutover: locations.dayCutover })
+    .from(locations)
+    .where(eq(locations.id, locationId));
+  if (location === undefined) throw new Error(`adjustments: no location ${locationId}`);
+  return {
+    fromBusinessDay: range.from,
+    toBusinessDay: range.to,
+    timeZone: location.timeZone,
+    dayCutover: location.dayCutover.slice(0, 5),
+  };
+}
+
 export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
-    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+    const gatedBy = <T>(
+      permission: string,
+      sessionId: string,
+      fn: (tx: Transaction) => Promise<T>,
+    ): Promise<T> =>
       withTransaction(ctx.db, async (tx) => {
-        await authorizeManager(tx, {
-          managementSessionId: sessionId,
-          permission: MANAGE_ADJUSTMENTS,
-        });
+        await authorizeManager(tx, { managementSessionId: sessionId, permission });
         return fn(tx);
       });
+    const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
+      gatedBy(MANAGE_ADJUSTMENTS, sessionId, fn);
+
+    app.get("/management-api/adjustments/report", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const range = requireRange(c.req.query("from"), c.req.query("to"));
+        const report = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
+          computeAdjustmentReport(tx, await reportInput(tx, ctx.cfg.locationId, range)),
+        );
+        return c.json(report);
+      }),
+    );
+
+    app.get("/management-api/adjustments/report/entries", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const range = requireRange(c.req.query("from"), c.req.query("to"));
+        const requester = requireRequester(c.req.query("person"), c.req.query("guests"));
+        const entries = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
+          listAdjustmentEntries(tx, {
+            ...(await reportInput(tx, ctx.cfg.locationId, range)),
+            requester,
+          }),
+        );
+        return c.json({ entries });
+      }),
+    );
 
     app.get("/management-api/adjustments/reasons", (c) =>
       run(c, log, async () => {
