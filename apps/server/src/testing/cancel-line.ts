@@ -34,7 +34,7 @@ export async function cancelReasonId(tx: Transaction): Promise<string> {
   return found?.id ?? (await createAdjustmentReason(tx, CANCEL_REASON)).id;
 }
 
-/** A person with `id`, added at the lowest role when the database has none: an adjustment is
+/** A person with `id`, added (at the default role) when no person has that id: an adjustment is
  * requested by someone. */
 async function ensureOperator(tx: Transaction, id: string): Promise<string> {
   await tx
@@ -89,9 +89,10 @@ export async function cancelBody(
 }
 
 /**
- * Cancel `quantity` of line `lineNo` of a party's bill, all of it when absent, as the till's Cancel
- * does: through {@link applyAdjustment} at the bill's current revision, under {@link CANCEL_REASON}.
- * `operatorId` is made a person when it is not one yet.
+ * Cancel `quantity` of line `lineNo` of a party's bill, all of it when absent, through
+ * {@link applyAdjustment}, which the adjustment route calls, without the route's invoice issue: at
+ * the bill's current revision, under {@link CANCEL_REASON}. `operatorId` is made a person when it is
+ * not one yet.
  */
 export async function cancelLine(
   tx: Transaction,

@@ -72,7 +72,7 @@ it("tells staff a card payment is running on the order, and that a dish has sold
   );
 });
 
-it("localises the refusals of changing or cancelling a sent line in both languages", () => {
+it("localises the refusals of changing a sent line in both languages", () => {
   for (const code of ["ticket.already_started", "ticket.already_fired"]) {
     const generic = codeMessage("some.unmapped_code", "en");
     expect(codeMessage(code, "en")).not.toBe(generic);
@@ -295,6 +295,6 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage(code, "es"));
   }
   expect(codeMessage("adjustment.partial_with_extras", "en")).toBe(
-    "A dish with extras can only be cancelled, comped or discounted whole",
+    "A dish with extras can only be given away or discounted whole",
   );
 });

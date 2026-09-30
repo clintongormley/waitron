@@ -212,8 +212,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Alguien con un puesto superior debe aprobarlo con su PIN",
   },
   "adjustment.partial_with_extras": {
-    en: "A dish with extras can only be cancelled, comped or discounted whole",
-    es: "Un plato con extras solo se puede cancelar, invitar o descontar entero",
+    en: "A dish with extras can only be given away or discounted whole",
+    es: "Un plato con extras solo se puede invitar o descontar entero",
   },
   "adjustment.line_not_adjustable": {
     en: "Choose the dish itself, not one of its extras",
