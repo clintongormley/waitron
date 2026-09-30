@@ -5645,7 +5645,7 @@ ongoing overhaul listed at the top of Track A.
   (not measured); left unchanged, a question to the owner. Third, which browser and address the
   owner saw the empty field in. **Next action:** the owner answers the PIN-field question.
 - **A sign-in step's links are one bulleted list, with its buttons on the first item's row — DONE
-  (C96, owner 2026-09-30: "Move 'Login with passkey' under 'i've forgotten my password' … the same
+  (C96, #936, owner 2026-09-30: "Move 'Login with passkey' under 'i've forgotten my password' … the same
   for any other similar links. Also the login button should be at the same level as the 'I've
   forgotten my password' on the right"; then "list the links with bullets").** On the dashboard's
   password step, "I've forgotten my password" is now the first item of the bulleted list, above
