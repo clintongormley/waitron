@@ -3364,6 +3364,8 @@ interface EditableLine {
   sentAt: string | null;
   groupId: string | null;
   creditedTo: string | null;
+  /** A cancel, comp or discount has set its price (`list_unit_price_gross` is set). */
+  adjusted: boolean;
   ticket: {
     id: string;
     firedAt: string | null;
@@ -3397,6 +3399,17 @@ interface EditableOrder {
   newWork: "fire" | "hold" | "none";
   /** The courses in which the kitchen already has fired work, read before the edit changes any. */
   firedCourseIds: Set<string>;
+}
+
+/**
+ * What a line the kitchen has not fired is waiting for, in {@link EditableOrder.newWork}'s terms: a
+ * held or recalled item waits to be sent; a line with no item was released when it was stamped sent,
+ * waits in its held group when it has one, and is otherwise a line nothing has sent.
+ */
+function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
+  if (line.ticket !== null) return "hold";
+  if (line.sentAt !== null) return "fire";
+  return line.groupId === null ? "none" : "hold";
 }
 
 /** What an edit asks of one stored dish line. `null` options or extras keep the stored ones. */
@@ -3551,6 +3564,7 @@ async function readEditableOrder(
       parentProductId: products.parentId,
       quantity: workingOrderLines.quantity,
       unitPriceGross: workingOrderLines.unitPriceGross,
+      listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       unitPrecision: workingOrderLines.unitPrecision,
       note: workingOrderLines.note,
       optionSnapshots: workingOrderLines.optionSnapshots,
@@ -3587,6 +3601,7 @@ async function readEditableOrder(
     sentAt: row.sentAt,
     groupId: row.groupId,
     creditedTo: row.creditedTo,
+    adjusted: row.listUnitPriceGross !== null,
     ticket:
       row.ticketId === null
         ? null
@@ -3815,6 +3830,8 @@ async function applyLineEdits(
     await refusePaidLines(tx, orderId, paidLineParts(parent), paid);
     const fired = await kitchenHas(parent);
     const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
+    // Widening an adjusted line would sell the added units at its adjusted price (ruling R12).
+    const addedApart = action === "free" && rise > 0 && parent.adjusted;
 
     // The picks the line carries after the edit, as a request names them. A child older than
     // `0014_order_edit_columns.sql` names none, and pricing it again refuses it as `extras.invalid`.
@@ -3835,19 +3852,19 @@ async function applyLineEdits(
       frozenOptions: optionSnapshots,
       extras: picks,
     });
-    if (action === "raise" || (action === "change" && rise > 0)) {
+    if (action === "raise" || (action === "change" && rise > 0) || addedApart) {
       pricing.push({
         ...asOffered(subtractDecimal(requested, parent.quantity)),
         courseId: parent.courseId,
       });
-      pricedAs.push({ kind: "line", kitchen: "fire" });
+      pricedAs.push({ kind: "line", kitchen: addedApart ? kitchenStateOf(parent) : "fire" });
     }
-    if (action === "free" && rise > 0) raised.push(asOffered(requested));
+    if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
     if (action === "change") {
       // The changed line goes to the kitchen again, which a sold-out dish never does.
       resent.push(parent.productId!, ...extras.kept.map(({ child }) => child.productId!));
     }
-    const quantity = action === "change" && rise > 0 ? parent.quantity : requested;
+    const quantity = (action === "change" && rise > 0) || addedApart ? parent.quantity : requested;
     let addedAt: number | null = null;
     if (extras.added.length > 0) {
       addedAt = pricing.length;

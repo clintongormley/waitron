@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,6 +11,7 @@ import {
   saleLines,
   sales,
   ticketItems,
+  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -25,8 +26,15 @@ import { listStationNotices } from "@waitron/venue-service";
 import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
+import { placeGroups } from "./order-groups.js";
 import { payWorkingOrder } from "./till-sale.js";
-import { addTabRound, advanceTicketItem } from "./working-order.js";
+import {
+  addTabRound,
+  advanceTicketItem,
+  readOrderRevision,
+  recallLines,
+  updateOrderLine,
+} from "./working-order.js";
 import { serveLine } from "./testing/serve-line.js";
 import {
   billWith,
@@ -646,6 +654,100 @@ describe("split rows and groups (plan D19)", () => {
     );
     expect(group!.state).toBe("removed");
     expect(await rowsOf(venue, billId)).toEqual([]);
+  });
+});
+
+describe("raising an adjusted line the kitchen does not have (ruling R12)", () => {
+  /** Line `lineNo`'s group state, and whether its kitchen item has fired. */
+  async function kitchenOf(billId: string, lineNo: number) {
+    const [row] = await inTx(venue, (tx) =>
+      tx
+        .select({ group: orderGroups.state, firedAt: ticketItems.firedAt })
+        .from(workingOrderLines)
+        .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(
+          and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, lineNo)),
+        ),
+    );
+    return row;
+  }
+
+  async function raise(billId: string, lineNo: number, quantity: string) {
+    await inTx(venue, async (tx) =>
+      updateOrderLine(
+        tx,
+        venue.cfg,
+        billId,
+        lineNo,
+        { quantity },
+        await readOrderRevision(tx, billId),
+        venue.staffId,
+      ),
+    );
+  }
+
+  it("sells the added Burger at today's price on a line of its own, leaving the comped one at €0.00", async () => {
+    const { billId, partyId } = await bill([{ name: "Burger" }], { release: "hold" });
+    // Bread fired since: a dish new to the bill would now go straight to the kitchen.
+    await inTx(venue, (tx) =>
+      placeGroups(tx, venue.cfg, partyId, {
+        groups: [{ lines: [{ menuItemId: venue.item("Bread"), quantity: "1" }], release: "fire" }],
+        operatorId: venue.staffId,
+        billId,
+      }),
+    );
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    const before = total(await rowsOf(venue, billId));
+
+    await raise(billId, 1, "2");
+
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "0.00", "12.00", "0.00"],
+      ["Bread", "1.000", "2.50", null, "2.50"],
+      ["Burger", "1.000", "12.00", null, "12.00"],
+    ]);
+    expect(decimalDifference(total(await rowsOf(venue, billId)), before)).toBe("12.00");
+    // The added Burger waits with the kitchen, as the one it was added to does.
+    expect(await kitchenOf(billId, 3)).toEqual({ group: "held", firedAt: null });
+  });
+
+  it("sells the added bottle at its full price beside the discounted one", async () => {
+    const { billId } = await bill([{ name: "Bottle" }], { release: "hold" });
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+
+    await raise(billId, 1, "2");
+
+    expect(await priced(billId)).toEqual([
+      ["Bottle", "1.000", "27.00", "30.00", "27.00"],
+      ["Bottle", "1.000", "30.00", null, "30.00"],
+    ]);
+  });
+
+  it("holds the Burger added to a comped one recalled from the kitchen", async () => {
+    const { billId } = await bill([{ name: "Burger" }]);
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await inTx(venue, (tx) => recallLines(tx, venue.cfg, billId, [1]));
+
+    await raise(billId, 1, "2");
+
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "0.00", "12.00", "0.00"],
+      ["Burger", "1.000", "12.00", null, "12.00"],
+    ]);
+    expect(await kitchenOf(billId, 2)).toEqual({ group: "held", firedAt: null });
+  });
+
+  it("still widens a line nobody adjusted", async () => {
+    const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
+
+    await raise(billId, 1, "2");
+
+    expect(await priced(billId)).toEqual([["Burger", "2.000", "12.00", null, "24.00"]]);
   });
 });
 
