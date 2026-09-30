@@ -757,9 +757,19 @@ export interface TillSaleLine {
   /** The line's total before a comp or a discount changed it; present only when that differs from
    *  `gross`. */
   listGross?: string;
+  /** The comps and discounts shown beneath this row's dish; absent when there are none. */
+  adjustments?: ReceiptAdjustment[];
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else null/absent.
    *  Presentation only — never hashed, never a fiscal figure. */
   parentLineNo?: number | null;
+}
+
+/** An amount a comp or a discount took off; `amount` is positive, as a decimal string. */
+export interface ReceiptAdjustment {
+  kind: "comp" | "discount";
+  /** Basis points, for a percentage discount only. */
+  percentBp?: number;
+  amount: string;
 }
 
 /**
@@ -791,6 +801,8 @@ export interface TillSaleResult {
   vatBreakdown: VatBreakdownEntry[];
   /** The filed line list, rendered by the receipt instead of the client basket. */
   lines: TillSaleLine[];
+  /** Discounts on the whole bill, shown after the goods; absent when there are none. */
+  billAdjustments?: ReceiptAdjustment[];
   tender: TenderBlock;
   qr: string;
 }

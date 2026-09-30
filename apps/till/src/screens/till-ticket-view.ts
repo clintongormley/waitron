@@ -12,7 +12,7 @@ import {
 } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
-import type { TillSaleLine, TillSaleResult } from "../api/client.js";
+import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -51,7 +51,8 @@ const LABEL = {
   card: "Tarjeta",
   tip: "Propina",
   charged: "Cobrado",
-  was: "Antes",
+  comp: "Invitación",
+  discount: "Descuento",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
@@ -86,15 +87,26 @@ function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   return groups;
 }
 
-/** A line's total; after a give-away or a discount, the total it had first, struck through, as the
- * printed receipt writes `12,00 € -> 0,00 €`. Presentation only: no fiscal figure changes. */
+/** A row at its list price; what a comp or discount took off is its own line (`adjustmentRow`). */
 function lineGross(line: TillSaleLine, locale: string) {
-  const now = formatMoney(line.gross, locale);
-  if (line.listGross === undefined) return html`<span class="line-gross">${now}</span>`;
-  return html`<span class="line-gross"
-    ><span class="visually-hidden">${LABEL.was} </span
-    ><s class="list-gross">${formatMoney(line.listGross, locale)}</s> ${now}</span
-  >`;
+  return html`<span class="line-gross">${formatMoney(line.listGross ?? line.gross, locale)}</span>`;
+}
+
+/** `Descuento 12,5%` for 1250 basis points, as `apps/server/src/receipt-ticket.ts` prints it. */
+function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
+  if (adjustment.kind === "comp") return LABEL.comp;
+  if (adjustment.percentBp === undefined) return LABEL.discount;
+  const percent = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(
+    adjustment.percentBp / 100,
+  );
+  return `${LABEL.discount} ${percent}%`;
+}
+
+function adjustmentRow(adjustment: ReceiptAdjustment, locale: string, extraClass = "") {
+  return html`<li class="line adjustment ${extraClass}">
+    <span class="line-name">${adjustmentLabel(adjustment, locale)}</span>
+    <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
+  </li>`;
 }
 
 /** The fecha de expedición (art. 7.1.b). */
@@ -259,25 +271,17 @@ export class TillTicketView extends LitElement {
         flex: 1;
       }
 
-      .list-gross {
-        color: var(--wt-color-text-muted);
-      }
-
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-
       /* A selected option (ordering modifiers, Task 14) — indented beneath its dish, name left and its
          own delta right (0,00 for a free option), never its own quantity column (an option is priced per
          dish, so repeating the count reads as noise) — matching the printed receipt's identical indent. */
-      .line.option {
+      .line.option,
+      .line.adjustment {
         padding-left: var(--wt-space-4);
         color: var(--wt-color-text-muted);
+      }
+
+      .line.bill-adjustment {
+        padding-left: 0;
       }
 
       .total-row {
@@ -444,7 +448,13 @@ export class TillTicketView extends LitElement {
                   `;
                 },
               )}
+              ${[group.dish, ...group.options].flatMap((line) =>
+                (line.adjustments ?? []).map((adjustment) => adjustmentRow(adjustment, locale)),
+              )}
             `,
+          )}
+          ${(r.billAdjustments ?? []).map((adjustment) =>
+            adjustmentRow(adjustment, locale, "bill-adjustment"),
           )}
         </ul>
 

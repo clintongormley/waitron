@@ -594,14 +594,17 @@ it("shows a dish's frozen options answers in the DINER's wording", async () => {
 });
 
 describe("till-ticket-view: a line given away or discounted (service plan Task 11)", () => {
+  // Every row prints its list price and each amount taken off is its own line, as on paper
+  // (`apps/server/src/receipt-ticket.ts`).
   const adjusted: Partial<TillSaleResult> = {
-    total: "27.00",
+    total: "25.50",
     lines: [
       {
         descriptions: { "es-ES": "Hamburguesa" },
         quantity: "1",
         gross: "0.00",
         listGross: "12.00",
+        adjustments: [{ kind: "comp", amount: "12.00" }],
       },
       {
         descriptions: { "es-ES": "Aceitunas" },
@@ -609,27 +612,85 @@ describe("till-ticket-view: a line given away or discounted (service plan Task 1
         gross: "0.00",
         listGross: "1.50",
         parentLineNo: 1,
+        adjustments: [{ kind: "comp", amount: "1.50" }],
       },
-      { descriptions: { "es-ES": "Rioja" }, quantity: "1", gross: "27.00", listGross: "30.00" },
+      {
+        descriptions: { "es-ES": "Rioja" },
+        quantity: "1",
+        gross: "24.00",
+        listGross: "30.00",
+        adjustments: [{ kind: "discount", percentBp: 2000, amount: "6.00" }],
+      },
       { descriptions: { "es-ES": "Pan" }, quantity: "1", gross: "2.50" },
     ],
+    billAdjustments: [{ kind: "discount", amount: "1.00" }],
   };
-  const grossOf = (row: Element) =>
-    norm(row.querySelector(".line-gross")!.textContent!)
+  const rowText = (row: Element) =>
+    norm(row.textContent!)
       .replace(/[ \n\t]+/g, " ")
       .trim();
 
-  it("shows the price a line had, struck through, before its new one, as the printed receipt does", async () => {
+  it("shows each dish at its list price, with what was taken off on its own line after its options", async () => {
     const { el } = await mount(adjusted);
-    const rows = [...el.shadowRoot!.querySelectorAll(".lines > .line")];
+    const rows = [...el.shadowRoot!.querySelectorAll(".lines > li")];
 
-    expect(rows.map(grossOf)).toEqual([
-      "Antes 12,00 € 0,00 €",
-      "Antes 1,50 € 0,00 €",
-      "Antes 30,00 € 27,00 €",
-      "2,50 €",
+    expect(rows.map(rowText)).toEqual([
+      "Hamburguesa 1 12,00 €",
+      "Aceitunas 1,50 €",
+      "Invitación -12,00 €",
+      "Invitación -1,50 €",
+      "Rioja 1 30,00 €",
+      "Descuento 20% -6,00 €",
+      "Pan 1 2,50 €",
+      "Descuento -1,00 €",
     ]);
-    expect(norm(rows[0]!.querySelector("s")!.textContent!)).toBe("12,00 €");
-    expect(rows[3]!.querySelector("s")).toBeNull();
+  });
+
+  it("no longer strikes through the price a line had", async () => {
+    const { el } = await mount(adjusted);
+
+    expect(el.shadowRoot!.querySelectorAll("s")).toHaveLength(0);
+    expect(text(el)).not.toContain("Antes");
+  });
+
+  it("writes a percentage in the invoice locale, to two decimals at most", async () => {
+    const { el } = await mount({
+      lines: [
+        {
+          descriptions: { "es-ES": "Rioja" },
+          quantity: "1",
+          gross: "26.25",
+          listGross: "30.00",
+          adjustments: [{ kind: "discount", percentBp: 1250, amount: "3.75" }],
+        },
+        {
+          descriptions: { "es-ES": "Vermut" },
+          quantity: "3",
+          gross: "8.00",
+          listGross: "9.00",
+          adjustments: [{ kind: "discount", percentBp: 1111, amount: "1.00" }],
+        },
+      ],
+    });
+    const entries = [...el.shadowRoot!.querySelectorAll(".lines > .adjustment")];
+
+    expect(entries.map(rowText)).toEqual(["Descuento 12,5% -3,75 €", "Descuento 11,11% -1,00 €"]);
+  });
+
+  it("shows a discount on the whole bill once, after the goods and before the VAT breakdown", async () => {
+    const { el } = await mount(adjusted);
+    const bill = [...el.shadowRoot!.querySelectorAll(".bill-adjustment")];
+    const firstVat = el.shadowRoot!.querySelector(".vat-row")!;
+    const lastGoods = [...el.shadowRoot!.querySelectorAll(".lines > li:not(.bill-adjustment)")].at(
+      -1,
+    )!;
+
+    expect(bill.map(rowText)).toEqual(["Descuento -1,00 €"]);
+    expect(
+      lastGoods.compareDocumentPosition(bill[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      bill[0]!.compareDocumentPosition(firstVat) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });
