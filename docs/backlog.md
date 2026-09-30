@@ -2520,7 +2520,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   keeps scanning through a pairing because skipping the scan would drop every unpaired device from
   the list after the server's 15 s `DISCOVERED_TTL_MS`. Box check owed: time a pairing through the
   dashboard.
-- **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done.** The
+- **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
   `apps/dashboard/src/screens/printers-screen.ts`), and a printer you have just added is switched
