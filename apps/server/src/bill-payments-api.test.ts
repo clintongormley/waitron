@@ -1776,6 +1776,62 @@ async function insertBillPayment(
   return inserted!.id;
 }
 
+describe("who can approve a refund (GET /api/refund-authorizers)", () => {
+  async function addPerson(role: "staff" | "supervisor" | "manager", status = "active") {
+    const [person] = await inTx((tx) =>
+      tx
+        .insert(persons)
+        .values({
+          displayName: `${role}-${randomUUID().slice(0, 8)}`,
+          pinHash: hashPin("5555"),
+          role,
+          status: status as "active" | "suspended",
+        })
+        .returning({ id: persons.id }),
+    );
+    return person!.id;
+  }
+
+  function idsOf(listed: { json: unknown }): string[] {
+    return (listed.json as { personId: string }[]).map((person) => person.personId);
+  }
+
+  it("lists the active holders of the refund permission, and no one else, by id and name only", async () => {
+    const supervisorId = await addPerson("supervisor");
+    const staffId = await addPerson("staff");
+
+    const listed = await request("GET", "/api/refund-authorizers");
+
+    expect(listed.status).toBe(200);
+    expect(idsOf(listed)).toEqual(expect.arrayContaining([venue.adminId, supervisorId]));
+    expect(idsOf(listed)).not.toContain(staffId);
+    expect(idsOf(listed)).not.toContain(venue.staffId);
+    for (const person of listed.json as unknown as Record<string, unknown>[])
+      expect(Object.keys(person)).toEqual(["personId", "displayName"]);
+  });
+
+  it("leaves a suspended holder out, as the drawer's list does", async () => {
+    const suspendedId = await addPerson("manager", "suspended");
+
+    const refunds = await request("GET", "/api/refund-authorizers");
+    const drawer = await request("GET", "/api/drawer/authorizers");
+
+    expect(idsOf(refunds)).not.toContain(suspendedId);
+    expect(idsOf(drawer)).not.toContain(suspendedId);
+  });
+
+  it("answers a caller with no session, and one with no device, as the drawer's list does", async () => {
+    for (const cookie of ["", venue.sessionCookie]) {
+      const refunds = await request("GET", "/api/refund-authorizers", undefined, cookie);
+      const drawer = await request("GET", "/api/drawer/authorizers", undefined, cookie);
+      expect(refunds.status).toBe(drawer.status);
+      if (drawer.status !== 200) expect(refunds.json).toEqual(drawer.json);
+    }
+    const anonymous = await request("GET", "/api/refund-authorizers", undefined, "");
+    expect(anonymous).toMatchObject({ status: 401, json: { code: "session.required" } });
+  });
+});
+
 describe("a cash refund before the invoice (design §6)", () => {
   it("gives the money back with a manager's PIN, recording who asked, who authorised it and the till", async () => {
     const billId = await bill120();
