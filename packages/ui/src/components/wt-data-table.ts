@@ -68,7 +68,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
         padding: var(--wt-space-3);
         border-bottom: 1px solid var(--wt-color-border);
         text-align: start;
-        vertical-align: middle;
+        vertical-align: baseline;
       }
 
       th {
@@ -305,7 +305,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
       .tree-cell {
         display: inline-flex;
-        align-items: center;
+        align-items: baseline;
       }
     `,
   ];

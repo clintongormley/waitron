@@ -2592,3 +2592,31 @@ describe("at phone width", () => {
     },
   );
 });
+
+it("lines each name up with the text beside it, with a thumbnail, a placeholder or a swatch", async () => {
+  const fx = apiFixture();
+  fx.api.listCategories.mockResolvedValue([
+    { ...food, color: "#b12525" },
+    { ...drink, image: "cheese.png" },
+    { ...food, id: "breakfast", name: { en: "Breakfast" }, parentId: "food" },
+  ]);
+  const { el } = await mountWidget<CategoriesScreen>("dashboard-categories-screen", {
+    api: fx.client,
+  });
+  const table = el.shadowRoot!.querySelector("wt-data-table")!;
+  await vi.waitFor(() => expect(table.rows.length).toBe(3));
+  await table.updateComplete;
+  const bottom = (parent: Element) => {
+    const text = [...parent.childNodes].find(
+      (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+    )!;
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    return range.getBoundingClientRect().bottom;
+  };
+  for (const id of ["food", "drink", "breakfast"]) {
+    const name = table.shadowRoot!.querySelector(`[data-category="${id}"]`)!;
+    const beside = table.shadowRoot!.querySelectorAll(`tr[data-row-key="${id}"] td`)[1]!;
+    expect(Math.abs(bottom(name) - bottom(beside)), id).toBeLessThanOrEqual(1);
+  }
+});

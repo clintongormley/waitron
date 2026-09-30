@@ -44,14 +44,16 @@ export class ProductList extends LitElement {
     css`
       /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
          crossing used for their presentation. */
+      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
+         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
       wt-data-table::part(product-cell) {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
+        display: block;
       }
       wt-data-table::part(thumb-frame),
       wt-data-table::part(thumb-placeholder) {
-        flex: none;
+        display: inline-block;
+        vertical-align: middle;
+        margin-inline-end: var(--wt-space-3);
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
         border: 1px solid var(--wt-color-border);
@@ -196,8 +198,7 @@ export class ProductList extends LitElement {
                     : html`<span part="thumb-frame" data-test="thumb"
                         ><img part="thumbnail" src=${`/media/${product.image}`} alt=""
                       /></span>`
-                }
-                <strong>${product.name}</strong>
+                }<strong>${product.name}</strong>
               </span>`,
       },
       {
