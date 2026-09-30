@@ -1,7 +1,8 @@
 # Product folders, menus that include menus, and prep station routing
 
 **Status:** owner decisions of 2026-09-30, from one brainstorm covering categories, menu sections,
-labels and kitchen routing together, so the four agree with each other. Not built. It is built in
+labels and kitchen routing together, so the four agree with each other. The owner reviewed and
+approved this document the same day, including §7's defaults. Not built. It is built in
 three slices (§6), each with its own plan and pull request.
 
 **What this replaces.** Where this document disagrees with an earlier one, this one wins:
@@ -20,8 +21,8 @@ Each names its file so it can be re-checked before building.
 
 ## 1. The idea in one page
 
-- **Categories are for reporting only.** They are folders in the products screen. Each has one
-  internal name, with no translations, no image and no colour. The Categories screen goes.
+- **Categories are for reporting and routing.** They are folders in the products screen. Each has
+  one internal name, with no translations, no image and no colour. The Categories screen goes.
 - **Folders also decide where things are made.** On one new screen, **Prep Stations**, each station
   claims folders. Ordered exceptions sit above the claims, and the venue's default station catches
   the rest.
@@ -39,7 +40,8 @@ Each names its file so it can be re-checked before building.
 
 ### 2.1 What a category is
 
-A category is a reporting folder. It has one internal name (not translated) and at most one parent.
+A category is a folder for reporting and routing: reports roll up along it, and stations claim it
+(§5.5). It has one internal name (not translated) and at most one parent.
 A product has at most one category. A product with no category sits at the top level, which is
 what "Uncategorised" means today. Reports roll up along the tree, as now.
 
@@ -317,8 +319,8 @@ separate conditions for order type and ordering device. The delivery area is fou
 
 ### 5.6 Exceptions
 
-An exception reads as a sentence, for example "Delivered to **Terrace**, from **Cocktails** →
-**Main bar**".
+An exception reads as a sentence, for example "**Cocktails** from **Terrace** → **Main bar**":
+what, then the delivery area, then the station.
 
 - **Conditions.** Every condition given must hold:
   - **delivery area** (§5.4);
@@ -336,8 +338,8 @@ An exception reads as a sentence, for example "Delivered to **Terrace**, from **
 | Rule wanted | How it is written |
 | ----------- | ----------------- |
 | All drinks go to the bar. | Bar claims Drinks. |
-| Drinks ordered upstairs go to the upstairs bar between 7 and 9pm; otherwise to the downstairs bar. | Exception "Upstairs + Drinks → Upstairs bar". The upstairs bar opens 19:00–21:00, with Downstairs bar as its fallback. |
-| Drinks ordered on the terrace go to the terrace bar, except cocktails, which go to the main bar. | Two exceptions, in this order: "Terrace + Cocktails → Main bar", then "Terrace + Drinks → Terrace bar". |
+| Drinks ordered upstairs go to the upstairs bar between 7 and 9pm; otherwise to the downstairs bar. | Exception "Drinks from Upstairs → Upstairs bar". The upstairs bar opens 19:00–21:00, with Downstairs bar as its fallback. |
+| Drinks ordered on the terrace go to the terrace bar, except cocktails, which go to the main bar. | Two exceptions, in this order: "Cocktails from Terrace → Main bar", then "Drinks from Terrace → Terrace bar". |
 
 ### 5.7 Opening hours and fallbacks
 
@@ -368,9 +370,12 @@ A watcher is a screen or printer that follows stations, delivery areas, or both.
 
 - **Following stations** works like a kitchen display. An expediter at the pass follows Grill,
   Fryer and Cold, and sees every item they make, from any area.
-- **Following delivery areas** works like the table plan. A runner follows Terrace and sees every
-  item for terrace tables, food and drinks together. This may turn out to be the till's and
-  handheld's existing table plan showing each table's progress, rather than a new screen (§8).
+- **Following delivery areas** works for every delivery area, including ones with no tables. A
+  runner follows Terrace and sees every item for terrace tables, food and drinks together. A
+  pickup screen follows Pickup and shows takeaway orders as their items come ready. A counter
+  screen follows Bar counter. So an area watcher is a real watcher screen or printer, not the table
+  plan: counters and takeaways have no table plan. The table plan may also show each table's
+  progress, but that is an addition, not a replacement.
 
 A watcher shows each item's progress (queued, being made, done), and it can mark its own copy done,
 for example "plated and sent out". When the venue's fire-control setting is "expo", the fire
@@ -493,12 +498,15 @@ These were not discussed. Each is the default this document takes.
 
 ## 8. Left open for planning
 
-- **Whether following a delivery area is a new screen, or the till's table plan** showing each
-  table's progress.
+- **Whether the till's table plan also shows each table's progress,** beside the area watchers
+  (§5.9).
 - **What the whole-order printer becomes.** A printer that prints one ticket per whole order
   (`printTicketScope = 'order'`) may be a watcher of a delivery area, or of every station. The
   routing plan decides and states why.
-- **Fixed-price set menus whose parts are made at different stations.** The menus design's §10.5
-  asked for an early check. Split-off extras (§5.8) may cover it, or may not.
+- **Bundles.** Waitron may gain bundled products, made of a list of other products: a set menu, for
+  example. Bundles are not designed here. The direction for routing: each product in a bundle is
+  an ordinary product in its own folder, so it routes by its own folder like any other. The bundle
+  itself is made by no station. A bundle's parts mention each other on tickets, as a dish and its
+  split-off extras do (§5.10).
 - **Whether an included menu's clashes can be seen from the included menu's own editor,** as a
   list of "menus this change affects", or only from each including menu.
