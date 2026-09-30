@@ -2704,8 +2704,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     before ending a Bluetooth printer's jobs. Printers belong to no agent, and one address has at
     most one registration per location (`printers_local_key_key`), so this is how "a printer on
     another agent is untouched" was read.
-  - _2026-10-01 (A163): the same pull now also ends the jobs that were waiting for it; see A163's
-    entry below._
+  - Jobs already queued for it wait, unclaimed, as for any switched-off printer (run: the new case
+    in `apps/server/src/print-api.test.ts` finds the job still `queued` with no attempts after the
+    pull). They print if the printer is switched on again (read, not run: `claimPrintJobs`,
+    `packages/printing/src/runtime.ts`, claims only a switched-on printer's jobs and has no age
+    limit on a queued one). _(2026-10-01: changed by A163 — the same pull now ends the jobs that
+    were waiting for it; see A163's entry below.)_
   - A Bluetooth printer an agent reports paired offers one row-menu action, Unpair, in place of
     Disable (owner's "ok" to the recommendation, 2026-09-30 ~19:00). One no agent reports paired
     keeps Disable, since there is nothing to unpair; network and USB printers keep Disable.
@@ -2718,8 +2722,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     printer stays on. Closing the browser tab mid-wizard does not switch it off. Saving leaves it on. This
     holds for any printer's Add again, not only a Bluetooth one. While it is on during calibration,
     jobs already queued for it can be handed out, whether or not calibration is then saved.
-    _2026-10-01 (A163): not the jobs a succeeded Unpair ended; a printer switched off with Disable
-    still keeps its waiting jobs._
+    **Next action (owner, 2026-10-01: "(c)"):** lane A's A163 ends a printer's waiting jobs when
+    its Unpair succeeds, so nothing stale can print during a later Add again. _(2026-10-01: done in
+    A163 — not the jobs a succeeded Unpair ended; a printer switched off with Disable still keeps
+    its waiting jobs.)_
   - A row shows Disable whenever Unpair would not appear, such as after a succeeded Unpair while
     the agent's paired report is still listed (`#printerActions`,
     `apps/dashboard/src/screens/printers-screen.ts`).
@@ -2730,7 +2736,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     printer on.
   - Left open: an Unpair outcome that reaches the server after it has dropped the command (120
     seconds, `COMMAND_TTL_MS` in `apps/server/src/printer-bluetooth-commands.ts`) leaves the printer
-    on; the owner can switch it off with Disable, which the row then shows.
+    on; the owner can switch it off with Disable, which the row then shows. _(2026-10-01: A163
+    — the printer's waiting jobs are kept in that case too, and Disable keeps them.)_
   - Left open: keeping the printer off until calibration is saved would need a calibration-only
     print path for a switched-off printer, since `enqueuePrintJob` refuses one and `claimPrintJobs`
     claims only switched-on printers' jobs.
@@ -2743,16 +2750,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `apps/server/src/print-api.ts`). Waiting means what a pull would claim (queued, failed with
     attempts left, or printing with a lapsed or missing claim), plus jobs this agent itself holds
     as printing. Each ends `failed` with no attempts left and the reason `printer.unpaired`, which
-    the Printers screen words as "The printer was unpaired before this job printed." with "—" for
-    attempts. Rows are kept, not deleted.
+    the Printers screen words as "The printer was unpaired, so this job will not be sent again."
+    with "—" for attempts. Rows are kept, not deleted. A job this agent holds as printing may
+    already have printed, if the agent sent it and its report was lost.
   - Left alone: another box's live claim, printed jobs, jobs already given up (they keep their
     reason), other printers' jobs, and every job when the Unpair failed or another box reported
-    within 15 seconds that it can print to the printer.
+    within 15 seconds that it can print to the printer. Also left alone, and still waiting: every
+    job of a printer whose Unpair outcome reaches the server after it dropped the command (120
+    seconds, `COMMAND_TTL_MS`), or after the server restarted (the command store is held in
+    memory, `apps/server/src/printer-bluetooth-commands.ts`), and of a printer unpaired outside
+    Waitron.
   - Drawer kicks end too: one left waiting would open the cash drawer during Add again, and
     `drawer_opens` holds no job id, so its audit row is unchanged (read, not run:
     `packages/db/src/schema/drawer-opens.ts`).
-  - A kitchen ticket ended this way shows as the table's printing problem, as a ticket given up
-    after its attempts does.
+  - Jobs ended this way do not raise the printer's `printer.jobs_waiting` alert after Add again,
+    but a kitchen ticket ended this way still shows as the table's printing problem, as a ticket
+    given up after its attempts does.
   - Run: `packages/printing/src/runtime.unpaired.test.ts`; the unpair cases in
     `apps/server/src/print-api.test.ts`, one of which switches the printer back on the way Add
     again does and sends a calibration test page, and the next pull hands out only that page;

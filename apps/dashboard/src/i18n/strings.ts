@@ -293,7 +293,7 @@ export const en = {
   "printers.filter_all": "All printers",
   "printers.add_again": "Add again",
   "printers.add_again_hint":
-    "Disabled printer. Adding it again restores its settings and resumes pending print jobs.",
+    "Disabled printer. Adding it again restores its settings and prints any jobs still waiting for it.",
   "printers.cash_register": "Cash register",
   "printers.yes": "Yes",
   "printers.no": "No",
@@ -2230,7 +2230,7 @@ export const es: Record<StringKey, string> = {
   "printers.filter_all": "Todas las impresoras",
   "printers.add_again": "Volver a añadir",
   "printers.add_again_hint":
-    "Impresora desactivada. Al volver a añadirla se restauran sus ajustes y se reanudan los trabajos pendientes.",
+    "Impresora desactivada. Al volver a añadirla se restauran sus ajustes y se imprimen los trabajos que sigan pendientes.",
   "printers.cash_register": "Caja",
   "printers.yes": "Sí",
   "printers.no": "No",

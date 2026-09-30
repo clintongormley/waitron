@@ -152,8 +152,7 @@ describe("endUnpairedPrinterJobs", () => {
     expect((await jobRow(givenUp)).lastError).toBe("device gone");
   });
 
-  // A drawer kick left waiting would open the cash drawer when the printer is added again; its
-  // `drawer_opens` audit row carries no job id, so ending the kick leaves the audit unchanged.
+  // A drawer kick left waiting would open the cash drawer when the printer is added again.
   it("ends a waiting drawer kick", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");

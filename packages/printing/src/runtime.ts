@@ -157,17 +157,21 @@ export async function failUnprintableBluetoothJobs(
   return ended.map(({ id }) => id);
 }
 
-/** The `last_error` of a job {@link endUnpairedPrinterJobs} ended. */
+/** The `last_error` of a job {@link endUnpairedPrinterJobs} ended: a code the dashboard words, not
+ * a sentence. */
 export const PRINTER_UNPAIRED = "printer.unpaired";
 
 /**
  * Ends failed, with no attempts left, every waiting job of the Bluetooth printers at `addresses`,
- * switched on or off, so none prints when the printer is added again. Waiting means due, or
- * `printing` under `agentId`'s own claim: that agent sends a pull's jobs before its next pull, so
- * none of its claims is mid-send while it reports the unpairing. Drawer kicks end too, since one
+ * which the caller chooses (the job pull in `apps/server/src/print-api.ts`), switched on or off, so
+ * none prints when the printer is added again. Waiting means due, or `printing` under `agentId`'s
+ * own claim: that agent sends a pull's jobs before its next pull, so none of its claims is mid-send
+ * while it reports the unpairing (`tick`, `packages/print-agent/src/agent.ts`, pushes and reports
+ * each pulled job before the next pull; ticks run one at a time). Drawer kicks end too, since one
  * left waiting would open the drawer on the re-add; `drawer_opens` holds no job id, so its audit
  * row is unchanged. Unbatched, unlike `failUnprintableBluetoothJobs`: the pull that carries an
- * Unpair's outcome acts on it once, so no later pull would end the rest.
+ * Unpair's outcome acts on it once, so no later pull would end the rest (`accept`,
+ * `apps/server/src/printer-bluetooth-commands.ts`, drops the command once its outcome arrives).
  */
 export async function endUnpairedPrinterJobs(
   tx: Transaction,

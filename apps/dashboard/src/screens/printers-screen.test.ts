@@ -7695,26 +7695,58 @@ describe("A Bluetooth printer whose agent cannot print to it", () => {
     expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
     expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
   });
+});
 
-  it("words a job ended because its printer was unpaired, and counts no attempts for it", async () => {
+describe("A job ended because its printer was unpaired", () => {
+  const bluetoothPrinter: Printer = {
+    ...printers[0]!,
+    id: "p5",
+    name: "Barra Bluetooth",
+    transport: "bluetooth",
+    host: null,
+    port: null,
+    localKey: "5A:4A:45:D4:FB:BB",
+  };
+  const unpaired: PrintJobRow = {
+    id: "j11",
+    printerId: "p5",
+    status: "failed",
+    canResend: true,
+    attempts: 5,
+    lastError: "printer.unpaired",
+    createdAt: "2026-09-29T17:00:00.000Z",
+    deliveredAt: null,
+  };
+
+  async function mountWithUnpaired() {
+    const api = stubApi({
+      listPrinters: vi.fn().mockResolvedValue([...printers, bluetoothPrinter]),
+      listRecentJobs: vi.fn().mockResolvedValue([unpaired, jobs[0]]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    return el;
+  }
+
+  it("words the job's reason, and counts no attempts for it", async () => {
+    const el = await mountWithUnpaired();
+
+    expect(text(el, "[data-test=job-error-j11]")).toBe(
+      "La impresora se desvinculó, así que este trabajo no se volverá a enviar.",
+    );
+    expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
+    expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
+  });
+
+  it("words the job's reason in English", async () => {
     const before = currentLocale();
     setLocale("en");
     try {
-      const unpaired = job({
-        status: "failed",
-        canResend: true,
-        attempts: 5,
-        lastError: "printer.unpaired",
-      });
-      const { el } = await mountWith({
-        listRecentJobs: vi.fn().mockResolvedValue([unpaired, jobs[0]]),
-      });
+      const el = await mountWithUnpaired();
 
       expect(text(el, "[data-test=job-error-j11]")).toBe(
-        "The printer was unpaired before this job printed.",
+        "The printer was unpaired, so this job will not be sent again.",
       );
-      expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
-      expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
     } finally {
       setLocale(before);
     }
