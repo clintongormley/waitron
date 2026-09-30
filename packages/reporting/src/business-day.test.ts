@@ -87,65 +87,68 @@ describe("businessDayRangeWindow", () => {
       expect(rows[0]!.range).toBe(expected ? 1 : 0);
     }
   });
+});
 
-  describe("readLocationClock", () => {
-    it("reads a location's zone and its cutover as HH:MM", async () => {
-      const [location] = await suite.db
-        .insert(locations)
-        .values({
-          name: "Sala",
-          invoiceLocales: ["es"],
-          operationDescription: "Restaurante",
-          timeZone: "Atlantic/Canary",
-          dayCutover: "04:30:00",
-        })
-        .returning({ id: locations.id });
+describe("readLocationClock", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
-      const clock = await withTransaction(suite.db, (tx) => readLocationClock(tx, location!.id));
+  it("reads a location's zone and its cutover as HH:MM", async () => {
+    const [location] = await suite.db
+      .insert(locations)
+      .values({
+        name: "Sala",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurante",
+        timeZone: "Atlantic/Canary",
+        dayCutover: "04:30:00",
+      })
+      .returning({ id: locations.id });
 
-      expect(clock).toEqual({ timeZone: "Atlantic/Canary", dayCutover: "04:30" });
-    });
+    const clock = await withTransaction(suite.db, (tx) => readLocationClock(tx, location!.id));
 
-    it("throws a plain Error for a location the database does not hold", async () => {
-      const missing = randomUUID();
-      await expect(
-        withTransaction(suite.db, (tx) => readLocationClock(tx, missing)),
-      ).rejects.toThrow(`reporting: no location ${missing}`);
-    });
+    expect(clock).toEqual({ timeZone: "Atlantic/Canary", dayCutover: "04:30" });
   });
 
-  describe("validatedRangeWindow", () => {
-    const input = {
-      fromBusinessDay: "2026-08-04",
-      toBusinessDay: "2026-08-05",
-      timeZone: TZ,
-      dayCutover: CUTOVER,
-    };
+  it("throws a plain Error for a location the database does not hold", async () => {
+    const missing = randomUUID();
+    await expect(withTransaction(suite.db, (tx) => readLocationClock(tx, missing))).rejects.toThrow(
+      `reporting: no location ${missing}`,
+    );
+  });
+});
 
-    it.each([
-      ["time zone", { timeZone: "Mars/Olympus" }, /time zone/],
-      ["cutover", { dayCutover: "5:00" }, /cutover/],
-      ["business day", { toBusinessDay: "2026-02-30" }, /not a real calendar date/],
-      ["range", { fromBusinessDay: "2026-08-06" }, /on or before/],
-    ])("refuses a bad %s before building a window", (_what, change, message) => {
-      expect(() => validatedRangeWindow({ ...input, ...change })).toThrow(message);
-    });
+describe("validatedRangeWindow", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
+  const input = {
+    fromBusinessDay: "2026-08-04",
+    toBusinessDay: "2026-08-05",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+  };
 
-    it("builds the range's window: its first cutover in, the cutover after its last day out", async () => {
-      const window = validatedRangeWindow(input);
-      const { rows } = await suite.db.execute<{
-        first: 0 | 1;
-        before: 0 | 1;
-        last: 0 | 1;
-        after: 0 | 1;
-      }>(
-        sql`select ${window(sql`${"2026-08-04T03:00:00.000Z"}`)} as first,
-          ${window(sql`${"2026-08-04T02:59:59.999Z"}`)} as before,
-          ${window(sql`${"2026-08-06T02:59:59.999Z"}`)} as last,
-          ${window(sql`${"2026-08-06T03:00:00.000Z"}`)} as after`,
-      );
-      expect(rows[0]).toEqual({ first: 1, before: 0, last: 1, after: 0 });
-    });
+  it.each([
+    ["time zone", { timeZone: "Mars/Olympus" }, /time zone/],
+    ["cutover", { dayCutover: "5:00" }, /cutover/],
+    ["business day", { toBusinessDay: "2026-02-30" }, /not a real calendar date/],
+    ["range", { fromBusinessDay: "2026-08-06" }, /on or before/],
+  ])("refuses a bad %s before building a window", (_what, change, message) => {
+    expect(() => validatedRangeWindow({ ...input, ...change })).toThrow(message);
+  });
+
+  it("builds the range's window: its first cutover in, the cutover after its last day out", async () => {
+    const window = validatedRangeWindow(input);
+    const { rows } = await suite.db.execute<{
+      first: 0 | 1;
+      before: 0 | 1;
+      last: 0 | 1;
+      after: 0 | 1;
+    }>(
+      sql`select ${window(sql`${"2026-08-04T03:00:00.000Z"}`)} as first,
+        ${window(sql`${"2026-08-04T02:59:59.999Z"}`)} as before,
+        ${window(sql`${"2026-08-06T02:59:59.999Z"}`)} as last,
+        ${window(sql`${"2026-08-06T03:00:00.000Z"}`)} as after`,
+    );
+    expect(rows[0]).toEqual({ first: 1, before: 0, last: 1, after: 0 });
   });
 });
 
