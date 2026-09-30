@@ -1966,7 +1966,8 @@ export class PrintersScreen extends LitElement {
         >${t("action.edit")}</wt-button
       >
       ${
-        // Unpair switches the printer off too (the job pull, `apps/server/src/print-api.ts`).
+        // A succeeded Unpair switches the printer off unless another box can print to it (the job
+        // pull, `apps/server/src/print-api.ts`).
         unpair !== nothing
           ? unpair
           : html`<wt-button

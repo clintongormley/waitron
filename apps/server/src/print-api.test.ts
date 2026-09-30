@@ -3500,7 +3500,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       expect(await isActive(printerId)).toBe(true);
     });
 
-    it("switches the printer off when the other box's report is older than the discovered list keeps it", async () => {
+    it("switches the printer off when the other box's report is older than fifteen seconds", async () => {
       const app = mountApp();
       const holder = await joinAndAccept(app, "Holder");
       const other = await joinAndAccept(app, "Other");

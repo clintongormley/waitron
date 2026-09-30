@@ -5903,7 +5903,7 @@ describe("printers-screen Bluetooth pairing", () => {
     }
   });
 
-  describe("Unpair stands in for Disable, and Add again stays off until calibration finishes", () => {
+  describe("Unpair stands in for Disable, and Add again switches it off again unless calibration is saved", () => {
     const saved: Printer = {
       ...btPrinter("p9", ADDRESS, false),
       paperWidth: "58mm",
