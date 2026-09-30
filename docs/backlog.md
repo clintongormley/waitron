@@ -5662,6 +5662,26 @@ ongoing overhaul listed at the top of Track A.
   sits beside the action, so a message too long to share the row takes the buttons below the list
   with it; C97, queued next, is to move it to the bottom of the form. Layout only,
   `apps/dashboard/src/screens/login-screen.ts`.
+- **A new passkey is listed under the person's email, with their name as its display name — DONE
+  (C99, owner 2026-09-30, on Google Password Manager showing a waitron.local passkey with Username
+  "Clinton Gormley" and Display name "No display name").** `beginPasskeyRegistration`
+  (`packages/identity/src/passkey.ts`) now sends the person's email as the passkey's `user.name` and
+  their display name as `user.displayName`; before, it sent the display name as `user.name` and no
+  display name, so the library sent an empty one. A person with no email gets their display name
+  for both. The name a person gives the passkey ("Laptop") still
+  lives only in Waitron's own list. What was checked: the two cases in
+  `packages/identity/src/passkey.test.ts` check the options the server sends; the result has not
+  yet been seen in a password manager. Still open: nothing in Waitron updates a passkey's username
+  or display name after it is created, so a passkey created before this change, or any passkey after
+  the person's email or display name later changes, is expected to keep showing the old values in
+  the password manager (not observed); removing it and adding it again should replace them. WebAuthn
+  Level 3 (a W3C Recommendation since 25 August 2026, §5.1.10.4) defines
+  `PublicKeyCredential.signalCurrentUserDetails`, which asks the password manager to update a
+  passkey's name and display name, but "Clients provide this functionality opportunistically" and
+  "signal methods do not indicate whether the operation succeeded"; it has not been tried in a
+  browser, and Waitron does not call it. Nor does it call `@simplewebauthn/browser`'s
+  `sendSignal()`, which wraps these signal methods (see "The version-14 browser helpers are
+  unused"); campaign item C101 is to call them.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
@@ -8540,10 +8560,12 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
   That is the same open question #432 raised and #450 restated: whether low floors are house style. It
   is one decision for every manifest, not one per bump.
 - **The version-14 browser helpers are unused.** `sendSignal()`, `browserSupportsPasskeys()` and
-  `getBrowserCapabilities()` are new in 14.0.0 and nothing in the tree calls them. One of them is
-  adjacent to something the dashboard already does: the login screen gates on
-  `browserSupportsWebAuthnAutofill()`, and whether `browserSupportsPasskeys()` would improve that gate
-  has not been assessed.
+  `getBrowserCapabilities()` are new in 14.0.0 and nothing in the tree calls them. `sendSignal()`
+  wraps the three signal methods, `signalCurrentUserDetails` among them, which could let an existing
+  passkey pick up the username and display name C99 changed (C99's entry); whether it does has not
+  been tried. `browserSupportsPasskeys()` is adjacent to something the dashboard already does: the
+  login screen gates on `browserSupportsWebAuthnAutofill()`, and whether `browserSupportsPasskeys()`
+  would improve that gate has not been assessed.
 - **`verifyAuthenticationResponse` has no algorithm list to pin.** The registration ceremony now
   states its accepted algorithms on both halves. The assertion ceremony verifies against the stored
   public key and takes no such parameter (its argument list, `verifyAuthenticationResponse.js:28`),
