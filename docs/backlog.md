@@ -3533,7 +3533,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/adjustments-apply.ts`). On the till, a stored order in the counter's basket
       that matches what the server holds offers Give away and Discount on each dish, Discount the
       bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
-      (`apps/till/src/widgets/basket.ts`). The basket reads each line's sent state and price before
+      (`apps/till/src/widgets/basket.ts`). _(2026-09-30, B11d: an extra's row offers them too,
+      whole; see the B11d note under B11a, above.)_ The basket reads each line's sent state and price before
       an adjustment from `GET /api/working-orders/:id/lines` when it loads the order. It loads the
       order again after an adjustment is made, refused as out of date, or left unanswered while
       its dialog is open (`#reloadCounterOrder`, `apps/till/src/till-app.ts`), taking no edit
@@ -3582,8 +3583,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       decide whether the per-line cap should see bill discounts.
       _(2026-09-30: B11b's venue limit on a bill's total discount, above, can ask for a manager's
       PIN when the combined discount passes it; this per-reason cap is unchanged.)_
-    - **Not offered:** a comp or a discount of part of a dish with extras
-      (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
+    - **Not offered (part of a dish with extras is offered since B11d, below):** a comp or a
+      discount of part of a dish with extras (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
       during the build: its two rounded parts need not add up to the line). _(2026-09-30: counter
       orders are offered since B11c, above.)_ A run-it review found that exactly representable weighed cases

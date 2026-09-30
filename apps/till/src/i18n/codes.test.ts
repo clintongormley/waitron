@@ -303,6 +303,9 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
   expect(codeMessage("adjustment.weighed_partial", "en")).toBe(
     "Part of an item sold by weight or measure can't be given away or discounted. Discount the whole line instead",
   );
+  expect(codeMessage("adjustment.weighed_partial", "es")).toBe(
+    "Parte de un artículo que se vende al peso o por medida no se puede invitar ni descontar. Haz un descuento sobre la línea entera",
+  );
   expect(codeMessage("adjustment.quantity_invalid", "en")).toBe(
     "That quantity cannot be used on this line. Check how many are on it; an extra is done whole",
   );
