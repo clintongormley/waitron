@@ -270,8 +270,6 @@ async function statusFor(token: string, stored: StoredJoinHash): Promise<JoinSta
  * the same token hash — so one selector answers both questions and the joiner's cookie is set once, at
  * join, and never re-issued. Denied, lapsed and never-existed all fold into `not_approved`: the
  * joiner's recovery is identical in every case.
- *
- * The sweep and both reads share one transaction; the key is derived after it has closed.
  */
 export async function readJoinStatus(
   db: Database,
@@ -418,8 +416,7 @@ export async function acceptPrintAgentJoinRequest(
 /**
  * The mirror of {@link readJoinStatus} for a print agent, resolving the approved fallback against
  * `print_agents`. The pending read is filtered to this node's rows; the approved fallback reads
- * `print_agents` by id and `active`, with no node filter. Like it, the key is derived after the
- * transaction has closed.
+ * `print_agents` by id and `active`, with no node filter.
  */
 export async function readAgentJoinStatus(
   db: Database,

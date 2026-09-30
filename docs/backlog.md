@@ -677,26 +677,27 @@ lists the product as "no longer on this menu". A shortcut whose target a newly r
 simply disappears, with no notice. **Next action:** the owner confirms this meets §9, or asks for a
 notice when a shortcut disappears.
 
-**Some secret checks still hold the venue's write lock while scrypt runs.** The blocking
-`verifySecret` is gone: every check now derives the key with `verifySecretAsync`
-(`packages/identity/src/secret-hash.ts`) on Node's thread pool, so the event loop keeps turning.
+**Some secret checks still hold the venue's write lock while scrypt runs.** Every check against a
+stored hash from `packages/identity/src/secret-hash.ts` now derives the key with
+`verifySecretAsync` on Node's thread pool, so the event loop keeps turning while it runs.
 **Done (2026-09-30, lane A's A125):** the print agent's token (`authenticateAgent`,
 `packages/printing/src/agent.ts`, called by `requireAgent` in
-`apps/server/src/print-agent-session.ts`) reads the stored hash with no transaction open, derives
-the key, and only then opens a transaction that re-reads the row, refusing the token if the agent
-was revoked or re-keyed meanwhile, before writing its sighting; the two join-status readers
-(`readJoinStatus` and `readAgentJoinStatus`, `apps/server/src/join-requests.ts`) derive the key
-after the transaction holding their sweep and reads has closed, and their routes in
+`apps/server/src/print-agent-session.ts`) reads the stored hash and derives the key with no
+transaction open, then re-reads the row and refuses the token if the agent was revoked or re-keyed
+meanwhile, and takes the write lock only for its once-a-minute sighting write; the two join-status
+readers (`readJoinStatus` and `readAgentJoinStatus`, `apps/server/src/join-requests.ts`) derive the
+key after the transaction holding their sweep and reads has closed, and their routes in
 `apps/server/src/device-api.ts` and `apps/server/src/print-api.ts` open none; the setup reset
 proof (`matchesResetProof`, `apps/server/src/setup-api.ts`) awaits `verifySecretAsync`. New tests
 in `packages/printing/src/agent.test.ts` and `apps/server/src/join-requests.test.ts` show another
 writer committing while the key is derived (each failed before the change). Earlier, the device
-token (menus Task 9, `tryReadDevice`, `apps/server/src/device-session.ts`) and, in #900 (A126),
-`verifyPin` and `verifyPassword` and every caller (`credential.ts`, `manager-login.ts`,
-`profile.ts`, `apps/server/src/break-glass.ts`) moved the same way. The PIN, manager-login and
-profile checks still await the key while their caller's `withTransaction` (which is the write lock,
-`packages/db/src/tenancy.ts`) is open, so other writes wait while the key is derived, though the
-event loop now keeps turning. A search of the non-test callers of `verifyPersonCredential`,
+token (menus Task 9, `tryReadDevice`, `apps/server/src/device-session.ts`) moved to
+`verifySecretAsync` and off the write lock; in #900 (A126), `verifyPin` and `verifyPassword` and
+every caller (`credential.ts`, `manager-login.ts`, `profile.ts`, `apps/server/src/break-glass.ts`)
+moved to `verifySecretAsync` only. The PIN, manager-login and profile checks still await the key
+while their caller's `withTransaction` (which is the write lock, `packages/db/src/tenancy.ts`) is
+open, so other writes wait while the key is derived, though the event loop now keeps turning. A
+search of the non-test callers of `verifyPersonCredential`,
 `authorize` with an override, `loginManager`, `loginManagerById` and the `profile.ts` functions
 (2026-09-30) found every server route among them inside `withTransaction`: PIN login
 (`loginWithPin` in `mountTillApi`, `apps/server/src/till-api.ts`), the drawer override
@@ -706,10 +707,22 @@ event loop now keeps turning. A search of the non-test callers of `verifyPersonC
 (`apps/server/src/management-api.ts`, and `loginManagerById` in `promote-api.ts` and
 `mirror-bundle-api.ts`), and profile changes (`updateProfile` in `apps/server/src/me-api.ts`, and
 `withCredentialChange` in `apps/server/src/management-api.ts` around passkey registration and
-Google linking). **Next action:** move the PIN, manager-login and profile checks out of `withTransaction` wherever
-they sit inside one, as A125 did for the print agent. Still blocking the event loop, not covered by
-this entry's work: `hashSecret` derives with `scryptSync` (`secret-hash.ts`), so minting a token or
-setting a PIN or password stops the loop while it runs.
+Google linking). **Next action:** move the PIN, manager-login and profile checks out of
+`withTransaction` wherever they sit inside one, as A125 did for the print agent. Still blocking the
+event loop, not covered by this entry's work: `hashSecret` derives with `scryptSync`
+(`secret-hash.ts`), so minting a token or setting a PIN or password stops the loop while it runs;
+and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) does too. Inside the server it runs for three
+setup routes, each staged from `boot.ts` into `mountSetup` (`apps/server/src/setup-api.ts`): the
+configuration import (`stageConfiguration` → `stageConfigurationImport` →
+`decodeConfigurationBundle` → `decryptArtifact`, `apps/server/src/artifact-cipher.ts`, which
+refuses a wrong passphrase as `recovery.passphrase_invalid`), the archive restore
+(`stageRestore` → `stageRestoreRequest` → `validateArtifact`, `apps/server/src/restore.ts`) and
+the bucket restore (`stageBucketRestore` → `stageStreamRestore` → `prepareStreamRestore` →
+`unsealNodeState`, `apps/server/src/sealed-state.ts`); and for the
+configuration export (`encodeConfigurationBundle` → `encryptArtifact`, from
+`apps/server/src/configuration-export-api.ts`) and the recovery bundle download (`encryptBundle`,
+from `apps/server/src/recovery-bundle-api.ts`). `decryptBundle`
+(`apps/server/src/recovery-bundle.ts`) is reached only from `recovery-unpack-command.ts`.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns (naming the layout if it had shown it, otherwise the menu) until

@@ -223,8 +223,7 @@ const runReset = createErrorBoundary(RESET_STATUS, "setup.reset_failed");
 /**
  * Whether `personId` and `password` are the admin login the primary accepted for the adopt that
  * stopped partway. It does NOT establish that the admin is still active on the primary, and the
- * one-time code is not checked again. The key is derived on the thread pool, so the event loop keeps
- * turning meanwhile.
+ * one-time code is not checked again.
  */
 async function matchesResetProof(
   proof: unknown,
