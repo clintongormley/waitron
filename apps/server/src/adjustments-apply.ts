@@ -39,6 +39,7 @@ import {
   decimalToThousandths,
   grossOf,
   MONEY_SCALE,
+  multiplyDecimal,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
@@ -85,7 +86,9 @@ export interface AdjustmentAsk {
 
 export interface AdjustmentArgs extends AdjustmentAsk {
   submissionId: string;
-  /** Someone at or above the reason's approver role, when the operator is below its apply role. */
+  /** Someone at or above the plan's approver role: the higher of the reason's approver role (when
+   * the operator is below its apply role) and a manager (when the bill's discount limit asks for
+   * one). */
   approver?: { personId: string; pin: string };
 }
 
@@ -96,8 +99,9 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** The role that must approve, or null when the operator may apply it alone. */
   needsApproval: PersonRoleValue | null;
-  /** This discount, or this cancel, leaves the bill's discount past the venue's limit, so someone at
-   * or above a manager must approve. */
+  /** The operator is below a manager, and this discount takes the bill past the venue's limit, or
+   * this cancel leaves it past the limit with a larger share than before; whoever approves is then
+   * at least a manager. */
   overBillDiscountLimit: boolean;
   /** Each line the action changes: what it loses, and the rows the changed part becomes. */
   lines: {
@@ -495,15 +499,18 @@ async function planAdjustment(
 }
 
 /**
- * The bill's discount and its price before adjustments, over its rows at `quantityOf`. The discount
- * is each row's list price less its price, none for a row priced above its list price, and left
- * out for the rows this bill's own comp records prove comped. A comped row that has moved to another bill is not proven comped there, so there
- * it counts as discount, which errs toward asking for a manager.
+ * The bill's discount and its price before adjustments, over its rows at `quantityOf`, each row
+ * priced by `priceOf`. The discount is each row's list price less its price, none for a row priced
+ * above its list price, and left out for the rows this bill's own comp records prove comped. A
+ * comped row that has moved to another bill is not proven comped there, so there it counts as
+ * discount, which errs toward asking for a manager. `priceOf` is `gross` for the cents the bill
+ * shows, or `exactly` for the unrounded price a cancel's rise is also judged on.
  */
 function shareOf(
   rows: readonly Row[],
   comped: CompedLines,
   quantityOf: (row: Row) => number,
+  priceOf: (unitCents: number, quantity: number) => Decimal,
 ): BillShare {
   const rowIds = new Set(comped.rows);
   const dishIds = new Set(comped.dishes);
@@ -511,19 +518,19 @@ function shareOf(
     rowIds.has(row.id) ||
     dishIds.has(row.id) ||
     (row.parentLineId !== null && dishIds.has(row.parentLineId));
+  const listed = (row: Row) => priceOf(row.list ?? row.unit, quantityOf(row));
   const discounts = rows
     .filter((row) => !wasComped(row))
     .map((row) => {
-      const off = subtractDecimal(
-        listValue(row, quantityOf(row)),
-        gross(row.unit, quantityOf(row)),
-      );
+      const off = subtractDecimal(listed(row), priceOf(row.unit, quantityOf(row)));
       return compareDecimal(off, ZERO) > 0 ? off : ZERO;
     });
-  return {
-    discount: sumDecimals(discounts),
-    value: sumDecimals(rows.map((row) => listValue(row, quantityOf(row)))),
-  };
+  return { discount: sumDecimals(discounts), value: sumDecimals(rows.map(listed)) };
+}
+
+/** `unitCents × quantity`, not rounded to the cent. */
+function exactly(unitCents: number, quantity: number): Decimal {
+  return multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity));
 }
 
 /**
@@ -543,21 +550,25 @@ async function pastBillDiscountLimit(
   const { maxBillDiscountBp } = await readAdjustmentSettings(tx);
   if (maxBillDiscountBp === null) return false;
   const comped = await readCompedLines(tx, orderId);
-  const before = shareOf(rows, comped, (row) => row.quantity);
   const { cancelLeft } = ask;
   if (cancelLeft === null) {
+    const now = shareOf(rows, comped, (row) => row.quantity, gross);
     return billDiscountNeedsManager({
       limitBp: maxBillDiscountBp,
-      priorDiscount: before.discount,
+      priorDiscount: now.discount,
       reduction: ask.reduction,
-      billValue: before.value,
+      billValue: now.value,
       actorRole: ask.actorRole,
     });
   }
+  const left = (row: Row) => cancelLeft.get(row.id) ?? row.quantity;
+  const all = (row: Row) => row.quantity;
   return billCancelNeedsManager({
     limitBp: maxBillDiscountBp,
-    before,
-    after: shareOf(rows, comped, (row) => cancelLeft.get(row.id) ?? row.quantity),
+    before: shareOf(rows, comped, all, gross),
+    after: shareOf(rows, comped, left, gross),
+    exactBefore: shareOf(rows, comped, all, exactly),
+    exactAfter: shareOf(rows, comped, left, exactly),
     actorRole: ask.actorRole,
   });
 }

@@ -128,7 +128,7 @@ export interface BillDiscountRequest {
 /**
  * Whether this discount takes the bill's discounts past the venue's limit when the operator is
  * below a manager, so someone at or above a manager must approve it. Reaching the limit exactly is
- * allowed; the comparison is exact, never rounded to the cent.
+ * allowed; the amounts are in the cents the bill shows, and the share is compared without rounding.
  */
 export function billDiscountNeedsManager(req: BillDiscountRequest): boolean {
   const { limitBp } = req;
@@ -147,26 +147,30 @@ export interface BillShare {
   value: Decimal;
 }
 
-/** A cancel asked on a bill: its share before the cancel and on the rows the cancel leaves. */
+/** A cancel asked on a bill: its share before and after the cancel, priced in the cents the bill
+ * shows and priced exactly. */
 export interface BillCancelRequest {
   limitBp: number | null;
   before: BillShare;
   after: BillShare;
+  exactBefore: BillShare;
+  exactAfter: BillShare;
   actorRole: PersonRoleValue;
 }
 
 /**
- * Whether a cancel leaves the bill's discount share past the venue's limit and higher than it was,
- * while the operator is below a manager. A share that does not rise asks nobody, so a cancel from a
- * bill a manager already took past the limit needs no one; a cancel that empties the bill leaves no
- * share. Shares are compared by cross-multiplying, exactly.
+ * Whether a cancel by an operator below a manager leaves the bill's discount share past the venue's
+ * limit, judged on `after`, and raises the share on both the shown and the exact prices, so a rise
+ * that rounding alone makes or hides asks nobody. A cancel that empties the bill leaves no share.
  */
 export function billCancelNeedsManager(req: BillCancelRequest): boolean {
-  const { limitBp, before, after } = req;
+  const { limitBp, before, after, exactBefore, exactAfter } = req;
   if (limitBp !== null && !isPercentBp(limitBp)) throw new RangeError("limitBp is not in 1..10000");
   for (const [name, share] of [
     ["before", before],
     ["after", after],
+    ["exactBefore", exactBefore],
+    ["exactAfter", exactAfter],
   ] as const) {
     if (compareDecimal(share.discount, ZERO) < 0 || compareDecimal(share.value, ZERO) < 0) {
       throw new RangeError(`${name} is negative`);
@@ -178,15 +182,15 @@ export function billCancelNeedsManager(req: BillCancelRequest): boolean {
       multiplyDecimal(after.discount, decimal("10000")),
       multiplyDecimal(after.value, decimal(String(limitBp))),
     ) > 0;
-  const rises =
+  const rises = (from: BillShare, to: BillShare) =>
     compareDecimal(
-      multiplyDecimal(after.discount, before.value),
-      multiplyDecimal(before.discount, after.value),
+      multiplyDecimal(to.discount, from.value),
+      multiplyDecimal(from.discount, to.value),
     ) > 0;
-  return past && rises;
+  return past && rises(before, after) && rises(exactBefore, exactAfter);
 }
 
-/** The policy an adjustment was evaluated under, kept on the adjustment so a later edit of the
+/** The reason's policy an adjustment was evaluated under, kept on the adjustment so a later edit of the
  * reason never rewrites what was approved. */
 export interface AdjustmentPolicySnapshot {
   actions: AdjustmentAction[];
