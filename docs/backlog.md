@@ -5788,7 +5788,7 @@ ongoing overhaul listed at the top of Track A.
   `sendSignal()`, which wraps these signal methods (see "The version-14 browser helpers are
   unused"); campaign item C101 is to call them.
 - **The passkey list says when each passkey was last used and which password manager holds it — DONE
-  (C100, owner 2026-09-30: "if i add a passkey then delete it in google password manager, then add
+  (C100, #945, owner 2026-09-30: "if i add a passkey then delete it in google password manager, then add
   another one, i have two passkeys listed in waitron but only one in google, and i'm not sure which
   one it is").** Each passkey on the Profile screen's Security tab now has a second line: the
   password manager that holds it ("Google Password Manager", "1Password", …) and "Last used
