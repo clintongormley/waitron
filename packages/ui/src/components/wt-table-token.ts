@@ -171,11 +171,15 @@ export class WtTableToken extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
+      /* nowrap comes from text-wrap because no-hardcoded-chrome.test.ts's keyword-colour scan
+         rejects the older shorthand, whose property name begins with a colour keyword. */
       .party-name {
         max-width: 100%;
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
-        overflow-wrap: anywhere;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-wrap: nowrap;
       }
 
       .occupancy {

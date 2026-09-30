@@ -4175,8 +4175,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     rules. `tab.not_table_tab` stays in the till's table refusals (`TABLE_REFUSALS`) although only
     the old tab join and merge raise it, which the till no longer calls; it goes with Task 13
     _(Task 13: gone)_. A table the server lists with no party opens no bill any more. On a
-    390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines), and on the
-    floor map a joined party's tables can break inside a word on a narrow table token.
+    390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines). _(Campaign
+    item C82: on the floor map the party's name now stays on one line and ends in an ellipsis
+    instead of breaking inside a word; the list card's wrapping is unchanged (it breaks inside a
+    word only when the word is wider than the card).)_ Open (seen by C82 at 390 and 1280 px, not
+    measured further): a token for four seats or fewer, or with no seat count set (the map's two
+    smallest sizes; `sizeForCapacity` picks the size from the seat count and gives a table with
+    none the second-smallest), is so narrow that the name shows only its first few letters ("T…"
+    at two seats, "Ter…" at four), and the table's own label, its covers and its "to serve" chip
+    spill past the token's edge. The map's token sizes (`wt-floor-canvas`) decide that; not
+    queued.
   - **Task 12 DONE (2026-09-29, #888, main `ba1458c45`): the till moves a bill to
     another table or the counter, and a counter order to a table, through Task 7's
     `POST /api/bills/:id/move`; and it pays a moved bill the way the server takes it.** This is

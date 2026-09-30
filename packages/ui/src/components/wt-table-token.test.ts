@@ -53,11 +53,20 @@ test("names the party seated there under the table's label, and nothing for a ta
   expect(unnamed.shadowRoot!.querySelector("[data-party-name]")).toBeNull();
 });
 
-test("the party's name wraps inside a token narrower than it is", async () => {
-  const el = await mountToken(table({ state: "open-tab", partyName: "Anastasiadoulopoulou" }));
+test("a party's name wider than the token stays on one line, cut short with an ellipsis", async () => {
+  const short = await mountToken(table({ state: "open-tab", partyName: "Ana" }));
+  const el = await mountToken(table({ state: "open-tab", partyName: "Terraza 10, 11" }));
+  short.style.width = "80px";
   el.style.width = "80px";
+  const oneLine = short.shadowRoot!.querySelector<HTMLElement>("[data-party-name]")!;
   const name = el.shadowRoot!.querySelector<HTMLElement>("[data-party-name]")!;
-  expect(name.scrollWidth).toBeLessThanOrEqual(name.clientWidth);
+  const card = el.shadowRoot!.querySelector<HTMLElement>(".card")!;
+  expect(name.scrollWidth).toBeGreaterThan(name.clientWidth);
+  expect(name.offsetHeight).toBe(oneLine.offsetHeight);
+  expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
+  expect(getComputedStyle(name).overflow).toBe("hidden");
+  expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
+  expect(name.textContent).toBe("Terraza 10, 11");
 });
 
 test("the party's name paints from the small-font and bold-weight tokens", async () => {
