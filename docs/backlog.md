@@ -3418,7 +3418,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the second re-creates the line trigger with the column in both unchanged-column lists). The
     printed receipt, the till's open bill and its on-screen receipt show that first price before the
     new one (`12,00 € -> 0,00 €` on paper: none of the printer character sets has `→`, pinned in
-    `apps/server/src/receipt-ticket.test.ts`). _(2026-09-30, C90: the printed receipt and the
+    `apps/server/src/receipt-ticket.test.ts`). _(2026-09-30, C90, #932: the printed receipt and the
     till's on-screen receipt no longer do. Every row shows its first price, and after each dish and
     its extras comes one line for each comp or discount made on them (`Invitación -12,00 €`,
     `Descuento 20% -2,40 €`, `Descuento -1,00 €`); a discount on the whole bill is its own line
@@ -3725,7 +3725,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - a bill's invoice is issued when it is fully paid, several payments may come before it, and lines
     can still be split off after a contribution;
   - discounts reduce the line, comps show at €0.00 with the original price, and weighed items take
-    discounts to the nearest cent; _(2026-09-30, C90: the receipt now prints the dish at its full
+    discounts to the nearest cent; _(2026-09-30, C90, #932: the receipt now prints the dish at its full
     price with the comp or discount on a line of its own beneath it.)_
   - an item is credited to whoever owns the draft when it is submitted, and adjustment rates are
     measured against those credits.
