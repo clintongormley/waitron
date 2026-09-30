@@ -122,15 +122,16 @@ export interface Host {
    * probe results, and treats a throw as "nothing marked". */
   markPagePrinters?(devices: DiscoveredDevice[]): Promise<DiscoveredDevice[]>;
   /** Turns a claimed job's connection facts into a {@link PrinterTarget} the transport can send to —
-   * for a local job, mapping its `localKey` to the box's current device path. Throws when the device
-   * is gone, so the loop marks the job failed rather than sending nowhere. */
+   * for a local job, mapping its `localKey` to a device path from the host's device list, which a
+   * host may take from a recent listing rather than a new one. Throws when the device is not in that
+   * list, so the loop marks the job failed rather than sending nowhere. */
   resolve(job: WireJob): Promise<PrinterTarget>;
   /** Attempts to pair a Bluetooth printer by MAC, returning its `localKey` on success. The PIN is
    * the operator's, handed over only if the printer asks for one; it never goes into a log line, an
    * error or the result. */
   pair(mac: string, pin?: string): Promise<PairResult>;
   /** Every bonded Bluetooth device. Throws when the Bluetooth side cannot be listed. Unlike
-   * {@link visibleDevices}, it includes devices no job can be delivered to yet. */
+   * {@link visibleDevices}, it also lists a paired device this host cannot print to. */
   pairedBluetooth(): Promise<PairedBluetoothDevice[]>;
   /** Removes the bond; an address BlueZ no longer knows counts as removed. */
   forgetBluetooth(mac: string): Promise<BluetoothCommandResult>;

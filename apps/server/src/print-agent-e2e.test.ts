@@ -368,6 +368,98 @@ describe("print-agent end to end", () => {
     expect(await jobStatus(enqueuedAfterRevoke.jobId)).toBe("queued");
   });
 
+  it("prints a Bluetooth calibration print through the box's own device layer, and ends it done", async () => {
+    const MAC = "5A:4A:45:D4:FB:BC";
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    pairingMode.open();
+    mountPrintApi(
+      app,
+      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      noopLog,
+    );
+    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountNodeApi(
+      app,
+      {
+        nodeId: cfg.nodeId,
+        acceptingSales: true,
+        environment: "preproduction",
+        readMembership: async () => null,
+      },
+      noopLog,
+    );
+    // The radio is faked and no USB printer is attached; the Bluetooth device path is the production one.
+    const sysfsRoot = await mkdtemp(join(tmpdir(), "print-agent-e2e-bt-"));
+    try {
+      const devices = createLinuxDevices({
+        sysfsRoot,
+        bluetooth: {
+          scan: async () => [],
+          pair: async () => ({ ok: false, error: "no fake" }),
+          paired: async () => [{ mac: MAC, name: "BlueTooth Printer" }],
+          forget: async () => ({ ok: false, error: "no fake" }),
+        },
+      });
+      const radio = new FakeSink();
+      const host = fakeHost({
+        config: { serverUrl: BASE, name: "Bluetooth printing agent" },
+        transport: new RoutingTransport({
+          network_tcp: new FakeSink(),
+          usb: new FakeSink(),
+          bluetooth: radio,
+        }),
+        visibleDevices: () => devices.visibleDevices(),
+        pairedBluetooth: () => devices.pairedBluetooth(),
+        bluetoothPrinting: () => devices.bluetoothPrinting(),
+        resolve: (job) => devices.resolve(job),
+        fetch: (input, init) => Promise.resolve(app.request(input, init)),
+      });
+      host.now = Date.now;
+      const agent = createAgent({ host });
+      await agent.runOnce();
+      const joinId = (await host.token())!.split(".")[0]!;
+      const choice = host.statuses.find(
+        (status) => status.verificationCode !== undefined,
+      )!.verificationCode;
+      expect(
+        (
+          await send(app, "POST", `/management-api/print-agent-join-requests/${joinId}/accept`, {
+            cookie: managerCookie,
+            body: { choice },
+          })
+        ).status,
+      ).toBe(204);
+      const created = await send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: { name: "Barra Bluetooth impresora", transport: "bluetooth", localKey: MAC },
+      });
+      expect(created.status).toBe(201);
+      const printerId = ((await created.json()) as { id: string }).id;
+      const test = await send(
+        app,
+        "POST",
+        `/management-api/printers/${printerId}/character-table-test`,
+        { cookie: managerCookie, body: { startTable: 0 } },
+      );
+      expect(test.status).toBe(202);
+      const { jobId } = (await test.json()) as { jobId: string };
+
+      await agent.runOnce();
+      await agent.runOnce();
+
+      expect(await jobStatus(jobId)).toBe("done");
+      const { rows } = await suite.db.execute<{ payload: Uint8Array }>(
+        sql`select payload from print_jobs where id = ${jobId}`,
+      );
+      expect(radio.written).toHaveLength(1);
+      expect(radio.written[0]!.printerId).toBe(printerId);
+      expect(Buffer.from(radio.written[0]!.bytes).equals(Buffer.from(rows[0]!.payload))).toBe(true);
+    } finally {
+      await rm(sysfsRoot, { recursive: true, force: true });
+    }
+  });
+
   it("ends a Bluetooth calibration print failed, with its reason, when the agent has the printer paired but cannot print to it", async () => {
     const MAC = "5A:4A:45:D4:FB:BB";
     const app = new Hono();
@@ -389,8 +481,8 @@ describe("print-agent end to end", () => {
       },
       noopLog,
     );
-    // The box's own device layer, with the radio faked and no USB printer attached; its Bluetooth
-    // device path is the production one.
+    // The box's own device layer, with the radio faked and no USB printer attached, behind a host
+    // that reports it cannot print over Bluetooth.
     const sysfsRoot = await mkdtemp(join(tmpdir(), "print-agent-e2e-bt-"));
     try {
       const devices = createLinuxDevices({
@@ -412,7 +504,7 @@ describe("print-agent end to end", () => {
         }),
         visibleDevices: () => devices.visibleDevices(),
         pairedBluetooth: () => devices.pairedBluetooth(),
-        bluetoothPrinting: () => devices.bluetoothPrinting(),
+        bluetoothPrinting: () => false,
         resolve: (job) => devices.resolve(job),
         fetch: (input, init) => Promise.resolve(app.request(input, init)),
       });

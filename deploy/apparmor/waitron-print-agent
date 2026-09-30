@@ -43,6 +43,12 @@
 # sender, and pairing still worked. `Agent1.Release`, which bluetoothd sends when it drops an agent
 # itself, is not allowed: the stand-in never sends it.
 #
+# Printing to a Bluetooth printer opens an RFCOMM socket (apps/print-agent/src/rfcomm-send.py), which
+# the template's `network,` rule allows; no rule was added for it. Probe run 36656859928 ran that
+# script in the agent's container on a runner whose kernel has no Bluetooth: under this profile the
+# kernel refused the socket for that (errno 97), and under this profile plus `deny network bluetooth`
+# the profile refused it first (errno 13). Connecting to a real printer under it has not been run.
+#
 # BlueZ's signals and its calls to the agent are allowed only from an unconfined sender, which the
 # stand-in was (root, no profile). A sender cannot be matched by its well-known name:
 # `peer=(name=org.bluez)` on the receive rules refused both scan signals on the A129 runs. A

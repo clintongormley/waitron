@@ -2223,7 +2223,7 @@ use them as defaults for other printers.
 cash-drawer question from the receipt test, finder codes use `nn-W`/`nn-8`, and clicking a printer
 opens its status and connection details. Bluetooth scans show progress and report failures, but real
 Bluetooth discovery and delivery remain hardware-unverified; the per-device Bluetooth delivery
-connection is still unimplemented in `liveBtDevicePath`.
+connection was built later by A140 (below).
 
 - **The setup-page link is unproven on the box.** The print agent now builds it from
   `WAITRON_SETUP_URL` (set on the box as `WAITRON_PRINT_AGENT_SETUP_URL`, which `deploy/compose.yml`
@@ -2366,8 +2366,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - Add a printer lists the Bluetooth devices the agent's scan found beside network and USB
     printers, showing only those the agent marked as looking like a printer, and any device with a
     Pair or Forget status on screen, until **Show all devices** is pressed; opening Add a printer
-    again hides the others again. A note in the dialog says printing to a Bluetooth printer is not
-    available yet, even once it is paired.
+    again hides the others again. A note in the dialog said printing to a Bluetooth printer was not
+    available yet, even once it was paired, until A140.
   - **Pair** opens a dialog asking for the printer's PIN, checked against the agent's own rule (1 to
     16 printable characters with no spaces; `isBluetoothPin` in
     `packages/print-agent/src/client.ts`) in the screen and again by the server, which refuses a bad
@@ -2467,7 +2467,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `Agent1.Release` (its "your pairing agent is no longer needed" message), which the profile does
   not allow and the stand-in never sends; and printing over RFCOMM (Bluetooth's serial-cable
   channel) from INSIDE the print-agent container — the owner printed from the host only. The last
-  belongs with Bluetooth delivery, below, still unbuilt.
+  is now A140's box check (below).
 - **The owner's Bluetooth printer was listed only under Show all devices (A137, owner 2026-09-29)
   — FIXED where the tests reach (#894); the cause on the box is not confirmed.** The agent's scan asked
   `bluetoothctl info` about the first eight devices listed and no others, and each scan's answer
@@ -2551,7 +2551,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   a device path, that test failed with `liveBtDevicePath`'s "resolution not implemented" error.
   That test and the A139 end-to-end case both use a stand-in for the Bluetooth adapter, so what the
   box's real adapter reports as paired is still unchecked. The server's forget route takes an agent and an address, never a printer, so it had no
-  switched-on check to change (read, not run: `apps/server/src/print-api.ts`).
+  switched-on check to change (read, not run: `apps/server/src/print-api.ts`). _(2026-09-30, A140,
+  below: `liveBtDevicePath` now returns the printer's address instead of throwing, and an agent
+  built with A140 reports that it can print over Bluetooth, so once it reports the printer paired
+  again it takes those jobs; only an agent built with A139 but not A140, which sends `false`, still
+  ends them with A139's reason.
+  The suspect's receipt above was taken while `liveBtDevicePath` threw.)_
 - **A print job for a Bluetooth printer waited with no reason (A139, owner 2026-09-29: _"i tried
   to print the character set block, but nothing printed, the jobs just get stuck"_) — FIXED where
   the tests reach (#904); the printing itself is A140.** The cause,
@@ -2564,15 +2569,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `packages/printing/src/runtime.ts`), and the agent's device layer leaves every paired Bluetooth
   device out of the devices it can print to while `liveBtDevicePath` refuses to name a device path
   (the catch in `visibleDevices`, `apps/print-agent/src/linux-devices.ts`). Now each job pull also says whether
-  the agent can print over Bluetooth (a new optional `bluetoothPrinting` field; the box's agent sends
-  `false` while `liveBtDevicePath` is unbuilt, and an agent that predates the field sends nothing and
+  the agent can print over Bluetooth (a new optional `bluetoothPrinting` field; the box's agent sent
+  `false` until A140 (below), and an agent that predates the field sends nothing and
   changes nothing), and when it says it cannot, the server ends the waiting jobs of every Bluetooth
   printer that agent reports paired, unless the printer is disabled or another agent has lately
   reported it can print to it (below): failed, with no attempts left,
   so they are not retried, at most `PULL_BATCH_LIMIT` of them per pull
   (`failUnprintableBluetoothJobs`, `packages/printing/src/runtime.ts`),
-  recording `printer.bluetooth_printing_unavailable`, which the dashboard shows as "Printing to a
+  recording `printer.bluetooth_printing_unavailable`, which the dashboard showed as "Printing to a
   Bluetooth printer is not available yet." / "Aún no se puede imprimir en una impresora Bluetooth."
+  until A140 reworded it
   A document job ended this way counts as in trouble, being failed with no attempts left
   (`printJobInTrouble`, `apps/server/src/print-job-trouble.ts`), so the printer's alert fires for
   it, and that alert says the printer's jobs are "stuck" (`printer.jobs_waiting`,
@@ -2581,7 +2587,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `apps/server/src/print-api.test.ts` holds. On the Printers screen the edit and calibration dialog
   shows the last print it sent that failed, as "Not printed: <reason>" / "No se ha impreso:
   <reason>" (an agent's own text for any other failure); that dialog and a Bluetooth printer's row in
-  the printers list say Bluetooth printing is not available yet; and the jobs list shows "—", not
+  the printers list said Bluetooth printing is not available yet until A140; and the jobs list shows "—", not
   the stored attempt count, for such a job, whose Reprint makes a new job that ends the same way
   (read, not run). **Not covered:** a Bluetooth printer no agent reports paired still waits with no
   reason on the job, as a USB printer no agent sees does. With two agents, one that cannot print
@@ -2601,7 +2607,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)`, shown for every Bluetooth printer,
   `apps/dashboard/src/screens/printers-screen.ts`), the sentence of
   `printers.bluetooth_pair_note` saying Bluetooth printing is not available yet even once paired (`apps/dashboard/src/i18n/strings.ts`), and the jobs list's "—" in
-  place of the attempt count. The stored code also becomes that sentence as a job's reason, through
+  place of the attempt count. _(2026-09-30: A140, below, answers this list.)_ The stored code also becomes that sentence as a job's reason, through
   `jobReason` in the jobs list and in the calibration dialog's "Not printed: <reason>"
   (`apps/dashboard/src/screens/printers-screen.ts`); A140 decides whether jobs ended before it keep
   that reason text. Not run on the box.
@@ -2610,20 +2616,71 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   holds Edit, Disable and Forget pairing is reached only by scrolling the table sideways — which
   works against A141's aim of making Forget pairing easy to find (observed 2026-09-30 in
   screenshots taken during the A141 work, not kept; the A141 finish-branch run-it review (Codex)
-  reported the same at 390 px; both before A139's note under a Bluetooth printer's name landed, so
-  re-check with it). The cause is not investigated. The product editor's variants table
+  reported the same at 390 px; both before A139's note under a Bluetooth printer's name landed, and
+  A140 (below) has since removed that note). The cause is not investigated. The product editor's variants table
   keeps its row menu on screen at phone width with its own layout rule for a narrow table, and the
   phone-width cases in `apps/dashboard/src/widgets/product-editor.test.ts` check that each row menu
   ends inside the frame ([design-system.md](developers/design-system.md), under
   `--wt-cell-name-max-width`). In `apps/dashboard/src/screens/printers-screen.a11y.test.ts`, the
   390 px case for the Printers tab's list runs only the accessibility check; the one check that
   the screen does not scroll sideways is on a printer's status view (read, not run).
-- **Bluetooth delivery from a paired printer (A140) remains separate.** `liveBtDevicePath` throws
-  for every paired device, because no real per-printer radio path has been established on the box,
-  so `visibleDevices` leaves every paired device out and no Bluetooth job is handed to the box's
-  agent; the pairing plan must not make a paired device claim work or say that it can print. Until
-  A140 builds the sending, a paired printer's jobs end failed with a reason under the conditions
-  A139 lists (above).
+- **Printing to a paired Bluetooth printer over its serial channel (A140, owner 2026-09-29: the
+  calibration print _"nothing printed"_) — BUILT where the tests and CI reach (this PR); no real
+  printer has printed through it yet.** The box's agent sends a Bluetooth job's bytes over RFCOMM
+  (Bluetooth's serial-cable channel) to the printer's own address (`RfcommTransport`,
+  `apps/print-agent/src/rfcomm.ts`), so two paired printers never share a path. Node has no
+  Bluetooth sockets, so each job runs `apps/print-agent/src/rfcomm-send.py` under `python3-minimal`,
+  which the print-agent image now installs, with the bytes on its input. It always uses channel 1,
+  the channel the owner's printer printed on in the owner's own run from the box's host on
+  2026-09-29, after a reboot that left the printer `Paired: yes`, `Bonded: yes`, `Trusted: no`
+  (the campaign's lane-A `questions.md`, outside this repository, "Question 1 — reconnect after
+  reboot"): _"a host-side Python RFCOMM write (`AF_BLUETOOTH`/`BTPROTO_RFCOMM`, channel **1**,
+  `ESC @` + text) printed a slip, no PIN asked. Not measured: that write from INSIDE the
+  print-agent container, or under the shipped profile."_ Nothing looks up a printer's channel, so a
+  printer whose serial port is on another channel fails each job with the connection error. The
+  helper gets 20 seconds to connect and 20 more to send (Python's socket timeout applies to each
+  operation), and the agent kills it 5 seconds after both, 45 seconds in all
+  (`2 * timeoutMs + graceMs`, `apps/print-agent/src/rfcomm.ts`); none of these times was measured
+  on the box. The agent's
+  device layer now names a paired printer's address where it named no path
+  (`liveBtDevicePath`, `apps/print-agent/src/linux-devices.ts`) and reports
+  `bluetoothPrinting: true`. An agent that predates this still reports `false`, and the server still
+  ends its Bluetooth jobs as A139 describes (above), with the reason now worded "This printer's print
+  agent cannot print to Bluetooth printers." / "El agente de impresión de esta impresora no puede
+  imprimir en impresoras Bluetooth." — jobs ended before this change show the new wording too. The
+  Printers screen no longer says Bluetooth printing is not available yet (the row note, the edit and
+  calibration dialog's hint and the pairing note). The jobs list still shows "—" in place of the
+  attempt count for a job ended with that code (`apps/dashboard/src/screens/printers-screen.ts`),
+  because the code now means the job's agent is an older build that cannot print to Bluetooth, and
+  no attempt was made. A139's restart gap is left as it is: it needs two
+  agents, one of them older than this. The AppArmor profile needed no new rule, because the
+  template's `network,` rule covers the socket: probe run 36656859928, on a runner whose kernel has
+  no Bluetooth, got errno 97 (no Bluetooth in the kernel) under the shipped profile and errno 13 (the
+  profile refusing) under the same profile plus `deny network bluetooth`; image-smoke now runs the
+  sender under the shipped profile and fails on errno 13. **Not run, owed to the box:** a real
+  RFCOMM connection and print from inside the container under the shipped profile — CI's runners
+  cannot load Bluetooth at all (`modprobe bluetooth` found no module on 6.17.0-1022-azure) — and
+  whether the printer gets every byte before the connection closes. **What CI does not show:**
+  image-smoke runs the helper directly with its own arguments, not through `RfcommTransport`, and
+  only as far as creating the socket, since the runner's kernel has no Bluetooth; and
+  `scripts/deploy-image-env.test.ts` reads the Dockerfile and `package.json` as text, so it does not
+  prove the bundle's default helper path resolves inside the image. On macOS, 2026-09-30, a probe
+  bundled into `dist/` beside the built `rfcomm-send.py` sent `1b 40 41` on channel 1 through the
+  real helper with a fake socket, and with `dist/rfcomm-send.py` moved away it failed
+  `can't open file '…/dist/rfcomm-send.py': [Errno 2]`; that was the package's `dist/`, not the image.
+  **Follow-ups the review raised, not done here (owner's call):**
+  - `BluetoothTransport` (`packages/print-agent/src/transport.ts`, with its export and tests) is
+    now unused in production and still models a device-file path.
+  - `liveBtDevicePath`, the `btDevicePath` option and the try/catch in `visibleDevices`
+    (`apps/print-agent/src/linux-devices.ts`) can go; the `/dev/rfcomm…` fixtures in
+    `apps/print-agent/src/linux-devices.test.ts` model a shape production no longer has, and
+    changing them changes existing tests.
+  - A139's chain for an agent that cannot print to Bluetooth (`failUnprintableBluetoothJobs`, the
+    `bluetoothPrinting` wire field, the error code) has no shipped agent reporting `false` now: keep
+    it for an older agent, or delete it before go-live.
+  - The 10-second paired-listing reuse in `resolve()` (`PAIRED_REUSE_MS`,
+    `apps/print-agent/src/linux-devices.ts`) is a chosen window, not a measured one, and a printer
+    unpaired outside the agent resolves as attached for up to 10 seconds.
 - **The virtual PDF printer**, and a `print_jobs` retention sweep — nothing deletes a job today.
   Deleting a print job also deletes its `kitchen_print_jobs` link rows (the key is
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
@@ -9027,8 +9084,10 @@ notices; the server bundles (`scripts/bundle-node.mjs`, esbuild), the three SPAs
 copied to `/app/web/`) and the print-agent bundle (`apps/print-agent`'s `build`, the same
 `bundle-node.mjs`, copied to `/app/print-agent.js` in `deploy/Dockerfile`'s `print-agent` stage)
 carry npm packages whose `LICENSE` files are left behind by bundling. The app image's
-`/app/third-party/` holds notices for libvips and Litestream only, and the print-agent image has no
-`/app/third-party/` at all. Measured 2026-09-24 in the
+`/app/third-party/` holds notices for libvips and Litestream only, and the print-agent image's
+`/app/third-party/` holds only `python3-minimal/`: the Debian copyright files of python3-minimal
+and the packages its install added, and a `PACKAGES.txt` listing them (since A140; bluez's are not
+copied). Measured 2026-09-24 in the
 `chore/litestream-notices` worktree: `apps/server/src/bin.ts` bundled with `bundle-node.mjs`'s
 options (esbuild 0.28.2, default `legalComments`, which keeps legal comments at the end of the file)
 took in 81 npm packages, 76 of which have a `LICENSE` file, and the output kept one block of legal

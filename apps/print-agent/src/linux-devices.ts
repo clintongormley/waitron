@@ -1,16 +1,17 @@
 import dgram from "node:dgram";
 import { connectTcp } from "./tcp-probe.js";
 import { networkInterfaces } from "node:os";
-import type {
-  BluetoothCommandResult,
-  DiscoveredDevice,
-  Host,
-  HostLog,
-  PairResult,
-  PairedBluetoothDevice,
-  PrinterTarget,
-  VisibleDevice,
-  WireJob,
+import {
+  type BluetoothCommandResult,
+  type DiscoveredDevice,
+  type Host,
+  type HostLog,
+  type PairResult,
+  type PairedBluetoothDevice,
+  type PrinterTarget,
+  type VisibleDevice,
+  type WireJob,
+  isBluetoothAddress,
 } from "@waitron/print-agent";
 import { type BluetoothDevice, type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
 import { runBluetoothctl } from "./bluetooth-command.js";
@@ -41,6 +42,10 @@ export const BLUETOOTH_RECHECK_MS = 30_000;
 /** How often the process asks `checkBluetooth()`; the check itself decides whether to list. */
 export const BLUETOOTH_CHECK_TICK_MS = 5_000;
 const LIST_TIMEOUT_MS = 3_000;
+/** A Bluetooth job is resolved against a paired listing started this recently rather than a new
+ * one, so a pull's jobs do not each wait on BlueZ. A printer unpaired outside this agent within that
+ * time still resolves as attached. */
+export const PAIRED_REUSE_MS = 10_000;
 
 type LocalDevice = VisibleDevice & { devicePath: string };
 
@@ -77,6 +82,8 @@ export function createLinuxDevices(
   let availability: BluetoothAvailability | undefined;
   let listedAt = -Infinity;
   let listing: Promise<BluetoothDevice[]> | undefined;
+  let recentPaired: { startedAt: number; devices: BluetoothDevice[] } | undefined;
+  let forgottenAt = -Infinity;
 
   const record = (next: BluetoothAvailability): void => {
     const changed = availability === undefined || !sameAvailability(availability, next);
@@ -87,12 +94,15 @@ export function createLinuxDevices(
   };
 
   const listPaired = async (): Promise<BluetoothDevice[]> => {
-    listedAt = now();
+    const startedAt = now();
+    listedAt = startedAt;
     try {
       const paired = await bluetooth.paired();
       record({ available: true });
+      recentPaired = { startedAt, devices: paired };
       return paired;
     } catch (error) {
+      recentPaired = undefined;
       record(classifyBluetoothFailure(error));
       throw error;
     }
@@ -115,7 +125,18 @@ export function createLinuxDevices(
       ...(d.name !== undefined ? { model: d.name } : {}),
       devicePath: btDevicePath(d.mac),
     }));
-  const pairedLocal = async (): Promise<LocalDevice[]> => toLocal(await bluetooth.paired());
+  // A listing that started before a forget finished may still hold the forgotten printer, and one
+  // that started before a pairing may lack the new one, so a job the recent listing cannot serve
+  // runs a listing of its own rather than joining one already running.
+  const pairedFor = async (mac: string | null): Promise<LocalDevice[]> => {
+    const recent = recentPaired;
+    const reusable =
+      recent !== undefined &&
+      recent.startedAt > forgottenAt &&
+      now() - recent.startedAt < PAIRED_REUSE_MS &&
+      recent.devices.some((d) => d.mac === mac);
+    return toLocal(reusable ? recent.devices : await listPaired());
+  };
 
   const dropPath = (d: LocalDevice): VisibleDevice => ({
     transport: d.transport,
@@ -141,7 +162,6 @@ export function createLinuxDevices(
           : sharedListing().catch(() => []);
       const usbDevices = (await usb()).map(dropPath);
       const paired = await listing;
-      // While `liveBtDevicePath` throws, this catch drops EVERY paired Bluetooth device in production.
       let btDevices: VisibleDevice[];
       try {
         btDevices = toLocal(paired).map(dropPath);
@@ -190,12 +210,15 @@ export function createLinuxDevices(
       }));
     },
 
-    forgetBluetooth(mac): Promise<BluetoothCommandResult> {
-      return bluetooth.forget(mac);
+    async forgetBluetooth(mac): Promise<BluetoothCommandResult> {
+      try {
+        return await bluetooth.forget(mac);
+      } finally {
+        forgottenAt = now();
+      }
     },
 
-    // Only a device path someone supplies can print: `liveBtDevicePath` is not built.
-    bluetoothPrinting: () => opts.btDevicePath !== undefined,
+    bluetoothPrinting: () => true,
 
     async resolve(job: WireJob): Promise<PrinterTarget> {
       if (job.transport === "network_tcp") {
@@ -208,8 +231,9 @@ export function createLinuxDevices(
         };
       }
       // Only the matching transport's list is consulted, so a USB job never reaches the radio.
-      const local: LocalDevice[] =
-        job.transport === "bluetooth" ? await pairedLocal() : await usb();
+      const local: LocalDevice[] = await (job.transport === "bluetooth"
+        ? pairedFor(job.localKey)
+        : usb());
       const match = local.find((d) => d.localKey === job.localKey);
       if (match === undefined) {
         throw new Error(`device ${job.localKey} not attached`);
@@ -223,6 +247,14 @@ export function createLinuxDevices(
       };
     },
   };
+}
+
+/** The host's Bluetooth transport sends to the printer's address itself. */
+function liveBtDevicePath(mac: string): string {
+  if (!isBluetoothAddress(mac)) {
+    throw new Error(`bluetooth device ${mac} is not a Bluetooth address`);
+  }
+  return mac;
 }
 
 /** A minimal mDNS PTR/IN query for the PDL service. */
@@ -242,13 +274,6 @@ export function buildPdlQuery(): Buffer {
 
 /* v8 ignore start -- opens the mDNS and port-9100 sockets; covered by the
    receipts, not unit tests (no radio or LAN in CI). */
-
-/** There is no per-MAC RFCOMM node yet, and a shared `/dev/rfcomm0` would route two paired printers
- * to the same node, so this throws; `visibleDevices` then leaves the device out, and no Bluetooth job
- * is handed to this agent. */
-function liveBtDevicePath(mac: string): string {
-  throw new Error(`bluetooth device ${mac} resolution not implemented (Step 6c receipt)`);
-}
 
 /** An announced entry, which carries the printer's own name, wins over a swept duplicate. */
 async function liveNetworkScan(): Promise<DiscoveredDevice[]> {

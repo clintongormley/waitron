@@ -196,6 +196,22 @@ describe("createContainerHost — the rest of the seam", () => {
     ).rejects.toThrow(/no host/);
   });
 
+  it("routes a bluetooth job through the Bluetooth serial helper, which refuses a device file", async () => {
+    const host = createContainerHost({
+      env: baseEnv,
+      state: new FileState(dir),
+      onStatus: () => {},
+    });
+    const devicePath = join(dir, "rfcomm0");
+    await expect(
+      host.transport.send(
+        { id: "p1", transport: "bluetooth", host: null, port: null, devicePath },
+        new Uint8Array([1]),
+      ),
+    ).rejects.toThrow("bluetooth printer p1 has no Bluetooth address");
+    await expect(readFile(devicePath)).rejects.toThrow(/ENOENT/);
+  });
+
   it("exposes the injected device seam as its visibleDevices/scan/pair/pairedBluetooth/forgetBluetooth/resolve", async () => {
     const devices = {
       visibleDevices: vi.fn(async () => [
@@ -263,7 +279,7 @@ describe("createContainerHost — the rest of the seam", () => {
       env: baseEnv,
       state: new FileState(dir),
       onStatus: () => {},
-      devices: createLinuxDevices({ sysfsRoot: dir }),
+      devices: { ...createLinuxDevices({ sysfsRoot: dir }), bluetoothPrinting: () => false },
     });
     expect(host.bluetoothPrinting?.()).toBe(false);
   });

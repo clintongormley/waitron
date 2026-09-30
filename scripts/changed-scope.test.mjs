@@ -138,6 +138,10 @@ describe("isImageInputPath", () => {
     },
   );
 
+  it("treats the print agent's Bluetooth sender, which the image copies and image-smoke runs, as an image input", () => {
+    expect(isImageInputPath("apps/print-agent/src/rfcomm-send.py")).toBe(true);
+  });
+
   // Reads image-smoke.yml as TEXT and sees only literal `scripts/…` paths, so a script reached
   // through a variable or outside `scripts/` is invisible to it.
   it("treats every scripts/ file image-smoke.yml names as an image input", () => {

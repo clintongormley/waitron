@@ -4,6 +4,11 @@ Status: design approved by the owner in conversation, 2026-09-27 (revised the sa
 owner's questions on failover, restores, printers-only lists and unpairing). Written spec awaiting
 the owner's review.
 
+> **2026-09-30:** Bluetooth printing, which this design leaves unbuilt, was built later by A140
+> (`docs/backlog.md`, A140's entry): the agent sends a job over RFCOMM to the printer's own
+> address, `liveBtDevicePath` names the printer's address instead of always throwing, and the
+> dashboard no longer says Bluetooth printing is not available yet.
+
 ## The problem
 
 The print agent (`apps/print-agent`) is the small program beside the printers that fetches print jobs

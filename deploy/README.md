@@ -356,7 +356,7 @@ command against it treat that entrypoint differently:
 
 `.env.example` documents every line. A box reached at `waitron.local` needs none of them set by
 hand: without AppArmor a plain `install` leaves it with no `.env` at all. Where AppArmor is on,
-listing, pairing and forgetting Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
+listing, pairing, forgetting and printing to Bluetooth printers needs the `WAITRON_PRINT_AGENT_APPARMOR` line `waitron.sh install` writes
 there once it has loaded the profile.
 The box holds no database credential, because there is no database server to hold one for. Its own secrets, the vault key ring and the CA and leaf
 certificates, are minted on the first setup boot into the `state` volume and never appear here. A

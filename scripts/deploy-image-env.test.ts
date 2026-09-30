@@ -202,6 +202,19 @@ describe("the print-agent image and its compose wiring", () => {
     );
   });
 
+  it("ships the Bluetooth sender beside the agent's bundle, with a python3 to run it", () => {
+    // The transport finds the script beside the module that loads it (apps/print-agent/src/rfcomm.ts),
+    // so the package's own build puts it beside the bundle and the image copies that pair.
+    const manifest = JSON.parse(read("apps/print-agent/package.json")) as {
+      scripts: { build: string };
+    };
+    expect(manifest.scripts.build).toContain("cp src/rfcomm-send.py dist/rfcomm-send.py");
+    expect(DOCKERFILE).toContain(
+      "COPY --from=build --chown=node:node /src/apps/print-agent/dist/rfcomm-send.py /app/rfcomm-send.py",
+    );
+    expect(DOCKERFILE).toContain("apt-get install -y --no-install-recommends python3-minimal");
+  });
+
   it("runs the agent as an on-by-default compose service with the measured USB shape", () => {
     expect(COMPOSE).toContain("print-agent:");
     expect(COMPOSE).toContain(
@@ -286,6 +299,11 @@ describe("the print-agent image and its compose wiring", () => {
       "member",
     ]);
     expect(unnamedBusFields(rule("member=StartDiscovery"))).toEqual(["interface"]);
+  });
+
+  it("smokes the agent's Bluetooth sender under that profile", () => {
+    expect(IMAGE_SMOKE).toContain("python3 /app/rfcomm-send.py 66:55:44:33:22:11 1 5");
+    expect(IMAGE_SMOKE).toContain("[Errno 13]");
   });
 
   it("smokes the agent under that profile against a stand-in BlueZ, with docker-default as the control", () => {
@@ -610,5 +628,57 @@ describe("the box image carries Litestream's licence and a notice naming the pin
     expect(IMAGE_SMOKE).toContain('reported=$(docker exec "$app" litestream version)');
     expect(IMAGE_SMOKE).toContain('[ "$reported" = "$pinned" ]');
     expect(IMAGE_SMOKE).toContain("test -s /app/third-party/licenses/Apache-2.0.txt");
+  });
+});
+
+/**
+ * python3-minimal and what it pulls in ship in the print-agent image under Debian's own copyright
+ * files. Reads TEXT: it proves the Dockerfile derives the list and copies the files and that
+ * image-smoke looks for them, not that the list is complete — image-smoke is what looks inside the
+ * image.
+ */
+describe("the print-agent image carries the copyright files of python3-minimal and what it pulls in", () => {
+  const stage = DOCKERFILE.slice(
+    DOCKERFILE.indexOf("AS print-agent"),
+    DOCKERFILE.indexOf("\nFROM ", DOCKERFILE.indexOf("AS print-agent")),
+  );
+
+  it("installs python3-minimal on its own, before bluez, so the packages it adds can be listed", () => {
+    const python = stage.indexOf("apt-get install -y --no-install-recommends python3-minimal;");
+    const bluez = stage.indexOf("apt-get install -y --no-install-recommends bluez;");
+    expect(python).toBeGreaterThan(stage.indexOf("> /tmp/base-packages"));
+    expect(stage.indexOf("comm -13 /tmp/base-packages")).toBeGreaterThan(python);
+    expect(bluez).toBeGreaterThan(stage.indexOf("comm -13 /tmp/base-packages"));
+  });
+
+  // A pipe reports only its last command's status, so a failed listing of the base would otherwise
+  // leave the list empty and every installed package would be counted as pulled in.
+  it("refuses an empty list of the base image's packages", () => {
+    const listed = stage.indexOf("> /tmp/base-packages;");
+    const guard = stage.indexOf("[ -s /tmp/base-packages ];");
+    expect(guard).toBeGreaterThan(listed);
+    expect(
+      stage.indexOf("apt-get install -y --no-install-recommends python3-minimal;"),
+    ).toBeGreaterThan(guard);
+  });
+
+  it("refuses a list without python3-minimal, and copies each listed package's copyright file", () => {
+    expect(stage).toContain("grep -qx python3-minimal /tmp/python3-packages");
+    expect(stage).toContain(
+      'cp -L "/usr/share/doc/$pkg/copyright" "/app/third-party/python3-minimal/$pkg/copyright"',
+    );
+    expect(stage).toContain("/app/third-party/python3-minimal/PACKAGES.txt");
+  });
+
+  it("describes them in the notice, and image-smoke looks for them in the built image", () => {
+    const section = noticeSection("The print agent's Python");
+    expect(section).toContain("`/app/third-party/python3-minimal/`");
+    expect(section).toContain("`PACKAGES.txt`");
+    expect(IMAGE_SMOKE).toContain(
+      "grep -q '^python3-minimal ' /app/third-party/python3-minimal/PACKAGES.txt",
+    );
+    expect(IMAGE_SMOKE).toContain(
+      "test -s /app/third-party/python3-minimal/python3-minimal/copyright",
+    );
   });
 });

@@ -832,7 +832,7 @@ export const en = {
   "printers.page_printer_hint": "Office printer — not supported for receipts",
   "printers.seen_at": "Seen on {agent} · {time}",
   "printers.bluetooth_pair_note":
-    "To add a Bluetooth printer that is not paired yet, press Pair and add beside it in the list: it asks for the printer's PIN, pairs it, then opens the form to add it. Printing to a Bluetooth printer is not available yet, even once it is paired. A printer already added and active whose pairing was forgotten shows Pair instead: it pairs it again without adding it.",
+    "To add a Bluetooth printer that is not paired yet, press Pair and add beside it in the list: it asks for the printer's PIN, pairs it, then opens the form to add it. A printer already added and active whose pairing was forgotten shows Pair instead: it pairs it again without adding it.",
   "printers.bluetooth_pair": "Pair and add",
   "printers.bluetooth_pair_only": "Pair",
   "printers.bluetooth_forget": "Forget pairing",
@@ -2769,7 +2769,7 @@ export const es: Record<StringKey, string> = {
   "printers.page_printer_hint": "Impresora de oficina: no sirve para imprimir recibos",
   "printers.seen_at": "Detectada en {agent} · {time}",
   "printers.bluetooth_pair_note":
-    "Para añadir una impresora Bluetooth que aún no está emparejada, pulsa Emparejar y añadir junto a ella en la lista: pide el PIN de la impresora, la empareja y luego abre el formulario para añadirla. Aún no se puede imprimir en una impresora Bluetooth, aunque esté emparejada. Una impresora ya añadida y activa que se desvinculó muestra Emparejar: la vuelve a emparejar sin añadirla.",
+    "Para añadir una impresora Bluetooth que aún no está emparejada, pulsa Emparejar y añadir junto a ella en la lista: pide el PIN de la impresora, la empareja y luego abre el formulario para añadirla. Una impresora ya añadida y activa que se desvinculó muestra Emparejar: la vuelve a emparejar sin añadirla.",
   "printers.bluetooth_pair": "Emparejar y añadir",
   "printers.bluetooth_pair_only": "Emparejar",
   "printers.bluetooth_forget": "Desvincular",

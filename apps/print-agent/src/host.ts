@@ -2,7 +2,6 @@ import { hostname } from "node:os";
 import { type MediaQuery, createPagePrinterMarker, queryMediaSupported } from "./ipp-probe.js";
 import { probeNetwork } from "./tcp-probe.js";
 import {
-  BluetoothTransport,
   NetworkTcpTransport,
   RoutingTransport,
   UsbTransport,
@@ -13,6 +12,7 @@ import {
 } from "@waitron/print-agent";
 import type { EnvConfig } from "./config.js";
 import { type LinuxDevices, createLinuxDevices } from "./linux-devices.js";
+import { RfcommTransport } from "./rfcomm.js";
 import type { FileState } from "./state.js";
 
 /** `console` satisfies it. */
@@ -53,7 +53,7 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
   const transport = new RoutingTransport({
     network_tcp: new NetworkTcpTransport(),
     usb: new UsbTransport(),
-    bluetooth: new BluetoothTransport(),
+    bluetooth: new RfcommTransport(),
   });
   const now = opts.now ?? (() => Date.now());
   const log = structuredLog(opts.log ?? console);

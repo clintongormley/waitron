@@ -5061,8 +5061,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel(`register-${ADDRESS}`))).toBeNull();
     expect(text(el, sel(`register-${OTHER}`))).toBe(t("action.add"));
     expect(q(el, sel(`pair-${OTHER}`))).toBeNull();
-    // Pairing is not delivery: the note says so. Pressing Pair and add asks for the PIN first; no
-    // naming form until the pairing succeeds.
+    // Pressing Pair and add asks for the PIN first; no naming form until the pairing succeeds.
     expect(text(el, sel("bluetooth-note"))).toBe(t("printers.bluetooth_pair_note"));
     await openPair(el);
     expect(q(el, sel("name-printer-modal"))).toBeNull();
@@ -6797,7 +6796,7 @@ describe("printers-screen Bluetooth pairing", () => {
   });
 });
 
-describe("Bluetooth printing is not available yet", () => {
+describe("A Bluetooth printer whose agent cannot print to it", () => {
   const UNAVAILABLE = "printer.bluetooth_printing_unavailable";
   const bluetoothPrinter: Printer = {
     ...printers[0]!,
@@ -6844,7 +6843,7 @@ describe("Bluetooth printing is not available yet", () => {
     await flush(el);
 
     expect(text(el, "[data-test=calibration-job-failed]")).toBe(
-      "No se ha impreso: Aún no se puede imprimir en una impresora Bluetooth.",
+      "No se ha impreso: El agente de impresión de esta impresora no puede imprimir en impresoras Bluetooth.",
     );
     expect(q(el, "[data-test=calibration-job-failed]")!.getAttribute("role")).toBe("alert");
   });
@@ -7002,15 +7001,15 @@ describe("Bluetooth printing is not available yet", () => {
     expect(q(el, "[data-test=calibration-job-failed]")).toBeNull();
   });
 
-  it("says in a Bluetooth printer's dialog, through calibration, that printing to it is not available yet", async () => {
+  it("does not say in a Bluetooth printer's dialog, through calibration, that printing to it is unavailable", async () => {
     const { el } = await mountWith();
     await openPrinter(el, "p5");
-    expect(text(el, "[data-test=bluetooth-printing-unavailable]")).toBe(
-      "Aún no se puede imprimir en una impresora Bluetooth.",
-    );
+    expect(q(el, "[data-test=save-printer-p5]")).not.toBeNull();
+    expect(q(el, "[data-test=bluetooth-printing-unavailable]")).toBeNull();
     q(el, "[data-test=calibrate-printer]")!.click();
     await flush(el);
-    expect(q(el, "[data-test=bluetooth-printing-unavailable]")).not.toBeNull();
+    expect(q(el, "[data-test=calibration-next]")).not.toBeNull();
+    expect(q(el, "[data-test=bluetooth-printing-unavailable]")).toBeNull();
     q(el, "[data-test=cancel-edit-printer]")!.click();
     await flush(el);
 
@@ -7018,15 +7017,14 @@ describe("Bluetooth printing is not available yet", () => {
     expect(q(el, "[data-test=bluetooth-printing-unavailable]")).toBeNull();
   });
 
-  it("says on a Bluetooth printer's row in the printers list that printing to it is not available yet", async () => {
+  it("does not say on a Bluetooth printer's row in the printers list that printing to it is unavailable", async () => {
     const before = currentLocale();
     setLocale("en");
     try {
       const { el } = await mountWith();
       await selectTab(el, "printers");
-      expect(text(el, "[data-test=printer-bluetooth-unavailable-p5]")).toBe(
-        "Printing to a Bluetooth printer is not available yet.",
-      );
+      expect(q(el, "[data-test=printer-row-p5]")).not.toBeNull();
+      expect(q(el, "[data-test=printer-bluetooth-unavailable-p5]")).toBeNull();
       expect(q(el, "[data-test=printer-bluetooth-unavailable-p1]")).toBeNull();
     } finally {
       setLocale(before);
@@ -7037,7 +7035,7 @@ describe("Bluetooth printing is not available yet", () => {
     const { el } = await mountWith({ listRecentJobs: vi.fn().mockResolvedValue([ended, jobs[0]]) });
 
     expect(text(el, "[data-test=job-error-j11]")).toBe(
-      "Aún no se puede imprimir en una impresora Bluetooth.",
+      "El agente de impresión de esta impresora no puede imprimir en impresoras Bluetooth.",
     );
     expect(text(el, "[data-test=job-attempts-j11]")).toBe("—");
     expect(text(el, "[data-test=job-attempts-j1]")).toBe("2");
