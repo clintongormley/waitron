@@ -10,7 +10,7 @@ export function trimQuantityForDisplay(quantity: string): string {
 }
 
 /** What a receipt line prints; a filed line and a stored gross line both carry it. */
-type ReceiptSource = Pick<
+export type ReceiptSource = Pick<
   GrossLine,
   | "descriptions"
   | "variantDescriptions"
@@ -59,4 +59,29 @@ function listGrossOf(
   if (listUnit === null) return {};
   const listGross = grossOf(listUnit, line.quantity);
   return compareDecimal(listGross, line.lineGross) === 0 ? {} : { listGross };
+}
+
+export interface LineGroup {
+  dish: TillSaleLine;
+  options: TillSaleLine[];
+}
+
+/**
+ * Group the filed lines into dishes with their option lines. Filed lines arrive dish-first
+ * (`grossBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
+ * lines still reconcile with the filed total. A child with no dish before it becomes its own group
+ * rather than being dropped, so no filed line vanishes from a legal receipt.
+ * Copied in `apps/till/src/screens/till-ticket-view.ts`; the two are kept in step.
+ */
+export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
+  const groups: LineGroup[] = [];
+  for (const line of lines) {
+    const current = groups[groups.length - 1];
+    if (line.parentLineNo == null || current === undefined) {
+      groups.push({ dish: line, options: [] });
+    } else {
+      current.options.push(line);
+    }
+  }
+  return groups;
 }

@@ -12,7 +12,7 @@ import {
 } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
-import type { TillSaleLine, TillSaleResult } from "../api/client.js";
+import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "../api/client.js";
 import type { ReceiptConfig } from "../layout.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
@@ -51,7 +51,8 @@ const LABEL = {
   card: "Tarjeta",
   tip: "Propina",
   charged: "Cobrado",
-  was: "Antes",
+  comp: "Invitación",
+  discount: "Descuento",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
@@ -69,7 +70,7 @@ interface LineGroup {
  * The filed lines arrive dish-then-its-options, so a single forward scan attaching each child to the most
  * recent dish groups them. It recomputes no figure: it only groups the SAME already-filed lines.
  *
- * A LOCAL copy of `apps/server/src/receipt-ticket.ts`'s `groupByParent`: importing it would drag server
+ * A LOCAL copy of `apps/server/src/receipt-lines.ts`'s `groupByParent`: importing it would drag server
  * code into the browser bundle. A leading child with no dish yet is treated as its own dish rather than
  * dropped, so no filed line ever vanishes from the on-screen ticket.
  */
@@ -86,15 +87,34 @@ function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   return groups;
 }
 
-/** A line's total; after a give-away or a discount, the total it had first, struck through, as the
- * printed receipt writes `12,00 € -> 0,00 €`. Presentation only: no fiscal figure changes. */
+/** A row at its list price; what a comp or discount took off is its own line (`adjustmentRow`). */
 function lineGross(line: TillSaleLine, locale: string) {
-  const now = formatMoney(line.gross, locale);
-  if (line.listGross === undefined) return html`<span class="line-gross">${now}</span>`;
-  return html`<span class="line-gross"
-    ><span class="visually-hidden">${LABEL.was} </span
-    ><s class="list-gross">${formatMoney(line.listGross, locale)}</s> ${now}</span
-  >`;
+  return html`<span class="line-gross">${formatMoney(line.listGross ?? line.gross, locale)}</span>`;
+}
+
+const percentFormatters = new Map<string, Intl.NumberFormat>();
+
+/** `Descuento 12,5%` for 1250 basis points, as `apps/server/src/receipt-ticket.ts` prints it. */
+function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
+  if (adjustment.kind === "comp") return LABEL.comp;
+  if (adjustment.percentBp === undefined) return LABEL.discount;
+  let formatter = percentFormatters.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+    percentFormatters.set(locale, formatter);
+  }
+  return `${LABEL.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
+}
+
+function adjustmentRow(
+  adjustment: ReceiptAdjustment,
+  locale: string,
+  kind: "adjustment" | "bill-adjustment",
+) {
+  return html`<li class="line ${kind}">
+    <span class="line-name">${adjustmentLabel(adjustment, locale)}</span>
+    <span class="line-gross">-${formatMoney(adjustment.amount, locale)}</span>
+  </li>`;
 }
 
 /** The fecha de expedición (art. 7.1.b). */
@@ -259,24 +279,16 @@ export class TillTicketView extends LitElement {
         flex: 1;
       }
 
-      .list-gross {
-        color: var(--wt-color-text-muted);
-      }
-
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
-      }
-
-      /* A selected option (ordering modifiers, Task 14) — indented beneath its dish, name left and its
-         own delta right (0,00 for a free option), never its own quantity column (an option is priced per
-         dish, so repeating the count reads as noise) — matching the printed receipt's identical indent. */
-      .line.option {
+      /* An option, or an amount taken off a dish, is indented beneath the dish as the printed
+         receipt indents it. */
+      .line.option,
+      .line.adjustment {
         padding-left: var(--wt-space-4);
+      }
+
+      .line.option,
+      .line.adjustment,
+      .line.bill-adjustment {
         color: var(--wt-color-text-muted);
       }
 
@@ -444,7 +456,15 @@ export class TillTicketView extends LitElement {
                   `;
                 },
               )}
+              ${[group.dish, ...group.options].flatMap((line) =>
+                (line.adjustments ?? []).map((adjustment) =>
+                  adjustmentRow(adjustment, locale, "adjustment"),
+                ),
+              )}
             `,
+          )}
+          ${(r.billAdjustments ?? []).map((adjustment) =>
+            adjustmentRow(adjustment, locale, "bill-adjustment"),
           )}
         </ul>
 

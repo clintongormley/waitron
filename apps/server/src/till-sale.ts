@@ -59,7 +59,7 @@ import { perDatabase } from "./live-in-process.js";
 import { refuseBillWithPayments } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { ticketLinesFrom } from "./receipt-lines.js";
+import { receiptLines } from "./receipt-adjustments.js";
 import type { TillConfig } from "./till-config.js";
 import {
   enqueueCashSaleDrawer,
@@ -133,12 +133,23 @@ export interface TillSaleLine {
    * differs from `gross`. The receipt shows it; nothing is filed from it.
    */
   listGross?: string;
+  /** The comps and discounts printed beneath this row's dish; absent when there are none. */
+  adjustments?: ReceiptAdjustment[];
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else `null`/absent.
    *  Presentation only: it groups already-filed lines and is no fiscal figure. */
   parentLineNo?: number | null;
   /** The diner's answers to this dish's OPTIONS lists, copied by value so a later catalogue edit
    *  cannot rewrite what a completed sale says was ordered. An extras pick is a child line instead. */
   optionSnapshots?: OptionSnapshot[];
+}
+
+/** An amount taken off, printed as its own line: presentation only, nothing is filed from it. */
+export interface ReceiptAdjustment {
+  kind: "comp" | "discount";
+  /** Basis points, for a percentage discount only. */
+  percentBp?: number;
+  /** The positive amount taken off, as a decimal string. */
+  amount: string;
 }
 
 /** Persisted tender amounts and optional manual terminal reference. Card identity belongs on the slip. */
@@ -186,6 +197,8 @@ export interface TillSaleResult {
   tender: TenderBlock;
   /** Every payment, when the bill was paid in parts before its invoice; absent otherwise. */
   payments?: BillTenderLine[];
+  /** Discounts on the whole bill, printed after the goods; absent when there are none. */
+  billAdjustments?: ReceiptAdjustment[];
   /** Where a customer can verify the record, or "" when the regime offers none. */
   qr: string;
 }
@@ -545,7 +558,7 @@ export async function readSettledTicket(
   /* v8 ignore stop */
 
   const stored = await readStoredOrder(tx, workingOrderId);
-  const ticketLines = ticketLinesFrom(stored.gross, stored.identities);
+  const ticketLines = await receiptLines(tx, workingOrderId, stored.gross, stored.identities);
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -568,7 +581,7 @@ export async function readSettledTicket(
     issuedAt: new Date(issued.issuedAt).toISOString(),
     total: centsToDecimal(issued.total),
     vatBreakdown: toVatBreakdown(filed.vatBreakdown),
-    lines: ticketLines,
+    ...ticketLines,
     tender,
     ...(billTenders.length === 0 ? {} : { payments: billTenders }),
     qr: filed.verificationUrl,
@@ -698,7 +711,7 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    lines: ticketLinesFrom(priced, order.identities),
+    ...(await receiptLines(tx, workingOrderId, priced, order.identities)),
     tender: tenderBlock,
     qr: fiscal.verificationUrl ?? "",
   };
@@ -1164,7 +1177,7 @@ async function finalizeCapture(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced, identities),
+        ...(await receiptLines(tx, req.id, priced, identities)),
         tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
@@ -1304,7 +1317,7 @@ async function finalizeRecovery(
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      lines: ticketLinesFrom(priced, order.identities),
+      ...(await receiptLines(tx, req.id, priced, order.identities)),
       tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };

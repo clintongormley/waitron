@@ -1,6 +1,6 @@
 /**
- * Formats a filed sale into the customer's ESC/POS receipt. Pure — no database, no state — so the
- * whole layout is pinned in a unit test.
+ * Formats a filed sale into the customer's ESC/POS receipt. Pure — no database, and no state beyond
+ * a formatter cache — so the whole layout is pinned in a unit test.
  *
  * FISCAL SAFETY. It only reads an already-filed `TillSaleResult`: the paper is a re-render of the
  * filed record, never a second source of fiscal truth.
@@ -12,9 +12,9 @@
  * and is never read by it.
  *
  * The receipt is issued in the INVOICE locale, not the operator's UI language: the fiscal labels
- * are fixed Spanish constants, and only money, date and product names are formatted with
- * `invoiceLocale`. The helpers shared with the till screen are copied rather than imported, because
- * `apps/server` must not depend on `apps/till`; keep them in step.
+ * are fixed Spanish constants, and only money, discount percentages, date and product names are
+ * formatted with `invoiceLocale`. The helpers shared with the till screen are copied rather than
+ * imported, because `apps/server` must not depend on `apps/till`; keep them in step.
  */
 import {
   QR_QUIET_ZONE,
@@ -41,8 +41,9 @@ import {
 } from "@waitron/shared";
 
 import { qrModules } from "./qr-matrix.js";
+import { groupByParent } from "./receipt-lines.js";
 import { formatMoney } from "./receipt-money.js";
-import type { TillSaleLine, TillSaleResult } from "./till-sale.js";
+import type { ReceiptAdjustment, TillSaleResult } from "./till-sale.js";
 
 /** The receipt issuer's legally-printed identity (RD 1619/2012 art. 7.1.d): venue name + NIF. */
 export interface ReceiptIssuer {
@@ -74,7 +75,7 @@ export interface FormatReceiptInput {
   issuer: ReceiptIssuer;
   /** The owner-authored non-fiscal header/footer trim; `{}` (or missing fields) prints no trim. */
   receipt: ReceiptTrim;
-  /** The locale the money, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
+  /** The locale the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
   /** The receipt printer's settings: they set the column count, the QR dot size and the text encoding. */
   printer: ReceiptPrinterSettings;
@@ -99,6 +100,8 @@ const LABEL = {
   tip: "Propina",
   charged: "Cobrado",
   refund: "Devolución",
+  comp: "Invitación",
+  discount: "Descuento",
 } as const;
 
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
@@ -115,40 +118,18 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
   return descriptions[locale] ?? Object.values(descriptions)[0] ?? "";
 }
 
-/**
- * A line's printed amount: its gross, after its total before a comp or a discount when one changed
- * it. No character set the receipt prints in has a right arrow (`receipt-ticket.test.ts`), so the
- * change is written `->`.
- */
-function lineAmount(line: TillSaleLine, locale: string): string {
-  const gross = formatMoney(line.gross, locale);
-  return line.listGross === undefined
-    ? gross
-    : `${formatMoney(line.listGross, locale)} -> ${gross}`;
-}
+const percentFormatters = new Map<string, Intl.NumberFormat>();
 
-interface LineGroup {
-  dish: TillSaleLine;
-  options: TillSaleLine[];
-}
-
-/**
- * Group the filed lines into dishes with their option lines. Filed lines arrive dish-first
- * (`grossBasketWithOptions`), so one forward scan suffices; nothing is recomputed, so the printed
- * lines still reconcile with the filed total. A child with no dish before it becomes its own group
- * rather than being dropped, so no filed line vanishes from a legal receipt.
- */
-function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
-  const groups: LineGroup[] = [];
-  for (const line of lines) {
-    const current = groups[groups.length - 1];
-    if (line.parentLineNo == null || current === undefined) {
-      groups.push({ dish: line, options: [] });
-    } else {
-      current.options.push(line);
-    }
+/** The label of an amount taken off: `Descuento 12,5%` for 1250 basis points. */
+function adjustmentLabel(adjustment: ReceiptAdjustment, locale: string): string {
+  if (adjustment.kind === "comp") return LABEL.comp;
+  if (adjustment.percentBp === undefined) return LABEL.discount;
+  let formatter = percentFormatters.get(locale);
+  if (formatter === undefined) {
+    formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
+    percentFormatters.set(locale, formatter);
   }
-  return groups;
+  return `${LABEL.discount} ${formatter.format(adjustment.percentBp / 100)}%`;
 }
 
 /** The issue timestamp formatted in the invoice locale — the fecha de expedición (art. 7.1.b). */
@@ -190,6 +171,10 @@ export function formatReceipt({
   const row = (label: string, amount: string, indent = 0): void => {
     for (const line of labelAmountLines(p(label), p(amount), columns, indent)) bodyLine(line);
   };
+  const takenOff = (adjustment: ReceiptAdjustment, indent: number): void => {
+    const label = `${" ".repeat(indent)}${adjustmentLabel(adjustment, locale)}`;
+    row(label, `-${formatMoney(adjustment.amount, locale)}`, indent);
+  };
 
   // The practice warning surrounds the immutable receipt content. It never enters the filed record or
   // its hash, but it must survive when a paper ticket leaves a Demo/Prepare till.
@@ -225,7 +210,11 @@ export function formatReceipt({
     // Cap that at 2 when the prefix is wider than half the paper: past there `wrapText`'s remaining room
     // shrinks to a few columns and the name wraps one glyph per line.
     const nameIndent = quantity.length > columns / 2 ? 2 : quantity.length;
-    row(`${quantity}${lineName(dish.descriptions, locale)}`, lineAmount(dish, locale), nameIndent);
+    row(
+      `${quantity}${lineName(dish.descriptions, locale)}`,
+      formatMoney(dish.listGross ?? dish.gross, locale),
+      nameIndent,
+    );
     // The dish's frozen answers to its options lists, each under the dish it was asked about. An
     // extras pick is NOT here: it is its own priced child line, printed by the loop below.
     for (const label of customerOptionSnapshotLabels(dish.optionSnapshots ?? [], locale)) {
@@ -236,9 +225,13 @@ export function formatReceipt({
       const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
       const name = lineName(option.descriptions, locale);
       const label = perDish > 1 ? `  ${name} ${QTY_BADGE}${perDish}` : `  ${name}`;
-      row(label, lineAmount(option, locale), 2);
+      row(label, formatMoney(option.listGross ?? option.gross, locale), 2);
+    }
+    for (const line of [dish, ...options]) {
+      for (const adjustment of line.adjustments ?? []) takenOff(adjustment, 2);
     }
   }
+  for (const adjustment of result.billAdjustments ?? []) takenOff(adjustment, 0);
   b.line();
 
   // VAT breakdown (7.1.f) — base imponible + cuota per tipo impositivo.

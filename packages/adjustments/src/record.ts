@@ -1,6 +1,7 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, eq, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
+  centsToDecimal,
   decimalToCents,
   rawCentsToDecimal,
   stringToThousandths,
@@ -137,4 +138,43 @@ export async function readCompedLines(
     else comped.rows.push(...splits.map((split) => split.to));
   }
   return comped;
+}
+
+/** A comp or discount still standing on a bill. `lineId` is null for one on the whole bill. */
+export interface BillAdjustment {
+  lineId: string | null;
+  splits: AdjustmentSplit[];
+  /** It covered less than the whole quantity of its line. */
+  partOfLine: boolean;
+  action: Exclude<AdjustmentAction, "cancel">;
+  percentBp: number | null;
+  reduction: Decimal;
+}
+
+/** This bill's comps and discounts, oldest first; its cancellations are not read. */
+export async function readBillAdjustments(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<BillAdjustment[]> {
+  const rows = await tx
+    .select({
+      lineId: adjustments.lineId,
+      splits: adjustments.splits,
+      quantity: adjustments.quantity,
+      lineQuantity: adjustments.lineQuantity,
+      action: adjustments.action,
+      percentBp: adjustments.percentBp,
+      reduction: adjustments.reduction,
+    })
+    .from(adjustments)
+    .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
+    .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
+  return rows.map(({ quantity, lineQuantity, reduction, action, ...row }) => ({
+    ...row,
+    // The query leaves cancellations out.
+    action: action as BillAdjustment["action"],
+    // A line row holds both counts (`adjustments_line_level_ck`).
+    partOfLine: row.lineId !== null && quantity! < lineQuantity!,
+    reduction: centsToDecimal(reduction),
+  }));
 }

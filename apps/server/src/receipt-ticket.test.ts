@@ -1,4 +1,4 @@
-import { FEED_BEFORE_CUT, columnsFor, esc, prepareText, withQuietZone } from "@waitron/printing";
+import { FEED_BEFORE_CUT, columnsFor, esc, withQuietZone } from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
@@ -1217,19 +1217,15 @@ describe("a bill payment partly given back before its invoice", () => {
   });
 });
 
-describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
-  it.each(["wpc1252", "pc858", "plain"] as const)(
-    "cannot print a right arrow in %s, so the change is written with ->",
-    (characterSet) => {
-      expect(prepareText("\u{2192}", characterSet)).toBe("?");
-      expect(prepareText("->", characterSet)).toBe("->");
-    },
-  );
+describe("a comped or discounted dish (owner decision 2026-09-30)", () => {
+  /** An 80 mm row: the label, then the amount right-aligned in 42 columns. */
+  const at80 = (label: string, amount: string): string =>
+    label + " ".repeat(42 - label.length - amount.length) + amount;
 
   const ADJUSTED: TillSaleResult = {
     ...FILED_SALE,
-    total: "31.00",
-    vatBreakdown: [{ rate: "21", base: "25.62", tax: "5.38" }],
+    total: "22.60",
+    vatBreakdown: [{ rate: "10", base: "20.55", tax: "2.05" }],
     lines: [
       {
         descriptions: { "es-ES": "Hamburguesa" },
@@ -1237,13 +1233,15 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
         gross: "0.00",
         listGross: "12.00",
         parentLineNo: null,
+        adjustments: [{ kind: "comp", amount: "12.00" }],
       },
       {
-        descriptions: { "es-ES": "Rioja crianza" },
+        descriptions: { "es-ES": "Tabla de quesos" },
         quantity: "1",
-        gross: "27.00",
-        listGross: "30.00",
+        gross: "9.60",
+        listGross: "12.00",
         parentLineNo: null,
+        adjustments: [{ kind: "discount", percentBp: 2000, amount: "2.40" }],
       },
       {
         descriptions: { "es-ES": "Agua mineral" },
@@ -1257,6 +1255,7 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
         gross: "0.00",
         listGross: "9.00",
         parentLineNo: null,
+        adjustments: [{ kind: "comp", amount: "10.50" }],
       },
       {
         descriptions: { "es-ES": "Aceitunas" },
@@ -1265,38 +1264,129 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
         listGross: "1.50",
         parentLineNo: 4,
       },
+      {
+        descriptions: { "es-ES": "Croquetas" },
+        quantity: "3",
+        gross: "9.00",
+        listGross: "9.99",
+        parentLineNo: null,
+        adjustments: [{ kind: "discount", amount: "0.99" }],
+      },
     ],
     tender: { method: "cash", change: "0.00" },
   };
 
-  it("prints a comped line's list total before its €0.00, and a discounted one's before what is left", () => {
-    const lines = printedLines(
+  /** 12.5% off the whole bill, spread over its two lines. */
+  const BILL_DISCOUNT: TillSaleResult = {
+    ...FILED_SALE,
+    total: "5.69",
+    vatBreakdown: [{ rate: "10", base: "5.17", tax: "0.52" }],
+    lines: [
+      {
+        descriptions: { "es-ES": "Agua mineral" },
+        quantity: "2",
+        gross: "3.50",
+        listGross: "4.00",
+        parentLineNo: null,
+      },
+      {
+        descriptions: { "es-ES": "Pan de pueblo" },
+        quantity: "1",
+        gross: "2.19",
+        listGross: "2.50",
+        parentLineNo: null,
+      },
+    ],
+    billAdjustments: [{ kind: "discount", percentBp: 1250, amount: "0.81" }],
+    tender: { method: "cash", change: "0.00" },
+  };
+
+  function printed80(result: TillSaleResult): string[] {
+    return printedLines(
       formatReceipt({
-        result: ADJUSTED,
+        result,
         issuer: ISSUER,
         receipt: {},
         invoiceLocale: "es-ES",
         printer: PRINTER_80,
       }),
     );
-    const first = lines.indexOf(`1  Hamburguesa${" ".repeat(11)}12,00 € -> 0,00 €`);
+  }
+
+  it("prints each dish at its list price, with its comp or discount on its own line beneath", () => {
+    const lines = printed80(ADJUSTED);
+    const first = lines.indexOf(at80("1  Hamburguesa", "12,00 €"));
     expect(first).toBeGreaterThanOrEqual(0);
-    expect(lines.slice(first, first + 5)).toEqual([
-      `1  Hamburguesa${" ".repeat(11)}12,00 € -> 0,00 €`,
-      `1  Rioja crianza${" ".repeat(8)}30,00 € -> 27,00 €`,
-      `2  Agua mineral${" ".repeat(21)}4,00 €`,
-      `1  Pizza margarita${" ".repeat(8)}9,00 € -> 0,00 €`,
-      `  Aceitunas${" ".repeat(15)}1,50 € -> 0,00 €`,
+    expect(lines.slice(first, first + 11)).toEqual([
+      at80("1  Hamburguesa", "12,00 €"),
+      at80("  Invitación", "-12,00 €"),
+      at80("1  Tabla de quesos", "12,00 €"),
+      at80("  Descuento 20%", "-2,40 €"),
+      at80("2  Agua mineral", "4,00 €"),
+      at80("1  Pizza margarita", "9,00 €"),
+      // The comp covers the dish and its extras, so it prints after them.
+      at80("  Aceitunas", "1,50 €"),
+      at80("  Invitación", "-10,50 €"),
+      at80("3  Croquetas", "9,99 €"),
+      at80("  Descuento", "-0,99 €"),
+      "",
     ]);
-    // What the invoice charges is unchanged: the total is the filed one.
-    expect(lines).toContain(`TOTAL${" ".repeat(30)}31,00 €`);
+    expect(lines).toContain(at80("TOTAL", "22,60 €"));
   });
 
-  it("puts the change under a long name on the narrow roll, right-aligned", () => {
+  it("prints a whole-bill discount once, after the goods and before the VAT breakdown", () => {
+    const lines = printed80(BILL_DISCOUNT);
+    const first = lines.indexOf(at80("2  Agua mineral", "4,00 €"));
+    expect(first).toBeGreaterThanOrEqual(0);
+    expect(lines.slice(first, first + 5)).toEqual([
+      at80("2  Agua mineral", "4,00 €"),
+      at80("1  Pan de pueblo", "2,50 €"),
+      at80("Descuento 12,5%", "-0,81 €"),
+      "",
+      at80("Base 10%", "5,17 €"),
+    ]);
+    expect(lines.filter((line) => line.startsWith("Descuento"))).toHaveLength(1);
+  });
+
+  it.each([
+    ["line", ADJUSTED],
+    ["bill", BILL_DISCOUNT],
+  ] as const)("writes no arrow, and its %s amounts add up to the TOTAL", (_, result) => {
+    const lines = printed80(result);
+    expect(lines.filter((line) => line.includes("->"))).toEqual([]);
+    const start = lines.findIndex((line) => line.startsWith("Fecha")) + 2;
+    const end = lines.indexOf("", start);
+    const goods = lines.slice(start, end).map((line) => printedCents(line.trimEnd()));
+    const total = lines.find((line) => line.startsWith("TOTAL"))!;
+    expect(goods.reduce((sum, cents) => sum + cents, 0)).toBe(printedCents(total.trimEnd()));
+  });
+
+  it.each([
+    ["wpc1252", 16, "Invitación"],
+    ["pc858", 19, "Invitación"],
+    ["plain", 0, "Invitacion"],
+  ] as const)(
+    "prints the comp's label in %s (table %i) as %s",
+    (characterSet, characterTable, label) => {
+      const lines = printedLines(
+        formatReceipt({
+          result: ADJUSTED,
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer: { paperWidth: "80mm", resolution: "180dpi", characterSet, characterTable },
+        }),
+      );
+      expect(lines.filter((line) => line.startsWith(`  ${label} `))).toHaveLength(2);
+    },
+  );
+
+  it("prints a long name at its list price and the comp on its own line on the narrow roll", () => {
     const lines = printedLines(
       formatReceipt({
         result: {
           ...ADJUSTED,
+          total: "0.00",
           lines: [
             {
               descriptions: { "es-ES": "Tostada con tomate y jamón ibérico de bellota" },
@@ -1304,6 +1394,7 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
               gross: "0.00",
               listGross: "12.50",
               parentLineNo: null,
+              adjustments: [{ kind: "comp", amount: "12.50" }],
             },
           ],
         },
@@ -1317,8 +1408,8 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
     expect(first).toBeGreaterThanOrEqual(0);
     expect(lines.slice(first, first + 3)).toEqual([
       "1  Tostada con tomate y jamón".padEnd(30),
-      "   ibérico de bellota".padEnd(30),
-      "12,50 € -> 0,00 €".padStart(30),
+      `   ibérico de bellota${" ".repeat(2)}12,50 €`,
+      `  Invitación${" ".repeat(10)}-12,50 €`,
     ]);
   });
 
@@ -1340,8 +1431,10 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
               gross: "1111.11",
               listGross: "1234.56",
               parentLineNo: null,
+              adjustments: [{ kind: "discount", percentBp: 1000, amount: "123.45" }],
             },
           ],
+          billAdjustments: [{ kind: "discount", percentBp: 1250, amount: "1000.00" }],
         },
         issuer: ISSUER,
         receipt: {},
@@ -1352,7 +1445,8 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
     const columns = columnsFor(printer.paperWidth);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
     const euro = printer.characterSet === "plain" ? "EUR" : "€";
-    const amount = `1234,56 ${euro} -> 1111,11 ${euro}`;
-    expect(lines.filter((line) => line.endsWith(amount))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith(`1234,56 ${euro}`))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith(`-123,45 ${euro}`))).toHaveLength(1);
+    expect(lines.filter((line) => line.endsWith(`-1000,00 ${euro}`))).toHaveLength(1);
   });
 });
