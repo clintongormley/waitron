@@ -2202,6 +2202,33 @@ the registry test now looks packs up by `countryCode` and checks that no install
 `apps/server/src/setup-api.country-pack.test.ts`, `apps/setup/src/screens/venue-screen.test.ts`)
 no longer set one.
 
+**A refused dropdown now gets the red outline — DONE (lane A's A151, 2026-09-30).** The shared
+dropdown style (`selectStyles`, `packages/ui/src/base-styles.ts`) draws a `select` marked
+`aria-invalid="true"` with the `--wt-color-danger` border, and the two restore screens
+(`apps/setup/src/screens/restore-screen.ts`, `restore-bucket-screen.ts`) now use that style; the
+venue screen already used it, so its country and province dropdowns gain the outline too (the
+province one is the case tested). Two dashboard screens also use that style, mark their dropdowns
+`aria-invalid` and have no invalid-dropdown rule of their own, so they gain the outline too: the
+product editor (`apps/dashboard/src/widgets/product-editor.ts`, its routing, VAT and unit
+dropdowns) and the venue operations screen
+(`packages/venue-service/src/dashboard/venue-operations-screen.ts`). Neither was opened and looked
+at, and no test of theirs asserts the outline. On both restore screens (backup restore and bucket
+restore) the environment dropdown now spans the column and takes the shared padding and border,
+where before it kept the browser's own size. Seen in both themes, English and Spanish, at 1280 and
+390 wide. Cases: the invalid-select case in `packages/ui/src/base-styles.test.ts`, and the
+danger-colour cases in the two restore screens' and the venue screen's tests.
+
+**Still OPEN, seen while doing A151 (2026-09-30), not changed:** on the backup restore screen the
+refused backup-file and recovery-key inputs, and on the bucket restore screen the refused recovery
+kit text box, get no red outline — both screens' own styles have no rule for an invalid input or
+text box (seen in screenshots of the refused state; only the dropdown was in A151's scope). Four
+stylesheets that already include `selectStyles` still carry their own identical
+`select[aria-invalid="true"]` rule — `reasons-screen.ts` (adjustments), `sumup-connect-form.ts`
+(payments-sumup), `member-list-editor.ts` and `unit-form.ts` (dashboard) — and a fifth,
+`apps/dashboard/src/screens/device-profiles-screen.ts` (dashboard), carries the same declaration
+limited to `.home-menu select[aria-invalid="true"]`. They were left because none of their own test
+files asserts a border colour, so removing them would go unchecked.
+
 The original walkthrough is retained under *Detail → Setup wizard*.
 
 ### A3. Printers from the dashboard

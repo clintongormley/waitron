@@ -577,6 +577,17 @@ describe("setup-venue-screen form errors", () => {
     expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
   });
 
+  it("outlines a refused dropdown in the danger colour", async () => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
+    host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+    await fillValid(el, { province: "" });
+    next(el).click();
+    await el.updateComplete;
+    const province = q(el, "[data-test=province]")!;
+    expect(province.getAttribute("aria-invalid")).toBe("true");
+    expect(getComputedStyle(province).borderColor).toBe("rgb(4, 5, 6)");
+  });
+
   it("re-checks the selects and the language group too, not only the text fields", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     await fillValid(el, { province: "" });
