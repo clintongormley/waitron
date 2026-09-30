@@ -3851,7 +3851,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       its extras in proportion, and `adjustment.partial_with_extras` is retired; part of a weighed
       line is refused `adjustment.weighed_partial`, which tells staff to discount the whole line.
       The till offers one of several of a dish with extras, and never offers part of a weighed
-      line: its give-away and discount dialog says the same sentence beside the action. A
+      line: its give-away and discount dialog says the same sentence above the action. A
       give-away or a discount that would take nothing off — the line already free, or a discount
       too small to move any price — is now refused `adjustment.no_reduction`; before, every such
       case tried, on main before B11d as well, was recorded as an adjustment of €0.00. A cancel is
@@ -5686,7 +5686,7 @@ ongoing overhaul listed at the top of Track A.
   sidebar.
 
 - **A form's message about a failed submission sits at the bottom of the form, on its own line above
-  the buttons (C97, owner 2026-09-30) — DONE (2026-09-30).** The one message a form shows about a
+  the buttons (C97, owner 2026-09-30) — DONE (2026-10-01).** The one message a form shows about a
   failed submission is no longer beside the buttons: it runs full width from the form's left edge,
   aligned to the start, on its own line just above the button row, at every width. In a dialog it
   is the last thing in the dialog's scrolling body, below the last field, and is scrolled into view;
@@ -5699,20 +5699,23 @@ ongoing overhaul listed at the top of Track A.
   panel's full width while it has a message. A dialog with more than one action row in its footer
   shows every row's message, joined; a dialog opened with a footer row's message already present
   scrolls it into view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
-  message scrolled into view when it appears. None of these scrolls happens while focus is in a text
-  field, list or text area: a form that re-checks its fields on every keystroke clears and re-shows
-  its message as the person types, and a measured case scrolled a long dialog 1,773 px away from
-  the focused field.
-  Two dialogs on the categories screen drew their own message instead and now pass it to their
-  footer `wt-form-actions`: its delete dialog (`#dialogMessage`, removed) and its products window, which drew
-  a refused add at the top of its body.
+  message scrolled into view when it appears. None of these scrolls happens when the message changes
+  in the same browser task as an edit inside the dialog (typing, choosing from a list, ticking a
+  box): a form that re-checks its fields on every keystroke clears and re-shows its message as the
+  person types, and a measured case scrolled a long dialog 1,773 px away from the focused field. A
+  refusal that comes back from a request later is scrolled to, even while focus is still in a field.
+  These dialogs drew their own message instead and now pass it to their footer `wt-form-actions`:
+  the categories screen's delete dialog (`#dialogMessage`, removed) and products window, which drew
+  a refused add at the top of its body; the staff screen's row action confirmation; the delete
+  dialogs on the modifiers, catalogue, sections and labels screens; the servers screen's remove and
+  clear confirmations; the menus screen's layout delete; and the image library's image delete.
   Browser tests hold the placement on location settings, the setup wizard's connect form, the
   profile screen's Add passkey dialog, the sign-in passkey step and the address check, at 1280 and
   390 pixels wide where the width matters. A `wt-form-actions` wrapped in another element inside a
   dialog's footer would keep its message in the footer; none does today.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
-  box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-09-30, C97: the message now
+  box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now
   sits on its own line at the bottom of the form, above the buttons, not beside them; see the entry
   above.)_ `wt-form-actions` gained an `error`
   message shown beside the buttons and announced to screen readers, and `focusFirstInvalid`
@@ -5744,7 +5747,9 @@ ongoing overhaul listed at the top of Track A.
   keep their refusal in the dialog's body; and the sections editor's member-list edit and reload
   errors (`apps/dashboard/src/screens/sections-screen.ts`) stay as paragraphs above the member list,
   because each member change is saved at once, not on a submit. Outside `apps/dashboard`, the image
-  library's delete confirmation also keeps its refusal in the dialog's body. Since C47s (#840) the setup
+  library's delete confirmation also keeps its refusal in the dialog's body. _(2026-10-01, C97:
+  these three delete confirmations now pass their refusal to the dialog's footer row; see the C97
+  entry above.)_ Since C47s (#840) the setup
   wizard's forms follow the rule too: the admin, connect, reset, venue, certificate, restore,
   bucket-restore, Cloud-restore and live-source screens. The wizard's screens with no fields —
   review, fiscal test, connection and provisioning — keep their refusal paragraph, as the cloud
