@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRequest } from "@waitron/dashboard-kit";
-import { AdjustmentsApi, type AdjustmentReason, type AdjustmentReasonInput } from "./client.js";
+import {
+  AdjustmentsApi,
+  type AdjustmentEntry,
+  type AdjustmentReason,
+  type AdjustmentReasonInput,
+  type AdjustmentReport,
+} from "./client.js";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return { ok: true, status, text: async () => JSON.stringify(body) } as Response;
@@ -91,5 +97,57 @@ describe("AdjustmentsApi", () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ids: ["r2", "r1"] }),
     });
+  });
+
+  it("reads the report over a range of business days", async () => {
+    const report = {
+      fromBusinessDay: "2026-09-01",
+      toBusinessDay: "2026-09-02",
+    } as AdjustmentReport;
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(report));
+    expect(await api(fetchImpl).getReport("2026-09-01", "2026-09-02")).toEqual(report);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/adjustments/report?from=2026-09-01&to=2026-09-02",
+      { method: "GET", credentials: "include" },
+    );
+  });
+
+  it("lists everyone's adjustments, one person's, or the guests', from the entries envelope", async () => {
+    const entry = { id: "a1" } as AdjustmentEntry;
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [entry] }));
+    const client = api(fetchImpl);
+    expect(await client.listEntries("2026-09-01", "2026-09-01", "everyone")).toEqual([entry]);
+    await client.listEntries("2026-09-01", "2026-09-02", {
+      personId: "5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b",
+    });
+    await client.listEntries("2026-09-01", "2026-09-02", "guests");
+    expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-01",
+      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&person=5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b",
+      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&guests=true",
+    ]);
+  });
+
+  it("reads the venue's current business day from the sales overview", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ businessDay: "2026-09-29" }));
+    expect(await api(fetchImpl).currentBusinessDay()).toBe("2026-09-29");
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/reports/overview", {
+      method: "GET",
+      credentials: "include",
+    });
+  });
+
+  it("marks each report read passive on the background client", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ entries: [], businessDay: "2026-09-29" }));
+    const client = api(fetchImpl, true);
+    await client.getReport("2026-09-01", "2026-09-01");
+    await client.listEntries("2026-09-01", "2026-09-01", "everyone");
+    await client.currentBusinessDay();
+    for (const call of fetchImpl.mock.calls) {
+      expect(new Headers((call[1] as RequestInit).headers).get("x-waitron-live")).toBe("1");
+    }
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 });

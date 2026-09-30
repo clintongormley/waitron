@@ -24,6 +24,74 @@ export interface AdjustmentReason extends AdjustmentReasonInput {
   position: number;
 }
 
+/** Amounts are decimal strings with two places, as the report routes write them. */
+export interface AdjustmentTally {
+  count: number;
+  reduction: string;
+  cancelledNominalValue: string;
+}
+
+export type AdjustmentStageGroup = "beforeFiring" | "afterFiring" | "afterServing" | "billDiscount";
+
+export interface ReasonTally extends AdjustmentTally {
+  reasonId: string;
+  reasonName: string;
+}
+
+export interface AdjustmentTotals extends AdjustmentTally {
+  byAction: Record<AdjustmentAction, AdjustmentTally>;
+  byStage: Record<AdjustmentStageGroup, AdjustmentTally>;
+  byReason: ReasonTally[];
+}
+
+export interface PersonRef {
+  personId: string;
+  name: string | null;
+}
+
+export interface PersonAdjustments extends AdjustmentTotals, PersonRef {
+  sales: string;
+  /** One decimal place; null when there are no sales. */
+  ratePercent: string | null;
+  approvers: (PersonRef & { count: number })[];
+  approvalsGiven: number;
+}
+
+export interface AdjustmentReport {
+  fromBusinessDay: string;
+  toBusinessDay: string;
+  overall: AdjustmentTotals & { sales: string; ratePercent: string | null };
+  people: PersonAdjustments[];
+  guests: AdjustmentTotals;
+}
+
+export interface AdjustmentEntry {
+  id: string;
+  createdAt: string;
+  action: AdjustmentAction;
+  stage: "unsent" | "held" | "fired" | "served" | null;
+  reasonId: string;
+  reasonName: string;
+  note: string | null;
+  lineName: string | null;
+  /** Three decimal places; null on a discount on the whole bill. */
+  quantity: string | null;
+  percentBp: number | null;
+  beforeAmount: string;
+  afterAmount: string;
+  reduction: string;
+  nominalValue: string;
+  requestedBy: PersonRef;
+  approvedBy: PersonRef | null;
+  creditedTo: PersonRef | null;
+  byGuest: boolean;
+  workingOrderId: string;
+  orderNumber: number;
+}
+
+/** Whose adjustments the drill-down lists. */
+export type EntriesOf = "everyone" | "guests" | { personId: string };
+
 export class AdjustmentsApi {
   constructor(
     private readonly request: DashboardRequest,
@@ -60,5 +128,37 @@ export class AdjustmentsApi {
   /** `ids` is every active reason, once each, in the new order. */
   reorderReasons(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });
+  }
+
+  getReport(from: string, to: string): Promise<AdjustmentReport> {
+    return this.request<AdjustmentReport>(
+      `/management-api/adjustments/report?${new URLSearchParams({ from, to })}`,
+      "GET",
+      undefined,
+      { passive: this.passive },
+    );
+  }
+
+  async listEntries(from: string, to: string, of: EntriesOf): Promise<AdjustmentEntry[]> {
+    const query = new URLSearchParams({ from, to });
+    if (of === "guests") query.set("guests", "true");
+    else if (of !== "everyone") query.set("person", of.personId);
+    const body = await this.request<{ entries: AdjustmentEntry[] }>(
+      `/management-api/adjustments/report/entries?${query}`,
+      "GET",
+      undefined,
+      { passive: this.passive },
+    );
+    return body.entries;
+  }
+
+  async currentBusinessDay(): Promise<string> {
+    const body = await this.request<{ businessDay: string }>(
+      "/management-api/reports/overview",
+      "GET",
+      undefined,
+      { passive: this.passive },
+    );
+    return body.businessDay;
   }
 }

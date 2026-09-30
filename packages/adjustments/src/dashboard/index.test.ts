@@ -3,6 +3,8 @@ import { render } from "lit";
 import { LiveData, codeMessage, createRequest } from "@waitron/dashboard-kit";
 import { ADJUSTMENTS_DASHBOARD } from "./index.js";
 import type { AdjustmentReasonsScreen } from "./reasons-screen.js";
+import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
+import { emptyReport } from "./test-helpers.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {
@@ -68,5 +70,41 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
     await vi.waitFor(() =>
       expect(screen.shadowRoot!.querySelector('[data-test="reasons"]')).not.toBeNull(),
     );
+  });
+
+  it("mounts the adjustment report on the context's request and live data", async () => {
+    const fetchImpl = vi.fn((path: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(path.includes("overview") ? { businessDay: "2026-09-29" } : emptyReport()),
+      } as Response),
+    );
+    const liveData = new LiveData();
+    const report = ADJUSTMENTS_DASHBOARD.moreScreens![0]!;
+    expect(report.screen.navLabelKey).toBe("nav.adjustment_report");
+    expect(ADJUSTMENTS_DASHBOARD.strings.en["nav.adjustment_report"]).toBe("Adjustment report");
+    expect(ADJUSTMENTS_DASHBOARD.strings.es["nav.adjustment_report"]).toBe("Informe de ajustes");
+    const handle = report.create({
+      request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData,
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(), container);
+    const screen = container.querySelector<AdjustmentReportScreen>(
+      "dashboard-adjustment-report-screen",
+    )!;
+    await screen.updateComplete;
+    expect(screen.api.liveData).toBe(liveData);
+    await vi.waitFor(() =>
+      expect(fetchImpl).toHaveBeenCalledWith(
+        "/management-api/adjustments/report?from=2026-09-29&to=2026-09-29",
+        expect.objectContaining({ method: "GET" }),
+      ),
+    );
+    liveData.clear();
   });
 });

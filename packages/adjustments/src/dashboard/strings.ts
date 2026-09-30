@@ -68,6 +68,59 @@ const en = {
   "adjustments.error.noteRequired": "Choose whether staff must write a note.",
   "adjustments.load_error": "The adjustment reasons could not be loaded.",
   "adjustments.reorder_error": "The new order could not be saved.",
+  "nav.adjustment_report": "Adjustment report",
+  "adjustment_report.title": "Adjustment report",
+  "adjustment_report.intro":
+    "Counts the cancellations, give-aways and discounts on the bills opened on these business days. A person's rate is what their own adjustments took off, as a share of the sales credited to them at prices before any adjustment.",
+  "adjustment_report.from": "From",
+  "adjustment_report.to": "To",
+  "adjustment_report.range_backwards": "Choose a first day on or before the last day.",
+  "adjustment_report.load_error": "The adjustment report could not be loaded: {reason}",
+  "adjustment_report.loading": "Loading the report",
+  "adjustment_report.summary": "All adjustments",
+  "adjustment_report.none": "No adjustments on these days.",
+  "adjustment_report.show_all": "List every adjustment",
+  "adjustment_report.figure.count": "Adjustments",
+  "adjustment_report.figure.reduction": "Taken off the bills",
+  "adjustment_report.figure.sales": "Sales before adjustments",
+  "adjustment_report.figure.rate": "Rate",
+  "adjustment_report.figure.cancelled": "List value of cancelled items",
+  "adjustment_report.people": "By person",
+  "adjustment_report.people_hint": "Choose a name to list that person's adjustments.",
+  "adjustment_report.guests": "Guests",
+  "adjustment_report.unknown_person": "Unknown person",
+  "adjustment_report.open_person": "List {name}'s adjustments",
+  "adjustment_report.open_guests": "List the guests' adjustments",
+  "adjustment_report.column.name": "Name",
+  "adjustment_report.column.count": "Adjustments",
+  "adjustment_report.column.reduction": "Taken off",
+  "adjustment_report.column.sales": "Credited sales",
+  "adjustment_report.column.rate": "Rate",
+  "adjustment_report.column.cancelled": "List value cancelled",
+  "adjustment_report.column.approved_by": "Approved by",
+  "adjustment_report.column.approvals_given": "Approvals given",
+  "adjustment_report.by_action": "By action",
+  "adjustment_report.by_stage": "By stage",
+  "adjustment_report.by_reason": "By reason",
+  "adjustment_report.column.action": "Action",
+  "adjustment_report.column.stage": "Stage",
+  "adjustment_report.column.reason": "Reason",
+  "adjustment_report.no_reasons": "No reason was used on these days.",
+  "adjustment_report.entries.person": "Adjustments by {name}",
+  "adjustment_report.entries.guests": "Adjustments by guests",
+  "adjustment_report.entries.everyone": "Every adjustment",
+  "adjustment_report.entries.close": "Close the list",
+  "adjustment_report.entries.error": "These adjustments could not be loaded: {reason}",
+  "adjustment_report.entries.time": "Time",
+  "adjustment_report.entries.when": "When",
+  "adjustment_report.entries.note": "Note",
+  "adjustment_report.entries.item": "Item",
+  "adjustment_report.entries.quantity": "Quantity",
+  "adjustment_report.entries.list_value": "List value",
+  "adjustment_report.entries.requested_by": "Requested by",
+  "adjustment_report.entries.credited_to": "Credited to",
+  "adjustment_report.entries.order": "Order",
+  "adjustment_report.entries.guest": "Guest",
 } as const;
 
 const es: Record<keyof typeof en, string> = {
@@ -130,6 +183,59 @@ const es: Record<keyof typeof en, string> = {
   "adjustments.error.noteRequired": "Elige si el personal debe escribir una nota.",
   "adjustments.load_error": "No se pudieron cargar los motivos de ajuste.",
   "adjustments.reorder_error": "No se pudo guardar el nuevo orden.",
+  "nav.adjustment_report": "Informe de ajustes",
+  "adjustment_report.title": "Informe de ajustes",
+  "adjustment_report.intro":
+    "Cuenta las anulaciones, invitaciones y descuentos de las cuentas abiertas en estas jornadas. La tasa de cada persona es lo que descontaron sus propios ajustes, en proporción a las ventas que se le atribuyen a precios anteriores a cualquier ajuste.",
+  "adjustment_report.from": "Desde",
+  "adjustment_report.to": "Hasta",
+  "adjustment_report.range_backwards": "Elige un primer día igual o anterior al último.",
+  "adjustment_report.load_error": "No se pudo cargar el informe de ajustes: {reason}",
+  "adjustment_report.loading": "Cargando el informe",
+  "adjustment_report.summary": "Todos los ajustes",
+  "adjustment_report.none": "No hay ajustes en estas jornadas.",
+  "adjustment_report.show_all": "Ver todos los ajustes",
+  "adjustment_report.figure.count": "Ajustes",
+  "adjustment_report.figure.reduction": "Descontado de las cuentas",
+  "adjustment_report.figure.sales": "Ventas antes de ajustes",
+  "adjustment_report.figure.rate": "Tasa",
+  "adjustment_report.figure.cancelled": "Valor de carta de lo anulado",
+  "adjustment_report.people": "Por persona",
+  "adjustment_report.people_hint": "Elige un nombre para ver los ajustes de esa persona.",
+  "adjustment_report.guests": "Clientes",
+  "adjustment_report.unknown_person": "Persona desconocida",
+  "adjustment_report.open_person": "Ver los ajustes de {name}",
+  "adjustment_report.open_guests": "Ver los ajustes de los clientes",
+  "adjustment_report.column.name": "Nombre",
+  "adjustment_report.column.count": "Ajustes",
+  "adjustment_report.column.reduction": "Descontado",
+  "adjustment_report.column.sales": "Ventas atribuidas",
+  "adjustment_report.column.rate": "Tasa",
+  "adjustment_report.column.cancelled": "Valor de carta anulado",
+  "adjustment_report.column.approved_by": "Aprobado por",
+  "adjustment_report.column.approvals_given": "Aprobaciones dadas",
+  "adjustment_report.by_action": "Por acción",
+  "adjustment_report.by_stage": "Por momento",
+  "adjustment_report.by_reason": "Por motivo",
+  "adjustment_report.column.action": "Acción",
+  "adjustment_report.column.stage": "Momento",
+  "adjustment_report.column.reason": "Motivo",
+  "adjustment_report.no_reasons": "No se usó ningún motivo en estas jornadas.",
+  "adjustment_report.entries.person": "Ajustes de {name}",
+  "adjustment_report.entries.guests": "Ajustes de los clientes",
+  "adjustment_report.entries.everyone": "Todos los ajustes",
+  "adjustment_report.entries.close": "Cerrar la lista",
+  "adjustment_report.entries.error": "No se pudieron cargar estos ajustes: {reason}",
+  "adjustment_report.entries.time": "Hora",
+  "adjustment_report.entries.when": "Momento",
+  "adjustment_report.entries.note": "Nota",
+  "adjustment_report.entries.item": "Artículo",
+  "adjustment_report.entries.quantity": "Cantidad",
+  "adjustment_report.entries.list_value": "Valor de carta",
+  "adjustment_report.entries.requested_by": "Solicitado por",
+  "adjustment_report.entries.credited_to": "Atribuido a",
+  "adjustment_report.entries.order": "Pedido",
+  "adjustment_report.entries.guest": "Cliente",
 };
 
 export const ADJUSTMENTS_STRINGS = { en, es };
@@ -173,6 +279,22 @@ const ACTION_CHOICES: NameTable = {
   discount_amount: { en: "Discount by an amount", es: "Descontar un importe" },
 };
 
+/** How a report heads each action's total. */
+const ACTION_TOTALS: NameTable = {
+  cancel: { en: "Cancellations", es: "Anulaciones" },
+  comp: { en: "Give-aways", es: "Invitaciones" },
+  discount_percent: { en: "Percentage discounts", es: "Descuentos en porcentaje" },
+  discount_amount: { en: "Amount discounts", es: "Descuentos en importe" },
+};
+
+/** How far an item had got when it was adjusted; a whole-bill discount has no item. */
+const STAGE_NAMES: NameTable = {
+  beforeFiring: { en: "Before firing", es: "Antes de marchar" },
+  afterFiring: { en: "After firing", es: "Después de marchar" },
+  afterServing: { en: "After serving", es: "Después de servir" },
+  billDiscount: { en: "Whole bill", es: "Toda la cuenta" },
+};
+
 const ROLE_NAMES: NameTable = {
   staff: { en: "Staff", es: "Empleado" },
   supervisor: { en: "Supervisor", es: "Supervisor" },
@@ -190,4 +312,12 @@ export function actionChoice(action: string, locale?: string): string {
 
 export function roleName(role: string, locale?: string): string {
   return resolveNameTable(ROLE_NAMES, role, locale);
+}
+
+export function actionTotalName(action: string, locale?: string): string {
+  return resolveNameTable(ACTION_TOTALS, action, locale);
+}
+
+export function stageName(stage: string, locale?: string): string {
+  return resolveNameTable(STAGE_NAMES, stage, locale);
 }
