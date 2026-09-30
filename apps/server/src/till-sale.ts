@@ -743,6 +743,8 @@ async function readOutstandingSaleForOrder(
  *  - `recover` / `recover-settle` — a captured payment with no sale (P2 committed, P3 never ran).
  *    Finish it WITHOUT charging again: file a sale, or settle the already-issued invoice when there is
  *    one, since a second `recordSale` would collide with it.
+ *  - `owes-nothing` — a sale was already issued and its corrections leave nothing owed: settled
+ *    here without asking the reader, as {@link collectOrder} does; below zero it is refused.
  *  - `settle` — a sale was already issued for the order: collect the amount due and SETTLE it.
  *  - `collect` — no sale yet: collect the priced total and file the sale.
  */
@@ -817,6 +819,12 @@ async function payIntegrated(
       }
 
       if (outstanding !== undefined) {
+        if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
+          return {
+            kind: "owes-nothing" as const,
+            ticket: await settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId),
+          };
+        }
         return { kind: "settle" as const, outstanding };
       }
 
@@ -864,7 +872,7 @@ async function payIntegrated(
     };
   });
 
-  if (prepared.kind === "replay") {
+  if (prepared.kind === "replay" || prepared.kind === "owes-nothing") {
     return { outcome: "captured", ticket: prepared.ticket };
   }
   // P2 is skipped entirely: the card was already charged.
@@ -1497,29 +1505,26 @@ export async function collectOrder(
     const outstanding = await readOutstandingSaleForOrder(tx, req.id);
 
     if (outstanding !== undefined) {
+      if (compareDecimal(outstanding.amountDue, ZERO) <= 0) {
+        return settleOwingNothing(tx, deps, cfg, req.id, outstanding.saleId);
+      }
       const { settledAmount } = settlementFor(req.tender, outstanding.amountDue);
       const settledAt = deps.clock.now().instant;
-      // Nothing is owed once corrections reach the invoice's total, so no money changes hands and
-      // no tender is written (`tenders_amount_ck` refuses one of zero or less). Below zero,
-      // `settleSale` refuses the empty tender list with `sale.tender_shortfall`.
-      const paysNothing = compareDecimal(outstanding.amountDue, ZERO) <= 0;
 
       await settleSale(tx, {
         saleId: outstanding.saleId,
-        tenders: paysNothing
-          ? []
-          : [
-              {
-                method: req.tender.method,
-                amount: settledAmount,
-                tipAmount: "0.00",
-                cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
-                settledAt,
-              },
-            ],
+        tenders: [
+          {
+            method: req.tender.method,
+            amount: settledAmount,
+            tipAmount: "0.00",
+            cashTendered: req.tender.method === "cash" ? req.tender.amount : null,
+            settledAt,
+          },
+        ],
       });
 
-      if (req.tender.method === "card" && !paysNothing) {
+      if (req.tender.method === "card") {
         const { provider, paymentRef } = await recordManualCardPayment(tx, {
           workingOrderId: req.id,
           amount: outstanding.amountDue,
@@ -1544,7 +1549,7 @@ export async function collectOrder(
       await clearBillRequestIfPaid(tx, req.id, deps.log);
 
       const ticket = await readSettledTicket(deps.backend, tx, cfg, req.id);
-      if (req.tender.method === "cash" && !paysNothing) {
+      if (req.tender.method === "cash") {
         await enqueueCashSaleDrawer(tx, cfg, outstanding.saleId, operatorId);
       }
       return ticket;
@@ -1553,6 +1558,29 @@ export async function collectOrder(
     const order = await priceStoredOrderForIssuance(tx, req.id);
     return fileImmediateSale(tx, deps, cfg, req.id, req.tender, order, operatorId, true);
   });
+}
+
+/**
+ * Close a placed order whose issued sale's corrections leave nothing owed: no money changes hands,
+ * so no tender, no `payments` row and no drawer opening (`tenders_amount_ck` refuses a tender of
+ * zero or less). Below zero, `settleSale` refuses the empty tender list with
+ * `sale.tender_shortfall` and the order stays placed.
+ */
+async function settleOwingNothing(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: TillConfig,
+  workingOrderId: string,
+  saleId: SaleId,
+): Promise<TillSaleResult> {
+  const settledAt = deps.clock.now().instant.toISOString();
+  await settleSale(tx, { saleId, tenders: [] });
+  await tx
+    .update(workingOrders)
+    .set({ status: "settled", settledAt, collectedAt: settledAt })
+    .where(eq(workingOrders.id, workingOrderId));
+  await clearBillRequestIfPaid(tx, workingOrderId, deps.log);
+  return readSettledTicket(deps.backend, tx, cfg, workingOrderId);
 }
 
 /**

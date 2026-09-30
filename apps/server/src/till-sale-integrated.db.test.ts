@@ -16,13 +16,15 @@ import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 // Its records carry NO `verificationUrl`, which exercises the ticket's empty-QR default.
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
-import { hashPassword, hashPin } from "@waitron/identity";
+import { hashPassword, hashPin, loginWithPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
+  allocateInvoiceNumber,
   drawerOpens,
   parties,
   printJobs,
+  sales,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -33,6 +35,7 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
   rawCentsToDecimal,
+  saleId as brandSaleId,
   seriesId as brandSeriesId,
   tillId as brandTillId,
 } from "@waitron/shared";
@@ -43,7 +46,7 @@ import {
   SimulatorPaymentProvider,
 } from "@waitron/payments";
 import type { PaymentProvider, PaymentResult, PaymentResultState } from "@waitron/payments";
-import { listOutstandingSales } from "@waitron/core";
+import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import { SumUpCloudProvider } from "@waitron/payments-sumup";
@@ -1251,6 +1254,113 @@ describe("payWorkingOrderIntegrated — ordering 1 (invoice-first settle path)",
     expect(await tendersFor(id)).toEqual([]);
     expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
     expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "1.50" }]);
+  });
+
+  describe("a bill whose corrections leave nothing owed", () => {
+    /** The venue's rectificative series. */
+    function rectificativeSeries(cfg: TillConfig): string {
+      return suite.db.all<{ id: string }>(sql`
+        select id from invoice_series where node_id = ${cfg.nodeId} and purpose = 'rectificative'
+      `)[0]!.id;
+    }
+
+    /** Café's 1.50 invoice (a 1.24 base at 21%), reversed whole by a credit note through
+     *  `recordCorrection`. */
+    async function correctToZero(cfg: TillConfig, saleId: string): Promise<void> {
+      const adminId = suite.db.all<{ id: string }>(
+        sql`select id from persons where role = 'admin'`,
+      )[0]!.id;
+      await withTransaction(suite.db, async (tx) => {
+        const session = await loginWithPin(tx, {
+          tillId: cfg.tillId,
+          personId: adminId,
+          pin: "1234",
+        });
+        await recordCorrection(tx, backend, {
+          tillId: cfg.tillId,
+          nodeId: cfg.nodeId,
+          seriesId: brandSeriesId(rectificativeSeries(cfg)),
+          correctsSaleId: brandSaleId(saleId),
+          total: "-1.50",
+          lines: [
+            {
+              lineNo: 1,
+              name: "Descuento",
+              descriptions: { [LOCALE]: "Descuento" },
+              quantity: "-1",
+              unitPrice: "1.24",
+              vatRate: "21.00",
+              lineTotal: "-1.24",
+            },
+          ],
+          clock,
+          authz: { sessionId: session.id },
+        });
+      });
+    }
+
+    it("closes the bill without asking the reader, writing no tender and no payment", async () => {
+      const { cfg: baseCfg, cafe } = await modeVenue("invoice_first");
+      const cfg = { ...baseCfg, tipsEnabled: true };
+      const station = await defaultStationId(cfg);
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      await correctToZero(cfg, saleId);
+      expect(await outstandingSalesFor()).toEqual([{ saleId, amountDue: "0.00" }]);
+      const { deps, client } = integratedDeps(cfg, suite.db);
+
+      const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [], tip: "0.30" });
+
+      expect(client.lastCreateIntent).toBeUndefined();
+      expect(out.outcome).toBe("captured");
+      if (out.outcome !== "captured") throw new Error("unreachable");
+      expect(out.ticket.invoiceNumber).toBe("A/1");
+      expect(out.ticket.tender).toEqual({ method: "unpaid" });
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await paymentCount(id)).toBe(0);
+      expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
+      expect(await collectedAtSet(id)).toBe(true);
+      expect(await stationQueueOrderIds(station)).toEqual([]);
+      expect(await outstandingSalesFor()).toEqual([]);
+      expect(await saleCount(id)).toBe(1);
+    });
+
+    it("refuses a bill already below zero with the domain code, without asking the reader", async () => {
+      const { cfg, cafe } = await modeVenue("invoice_first");
+      const { id, saleId } = await placeInvoiceFirst(cfg, cafe);
+      // Written straight to `sales`: `recordCorrection` refuses a correction this large, but a
+      // bill below zero must still be refused at collection. No fiscal record is written for it.
+      await withTransaction(suite.db, async (tx) => {
+        const seriesId = rectificativeSeries(cfg);
+        const now = clock.now();
+        await tx.insert(sales).values({
+          tillId: cfg.tillId,
+          nodeId: cfg.nodeId,
+          seriesId,
+          invoiceNumber: await allocateInvoiceNumber(tx, seriesId),
+          issuedAt: now.instant.toISOString(),
+          issuedOffsetMinutes: now.offsetMinutes,
+          total: -200,
+          vatBreakdown: [{ rate: "21.00", base: "-1.65", tax: "-0.35" }],
+          locale: LOCALE,
+          invoiceLocales: [LOCALE],
+          fiscalBackend: backend.id,
+          fiscalState: "recorded",
+          correctsSaleId: saleId,
+        });
+      });
+      const { deps, client } = integratedDeps(cfg, suite.db);
+
+      await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toMatchObject({
+        code: "sale.tender_shortfall",
+        params: { due: "-0.50", charged: "0" },
+      });
+
+      expect(client.lastCreateIntent).toBeUndefined();
+      expect(await tendersFor(id)).toEqual([]);
+      expect(await paymentCount(id)).toBe(0);
+      expect(await orderState(id)).toEqual({ status: "placed", settledAtSet: false });
+      expect(await collectedAtSet(id)).toBe(false);
+    });
   });
 
   // A captured payment with no sale on an invoice-first order is recovered by SETTLING the issued

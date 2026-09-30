@@ -3855,17 +3855,20 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         already corrected below zero, with the domain code, and leaves it open" in
         `apps/server/src/collect-by-invoice.test.ts` inserts a -20.00 corrective row straight into
         `sales`, and failed with that check deleted.
-        **Still open: the card-reader path (queued as C67).** `payWorkingOrderIntegrated`
-        (`apps/server/src/till-sale.ts`) is unchanged: for a bill with a sale it asks the card
-        reader to collect the amount due plus any tip, so on a bill corrected to zero it would ask
-        for 0.00 (plus tip), and, on a bill below zero (which `recordCorrection` no longer
-        produces, C66), for a negative amount (plus tip).
-        What the payment provider does with either was not run. **Next action:** a test driving
-        `payWorkingOrderIntegrated` on a bill corrected to zero, then close such a bill without
-        asking the reader, as `collectOrder` does (the owner's answer "just close the bill" covers
-        it); and a guard for a bill below zero, refused with the code `collectOrder` uses, never
-        asking the reader for a negative amount (`recordCorrection` refuses a correction that would
-        make one, C66 above).
+        **DONE (C67, 2026-09-30): the card-reader path closes a bill that owes nothing without
+        asking the reader.** `payWorkingOrderIntegrated` (`apps/server/src/till-sale.ts`) now
+        settles a bill with a sale whose corrections leave nothing owed the way `collectOrder` does,
+        through one shared step (`settleOwingNothing`): no tender, no `payments` row, the bill
+        `settled` with `collected_at` stamped, and the ticket's tender `{ method: "unpaid" }`. A tip
+        sent with the request is not charged, since the reader is never asked. A bill below zero is
+        refused with `sale.tender_shortfall`, as `collectOrder` refuses it, and stays placed. New
+        cases in `apps/server/src/till-sale-integrated.db.test.ts` ("a bill whose corrections leave
+        nothing owed"), driving the Stripe provider over its fake HTTP client: before the change the
+        zero case asked the reader to charge 0.30 (the tip alone on a 0.00 bill), and the below-zero
+        case failed with `CHECK constraint failed` on the provider's `payments` row for -0.50.
+        Unchanged: a captured card payment with no sale on such a bill still takes the recovery
+        branch first and settles at the captured amount; and the branch for an order with no sale
+        yet was not run with a zero total.
         **Still open: a correction's third decimal place (queued as A144).** `recordCorrection` stores the
         correction's total rounded to the cent on the `sales` row but hands the unrounded input to
         the fiscal backend (`total: decimal(input.total)`,
