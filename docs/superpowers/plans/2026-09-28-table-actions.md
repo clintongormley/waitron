@@ -1797,7 +1797,9 @@ harness), as the existing party tests do.
 
     These go through `refuseInconsistentMerge`, `tablePointsAt` and `joinTable`'s own check, not
     `assertAnchoredTabOpen`. A COUNTER order (no party) is still refused by `assertPartyBillOpen`
-    everywhere it was.
+    everywhere it was. _(2026-09-30: since B11c an adjustment takes any open order, counter orders
+    included (`planAdjustment`); `assertPartyBillOpen` still guards `sendLines`, `recallLines`,
+    `setLineCourse` and `priceTabRound`'s bill check.)_
 
 - [ ] **Step 6: The main bill agrees with the old rule on every old path.** Add this to
   `party-main-bill.test.ts`. For each of seat, join, move-tab, unjoin-with-items and

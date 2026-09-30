@@ -770,6 +770,20 @@ describe("TillApi", () => {
     expect(r).toEqual({ items: groups, notices });
   });
 
+  it("retrieveWorkingOrder and getTabLines hand a caller's abort signal to fetch", async () => {
+    const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse({}));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+
+    await api.retrieveWorkingOrder("wo-1", { signal });
+    await api.getTabLines("wo-1", { signal });
+
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init?.signal])).toEqual([
+      ["/api/working-orders/wo-1", signal],
+      ["/api/working-orders/wo-1/lines", signal],
+    ]);
+  });
+
   it("getStationQueue and getDeviceStation hand a caller's abort signal to fetch", async () => {
     const fetchStub = vi.fn<typeof fetch>(async () => jsonResponse({ items: [], notices: [] }));
     const api = new TillApi("", fetchStub);

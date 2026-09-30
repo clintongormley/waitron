@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  floorZones,
   serviceCommands,
   orderGroups,
   parties,
@@ -29,6 +30,7 @@ import { decimal, subtractDecimal, sumDecimals, toScale, type Decimal } from "@w
 import { applyAdjustment, previewAdjustment } from "./adjustments-apply.js";
 import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill, transferItems } from "./bill-actions.js";
+import { moveBill } from "./move-bill.js";
 import { fireGroup, placeGroups } from "./order-groups.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -41,11 +43,14 @@ import {
 import {
   addTabRound,
   advanceTicketItem,
+  parkOrder,
+  placeOrder,
   readOrderRevision,
   recallLines,
   updateHeldOrder,
   updateOrderLine,
 } from "./working-order.js";
+import { send } from "./testing/bill-venue.js";
 import { serveLine } from "./testing/serve-line.js";
 import {
   billWith,
@@ -59,10 +64,11 @@ import {
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
-// Cancellations, comps and discounts applied to a party's bill (service plan Task 11, spec §7),
-// against a provisioned venue that files real Veri*Factu records. Each case seats its own party.
+// Cancellations, comps and discounts applied to an open bill (service plan Task 11, spec §7),
+// against a provisioned venue that files real Veri*Factu records.
 let venue: AdjustmentVenue;
 
 useVenueDb({
@@ -110,7 +116,7 @@ function preview(billId: string, ask: Ask) {
     const { submissionId, approver, ...args } = await argsFor(tx, billId, ask);
     void submissionId;
     void approver;
-    return previewAdjustment(tx, venue.cfg, args, venue.venueLocale);
+    return previewAdjustment(tx, args, venue.venueLocale);
   });
 }
 
@@ -2155,4 +2161,382 @@ async function ticketItemCount(billId: string): Promise<number> {
 
 function decimalDifference(a: string, b: string): Decimal {
   return toScale(subtractDecimal(decimal(a), decimal(b)), 2);
+}
+
+describe("a counter order (B11c)", () => {
+  /** A counter zone of its own, paying before the order is sent. */
+  let counterZone: string;
+  /** A counter zone whose orders are placed with a ticket and paid after. */
+  let ticketZone: string;
+
+  async function counterZoneNamed(name: string, serviceMode: "prepay" | "ticket_then_pay") {
+    return inTx(venue, async (tx) => {
+      const [zone] = await tx
+        .insert(floorZones)
+        .values({ locationId: venue.cfg.locationId, name })
+        .returning({ id: floorZones.id });
+      // `routes: "none"` keeps the Coffee's no-preparation route the suite set up.
+      return (
+        await offerProducts(tx, venue.cfg, {
+          zone: { zoneId: zone!.id },
+          serviceMode,
+          routes: "none",
+        })
+      ).zoneId;
+    });
+  }
+
+  beforeAll(async () => {
+    counterZone = await counterZoneNamed("Barra B11c", "prepay");
+    ticketZone = await counterZoneNamed("Barra ticket B11c", "ticket_then_pay");
+  });
+
+  /** A table's bill with `lines` sent to the kitchen, then moved to the counter. */
+  async function movedToCounter(lines: RoundLine[]): Promise<string> {
+    const { billId, partyId } = await bill(lines);
+    const expectedPartyRevision = await partyRevision(partyId);
+    await inTx(venue, (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        billId,
+        { counter: { zoneId: counterZone } },
+        { bills: "merge", partyId, expectedPartyRevision, operatorId: venue.staffId },
+      ),
+    );
+    return billId;
+  }
+
+  /** An order parked at the counter, nothing sent. */
+  async function parked(zoneId: string, ...names: string[]): Promise<string> {
+    const id = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id,
+      zoneId,
+      lines: names.map((name) => ({ menuItemId: venue.item(name), quantity: "1" })),
+      operatorId: venue.staffId,
+    });
+    return id;
+  }
+
+  /** Everything an adjustment could change on an order of no party. */
+  async function counterStateOf(orderId: string) {
+    const [order] = await inTx(venue, (tx) =>
+      tx
+        .select({
+          revision: workingOrders.revision,
+          status: workingOrders.status,
+          partyId: workingOrders.partyId,
+        })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, orderId)),
+    );
+    return { order, recorded: await recordedOn(orderId), rows: await rowsOf(venue, orderId) };
+  }
+
+  it("is a table's bill moved to the counter: open, of no party, its dishes sent", async () => {
+    const billId = await movedToCounter([{ name: "Burger" }]);
+
+    expect((await counterStateOf(billId)).order).toMatchObject({ status: "open", partyId: null });
+    expect(await ticketOf(venue, billId, 1)).toMatchObject({ stationId: venue.stationId });
+  });
+
+  it("comps a sent dish, recorded once under its reason, and moves the order's revision on", async () => {
+    const billId = await movedToCounter([{ name: "Burger" }, { name: "Bread" }]);
+    const before = await counterStateOf(billId);
+
+    const applied = await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      reasonId: venue.reasonId.complaint,
+    });
+
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "0.00", "12.00", "0.00"],
+      ["Bread", "1.000", "2.50", null, "2.50"],
+    ]);
+    const recorded = await recordedOn(billId);
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      action: "comp",
+      reasonId: venue.reasonId.complaint,
+      stage: "fired",
+      reduction: 1200,
+    });
+    expect(applied.revision).toBe(before.order!.revision + 1);
+    expect((await counterStateOf(billId)).order!.revision).toBe(before.order!.revision + 1);
+  });
+
+  it("discounts a sent dish", async () => {
+    const billId = await movedToCounter([{ name: "Bottle" }]);
+
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+
+    expect(await priced(billId)).toEqual([["Bottle", "1.000", "27.00", "30.00", "27.00"]]);
+    expect(await recordedOn(billId)).toMatchObject([
+      { action: "discount_percent", reasonId: venue.reasonId.house, reduction: 300 },
+    ]);
+  });
+
+  it("discounts the whole order", async () => {
+    const billId = await movedToCounter([{ name: "Bottle" }, { name: "Salad" }]);
+
+    await adjust(billId, { action: "discount_amount", amount: "4.00" });
+
+    expect(total(await rowsOf(venue, billId))).toBe("36.00");
+    expect(await recordedOn(billId)).toMatchObject([
+      { action: "discount_amount", lineName: null, reduction: 400 },
+    ]);
+  });
+
+  it("cancels a sent dish whole, telling the kitchen with a VOID slip", async () => {
+    const billId = await movedToCounter([{ name: "Steak" }, { name: "Bread" }]);
+    const jobs = await printJobCount();
+
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "cancel",
+      reasonId: venue.reasonId.mistake,
+      note: "Wrong order",
+    });
+
+    expect(await priced(billId)).toEqual([["Bread", "1.000", "2.50", null, "2.50"]]);
+    expect((await noticesAtStation()).slice(-1)).toEqual([
+      { kind: "void", lineName: "CHULETA", quantity: "1.000", wasStarted: false },
+    ]);
+    expect(await printJobCount()).toBe(jobs + 1);
+    expect(await lastKitchenSlip()).toEqual(
+      expect.arrayContaining(["*** VOID ***", "1.000 x CHULETA"]),
+    );
+    expect(await recordedOn(billId)).toMatchObject([
+      {
+        action: "cancel",
+        reasonId: venue.reasonId.mistake,
+        reduction: 2500,
+        lineName: "Steak",
+        note: "Wrong order",
+      },
+    ]);
+  });
+
+  it("cancels 1 of 2 sent Steaks, telling the kitchen with a VOID slip of one", async () => {
+    const billId = await movedToCounter([{ name: "Steak", quantity: "2" }]);
+    const jobs = await printJobCount();
+
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "cancel",
+      quantity: "1",
+    });
+
+    expect(await priced(billId)).toEqual([["Steak", "1.000", "25.00", null, "25.00"]]);
+    expect((await noticesAtStation()).slice(-1)).toEqual([
+      { kind: "void", lineName: "CHULETA", quantity: "1.000", wasStarted: false },
+    ]);
+    expect(await printJobCount()).toBe(jobs + 1);
+    expect(await lastKitchenSlip()).toEqual(
+      expect.arrayContaining(["*** VOID ***", "1.000 x CHULETA"]),
+    );
+    expect(await recordedOn(billId)).toMatchObject([
+      { action: "cancel", quantity: 1000, reduction: 2500 },
+    ]);
+  });
+
+  it("asks for the reason's approver: refused without a PIN, applied with a manager's", async () => {
+    const billId = await movedToCounter([{ name: "Burger" }]);
+    const comp = async (approver?: AdjustmentArgs["approver"]): Promise<Ask> => ({
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "comp",
+      reasonId: venue.reasonId.complaint,
+      operatorId: venue.staffId,
+      ...(approver === undefined ? {} : { approver }),
+    });
+    const before = await counterStateOf(billId);
+
+    await expect(adjust(billId, await comp())).rejects.toMatchObject({
+      code: "adjustment.approval_required",
+      params: { approverRole: "manager" },
+    });
+    expect(await counterStateOf(billId)).toEqual(before);
+
+    await adjust(billId, await comp({ personId: venue.managerId, pin: PINS.manager }));
+    expect(await recordedOn(billId)).toMatchObject([
+      { requestedBy: venue.staffId, approvedBy: venue.managerId },
+    ]);
+  });
+
+  describe("under the venue's limit on a bill's total discount (B11b)", () => {
+    const setLimit = (maxBillDiscountBp: number | null) =>
+      inTx(venue, (tx) => saveAdjustmentSettings(tx, { maxBillDiscountBp }));
+    afterEach(() => setLimit(null));
+
+    it("asks a manager for a staff member's second 30% off under a 40% limit", async () => {
+      await setLimit(4000);
+      const billId = await movedToCounter([{ name: "Salad", quantity: "10" }]);
+      const thirty = (extra: Partial<Ask> = {}): Ask => ({
+        action: "discount_percent",
+        percentBp: 3000,
+        operatorId: venue.staffId,
+        ...extra,
+      });
+      await adjust(billId, thirty());
+      const before = await counterStateOf(billId);
+
+      await expect(adjust(billId, thirty())).rejects.toMatchObject({
+        code: "adjustment.approval_required",
+        params: { approverRole: "manager" },
+      });
+      expect(await counterStateOf(billId)).toEqual(before);
+
+      await adjust(billId, thirty({ approver: { personId: venue.managerId, pin: PINS.manager } }));
+      expect((await recordedOn(billId)).map((row) => [row.reduction, row.approvedBy])).toEqual([
+        [3000, null],
+        [2100, venue.managerId],
+      ]);
+    });
+  });
+
+  it("applies a resent adjustment once, under the order's own command scope", async () => {
+    const billId = await movedToCounter([{ name: "Bottle" }]);
+    const args = await inTx(venue, (tx) =>
+      argsFor(tx, billId, { lineId: null, action: "discount_amount", amount: "5.00" }),
+    );
+
+    const first = await inTx(venue, (tx) =>
+      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+    );
+    const again = await inTx(venue, (tx) =>
+      applyAdjustment(tx, venue.cfg, args, venue.venueLocale),
+    );
+
+    expect(again).toEqual(first);
+    expect(await recordedOn(billId)).toHaveLength(1);
+    expect(await priced(billId)).toEqual([["Bottle", "1.000", "25.00", "30.00", "25.00"]]);
+    const commands = await inTx(venue, (tx) =>
+      tx
+        .select({ scopeKind: serviceCommands.scopeKind })
+        .from(serviceCommands)
+        .where(eq(serviceCommands.scopeId, billId)),
+    );
+    expect(commands).toEqual([{ scopeKind: "bill" }]);
+  });
+
+  it("refuses a comp of a dish paid for on its own, writing nothing, and comps the unpaid one", async () => {
+    const { billId, partyId } = await bill([{ name: "Burger" }, { name: "Steak" }]);
+    const paid = await send(
+      venue.app,
+      venue.cookie.staff,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        tip: "0.00",
+        kind: "items",
+        lines: [{ lineNo: 2 }],
+        method: "cash",
+        tendered: "25.00",
+        applied: "25.00",
+      },
+    );
+    expect(paid.status).toBe(200);
+    const expectedPartyRevision = await partyRevision(partyId);
+    await inTx(venue, (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        billId,
+        { counter: { zoneId: counterZone } },
+        { bills: "merge", partyId, expectedPartyRevision, operatorId: venue.staffId },
+      ),
+    );
+    const before = await counterStateOf(billId);
+    expect(before.order).toMatchObject({ status: "open", partyId: null });
+
+    await expect(
+      adjust(billId, { lineId: await lineIdOf(venue, billId, 2), action: "comp" }),
+    ).rejects.toMatchObject({
+      code: "bill.line_paid",
+      params: { workingOrderId: billId, lineNo: 2 },
+    });
+    expect(await counterStateOf(billId)).toEqual(before);
+
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "0.00", "12.00", "0.00"],
+      ["Steak", "1.000", "25.00", null, "25.00"],
+    ]);
+    expect(await recordedOn(billId)).toMatchObject([{ action: "comp", reduction: 1200 }]);
+  });
+
+  it("discounts a parked order, and the sale route charges the discounted price", async () => {
+    const orderId = await parked(counterZone, "Bottle");
+
+    await adjust(orderId, { action: "discount_percent", percentBp: 1000 });
+    const paid = await send(venue.app, venue.cookie.staff, "POST", "/api/sales", {
+      lines: [],
+      tender: { method: "cash", amount: "27.00" },
+      workingOrderId: orderId,
+    });
+
+    expect(paid.status).toBe(200);
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select({ total: sales.total }).from(sales).where(eq(sales.workingOrderId, orderId)),
+    );
+    expect(sale).toEqual({ total: 2700 });
+  });
+
+  it("keeps a comped dish at €0.00 when a held-order edit adds another dish", async () => {
+    const orderId = await parked(counterZone, "Burger");
+    const [burger] = await rowsOf(venue, orderId);
+    await adjust(orderId, { lineId: burger!.id, action: "comp" });
+
+    await updateHeldOrder({ db: venue.db }, venue.cfg, orderId, {
+      revision: (await counterStateOf(orderId)).order!.revision,
+      lines: [
+        { workingOrderLineId: burger!.id, menuItemId: venue.item("Burger"), quantity: "1" },
+        { menuItemId: venue.item("Bread"), quantity: "1" },
+      ],
+      operatorId: venue.staffId,
+    });
+
+    expect(await priced(orderId)).toEqual([
+      ["Burger", "1.000", "0.00", "12.00", "0.00"],
+      ["Bread", "1.000", "2.50", null, "2.50"],
+    ]);
+  });
+
+  it("refuses a placed counter order as tab.not_open, writing nothing", async () => {
+    const orderId = await parked(ticketZone, "Burger");
+    await placeOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      orderId,
+      venue.staffId,
+      venue.cfg.tillId,
+    );
+    const before = await counterStateOf(orderId);
+    expect(before.order).toMatchObject({ status: "placed", partyId: null });
+
+    await expect(
+      adjust(orderId, { lineId: before.rows[0]!.id, action: "comp" }),
+    ).rejects.toMatchObject({ code: "tab.not_open", params: { tabId: orderId } });
+    expect(await counterStateOf(orderId)).toEqual(before);
+  });
+});
+
+/** The kitchen printer's newest job, as its non-blank lines. */
+async function lastKitchenSlip(): Promise<string[]> {
+  const [job] = await inTx(venue, (tx) =>
+    tx
+      .select({ payload: printJobs.payload })
+      .from(printJobs)
+      .where(eq(printJobs.printerId, venue.printerId))
+      .orderBy(sql`rowid desc`)
+      .limit(1),
+  );
+  return printedLines(job!.payload).filter((line) => line.trim() !== "");
 }

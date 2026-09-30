@@ -418,6 +418,9 @@ export const en = {
   "adjust.reasons_error": "Could not load the reasons, try again",
   "adjust.unconfirmed":
     "No answer from the server. The bill has been read again: check whether the change was made before trying again.",
+  "adjust.unconfirmed_unread":
+    "No answer from the server: the change may already have been made. Hold the order, then retrieve it, and check whether the change was made before trying again.",
+  "adjust.basket_changed": "The order changed while this was open, so nothing was sent.",
   "adjust.changed_bill":
     "This bill was changed on another device. It has been read again: check it and try again.",
   "adjust.changed_line":
@@ -573,6 +576,8 @@ export const en = {
   // Says what to DO, because reopening the line and choosing again is the only way out.
   "held.options_changed": "An item's choices have changed — open the line and choose again",
   "held.stale": "That order is no longer available",
+  "held.reread_failed":
+    "The order could not be read again. Hold it, then retrieve it, to check it.",
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
   "place.error": "Could not place the order, try again",
@@ -1065,6 +1070,10 @@ export const es: Record<StringKey, string> = {
   "adjust.reasons_error": "No se pudieron cargar los motivos, inténtalo de nuevo",
   "adjust.unconfirmed":
     "El servidor no ha respondido. Se ha vuelto a leer la cuenta: comprueba si se hizo el cambio antes de volver a intentarlo.",
+  "adjust.unconfirmed_unread":
+    "El servidor no ha respondido: puede que el cambio ya se haya hecho. Aparca el pedido, recupéralo y comprueba si se hizo el cambio antes de volver a intentarlo.",
+  "adjust.basket_changed":
+    "El pedido cambió mientras esto estaba abierto, así que no se envió nada.",
   "adjust.changed_bill":
     "Esta cuenta se ha cambiado en otro dispositivo. Se ha vuelto a leer: revísala e inténtalo de nuevo.",
   "adjust.changed_line":
@@ -1213,6 +1222,8 @@ export const es: Record<StringKey, string> = {
   "held.options_changed":
     "Han cambiado las opciones de un producto: abre la línea y vuelve a elegir",
   "held.stale": "Ese pedido ya no está disponible",
+  "held.reread_failed":
+    "No se pudo volver a leer el pedido. Apárcalo y recupéralo para comprobarlo.",
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",

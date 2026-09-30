@@ -1,10 +1,10 @@
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { formatMoney } from "@waitron/shared";
+import { type Decimal, decimal, formatMoney, grossOf } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -13,10 +13,26 @@ import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type { LineSelection, OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import type {
+  LineSelection,
+  OrderLine,
+  SelectedExtra,
+  WorkingOrderStore,
+} from "../state/working-order.js";
 import type { BlockReason } from "../state/menu-refresh.js";
 import type { StringKey } from "../i18n/strings.js";
 import { lineProductName, productUnit } from "./product-name.js";
+import { lineTotal, priceWasStyles } from "./price-was.js";
+import {
+  LINE_ADJUSTMENTS,
+  adjustableListing,
+  billGross,
+  lineAdjustTarget,
+  storedListing,
+} from "../state/adjust-target.js";
+import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
+import type { AdjustDetail } from "../screens/till-table-order-screen.js";
+import type { TabLine } from "../api/client.js";
 
 /** The same `×` (U+00D7) the printed receipt and the settled-ticket view use. */
 const QTY_BADGE = "×";
@@ -44,6 +60,13 @@ function blockedMarker(reason: BlockReason) {
   return html` <span class="not-offered">${t(BLOCKED_WORDS[reason])}</span>`;
 }
 
+/** A stored order's lines as the server listed them, and the revision they were read at. */
+export interface StoredLines {
+  orderId: string;
+  revision: number;
+  lines: readonly TabLine[];
+}
+
 /**
  * The running order. It holds no basket state of its own, so it can never disagree with the store the
  * pay flow reads.
@@ -54,9 +77,19 @@ export class TillBasket extends LitElement {
     baseStyles,
     dietBadgeStyles,
     lineExtrasEditorStyles,
+    priceWasStyles,
     css`
       :host {
         display: block;
+      }
+
+      .line-actions,
+      .bill-adjust {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: var(--wt-space-2);
+        padding: var(--wt-space-1) 0 var(--wt-space-2);
       }
 
       .empty {
@@ -138,6 +171,19 @@ export class TillBasket extends LitElement {
 
       .line-total {
         font-variant-numeric: tabular-nums;
+      }
+
+      /* Unseen copies of the − and × a dish the kitchen has does not offer, so its count, total and
+         Note line up with the rows that keep them whatever width the font gives those buttons. */
+      .step-gap,
+      .remove-gap {
+        visibility: hidden;
+      }
+
+      /* The price before an adjustment stands above the price now, so the column stays narrow. */
+      .line-total .list-total,
+      .option-total .list-total {
+        display: block;
       }
 
       /* A pick, and a frozen options answer — indented beneath its dish, name left and any price
@@ -243,6 +289,19 @@ export class TillBasket extends LitElement {
 
   @property({ type: Boolean, reflect: true }) stacked = false;
 
+  /** The stored order the basket holds, as the server last listed it; null when not known. While it
+   * is known, a dish the kitchen has shows no × and no `−`, and the adjustments are offered only
+   * while the basket is exactly what the listing lists. */
+  @property({ attribute: false }) storedLines: StoredLines | null = null;
+
+  /** A pay, place or hold of the basket's order is out, so no adjustment is offered. */
+  @property({ type: Boolean }) orderInFlight = false;
+
+  /** Built when {@link storedLines} changes, not searched for line by line on every render. */
+  #listedById = new Map<string, TabLine>();
+  #listedExtras = new Map<number, TabLine[]>();
+  #listedTotal: Decimal = decimal("0");
+
   /** The line whose note editor is open, by the line itself rather than its place: other lines move
    * under it (a remove elsewhere, another basket showing the same order), and a note, which can
    * carry allergy information, must never reattach to the line that slid into its place. */
@@ -332,6 +391,21 @@ export class TillBasket extends LitElement {
       : { addAllergens: item.addAllergens, suitableFor: item.suitableFor };
   }
 
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (!changed.has("storedLines")) return;
+    const rows = this.storedLines?.lines ?? [];
+    this.#listedById = new Map(rows.map((row) => [row.id, row]));
+    this.#listedExtras = new Map();
+    for (const row of rows) {
+      const parent = row.parentLineNo;
+      if (parent === null || parent === undefined) continue;
+      const siblings = this.#listedExtras.get(parent);
+      if (siblings === undefined) this.#listedExtras.set(parent, [row]);
+      else siblings.push(row);
+    }
+    this.#listedTotal = billGross(rows);
+  }
+
   override render() {
     const lines = this.store.lines;
     if (lines.length === 0) {
@@ -343,9 +417,13 @@ export class TillBasket extends LitElement {
       const line = lines[index];
       return line === undefined ? [] : [[line, index] as const];
     });
+    const listing = storedListing(this.store, this.storedLines);
+    const adjustable = adjustableListing(this.store, listing, this.orderInFlight);
     return html`
-      ${shown.map(
-        ([line, index]) => html`
+      ${shown.map(([line, index]) => {
+        const listed = this.#listed(line, listing);
+        const sent = listed !== undefined && (listed.sentAt !== null || listed.firedAt !== null);
+        return html`
           <div class="line">
             <span class="name" part="name"
               ><slot name=${`lead-${index}`}>${this.#lineName(line)}</slot>${
@@ -358,8 +436,7 @@ export class TillBasket extends LitElement {
                   : nothing
               }</span
             >
-            ${this.#quantityCell(line, index)}
-            <span class="line-total">${formatMoney(dishGross(line), currentLocale())}</span>
+            ${this.#quantityCell(line, index, sent)} ${this.#dishTotal(line, listed)}
             <wt-button
               class="note-toggle"
               variant="ghost"
@@ -371,15 +448,21 @@ export class TillBasket extends LitElement {
             >
               ${t("line.note.button")}
             </wt-button>
-            <wt-button
-              class="remove"
-              variant="ghost"
-              size="md"
-              aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
-              @click=${() => this.store.removeLine(index)}
-            >
-              <span aria-hidden="true">×</span>
-            </wt-button>
+            ${
+              sent
+                ? html`<wt-button class="remove-gap" variant="ghost" size="md" inert
+                    ><span aria-hidden="true">×</span></wt-button
+                  >`
+                : html`<wt-button
+                    class="remove"
+                    variant="ghost"
+                    size="md"
+                    aria-label=${`${t("action.remove")} ${this.#lineName(line)}`}
+                    @click=${() => this.store.removeLine(index)}
+                  >
+                    <span aria-hidden="true">×</span>
+                  </wt-button>`
+            }
           </div>
           ${
             // Offered lists alone, NOT `needsModifierPicker`: `setLineModifiers` replaces a line's
@@ -406,9 +489,7 @@ export class TillBasket extends LitElement {
               return html`
                 <div class="option">
                   <span class="name">${extra.name}${pickQuantityBadge(extra.quantity)}</span>
-                  <span class="option-total"
-                    >${formatMoney(extraGross(line, extra), currentLocale())}</span
-                  >
+                  ${this.#extraTotal(line, extra, this.#listedExtra(listed, extra))}
                 </div>
                 ${own ? extraNutrition(own, `option-allergens-${index}-${i}`, `option-diet-${index}-${i}`) : nothing}
               `;
@@ -428,9 +509,11 @@ export class TillBasket extends LitElement {
           )}
           ${this.#answers(line).map((answer) => html`<div class="option modifier-answer"><span class="name">${answer}</span></div>`)}
           ${this.#allergenRow(line, index)} ${this.#dietRow(line, index)}
+          ${adjustable !== null && listed !== undefined ? this.#lineActions(line, index, listed, sent, adjustable) : nothing}
           <div class="line-after"><slot name=${`after-${index}`}></slot></div>
-        `,
-      )}
+        `;
+      })}
+      ${adjustable === null ? nothing : this.#billAdjust()}
       ${
         this.modifierLine && this.#modifierSelection
           ? html`<till-modifier-picker
@@ -489,8 +572,9 @@ export class TillBasket extends LitElement {
     return dietBadges(asServedDiet(line), `line-diet-${index}`);
   }
 
-  /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. */
-  #quantityCell(line: OrderLine, index: number) {
+  /** `−` is disabled at 1: removing a line is the × control's job, never the stepper's. A dish the
+   * kitchen has has no `−`: less of it leaves only through Cancel. */
+  #quantityCell(line: OrderLine, index: number, sent: boolean) {
     const unit = productUnit(line.product);
     if (unit.hardwareUnit !== null || unit.precision > 0) {
       return html`<span class="qty">${quantityLabel(line)}</span>`;
@@ -499,16 +583,22 @@ export class TillBasket extends LitElement {
     const name = this.#lineName(line);
     return html`
       <span class="qty stepper">
-        <wt-button
-          class="step step-dec"
-          variant="ghost"
-          size="sm"
-          aria-label=${`${t("basket.decrease")} ${name}`}
-          ?disabled=${count <= 1}
-          @click=${() => this.store.setLineQuantity(index, String(count - 1))}
-        >
-          <span aria-hidden="true">−</span>
-        </wt-button>
+        ${
+          sent
+            ? html`<wt-button class="step-gap" variant="ghost" size="sm" inert
+                ><span aria-hidden="true">−</span></wt-button
+              >`
+            : html`<wt-button
+                class="step step-dec"
+                variant="ghost"
+                size="sm"
+                aria-label=${`${t("basket.decrease")} ${name}`}
+                ?disabled=${count <= 1}
+                @click=${() => this.store.setLineQuantity(index, String(count - 1))}
+              >
+                <span aria-hidden="true">−</span>
+              </wt-button>`
+        }
         <span class="count">${line.quantity}</span>
         <wt-button
           class="step step-inc"
@@ -521,6 +611,105 @@ export class TillBasket extends LitElement {
         </wt-button>
       </span>
     `;
+  }
+
+  /** The dish as listed, by the stored line it came from. */
+  #listed(line: OrderLine, listing: StoredLines | null): TabLine | undefined {
+    const id = line.workingOrderLineId;
+    if (id === undefined || listing === null) return undefined;
+    return this.#listedById.get(id);
+  }
+
+  /** An extras pick as listed: the dish's child row of the same product from the same list. */
+  #listedExtra(dish: TabLine | undefined, extra: SelectedExtra): TabLine | undefined {
+    if (dish === undefined) return undefined;
+    return this.#listedExtras
+      .get(dish.lineNo)
+      ?.find((row) => row.productId === extra.productId && row.listId === extra.listId);
+  }
+
+  /** The dish's total, and before it the total at its listed price when an adjustment changed it. */
+  #dishTotal(line: OrderLine, listed: TabLine | undefined) {
+    const now = dishGross(line);
+    const unit = listed?.listUnitPriceGross;
+    return lineTotal(unit === undefined ? now : grossOf(unit, line.quantity), now);
+  }
+
+  #extraTotal(line: OrderLine, extra: SelectedExtra, listed: TabLine | undefined) {
+    const now = extraGross(line, extra);
+    const unit = listed?.listUnitPriceGross;
+    const before =
+      unit === undefined ? now : extraGross(line, { price: unit, quantity: extra.quantity });
+    return lineTotal(before, now, "option-total");
+  }
+
+  /** Cancel on a dish the kitchen has, and Give away and Discount on every dish, which cover its
+   * extras. */
+  #lineActions(
+    line: OrderLine,
+    index: number,
+    listed: TabLine,
+    sent: boolean,
+    listing: StoredLines,
+  ) {
+    const name = this.#lineName(line);
+    const target = (kind: AdjustKind) => lineAdjustTarget(listed, listing.lines, kind, name);
+    return html`<div class="line-actions">
+      ${
+        sent
+          ? html`<wt-button
+              class="line-cancel"
+              size="sm"
+              variant="danger"
+              data-cancel-line=${index}
+              aria-label=${`${t("table.cancel_line")} · ${name}`}
+              @click=${() => this.#adjust("cancel", target("cancel"))}
+            >
+              ${t("table.cancel_line")}
+            </wt-button>`
+          : nothing
+      }
+      ${LINE_ADJUSTMENTS.map(
+        ({ kind, label }) =>
+          html`<wt-button
+            class="line-adjust"
+            size="sm"
+            variant="secondary"
+            data-comp-line=${kind === "comp" ? index : nothing}
+            data-discount-line=${kind === "discount" ? index : nothing}
+            aria-label=${`${t(label)} · ${name}`}
+            @click=${() => this.#adjust(kind, target(kind))}
+          >
+            ${t(label)}
+          </wt-button>`,
+      )}
+    </div>`;
+  }
+
+  #billAdjust() {
+    const total = this.#listedTotal;
+    return html`<div class="bill-adjust">
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-discount-bill
+        @click=${() =>
+          this.#adjust("discount", {
+            lineId: null,
+            name: t("adjust.whole_bill"),
+            quantity: null,
+            total,
+            unitTotal: null,
+          })}
+      >
+        ${t("table.discount_bill")}
+      </wt-button>
+    </div>`;
+  }
+
+  #adjust(kind: AdjustKind, target: AdjustTarget): void {
+    const detail: AdjustDetail = { kind, target, counter: true };
+    this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
   }
 
   #allergenRow(line: OrderLine, index: number) {

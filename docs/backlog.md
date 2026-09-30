@@ -3491,6 +3491,49 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `APPROVER_REFUSALS` in `apps/till/src/till-app.ts` names `person.not_found` and
         `person.suspended`, which an approver's PIN check stopped returning when every login
         failure became `pin.invalid` (C95, #930). **Next action:** drop the two entries.
+    - _Done by lane B item B11c (2026-09-30):_ comps, discounts and Cancel work on a stored open
+      counter order — a bill moved from a table, a split or edit of one, and an order parked at the
+      counter — with the same reasons, limits and approvals as a table's bill (owner, 2026-09-30).
+      The server takes an adjustment on any open order (`planAdjustment`,
+      `apps/server/src/adjustments-apply.ts`). On the till, a stored order in the counter's basket
+      that matches what the server holds offers Give away and Discount on each dish, Discount the
+      bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
+      (`apps/till/src/widgets/basket.ts`). The basket reads each line's sent state and price before
+      an adjustment from `GET /api/working-orders/:id/lines` when it loads the order. It loads the
+      order again after an adjustment is made, refused as out of date, or left unanswered while
+      its dialog is open (`#reloadCounterOrder`, `apps/till/src/till-app.ts`), taking no edit
+      until that load answers, the basket moves on (cleared, or loaded again), the operator signs
+      out, or the till's request limit (150 s) passes. An answer the basket has moved past, a load
+      of the same order again included, is dropped. An unsaved or changed basket offers none of
+      them, nor does one being loaded again or whose pay, place or hold is out; a changed one
+      offers them again once it is held and retrieved. The counter checks this again once the
+      reasons are read, and does not open the dialog if the basket changed meanwhile; and again
+      before the adjustment is sent, when a changed basket means nothing is sent, the dialog closes
+      and the till says `adjust.basket_changed`. Left open:
+      - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be
+        adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
+        already filed its invoice. B16, the counter handover task, was kept clear of. **Next
+        action:** decide with B16 whether a placed order can be adjusted before it is collected.
+      - **The server's held-order edit (`PUT /api/working-orders/:id`) still voids a sent dish's
+        dropped quantity without a reason** when a client sends it that way, the venue allows
+        changes to sent items and the kitchen has not started the dish (otherwise it refuses
+        `ticket.already_fired` or `ticket.already_started`; `applyLineEdits`,
+        `apps/server/src/working-order.ts`). The till's counter hides × and `−` on a sent dish only
+        while it has read the order's lines; when they cannot be read, it shows both on every
+        line. **Next action:** decide whether the edit should refuse dropping a sent line, as the
+        table's Cancel requires a reason.
+      - **Two basket changes the app makes by itself do not check the lock:** the menu poll's
+        price-version update of the basket's lines (`adoptLines`) and the order's label
+        (`WorkingOrderStore`, `apps/till/src/state/working-order.ts`). Neither checked `sending`
+        before this change. A version update made while the order is being read again is replaced
+        by the order as read. The till sends no prices when it saves (`#currentSaleLines`), so
+        what is lost is the basket's own copy of the new prices. **Next action:** decide whether
+        the two should wait for the lock.
+      - **Nothing on screen shows the lock.** A tap on `+` or on the menu does nothing until the
+        order and its lines have been read, and the basket shows no sign why. The lock ends at once
+        on Hold, New sale, a retrieve or a sign-out, and at the latest after the till's request
+        limit (150 s). How long it lasts on a real network is not measured. **Next action:** dim
+        the basket, or show a one-line note, while `editsLocked` is set.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
@@ -3507,8 +3550,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **Not offered:** a comp or a discount of part of a dish with extras
       (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
-      during the build: its two rounded parts need not add up to the line), and counter orders (the
-      route takes a table's bill only). A run-it review found that exactly representable weighed cases
+      during the build: its two rounded parts need not add up to the line). _(2026-09-30: counter
+      orders are offered since B11c, above.)_ A run-it review found that exactly representable weighed cases
       are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
       decides whether exactly representable partial weighed adjustments should be allowed.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's

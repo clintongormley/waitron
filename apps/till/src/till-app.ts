@@ -152,6 +152,8 @@ import {
 } from "./state/menu-refresh.js";
 import type { ShellAffordance } from "./widgets/tab-shell.js";
 import type { OrderLine } from "./state/working-order.js";
+import type { StoredLines } from "./widgets/basket.js";
+import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
 import type { DevDeviceList } from "./api/client.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
@@ -180,6 +182,9 @@ type Drill = { kind: "table-order" | "ticket" | TillDestination };
 const HANDHELD_FACES: Screen[] = ["lock", "floor", "table-order"];
 
 type RefreshList = "held" | "station";
+
+/** How reading an adjusted order again ended. */
+type Reread = "read" | "unread" | "gone";
 
 interface RefreshRetry {
   /** What the write that preceded the failed refresh achieved. */
@@ -412,10 +417,13 @@ function counterError(error: unknown, fallback: StringKey): CounterError {
   return code !== undefined && ACTIONABLE_REFUSALS.has(code) ? { code } : fallback;
 }
 
-/** An adjustment dialog: the bill and the revision its lines were read at when it opened, the
- * order visit it opened on, and the server's last answer. */
+/** An adjustment dialog: where it was opened, the bill and the revision its lines were read at
+ * when it opened, the order visit it opened on (on the counter, the operator session), and the
+ * server's last answer. */
 interface Adjusting {
   id: number;
+  /** The table's open bill, or the stored order in the counter's basket. */
+  surface: "table" | "counter";
   orderId: string;
   revision: number;
   visit: number;
@@ -1028,6 +1036,9 @@ export class TillApp extends LitElement {
   @state() private defaultReaderId?: string;
   /** Where the current basket sits in an order-then-collect flow; unused under prepay. */
   @state() private stage: "order" | "collect" = "order";
+  /** The lines of the stored order last loaded into the basket, as the server lists them; null
+   * before any load, or when they could not be read. */
+  @state() private counterLines: StoredLines | null = null;
   @state() private stations: Station[] = [];
   /** The default station's queue. Prepay enqueues nothing automatically, so a prepay till never fetches it. */
   @state() private stationQueue: StationQueueGroup[] = [];
@@ -1078,6 +1089,9 @@ export class TillApp extends LitElement {
   @state() private adjustApproverError: string | null = null;
   /** Each opening of the adjustment dialog, so an answer to a closed one changes nothing. */
   #adjustments = 0;
+  /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder}; a no-op once it
+   * has ended, and for a lock taken later. */
+  #endReloadLock: () => void = () => {};
   #adjustOpening = false;
   /**
    * The outcome of the last non-captured `collect-card` attempt. Cleared wherever the basket it describes
@@ -1159,7 +1173,7 @@ export class TillApp extends LitElement {
     // An answer can move the app off the order while the dialog is open. An apply already out
     // carries on without the dialog; #applyAdjustment says what its answer does then.
     const open = this.adjusting;
-    if (open !== null && this.#hasLeftOrder(open.orderId, open.visit)) this.#closeAdjust();
+    if (open !== null && this.#hasLeftAdjusted(open)) this.#closeAdjust();
   }
 
   #contentLanguageGeneration = 0;
@@ -2257,9 +2271,22 @@ export class TillApp extends LitElement {
     await this.#refreshHeldOrders();
   }
 
-  /** Replaces the basket with the open order `id` as stored; a failed read rejects, basket untouched. */
-  async #loadHeldOrder(id: string): Promise<void> {
-    const order = await this.api.retrieveWorkingOrder(id);
+  /** Replaces the basket with the open order `id` as stored, with its lines as the server lists
+   * them; a failed read rejects, basket untouched. Nothing changes when `left` says, once the order
+   * is read, that the basket has moved on, and the answer is then undefined; otherwise it is whether
+   * the lines were read too. */
+  async #loadHeldOrder(
+    id: string,
+    left?: () => boolean,
+    signal?: AbortSignal,
+  ): Promise<boolean | undefined> {
+    const [order, listed] = await Promise.all([
+      signal === undefined
+        ? this.api.retrieveWorkingOrder(id)
+        : this.api.retrieveWorkingOrder(id, { signal }),
+      this.#readStoredLines(id, signal),
+    ]);
+    if (left?.() === true) return undefined;
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
@@ -2321,7 +2348,60 @@ export class TillApp extends LitElement {
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
     this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision);
+    this.counterLines = listed;
     this.cardOutcome = undefined;
+    return listed !== null;
+  }
+
+  /** Null when the lines cannot be read: the basket then offers no adjustment, and keeps its own
+   * controls on every line. */
+  async #readStoredLines(orderId: string, signal?: AbortSignal): Promise<StoredLines | null> {
+    try {
+      const { lines, revision } = await this.api.getTabLines(orderId, { signal });
+      return { orderId, revision, lines };
+    } catch {
+      return null;
+    }
+  }
+
+  /** The stored order `orderId` is no longer the basket's (clearing the basket gives it a new id),
+   * or the operator session `session` has ended. */
+  #hasLeftCounterOrder(orderId: string, session: number): boolean {
+    return this.#store.id !== orderId || session !== this.#operatorSession;
+  }
+
+  /** Staff edits are locked while the order is read, so the load cannot replace a staff edit made
+   * meanwhile; an answer the basket has moved past (cleared, or loaded again, the same order
+   * included) is dropped. `unread` when the order or its lines could not be read, or the answer was
+   * dropped; `gone` when the order no longer exists and that has been said. */
+  async #reloadCounterOrder(orderId: string, session: number): Promise<Reread> {
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    const unlock = this.#store.lockEdits();
+    this.#endReloadLock = unlock;
+    limit.signal.addEventListener("abort", unlock, { once: true });
+    let load = this.#store.loadGeneration;
+    const movedOn = () => load !== this.#store.loadGeneration || session !== this.#operatorSession;
+    let failure: StringKey | undefined;
+    try {
+      const read = await this.#loadHeldOrder(
+        orderId,
+        () => limit.signal.aborted || movedOn(),
+        limit.signal,
+      );
+      if (read !== undefined) load = this.#store.loadGeneration;
+      if (read !== true) failure = "held.reread_failed";
+    } catch (error) {
+      const gone = (error as { code?: string } | undefined)?.code === "working_order.not_found";
+      failure = gone ? "held.stale" : "held.reread_failed";
+    } finally {
+      limit.done();
+      unlock();
+    }
+    const said = failure !== undefined && !movedOn();
+    if (said) this.errorKey = failure;
+    await this.#refreshHeldOrders();
+    if (failure === undefined) return "read";
+    return said && failure === "held.stale" ? "gone" : "unread";
   }
 
   /** A discard already made on another till is a non-fatal `held.stale`; the list refreshes on both paths. */
@@ -3536,12 +3616,18 @@ export class TillApp extends LitElement {
   /** Cancel, Give away or Discount pressed, or Cancel offered: the reasons are read, then the dialog
    * opens on the bill as the screen last read it. */
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target, offered } = (event as CustomEvent<AdjustDetail>).detail;
-    const orderId = this.activeTabId;
+    const { kind, target, offered, counter } = (event as CustomEvent<AdjustDetail>).detail;
+    const surface = counter === true ? "counter" : "table";
+    const orderId = surface === "counter" ? this.#store.id : this.activeTabId;
     if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
-    const revision = this.tabRevision;
-    const visit = this.#orderVisit;
     const session = this.#operatorSession;
+    const opened = {
+      surface,
+      orderId,
+      revision: surface === "counter" ? this.#store.revision : this.tabRevision,
+      visit: surface === "counter" ? session : this.#orderVisit,
+    } as const;
+    if (surface === "counter" && !this.#counterStillAdjustable(opened)) return;
     if (offered !== true) this.errorKey = undefined;
     const offer = offered === true ? this.errorKey : undefined;
     this.#adjustOpening = true;
@@ -3554,12 +3640,15 @@ export class TillApp extends LitElement {
     } finally {
       this.#adjustOpening = false;
     }
-    if (session !== this.#operatorSession || this.#hasLeftOrder(orderId, visit)) return;
+    if (
+      session !== this.#operatorSession ||
+      this.#hasLeftAdjusted(opened) ||
+      (surface === "counter" && !this.#counterStillAdjustable(opened))
+    )
+      return;
     this.adjusting = {
       id: ++this.#adjustments,
-      orderId,
-      revision,
-      visit,
+      ...opened,
       kind,
       target,
       reasons,
@@ -3569,6 +3658,40 @@ export class TillApp extends LitElement {
       busy: false,
       offer,
     };
+  }
+
+  /** The counter's basket still holds the stored order it held when `open` was opened, at the same
+   * revision, and still as the basket requires to offer an adjustment: unchanged, and with no pay,
+   * place or hold of it out. */
+  #counterStillAdjustable(open: Pick<Adjusting, "orderId" | "revision">): boolean {
+    const listing = adjustableListing(
+      this.#store,
+      this.#basketStoredLines(),
+      this.#counterOrderInFlight(),
+    );
+    return (
+      listing !== null && listing.orderId === open.orderId && listing.revision === open.revision
+    );
+  }
+
+  #hasLeftAdjusted(open: Pick<Adjusting, "surface" | "orderId" | "visit">): boolean {
+    return open.surface === "counter"
+      ? this.#hasLeftCounterOrder(open.orderId, open.visit)
+      : this.#hasLeftOrder(open.orderId, open.visit);
+  }
+
+  /** The order the dialog adjusts, read again after an answer: the table's bill with its party and
+   * what it owes, or the counter's stored order into the basket. Not `read` when the counter's was
+   * not loaded again with its lines; why has been said, unless the basket had moved on. */
+  async #rereadAdjusted(open: Adjusting): Promise<Reread> {
+    if (open.surface === "counter") return this.#reloadCounterOrder(open.orderId, open.visit);
+    await this.#rereadAmounts(open.orderId, open.visit);
+    return "read";
+  }
+
+  /** The adjusted order's lines as last read; none when the counter's could not be read. */
+  #adjustedLines(open: Adjusting): readonly TabLine[] {
+    return open.surface === "table" ? this.tabLines : (this.counterLines?.lines ?? []);
   }
 
   #adjustAsk(open: Adjusting, choice: AdjustmentChoice): AdjustmentAsk {
@@ -3631,17 +3754,25 @@ export class TillApp extends LitElement {
   /**
    * A fresh submission id for each confirmation, sent again unchanged only while a request gets no
    * answer (plan D8). Applied, the dialog closes if still open, the party's new revision is noted
-   * ({@link #noteBillParty}) and, unless the waiter has left the order, the bill, its party and
-   * what it owes are read again. With no answer at all while the dialog is open, it closes, they
-   * are read again too, and the message says the change may have been made unless the waiter has
-   * left the order by then. Once the dialog is gone, no answer only reads the floor again and
-   * takes the party from it ({@link #retakePartyFromFloor}) while the operator session that sent
-   * it lasts, and a refusal changes nothing.
+   * ({@link #noteBillParty}) and, unless the waiter has left the order, it is read again
+   * ({@link #rereadAdjusted}). With no answer at all while the dialog is open, it closes, the order
+   * is read again too, and unless the waiter has left the order by then the message says the change
+   * may have been made, and when that read failed or its answer was dropped, to hold and retrieve
+   * the order to check; an order found gone is said to be gone, and nothing more. Once the dialog
+   * is gone, no answer on a table's bill only reads the floor again and takes the party from it
+   * ({@link #retakePartyFromFloor}) while the operator session that sent it lasts, and a refusal
+   * changes nothing. On the counter nothing is sent once the basket no longer holds the order as
+   * the dialog opened on it: the dialog closes and says so.
    */
   async #applyAdjustment(
     open: Adjusting,
     approver?: { personId: string; pin: string },
   ): Promise<void> {
+    if (open.surface === "counter" && !this.#counterStillAdjustable(open)) {
+      this.#closeAdjust();
+      this.errorKey = "adjust.basket_changed";
+      return;
+    }
     const command: AdjustmentCommand = {
       ...this.#adjustAsk(open, open.choice!),
       submissionId: crypto.randomUUID(),
@@ -3659,11 +3790,15 @@ export class TillApp extends LitElement {
       this.#noteBillParty(answer.party);
       if (this.#adjustingNow(open.id) !== null) this.#closeAdjust();
       if (this.errorKey === open.offer) this.errorKey = undefined;
-      if (this.#hasLeftOrder(open.orderId, open.visit)) return;
-      await this.#rereadAmounts(open.orderId, open.visit);
+      if (this.#hasLeftAdjusted(open)) return;
+      await this.#rereadAdjusted(open);
     } catch (error) {
       if (this.#adjustingNow(open.id) === null) {
-        if (isNetworkFailure(error) && session === this.#operatorSession)
+        if (
+          open.surface === "table" &&
+          isNetworkFailure(error) &&
+          session === this.#operatorSession
+        )
           await this.#retakePartyFromFloor();
         return;
       }
@@ -3693,8 +3828,9 @@ export class TillApp extends LitElement {
     }
     if ((stage === "apply" || stage === "approved") && isNetworkFailure(error)) {
       this.#closeAdjust();
-      await this.#rereadAmounts(open.orderId, open.visit);
-      if (!this.#hasLeftOrder(open.orderId, open.visit)) this.errorKey = "adjust.unconfirmed";
+      const read = await this.#rereadAdjusted(open);
+      if (!this.#hasLeftAdjusted(open) && read !== "gone")
+        this.errorKey = read === "read" ? "adjust.unconfirmed" : "adjust.unconfirmed_unread";
       return;
     }
     const refusal = code ?? "server.internal";
@@ -3725,11 +3861,11 @@ export class TillApp extends LitElement {
    */
   async #onAdjustOutOfDate(open: Adjusting): Promise<void> {
     const lineId = open.target.lineId;
-    const before = this.tabLines.find((line) => line.id === lineId);
+    const before = this.#adjustedLines(open).find((line) => line.id === lineId);
     this.#closeAdjust();
-    await this.#rereadAmounts(open.orderId, open.visit);
-    if (this.#hasLeftOrder(open.orderId, open.visit)) return;
-    const after = this.tabLines.find((line) => line.id === lineId);
+    const read = await this.#rereadAdjusted(open);
+    if (this.#hasLeftAdjusted(open) || read !== "read") return;
+    const after = this.#adjustedLines(open).find((line) => line.id === lineId);
     const changed =
       before !== undefined &&
       after !== undefined &&
@@ -4242,6 +4378,7 @@ export class TillApp extends LitElement {
   }
 
   #endOperatorSession(): void {
+    this.#endReloadLock();
     this.#menuPoll.stop();
     this.#tableZoneId = undefined;
     this.#markedRounds.clear();
@@ -4458,6 +4595,15 @@ export class TillApp extends LitElement {
     return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
   }
 
+  #counterOrderInFlight(): boolean {
+    return this.submitting || this.placing || this.parking;
+  }
+
+  /** A placed order is not open, so it offers no adjustment. */
+  #basketStoredLines(): StoredLines | null {
+    return this.stage === "order" ? this.counterLines : null;
+  }
+
   #tabBody(tab: TabDef): TemplateResult {
     if (tab.key === "counter") {
       // `embedded`: the shell owns the header.
@@ -4488,6 +4634,8 @@ export class TillApp extends LitElement {
         .activeReaders=${this.activeReaders}
         .defaultReaderId=${this.defaultReaderId}
         .handheld=${this.handheldMode}
+        .storedLines=${this.#basketStoredLines()}
+        .orderInFlight=${this.#counterOrderInFlight()}
       ></till-counter-screen>`;
     }
     const tableTab = tab.key === this.#tableOrderTabKey();
@@ -4495,6 +4643,8 @@ export class TillApp extends LitElement {
     return html`<till-card-grid
       .tab=${tab}
       .store=${this.#store}
+      .storedLines=${this.#basketStoredLines()}
+      .orderInFlight=${this.#counterOrderInFlight()}
       .capabilities=${this.capabilities}
       .canConfigureTill=${this.canEdit}
       .products=${tableTab ? this.tableProducts : this.products}

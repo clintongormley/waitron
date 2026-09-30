@@ -22,6 +22,7 @@ import type {
   TillZoneMenu,
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
+import type { StoredLines } from "../widgets/basket.js";
 import type { CardOutcome, CardProvider } from "../widgets/tender-pay.js";
 
 /** A brand wordmark is a fixed name, not translated UI copy. */
@@ -93,6 +94,10 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) api!: TillApi;
   /** Set before the element connects. */
   @property({ attribute: false }) store!: WorkingOrderStore;
+  /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
+  @property({ attribute: false }) storedLines: StoredLines | null = null;
+  /** A pay, place or hold of {@link store}'s order is out; see the basket's own. */
+  @property({ type: Boolean }) orderInFlight = false;
   /** The grid shows the selected menu's offers; the allergen lookup screen keeps the full zone set. */
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) menus: TillZoneMenu[] = [];
@@ -253,6 +258,8 @@ export class TillCounterScreen extends LitElement {
       <till-card-grid
         .tab=${this.counterTab}
         .store=${this.store}
+        .storedLines=${this.storedLines}
+        .orderInFlight=${this.orderInFlight}
         .products=${this.products}
         .menus=${this.menus}
         .selectedMenuId=${this.selectedMenuId}

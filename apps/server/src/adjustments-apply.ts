@@ -51,7 +51,7 @@ import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  assertPartyBillOpen,
+  assertTabOpen,
   bumpRevision,
   extraQuantityFor,
   isReleased,
@@ -341,13 +341,12 @@ function zeroed(
  */
 async function planAdjustment(
   tx: Transaction,
-  cfg: TillConfig,
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<Plan> {
   const { orderId } = ask;
-  // The table screen is the only surface (ruling R1): an open bill of a party.
-  const revision = await assertPartyBillOpen(tx, cfg, orderId);
+  // An open bill, a table's or a counter order.
+  const revision = await assertTabOpen(tx, orderId);
   if (revision !== ask.expectedRevision) {
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
@@ -576,11 +575,10 @@ async function pastBillDiscountLimit(
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
 export async function previewAdjustment(
   tx: Transaction,
-  cfg: TillConfig,
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  const plan = await planAdjustment(tx, cfg, ask, venueLocale);
+  const plan = await planAdjustment(tx, ask, venueLocale);
   const lines =
     ask.action === "cancel"
       ? [
@@ -692,12 +690,12 @@ async function reprice(
 }
 
 /**
- * Apply a cancellation, comp or discount to an open bill of a party, at most once per submission id
- * on the bill (plan D8): a cancel removes the part ({@link removeFromLine}), telling the kitchen; a comp or a
- * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's
- * revision and the party's on, and records one adjustment. The PIN never enters the recorded
- * command. `venueLocale` is the venue's display language, which names the reason for an operator
- * with no language of their own.
+ * Apply a cancellation, comp or discount to an open bill, a table's or a counter order, at most once
+ * per submission id on the bill (plan D8): a cancel removes the part ({@link removeFromLine}),
+ * telling the kitchen; a comp or a discount lowers the prices by plan D4 and D15, and tells the
+ * kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
+ * adjustment. The PIN never enters the recorded command. `venueLocale` is the venue's display
+ * language, which names the reason for an operator with no language of their own.
  */
 export async function applyAdjustment(
   tx: Transaction,
@@ -713,7 +711,7 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, approverId: approver?.personId },
     async () => {
-      const plan = await planAdjustment(tx, cfg, args, venueLocale);
+      const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver);
       let splits: AdjustmentSplit[] = [];
       if (args.action === "cancel") {

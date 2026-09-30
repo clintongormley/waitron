@@ -2,7 +2,7 @@ import { afterEach, describe, it } from "vitest";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./basket.js";
-import type { TillBasket } from "./basket.js";
+import type { StoredLines, TillBasket } from "./basket.js";
 import type { TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
@@ -55,6 +55,53 @@ describe.each(["light", "dark"] as const)("till-basket a11y (%s theme)", (theme)
       },
     ]);
     const { host } = await mountWidget<TillBasket>("till-basket", { store }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it("a stored order offering Cancel, Give away, Discount and a struck price has no violations", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom(
+      "wo-9",
+      [
+        { workingOrderLineId: "l-1", product: cafe, quantity: "2" },
+        { workingOrderLineId: "l-2", product: { ...cafe, unitPrice: "0.00" }, quantity: "1" },
+      ],
+      undefined,
+      4,
+    );
+    const line = {
+      productId: "cafe",
+      parentLineNo: null,
+      quantity: "2.000",
+      unitPrecision: 0,
+      unitPriceGross: "1.50",
+      servedAt: null,
+      courseId: null,
+      sentAt: null,
+      firedAt: null,
+      state: null,
+      groupId: null,
+      note: null,
+      listId: null,
+      menuItemId: null,
+      parentProductId: null,
+    };
+    const storedLines: StoredLines = {
+      orderId: "wo-9",
+      revision: 4,
+      lines: [
+        { ...line, id: "l-1", lineNo: 1, sentAt: "2026-09-30T09:00:00.000Z", state: "queued" },
+        {
+          ...line,
+          id: "l-2",
+          lineNo: 2,
+          quantity: "1.000",
+          unitPriceGross: "0.00",
+          listUnitPriceGross: "1.50",
+        },
+      ],
+    };
+    const { host } = await mountWidget<TillBasket>("till-basket", { store, storedLines }, theme);
     await expectNoA11yViolations(host);
   });
 

@@ -194,6 +194,8 @@ export class WorkingOrderStore {
   /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
   #revision = 0;
   #sending = false;
+  #editLock: object | null = null;
+  #loadGeneration = 0;
   #lastAdded?: OrderLine;
 
   /** Changes only on {@link clear} and {@link loadFrom}. */
@@ -246,6 +248,34 @@ export class WorkingOrderStore {
 
   get revision(): number {
     return this.#revision;
+  }
+
+  /** Staff edits are refused while the order in the basket is being read again, so the read never
+   * replaces an edit made meanwhile. The lock ends when the returned function is called (a later
+   * lock stays), or when the basket is cleared or another copy is loaded into it. */
+  lockEdits(): () => void {
+    const lock = {};
+    this.#editLock = lock;
+    this.emit("changed");
+    return () => {
+      if (this.#editLock !== lock) return;
+      this.#editLock = null;
+      this.emit("changed");
+    };
+  }
+
+  /** Counts {@link clear} and {@link loadFrom} calls, so a copy of the same order loaded again
+   * reads as a different basket where {@link id} does not. */
+  get loadGeneration(): number {
+    return this.#loadGeneration;
+  }
+
+  get editsLocked(): boolean {
+    return this.#editLock !== null;
+  }
+
+  get #refusesEdits(): boolean {
+    return this.#sending || this.#editLock !== null;
   }
 
   /** No `"changed"` notification: not a rendering concern. */
@@ -305,7 +335,7 @@ export class WorkingOrderStore {
   }
 
   addProduct(product: TillProduct, quantity: string, selection?: LineSelection): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     const line = newLine(product, quantity, selection);
     this.#lines.push(line);
     this.#lastAdded = line;
@@ -318,7 +348,7 @@ export class WorkingOrderStore {
    * not offered or blocked takes nothing: a fresh tap starts a line of its own beside it.
    */
   addMerging(product: TillProduct, quantity: string, selection?: LineSelection): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     const line = newLine(product, quantity, selection);
     const into = mergeTarget(this.#lines, line);
     if (into === undefined) this.#lines.push(line);
@@ -335,7 +365,7 @@ export class WorkingOrderStore {
 
   /** Replaces the line's answers but not its note, which {@link setLineExtras} owns. */
   setLineModifiers(index: number, selection: LineSelection): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     const line = this.#lines[index];
     if (!line) return;
     delete line.extras;
@@ -349,7 +379,7 @@ export class WorkingOrderStore {
 
   /** Never merges lines: stepping one line's count never folds it into an identical sibling. */
   setLineQuantity(index: number, quantity: string): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
@@ -365,7 +395,7 @@ export class WorkingOrderStore {
   /** Split quantity: a whole-unit line of N becomes N lines of one in its place, the first being the
    * same line object. Each is marked `noMerge`, so no later add folds them back together. */
   splitLine(index: number): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     const line = this.#lines[index];
     if (line === undefined || !soldByTheUnit(line.product)) return;
     const count = Number(line.quantity);
@@ -380,7 +410,7 @@ export class WorkingOrderStore {
 
   /** The waiter's course override on a table draft line; `undefined` goes back to the dish's own. */
   setLineCourse(index: number, courseId: string | undefined): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     const line = this.#lines[index];
     if (line === undefined) return;
     if (courseId === undefined) delete line.courseId;
@@ -394,7 +424,7 @@ export class WorkingOrderStore {
    * key. It marks the basket dirty because the note is sent with the line.
    */
   setLineExtras(index: number, extras: { note?: string }): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
@@ -424,7 +454,7 @@ export class WorkingOrderStore {
   }
 
   removeLine(index: number): void {
-    if (this.#sending) return;
+    if (this.#refusesEdits) return;
     if (index < 0 || index >= this.#lines.length) {
       return;
     }
@@ -465,6 +495,8 @@ export class WorkingOrderStore {
   /** Mints a FRESH {@link id}: a cleared basket is a new working order, so its next park or pay does
    * not collide with the settled one. */
   clear(): void {
+    this.#loadGeneration++;
+    this.#editLock = null;
     this.#lines.length = 0;
     this.#id = crypto.randomUUID();
     this.#label = undefined;
@@ -490,6 +522,8 @@ export class WorkingOrderStore {
     this.#invalidatePricing();
     this.#persisted = true;
     this.#dirty = false;
+    this.#editLock = null;
+    this.#loadGeneration++;
     this.emit("changed");
   }
 

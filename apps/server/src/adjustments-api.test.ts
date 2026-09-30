@@ -334,7 +334,7 @@ describe("the route's own rules", () => {
     expect(await recordedOn(billId)).toEqual([]);
   });
 
-  it("refuses an open counter order, which has no party, as tab.not_open, writing nothing", async () => {
+  it("comps a dish on an open counter order, which has no party, recording it once", async () => {
     const orderId = randomUUID();
     await parkOrder({ db: venue.db }, venue.cfg, {
       id: orderId,
@@ -354,13 +354,19 @@ describe("the route's own rules", () => {
 
     const answer = await post(orderId, { lineId: rows[0]!.id, action: "comp" });
 
-    expect([answer.status, answer.json]).toEqual([
-      409,
-      { code: "tab.not_open", params: { tabId: orderId } },
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({
+      adjustmentIds: [expect.any(String)],
+      revision: revision + 1,
+      party: null,
+    });
+    expect(await recordedOn(orderId)).toMatchObject([
+      { action: "comp", lineId: rows[0]!.id, reduction: 1200 },
     ]);
-    expect(await recordedOn(orderId)).toEqual([]);
-    expect(await revisionOf(orderId)).toBe(revision);
-    expect(await rowsOf(venue, orderId)).toEqual(rows);
+    expect(await revisionOf(orderId)).toBe(revision + 1);
+    expect((await rowsOf(venue, orderId)).map((row) => [row.name, row.lineTotal])).toEqual([
+      ["Burger", "0.00"],
+    ]);
   });
 
   it("maps over_limit, partial_with_extras and reason_inactive to 409", async () => {
