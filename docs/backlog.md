@@ -3233,7 +3233,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `apps/server/src/order-groups.ts`). Like a snooze, it applies only to the group the reminder
         is waiting on, so a moved group is cleared once it becomes the waiting one; the reminder then
         falls due as if it had never been snoozed. Clearing a group with no snooze is accepted and
-        changes nothing but the party's revision. **Spanish wording DONE (campaign item A124):** the
+        changes nothing but the party's revision. **Spanish wording DONE (#910, campaign item A124):** the
         button reads "Cancelar posponer", not "Quitar aplazamiento" (owner, 2026-09-29: "Just use
         Cancelar or Cancelar Posponer, apparently nobody uses posposición"); a bare "Cancelar" would
         not say what the reminder row's button cancels. It was the till's only Spanish string
