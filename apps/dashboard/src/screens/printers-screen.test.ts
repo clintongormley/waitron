@@ -5986,6 +5986,49 @@ describe("printers-screen Bluetooth pairing", () => {
       await flush(el);
       expect(api.deactivatePrinter).not.toHaveBeenCalled();
     });
+
+    async function saveChangedWidth(el: PrintersScreen): Promise<void> {
+      q(el, sel("calibration-next"))!.click();
+      await flush(el);
+      await chooseOption(el, "printer-paper-width", "80mm");
+      for (let step = 2; step < 4; step++) {
+        q(el, sel("calibration-next"))!.click();
+        await flush(el);
+      }
+      q(el, sel("save-printer-p9"))!.click();
+      await flush(el);
+    }
+
+    it("leaves the printer switched on when the screen is left while its calibration is being saved", async () => {
+      const { el, api } = await addAgain();
+      let answer!: () => void;
+      vi.mocked(api.updatePrinter).mockReturnValueOnce(
+        new Promise<void>((resolve) => (answer = resolve)),
+      );
+      await saveChangedWidth(el);
+      expect(api.updatePrinter).toHaveBeenLastCalledWith("p9", { paperWidth: "80mm" });
+
+      el.remove();
+      answer();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+    });
+
+    it("switches the printer off again when its calibration fails to save and the wizard is then closed", async () => {
+      const { el, api } = await addAgain();
+      vi.mocked(api.updatePrinter).mockRejectedValueOnce({ code: "connection.failed" });
+      await saveChangedWidth(el);
+      expect(api.updatePrinter).toHaveBeenLastCalledWith("p9", { paperWidth: "80mm" });
+      expect(q(el, sel("edit-printer-modal"))).not.toBeNull();
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+
+      q(el, sel("cancel-edit-printer"))!.click();
+      await flush(el);
+
+      await vi.waitFor(() => expect(q(el, sel("edit-printer-modal"))).toBeNull());
+      expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p9");
+    });
   });
 
   describe("an added printer that is switched on", () => {

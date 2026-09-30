@@ -1461,8 +1461,16 @@ export class PrintersScreen extends LitElement {
     if (row.characterTable !== row.saved.characterTable) patch.characterTable = row.characterTable;
     if (row.hasCashDrawer !== row.saved.hasCashDrawer) patch.hasCashDrawer = row.hasCashDrawer;
     await this.#submit(async () => {
-      if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
-      if (this.#readdingId === id) this.#readdingId = undefined;
+      // Cleared before the request, so leaving the screen while it is in flight does not switch
+      // off a printer being saved; a failed save puts it back for the wizard's close.
+      const readding = this.#readdingId === id;
+      if (readding) this.#readdingId = undefined;
+      try {
+        if (Object.keys(patch).length) await this.api.updatePrinter(id, patch);
+      } catch (error) {
+        if (readding) this.#readdingId = id;
+        throw error;
+      }
       await this.#closeModal("edit-printer-modal");
     });
   }
