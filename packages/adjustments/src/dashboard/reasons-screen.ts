@@ -17,6 +17,7 @@ import type {
   AdjustmentAction,
   AdjustmentReason,
   AdjustmentReasonInput,
+  AdjustmentSettings,
   AdjustmentsApi,
   PersonRole,
 } from "./client.js";
@@ -192,6 +193,16 @@ export class AdjustmentReasonsScreen extends LitElement {
       select[aria-invalid="true"] {
         border-color: var(--wt-color-danger);
       }
+      .limit {
+        display: grid;
+        gap: var(--wt-space-3);
+        max-width: var(--wt-modal-max-width);
+        margin-top: var(--wt-space-6);
+      }
+      .limit h2,
+      .limit p {
+        margin: 0;
+      }
       /* Cell markup lives in the table's shadow root, so only a part reaches it. */
       wt-data-table::part(manage) {
         display: flex;
@@ -214,7 +225,20 @@ export class AdjustmentReasonsScreen extends LitElement {
   /** A refusal that names no field the form shows, until the operator saves again. */
   @state() private editorError?: string;
   @state() private busy = false;
+  @state() private settings?: AdjustmentSettings;
+  @state() private limitLoadError?: string;
+  /** What the operator typed; undefined until they change the field, so a refresh shows the saved
+   * limit without replacing a value being typed. */
+  @state() private limitDraft?: string;
+  @state() private limitAttempted = false;
+  /** The server refused the limit itself, until the operator changes it or saves again. */
+  @state() private limitRefused = false;
+  /** A refusal that names no field, until the operator saves again. */
+  @state() private limitError?: string;
+  @state() private limitSaving = false;
+  @state() private limitSaved = false;
   #loaded = false;
+  #settingsLoaded = false;
   #opener?: HTMLElement;
   /** The active reasons' ids in list order, and each one's place in it, kept in step with `reasons`. */
   #activeIds: readonly string[] = [];
@@ -227,6 +251,14 @@ export class AdjustmentReasonsScreen extends LitElement {
     },
   );
 
+  readonly #settingsQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.limitLoadError = t("adjustments.limit.load_error");
+    },
+  );
+
   constructor() {
     super();
     new ContentLanguageController(this);
@@ -235,6 +267,33 @@ export class AdjustmentReasonsScreen extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     void this.#load();
+    void this.#loadSettings();
+  }
+
+  async #loadSettings(): Promise<void> {
+    const initial = !this.#settingsLoaded;
+    this.#settingsLoaded = true;
+    try {
+      await this.#settingsQueries.watch(
+        "settings",
+        {
+          key: "adjustments:settings",
+          dependencies: QUERY_DEPENDENCIES.settings.map((type) => ({ type })),
+          refreshMs: 60_000,
+          read: firstReadThenPassive(
+            () => this.api,
+            (api) => api.getSettings(),
+            initial,
+          ),
+        },
+        (settings) => {
+          this.settings = settings;
+          this.limitLoadError = undefined;
+        },
+      );
+    } catch {
+      this.limitLoadError = t("adjustments.limit.load_error");
+    }
   }
 
   async #load(): Promise<void> {
@@ -459,6 +518,107 @@ export class AdjustmentReasonsScreen extends LitElement {
     void this.#write(() =>
       reason ? this.api.updateReason(reason.id, input) : this.api.createReason(input),
     );
+  }
+
+  #limitText(): string {
+    if (this.limitDraft !== undefined) return this.limitDraft;
+    const bp = this.settings!.maxBillDiscountBp;
+    return bp === null ? "" : localDecimal(String(bp / 100));
+  }
+
+  #limitCheck(): string | undefined {
+    return percentBp(this.#limitText()) === undefined ? t("adjustments.limit.invalid") : undefined;
+  }
+
+  async #focusLimit(): Promise<void> {
+    await this.updateComplete;
+    await focusFirstInvalid(this.renderRoot.querySelector('[data-test="limit"]')!);
+  }
+
+  /** A refresh that fails after the save succeeded is a load failure, shown as one. */
+  async #saveLimit(): Promise<void> {
+    if (this.limitSaving) return;
+    this.limitAttempted = true;
+    this.limitRefused = false;
+    this.limitError = undefined;
+    this.limitSaved = false;
+    if (this.#limitCheck() !== undefined) {
+      await this.#focusLimit();
+      return;
+    }
+    this.limitSaving = true;
+    let settings: AdjustmentSettings;
+    try {
+      settings = await this.api.saveSettings({ maxBillDiscountBp: percentBp(this.#limitText())! });
+    } catch (error) {
+      const field = (error as { params?: { field?: unknown } }).params?.field;
+      if (codeOf(error) === "management.request_invalid" && field === "maxBillDiscountBp") {
+        this.limitRefused = true;
+        void this.#focusLimit();
+      } else {
+        this.limitError = codeMessage(codeOf(error));
+      }
+      return;
+    } finally {
+      this.limitSaving = false;
+    }
+    this.settings = settings;
+    this.limitDraft = undefined;
+    this.limitAttempted = false;
+    this.limitSaved = true;
+    await this.#loadSettings();
+  }
+
+  #limitSection() {
+    return html`<section class="limit" data-test="limit" aria-labelledby="limit-heading">
+      <h2 id="limit-heading">${t("adjustments.limit.heading")}</h2>
+      ${
+        this.limitLoadError
+          ? html`<p class="alert" role="alert" data-test="limit-alert">${this.limitLoadError}</p>`
+          : nothing
+      }
+      ${this.settings ? this.#limitForm() : nothing}
+    </section>`;
+  }
+
+  #limitForm() {
+    const own = this.limitAttempted ? this.#limitCheck() : undefined;
+    const error = own ?? (this.limitRefused ? t("adjustments.limit.invalid") : undefined);
+    const bottom = [
+      ...(this.limitError ? [this.limitError] : []),
+      ...(error ? [t("adjustments.fix_fields")] : []),
+    ].join(" ");
+    return html`<wt-input
+        name="maxBillDiscount"
+        autocomplete="off"
+        label=${t("adjustments.limit.field")}
+        hint=${t("adjustments.limit.hint")}
+        .value=${this.#limitText()}
+        .error=${error ?? ""}
+        .disabled=${this.limitSaving}
+        @wt-change=${(event: CustomEvent<{ value: string }>) => {
+          event.stopPropagation();
+          this.limitDraft = event.detail.value;
+          this.limitRefused = false;
+          this.limitSaved = false;
+        }}
+        @keydown=${(event: KeyboardEvent) =>
+          submitOnEnter(event, this.renderRoot.querySelector('[data-test="save-limit"]'))}
+      ></wt-input>
+      ${
+        this.limitSaved
+          ? html`<p role="status" data-test="limit-saved">${t("adjustments.limit.saved")}</p>`
+          : nothing
+      }
+      <wt-form-actions .error=${bottom}
+        ><wt-button
+          variant="primary"
+          data-test="save-limit"
+          ?disabled=${this.limitSaving || own !== undefined}
+          @click=${() => void this.#saveLimit()}
+          >${t("adjustments.limit.save")}</wt-button
+        ></wt-form-actions
+      >`;
   }
 
   #limits(reason: AdjustmentReason): string[] {
@@ -813,7 +973,7 @@ export class AdjustmentReasonsScreen extends LitElement {
             ></wt-data-table>`
           : nothing
       }
-      ${this.#modal()}`;
+      ${this.#limitSection()} ${this.#modal()}`;
   }
 }
 
