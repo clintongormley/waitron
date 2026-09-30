@@ -276,3 +276,29 @@ it("says in both languages why a table cannot be joined across service areas, or
     "Esa mesa está en una zona sin servicio de mesa. Elige otra mesa",
   );
 });
+
+it("explains each refusal a cancel, comp or discount can give, in both languages", () => {
+  const generic = {
+    en: codeMessage("server.internal", "en"),
+    es: codeMessage("server.internal", "es"),
+  };
+  for (const code of [
+    "adjustment.action_not_allowed",
+    "adjustment.over_limit",
+    "adjustment.note_required",
+    "adjustment.reason_inactive",
+    "adjustment.exceeds_amount",
+    "adjustment.approval_required",
+    "adjustment.partial_with_extras",
+    "adjustment.line_not_adjustable",
+    "adjustment.quantity_invalid",
+    "adjustment_reason.not_found",
+  ]) {
+    expect(codeMessage(code, "en"), code).not.toBe(generic.en);
+    expect(codeMessage(code, "es"), code).not.toBe(generic.es);
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage(code, "es"));
+  }
+  expect(codeMessage("adjustment.partial_with_extras", "en")).toBe(
+    "A dish with extras can only be cancelled, comped or discounted whole",
+  );
+});

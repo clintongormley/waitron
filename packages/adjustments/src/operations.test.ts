@@ -6,6 +6,7 @@ import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
+  findAdjustmentReason,
   listAdjustmentReasons,
   reorderAdjustmentReasons,
   updateAdjustmentReason,
@@ -258,5 +259,19 @@ describe("adjustment reason operations", () => {
       updateAdjustmentReason(tx, created.id, complaint({ names: { en: " ", es: "Queja" } })),
     );
     expect(updated.names).toEqual({ es: "Queja" });
+  });
+
+  it("reads one reason by its id, an inactive one included, and refuses an id that names none", async () => {
+    const reason = await inTx((tx) => createAdjustmentReason(tx, complaint({ name: "Read" })));
+    await inTx((tx) => deactivateAdjustmentReason(tx, reason.id));
+
+    expect(await inTx((tx) => findAdjustmentReason(tx, reason.id))).toEqual({
+      ...reason,
+      active: false,
+    });
+    await expect(inTx((tx) => findAdjustmentReason(tx, MISSING))).rejects.toMatchObject({
+      code: "adjustment_reason.not_found",
+      params: { reasonId: MISSING },
+    });
   });
 });

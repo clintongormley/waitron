@@ -10,7 +10,7 @@ import {
   decimalToCents,
   type Decimal,
 } from "@waitron/shared";
-import type { AdjustmentAction, AdjustmentReason } from "./policy.js";
+import { isPercentBp, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
 import { adjustmentReasons } from "./schema/reasons.js";
 import "./errors.js";
 
@@ -80,7 +80,7 @@ function reasonValues(input: AdjustmentReasonInput) {
     throw invalid("actions");
   }
   const percent = input.maxPercentBp;
-  if (percent !== null && (!Number.isInteger(percent) || percent <= 0 || percent > 10000)) {
+  if (percent !== null && !isPercentBp(percent)) {
     throw invalid("maxPercentBp");
   }
   const amount = input.maxAmount;
@@ -124,6 +124,14 @@ async function findReason(tx: Transaction, reasonId: string): Promise<ReasonRow>
   const [row] = await tx.select().from(adjustmentReasons).where(eq(adjustmentReasons.id, reasonId));
   if (row === undefined) throw new AppError("adjustment_reason.not_found", { reasonId });
   return row;
+}
+
+/** One reason by its id, active or not; `adjustment_reason.not_found` when none has it. */
+export async function findAdjustmentReason(
+  tx: Transaction,
+  reasonId: string,
+): Promise<AdjustmentReason> {
+  return toReason(await findReason(tx, reasonId));
 }
 
 /** Reasons in the order staff see them. Active ones only unless asked. */

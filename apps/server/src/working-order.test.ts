@@ -63,7 +63,7 @@ import {
   markCourseAway,
   parkOrder,
   placeOrder,
-  priceStoredOrder,
+  readStoredOrder,
   priceStoredOrderForIssuance,
   readTabLines,
   recallLines,
@@ -7580,7 +7580,9 @@ describe("a variant is sold as the product it is", () => {
         expo: (await listExpoQueue(tx, twoLocales))[0]!.courses.flatMap((c) =>
           c.items.map((i) => i.name),
         ),
-        receipt: ticketLinesFrom(await priceStoredOrder(tx, orderId)).map((l) => l.descriptions),
+        receipt: await readStoredOrder(tx, orderId).then(({ gross, identities }) =>
+          ticketLinesFrom(gross, identities).map((l) => l.descriptions),
+        ),
       };
     });
     expect(seen).toEqual({

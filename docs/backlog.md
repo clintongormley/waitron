@@ -122,11 +122,11 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Thirteen of the service
+1. **Finish table service and paying a bill in parts** (A4, lane B). Fourteen of the service
    plan's eighteen tasks are done: 0–10, 13 and 14 have landed (Task 9, marking dishes served, as
-   #814; Task 10, the attention signals, as #908; Task 13, standalone ordering, as #903). Left:
-   applying a cancellation,
-   comp or discount to an order (11) and its reports (12),
+   #814; Task 10, the attention signals, as #908; Task 13, standalone ordering, as #903), and
+   Task 11, comps and discounts, is done on `feat/service-adjustments`, awaiting its pull request. Left: the till's Cancel
+   taking a reason (waits on the owner, see Task 11's entry), the adjustment reports (12),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
@@ -2635,10 +2635,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - **Task 1 landed as #706** (2026-09-26): the new module `packages/adjustments`, holding
     adjustment reasons (table `adjustment_reasons`), the policy check `evaluateAdjustment` and a
     managers' dashboard screen (permission `adjustment.manage`).
-    Nothing applies a reason to an order yet — Task 11 does. Two points Task 11 inherits:
-    `evaluateAdjustment` counts a cancel's reduction against the reason's euro limit, and it
-    throws a `RangeError` on a malformed request (a negative amount, or a percentage discount
-    without a percentage from 1 to 10000) rather than returning a verdict. Left from the review:
+    Task 11 applies the reasons to orders (see its entry below). `evaluateAdjustment` counts a
+    cancel's reduction against the reason's euro limit, and it throws a `RangeError` on a malformed
+    request (a negative amount, or a percentage discount without a percentage from 1 to 10000)
+    rather than returning a verdict; Task 11's apply path checks the request before calling it. Left from the review:
     the reasons screen keeps its own copy of the role list and role names (C51 now sorts its
     dropdowns by displayed name, with a separate seniority order for validation) and of the
     placeholder-filling helper in `apps/dashboard/src/widgets/menu-preview.ts`; sharing them means moving both into
@@ -3304,6 +3304,59 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         stricter than most of C81's table actions, whose late refusals are still said on the banner
         (Finish's refusal for a bill still unpaid and the name's own refusal are dropped there too).
         **Next action:** decide whether a late refusal of the bill request should be said too.
+  - **Task 11 (cancellations, comps and discounts)** DONE on `feat/service-adjustments` (lane B
+    item B11, 2026-09-30). A comp, a line discount (percentage or amount) and a whole-bill discount
+    are applied under a reason (`POST /api/working-orders/:id/adjustments`, with a read-only
+    `…/adjustments/preview` the till shows before confirming; `applyAdjustment` in
+    `apps/server/src/adjustments-apply.ts`), recorded in the append-only `adjustments` table of
+    `packages/adjustments` with the reason and policy as they were, checked against the reason's
+    cumulative limits, and, when the operator's role is below the reason's `apply_role`, approved on
+    the waiter's till by the PIN of someone at or above its `approver_role`. A comp or discount lowers the line's price in whole cents per unit (plan D4, D15) and keeps
+    its first price in `working_order_lines.list_unit_price_gross` (core migrations `0049`, `0050`;
+    the second re-creates the line trigger with the column in both unchanged-column lists). The
+    printed receipt, the till's open bill and its on-screen receipt show that first price before the
+    new one (`12,00 € -> 0,00 €` on paper: none of the printer character sets has `→`, pinned in
+    `apps/server/src/receipt-ticket.test.ts`). Raising the quantity of an adjusted line adds the new
+    units as their own line at today's price; while the adjusted line is held they wait in its
+    group and fire with it. **The upgrade was measured**
+    (2026-09-30; taken before the `adjustments` table's `split_line_ids` column became `splits`; the
+    upgrade creates that table empty): a venue seeded with main at `1e21f89fb` (core migrations ending at `0048`) through
+    `devSetup`, plus one open party bill with fired lines, one with a held group and one paid, was
+    migrated with the branch's `applyMigrations`; every pre-existing table kept its row count, and
+    `pragma foreign_key_check` printed nothing. The golden huella test and `inmutabilidad` pass
+    unedited. Left open:
+    - **The till's Cancel still takes no reason** and records no adjustment: it calls the old
+      `DELETE /api/working-orders/:id/lines/:lineNo`. Moving it onto the adjustment route (the dialog
+      already carries a cancel) changes assertions in tests that predate the branch — the one-press
+      cancel dialog and `api.voidLine` cases in `apps/till/src/screens/till-table-order-screen.test.ts`,
+      `apps/till/src/till-app.test.ts`, `apps/till/src/till-app-table-service.test.ts` and
+      `apps/till/src/till-app-parties.test.ts` — which needs the owner's word (lane B item B11a). The
+      reasonless route stays reachable from the API until then. **Next action:** the owner rules;
+      then move the Cancel and retire the old route.
+    - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
+      overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
+      wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
+      throttle for every override PIN.
+    - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
+      discount, or two bill discounts under one reason, because a bill discount counts as 0% on
+      each line (a run-it review, 2026-09-30, applied two successive 30% whole-bill discounts under a
+      50% cap and both succeeded). A row split off by splitting the bill, by a transfer, or by moving
+      part of a line to another group starts with no percentage history (lines record no source line); a row a comp or discount carves keeps
+      its source line's history. **Next action:**
+      decide whether the per-line cap should see bill discounts.
+    - **Not offered:** part of a dish with extras (`adjustment.partial_with_extras`), part of a
+      weighed line (`adjustment.quantity_invalid`, a controller ruling during the build: its two
+      rounded parts need not add up to the line), and counter orders (the route takes a table's bill
+      only, as the old void does). A run-it review found that exactly representable weighed cases
+      are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
+      decides whether exactly representable partial weighed adjustments should be allowed.
+    - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
+      close report arrives with the next animation frame): "saves on Enter and cancels on Escape from
+      a focused field" in `apps/dashboard/src/widgets/variant-form.test.ts`, and `pressEscape`'s fixed
+      50 ms wait in `packages/ui/src/components/wt-dialog.test.ts`. **Next action:** wait for the
+      close event there too.
+    - The till's "Amount off (€)" writes the euro sign into the label rather than taking the venue's
+      currency. How a comp or discount appears on the invoice is still asesor Q29.
   - **Eight till tests wait a fixed real time for a round's retries** (found 2026-09-30, B13). Each
     sleeps `2 * SUBMIT_RETRY_PAUSE_MS + 50` ms while the retries pause on real time; one more test of
     that shape, "takes the party's revision from the floor read after a round that got no answer"
@@ -4943,6 +4996,9 @@ ongoing overhaul listed at the top of Track A.
   `packages/adjustments/src/dashboard/reasons-screen.test.ts` failed twice in about five runs while
   other browser suites ran beside it, then passed 27 times in a row; the failure text was not kept
   and the cause is not established. (e) and (f) are observations from the implementer's session.
+  _(2026-09-30, service plan Task 11 (`feat/service-adjustments`): (f)'s cause was found — Chromium
+  reports the dialog's close with the next animation frame, so the test checked too early; that
+  test now waits for the close.)_
 
 - **Request refusals that still land in the bottom message, or under a field in generic words —
   OPEN (left by C54, #853).** In the forms C54 surveyed (the dashboard, the setup wizard, and the
@@ -5237,7 +5293,10 @@ ongoing overhaul listed at the top of Track A.
 - **Pricing adjustments** (owner, 2026-09-03), both gated on the discount permission: reduce or zero
   an order line; a whole-order discount spread across lines and VAT rates. A *descuento* agreed at or
   before issuance is outside the VAT base (Q15), so it must reach the line BEFORE `computeHuella` —
-  specced with the owner, never landed unattended.
+  specced with the owner, never landed unattended. _(2026-09-30: comps, line discounts and
+  whole-bill discounts are built by service plan Task 11 — see its entry under the service plan;
+  they are gated by each reason's roles, not a discount permission, per plan decision D6 in
+  `docs/superpowers/plans/2026-09-26-service-ordering-and-billing.md`.)_
 - **KDS corrections deferred from #191** (owner, 2026-09-01): a moved dish must keep its kitchen
   status (`moveTabLines` deletes and reinserts the line, so its `ticket_items` row cascade-drops; the
   ticket must travel with the line, not re-fire — no test covers it today) _(2026-09-30, Task 13:

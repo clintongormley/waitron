@@ -43,14 +43,14 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import {
   createOpenOrder,
   fireLines,
-  priceStoredOrder,
   priceStoredOrderForIssuance,
   readInvoiceNumber,
+  readStoredOrder,
   refusePaymentInFlight,
   toVatBreakdown,
   unsentDishLines,
 } from "./working-order.js";
-import type { GrossOrder, LineExtras, TillSaleDeps } from "./working-order.js";
+import type { GrossOrder, LineExtras, OrderLineIdentity, TillSaleDeps } from "./working-order.js";
 import { issuancePass } from "./issuance-pass.js";
 import { issueMoment } from "./issue-moment.js";
 import { cashChange, ZERO } from "./bill-allocation.js";
@@ -127,6 +127,11 @@ export interface TillSaleLine {
   quantity: string;
   /** The GROSS (VAT-inclusive) line total the line was filed at, as a decimal string. */
   gross: string;
+  /**
+   * The line's total at its price before a comp or a discount lowered it, present only when that
+   * differs from `gross`. The receipt shows it; nothing is filed from it.
+   */
+  listGross?: string;
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else `null`/absent.
    *  Presentation only: it groups already-filed lines and is no fiscal figure. */
   parentLineNo?: number | null;
@@ -536,7 +541,8 @@ export async function readSettledTicket(
   }
   /* v8 ignore stop */
 
-  const ticketLines = ticketLinesFrom(await priceStoredOrder(tx, workingOrderId));
+  const stored = await readStoredOrder(tx, workingOrderId);
+  const ticketLines = ticketLinesFrom(stored.gross, stored.identities);
 
   // Reads the already-filed record; never re-files.
   const filed = await backend.filedReceiptFor(tx, brandSaleId(issued.saleId));
@@ -689,7 +695,7 @@ async function fileImmediateSale(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    lines: ticketLinesFrom(priced),
+    lines: ticketLinesFrom(priced, order.identities),
     tender: tenderBlock,
     qr: fiscal.verificationUrl ?? "",
   };
@@ -865,7 +871,13 @@ async function payIntegrated(
       // Inside the transaction, so no release pass runs between the mark and its registration.
       onMarked(attemptAt);
     }
-    return { kind: "collect" as const, gross, wasPlaced, attemptAt };
+    return {
+      kind: "collect" as const,
+      gross,
+      identities: order.identities,
+      wasPlaced,
+      attemptAt,
+    };
   });
 
   if (prepared.kind === "replay") {
@@ -920,6 +932,7 @@ async function payIntegrated(
     cfg,
     req,
     prepared.gross,
+    prepared.identities,
     tip,
     result,
     operatorId,
@@ -1048,6 +1061,7 @@ async function finalizeCapture(
   cfg: TillConfig,
   req: IntegratedPayRequest,
   grossInP1: GrossLines,
+  identities: readonly OrderLineIdentity[],
   tip: Decimal,
   result: PaymentResult,
   operatorId?: string,
@@ -1122,7 +1136,7 @@ async function finalizeCapture(
         issuedAt: fiscal.issuedAt.toISOString(),
         total: priced.total,
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced),
+        lines: ticketLinesFrom(priced, identities),
         tender: tenderBlock,
         qr: fiscal.verificationUrl ?? "",
       };
@@ -1175,15 +1189,8 @@ async function finalizeRecovery(
       };
     }
 
-    const { priced, clock } = issueMoment(
-      deps.clock,
-      await issuancePass(
-        tx,
-        cfg,
-        req.id,
-        await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false }),
-      ),
-    );
+    const order = await priceStoredOrderForIssuance(tx, req.id, { refuseUnsentUnavailable: false });
+    const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, req.id, order));
     const capturedAmount = decimal(captured.amount);
 
     if (compareDecimal(capturedAmount, priced.total) < 0) {
@@ -1259,7 +1266,7 @@ async function finalizeRecovery(
       issuedAt: fiscal.issuedAt.toISOString(),
       total: priced.total,
       vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-      lines: ticketLinesFrom(priced),
+      lines: ticketLinesFrom(priced, order.identities),
       tender: tenderBlock,
       qr: fiscal.verificationUrl ?? "",
     };

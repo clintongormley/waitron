@@ -800,7 +800,13 @@ describe("the editor", () => {
     const el = await mount(api);
     await press(el, "edit-c");
     field(el, "name").focus();
+    // Chromium delivers the native dialog's close event with the next animation frame, which can
+    // come after the key press resolves and after `settle`.
+    const closed = new Promise<void>((resolve) =>
+      modal(el)!.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
     await userEvent.keyboard("{Escape}");
+    await closed;
     await settle(el);
     expect(modal(el)).toBeNull();
     expect(api.updateReason).not.toHaveBeenCalled();

@@ -146,6 +146,7 @@ import {
 } from "./device-session.js";
 import { requireBodyUuid, requireUuidParam } from "@waitron/server-kit";
 import { requestBill } from "./bill-request.js";
+import { mountAdjustmentsApi } from "./adjustments-api.js";
 // Side-effect only: loads this host's errors.ts augmentation.
 import "./errors.js";
 
@@ -384,6 +385,20 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "status.inactive": 409,
   "drawer.no_printer": 400,
   "drawer.not_attached": 400,
+  "adjustment_reason.not_found": 404,
+  // 403, as `authorization.not_permitted` answers: the request is sound, the person may not alone.
+  "adjustment.approval_required": 403,
+  // The rest follow their nearest siblings: a refusal that depends on the bill or the reason as they
+  // stand is 409, like `bill.received_exceeds_total`; one about the request's own fields is 400,
+  // like `tab.void_quantity_invalid` and `tab.transfer_modifier_line`.
+  "adjustment.exceeds_amount": 409,
+  "adjustment.over_limit": 409,
+  "adjustment.action_not_allowed": 409,
+  "adjustment.reason_inactive": 409,
+  "adjustment.partial_with_extras": 409,
+  "adjustment.note_required": 400,
+  "adjustment.line_not_adjustable": 400,
+  "adjustment.quantity_invalid": 400,
 };
 
 export const run = createErrorBoundary(STATUS, "till.failed");
@@ -433,7 +448,7 @@ function requireCapacity(capacity: number | undefined): void {
 }
 
 /** A non-UUID names no open tab, so it gets the absent tab's `tab.not_open`. */
-function requireTabParam(id: string): string {
+export function requireTabParam(id: string): string {
   if (!isUuid(id)) {
     throw new AppError("tab.not_open", { tabId: id });
   }
@@ -444,11 +459,12 @@ function requireTabParam(id: string): string {
  * A revision as a body carries it, an order's or a party's: a whole number from 0, else
  * `management.request_invalid` naming `field`.
  */
-function requireRevision(
+export function requireRevision(
   value: unknown,
   field:
     | "revision"
     | "draftRevision"
+    | "expectedRevision"
     | "expectedPartyRevision"
     | "expectedOtherPartyRevision" = "revision",
 ): number {
@@ -775,6 +791,7 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
   // What a write that leaves a bill fully paid issues its invoice with (bill payments design §7).
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
   mountBillPaymentsApi(app, deps, log, run);
+  mountAdjustmentsApi(app, deps, log, run);
 
   // Device-gated: the throttle keys on the authenticated device, so dropping the cookie cannot
   // evade it, and the shift records the device's own till rather than `cfg.tillId`.

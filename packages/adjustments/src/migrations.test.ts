@@ -6,12 +6,15 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   engineErrorMessage,
+  FOREIGN_KEY_VIOLATION,
   isRefusal,
+  triggerRaised,
   UNIQUE_VIOLATION,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
+import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
 
@@ -101,5 +104,223 @@ describe("the adjustments migration set", () => {
     const second = await captureError(() => db.execute(insert({ name: "Complaint" })));
     expect(isRefusal(second, UNIQUE_VIOLATION)).toBe(true);
     expect(engineErrorMessage(second)).toContain("adjustment_reasons.name");
+  });
+});
+
+/** A comp of one of two €25.00 steaks, as the columns store it; `overrides` replaces columns. */
+async function adjustmentRow(
+  overrides: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> {
+  const reason = await seedReason(db);
+  return {
+    id: randomUUID(),
+    working_order_id: await seedWorkingOrder(db),
+    line_id: randomUUID(),
+    splits: "[]",
+    line_name: "Steak",
+    line_quantity: 2000,
+    line_list_unit_price: 2500,
+    credited_to: randomUUID(),
+    reason_id: reason.id,
+    reason_name: "Complaint",
+    policy_snapshot: "{}",
+    action: "comp",
+    quantity: 1000,
+    percent_bp: null,
+    before_amount: 5000,
+    after_amount: 2500,
+    reduction: 2500,
+    nominal_value: 2500,
+    requested_by: randomUUID(),
+    approved_by: null,
+    note: null,
+    stage: "served",
+    by_guest: 0,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+/** A €5.00 discount on the whole bill: no line, no stage, no quantity. */
+const BILL_LEVEL = {
+  line_id: null,
+  line_name: null,
+  line_quantity: null,
+  line_list_unit_price: null,
+  credited_to: null,
+  action: "discount_amount",
+  quantity: null,
+  stage: null,
+  before_amount: 4248,
+  after_amount: 3748,
+  reduction: 500,
+  nominal_value: 500,
+};
+
+function insertAdjustment(row: Record<string, unknown>) {
+  const columns = Object.keys(row);
+  return db.execute(
+    sql`insert into adjustments (${sql.join(
+      columns.map((column) => sql.identifier(column)),
+      sql`, `,
+    )}) values (${sql.join(
+      columns.map((column) => sql`${row[column]}`),
+      sql`, `,
+    )})`,
+  );
+}
+
+async function adjustmentRefused(
+  overrides: Record<string, unknown>,
+  constraint: string,
+): Promise<void> {
+  const error = await captureError(async () => insertAdjustment(await adjustmentRow(overrides)));
+  expect(isRefusal(error, CHECK_VIOLATION), constraint).toBe(true);
+  expect(engineErrorMessage(error), constraint).toContain(constraint);
+}
+
+describe("the adjustments table", () => {
+  it("has the snapshot, policy and amount columns, nullable only where a bill has no line", async () => {
+    const columns = await db.execute<{ name: string; notnull: number }>(
+      sql`select name, "notnull" from pragma_table_info('adjustments')`,
+    );
+    expect(Object.fromEntries(columns.rows.map((c) => [c.name, c.notnull]))).toEqual({
+      id: 1,
+      working_order_id: 1,
+      line_id: 0,
+      splits: 1,
+      line_name: 0,
+      line_quantity: 0,
+      line_list_unit_price: 0,
+      credited_to: 0,
+      reason_id: 1,
+      reason_name: 1,
+      policy_snapshot: 1,
+      action: 1,
+      quantity: 0,
+      percent_bp: 0,
+      before_amount: 1,
+      after_amount: 1,
+      reduction: 1,
+      nominal_value: 1,
+      requested_by: 1,
+      approved_by: 0,
+      note: 0,
+      stage: 0,
+      by_guest: 1,
+      created_at: 1,
+    });
+  });
+
+  it("accepts a line adjustment and a bill-level discount, which may split rows", async () => {
+    await insertAdjustment(await adjustmentRow());
+    await insertAdjustment(
+      await adjustmentRow({
+        ...BILL_LEVEL,
+        splits: JSON.stringify([{ from: randomUUID(), to: randomUUID() }]),
+      }),
+    );
+    await insertAdjustment(
+      await adjustmentRow({
+        action: "discount_percent",
+        percent_bp: 1000,
+        after_amount: 4500,
+        reduction: 500,
+        nominal_value: 500,
+      }),
+    );
+    expect((await db.execute(sql`select count(*) as n from adjustments`)).rows).toEqual([{ n: 3 }]);
+  });
+
+  it("refuses an action or a stage outside its vocabulary", async () => {
+    await adjustmentRefused({ action: "refund" }, "adjustments_action_ck");
+    await adjustmentRefused({ stage: "eaten" }, "adjustments_stage_ck");
+  });
+
+  it("refuses a reduction that is not before less after, a rise, and a negative value", async () => {
+    await adjustmentRefused({ reduction: 2400 }, "adjustments_amounts_ck");
+    await adjustmentRefused(
+      { before_amount: 2500, after_amount: 5000, reduction: -2500 },
+      "adjustments_amounts_ck",
+    );
+    await adjustmentRefused(
+      { before_amount: -1, after_amount: -1, reduction: 0 },
+      "adjustments_amounts_ck",
+    );
+    await adjustmentRefused({ nominal_value: -1 }, "adjustments_amounts_ck");
+  });
+
+  it("holds a percentage on a percentage discount only, within 1..10000 basis points", async () => {
+    await adjustmentRefused({ action: "discount_percent" }, "adjustments_percent_ck");
+    await adjustmentRefused({ percent_bp: 1000 }, "adjustments_percent_ck");
+    await adjustmentRefused(
+      { action: "discount_percent", percent_bp: 0 },
+      "adjustments_percent_ck",
+    );
+    await adjustmentRefused(
+      { action: "discount_percent", percent_bp: 10001 },
+      "adjustments_percent_ck",
+    );
+  });
+
+  it("refuses a blank reason name", async () => {
+    await adjustmentRefused({ reason_name: "  " }, "adjustments_reason_name_ck");
+  });
+
+  it("refuses a line adjustment missing its snapshot, stage or a quantity within the line", async () => {
+    await adjustmentRefused({ line_name: null }, "adjustments_line_level_ck");
+    await adjustmentRefused({ line_quantity: null }, "adjustments_line_level_ck");
+    await adjustmentRefused({ line_list_unit_price: null }, "adjustments_line_level_ck");
+    await adjustmentRefused({ line_list_unit_price: -1 }, "adjustments_line_level_ck");
+    await adjustmentRefused({ stage: null }, "adjustments_line_level_ck");
+    await adjustmentRefused({ quantity: null }, "adjustments_line_level_ck");
+    await adjustmentRefused({ quantity: 0 }, "adjustments_line_level_ck");
+    await adjustmentRefused({ quantity: 3000 }, "adjustments_line_level_ck");
+  });
+
+  it("refuses a bill-level row that carries a line's snapshot or a line action", async () => {
+    await adjustmentRefused({ ...BILL_LEVEL, line_name: "Steak" }, "adjustments_bill_level_ck");
+    await adjustmentRefused({ ...BILL_LEVEL, line_quantity: 1000 }, "adjustments_bill_level_ck");
+    await adjustmentRefused(
+      { ...BILL_LEVEL, line_list_unit_price: 1 },
+      "adjustments_bill_level_ck",
+    );
+    await adjustmentRefused(
+      { ...BILL_LEVEL, credited_to: randomUUID() },
+      "adjustments_bill_level_ck",
+    );
+    await adjustmentRefused({ ...BILL_LEVEL, quantity: 1000 }, "adjustments_bill_level_ck");
+    await adjustmentRefused({ ...BILL_LEVEL, stage: "fired" }, "adjustments_bill_level_ck");
+    await adjustmentRefused({ ...BILL_LEVEL, action: "comp" }, "adjustments_bill_level_ck");
+  });
+
+  it("refuses a working order that does not exist", async () => {
+    const order = await captureError(async () =>
+      insertAdjustment(await adjustmentRow({ working_order_id: randomUUID() })),
+    );
+    expect(isRefusal(order, FOREIGN_KEY_VIOLATION)).toBe(true);
+  });
+
+  it("holds no key to its reason, so deleting every reason leaves the history", async () => {
+    const row = await adjustmentRow();
+    await insertAdjustment(row);
+    await db.execute(sql`delete from adjustment_reasons`);
+    const kept = await db.execute<{ reason_name: string }>(
+      sql`select reason_name from adjustments where id = ${row.id as string}`,
+    );
+    expect(kept.rows).toEqual([{ reason_name: "Complaint" }]);
+  });
+
+  it("is append-only: an update and a delete are both refused", async () => {
+    const row = await adjustmentRow();
+    await insertAdjustment(row);
+    const update = await captureError(() =>
+      db.execute(sql`update adjustments set reduction = 0 where id = ${row.id as string}`),
+    );
+    expect(triggerRaised(update, "adjustments is append-only")).toBe(true);
+    const remove = await captureError(() =>
+      db.execute(sql`delete from adjustments where id = ${row.id as string}`),
+    );
+    expect(triggerRaised(remove, "adjustments is append-only")).toBe(true);
   });
 });

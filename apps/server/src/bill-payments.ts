@@ -636,16 +636,12 @@ async function issueWhenFullyPaid(
 
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
+  const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
+    refuseUnsentUnavailable: options.moneyMoved !== true,
+  });
   const { priced, clock } = issueMoment(
     deps.clock,
-    await issuancePass(
-      tx,
-      cfg,
-      workingOrderId,
-      await priceStoredOrderForIssuance(tx, workingOrderId, {
-        refuseUnsentUnavailable: options.moneyMoved !== true,
-      }),
-    ),
+    await issuancePass(tx, cfg, workingOrderId, stored),
   );
   const tendersOfBill: SettleSaleTender[] = held
     .filter(({ row }) => row.state === "received")
@@ -711,7 +707,7 @@ async function issueWhenFullyPaid(
     issuedAt: fiscal.issuedAt.toISOString(),
     total: priced.total,
     vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-    lines: ticketLinesFrom(priced),
+    lines: ticketLinesFrom(priced, stored.identities),
     tender: await readTenderBlock(tx, cfg, saleId, workingOrderId),
     payments: await readBillTenderLines(tx, saleId),
     qr: fiscal.verificationUrl ?? "",

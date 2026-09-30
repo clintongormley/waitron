@@ -1275,7 +1275,7 @@ async function heldItemsOf(
 }
 
 /** `+N` on the HOLD ticket of the group these dish lines just joined, where one was queued. */
-async function correctJoin(
+export async function correctJoin(
   tx: Transaction,
   cfg: TillConfig,
   groupId: string,

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import { evaluateAdjustment, type AdjustmentReason, type AdjustmentRequest } from "./policy.js";
+import {
+  evaluateAdjustment,
+  policySnapshotOf,
+  type AdjustmentReason,
+  type AdjustmentRequest,
+} from "./policy.js";
 
 const COMPLAINT: AdjustmentReason = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -224,5 +229,26 @@ describe("evaluateAdjustment", () => {
       kind: "refused",
       code: "adjustment.over_limit",
     });
+  });
+});
+
+describe("policySnapshotOf", () => {
+  it("keeps the evaluated policy and nothing that names or orders the reason", () => {
+    expect(policySnapshotOf(COMPLAINT)).toEqual({
+      actions: ["comp", "discount_percent"],
+      maxPercentBp: 5000,
+      maxAmount: "30.00",
+      applyRole: "supervisor",
+      approverRole: "manager",
+      noteRequired: true,
+    });
+  });
+
+  it("copies the action list, so a later edit of the reason cannot reach the snapshot", () => {
+    const reason = { ...COMPLAINT, actions: [...COMPLAINT.actions] };
+    const snapshot = policySnapshotOf(reason);
+    reason.actions.push("cancel");
+    expect(snapshot.actions).toEqual(["comp", "discount_percent"]);
+    expect(policySnapshotOf({ ...COMPLAINT, maxAmount: null }).maxAmount).toBeNull();
   });
 });

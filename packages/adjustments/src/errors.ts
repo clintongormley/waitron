@@ -1,4 +1,5 @@
 import "@waitron/shared";
+import type { PersonRoleValue } from "@waitron/identity";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
@@ -11,5 +12,17 @@ declare module "@waitron/shared" {
     "adjustment.over_limit": Record<string, never>;
     "adjustment.note_required": Record<string, never>;
     "adjustment.reason_inactive": Record<string, never>;
+    /** A discount larger than the line or bill it is taken off; amounts are decimal strings. */
+    "adjustment.exceeds_amount": { requested: string; available: string };
+    /** The requester is below the reason's `apply_role`, and no approver at or above
+     * `approverRole` was given. */
+    "adjustment.approval_required": { approverRole: PersonRoleValue };
+    /** Part of the quantity of a dish that has extras, which is adjusted only whole. */
+    "adjustment.partial_with_extras": { workingOrderId: string; lineNo: number };
+    /** An extras row named on its own; an adjustment names the dish it belongs to. */
+    "adjustment.line_not_adjustable": { workingOrderId: string; lineNo: number };
+    /** Not a positive quantity in the line's unit, no larger than the line, or part of a weighed
+     * line, which is comped or discounted only whole. */
+    "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
   }
 }

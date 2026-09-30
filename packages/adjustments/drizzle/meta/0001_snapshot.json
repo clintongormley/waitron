@@ -1,0 +1,383 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "8c5dc6dc-17af-4482-9a9c-8a6ac1d734f0",
+  "prevId": "67d6aa98-7798-4999-b663-56d4e03349fd",
+  "tables": {
+    "adjustment_reasons": {
+      "name": "adjustment_reasons",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "names": {
+          "name": "names",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actions": {
+          "name": "actions",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "max_percent": {
+          "name": "max_percent",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "max_amount": {
+          "name": "max_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "apply_role": {
+          "name": "apply_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approver_role": {
+          "name": "approver_role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "note_required": {
+          "name": "note_required",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "active": {
+          "name": "active",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "position": {
+          "name": "position",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "adjustment_reasons_active_name_key": {
+          "name": "adjustment_reasons_active_name_key",
+          "columns": [
+            "name"
+          ],
+          "isUnique": true,
+          "where": "\"adjustment_reasons\".\"active\""
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "adjustment_reasons_name_ck": {
+          "name": "adjustment_reasons_name_ck",
+          "value": "length(trim(\"adjustment_reasons\".\"name\")) > 0"
+        },
+        "adjustment_reasons_actions_ck": {
+          "name": "adjustment_reasons_actions_ck",
+          "value": "json_array_length(\"adjustment_reasons\".\"actions\") > 0"
+        },
+        "adjustment_reasons_max_percent_ck": {
+          "name": "adjustment_reasons_max_percent_ck",
+          "value": "\"adjustment_reasons\".\"max_percent\" is null or (\"adjustment_reasons\".\"max_percent\" > 0 and \"adjustment_reasons\".\"max_percent\" <= 10000)"
+        },
+        "adjustment_reasons_max_amount_ck": {
+          "name": "adjustment_reasons_max_amount_ck",
+          "value": "\"adjustment_reasons\".\"max_amount\" is null or \"adjustment_reasons\".\"max_amount\" > 0"
+        },
+        "adjustment_reasons_apply_role_ck": {
+          "name": "adjustment_reasons_apply_role_ck",
+          "value": "\"adjustment_reasons\".\"apply_role\" in ('staff', 'supervisor', 'manager', 'admin')"
+        },
+        "adjustment_reasons_approver_role_ck": {
+          "name": "adjustment_reasons_approver_role_ck",
+          "value": "\"adjustment_reasons\".\"approver_role\" in ('staff', 'supervisor', 'manager', 'admin')"
+        },
+        "adjustment_reasons_position_ck": {
+          "name": "adjustment_reasons_position_ck",
+          "value": "\"adjustment_reasons\".\"position\" >= 0"
+        }
+      }
+    },
+    "adjustments": {
+      "name": "adjustments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "working_order_id": {
+          "name": "working_order_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_id": {
+          "name": "line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "splits": {
+          "name": "splits",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "line_name": {
+          "name": "line_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "line_quantity": {
+          "name": "line_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "line_list_unit_price": {
+          "name": "line_list_unit_price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "credited_to": {
+          "name": "credited_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reason_id": {
+          "name": "reason_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason_name": {
+          "name": "reason_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "policy_snapshot": {
+          "name": "policy_snapshot",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "percent_bp": {
+          "name": "percent_bp",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "before_amount": {
+          "name": "before_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "after_amount": {
+          "name": "after_amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reduction": {
+          "name": "reduction",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nominal_value": {
+          "name": "nominal_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "requested_by": {
+          "name": "requested_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "by_guest": {
+          "name": "by_guest",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "adjustments_order_reason_idx": {
+          "name": "adjustments_order_reason_idx",
+          "columns": [
+            "working_order_id",
+            "reason_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "adjustments_working_order_fk": {
+          "name": "adjustments_working_order_fk",
+          "tableFrom": "adjustments",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "working_order_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "adjustments_action_ck": {
+          "name": "adjustments_action_ck",
+          "value": "\"adjustments\".\"action\" in ('cancel', 'comp', 'discount_percent', 'discount_amount')"
+        },
+        "adjustments_stage_ck": {
+          "name": "adjustments_stage_ck",
+          "value": "\"adjustments\".\"stage\" in ('unsent', 'held', 'fired', 'served')"
+        },
+        "adjustments_reason_name_ck": {
+          "name": "adjustments_reason_name_ck",
+          "value": "length(trim(\"adjustments\".\"reason_name\")) > 0"
+        },
+        "adjustments_amounts_ck": {
+          "name": "adjustments_amounts_ck",
+          "value": "\"adjustments\".\"after_amount\" >= 0 and \"adjustments\".\"after_amount\" <= \"adjustments\".\"before_amount\"\n          and \"adjustments\".\"reduction\" = \"adjustments\".\"before_amount\" - \"adjustments\".\"after_amount\" and \"adjustments\".\"nominal_value\" >= 0"
+        },
+        "adjustments_percent_ck": {
+          "name": "adjustments_percent_ck",
+          "value": "(\"adjustments\".\"action\" = 'discount_percent') = (\"adjustments\".\"percent_bp\" is not null)\n          and (\"adjustments\".\"percent_bp\" is null or \"adjustments\".\"percent_bp\" between 1 and 10000)"
+        },
+        "adjustments_line_level_ck": {
+          "name": "adjustments_line_level_ck",
+          "value": "\"adjustments\".\"line_id\" is null or (\"adjustments\".\"line_name\" is not null and \"adjustments\".\"stage\" is not null\n          and \"adjustments\".\"line_quantity\" is not null and \"adjustments\".\"line_quantity\" > 0\n          and \"adjustments\".\"line_list_unit_price\" is not null and \"adjustments\".\"line_list_unit_price\" >= 0\n          and \"adjustments\".\"quantity\" is not null and \"adjustments\".\"quantity\" > 0\n          and \"adjustments\".\"quantity\" <= \"adjustments\".\"line_quantity\")"
+        },
+        "adjustments_bill_level_ck": {
+          "name": "adjustments_bill_level_ck",
+          "value": "\"adjustments\".\"line_id\" is not null or (\"adjustments\".\"line_name\" is null and \"adjustments\".\"line_quantity\" is null\n          and \"adjustments\".\"line_list_unit_price\" is null and \"adjustments\".\"credited_to\" is null and \"adjustments\".\"quantity\" is null\n          and \"adjustments\".\"stage\" is null and \"adjustments\".\"action\" in ('discount_percent', 'discount_amount'))"
+        }
+      }
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

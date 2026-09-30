@@ -31,7 +31,7 @@ function moneyField(value: unknown, field: string): string {
   return value;
 }
 
-function optionalMoney(value: unknown, field: string): string | undefined {
+export function optionalMoney(value: unknown, field: string): string | undefined {
   return value === undefined ? undefined : moneyField(value, field);
 }
 

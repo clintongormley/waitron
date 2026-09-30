@@ -95,6 +95,7 @@ import {
 import { segmentedOptionStyles } from "../widgets/segmented-control-styles.js";
 import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
+import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 
 export type { TableServiceStatus };
 
@@ -280,6 +281,17 @@ export interface UnsnoozeGroupDetail {
 
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
+
+const LINE_ADJUSTMENTS = [
+  { kind: "comp", label: "table.comp_line" },
+  { kind: "discount", label: "table.discount_line" },
+] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
+
+/** `adjust`: Give away or Discount pressed on a dish, or Discount on the bill on screen. */
+export interface AdjustDetail {
+  kind: AdjustKind;
+  target: AdjustTarget;
+}
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
 export interface ChangeLineDetail {
@@ -513,6 +525,24 @@ export class TillTableOrderScreen extends LitElement {
 
       .line-total {
         font-variant-numeric: tabular-nums;
+      }
+
+      .list-total {
+        color: var(--wt-color-text-muted);
+      }
+
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      .bill-adjust {
+        display: flex;
+        justify-content: flex-end;
       }
 
       .empty {
@@ -1712,7 +1742,98 @@ export class TillTableOrderScreen extends LitElement {
           ${t("table.cancel_line")}
         </wt-button>`,
       );
+    actions.push(...this.#adjustActions(line));
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
+  }
+
+  /** The server adjusts only an open bill of a party (a paid, presented or counter bill is
+   * refused), so the actions are offered only there. */
+  #adjustable(): boolean {
+    return (
+      this.party !== null && (this.#shownBill === undefined || this.#shownBill.status === "open")
+    );
+  }
+
+  /** Give away and Discount on a dish, which cover its extras; an extras row has neither. */
+  #adjustActions(line: TabLine): TemplateResult[] {
+    if (this.#isChild(line) || !this.#adjustable()) return [];
+    const name = this.#nameForLine(line);
+    return LINE_ADJUSTMENTS.map(
+      ({ kind, label }) =>
+        html`<wt-button
+          class="line-adjust"
+          size="sm"
+          variant="secondary"
+          data-comp-line=${kind === "comp" ? line.lineNo : nothing}
+          data-discount-line=${kind === "discount" ? line.lineNo : nothing}
+          aria-label=${`${t(label)} · ${name}`}
+          @click=${() => this.#adjust(kind, this.#lineTarget(line))}
+        >
+          ${t(label)}
+        </wt-button>`,
+    );
+  }
+
+  /** A dish with its extras. Part of it can be adjusted only when it is several whole units with no
+   * extras, as the server allows. */
+  #lineTarget(line: TabLine): AdjustTarget {
+    const extras = this.lines.filter((row) => row.parentLineNo === line.lineNo);
+    const total = toScale(
+      sumDecimals([line, ...extras].map((row) => this.#lineGross(row))),
+      MONEY_SCALE,
+    );
+    const inParts = extras.length === 0 && this.#moreThanOneWholeUnit(line);
+    return {
+      lineId: line.id,
+      name: this.#nameForLine(line),
+      quantity: this.#displayQty(line.quantity),
+      total,
+      unitTotal: inParts ? toScale(decimal(line.unitPriceGross), MONEY_SCALE) : null,
+      started: this.#isStarted(line),
+    };
+  }
+
+  #adjust(kind: AdjustKind, target: AdjustTarget): void {
+    const detail: AdjustDetail = { kind, target };
+    this.dispatchEvent(new CustomEvent("adjust", { detail, bubbles: true, composed: true }));
+  }
+
+  /** Discount on the bill on screen, named as the bills list names it. */
+  #billAdjust(): TemplateResult | typeof nothing {
+    if (!this.#adjustable() || this.lines.length === 0) return nothing;
+    const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
+    const name = index === -1 ? t("adjust.whole_bill") : this.#billName(index);
+    return html`<div class="bill-adjust">
+      <wt-button
+        size="sm"
+        variant="secondary"
+        data-discount-bill
+        @click=${() =>
+          this.#adjust("discount", {
+            lineId: null,
+            name,
+            quantity: null,
+            total: this.#payStore!.total,
+            unitTotal: null,
+          })}
+      >
+        ${t("table.discount_bill")}
+      </wt-button>
+    </div>`;
+  }
+
+  /** A line's total; after a give-away or a discount, the total it had first, struck through. */
+  #lineTotal(line: TabLine): TemplateResult {
+    const now = this.#lineGross(line);
+    const listed = line.listUnitPriceGross;
+    const before = listed === undefined ? now : grossOf(listed, line.quantity);
+    if (compareDecimal(before, now) === 0)
+      return html`<span class="line-total">${formatMoney(now, currentLocale())}</span>`;
+    return html`<span class="line-total"
+      ><span class="visually-hidden" data-price-was>${t("table.price_was")} </span
+      ><s class="list-total">${formatMoney(before, currentLocale())}</s>
+      ${formatMoney(now, currentLocale())}</span
+    >`;
   }
 
   #sendLine(lineNo: number): void {
@@ -2707,7 +2828,7 @@ export class TillTableOrderScreen extends LitElement {
             >${formatMoney(this.#payStore!.total, currentLocale())}</span
           >
         </div>
-        ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
+        ${this.#billAdjust()} ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
         ${this.#billsSection()} ${this.#statusSection()} ${this.#actionSection()}
       </aside>
     `;
@@ -2911,9 +3032,14 @@ export class TillTableOrderScreen extends LitElement {
         >${name}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}</span
       >
       <span class="qty">${this.#displayQty(line.quantity)}</span>
-      <span class="line-total">${formatMoney(this.#lineGross(line), currentLocale())}</span>
-      ${this.#lineCourse(line)} ${this.#lineActions(line)}
+      ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#lineActions(line)}
     </li>`;
+  }
+
+  /** A served dish can still be given away or discounted. */
+  #servedActions(line: TabLine): TemplateResult | typeof nothing {
+    const actions = this.#adjustActions(line);
+    return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
   #servedSection(): TemplateResult {
@@ -2931,10 +3057,7 @@ export class TillTableOrderScreen extends LitElement {
                       >${this.#nameForLine(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}</span
                     >
                     <span class="qty">${this.#displayQty(line.quantity)}</span>
-                    <span class="line-total"
-                      >${formatMoney(this.#lineGross(line), currentLocale())}</span
-                    >
-                    ${this.#lineCourse(line)}
+                    ${this.#lineTotal(line)} ${this.#lineCourse(line)} ${this.#servedActions(line)}
                   </li>`,
               )}
             </ul>`

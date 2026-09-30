@@ -1308,6 +1308,9 @@ the tree (`packages/db/drizzle/0001_behavioural_triggers.sql`,
 `packages/db/drizzle/0043_drop_triggers_before_rebuild.sql` and
 `packages/db/drizzle/0045_recreate_triggers_after_rebuild.sql` (the three triggers around `0044`'s
 rebuild of `dining_tables`, `parties` and `service_commands`),
+`packages/db/drizzle/0050_line_list_price_frozen.sql` (re-creates
+`working_order_lines_require_open_parent_update` with `list_unit_price_gross` in both
+unchanged-column lists),
 `packages/media/drizzle/0001_image_references.sql`,
 `packages/media/drizzle/0002_section_image_references.sql` and
 `packages/media/drizzle/0003_published_image_references.sql`) each carry their own
@@ -1315,7 +1318,8 @@ rebuild of `dining_tables`, `parties` and `service_commands`),
 `0024_bill_payment_triggers.sql`, 2026-09-28 for `0027_line_vat_class_triggers.sql`,
 `0033_line_served_exception.sql` and `0038_main_bill_release.sql`, and 2026-09-29 for
 `0042_placed_bill_moves.sql`, `0043_drop_triggers_before_rebuild.sql` and
-`0045_recreate_triggers_after_rebuild.sql`) each of those files equalled the one before it once `id` and
+`0045_recreate_triggers_after_rebuild.sql`, and 2026-09-30 for `0050_line_list_price_frozen.sql`)
+each of those files equalled the one before it once `id` and
 `prevId` were removed and keys sorted, except that `0042`'s `_meta.columns` no longer carried
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
 does not reproduce it.

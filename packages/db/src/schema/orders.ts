@@ -182,6 +182,9 @@ export const workingOrderLines = table(
     // Whose sale the line counts as. A plain person id with no key: `persons` is in
     // @waitron/identity's migration set, not the core one.
     creditedTo: id("credited_to"),
+    // The unit price the line had when an adjustment first touched it, never changed after; null
+    // on a line no adjustment has touched. Filing reads `unit_price_gross`, never this.
+    listUnitPriceGross: money("list_unit_price_gross"),
   },
   (t) => [
     foreignKey({
