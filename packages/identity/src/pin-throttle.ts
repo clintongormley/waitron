@@ -17,10 +17,14 @@ export const PIN_THROTTLE_IDLE_MS = 15 * 60_000;
 
 /**
  * A failure may be recorded for any person id a till sends, known or not, so without a cap made-up
- * ids would grow the map without end. While it is full of live entries a new pair is refused for
- * {@link PIN_THROTTLE_FULL_RETRY_SECONDS}.
+ * ids would grow the map without end. The cap is per device, so one device's made-up ids can refuse
+ * only that device's new pairs: while a device holds this many live entries each new pair is
+ * refused with a {@link PIN_THROTTLE_FULL_RETRY_SECONDS} wait, and room returns only as the
+ * device's entries fall idle ({@link PIN_THROTTLE_IDLE_MS}). The password throttle keeps every key
+ * it tracks under one device and caps itself at 1000 (`password-throttle.ts` in `apps/server`), so
+ * this must stay above that; nothing guards it.
  */
-export const PIN_THROTTLE_MAX_KEYS = 10_000;
+export const PIN_THROTTLE_MAX_KEYS_PER_DEVICE = 2_000;
 
 export const PIN_THROTTLE_FULL_RETRY_SECONDS = 60;
 
@@ -37,6 +41,7 @@ export interface PinThrottle {
 }
 
 interface Entry {
+  deviceId: string;
   fails: number;
   /** `0` while still inside the free attempts. */
   unlockAt: number;
@@ -55,6 +60,14 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
   const { now = Date.now } = opts;
   // Kept in order of `lastAt`, oldest first: every touch moves its entry to the end.
   const entries = new Map<string, Entry>();
+  const heldByDevice = new Map<string, number>();
+
+  function drop(key: string, entry: Entry): void {
+    entries.delete(key);
+    const held = heldByDevice.get(entry.deviceId)! - 1;
+    if (held === 0) heldByDevice.delete(entry.deviceId);
+    else heldByDevice.set(entry.deviceId, held);
+  }
 
   function touch(key: string, entry: Entry, t: number): void {
     entry.lastAt = t;
@@ -66,18 +79,20 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
     const entry = entries.get(key);
     if (entry === undefined) return undefined;
     if (t - entry.lastAt >= PIN_THROTTLE_IDLE_MS) {
-      entries.delete(key);
+      drop(key, entry);
       return undefined;
     }
     return entry;
   }
 
-  function hasRoom(t: number): boolean {
+  // Sweeps every device's idle entries, not only this one's, so a device that goes quiet does not
+  // keep its share until the process restarts.
+  function hasRoom(deviceId: string, t: number): boolean {
     for (const [key, entry] of entries) {
-      if (entries.size < PIN_THROTTLE_MAX_KEYS || t - entry.lastAt < PIN_THROTTLE_IDLE_MS) break;
-      entries.delete(key);
+      if (t - entry.lastAt < PIN_THROTTLE_IDLE_MS) break;
+      drop(key, entry);
     }
-    return entries.size < PIN_THROTTLE_MAX_KEYS;
+    return (heldByDevice.get(deviceId) ?? 0) < PIN_THROTTLE_MAX_KEYS_PER_DEVICE;
   }
 
   return {
@@ -86,7 +101,7 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
       const key = entryKey(deviceId, personId);
       const entry = liveEntry(key, t);
       if (entry === undefined) {
-        if (!hasRoom(t)) {
+        if (!hasRoom(deviceId, t)) {
           throw new AppError("pin.throttled", {
             retryAfterSeconds: PIN_THROTTLE_FULL_RETRY_SECONDS,
           });
@@ -107,8 +122,9 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
       let entry = liveEntry(key, t);
       if (entry === undefined) {
         // While full the pair stays unrecorded, and `check` refuses it anyway.
-        if (!hasRoom(t)) return;
-        entry = { fails: 0, unlockAt: 0, lastAt: t };
+        if (!hasRoom(deviceId, t)) return;
+        entry = { deviceId, fails: 0, unlockAt: 0, lastAt: t };
+        heldByDevice.set(deviceId, (heldByDevice.get(deviceId) ?? 0) + 1);
       }
       entry.fails += 1;
       touch(key, entry, t);
@@ -118,7 +134,9 @@ export function createPinThrottle(opts: PinThrottleOptions = {}): PinThrottle {
     },
 
     clear(deviceId: string, personId: string): void {
-      entries.delete(entryKey(deviceId, personId));
+      const key = entryKey(deviceId, personId);
+      const entry = entries.get(key);
+      if (entry !== undefined) drop(key, entry);
     },
   };
 }

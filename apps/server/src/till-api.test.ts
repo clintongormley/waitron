@@ -21,6 +21,7 @@ import { departments, preparationRoutes } from "@waitron/venue-service";
 import {
   createPinThrottle,
   endSession,
+  PIN_THROTTLE_MAX_KEYS_PER_DEVICE,
   hashPin,
   hashSessionToken,
   loginWithPin,
@@ -754,6 +755,38 @@ describe("POST /api/session — wrong-PIN throttle (§5) + device register (§6)
     expect(await abelOk.json()).toMatchObject({ personId: abel.id });
 
     await suite.db.execute(sql`delete from sessions where person_id = ${abel.id}`);
+  });
+
+  it("one device filling its share of the throttle with made-up ids does not refuse another till's correct PIN", async () => {
+    const now = 4_000_000;
+    const pinThrottle = createPinThrottle({ now: () => now });
+    const app = new Hono();
+    mountTillApi(app, { ...deps(suite.db), pinThrottle }, collect([]));
+    const flooder = await enrolTillDeviceCookie(suite.db);
+    const other = await enrolTillDeviceCookie(suite.db);
+    const post = (cookie: string, personId: string, pin: string) =>
+      app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({ personId, pin }),
+      });
+
+    // Filled through the route's own throttle rather than thousands of requests; "counts an unknown
+    // person's wrong attempts" below shows the route records exactly this failure for a made-up id.
+    for (let i = 0; i < PIN_THROTTLE_MAX_KEYS_PER_DEVICE; i++) {
+      pinThrottle.recordFailure(deviceIdOf(flooder), randomUUID());
+    }
+    const refused = await post(flooder, randomUUID(), "0000");
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toEqual({
+      error: { code: "pin.throttled", params: { retryAfterSeconds: 60 } },
+    });
+
+    const ok = await post(other, ana.id, "5555");
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toMatchObject({ personId: ana.id });
+
+    await suite.db.execute(sql`delete from sessions where person_id = ${ana.id}`);
   });
 });
 
