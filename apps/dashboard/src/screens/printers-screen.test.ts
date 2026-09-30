@@ -5952,9 +5952,9 @@ describe("printers-screen Bluetooth pairing", () => {
       expect((q(el, 'select[name="printer-resolution"]') as HTMLSelectElement).value).toBe(
         "203dpi",
       );
-      expect((q(el, '[name="printer-cash-drawer"]') as HTMLElement & { checked: boolean }).checked).toBe(
-        true,
-      );
+      expect(
+        (q(el, '[name="printer-cash-drawer"]') as HTMLElement & { checked: boolean }).checked,
+      ).toBe(true);
       expect(api.deactivatePrinter).not.toHaveBeenCalled();
 
       q(el, sel("cancel-edit-printer"))!.click();

@@ -3447,7 +3447,11 @@ describe("Bluetooth Pair and Forget commands", () => {
       expect(await isActive(bystanderId)).toBe(true);
       expect(reply.jobs.map((job) => job.id)).not.toContain(jobId);
       // As for any switched-off printer, the job waits unclaimed rather than failing.
-      expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, last_error: null });
+      expect(await jobRow(jobId)).toMatchObject({
+        status: "queued",
+        attempts: 0,
+        last_error: null,
+      });
       expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
         bluetoothCommand: { id, kind: "forget", state: "succeeded" },
       });
