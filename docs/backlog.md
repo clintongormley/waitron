@@ -4142,7 +4142,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/till-api.move-bill.test.ts` move a table bill whose dish was sent to a
       pay-first counter and pay it the same way: one invoice and no second send. Made to send
       every dish rather than the unsent ones, those two failed and the parked ones still passed.)_
-      _(2026-09-30, lane A's A143, owner's decision: since #914 that payment was refused
+      _(2026-09-30, lane A's A143 (#928), owner's decision: since #914 that payment was refused
       `route.station_inactive` or `route.missing` when a dish had no kitchen station to go to.
       Now a route whose station is switched off falls back to the next matching route whose
       station is on (never to a no-preparation route), for every caller
@@ -4167,7 +4167,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       table round and the "when the alert cannot be written" ones failed on the code before this
       change. Of those, the four `raise(abort)` cases failed with the alert's catch removed, the
       missing-table case failed with a catch that swallowed every error, and the `raise(rollback)`
-      case passed both ways.)_
+      case passed both ways. Left open: invoice-first placing still refuses a dish with no usable
+      route; nobody has decided whether it should take the order and raise the alert instead.)_
     - The party's main bill moves only as its last unpaid bill (`party.main_bill_stays`
       otherwise), and the party's next order then starts a new one. A table the bill's own party
       holds is `table.already_in_party`. A table needing clearing, taken out of use or unknown is
