@@ -723,10 +723,15 @@ read just before the key is derived, so a request denied or revoked in that wind
 stale `pending` or `approved`; both routes return only `{ status }` and issue no credential, and
 the joiner's next request goes through `tryReadDevice` or `authenticateAgent`, which re-read the
 row (the till and print-agent clients were not traced). (2) With the blocking twin gone,
-`verifySecretAsync` could be renamed `verifySecret` across the tree (optional). (3) Not checked:
-`tryReadDevice`'s last-seen write may not re-check that the device is still active, the gap #912
-closed for the print agent. **Next action:** read `tryReadDevice` and add the re-check if it is
-missing.
+`verifySecretAsync` could be renamed `verifySecret` across the tree (optional). (3) **Done
+(2026-09-30, A146):** `tryReadDevice`'s last-seen write did not re-check the device, so a device
+revoked or given a new token while its request waited for the write lock was still served. It now
+re-reads the row inside that transaction, refuses one no longer active or no longer holding the
+checked token (as the print agent does), and returns the device's details as read there. Of the
+three cases in `apps/server/src/device-session.test.ts` whose titles end "while it waits for the
+lock to record a sighting", the two refusals (revoked, re-keyed) returned the device before the
+change and `null` after; the third returned the old profile before the change and now the one the
+device was moved to.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns (naming the layout if it had shown it, otherwise the menu) until

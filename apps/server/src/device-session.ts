@@ -5,7 +5,7 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { AppError, tillId } from "@waitron/shared";
 import type { TillId } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { kindOfFormFactor } from "@waitron/layouts";
 import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import { verifySecretAsync } from "@waitron/identity";
@@ -159,11 +159,13 @@ function toDeviceBinding(
  * missing or malformed cookie, an unknown or revoked device, or a token that does not verify — so
  * `requireDevice`'s `device.unauthorized` confirms neither a device's existence nor its revocation
  * state. The id selects the row because scrypt is per-row-salted; the token validates it. Only a
- * successful cookie read writes (the `last_seen_at` sighting); every other path is a pure read.
+ * cookie read that verifies writes (the `last_seen_at` sighting), and only when a sighting is due.
  *
- * The reads and the token check run outside `withTransaction`, which is the venue's write lock, so
- * scrypt never holds up a sale; a read issued while another caller's write is open sees committed
- * rows only (`packages/store/src/connections.ts`).
+ * The authenticating reads and the token check run outside `withTransaction`, which is the venue's
+ * write lock, so scrypt never holds up a sale; a read issued while another caller's write is open
+ * sees committed rows only (`packages/store/src/connections.ts`). The sighting write re-reads the
+ * row inside its transaction first, so a revocation or a new token committed while this call
+ * waited for the lock refuses the request, and a new binding is what it returns.
  */
 export async function tryReadDevice(
   deps: { db: Database; devMode?: boolean },
@@ -192,8 +194,8 @@ export async function tryReadDevice(
   const token = raw.slice(dot + 1);
   if (!isUuid(deviceId)) return null;
 
-  const readRow = async () => {
-    const [found] = await deps.db
+  const readRow = async (on: Database | Transaction = deps.db) => {
+    const [found] = await on
       .select({
         tokenHash: devices.tokenHash,
         lastSeenAt: devices.lastSeenAt,
@@ -230,9 +232,14 @@ export async function tryReadDevice(
   // what keeps concurrent requests that all read a stale row to one write.
   const seenAt = nowIso();
   const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
-  if (row.lastSeenAt === null || row.lastSeenAt < staleBefore)
-    await withTransaction(deps.db, (tx) =>
-      tx
+  if (row.lastSeenAt === null || row.lastSeenAt < staleBefore) {
+    const checkedHash = row.tokenHash;
+    const locked = await withTransaction(deps.db, async (tx) => {
+      // A revocation, a new token or a new binding committed while this request waited for the
+      // lock wins.
+      const current = await readRow(tx);
+      if (current === undefined || current.tokenHash !== checkedHash) return undefined;
+      await tx
         .update(devices)
         .set({ lastSeenAt: seenAt })
         .where(
@@ -242,8 +249,15 @@ export async function tryReadDevice(
             // needs its own alternative or it would never be written.
             or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, staleBefore)),
           ),
-        ),
-    );
+        );
+      return current;
+    });
+    if (locked === undefined) {
+      verifiedTokens.delete(deviceId);
+      return null;
+    }
+    row = locked;
+  }
   return toDeviceBinding(deviceId, row);
 }
 
