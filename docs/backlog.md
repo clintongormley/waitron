@@ -5638,10 +5638,8 @@ ongoing overhaul listed at the top of Track A.
   in on the first row in English and Spanish, and the code step keeps Back and Log in there in
   English; the code step in Spanish and the passkey and Google steps wrap their buttons below the
   list, right-aligned. On a form at its full width (30rem), only the first link has to fit beside
-  the buttons: a longer later link breaks onto a second line inside the list instead. CI's Linux
-  Chromium falls back to a wider font than macOS and first wrapped the Google step's button below
-  the list at 1280 px in Spanish, because the row was then sized by the widest link; a test standing
-  in Verdana with extra letter spacing for that font reproduces it on macOS. A refusal's message
+  the buttons: a longer later link breaks onto a second line inside the list instead, so a wider
+  system font (Linux's, which CI uses) does not push them below. A refusal's message
   sits beside the action, so a message too long to share the row takes the buttons below the list
   with it; C97, queued next, is to move it to the bottom of the form. Layout only,
   `apps/dashboard/src/screens/login-screen.ts`.
