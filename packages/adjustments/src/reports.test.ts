@@ -12,7 +12,14 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";
+import {
+  addDecimal,
+  decimal,
+  decimalToCents,
+  grossOf,
+  stringToThousandths,
+  subtractDecimal,
+} from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
 import { recordAdjustment } from "./record.js";
@@ -630,6 +637,25 @@ describe("which bills and lines a range holds", () => {
     expect(personRow(read, alex)).toMatchObject({ sales: "39.98", ratePercent: "0.0" });
     expect(read.overall).toMatchObject({ sales: "41.98", ratePercent: "0.0" });
     expect(read.people).toHaveLength(1);
+  });
+
+  it("rounds each line half away from zero, as grossOf does, before summing", async () => {
+    const [ana, bea] = [await person("Ana"), await person("Bea")];
+    const visit = await bill();
+    // Ana: €32.475 and €0.005 each round up, to €32.49; rounding half to even gives €32.48.
+    await line(visit.id, { name: "Fish", quantity: "2.5", unit: "12.99", creditedTo: ana });
+    await line(visit.id, { name: "Mint", quantity: "0.5", unit: "0.01", creditedTo: ana });
+    // Bea: -€0.045 rounds away from zero to -€0.05; half to even, or half up, gives -€0.04.
+    await line(visit.id, { name: "Refund", quantity: "-1.5", unit: "0.03", creditedTo: bea });
+
+    const read = await report();
+
+    expect(personRow(read, ana).sales).toBe("32.49");
+    expect(personRow(read, bea)).toMatchObject({ sales: "-0.05", ratePercent: null });
+    expect(personRow(read, ana).sales).toBe(
+      addDecimal(grossOf("12.99", "2.5"), grossOf("0.01", "0.5")),
+    );
+    expect(personRow(read, bea).sales).toBe(grossOf("0.03", "-1.5"));
   });
 
   it("answers an empty range with no people, zero sales and no rate", async () => {

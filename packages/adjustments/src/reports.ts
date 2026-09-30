@@ -13,8 +13,8 @@ import {
   compareDecimal,
   decimal,
   divideDecimal,
-  grossOf,
   multiplyDecimal,
+  rawCentsToDecimal,
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
@@ -257,27 +257,28 @@ async function namesOf(tx: Transaction, ids: Set<string>): Promise<Map<string, s
 }
 
 /**
- * Each line's value before any adjustment on the bills opened in the range, abandoned bills aside
- * (their lines were never sold): its first price times its quantity, rounded as a line total is.
+ * The sales credited to each person (null: to nobody) on the bills opened in the range, abandoned
+ * bills aside (their lines were never sold): each line at its first price times its quantity,
+ * rounded to the cent half away from zero as `grossOf` rounds a line total, then summed. A price
+ * is whole cents and a quantity whole thousandths, so their product is in thousandths of a cent;
+ * integer division truncates toward zero, hence the sign-dependent half.
  */
-async function readLineSales(
+async function readCreditedSales(
   tx: Transaction,
   window: SQL,
-): Promise<{ creditedTo: string | null; value: Decimal }[]> {
-  const lines = await tx
+): Promise<{ creditedTo: string | null; sales: Decimal }[]> {
+  const value = sql`coalesce(${workingOrderLines.listUnitPriceGross}, ${workingOrderLines.unitPriceGross}) * ${workingOrderLines.quantity}`;
+  const rows = await tx
     .select({
       creditedTo: workingOrderLines.creditedTo,
-      quantity: workingOrderLines.quantity,
-      unit: workingOrderLines.unitPriceGross,
-      list: workingOrderLines.listUnitPriceGross,
+      cents: sql<string>`cast(sum(case when ${value} >= 0 then (${value} + 500) / 1000
+        else -((500 - ${value}) / 1000) end) as text)`,
     })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(and(window, ne(workingOrders.status, "abandoned")));
-  return lines.map((line) => ({
-    creditedTo: line.creditedTo,
-    value: grossOf(centsToDecimal(line.list ?? line.unit), thousandthsToDecimal(line.quantity)),
-  }));
+    .where(and(window, ne(workingOrders.status, "abandoned")))
+    .groupBy(workingOrderLines.creditedTo);
+  return rows.map((row) => ({ creditedTo: row.creditedTo, sales: rawCentsToDecimal(row.cents) }));
 }
 
 interface PersonAccumulator extends Accumulator {
@@ -299,7 +300,7 @@ export async function computeAdjustmentReport(
 ): Promise<AdjustmentReport> {
   const window = validated(input);
   const rows = await readRows(tx, window);
-  const lines = await readLineSales(tx, window);
+  const credited = await readCreditedSales(tx, window);
 
   const people = new Map<string, PersonAccumulator>();
   const personAcc = (personId: string): PersonAccumulator => {
@@ -320,7 +321,7 @@ export async function computeAdjustmentReport(
     acc.sales = addDecimal(acc.sales, value);
   };
 
-  for (const line of lines) credit(line.creditedTo, line.value);
+  for (const { creditedTo, sales } of credited) credit(creditedTo, sales);
   // Rows arrive newest first, so the first name seen for a reason is its most recent.
   const reasonNames = new Map<string, string>();
   for (const row of rows) {
