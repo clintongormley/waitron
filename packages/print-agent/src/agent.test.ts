@@ -87,6 +87,26 @@ describe("createAgent — phases", () => {
     },
   );
 
+  it.each([false, true])(
+    "tells the server whether the host can print over Bluetooth (%s)",
+    async (bluetoothPrinting) => {
+      const host = fakeHost({
+        config: CONFIG,
+        token: "a1.s",
+        bluetoothPrinting: () => bluetoothPrinting,
+      });
+      const c = client();
+      await createAgent({ host, client: c }).runOnce();
+      expect(c.pullJobs).toHaveBeenCalledWith(A, "a1.s", {
+        visible: [],
+        scanned: [],
+        pairedBluetooth: [],
+        bluetoothOutcomes: [],
+        bluetoothPrinting,
+      });
+    },
+  );
+
   it("unconfigured: reports the phase and probes nothing", async () => {
     const host = fakeHost({ config: null });
     const c = client();

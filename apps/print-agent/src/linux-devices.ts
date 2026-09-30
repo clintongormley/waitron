@@ -47,7 +47,8 @@ type LocalDevice = VisibleDevice & { devicePath: string };
 export type LinuxDevices = Pick<
   Host,
   "visibleDevices" | "scan" | "pair" | "pairedBluetooth" | "forgetBluetooth" | "resolve"
->;
+> &
+  Required<Pick<Host, "bluetoothPrinting">>;
 
 export interface BluetoothStatusSource {
   /** Undefined until the first check. */
@@ -185,6 +186,9 @@ export function createLinuxDevices(
       return bluetooth.forget(mac);
     },
 
+    // Only a device path someone supplies can print: `liveBtDevicePath` is not built.
+    bluetoothPrinting: () => opts.btDevicePath !== undefined,
+
     async resolve(job: WireJob): Promise<PrinterTarget> {
       if (job.transport === "network_tcp") {
         return {
@@ -232,7 +236,8 @@ export function buildPdlQuery(): Buffer {
    receipts, not unit tests (no radio or LAN in CI). */
 
 /** There is no per-MAC RFCOMM node yet, and a shared `/dev/rfcomm0` would route two paired printers
- * to the same node, so resolving a Bluetooth job FAILS LOUD. */
+ * to the same node, so this throws; `visibleDevices` then leaves the device out, and no Bluetooth job
+ * is handed to this agent. */
 function liveBtDevicePath(mac: string): string {
   throw new Error(`bluetooth device ${mac} resolution not implemented (Step 6c receipt)`);
 }

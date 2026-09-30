@@ -34,6 +34,7 @@ import {
   deactivatePrinter,
   dpiValue,
   enqueuePrintJob,
+  failUnprintableBluetoothJobs,
   listPrinters,
   MAX_DELIVERY_ATTEMPTS,
   reportPrintJob,
@@ -336,6 +337,8 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     scannedAt?: number;
     /** Only a paired report sets this, and only it authorizes Forget. */
     pairedAt?: number;
+    /** Only a visible report sets this: the agent can print to the device. */
+    visibleAt?: number;
   }
   const discovered = new Map<string, DiscoveredEntry>();
   const printerProbes = createPrinterProbes();
@@ -412,8 +415,11 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     }),
   );
 
-  // A usb/bluetooth printer is claimed only by the box that currently sees its `local_key`; a
-  // network_tcp printer by any box at the printer's location.
+  // A usb/bluetooth printer is claimed only by a box whose `visible` report lists its `local_key`;
+  // a network_tcp printer by any box at the printer's location. A box that says it cannot print
+  // over Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another
+  // box reported it can print to that printer within `DISCOVERED_TTL_MS`. The jobs are ended anyway
+  // when that report is older than the window or, being held in memory, lost to a server restart.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
@@ -425,11 +431,13 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         setupPort?: unknown;
         pairedBluetooth?: unknown;
         bluetoothOutcomes?: unknown;
+        bluetoothPrinting?: unknown;
       }>(c);
       const reportedHost = optionalString(body.host, "host");
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
       const setupUrl = optionalAgentSetupUrl(body.setupUrl);
       const setupPort = optionalAgentSetupPort(body.setupPort);
+      const bluetoothPrinting = optionalBool(body.bluetoothPrinting, "bluetoothPrinting");
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
       const pairedBluetooth = screenPairedBluetooth(body.pairedBluetooth);
@@ -439,19 +447,21 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
 
       const now = Date.now();
       // A visible or scanned report replaces the description, never another kind of report's stamp.
-      const remember = (d: DiscoveredDeviceWire, scannedAt: number | undefined): void => {
+      const remember = (d: DiscoveredDeviceWire, stamp: "scannedAt" | "visibleAt"): void => {
         const key = keyOf(agentId, d.transport, d.localKey ?? `${d.host}:${d.port}`);
         const prior = discovered.get(key);
         discovered.set(key, {
           agentId,
           ...d,
           lastSeenAt: now,
-          scannedAt: scannedAt ?? prior?.scannedAt,
+          scannedAt: prior?.scannedAt,
           pairedAt: prior?.pairedAt,
+          visibleAt: prior?.visibleAt,
+          [stamp]: now,
         });
       };
-      for (const v of visible) remember(v, undefined);
-      for (const s of scanned) remember(s, now);
+      for (const v of visible) remember(v, "visibleAt");
+      for (const s of scanned) remember(s, "scannedAt");
       for (const p of pairedBluetooth) {
         const key = keyOf(agentId, "bluetooth", p.localKey);
         const prior = discovered.get(key);
@@ -491,6 +501,27 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
                 ),
               ),
             );
+        }
+        // Absent from an agent that predates the field, which then changes nothing.
+        if (bluetoothPrinting === false && pairedBluetooth.length > 0) {
+          // Read here rather than before the transaction, so a report another agent recorded while
+          // this pull waited for the write lock counts.
+          const checkedAt = Date.now();
+          const printableElsewhere = new Set(
+            [...discovered.values()]
+              .filter(
+                (e) =>
+                  e.agentId !== agentId &&
+                  e.transport === "bluetooth" &&
+                  isFresh(e.visibleAt, checkedAt),
+              )
+              .map((e) => e.localKey),
+          );
+          await failUnprintableBluetoothJobs(
+            tx,
+            agentId,
+            pairedBluetooth.map((p) => p.localKey).filter((key) => !printableElsewhere.has(key)),
+          );
         }
         return claimPrintJobs(tx, agentId, {
           locationId: deps.cfg.locationId,

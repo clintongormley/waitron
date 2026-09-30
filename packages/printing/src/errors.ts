@@ -18,6 +18,9 @@ declare module "@waitron/shared" {
     /** An ongoing dashboard alert: `{count}` print jobs are stuck at printer `{printer}` — waiting too
      * long or out of delivery attempts. Not thrown; raised by the printing alert source. */
     "printer.jobs_waiting": { printer: string; count: number };
+    /** A print job ended because the agent that has its Bluetooth printer paired cannot print over
+     * Bluetooth. Not thrown; stored as the job's `last_error` by `failUnprintableBluetoothJobs`. */
+    "printer.bluetooth_printing_unavailable": Record<string, never>;
     /** No print agent carries this id. `id` is the id looked up. */
     "agent.not_found": { id: string };
     /** The bearer token did not verify, or the agent is revoked. No params, so the failure never

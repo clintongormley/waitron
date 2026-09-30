@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./linux-devices.js": "./src/linux-devices.ts",
     "./tcp-probe.js": "./src/tcp-probe.ts"
   },
   "waitron": {

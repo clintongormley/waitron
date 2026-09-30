@@ -1,5 +1,9 @@
 import { probeNetwork } from "@waitron/print-agent-app/tcp-probe.js";
+import { createLinuxDevices } from "@waitron/print-agent-app/linux-devices.js";
 import net from "node:net";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
@@ -9,7 +13,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { enqueuePrintJob, esc } from "@waitron/printing";
+import { MAX_DELIVERY_ATTEMPTS, enqueuePrintJob, esc } from "@waitron/printing";
 import { FakeSink, NetworkTcpTransport, RoutingTransport, createAgent } from "@waitron/print-agent";
 import { fakeHost } from "@waitron/print-agent/testing/fake-host.js";
 import {
@@ -362,5 +366,109 @@ describe("print-agent end to end", () => {
     await agent.runOnce();
     expect(agent.status.phase).toBe("unauthorized");
     expect(await jobStatus(enqueuedAfterRevoke.jobId)).toBe("queued");
+  });
+
+  it("ends a Bluetooth calibration print failed, with its reason, when the agent has the printer paired but cannot print to it", async () => {
+    const MAC = "5A:4A:45:D4:FB:BB";
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    pairingMode.open();
+    mountPrintApi(
+      app,
+      { db: suite.db, cfg, pairingMode, readMembership: async () => null, venueLocale: "es-ES" },
+      noopLog,
+    );
+    mountJoinApi(app, { db: suite.db, cfg, pairingMode }, noopLog);
+    mountNodeApi(
+      app,
+      {
+        nodeId: cfg.nodeId,
+        acceptingSales: true,
+        environment: "preproduction",
+        readMembership: async () => null,
+      },
+      noopLog,
+    );
+    // The box's own device layer, with the radio faked and no USB printer attached; its Bluetooth
+    // device path is the production one.
+    const sysfsRoot = await mkdtemp(join(tmpdir(), "print-agent-e2e-bt-"));
+    try {
+      const devices = createLinuxDevices({
+        sysfsRoot,
+        bluetooth: {
+          scan: async () => [],
+          pair: async () => ({ ok: false, error: "no fake" }),
+          paired: async () => [{ mac: MAC, name: "BlueTooth Printer" }],
+          forget: async () => ({ ok: false, error: "no fake" }),
+        },
+      });
+      const radio = new FakeSink();
+      const host = fakeHost({
+        config: { serverUrl: BASE, name: "Bluetooth agent" },
+        transport: new RoutingTransport({
+          network_tcp: new FakeSink(),
+          usb: new FakeSink(),
+          bluetooth: radio,
+        }),
+        visibleDevices: () => devices.visibleDevices(),
+        pairedBluetooth: () => devices.pairedBluetooth(),
+        bluetoothPrinting: () => devices.bluetoothPrinting(),
+        resolve: (job) => devices.resolve(job),
+        fetch: (input, init) => Promise.resolve(app.request(input, init)),
+      });
+      host.now = Date.now;
+      const agent = createAgent({ host });
+      await agent.runOnce();
+      const joinId = (await host.token())!.split(".")[0]!;
+      const choice = host.statuses.find(
+        (status) => status.verificationCode !== undefined,
+      )!.verificationCode;
+      expect(
+        (
+          await send(app, "POST", `/management-api/print-agent-join-requests/${joinId}/accept`, {
+            cookie: managerCookie,
+            body: { choice },
+          })
+        ).status,
+      ).toBe(204);
+      const created = await send(app, "POST", "/management-api/printers", {
+        cookie: managerCookie,
+        body: { name: "Barra Bluetooth", transport: "bluetooth", localKey: MAC },
+      });
+      expect(created.status).toBe(201);
+      const printerId = ((await created.json()) as { id: string }).id;
+      const test = await send(
+        app,
+        "POST",
+        `/management-api/printers/${printerId}/character-table-test`,
+        { cookie: managerCookie, body: { startTable: 0 } },
+      );
+      expect(test.status).toBe(202);
+      const { jobId } = (await test.json()) as { jobId: string };
+
+      await agent.runOnce();
+      await agent.runOnce();
+
+      const jobs = (await (
+        await send(app, "GET", "/management-api/print-jobs", { cookie: managerCookie })
+      ).json()) as Array<{
+        id: string;
+        status: string;
+        lastError: string | null;
+        attempts: number;
+      }>;
+      expect(jobs.find(({ id }) => id === jobId)).toMatchObject({
+        status: "failed",
+        lastError: "printer.bluetooth_printing_unavailable",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+      });
+      const printers = (await (
+        await send(app, "GET", "/management-api/printers", { cookie: managerCookie })
+      ).json()) as Array<{ id: string; pendingJobs: number }>;
+      expect(printers.find(({ id }) => id === printerId)?.pendingJobs).toBe(0);
+      expect(radio.written).toEqual([]);
+    } finally {
+      await rm(sysfsRoot, { recursive: true, force: true });
+    }
   });
 });

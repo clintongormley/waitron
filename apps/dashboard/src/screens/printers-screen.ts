@@ -72,6 +72,13 @@ const bottomMessage = (...parts: (string | null)[]): string =>
 
 const refusal = (code: string | null): string | null => (code === null ? null : codeMessage(code));
 
+/** The `last_error` the server stores for a job it ended because this printer's agent cannot print
+ * to it (`BLUETOOTH_PRINTING_UNAVAILABLE`, packages/printing/src/runtime.ts). */
+const BLUETOOTH_PRINTING_UNAVAILABLE = "printer.bluetooth_printing_unavailable";
+
+const jobReason = (lastError: string): string =>
+  lastError === BLUETOOTH_PRINTING_UNAVAILABLE ? codeMessage(lastError) : lastError;
+
 const refusedField = (error: unknown): unknown =>
   (error as { params?: { field?: unknown } } | null)?.params?.field;
 
@@ -481,6 +488,8 @@ export class PrintersScreen extends LitElement {
   @state() private finderChosenCode = "";
   #tableTestEpoch = 0;
   #testEpoch = 0;
+  #calibrationEpoch = 0;
+  #calibrationShownEpoch = 0;
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
   @state() private editingAgent: PrintAgentRow | null = null;
@@ -490,6 +499,8 @@ export class PrintersScreen extends LitElement {
   @state() private previewOpen = false;
   @state() private jobs: PrintJobRow[] = [];
   @state() private resendingJobId: string | null = null;
+  /** The last print the edit or calibration dialog sent. */
+  @state() private calibrationJobId: string | null = null;
 
   @state() private tills: Till[] = [];
 
@@ -1405,11 +1416,13 @@ export class PrintersScreen extends LitElement {
   async #testPrint(id: string): Promise<void> {
     if (this.printingTest) return;
     const epoch = this.#testEpoch;
+    const calibration = ++this.#calibrationEpoch;
     this.printingTest = true;
     this.testError = null;
     try {
-      await this.api.testPrint(id);
+      const { jobId } = await this.api.testPrint(id);
       if (epoch === this.#testEpoch) {
+        this.#showCalibrationJob(calibration, jobId);
         await this.#load();
       }
     } catch (error) {
@@ -1423,16 +1436,20 @@ export class PrintersScreen extends LitElement {
     if (this.printingSample) return;
     if (!this.#validatePrinter(p)) return;
     const epoch = this.#testEpoch;
+    const calibration = ++this.#calibrationEpoch;
     this.printingSample = true;
     this.errorKey = null;
     try {
-      await this.api.sampleReceipt(p.id, {
+      const { jobId } = await this.api.sampleReceipt(p.id, {
         paperWidth: p.paperWidth,
         resolution: p.resolution,
         characterSet: p.characterSet,
         characterTable: p.characterTable,
       });
-      if (epoch === this.#testEpoch) await this.#load();
+      if (epoch === this.#testEpoch) {
+        this.#showCalibrationJob(calibration, jobId);
+        await this.#load();
+      }
     } catch (error) {
       if (epoch === this.#testEpoch) this.errorKey = codeOf(error);
     } finally {
@@ -1446,9 +1463,11 @@ export class PrintersScreen extends LitElement {
     this.errorKey = null;
     const blockStart = this.tableBlockStart;
     const epoch = this.#tableTestEpoch;
+    const calibration = ++this.#calibrationEpoch;
     try {
-      const { calibrationLocale } = await this.api.testCharacterTables(p.id, blockStart);
+      const { jobId, calibrationLocale } = await this.api.testCharacterTables(p.id, blockStart);
       if (epoch === this.#tableTestEpoch) {
+        this.#showCalibrationJob(calibration, jobId);
         if (
           this.finderLocales[blockStart] !== undefined &&
           this.finderLocales[blockStart] !== calibrationLocale &&
@@ -1465,6 +1484,12 @@ export class PrintersScreen extends LitElement {
     }
   }
 
+  #showCalibrationJob(calibration: number, jobId: string): void {
+    if (calibration <= this.#calibrationShownEpoch) return;
+    this.#calibrationShownEpoch = calibration;
+    this.calibrationJobId = jobId;
+  }
+
   #closeTest(): void {
     this.#testEpoch++;
     this.#tableTestEpoch++;
@@ -1473,18 +1498,23 @@ export class PrintersScreen extends LitElement {
     this.printingSample = false;
     this.testingDrawer = false;
     this.testError = null;
+    this.calibrationJobId = null;
   }
 
   async #testDrawer(p: EditablePrinter): Promise<void> {
     if (this.testingDrawer) return;
     const epoch = this.#testEpoch;
+    const calibration = ++this.#calibrationEpoch;
     this.testingDrawer = true;
     this.drawerTestSent = false;
     this.drawerOutcome = "";
     this.testError = null;
     try {
-      await this.api.testPrinterDrawer(p.id);
-      if (epoch === this.#testEpoch) this.drawerTestSent = true;
+      const { jobId } = await this.api.testPrinterDrawer(p.id);
+      if (epoch === this.#testEpoch) {
+        this.drawerTestSent = true;
+        this.#showCalibrationJob(calibration, jobId);
+      }
     } catch (error) {
       if (epoch === this.#testEpoch) this.testError = codeOf(error);
     } finally {
@@ -2014,12 +2044,21 @@ export class PrintersScreen extends LitElement {
         sortValue: (p) => p.name,
         cell: (p) =>
           html`<wt-button
-            variant="ghost"
-            part="printer-name"
-            data-test=${`printer-row-${p.id}`}
-            @click=${() => this.#showPrinterStatus(p.id)}
-            >${p.name}</wt-button
-          >`,
+              variant="ghost"
+              part="printer-name"
+              data-test=${`printer-row-${p.id}`}
+              @click=${() => this.#showPrinterStatus(p.id)}
+              >${p.name}</wt-button
+            >${
+              p.transport === "bluetooth"
+                ? html`<div
+                    part="printer-meta"
+                    data-test=${`printer-bluetooth-unavailable-${p.id}`}
+                  >
+                    ${codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)}
+                  </div>`
+                : nothing
+            }`,
       },
       {
         key: "agent",
@@ -2137,14 +2176,17 @@ export class PrintersScreen extends LitElement {
         cell: (j) =>
           html`<span part=${`job-status job-${j.status}`} data-test=${`job-status-${j.id}`}
               >${jobStatusName(j.status)}</span
-            >${j.lastError === null ? nothing : html`<p data-test=${`job-error-${j.id}`}>${j.lastError}</p>`}`,
+            >${j.lastError === null ? nothing : html`<p data-test=${`job-error-${j.id}`}>${jobReason(j.lastError)}</p>`}`,
       },
       {
         key: "attempts",
         choosable: "shown",
         label: t("printers.job_attempts"),
         sortValue: (j) => j.attempts,
-        cell: (j) => html`<span data-test=${`job-attempts-${j.id}`}>${j.attempts}</span>`,
+        cell: (j) =>
+          html`<span data-test=${`job-attempts-${j.id}`}
+            >${j.lastError === BLUETOOTH_PRINTING_UNAVAILABLE ? "—" : j.attempts}</span
+          >`,
       },
       {
         key: "queued",
@@ -2283,6 +2325,14 @@ export class PrintersScreen extends LitElement {
     return errors;
   }
 
+  #renderCalibrationFailure(): TemplateResult | typeof nothing {
+    const job = this.jobs.find(({ id }) => id === this.calibrationJobId);
+    if (job?.status !== "failed") return nothing;
+    return html`<p class="error" role="alert" data-test="calibration-job-failed">
+      ${t("printers.calibration_job_failed").replace("{reason}", () => jobReason(job.lastError ?? ""))}
+    </p>`;
+  }
+
   #renderEditPrinter(): TemplateResult | typeof nothing {
     const p = this.editingPrinter;
     if (!p) return nothing;
@@ -2336,6 +2386,8 @@ export class PrintersScreen extends LitElement {
       <div class="form-fields">
         ${this.#renderRefreshError()}
         ${this.calibrationStep ? html`<p role="status">${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}</p>` : nothing}
+        ${p.transport === "bluetooth" ? html`<p class="hint" data-test="bluetooth-printing-unavailable">${codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)}</p>` : nothing}
+        ${this.#renderCalibrationFailure()}
         ${
           this.calibrationStep === 0
             ? html`

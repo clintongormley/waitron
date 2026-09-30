@@ -96,5 +96,6 @@ export function createContainerHost(opts: ContainerHostOptions): Host {
     pairedBluetooth: devices.pairedBluetooth,
     forgetBluetooth: devices.forgetBluetooth,
     resolve: devices.resolve,
+    bluetoothPrinting: devices.bluetoothPrinting,
   };
 }
