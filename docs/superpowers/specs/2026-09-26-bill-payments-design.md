@@ -1020,6 +1020,9 @@ contribution is correct, and what to do when the invoice was printed first.
   bill of the visit. §4.2's example would be refused until that correction path exists.
 - **If Q27(b) says the split after a contribution is not correct**, moving lines off a bill with
   received money is refused (`bill.payments_received`) until the payments are refunded.
+  _(2026-09-30, B19: as built, a transfer between two existing bills stays refused after a full
+  refund too; a split onto a new bill is allowed while what stays on the bill still covers what it
+  has received (`bill.received_exceeds_total`).)_
 
 ---
 
@@ -1077,6 +1080,9 @@ The till's pay screen for a bill:
 - **`bill.allocation_changed`** reopens the confirmation with the new amounts; `bill.line_paid`,
   `bill.received_exceeds_total` and `bill.payments_received` are shown beside the action with the
   way on (refund first, move fewer lines).
+  _(2026-09-30, B19: for `bill.payments_received` a full refund lifts the refusals that ask whether
+  a bill still holds money (`refuseBillHoldingMoney`), such as finishing a table with an emptied
+  bill, but not a merge or a transfer between two existing bills (`refuseBillWithPayments`).)_
 - **Related bills** of the visit are listed together (Task 2); the table never reads as fully paid
   while one is outstanding.
 

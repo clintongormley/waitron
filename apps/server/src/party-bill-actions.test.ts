@@ -165,6 +165,25 @@ async function contribute(billId: string, amount: string): Promise<string> {
   return result.payment.id;
 }
 
+/** Gives the whole of a 5.00 cash contribution back, under the admin's PIN. */
+async function refundInFull(billId: string, paymentId: string): Promise<void> {
+  const session = await inTx(v, (tx) =>
+    loginWithPin(tx, { tillId: v.cfg.tillId, personId: adminId, pin: "1234" }),
+  );
+  await refundBillPayment(
+    { db: v.db, clock: v.clock },
+    v.cfg,
+    billId,
+    paymentId,
+    { submissionId: randomUUID(), appliedAmount: "5.00", tipAmount: "0.00", reason: "error" },
+    {
+      personId: adminId,
+      sessionId: session.id,
+      attempts: overridePinAttempts(createPinThrottle(), v.cfg.tillId),
+    },
+  );
+}
+
 /** A party at a fresh table whose main bill holds a Burger and whose second bill holds a Vino. */
 async function twoBills(label: string): Promise<{ partyId: string; main: string; second: string }> {
   const { partyId, tabId } = await seat(v, await v.table(label));
@@ -173,18 +192,20 @@ async function twoBills(label: string): Promise<{ partyId: string; main: string;
   return { partyId, main: tabId, second };
 }
 
-type Touch = "presented" | "partly paid" | "paid";
+type Touch = "presented" | "partly paid" | "paid" | "refunded in full";
 
 const TOUCHED_CODE: Record<Touch, string> = {
   presented: "bill.presented",
   "partly paid": "bill.payments_received",
   paid: "bill.paid",
+  "refunded in full": "bill.payments_received",
 };
 
-/** Present, partly pay or pay the bill; `total` is what it owes. */
+/** Present, partly pay, pay, or partly pay then refund the bill; `total` is what it owes. */
 async function touch(billId: string, how: Touch, total: string): Promise<void> {
   if (how === "presented") await placeByHand(v, billId);
   else if (how === "partly paid") await contribute(billId, "5.00");
+  else if (how === "refunded in full") await refundInFull(billId, await contribute(billId, "5.00"));
   else await pay(v, billId, total);
 }
 
@@ -511,7 +532,7 @@ describe("merge bills", () => {
   });
 
   const SIDES = ["from", "into"] as const;
-  const TOUCHES: Touch[] = ["presented", "partly paid", "paid"];
+  const TOUCHES: Touch[] = ["presented", "partly paid", "paid", "refunded in full"];
   const EACH_SIDE = SIDES.flatMap((side) => TOUCHES.map((how) => [side, how] as const));
 
   it.each(EACH_SIDE)("refuses a merge whose %s bill is %s, changing nothing", async (side, how) => {
@@ -525,35 +546,6 @@ describe("merge bills", () => {
 
     expect(error).toMatchObject({
       code: TOUCHED_CODE[how],
-      params: { workingOrderId: second },
-    });
-    expect(await snapshot(partyId, [main, second])).toEqual(before);
-  });
-
-  it("refuses a bill whose only payment was given back in full", async () => {
-    const { partyId, main, second } = await twoBills("Mesa 22");
-    const paymentId = await contribute(second, "5.00");
-    const session = await inTx(v, (tx) =>
-      loginWithPin(tx, { tillId: v.cfg.tillId, personId: adminId, pin: "1234" }),
-    );
-    await refundBillPayment(
-      { db: v.db, clock: v.clock },
-      v.cfg,
-      second,
-      paymentId,
-      { submissionId: randomUUID(), appliedAmount: "5.00", tipAmount: "0.00", reason: "error" },
-      {
-        personId: adminId,
-        sessionId: session.id,
-        attempts: overridePinAttempts(createPinThrottle(), v.cfg.tillId),
-      },
-    );
-    const before = await snapshot(partyId, [main, second]);
-
-    const error = await captureError(() => merge(partyId, main, second));
-
-    expect(error).toMatchObject({
-      code: "bill.payments_received",
       params: { workingOrderId: second },
     });
     expect(await snapshot(partyId, [main, second])).toEqual(before);
@@ -652,7 +644,7 @@ describe("transfer items", () => {
   });
 
   const SIDES = ["from", "to"] as const;
-  const TOUCHES: Touch[] = ["presented", "partly paid", "paid"];
+  const TOUCHES: Touch[] = ["presented", "partly paid", "paid", "refunded in full"];
   const EACH_SIDE = SIDES.flatMap((side) => TOUCHES.map((how) => [side, how] as const));
 
   it.each(EACH_SIDE)(

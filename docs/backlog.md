@@ -4008,14 +4008,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     what it still owes, "Paid so far" and a button opening the dialog; the counter shows "{amount}
     to pay" and "Take the rest" above the pay card. The ticket lists every payment. Server: `GET
     /api/refund-authorizers` and `BillPaymentView.entry`. Open:
-    - **OPEN, owner decision — the till tells staff to give the money back before a merge, and a
-      merge is refused even then.** The till's `bill.payments_received` message says "To discard or
-      merge the bill, give that money back first", but `refuseBillWithPayments`
-      (`apps/server/src/bill-actions.ts`) refuses a merge of any bill that has ever held a pending
-      or received payment, one given back in full included. Run 2026-09-30: a full refund and then
-      a merge still answered 409 `bill.payments_received`. The wording is pinned by a test on
-      `main` (`apps/till/src/i18n/codes.test.ts`), so B15 left it. **Next action:** the owner
-      decides whether the message drops "or merge" or the server lets a fully refunded bill merge.
+    - **DONE — the till no longer tells staff to give the money back before a merge** (lane B
+      item B19, 2026-09-30; the owner's "Ok" to the recommendation). A merge, or a transfer
+      between two existing bills, stays refused while either bill holds a pending or received
+      payment, one given back in full included; splitting unpaid items onto a new bill is still
+      allowed while what stays still covers what the bill has received
+      (`bill.received_exceeds_total`). The message now says so, keeps "take the rest from the bill's payments", and keeps
+      "give it back" only for finishing a table whose emptied bill still holds money. Of the three
+      till actions that show this message (merge, transfer, finish table), that is the only one
+      giving the money back unblocks. Guards: the merge and transfer cases for a bill whose only
+      payment was given back in full, in `apps/server/src/party-bill-actions.test.ts`, and "will
+      not abandon an emptied bill that still holds a tip, and finishes once it is given back" in
+      `apps/server/src/parties.test.ts`.
     - **OPEN — the generic "received more than the bill" text also answers a comp or discount.**
       The till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer
       items, or refund the difference first") is on `main`, and the adjustment dialog shows it
