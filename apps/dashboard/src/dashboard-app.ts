@@ -24,9 +24,10 @@ import type { StringKey } from "./i18n/strings.js";
 import {
   registerCatalogue,
   t as tKit,
-  type DashboardContribution,
+  type DashboardFurtherScreen,
   type DashboardRequest,
   type DashboardScreenHandle,
+  type DashboardScreenPlacement,
   type NavGroupId,
 } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
@@ -573,9 +574,9 @@ export class DashboardApp extends LitElement {
 
   #activeScreens = new Map<
     string,
-    { contribution: DashboardContribution; handle: DashboardScreenHandle }
+    { screen: DashboardScreenPlacement; handle: DashboardScreenHandle }
   >();
-  #navGroups = new Map<NavGroupId, DashboardContribution[]>();
+  #navGroups = new Map<NavGroupId, DashboardScreenPlacement[]>();
 
   #sessionPermissions: string[] = [];
 
@@ -1027,23 +1028,30 @@ export class DashboardApp extends LitElement {
     this.#navGroups.clear();
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
-      if (!knownGroups.has(c.screen.group))
-        throw new Error(
-          `dashboard module "${c.module}" names unknown nav group "${c.screen.group}"`,
-        );
+      const screens: DashboardFurtherScreen[] = [
+        { screen: c.screen, create: (ctx) => c.create(ctx) },
+        ...(c.moreScreens ?? []),
+      ];
+      for (const { screen } of screens)
+        if (!knownGroups.has(screen.group))
+          throw new Error(
+            `dashboard module "${c.module}" names unknown nav group "${screen.group}"`,
+          );
       registerCatalogue(c.strings);
-      this.#activeScreens.set(c.screen.id, {
-        contribution: c,
-        handle: c.create({ request: this.request, liveData: this.api.liveData }),
-      });
-      if (this.#sessionPermissions.includes(c.screen.requiresPermission)) {
-        const group = this.#navGroups.get(c.screen.group) ?? [];
-        group.push(c);
-        this.#navGroups.set(c.screen.group, group);
+      for (const { screen, create } of screens) {
+        this.#activeScreens.set(screen.id, {
+          screen,
+          handle: create({ request: this.request, liveData: this.api.liveData }),
+        });
+        if (this.#sessionPermissions.includes(screen.requiresPermission)) {
+          const group = this.#navGroups.get(screen.group) ?? [];
+          group.push(screen);
+          this.#navGroups.set(screen.group, group);
+        }
       }
     }
     for (const list of this.#navGroups.values())
-      list.sort((a, b) => (a.screen.order ?? 0) - (b.screen.order ?? 0));
+      list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   }
 
   /**
@@ -1333,10 +1341,7 @@ export class DashboardApp extends LitElement {
     if (item && this.#mayOpen(item)) return item.screen;
     if (requested !== null) {
       const active = this.#activeScreens.get(requested);
-      if (
-        active &&
-        this.#sessionPermissions.includes(active.contribution.screen.requiresPermission)
-      )
+      if (active && this.#sessionPermissions.includes(active.screen.requiresPermission))
         return requested;
     }
     return "overview";
@@ -1402,9 +1407,9 @@ export class DashboardApp extends LitElement {
         ...group.items
           .filter((item) => this.#mayOpen(item))
           .map((item) => ({ screen: item.screen, label: t(item.labelKey) })),
-        ...(this.#navGroups.get(group.id) ?? []).map((c) => ({
-          screen: c.screen.id,
-          label: tKit(c.screen.navLabelKey),
+        ...(this.#navGroups.get(group.id) ?? []).map((screen) => ({
+          screen: screen.id,
+          label: tKit(screen.navLabelKey),
         })),
       ];
       const holdsCurrent =
