@@ -706,6 +706,8 @@ export interface AdjustmentPreview {
   nominalValue: string;
   /** The role that must approve it, or null when the operator may apply it alone. */
   needsApproval: PersonRole | null;
+  /** The venue's limit on a bill's total discount is what makes a manager's approval needed. */
+  overBillDiscountLimit: boolean;
   lines: {
     lineId: string;
     lineNo: number;

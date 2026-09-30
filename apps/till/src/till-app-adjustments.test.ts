@@ -170,6 +170,7 @@ const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
   reduction: "30.00",
   nominalValue: "30.00",
   needsApproval: null,
+  overBillDiscountLimit: false,
   lines: [],
   ...over,
 });
