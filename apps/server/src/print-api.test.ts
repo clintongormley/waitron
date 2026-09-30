@@ -2271,6 +2271,24 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(await jobRow(jobId)).toMatchObject({ status: "printing", last_error: null });
   });
 
+  it("refuses a pull whose bluetoothPrinting is not a boolean, naming the field, before recording its pairing report", async () => {
+    const app = mountApp();
+    const { agentId, token } = await joinAndAccept(app);
+    const mac = lowerMac().toUpperCase();
+
+    for (const value of ["false", null, 0, [], {}]) {
+      const res = await send(app, "POST", "/print-api/agent/jobs", {
+        bearer: token,
+        body: { visible: [], pairedBluetooth: [{ localKey: mac }], bluetoothPrinting: value },
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "bluetoothPrinting" } },
+      });
+    }
+    expect((await discoveredRows(app)).filter((r) => r.agentId === agentId)).toEqual([]);
+  });
+
   function lowerMac(): string {
     return Array.from(randomBytes(6), (b) => b.toString(16).padStart(2, "0")).join(":");
   }

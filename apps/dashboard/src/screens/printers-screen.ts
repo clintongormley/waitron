@@ -488,6 +488,8 @@ export class PrintersScreen extends LitElement {
   @state() private finderChosenCode = "";
   #tableTestEpoch = 0;
   #testEpoch = 0;
+  #calibrationEpoch = 0;
+  #calibrationShownEpoch = 0;
   @state() private testError: string | null = null;
   @state() private editingPrinter: EditablePrinter | null = null;
   @state() private editingAgent: PrintAgentRow | null = null;
@@ -1414,12 +1416,13 @@ export class PrintersScreen extends LitElement {
   async #testPrint(id: string): Promise<void> {
     if (this.printingTest) return;
     const epoch = this.#testEpoch;
+    const calibration = ++this.#calibrationEpoch;
     this.printingTest = true;
     this.testError = null;
     try {
       const { jobId } = await this.api.testPrint(id);
       if (epoch === this.#testEpoch) {
-        this.calibrationJobId = jobId;
+        this.#showCalibrationJob(calibration, jobId);
         await this.#load();
       }
     } catch (error) {
@@ -1433,6 +1436,7 @@ export class PrintersScreen extends LitElement {
     if (this.printingSample) return;
     if (!this.#validatePrinter(p)) return;
     const epoch = this.#testEpoch;
+    const calibration = ++this.#calibrationEpoch;
     this.printingSample = true;
     this.errorKey = null;
     try {
@@ -1443,7 +1447,7 @@ export class PrintersScreen extends LitElement {
         characterTable: p.characterTable,
       });
       if (epoch === this.#testEpoch) {
-        this.calibrationJobId = jobId;
+        this.#showCalibrationJob(calibration, jobId);
         await this.#load();
       }
     } catch (error) {
@@ -1459,10 +1463,11 @@ export class PrintersScreen extends LitElement {
     this.errorKey = null;
     const blockStart = this.tableBlockStart;
     const epoch = this.#tableTestEpoch;
+    const calibration = ++this.#calibrationEpoch;
     try {
       const { jobId, calibrationLocale } = await this.api.testCharacterTables(p.id, blockStart);
       if (epoch === this.#tableTestEpoch) {
-        this.calibrationJobId = jobId;
+        this.#showCalibrationJob(calibration, jobId);
         if (
           this.finderLocales[blockStart] !== undefined &&
           this.finderLocales[blockStart] !== calibrationLocale &&
@@ -1479,6 +1484,12 @@ export class PrintersScreen extends LitElement {
     }
   }
 
+  #showCalibrationJob(calibration: number, jobId: string): void {
+    if (calibration <= this.#calibrationShownEpoch) return;
+    this.#calibrationShownEpoch = calibration;
+    this.calibrationJobId = jobId;
+  }
+
   #closeTest(): void {
     this.#testEpoch++;
     this.#tableTestEpoch++;
@@ -1493,6 +1504,7 @@ export class PrintersScreen extends LitElement {
   async #testDrawer(p: EditablePrinter): Promise<void> {
     if (this.testingDrawer) return;
     const epoch = this.#testEpoch;
+    const calibration = ++this.#calibrationEpoch;
     this.testingDrawer = true;
     this.drawerTestSent = false;
     this.drawerOutcome = "";
@@ -1501,7 +1513,7 @@ export class PrintersScreen extends LitElement {
       const { jobId } = await this.api.testPrinterDrawer(p.id);
       if (epoch === this.#testEpoch) {
         this.drawerTestSent = true;
-        this.calibrationJobId = jobId;
+        this.#showCalibrationJob(calibration, jobId);
       }
     } catch (error) {
       if (epoch === this.#testEpoch) this.testError = codeOf(error);
@@ -2317,7 +2329,7 @@ export class PrintersScreen extends LitElement {
     const job = this.jobs.find(({ id }) => id === this.calibrationJobId);
     if (job?.status !== "failed") return nothing;
     return html`<p class="error" role="alert" data-test="calibration-job-failed">
-      ${t("printers.calibration_job_failed").replace("{reason}", jobReason(job.lastError ?? ""))}
+      ${t("printers.calibration_job_failed").replace("{reason}", () => jobReason(job.lastError ?? ""))}
     </p>`;
   }
 

@@ -433,6 +433,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const host = reportedHost === undefined ? undefined : reportedHost.trim() || null;
       const setupUrl = optionalAgentSetupUrl(body.setupUrl);
       const setupPort = optionalAgentSetupPort(body.setupPort);
+      const bluetoothPrinting = optionalBool(body.bluetoothPrinting, "bluetoothPrinting");
       const visible = screenVisible(body.visible);
       const scanned = screenScanned(body.scanned);
       const pairedBluetooth = screenPairedBluetooth(body.pairedBluetooth);
@@ -470,8 +471,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         .filter((v) => v.transport === "usb" || v.transport === "bluetooth")
         .map((v) => v.localKey);
       // Absent from an agent that predates the field, which then changes nothing.
-      const unprintable =
-        body.bluetoothPrinting === false ? pairedBluetooth.map((p) => p.localKey) : [];
+      const unprintable = bluetoothPrinting === false ? pairedBluetooth.map((p) => p.localKey) : [];
 
       // The claim commits within this request: no transaction is held across the agent's socket write,
       // and the agent reports the outcome in a separate request.

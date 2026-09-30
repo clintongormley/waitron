@@ -6606,6 +6606,97 @@ describe("Bluetooth printing is not available yet", () => {
     expect(text(el, "[data-test=calibration-job-failed]")).toBe("No se ha impreso: paper out");
   });
 
+  it("keeps the latest calibration print when an earlier one's reply arrives after it", async () => {
+    let releaseFirst!: () => void;
+    const { el } = await mountWith({
+      testPrint: vi.fn().mockReturnValueOnce(
+        new Promise((resolve) => {
+          releaseFirst = () => resolve({ jobId: "j9" });
+        }),
+      ),
+      sampleReceipt: vi.fn().mockResolvedValue({ jobId: "j10" }),
+      listRecentJobs: vi
+        .fn()
+        .mockResolvedValue([
+          job({ id: "j9", printerId: "p1", status: "failed", lastError: "FIRST" }),
+          job({ id: "j10", printerId: "p1", status: "done" }),
+        ]),
+    });
+    await openPrinter(el, "p1");
+    q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+    await flush(el);
+
+    releaseFirst();
+    await flush(el);
+
+    expect(q(el, "[data-test=calibration-job-failed]")).toBeNull();
+  });
+
+  it("shows an earlier calibration print's reply when a later print was refused", async () => {
+    let releaseSecond!: () => void;
+    const { el } = await mountWith({
+      testPrint: vi
+        .fn()
+        .mockResolvedValueOnce({ jobId: "j8" })
+        .mockReturnValueOnce(
+          new Promise((resolve) => {
+            releaseSecond = () => resolve({ jobId: "j9" });
+          }),
+        ),
+      sampleReceipt: vi.fn().mockRejectedValue({ code: "printer.not_found" }),
+      listRecentJobs: vi
+        .fn()
+        .mockResolvedValue([
+          job({ id: "j8", printerId: "p1", status: "failed", lastError: "OLD" }),
+          job({ id: "j9", printerId: "p1", status: "failed", lastError: "A-FAILED" }),
+        ]),
+    });
+    await openPrinter(el, "p1");
+    q(el, "[data-test=calibrate-printer]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    expect(text(el, "[data-test=calibration-job-failed]")).toBe("No se ha impreso: OLD");
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+    q(el, "[data-test=calibration-next]")!.click();
+    await flush(el);
+    q(el, "[data-test=print-sample-receipt-p1]")!.click();
+    await flush(el);
+
+    releaseSecond();
+    await flush(el);
+
+    expect(text(el, "[data-test=calibration-job-failed]")).toBe("No se ha impreso: A-FAILED");
+  });
+
+  it("shows an agent's reason verbatim, even one holding replacement patterns", async () => {
+    const reason = "write failed: $& cost $$5 $' $`";
+    const { el } = await mountWith({
+      listRecentJobs: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([
+          job({ id: "j9", printerId: "p1", status: "failed", lastError: reason }),
+        ]),
+    });
+    await openPrinter(el, "p1");
+    q(el, "[data-test=print-test-page-p1]")!.click();
+    await flush(el);
+
+    expect(text(el, "[data-test=calibration-job-failed]")).toBe(`No se ha impreso: ${reason}`);
+  });
+
   it("forgets the calibration print when the dialog closes", async () => {
     const { el } = await mountWith({
       listRecentJobs: vi.fn().mockResolvedValue([job({ ...ended, id: "drawer-test" })]),
