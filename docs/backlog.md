@@ -3491,6 +3491,26 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         `APPROVER_REFUSALS` in `apps/till/src/till-app.ts` names `person.not_found` and
         `person.suspended`, which an approver's PIN check stopped returning when every login
         failure became `pin.invalid` (C95, #930). **Next action:** drop the two entries.
+    - _Done by lane B item B11c (2026-09-30):_ comps, discounts and Cancel work on a stored open
+      counter order — a bill moved from a table, a split or edit of one, and an order parked at the
+      counter — with the same reasons, limits and approvals as a table's bill (owner, 2026-09-30).
+      The server takes an adjustment on any open order (`planAdjustment`,
+      `apps/server/src/adjustments-apply.ts`). On the till, a stored order in the counter's basket
+      that matches what the server holds offers Give away and Discount on each dish, Discount the
+      bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
+      (`apps/till/src/widgets/basket.ts`); the basket reads each line's sent state and price before
+      an adjustment from `GET /api/working-orders/:id/lines` when it loads the order, and loads the
+      order again after an adjustment is made, refused as out of date, or left unanswered. An
+      unsaved or changed basket offers none of them; a changed one offers them again once it is held
+      and retrieved. Left open:
+      - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be
+        adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
+        already filed its invoice. B16, the counter handover task, was kept clear of. **Next
+        action:** decide with B16 whether a placed order can be adjusted before it is collected.
+      - **The server's held-order edit (`PUT /api/working-orders/:id`) still removes a sent dish's
+        dropped quantity without a reason** when a client sends it that way; the till's counter no
+        longer offers it for a sent dish. **Next action:** decide whether the edit should refuse
+        dropping a sent line, as the table's Cancel requires a reason.
     - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
       overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
       wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
@@ -3507,8 +3527,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - **Not offered:** a comp or a discount of part of a dish with extras
       (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling
-      during the build: its two rounded parts need not add up to the line), and counter orders (the
-      route takes a table's bill only). A run-it review found that exactly representable weighed cases
+      during the build: its two rounded parts need not add up to the line). _(2026-09-30: counter
+      orders are offered since B11c, above.)_ A run-it review found that exactly representable weighed cases
       are refused too (0.500 kg of a 1.000 kg ham line at €24/kg). **Next action:** the owner
       decides whether exactly representable partial weighed adjustments should be allowed.
     - **Two dashboard tests share the Escape flake fixed here** (a check made before the browser's
