@@ -3819,7 +3819,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         it in cash and by manual card; both failed with `CHECK constraint failed:
         tenders_amount_ck` before the change. A control case shows an ordinary cash collection of
         a corrected bill does open the drawer.
-        **DONE (C66, 2026-09-30): a negative correction that would take an invoice below zero is
+        **DONE (C66, #922, 2026-09-30): a negative correction that would take an invoice below zero is
         refused when it is recorded.** The owner's answer (2026-09-30): refuse it, in place of
         paying the difference back at collection. `recordCorrection`
         (`packages/core/src/record-correction.ts`) adds the invoice's total, the corrections
@@ -3855,7 +3855,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         already corrected below zero, with the domain code, and leaves it open" in
         `apps/server/src/collect-by-invoice.test.ts` inserts a -20.00 corrective row straight into
         `sales`, and failed with that check deleted.
-        **Still open: the card-reader path.** `payWorkingOrderIntegrated`
+        **Still open: the card-reader path (queued as C67).** `payWorkingOrderIntegrated`
         (`apps/server/src/till-sale.ts`) is unchanged: for a bill with a sale it asks the card
         reader to collect the amount due plus any tip, so on a bill corrected to zero it would ask
         for 0.00 (plus tip), and, on a bill below zero (which `recordCorrection` no longer
@@ -3866,7 +3866,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         it); and a guard for a bill below zero, refused with the code `collectOrder` uses, never
         asking the reader for a negative amount (`recordCorrection` refuses a correction that would
         make one, C66 above).
-        **Still open: a correction's third decimal place.** `recordCorrection` stores the
+        **Still open: a correction's third decimal place (queued as A144).** `recordCorrection` stores the
         correction's total rounded to the cent on the `sales` row but hands the unrounded input to
         the fiscal backend (`total: decimal(input.total)`,
         `packages/core/src/record-correction.ts:263`), so a -14.414 correction stores -14.41 on the
