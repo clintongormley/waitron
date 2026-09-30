@@ -412,6 +412,28 @@ test("brings the message of actions placed in the body into view when it appears
   }
 });
 
+const REFUSAL = "Correct the highlighted fields to continue.";
+
+/** A modal with a name field at the top of a long body, and actions placed by `slot`. */
+async function openUnitForm(slot: string) {
+  const modal = (await mount(`<wt-modal heading="Add unit">
+    <wt-input name="name" label="Name"></wt-input>
+    ${LONG_BODY}
+    <wt-form-actions ${slot}><wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  modal.open = true;
+  await modal.updateComplete;
+  const input = modal.querySelector("wt-input")!;
+  await input.updateComplete;
+  return {
+    modal,
+    body: modal.shadowRoot!.querySelector<HTMLElement>(".body")!,
+    actions: modal.querySelector("wt-form-actions")!,
+    input,
+    field: input.shadowRoot!.querySelector("input")!,
+  };
+}
+
 test.each([
   ["in the footer", 'slot="footer"'],
   ["in the body", ""],
@@ -420,21 +442,13 @@ test.each([
   async (_, slot) => {
     await page.viewport(390, 500);
     try {
-      const modal = (await mount(`<wt-modal heading="Add unit">
-        <wt-input name="name" label="Name"></wt-input>
-        ${LONG_BODY}
-        <wt-form-actions ${slot}><wt-button>Save</wt-button></wt-form-actions>
-      </wt-modal>`)) as WtModal;
-      modal.open = true;
-      await modal.updateComplete;
-      const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
-      const actions = modal.querySelector("wt-form-actions")!;
-      const input = modal.querySelector("wt-input")!;
-      await input.updateComplete;
-      input.shadowRoot!.querySelector("input")!.focus();
+      const { modal, body, actions, input, field } = await openUnitForm(slot);
+      // A form that re-checks its fields on every keystroke, as the unit form does after a failed save.
+      input.addEventListener("wt-change", () => (actions.error = REFUSAL));
+      field.focus();
       body.scrollTop = 0;
-      actions.error = "Correct the highlighted fields to continue.";
-      await actions.updateComplete;
+      await userEvent.keyboard("k");
+      expect((await formMessageOf(actions))?.textContent).toBe(REFUSAL);
       await modal.updateComplete;
       await new Promise((resolve) => requestAnimationFrame(resolve));
       expect(body.scrollTop).toBe(0);
@@ -445,9 +459,13 @@ test.each([
 );
 
 test.each([
-  ["a text area", '<textarea name="notes" aria-label="Notes"></textarea>'],
-  ["a list", '<select name="unit" aria-label="Unit"><option>kg</option></select>'],
-])("does not scroll away from %s in focus when the message reappears", async (_, field) => {
+  ["a text area", '<textarea name="notes" aria-label="Notes"></textarea>', "keyboard"],
+  [
+    "a list",
+    '<select name="unit" aria-label="Unit"><option>kg</option><option>g</option></select>',
+    "select",
+  ],
+])("does not scroll away from %s in focus when the message reappears", async (_, field, how) => {
   await page.viewport(390, 500);
   try {
     const modal = (await mount(`<wt-modal heading="Add unit">
@@ -458,15 +476,47 @@ test.each([
     modal.open = true;
     await modal.updateComplete;
     const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
-    modal.querySelector<HTMLElement>("textarea, select")!.focus();
-    body.scrollTop = 0;
     const actions = modal.querySelector("wt-form-actions")!;
-    actions.error = "Correct the highlighted fields to continue.";
-    await actions.updateComplete;
-    await modal.updateComplete;
+    const control = modal.querySelector<HTMLTextAreaElement | HTMLSelectElement>(
+      "textarea, select",
+    )!;
+    control.addEventListener("input", () => (actions.error = REFUSAL));
+    control.focus();
+    body.scrollTop = 0;
+    if (how === "keyboard") await userEvent.keyboard("k");
+    else await userEvent.selectOptions(control as HTMLSelectElement, "g");
+    expect((await formMessageOf(actions))?.textContent).toBe(REFUSAL);
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect(body.scrollTop).toBe(0);
   } finally {
     await page.viewport(1280, 900);
   }
 });
+
+test.each([
+  ["in the footer", 'slot="footer"'],
+  ["in the body", ""],
+])(
+  "brings a refused save's message for actions %s into view when Enter submitted it from a field",
+  async (_, slot) => {
+    await page.viewport(390, 500);
+    try {
+      const { modal, body, actions, input, field } = await openUnitForm(slot);
+      // The save request answers in a later task, as a network response does.
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") setTimeout(() => (actions.error = REFUSAL));
+      });
+      field.focus();
+      body.scrollTop = 0;
+      await userEvent.keyboard("k");
+      await userEvent.keyboard("{Enter}");
+      await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+      const message = (await formMessageOf(actions))!;
+      expect(message.textContent).toBe(REFUSAL);
+      expectInsideBody(modal, message);
+      expect(input.shadowRoot!.activeElement).toBe(field);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);

@@ -9,19 +9,6 @@ import {
   WtFormActions,
 } from "./wt-form-actions.js";
 
-/** Whether focus is in a text field. A form that re-checks its fields on every keystroke clears and
- * re-shows its message as the person types, and scrolling to it then would carry a long dialog away
- * from the field they are typing in. */
-function typingInField(): boolean {
-  let active = document.activeElement;
-  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
-  return (
-    active instanceof HTMLInputElement ||
-    active instanceof HTMLTextAreaElement ||
-    active instanceof HTMLSelectElement
-  );
-}
-
 @customElement("wt-dialog")
 export class WtDialog extends LitElement {
   static override styles = [
@@ -96,9 +83,40 @@ export class WtDialog extends LitElement {
   @state() private footerMessage = "";
   private footerActions: WtFormActions[] = [];
 
+  /** True from a field's `input` event until the task it arrived in ends. A message that changes
+   * within that task is taken to be the form re-checking the edit, and is not scrolled to: that would
+   * carry the field out of sight. A refusal from a request arrives in a later task. */
+  private editing = false;
+
+  constructor() {
+    super();
+    // Captured, so this runs before the field's own listeners: the browser runs microtasks after
+    // each listener it calls, so a form's re-check has rendered before a bubbling listener here
+    // would run. wt-input also stops the event inside its own shadow root.
+    this.addEventListener(
+      "input",
+      () => {
+        this.editing = true;
+        setTimeout(() => (this.editing = false));
+      },
+      { capture: true },
+    );
+  }
+
   @query("dialog") private dialog!: HTMLDialogElement;
   @query(".footer") private footerEl!: HTMLElement;
   @query('slot[name="footer"]') private footerSlot!: HTMLSlotElement;
+
+  override willUpdate(): void {
+    if (this.hasUpdated) return;
+    // The footer slot does not exist until the first render, and a message read from it only then
+    // costs a second update. The slot's own reading in firstUpdated stays the authority: a row
+    // reached through a forwarded slot is found only there.
+    this.footerActions = [...this.children].filter(
+      (child): child is WtFormActions => child instanceof WtFormActions && child.slot === "footer",
+    );
+    this.readFooterMessage();
+  }
 
   override firstUpdated(): void {
     this.updateHasFooter();
@@ -111,7 +129,7 @@ export class WtDialog extends LitElement {
     }
     // A footer row's message set while the dialog was shut could not be scrolled to then, so
     // opening does it.
-    if ((changed.has("footerMessage") || changed.has("open")) && !typingInField()) {
+    if (changed.has("open") || (changed.has("footerMessage") && !this.editing)) {
       this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
   }
@@ -156,7 +174,7 @@ export class WtDialog extends LitElement {
    * body. The row dispatches the event once it has rendered, so the message is already there. */
   private onBodyMessage(event: FormErrorEvent): void {
     const row = event.composedPath()[0];
-    if (row instanceof WtFormActions && !typingInField()) {
+    if (row instanceof WtFormActions && !this.editing) {
       row.shadowRoot!.querySelector("[data-error]")?.scrollIntoView({ block: "nearest" });
     }
   }

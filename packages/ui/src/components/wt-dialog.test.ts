@@ -1,8 +1,9 @@
 import { expect, test, afterEach, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, formMessageOf, host, mount, mountInShadowRoot } from "../test-helpers.js";
-import "./wt-dialog.js";
+import { WtDialog } from "./wt-dialog.js";
 import "./wt-form-actions.js";
+import "./wt-input.js";
 
 /**
  * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
@@ -417,6 +418,24 @@ test("stays shut when another property changes just after the dialog was closed"
   expect(dialog.matches(":modal")).toBe(false);
 });
 
+test("shows a message its footer actions already carry in its first render, not a second", async () => {
+  const updated = vi.spyOn(WtDialog.prototype, "updated");
+  try {
+    const el = await mount(`<wt-dialog heading="Add passkey">
+      <wt-form-actions slot="footer" error="This device already holds a passkey for your account.">
+        <button>Save</button>
+      </wt-form-actions>
+    </wt-dialog>`);
+    expect(el.shadowRoot!.querySelector(".body > [data-error]")?.textContent).toBe(
+      "This device already holds a passkey for your account.",
+    );
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(updated).toHaveBeenCalledTimes(1);
+  } finally {
+    updated.mockRestore();
+  }
+});
+
 test("shows its footer actions' message at the end of the body, below the last field", async () => {
   const el = (await mount(`<wt-dialog heading="Add passkey">
     <label>Passkey name <input name="passkey-name" /></label>
@@ -437,3 +456,36 @@ test("shows its footer actions' message at the end of the body, below the last f
   expect(el.shadowRoot!.querySelector(".footer [data-error]")).toBeNull();
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });
+
+test.each([
+  ["a field", '<label>Passkey name <input name="passkey-name" /></label>'],
+  ["a wt-input", '<wt-input name="passkey-name" label="Passkey name"></wt-input>'],
+])(
+  "brings a message it already carries into view when it opens, though %s first in it takes focus",
+  async (_, field) => {
+    await page.viewport(390, 500);
+    try {
+      const el = (await mount(`<wt-dialog heading="Add passkey">
+        ${field}
+        <div style="height: 2000px">Long settings</div>
+        <wt-form-actions slot="footer" error="This device already holds a passkey for your account.">
+          <button>Save</button>
+        </wt-form-actions>
+      </wt-dialog>`)) as Openable;
+      const message = (await formMessageOf(el.querySelector("wt-form-actions")!))!;
+      el.open = true;
+      await el.updateComplete;
+      let focused = document.activeElement;
+      while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+      expect(focused).toBeInstanceOf(HTMLInputElement);
+      const dialog = el.shadowRoot!.querySelector("dialog")!;
+      await vi.waitFor(() => expect(dialog.scrollTop).toBeGreaterThan(0));
+      const frame = dialog.getBoundingClientRect();
+      const box = message.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(frame.top - 1);
+      expect(box.bottom).toBeLessThanOrEqual(frame.bottom + 1);
+    } finally {
+      await page.viewport(1280, 900);
+    }
+  },
+);
