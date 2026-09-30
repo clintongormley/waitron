@@ -1029,10 +1029,7 @@ export class DashboardApp extends LitElement {
     this.#navGroups.clear();
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
-      const screens: DashboardFurtherScreen[] = [
-        { screen: c.screen, create: (ctx) => c.create(ctx) },
-        ...(c.moreScreens ?? []),
-      ];
+      const screens: readonly DashboardFurtherScreen[] = [c, ...(c.moreScreens ?? [])];
       for (const { screen } of screens) {
         if (!knownGroups.has(screen.group))
           throw new Error(
@@ -1043,10 +1040,11 @@ export class DashboardApp extends LitElement {
         ids.add(screen.id);
       }
       registerCatalogue(c.strings);
-      for (const { screen, create } of screens) {
+      for (const contributed of screens) {
+        const { screen } = contributed;
         this.#activeScreens.set(screen.id, {
           screen,
-          handle: create({ request: this.request, liveData: this.api.liveData }),
+          handle: contributed.create({ request: this.request, liveData: this.api.liveData }),
         });
         if (this.#sessionPermissions.includes(screen.requiresPermission)) {
           const group = this.#navGroups.get(screen.group) ?? [];

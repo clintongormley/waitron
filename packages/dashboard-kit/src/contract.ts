@@ -6,7 +6,8 @@ import type { DashboardRequest } from "./request.js";
 // DashboardContribution; the app validates its nav groups, registers its strings, and mounts its screens.
 // It names no concrete module.
 
-/** A dashboard nav-group id; the app validates a contribution's group against its own known ids. */
+/** A dashboard nav-group id; the app validates each contributed screen's group against its own
+ * known ids. */
 export type NavGroupId = string;
 
 /** What a contributed screen is handed at construction. */
@@ -37,11 +38,9 @@ export interface DashboardFurtherScreen {
 
 /** One module's dashboard contribution: its identity, its first screen's placement and factory, any
  * further screens, and its localised strings. */
-export interface DashboardContribution {
+export interface DashboardContribution extends DashboardFurtherScreen {
   module: string; // == the server descriptor name
-  screen: DashboardScreenPlacement;
   strings: { en: Record<string, string>; es: Record<string, string> };
-  create(ctx: DashboardModuleContext): DashboardScreenHandle;
   /** Mounted, listed, searched and permission-gated exactly as `screen` is. */
   moreScreens?: readonly DashboardFurtherScreen[];
 }
