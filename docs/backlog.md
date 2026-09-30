@@ -5501,7 +5501,7 @@ ongoing overhaul listed at the top of Track A.
   `BUCKET_FIELD_CHECKS` in `apps/setup/src/setup-app.ts`; tests in
   `apps/setup/src/setup-app.test.ts`). design-system.md → Forms gained a sentence stating the setup
   wizard's rule ("In the setup wizard the sentence under the field speaks about that field alone").
-  **DONE (A152, 2026-09-30):** on the bucket-restore screen a `setup.request_invalid` naming
+  **DONE (A152, #947, 2026-09-30):** on the bucket-restore screen a `setup.request_invalid` naming
   `oldBoxGone` or `venueConfirmed` (the two tick boxes) no longer shows "Check the kit and the
   environment": `BUCKET_FIELD_PATHS` places both, and the sentence speaks about that tick box alone
   — "Check your answer about the old server." / "Revisa tu respuesta sobre el servidor anterior."
