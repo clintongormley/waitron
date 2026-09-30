@@ -1,6 +1,12 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { QueryController, codeMessage, codeOf, currentLocale } from "@waitron/dashboard-kit";
+import {
+  QueryController,
+  codeMessage,
+  codeOf,
+  currentLocale,
+  formatIsoMinute,
+} from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { baseStyles, type DataTableColumn } from "@waitron/ui";
 import type {
@@ -95,13 +101,6 @@ function tallyCell(tally: AdjustmentTally): string {
 
 function personName(ref: PersonRef): string {
   return ref.name ?? t("adjustment_report.unknown_person");
-}
-
-/** `YYYY-MM-DD HH:MM` in the browser's own time zone, as the dashboard writes a moment elsewhere. */
-function minute(iso: string): string {
-  const at = new Date(iso);
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
 function sameEntries(a: EntriesOf, b: EntriesOf): boolean {
@@ -544,7 +543,7 @@ export class AdjustmentReportScreen extends LitElement {
         key: "time",
         label: t("adjustment_report.entries.time"),
         sortValue: (entry) => entry.createdAt,
-        cell: (entry) => html`<span part="amount">${minute(entry.createdAt)}</span>`,
+        cell: (entry) => html`<span part="amount">${formatIsoMinute(entry.createdAt)}</span>`,
       },
       {
         key: "action",
