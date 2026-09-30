@@ -76,7 +76,7 @@ export class SetupConnectScreen extends LitElement {
 
   /**
    * The body the shell last sent, returned with a refusal so the operator's entries are kept — all
-   * but the one-time code, which has usually expired by the next try.
+   * but the one-time code, left empty by owner decision (C87, 2026-09-30).
    */
   @property({ attribute: false }) request?: AdoptBody;
 

@@ -1533,7 +1533,7 @@ describe("setup-app", () => {
       },
     );
 
-    it("shows a refusal naming a field under that field, with the typed values kept", async () => {
+    it("shows a refusal naming a field under that field, with the typed password kept", async () => {
       const adopt = vi.fn().mockRejectedValue({
         code: "setup.request_invalid",
         params: { field: "credential.password" },
