@@ -41,4 +41,8 @@ export const selectStyles = css`
     color: var(--wt-color-text);
     width: 100%;
   }
+
+  select[aria-invalid="true"] {
+    border-color: var(--wt-color-danger);
+  }
 `;

@@ -358,6 +358,17 @@ describe("SetupRestoreScreen", () => {
       expect(fieldMessages(el)).toEqual([REFUSAL[field]]);
     });
 
+    it("outlines the environment dropdown it names in the danger colour", async () => {
+      const { el, host } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
+        request: REQUEST,
+        errorMessage: REFUSAL.environment,
+        invalidField: "environment",
+      });
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
+      expect(getComputedStyle(environment).borderTopColor).toBe("rgb(4, 5, 6)");
+    });
+
     it("drops it when the named field changes", async () => {
       const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {
         request: REQUEST,

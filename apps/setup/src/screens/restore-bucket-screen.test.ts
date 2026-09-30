@@ -375,6 +375,21 @@ describe("SetupRestoreBucketScreen", () => {
       expect(fieldMessages(el)).toEqual([]);
     });
 
+    it("outlines the environment dropdown it names in the danger colour", async () => {
+      const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+        "setup-restore-bucket-screen",
+        {
+          request: REQUEST,
+          errorMessage:
+            "The copy comes from the other environment. Choose the environment it came from.",
+          invalidField: "environment",
+        },
+      );
+      host.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+      const environment = q<HTMLSelectElement>(el, "[data-test=environment]")!;
+      expect(getComputedStyle(environment).borderTopColor).toBe("rgb(4, 5, 6)");
+    });
+
     it("drops it on the next press and sends the request again", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",

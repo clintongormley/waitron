@@ -1,6 +1,6 @@
 import { LitElement, type PropertyValues, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, focusFirstInvalid } from "@waitron/ui";
+import { baseStyles, focusFirstInvalid, selectStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -33,6 +33,7 @@ export type BucketField = "kit" | "environment";
 export class SetupRestoreBucketScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     fieldStyles,
     errorStyles,
     actionsStyles,

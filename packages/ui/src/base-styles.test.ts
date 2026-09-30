@@ -19,6 +19,19 @@ test("selectStyles is the full-width form select", () => {
   expect(selectStyles.cssText).toContain("select");
 });
 
+test("a select marked invalid draws its border in the danger colour, and only then", async () => {
+  const wrapper = await mount("<div></div>");
+  wrapper.style.setProperty("--wt-color-danger", "rgb(4, 5, 6)");
+  wrapper.style.setProperty("--wt-color-border", "rgb(7, 8, 9)");
+  const shadow = wrapper.attachShadow({ mode: "open" });
+  shadow.adoptedStyleSheets = [selectStyles.styleSheet!];
+  shadow.innerHTML =
+    '<select aria-invalid="true"><option>a</option></select><select aria-invalid="false"><option>a</option></select>';
+  const [refused, accepted] = shadow.querySelectorAll("select");
+  expect(getComputedStyle(refused!).borderTopColor).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(accepted!).borderTopColor).toBe("rgb(7, 8, 9)");
+});
+
 test("the shared floor tray lays its unplaced tables out as a wrapping row", async () => {
   const wrapper = await mount("<div></div>");
   const shadow = wrapper.attachShadow({ mode: "open" });
