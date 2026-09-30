@@ -5,7 +5,7 @@ import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helper
 import type { AdjustmentsApi } from "./client.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
-import { ALEX, alexEntries, emptyReport, fixtureReport } from "./test-helpers.js";
+import { ALEX, alexEntries, emptyReport, fixtureReport, onePage } from "./test-helpers.js";
 
 afterEach(() => {
   cleanup();
@@ -28,7 +28,7 @@ async function screen(
   await mountThemed("<div></div>", theme);
   const api = {
     getReport: vi.fn().mockResolvedValue(fixtureReport()),
-    listEntries: vi.fn().mockResolvedValue(alexEntries()),
+    listEntries: vi.fn().mockResolvedValue(onePage(alexEntries())),
     ...overrides,
   } as Record<string, unknown>;
   api.background = api;

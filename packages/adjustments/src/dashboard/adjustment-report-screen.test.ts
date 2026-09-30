@@ -4,7 +4,15 @@ import { applyTokens } from "@waitron/ui";
 import type { AdjustmentsApi } from "./client.js";
 import type { AdjustmentReportScreen } from "./adjustment-report-screen.js";
 import "./adjustment-report-screen.js";
-import { ALEX, alexEntries, emptyReport, fixtureReport, samEntry, SAM } from "./test-helpers.js";
+import {
+  ALEX,
+  alexEntries,
+  emptyReport,
+  fixtureReport,
+  onePage,
+  samEntry,
+  SAM,
+} from "./test-helpers.js";
 
 const hosts: HTMLElement[] = [];
 beforeEach(() => {
@@ -37,7 +45,7 @@ function fakeApi(overrides: Partial<Fake> = {}): Fake {
   const api: Fake = {
     liveData: undefined,
     getReport: vi.fn((range?: Range) => Promise.resolve(answer(fixtureReport, range))),
-    listEntries: vi.fn().mockResolvedValue(alexEntries()),
+    listEntries: vi.fn().mockResolvedValue(onePage(alexEntries())),
     ...overrides,
   };
   api.background = api;
@@ -396,7 +404,7 @@ describe("the drill-down", () => {
   });
 
   it("lists every adjustment from the summary, and a whole-bill discount without an item", async () => {
-    const api = fakeApi({ listEntries: vi.fn().mockResolvedValue([samEntry()]) });
+    const api = fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([samEntry()])) });
     const el = await mount(api);
     part(el, "show-all")!.click();
     await settle(el);
@@ -410,7 +418,7 @@ describe("the drill-down", () => {
   });
 
   it("lists the guests' adjustments, and says so in words when there are none", async () => {
-    const api = fakeApi({ listEntries: vi.fn().mockResolvedValue([]) });
+    const api = fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([])) });
     const el = await mount(api);
     await open(el, "guests");
     expect(api.listEntries).toHaveBeenCalledWith("2026-09-29", "2026-09-29", "guests");
@@ -422,7 +430,7 @@ describe("the drill-down", () => {
 
   it("names a guest as the requester of a guest's adjustment", async () => {
     const entry = { ...samEntry(), byGuest: true };
-    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue([entry]) }));
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([entry])) }));
     await open(el, "guests");
     expect(row(part(el, "entries")!, "e4")["Requested by"]).toBe("Guest");
   });
@@ -535,7 +543,7 @@ describe("sorting and columns", () => {
 
   it("sorts the listed adjustments by each column", async () => {
     const el = await mount(
-      fakeApi({ listEntries: vi.fn().mockResolvedValue([...alexEntries(), samEntry()]) }),
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([...alexEntries(), samEntry()])) }),
     );
     part(el, "show-all")!.click();
     await settle(el);
@@ -559,7 +567,7 @@ describe("sorting and columns", () => {
       JSON.stringify({ creditedTo: true }),
     );
     const el = await mount(
-      fakeApi({ listEntries: vi.fn().mockResolvedValue([...alexEntries(), samEntry()]) }),
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([...alexEntries(), samEntry()])) }),
     );
     part(el, "show-all")!.click();
     await settle(el);

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { validatedRangeWindow } from "@waitron/reporting";
@@ -91,6 +91,8 @@ export interface AdjustmentEntry {
   createdAt: string;
   action: AdjustmentAction;
   stage: AdjustmentStage | null;
+  /** The stage group the report's totals count this row under. */
+  stageGroup: AdjustmentStageGroup;
   reasonId: string;
   reasonName: string;
   note: string | null;
@@ -113,6 +115,21 @@ export interface AdjustmentEntry {
 /** Everyone's requests, or one person's (never a guest's), or the guests' alone. */
 export type AdjustmentRequester = { personId: string } | "guests";
 
+/** The last row of a drill-down page; the next page starts after it. */
+export interface EntryCursor {
+  createdAt: string;
+  id: string;
+}
+
+export interface AdjustmentEntryPage {
+  entries: AdjustmentEntry[];
+  /** Null on the last page. */
+  next: EntryCursor | null;
+}
+
+export const DEFAULT_ENTRY_PAGE_SIZE = 200;
+export const MAX_ENTRY_PAGE_SIZE = 500;
+
 const ZERO = decimal("0.00");
 const HUNDRED = decimal("100");
 
@@ -122,6 +139,10 @@ const STAGE_GROUP: Record<AdjustmentStage, AdjustmentStageGroup> = {
   fired: "afterFiring",
   served: "afterServing",
 };
+
+function stageGroupOf(stage: AdjustmentStage | null): AdjustmentStageGroup {
+  return stage === null ? "billDiscount" : STAGE_GROUP[stage];
+}
 
 function validated(input: AdjustmentReportInput): SQL {
   return validatedRangeWindow(input)(sql`${workingOrders.openedAt}`);
@@ -171,7 +192,7 @@ function accumulator(): Accumulator {
 function tallyRow(into: Accumulator, row: Tallied): void {
   add(into, row);
   add(into.byAction[row.action], row);
-  add(into.byStage[row.stage === null ? "billDiscount" : STAGE_GROUP[row.stage]], row);
+  add(into.byStage[stageGroupOf(row.stage)], row);
   let reason = into.byReason.get(row.reasonId);
   if (reason === undefined) {
     reason = emptyTally();
@@ -237,8 +258,11 @@ async function readReportRows(tx: Transaction, window: SQL) {
   }));
 }
 
-/** The adjustments on bills opened in the range, newest first, converted at the row. */
-async function readRows(tx: Transaction, window: SQL, filter?: SQL) {
+/**
+ * Up to `limit` adjustments on bills opened in the range, newest first, the id breaking a tie in
+ * time, converted at the row.
+ */
+async function readEntryRows(tx: Transaction, where: SQL, limit: number) {
   const rows = await tx
     .select({
       id: adjustments.id,
@@ -264,10 +288,12 @@ async function readRows(tx: Transaction, window: SQL, filter?: SQL) {
     })
     .from(adjustments)
     .innerJoin(workingOrders, eq(workingOrders.id, adjustments.workingOrderId))
-    .where(filter === undefined ? window : and(window, filter))
-    .orderBy(desc(adjustments.createdAt), desc(adjustments.id));
+    .where(where)
+    .orderBy(desc(adjustments.createdAt), desc(adjustments.id))
+    .limit(limit);
   return rows.map((row) => ({
     ...row,
+    stageGroup: stageGroupOf(row.stage),
     quantity: row.quantity === null ? null : thousandthsToDecimal(row.quantity),
     beforeAmount: centsToDecimal(row.beforeAmount),
     afterAmount: centsToDecimal(row.afterAmount),
@@ -406,22 +432,45 @@ function byName<T extends PersonRef>(rows: T[]): T[] {
 }
 
 /**
- * The individual adjustments on the bills opened in the range, newest first: everyone's, one
- * person's own requests, or the guests'.
+ * One page of the individual adjustments on the bills opened in the range, newest first:
+ * everyone's, one person's own requests, or the guests'. `after` is the previous page's `next`.
+ * The page size is a caller precondition: a plain `Error` refuses one that is not a whole number
+ * from 1 to {@link MAX_ENTRY_PAGE_SIZE}.
  */
 export async function listAdjustmentEntries(
   tx: Transaction,
-  input: AdjustmentReportInput & { requester?: AdjustmentRequester },
-): Promise<AdjustmentEntry[]> {
+  input: AdjustmentReportInput & {
+    requester?: AdjustmentRequester;
+    limit?: number;
+    after?: EntryCursor;
+  },
+): Promise<AdjustmentEntryPage> {
   const window = validated(input);
-  const { requester } = input;
-  const filter =
-    requester === undefined
-      ? undefined
-      : requester === "guests"
-        ? eq(adjustments.byGuest, true)
-        : and(eq(adjustments.requestedBy, requester.personId), eq(adjustments.byGuest, false));
-  const rows = await readRows(tx, window, filter);
+  const { requester, after, limit = DEFAULT_ENTRY_PAGE_SIZE } = input;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_ENTRY_PAGE_SIZE) {
+    throw new Error(`adjustments: invalid drill-down page size ${limit}`);
+  }
+  const conditions = [window];
+  if (requester === "guests") conditions.push(eq(adjustments.byGuest, true));
+  else if (requester !== undefined) {
+    conditions.push(
+      eq(adjustments.requestedBy, requester.personId),
+      eq(adjustments.byGuest, false),
+    );
+  }
+  if (after !== undefined) {
+    conditions.push(
+      or(
+        lt(adjustments.createdAt, after.createdAt),
+        and(eq(adjustments.createdAt, after.createdAt), lt(adjustments.id, after.id)),
+      )!,
+    );
+  }
+  // One row past the page says whether another page follows.
+  const read = await readEntryRows(tx, and(...conditions)!, limit + 1);
+  const rows = read.slice(0, limit);
+  const next =
+    read.length > limit ? { createdAt: rows[limit - 1]!.createdAt, id: rows[limit - 1]!.id } : null;
   const ids = new Set<string>();
   for (const row of rows) {
     ids.add(row.requestedBy);
@@ -430,10 +479,11 @@ export async function listAdjustmentEntries(
   }
   const names = await namesOf(tx, ids);
   const ref = (personId: string): PersonRef => ({ personId, name: names.get(personId) ?? null });
-  return rows.map((row) => ({
+  const entries = rows.map((row) => ({
     ...row,
     requestedBy: ref(row.requestedBy),
     approvedBy: row.approvedBy === null ? null : ref(row.approvedBy),
     creditedTo: row.creditedTo === null ? null : ref(row.creditedTo),
   }));
+  return { entries, next };
 }

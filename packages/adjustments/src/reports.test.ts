@@ -26,7 +26,9 @@ import { recordAdjustment } from "./record.js";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,
+  type AdjustmentEntry,
   type AdjustmentReport,
+  type EntryCursor,
 } from "./reports.js";
 import type { AdjustmentStage } from "./schema/adjustments.js";
 import { seedReason } from "../test/seed.js";
@@ -188,11 +190,23 @@ function report(input = range()): Promise<AdjustmentReport> {
   return withTransaction(db, (tx) => computeAdjustmentReport(tx, input));
 }
 
-function entries(
-  requester?: { personId: string } | "guests",
+function page(
+  opts: {
+    requester?: { personId: string } | "guests";
+    limit?: number;
+    after?: EntryCursor;
+  } = {},
   input = range(),
 ): ReturnType<typeof listAdjustmentEntries> {
-  return withTransaction(db, (tx) => listAdjustmentEntries(tx, { ...input, requester }));
+  return withTransaction(db, (tx) => listAdjustmentEntries(tx, { ...input, ...opts }));
+}
+
+/** The first page, which holds every row a test makes. */
+async function entries(
+  requester?: { personId: string } | "guests",
+  input = range(),
+): Promise<AdjustmentEntry[]> {
+  return (await page({ requester }, input)).entries;
 }
 
 const NONE = { count: 0, reduction: "0.00", cancelledNominalValue: "0.00" };
@@ -468,6 +482,7 @@ describe("the fixture day (spec §7)", () => {
         createdAt: "2026-09-15T20:00:00.000Z",
         action: "cancel",
         stage: "fired",
+        stageGroup: "afterFiring",
         reasonId: day.mistake.id,
         reasonName: "Mistake",
         note: "Wrong table",
@@ -719,6 +734,41 @@ describe("stages, reasons and guests", () => {
     expect(discount).toMatchObject({ action: "discount_percent", percentBp: 1000 });
   });
 
+  it("gives each drill-down row the stage group the totals count it under", async () => {
+    const alex = await person("Alex");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    let minute = 0;
+    const comp = (stage?: AdjustmentStage) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName: "House",
+        action: stage === undefined ? "discount_amount" : "comp",
+        ...(stage === undefined
+          ? {}
+          : { line: { name: "Coffee", list: "1.50", creditedTo: alex, stage } }),
+        before: "1.50",
+        after: "0.00",
+        nominal: "1.50",
+        by: alex,
+        at: `2026-09-15T19:0${(minute += 1)}:00.000Z`,
+      });
+    for (const stage of ["unsent", "held", "fired", "served", undefined] as const) {
+      await comp(stage);
+    }
+
+    const rows = await entries();
+
+    expect(rows.map((row) => [row.stage, row.stageGroup])).toEqual([
+      [null, "billDiscount"],
+      ["served", "afterServing"],
+      ["fired", "afterFiring"],
+      ["held", "beforeFiring"],
+      ["unsent", "beforeFiring"],
+    ]);
+  });
+
   it("names a reason by its most recent row, and the drill-down shows each row's own name", async () => {
     const alex = await person("Alex");
     const reason = await seedReason(db);
@@ -922,5 +972,120 @@ describe("the order of the rows", () => {
       [twinA.id, "Twin"],
       [twinB.id, "Twin"],
     ]);
+  });
+});
+
+describe("the drill-down, a page at a time", () => {
+  /** Five comps: the middle three made at one instant, so only their ids order them. */
+  async function fiveComps(): Promise<{ alex: string; newestFirst: string[] }> {
+    const alex = await person("Alex");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const comp = (at: string) =>
+      adjust({
+        bill: visit.id,
+        reason,
+        reasonName: "House",
+        action: "comp",
+        line: { name: "Coffee", list: "1.50", creditedTo: alex, stage: "served" },
+        before: "1.50",
+        after: "0.00",
+        nominal: "1.50",
+        by: alex,
+        at,
+      });
+    const oldest = await comp("2026-09-15T19:00:00.000Z");
+    const tied = [
+      await comp("2026-09-15T19:30:00.000Z"),
+      await comp("2026-09-15T19:30:00.000Z"),
+      await comp("2026-09-15T19:30:00.000Z"),
+    ].sort((a, b) => b.localeCompare(a));
+    const newest = await comp("2026-09-15T20:00:00.000Z");
+    return { alex, newestFirst: [newest, ...tied, oldest] };
+  }
+
+  it("walks every row once, newest first, the id breaking a tie in time, and says when there is no more", async () => {
+    const { newestFirst } = await fiveComps();
+
+    const first = await page({ limit: 2 });
+    const second = await page({ limit: 2, after: first.next! });
+    const third = await page({ limit: 2, after: second.next! });
+
+    expect(first.entries.map((row) => row.id)).toEqual(newestFirst.slice(0, 2));
+    expect(first.next).toEqual({ createdAt: "2026-09-15T19:30:00.000Z", id: newestFirst[1] });
+    expect(second.entries.map((row) => row.id)).toEqual(newestFirst.slice(2, 4));
+    expect(third.entries.map((row) => row.id)).toEqual(newestFirst.slice(4));
+    expect(third.next).toBeNull();
+  });
+
+  it("answers no further page when the last page is exactly full", async () => {
+    const { newestFirst } = await fiveComps();
+
+    const all = await page({ limit: 5 });
+
+    expect(all.entries.map((row) => row.id)).toEqual(newestFirst);
+    expect(all.next).toBeNull();
+  });
+
+  it("pages one person's rows alone, and leaves the report's totals whole", async () => {
+    const { alex, newestFirst } = await fiveComps();
+    const sam = await person("Sam");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    await adjust({
+      bill: visit.id,
+      reason,
+      reasonName: "House",
+      action: "discount_amount",
+      before: "10.00",
+      after: "9.00",
+      nominal: "10.00",
+      by: sam,
+      at: "2026-09-15T19:45:00.000Z",
+    });
+
+    const first = await page({ requester: { personId: alex }, limit: 3 });
+    const rest = await page({ requester: { personId: alex }, limit: 3, after: first.next! });
+
+    expect([...first.entries, ...rest.entries].map((row) => row.id)).toEqual(newestFirst);
+    expect(rest.next).toBeNull();
+    expect((await report()).overall).toMatchObject({ count: 6, reduction: "8.50" });
+  });
+
+  it("lists up to 200 rows when no page size is given", async () => {
+    const alex = await person("Alex");
+    const reason = await seedReason(db);
+    const visit = await bill();
+    const snapshot = policySnapshotOf(reason);
+    await withTransaction(db, async (tx) => {
+      for (let i = 0; i < 201; i += 1) {
+        await recordAdjustment(tx, {
+          workingOrderId: visit.id,
+          line: null,
+          quantity: null,
+          reason: { id: reason.id, name: "House", policy: snapshot },
+          action: "discount_amount",
+          percentBp: null,
+          beforeAmount: decimal("1.00"),
+          afterAmount: decimal("0.99"),
+          reduction: decimal("0.01"),
+          nominalValue: decimal("1.00"),
+          requestedBy: alex,
+          approvedBy: null,
+          note: null,
+          byGuest: false,
+        });
+      }
+    });
+
+    const first = await page();
+
+    expect(first.entries).toHaveLength(200);
+    expect(first.next).not.toBeNull();
+    expect((await page({ after: first.next! })).entries).toHaveLength(1);
+  });
+
+  it.each([0, -1, 1.5, 501])("refuses a page size of %s", async (limit) => {
+    await expect(page({ limit })).rejects.toThrow(/page size/);
   });
 });

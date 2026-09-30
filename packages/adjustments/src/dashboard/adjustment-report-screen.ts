@@ -330,7 +330,7 @@ export class AdjustmentReportScreen extends LitElement {
           key: JSON.stringify(["adjustments:entries", from, to, of]),
           dependencies: QUERY_DEPENDENCIES.entries.map((type) => ({ type })),
           refreshMs: 60_000,
-          read: this.#reader((api) => api.listEntries(from, to, of)),
+          read: this.#reader(async (api) => (await api.listEntries(from, to, of)).entries),
         },
         (entries) => {
           this.entries = entries;

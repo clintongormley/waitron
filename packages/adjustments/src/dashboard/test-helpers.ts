@@ -1,5 +1,6 @@
 import type {
   AdjustmentEntry,
+  AdjustmentEntryPage,
   AdjustmentReport,
   AdjustmentTally,
   AdjustmentTotals,
@@ -155,6 +156,7 @@ export function alexEntries(): AdjustmentEntry[] {
       createdAt: "2026-09-29T19:40:00.000Z",
       action: "cancel",
       stage: "fired",
+      stageGroup: "afterFiring",
       note: "Keyed on the wrong table",
       lineName: "Steak",
       beforeAmount: "25.00",
@@ -170,6 +172,7 @@ export function alexEntries(): AdjustmentEntry[] {
       createdAt: "2026-09-29T19:30:00.000Z",
       action: "cancel",
       stage: "served",
+      stageGroup: "afterServing",
       note: null,
       lineName: "Burger",
       beforeAmount: "0.00",
@@ -185,6 +188,7 @@ export function alexEntries(): AdjustmentEntry[] {
       createdAt: "2026-09-29T19:20:00.000Z",
       action: "comp",
       stage: "served",
+      stageGroup: "afterServing",
       reasonId: "r-cold",
       reasonName: "Cold food",
       note: "Came out cold",
@@ -200,6 +204,11 @@ export function alexEntries(): AdjustmentEntry[] {
   ];
 }
 
+/** The only page of a drill-down. */
+export function onePage(entries: AdjustmentEntry[]): AdjustmentEntryPage {
+  return { entries, next: null };
+}
+
 /** Sam's discount on a whole bill: no item, no quantity, no stage. */
 export function samEntry(): AdjustmentEntry {
   return {
@@ -207,6 +216,7 @@ export function samEntry(): AdjustmentEntry {
     createdAt: "2026-09-29T21:05:00.000Z",
     action: "discount_percent",
     stage: null,
+    stageGroup: "billDiscount",
     reasonId: "r-staff",
     reasonName: "Staff meal",
     note: null,

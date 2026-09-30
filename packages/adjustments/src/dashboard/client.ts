@@ -70,6 +70,8 @@ export interface AdjustmentEntry {
   createdAt: string;
   action: AdjustmentAction;
   stage: "unsent" | "held" | "fired" | "served" | null;
+  /** The stage group the report's totals count this row under. */
+  stageGroup: AdjustmentStageGroup;
   reasonId: string;
   reasonName: string;
   note: string | null;
@@ -87,6 +89,13 @@ export interface AdjustmentEntry {
   byGuest: boolean;
   workingOrderId: string;
   orderNumber: number;
+}
+
+/** One page of the drill-down, newest first. */
+export interface AdjustmentEntryPage {
+  entries: AdjustmentEntry[];
+  /** Passed back as `after` for the following page; null on the last page. */
+  next: string | null;
 }
 
 /** Whose adjustments the drill-down lists. */
@@ -141,16 +150,23 @@ export class AdjustmentsApi {
     );
   }
 
-  async listEntries(from: string, to: string, of: EntriesOf): Promise<AdjustmentEntry[]> {
+  /** Without a `limit`, the route chooses the page size. */
+  listEntries(
+    from: string,
+    to: string,
+    of: EntriesOf,
+    page: { after?: string; limit?: number } = {},
+  ): Promise<AdjustmentEntryPage> {
     const query = new URLSearchParams({ from, to });
     if (of === "guests") query.set("guests", "true");
     else if (of !== "everyone") query.set("personId", of.personId);
-    const body = await this.request<{ entries: AdjustmentEntry[] }>(
+    if (page.after !== undefined) query.set("after", page.after);
+    if (page.limit !== undefined) query.set("limit", String(page.limit));
+    return this.request<AdjustmentEntryPage>(
       `/management-api/adjustments/report/entries?${query}`,
       "GET",
       undefined,
       { passive: this.passive },
     );
-    return body.entries;
   }
 }

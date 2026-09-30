@@ -14,7 +14,7 @@ import {
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
 import { currentBusinessDay, readLocationClock } from "@waitron/reporting";
-import { AppError, decimal } from "@waitron/shared";
+import { AppError, decimal, isUuid } from "@waitron/shared";
 import {
   createAdjustmentReason,
   deactivateAdjustmentReason,
@@ -28,8 +28,10 @@ import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,
+  MAX_ENTRY_PAGE_SIZE,
   type AdjustmentReportInput,
   type AdjustmentRequester,
+  type EntryCursor,
 } from "./reports.js";
 import "./errors.js";
 
@@ -117,6 +119,28 @@ function requireRequester(
   return { personId: requireUuidParam(personId, "PersonId").toLowerCase() };
 }
 
+const PAGE_SIZE = /^[1-9]\d{0,2}$/;
+
+function requirePageSize(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  if (!PAGE_SIZE.test(value) || Number(value) > MAX_ENTRY_PAGE_SIZE) throw invalid("limit");
+  return Number(value);
+}
+
+/** A drill-down cursor on the wire: the row's `createdAt`, an underscore, then its id. */
+const CURSOR = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)_(.+)$/;
+
+function requireCursor(value: string | undefined): EntryCursor | undefined {
+  if (value === undefined) return undefined;
+  const match = CURSOR.exec(value);
+  if (match === null || !isUuid(match[2]!)) throw invalid("after");
+  return { createdAt: match[1]!, id: match[2]!.toLowerCase() };
+}
+
+function cursorText(cursor: EntryCursor | null): string | null {
+  return cursor === null ? null : `${cursor.createdAt}_${cursor.id}`;
+}
+
 /** `undefined` when neither end is given: the report then covers the venue's current business day. */
 function requireOptionalRange(
   from: string | undefined,
@@ -170,13 +194,17 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const range = requireOptionalRange(c.req.query("from"), c.req.query("to"));
         const requester = requireRequester(c.req.query("personId"), c.req.query("guests"));
-        const entries = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
+        const limit = requirePageSize(c.req.query("limit"));
+        const after = requireCursor(c.req.query("after"));
+        const page = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
           listAdjustmentEntries(tx, {
             ...(await reportInput(tx, ctx.cfg.locationId, range)),
             requester,
+            limit,
+            after,
           }),
         );
-        return c.json({ entries });
+        return c.json({ entries: page.entries, next: cursorText(page.next) });
       }),
     );
 

@@ -516,6 +516,24 @@ describe("adjustment report routes", () => {
     }
   });
 
+  it("drills down a page at a time, each page naming the next until the last", async () => {
+    const fx = await reportFixture();
+    const read = async (query: string) => {
+      const response = await send(fx.app, "GET", `${ENTRIES}?${DAY}${query}`, fx.cookie.manager);
+      expect(response.status).toBe(200);
+      return (await response.json()) as { entries: { id: string }[]; next: string | null };
+    };
+
+    const whole = await read("");
+    const first = await read("&limit=1");
+    const second = await read(`&limit=1&after=${encodeURIComponent(first.next!)}`);
+
+    expect(whole.next).toBeNull();
+    expect(first.entries).toEqual([whole.entries[0]]);
+    expect(first.next).toEqual(expect.any(String));
+    expect(second).toEqual({ entries: [whole.entries[1]], next: null });
+  });
+
   it("refuses a drill-down whose person id is not a UUID", async () => {
     const fx = await reportFixture();
     const response = await send(
@@ -533,6 +551,17 @@ describe("adjustment report routes", () => {
   it.each<[string, string]>([
     ["guests", "&guests=yes"],
     ["guests", `&guests=true&personId=${MISSING}`],
+    ["limit", "&limit="],
+    ["limit", "&limit=0"],
+    ["limit", "&limit=1.5"],
+    ["limit", "&limit=01"],
+    ["limit", "&limit=501"],
+    ["limit", "&limit=ten"],
+    ["after", "&after="],
+    ["after", "&after=nope"],
+    ["after", `&after=2026-09-15T20:00:00.000Z_not-a-uuid`],
+    ["after", `&after=2026-09-15_${MISSING}`],
+    ["after", `&after=2026-09-15T20:00:00.000Z${MISSING}`],
   ])("refuses a drill-down whose %s is malformed (%s)", async (field, query) => {
     const fx = await reportFixture();
     const response = await send(fx.app, "GET", `${ENTRIES}?${DAY}${query}`, fx.cookie.manager);

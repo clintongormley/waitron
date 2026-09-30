@@ -118,11 +118,14 @@ describe("AdjustmentsApi", () => {
     ]);
   });
 
-  it("lists everyone's adjustments, one person's, or the guests', from the entries envelope", async () => {
-    const entry = { id: "a1" } as AdjustmentEntry;
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [entry] }));
+  it("lists everyone's adjustments, one person's, or the guests', a page at a time", async () => {
+    const page = {
+      entries: [{ id: "a1" } as AdjustmentEntry],
+      next: "2026-09-01T20:00:00.000Z_a1",
+    };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(page));
     const client = api(fetchImpl);
-    expect(await client.listEntries("2026-09-01", "2026-09-01", "everyone")).toEqual([entry]);
+    expect(await client.listEntries("2026-09-01", "2026-09-01", "everyone")).toEqual(page);
     await client.listEntries("2026-09-01", "2026-09-02", {
       personId: "5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b",
     });
@@ -131,6 +134,20 @@ describe("AdjustmentsApi", () => {
       "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-01",
       "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&personId=5b1e6a52-0c1d-4f6e-9a3b-2d7c8e9f0a1b",
       "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-02&guests=true",
+    ]);
+  });
+
+  it("asks for the page after a cursor, and for a page size", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ entries: [], next: null }));
+    const client = api(fetchImpl);
+    await client.listEntries("2026-09-01", "2026-09-01", "guests", {
+      after: "2026-09-01T20:00:00.000Z_a1",
+      limit: 50,
+    });
+    await client.listEntries("2026-09-01", "2026-09-01", "everyone", { limit: 10 });
+    expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-01&guests=true&after=2026-09-01T20%3A00%3A00.000Z_a1&limit=50",
+      "/management-api/adjustments/report/entries?from=2026-09-01&to=2026-09-01&limit=10",
     ]);
   });
 
