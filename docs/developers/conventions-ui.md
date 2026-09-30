@@ -221,7 +221,7 @@ right PIN whose role is too low (`apps/server/src/adjustments-apply.ts`). Guards
 password and a wrong code, not every cause), the adjustment approver
 (`apps/server/src/adjustments-apply.ts`), the refund override and the manual-refund confirmer
 (`apps/server/src/bill-refunds.ts`) rest on identity's cases alone, and a new sign-in route is seen
-by none of them. Built in C95.
+by none of them. Built in C95, #930.
 
 **UI primitives in `packages/ui`**
 

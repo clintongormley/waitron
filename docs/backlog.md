@@ -5509,7 +5509,7 @@ ongoing overhaul listed at the top of Track A.
   **Next action:** the other open points, and the delete dialog's message noted above, still wait
   for the owner to say which are worth doing.
 
-- **Every login failure is one answer — DONE (C95, owner decision 2026-09-30).** The owner's rule:
+- **Every login failure is one answer — DONE (C95, #930, owner decision 2026-09-30).** The owner's rule:
   "reasons for login shouldn't expose the existence or non existence of a user. so any failure should
   just report that the login failed." A password login (`loginManager` and `loginManagerById`,
   `packages/identity/src/manager-login.ts`: the dashboard, standby connect, membership and promote)
