@@ -20,6 +20,7 @@ import {
 } from "./testing/bill-venue.js";
 import { addTabRound } from "./working-order.js";
 import "./errors.js";
+import { cancelBody } from "./testing/cancel-line.js";
 
 // A card on a reader against a bill (bill payments design §5, §8 tests 1, 3, 10 and 12): three
 // phases, the reservation a pending card holds, retries, and two devices in both orders. Every
@@ -887,8 +888,9 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
     const voided = await send(
       venue.app,
       venue.cookie,
-      "DELETE",
-      `/api/working-orders/${billId}/lines/2`,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(venue.db, billId, 2),
     );
     // The round is the function a group submission calls.
     const round = await inTx(venue, (tx) =>

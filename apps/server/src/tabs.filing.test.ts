@@ -29,12 +29,13 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { createTable } from "./tables.js";
-import { addTabRound, listStationQueue, voidTabLine } from "./working-order.js";
+import { addTabRound, listStationQueue } from "./working-order.js";
 import { createCourse } from "./kitchen.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 /**
  * Tabs end to end through a real `VerifactuBackend`: what paying a tab files, and that a refusal
@@ -587,7 +588,7 @@ describe("a sent line is payable whatever its availability; an unsent one is not
     });
 
     // Removing the held Burger lets the tab pay its fired Burger and the bottle.
-    await withTransaction(suite.db, (tx) => voidTabLine(tx, cfg, tabId, 3));
+    await withTransaction(suite.db, (tx) => cancelLine(tx, cfg, tabId, 3));
     const tab = await payWorkingOrder(deps, cfg, {
       id: tabId,
       lines: [],

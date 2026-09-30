@@ -23,6 +23,7 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import "./errors.js";
+import { cancelBody } from "./testing/cancel-line.js";
 
 // The loop's half of a card bill payment (bill payments design §5.4, §8 tests 13 and 16): a pending
 // payment nothing in this process drives is settled from its provider row, never from its age.
@@ -193,8 +194,9 @@ describe("recovery after a crash (design §8 test 13)", () => {
     const voided = await send(
       venue.app,
       venue.cookie,
-      "DELETE",
-      `/api/working-orders/${billId}/lines/2`,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(venue.db, billId, 2),
     );
 
     expect(pass).toMatchObject({ received: 0, failed: 0 });

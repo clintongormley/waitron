@@ -762,7 +762,9 @@ table is an unchecked path to one. _(2026-09-29, table actions Task 11: the till
 table-actions Task 2 (#825, 2026-09-28), `voidTabLine`
 (`apps/server/src/working-order.ts`) calls `assertPartyBillOpen`. It lets through an open bill
 that belongs to a party whether or not a table points at it, and a split check carries its party
-("can have a line voided", `apps/server/src/party-main-bill.test.ts`). An open order of no party
+("can have a line voided", `apps/server/src/party-main-bill.test.ts`). _(2026-09-30, B11a:
+`voidTabLine` is deleted; a cancel through the adjustment route makes the same `assertPartyBillOpen`
+check, and that case now cancels through it.)_ An open order of no party
 that no table points at is still refused `tab.not_open`. Before Task 2 the server refused a void
 on a check no table pointed at (`assertAnchoredTabOpen`). Since menus Task 7b (owner decision
 2026-09-26), a part of a line the kitchen has started can be split onto a check. A check can be
@@ -2976,7 +2978,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       ticket or a Reprint, each of which prints the group as it stands, can be relied on.
     - The route that removes a line, `DELETE /api/working-orders/:id/lines/:lineNo`, takes no
       revision and no retry id, so a retried removal of part of a held dish removes another part
-      and prints a second HOLD CANCELLED slip. The route predates Task 6.
+      and prints a second HOLD CANCELLED slip. The route predates Task 6. _(2026-09-30, B11a: the
+      route and `voidTabLine` are deleted; a cancel goes through the adjustment route, which takes
+      the bill's revision and a retry id.)_
     - Whether a group's HOLD ticket was queued is recorded per group, not per station, so a
       correction can print at a station whose printer never printed that group's HOLD ticket — a
       dish from another station joined to the group, say, or a printer switched back on after the

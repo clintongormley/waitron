@@ -39,6 +39,7 @@ import {
 import { systemClock } from "./till-backend.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import "./errors.js";
+import { cancelBody } from "./testing/cancel-line.js";
 
 // A card refund of a bill payment that survives an interruption (bill payments design §6b, §8 tests
 // 17–23): the refund row is written before the provider is asked, the call is keyed to the row,
@@ -253,8 +254,9 @@ async function lockedWrites(billId: string, paymentId: string) {
     reduction: await send(
       venue.app,
       venue.cookie,
-      "DELETE",
-      `/api/working-orders/${billId}/lines/2`,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(venue.db, billId, 2),
     ),
     billSplit: await send(venue.app, venue.cookie, "POST", `/api/bills/${billId}/split`, {
       transfers: [{ lineNo: 3 }],
@@ -1745,8 +1747,9 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
     const reduction = await send(
       venue.app,
       venue.cookie,
-      "DELETE",
-      `/api/working-orders/${billId}/lines/3`,
+      "POST",
+      `/api/working-orders/${billId}/adjustments`,
+      await cancelBody(venue.db, billId, 3),
     );
 
     expect(reduction.status).toBe(409);

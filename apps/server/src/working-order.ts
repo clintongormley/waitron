@@ -1881,34 +1881,6 @@ export async function insertTabRound(
   return inserted;
 }
 
-/**
- * Void a not-yet-paid line, or `quantity` of it, from an OPEN tab: pre-fiscal, a plain delete or a
- * reduction. `quantity` absent, or equal to the line's own, voids the whole line; a smaller one
- * voids that part only, reducing the line, its extras children (which follow their dish) and its
- * ticket item's fired quantity. A line that had already fired records a VOID kitchen notice for what
- * was removed — marked started when the cook had started it — and gets a VOID correction slip where
- * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
- * notice for what was removed and gets a HOLD CANCELLED slip instead.
- *
- * Voiding stays open with changes to sent items switched off.
- */
-export async function voidTabLine(
-  tx: Transaction,
-  cfg: TillConfig,
-  tabId: string,
-  lineNo: number,
-  quantity?: string,
-  operatorId?: string,
-): Promise<void> {
-  await assertPartyBillOpen(tx, cfg, tabId);
-  const target = await readVoidTarget(tx, tabId, lineNo);
-  const removed = quantity === undefined ? null : voidQuantity(tabId, lineNo, quantity, target);
-  await refusePaidLines(tx, tabId, [
-    { id: target.id, lineNo, keeps: removed === null ? 0 : target.quantity - removed },
-  ]);
-  await removeFromLine(tx, cfg, tabId, target, removed, operatorId);
-}
-
 /** A line as a void reads it, with its ticket item's kitchen state. */
 export interface VoidTarget {
   id: string;
@@ -1925,41 +1897,13 @@ export interface VoidTarget {
 }
 
 /**
- * Line `lineNo` of the order as a void reads it, else `tab.line_not_found`. Read before the change,
- * because a delete's cascade removes the ticket item too.
- */
-export async function readVoidTarget(
-  tx: Transaction,
-  tabId: string,
-  lineNo: number,
-): Promise<VoidTarget> {
-  const [target] = await tx
-    .select({
-      id: workingOrderLines.id,
-      parentLineId: workingOrderLines.parentLineId,
-      groupId: workingOrderLines.groupId,
-      quantity: workingOrderLines.quantity,
-      unitPrecision: workingOrderLines.unitPrecision,
-      unitPriceGross: workingOrderLines.unitPriceGross,
-      ticketItemId: ticketItems.id,
-      firedAt: ticketItems.firedAt,
-      stationId: ticketItems.stationId,
-      state: ticketItems.state,
-      firedQuantity,
-    })
-    .from(workingOrderLines)
-    .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, lineNo)));
-  if (target === undefined) {
-    throw new AppError("tab.line_not_found", { tabId, lineNo });
-  }
-  return target;
-}
-
-/**
- * {@link voidTabLine}'s change once the caller has checked the bill and the paid lines: take
- * `removed` thousandths off the line, or the whole line with its extras children when null, telling
- * the kitchen as that function describes, and move the bill's and the party's revisions on.
+ * A cancel's change once the caller has checked the bill and the paid lines: take `removed`
+ * thousandths off the line, reducing its extras children (which follow their dish) and its ticket
+ * item's fired quantity, or the whole line with its extras children when null; and move the bill's
+ * and the party's revisions on. A line that had already fired records a VOID kitchen notice for what
+ * was removed — marked started when the cook had started it — and gets a VOID correction slip where
+ * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
+ * notice for what was removed and gets a HOLD CANCELLED slip instead.
  */
 export async function removeFromLine(
   tx: Transaction,
@@ -2145,24 +2089,6 @@ export function quantityOfLine(
     throw refused();
   }
   if (asked > line.quantity) throw refused();
-  return asked;
-}
-
-/**
- * The part of a line a void removes, as thousandths, or `null` for the whole line. Refused
- * `tab.void_quantity_invalid` unless it is a {@link quantityOfLine}, and the whole of an extras
- * child, whose quantity follows its dish.
- */
-function voidQuantity(
-  tabId: string,
-  lineNo: number,
-  quantity: string,
-  line: { quantity: number; parentLineId: string | null; unitPrecision: number | null },
-): number | null {
-  const invalid = () => new AppError("tab.void_quantity_invalid", { tabId, lineNo, quantity });
-  const asked = quantityOfLine(quantity, line, invalid);
-  if (asked === line.quantity) return null;
-  if (line.parentLineId !== null) throw invalid();
   return asked;
 }
 

@@ -86,7 +86,6 @@ import {
   readOrderRevision,
   updateHeldOrder,
   updateOrderLine,
-  voidTabLine,
 } from "./working-order.js";
 import type { LineExtras, OrderLinePatch, TicketState } from "./working-order.js";
 import { listCourses, listStations } from "./kitchen.js";
@@ -343,7 +342,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "tab.merge_self": 400,
   "tab.transfer_self": 400,
   "tab.transfer_quantity_invalid": 400,
-  "tab.void_quantity_invalid": 400,
   "tab.serve_quantity_invalid": 400,
   "tab.transfer_duplicate_line": 400,
   "table.not_joined": 409,
@@ -390,7 +388,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "adjustment.approval_required": 403,
   // The rest follow their nearest siblings: a refusal that depends on the bill or the reason as they
   // stand is 409, like `bill.received_exceeds_total`; one about the request's own fields is 400,
-  // like `tab.void_quantity_invalid` and `tab.transfer_modifier_line`.
+  // like `tab.transfer_quantity_invalid` and `tab.transfer_modifier_line`.
   "adjustment.exceeds_amount": 409,
   "adjustment.over_limit": 409,
   "adjustment.action_not_allowed": 409,
@@ -1970,26 +1968,6 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
         submitDraft(tx, deps.cfg, partyId, draftId, input),
       );
       return c.json(submitted);
-    }),
-  );
-
-  app.delete("/api/working-orders/:id/lines/:lineNo", (c) =>
-    run(c, log, async () => {
-      const { personId } = await requireSession(deps, c);
-      const id = c.req.param("id");
-      if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-      const lineNo = requireLineNo(id, c.req.param("lineNo"));
-      // Absent voids the whole line; `voidTabLine` validates a given one.
-      const quantity = c.req.query("quantity");
-      // The party's revision after the void, for the till's next command on the party.
-      const party = await withSaleTillWhenIssuing(deps, c, (saleCfg) =>
-        withTransaction(deps.db, async (tx) => {
-          await voidTabLine(tx, deps.cfg, id, lineNo, quantity, personId);
-          await issueIfFullyPaid(tx, fiscal, saleCfg, id, personId);
-          return partyRevisionOfOrder(tx, id);
-        }),
-      );
-      return c.json({ party });
     }),
   );
 

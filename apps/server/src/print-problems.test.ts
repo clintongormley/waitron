@@ -42,7 +42,7 @@ import { createTable } from "./tables.js";
 import { listPrintProblems, ordersWithPrintProblem, reprintOrderTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
-import { listStationQueue, recallLines, voidTabLine } from "./working-order.js";
+import { listStationQueue, recallLines } from "./working-order.js";
 import { readPartyBills, seatTable } from "./parties.js";
 import {
   fireGroup,
@@ -59,6 +59,7 @@ import "./errors.js";
 import { splitBill } from "./bill-actions.js";
 import { joinTables } from "./table-actions.js";
 import { moveBill } from "./move-bill.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // Review Focus 6: a kitchen ticket that failed or is stuck shows as a printing problem on the table
 // and on its station's card, never refuses the next order, and clears once a reprint has printed, or
@@ -1788,7 +1789,7 @@ async function lineNoOf(orderId: string, dish: Dish): Promise<number> {
 /** Void `dish`'s line on `s`'s bill. */
 async function voidDish(v: Venue, s: Seated, dish: Dish): Promise<void> {
   const lineNo = await lineNoOf(s.tabId, dish);
-  await inTx((tx) => voidTabLine(tx, v.cfg, s.tabId, lineNo, undefined, ALEX));
+  await inTx((tx) => cancelLine(tx, v.cfg, s.tabId, lineNo, undefined, ALEX));
 }
 
 /** Reprint `orderId` and mark every job the reprint queued as printed. */

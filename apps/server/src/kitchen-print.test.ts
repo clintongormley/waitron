@@ -41,13 +41,7 @@ import {
 } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import { createCourse, createStation, setProductCourse, setProductStation } from "./kitchen.js";
-import {
-  addTabRound,
-  createOpenOrder,
-  fireCourse,
-  fireLines,
-  voidTabLine,
-} from "./working-order.js";
+import { addTabRound, createOpenOrder, fireCourse, fireLines } from "./working-order.js";
 import { listStationNotices, writeKitchenTicketGrouping } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
@@ -72,6 +66,7 @@ import {
 } from "./testing/party-venue.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
@@ -828,7 +823,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
       await addTabRound(tx, cfg, tabId, [{ menuItemId: offers.offerFor(steak), quantity: "3" }]);
       const before = new Set((await printJobsFor(tx)).map((job) => job.id));
-      await voidTabLine(tx, cfg, tabId, 1, "2");
+      await cancelLine(tx, cfg, tabId, 1, "2");
       return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
     });
 

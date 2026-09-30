@@ -52,7 +52,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { TillConfig } from "./till-config.js";
 import { payWorkingOrder, recordTillSale } from "./till-sale.js";
-import { addTabRound, createOpenOrder, updateHeldOrder, voidTabLine } from "./working-order.js";
+import { addTabRound, createOpenOrder, updateHeldOrder } from "./working-order.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -1785,7 +1785,8 @@ describe("ordering extras and options — parent + child lines", () => {
     });
 
     // Tab: dish#1 (line_no 1) + bacon child (line_no 2); dish#2 (line_no 3) + queso child (line_no 4).
-    // Then VOID the bacon child (line_no 2), leaving {1,3,4} — non-contiguous.
+    // Then remove the bacon child (line_no 2), leaving {1,3,4} — non-contiguous. A cancel takes a
+    // dish only, so the row is deleted directly.
     const tabId = await withTransaction(suite.db, async (tx) => {
       const { tabId } = await openPartyTab(tx, v.cfg, { tableId });
       await addTabRound(tx, v.cfg, tabId, [
@@ -1800,7 +1801,9 @@ describe("ordering extras and options — parent + child lines", () => {
           extras: extrasPick(v, [{ productId: v.quesoId, quantity: 1 }]),
         },
       ]);
-      await voidTabLine(tx, v.cfg, tabId, 2);
+      await tx
+        .delete(workingOrderLines)
+        .where(and(eq(workingOrderLines.workingOrderId, tabId), eq(workingOrderLines.lineNo, 2)));
       return tabId;
     });
 

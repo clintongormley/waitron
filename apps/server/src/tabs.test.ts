@@ -64,13 +64,13 @@ import {
   unmarkServed,
   updateHeldOrder,
   updateOrderLine,
-  voidTabLine,
 } from "./working-order.js";
 import { finishTable, seatTable, partyRevisionOfOrder } from "./parties.js";
 import "./errors.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup } from "./order-groups.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
 
@@ -486,7 +486,7 @@ describe("addTabRound per-line note (NON-FISCAL, spec §2/§3)", () => {
   });
 });
 
-describe("voidTabLine", () => {
+describe("a cancel", () => {
   it("deletes one line from an open tab and leaves the rest", async () => {
     const { cfg, tableId, cafeOffer, aguaOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) =>
@@ -495,7 +495,7 @@ describe("voidTabLine", () => {
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
     ); // line 2
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1));
 
     const lines = await db
       .select({ lineNo: workingOrderLines.lineNo })
@@ -503,17 +503,6 @@ describe("voidTabLine", () => {
       .where(eq(workingOrderLines.workingOrderId, tabId))
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toEqual([{ lineNo: 2 }]);
-  });
-
-  it("throws tab.line_not_found for a line_no that matches nothing", async () => {
-    const { cfg, tableId, cafeOffer } = await setupVenue();
-    const { tabId } = await asApp(cfg, (tx) =>
-      openPartyTab(tx, cfg, { tableId, lines: [{ menuItemId: cafeOffer, quantity: "1" }] }),
-    );
-    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 99))).rejects.toMatchObject({
-      code: "tab.line_not_found",
-      params: { tabId, lineNo: 99 },
-    });
   });
 
   it("throws tab.not_open for a settled order", async () => {
@@ -524,7 +513,7 @@ describe("voidTabLine", () => {
     await db.execute(
       sql`update working_orders set status = 'settled', settled_at = ${nowIso()} where id = ${tabId}`,
     );
-    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1))).rejects.toMatchObject({
+    await expect(asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1))).rejects.toMatchObject({
       code: "tab.not_open",
       params: { tabId },
     });
@@ -1448,7 +1437,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const ticket = await ticketOfLine(tabId, 1);
     await asApp(cfg, (tx) => advanceTicketItem(tx, cfg, ticket.id, "preparing"));
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1));
 
     expect(await linesOf(tabId)).toEqual([]);
     // The notice keeps the line's name after the line is gone.
@@ -1467,7 +1456,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     );
     const ticket = await ticketOfLine(tabId, 1);
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1));
 
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
@@ -1488,7 +1477,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     const ticket = await ticketOfLine(tabId, 1);
     expect(ticket.quantity).toBe(3000);
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "1"));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1, "1"));
 
     // The café at 1.50 for two dishes, and its extra at 0.50, two per dish, for four: each column
     // in its own scale, quantities in thousandths and money in cents.
@@ -1510,7 +1499,7 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     );
     const ticket = await ticketOfLine(tabId, 1);
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "2"));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1, "2"));
 
     expect(await linesOf(tabId)).toEqual([]);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
@@ -1529,10 +1518,10 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       const ticket = await ticketOfLine(tabId, 1);
 
       await expect(
-        asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, quantity)),
+        asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1, quantity)),
       ).rejects.toMatchObject({
-        code: "tab.void_quantity_invalid",
-        params: { tabId, lineNo: 1, quantity },
+        code: "adjustment.quantity_invalid",
+        params: { workingOrderId: tabId, lineNo: 1, quantity },
       });
       expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
       expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
@@ -1547,16 +1536,16 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
     );
     const ticket = await ticketOfLine(tabId, 1);
 
-    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1, "0.5"))).rejects.toMatchObject({
-      code: "tab.void_quantity_invalid",
-      params: { tabId, lineNo: 1, quantity: "0.5" },
+    await expect(asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1, "0.5"))).rejects.toMatchObject({
+      code: "adjustment.quantity_invalid",
+      params: { workingOrderId: tabId, lineNo: 1, quantity: "0.5" },
     });
     expect(await linesOf(tabId)).toEqual([expect.objectContaining({ quantity: 2000 })]);
     expect((await ticketOfLine(tabId, 1)).quantity).toBe(2000);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([]);
   });
 
-  it("refuses to void part of an extras line, whose quantity follows its dish", async () => {
+  it("refuses to cancel an extras line, whose quantity follows its dish", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer } = await setupVenue();
     const listId = await asApp(cfg, (tx) => attachExtras(tx, cfg, cafeId, aguaId));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
@@ -1570,9 +1559,9 @@ describe("corrections to sent work reach the kitchen as notices, printer or not"
       ]),
     );
 
-    await expect(asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 2, "1"))).rejects.toMatchObject({
-      code: "tab.void_quantity_invalid",
-      params: { tabId, lineNo: 2, quantity: "1" },
+    await expect(asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 2, "1"))).rejects.toMatchObject({
+      code: "adjustment.line_not_adjustable",
+      params: { workingOrderId: tabId, lineNo: 2 },
     });
     expect((await linesOf(tabId)).map((line) => line.quantity)).toEqual([2000, 2000]);
   });
@@ -1635,7 +1624,7 @@ describe("with changes to sent items switched off", () => {
     );
     const ticket = await ticketOfLine(tabId, 1);
 
-    await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, 1));
+    await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, 1));
 
     expect(await linesOf(tabId)).toEqual([]);
     expect(await noticesAt(cfg, ticket.stationId)).toEqual([
@@ -2487,7 +2476,7 @@ describe("every write to an open order's lines counts on its revision, a served 
       (tx, t) => addTabRound(tx, t.cfg, t.tabId, [{ menuItemId: t.cafeOffer, quantity: "1" }]),
       ["tab"],
     ],
-    ["a void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
+    ["a void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
     ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
@@ -2649,8 +2638,8 @@ describe("a line write on an order whose card payment is in flight is refused, a
       (tx, t) => addTabRound(tx, t.cfg, t.tabId, [{ menuItemId: t.cafeOffer, quantity: "1" }]),
       ["tab"],
     ],
-    ["a void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1), ["tab"]],
-    ["a part void", (tx, t) => voidTabLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
+    ["a void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1), ["tab"]],
+    ["a part void", (tx, t) => cancelLine(tx, t.cfg, t.tabId, 1, "1"), ["tab"]],
     ["a recall", (tx, t) => recallLines(tx, t.cfg, t.tabId, [1]), ["tab"]],
     ["a send", (tx, t) => sendLines(tx, t.cfg, t.tabId, [2]), ["tab"]],
     ["a course fired", (tx, t) => fireCourse(tx, t.cfg, t.tabId, t.courseId, OPERATOR), ["tab"]],
@@ -2753,7 +2742,7 @@ describe("a line write on an order whose card payment is in flight is refused, a
     await asApp(tabs.cfg, (tx) =>
       addTabRound(tx, tabs.cfg, tabs.tabId, [{ menuItemId: tabs.cafeOffer, quantity: "1" }]),
     );
-    await asApp(tabs.cfg, (tx) => voidTabLine(tx, tabs.cfg, tabs.tabId, 1, "1"));
+    await asApp(tabs.cfg, (tx) => cancelLine(tx, tabs.cfg, tabs.tabId, 1, "1"));
     await asApp(tabs.cfg, async (tx) =>
       updateOrderLine(tx, tabs.cfg, tabs.tabId, 1, { note: "x" }, await revisionOf(tabs.tabId)),
     );
@@ -2857,7 +2846,7 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     const { cfg, tabId, stationId } = await fiveDishesOnATab();
 
     for (let lineNo = 5; lineNo >= 1; lineNo--) {
-      await asApp(cfg, (tx) => voidTabLine(tx, cfg, tabId, lineNo));
+      await asApp(cfg, (tx) => cancelLine(tx, cfg, tabId, lineNo));
     }
 
     expect(await linesOf(tabId)).toEqual([]);

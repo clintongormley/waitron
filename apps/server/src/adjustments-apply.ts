@@ -332,7 +332,7 @@ async function planAdjustment(
   venueLocale: string,
 ): Promise<Plan> {
   const { orderId } = ask;
-  // The table screen is the only surface (ruling R1): an open bill of a party, as a void needs.
+  // The table screen is the only surface (ruling R1): an open bill of a party.
   const revision = await assertPartyBillOpen(tx, cfg, orderId);
   if (revision !== ask.expectedRevision) {
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
@@ -588,7 +588,7 @@ async function reprice(
 
 /**
  * Apply a cancellation, comp or discount to an open bill of a party, at most once per submission id
- * on the bill (plan D8): a cancel removes the part as a void does, telling the kitchen; a comp or a
+ * on the bill (plan D8): a cancel removes the part ({@link removeFromLine}), telling the kitchen; a comp or a
  * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's
  * revision and the party's on, and records one adjustment. The PIN never enters the recorded
  * command. `venueLocale` is the venue's display language, which names the reason for an operator

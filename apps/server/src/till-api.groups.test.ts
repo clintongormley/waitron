@@ -18,6 +18,7 @@ import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testi
 import { addTabRound } from "./working-order.js";
 import "./errors.js";
 import { splitBill } from "./bill-actions.js";
+import { cancelBody } from "./testing/cancel-line.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
 // status each refusal maps to, and the answer's shape. What the commands do is pinned in
@@ -958,7 +959,11 @@ describe("the line-editing routes act as the session's operator", () => {
     )!.lineNo;
     const revision = await revisionOf(party.partyId);
 
-    const voided = await call("DELETE", `/api/working-orders/${party.tabId}/lines/${lineNo}`);
+    const voided = await call(
+      "POST",
+      `/api/working-orders/${party.tabId}/adjustments`,
+      await cancelBody(venue.db, party.tabId, lineNo),
+    );
 
     expect(voided.status).toBe(200);
     expect(await eventsOfGroup(party.croquetas.id)).toEqual([

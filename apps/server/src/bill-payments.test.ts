@@ -57,9 +57,10 @@ import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { TillConfig } from "./till-config.js";
 import { collectOrder, payWorkingOrder, readBillTenderLines } from "./till-sale.js";
-import { abandonHeldOrder, updateHeldOrder, voidTabLine, moveOrderLines } from "./working-order.js";
+import { abandonHeldOrder, updateHeldOrder, moveOrderLines } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { cancelLine } from "./testing/cancel-line.js";
 
 // The bill payment guards at the level of the functions each route calls: the writers with no
 // route of their own, the orderings a route cannot show, and the payment slip of a bill paid by
@@ -321,7 +322,7 @@ describe("the writers with no route of their own", () => {
     const billId = await tabWith("Chuletón", "Tarta");
     await insertPayment(billId, { applied: 2000 });
 
-    const error = await captureError(() => inTx((tx) => voidTabLine(tx, venue.cfg, billId, 1)));
+    const error = await captureError(() => inTx((tx) => cancelLine(tx, venue.cfg, billId, 1)));
 
     expect(error).toMatchObject({ code: "order.payment_in_flight" });
   });
@@ -564,7 +565,7 @@ describe("the invoice at full payment", () => {
         completedAt: new Date().toISOString(),
       }),
     );
-    await inTx((tx) => voidTabLine(tx, venue.cfg, billId, 1));
+    await inTx((tx) => cancelLine(tx, venue.cfg, billId, 1));
 
     const issued = await inTx((tx) => issueIfFullyPaid(tx, fiscal(), venue.cfg, billId, OPERATOR));
 
