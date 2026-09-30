@@ -269,7 +269,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // 429, not 401, so the till can tell "wait N seconds" apart from "wrong PIN".
   "pin.throttled": 429,
   "person.not_found": 401,
-  "person.suspended": 403,
   // Authenticated device lacks the action capability or is excluded from the workflow.
   "device.forbidden_action": 403,
   // The same codes and statuses `device-api.ts`'s map assigns.
@@ -417,16 +416,15 @@ function requireUuidId(
 }
 
 /**
- * An absent override leaves the operator's own role to decide. A malformed one gets the codes the
- * credential gate gives a bad credential: `person.not_found` for a non-UUID id, `pin.invalid` for a
- * non-string PIN.
+ * An absent override leaves the operator's own role to decide. A malformed one is `pin.invalid`,
+ * the one answer the credential gate gives any override that cannot sign in.
  */
 export function parseDrawerOverride(
   raw: { personId?: unknown; pin?: unknown } | undefined | null,
 ): { personId: string; pin: string } | undefined {
   if (raw === undefined || raw === null) return undefined;
   if (typeof raw.personId !== "string" || !isUuid(raw.personId)) {
-    throw new AppError("person.not_found", { personId: String(raw.personId) });
+    throw new AppError("pin.invalid", {});
   }
   if (typeof raw.pin !== "string") {
     throw new AppError("pin.invalid", {});
@@ -801,8 +799,8 @@ export function mountTillApi(app: Hono, deps: TillApiDeps, log: Logger): void {
       // Canonicalised before it keys the throttle and the lookup: the throttle keys on the string,
       // and the `text` id column folds no spellings (`canonicaliseUuid`).
       const personId = canonicaliseUuid(rawPersonId);
-      if (personId === null)
-        throw new AppError("person.not_found", { personId: String(rawPersonId) });
+      // Not throttled: this id never reaches the lookup, so no PIN is being tried against anyone.
+      if (personId === null) throw new AppError("pin.invalid", {});
       const device = await requireDevice(deps, c);
       // `sessions.till_id` is NOT NULL, and a till-less device (a kds display) holds no shift.
       if (device.tillId === null) throw new AppError("device.till_required", {});

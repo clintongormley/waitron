@@ -734,7 +734,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: a malformed override.personId (not a UUID) is 401 person.not_found — no 22P02 500", async () => {
+  it("gated: a malformed override.personId (not a UUID) is 401 pin.invalid — no 22P02 500", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -746,11 +746,9 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
       "/api/drawer/open",
       withOverride(cookie, { personId: "not-a-uuid", pin: "5555" }),
     );
-    // `parseDrawerOverride` maps a non-UUID id to the SAME person.not_found (401) a well-formed but
-    // absent id gets.
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "person.not_found" },
+      error: { code: "pin.invalid" },
     });
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
@@ -777,7 +775,7 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
-  it("gated: a well-formed-but-unknown override.personId is 401 person.not_found", async () => {
+  it("gated: a well-formed-but-unknown override.personId is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
     await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
 
@@ -791,7 +789,46 @@ describe("POST /api/drawer/open — gated policy: authorize() + supervisor overr
     );
     expect(res.status).toBe(401);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "person.not_found" },
+      error: { code: "pin.invalid" },
+    });
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("gated: an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
+    const { cfg, operatorId, supervisorId } = await setupVenue();
+    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    const [suspended] = await suite.db
+      .insert(persons)
+      .values({
+        displayName: "Responsable suspendida",
+        pinHash: hashPin("5555"),
+        role: "supervisor",
+        status: "suspended",
+      })
+      .returning({ id: persons.id });
+
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = await login(app, cfg, operatorId);
+
+    const causes = {
+      unknown: { personId: randomUUID(), pin: "5555" },
+      // The suspended supervisor's own PIN, so only the suspension can be the cause.
+      suspended: { personId: suspended!.id, pin: "5555" },
+      notAUuid: { personId: "not-a-uuid", pin: "5555" },
+      wrongPin: { personId: supervisorId, pin: "0000" },
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [cause, override] of Object.entries(causes)) {
+      const res = await app.request("/api/drawer/open", withOverride(cookie, override));
+      answers[cause] = { status: res.status, body: await res.json() };
+    }
+    const refused = { status: 401, body: { error: { code: "pin.invalid", params: {} } } };
+    expect(answers).toEqual({
+      unknown: refused,
+      suspended: refused,
+      notAUuid: refused,
+      wrongPin: refused,
     });
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
