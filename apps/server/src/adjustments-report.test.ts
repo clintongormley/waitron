@@ -22,6 +22,7 @@ import {
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
 import { SESSION_COOKIE } from "./till-session.js";
+import { parkOrder } from "./working-order.js";
 import "./errors.js";
 
 // The adjustment report (service plan Task 12) over bills made through the till's own routes:
@@ -282,5 +283,26 @@ describe("a kitchen cancellation is not a voided invoice (spec §7)", () => {
 
     expect(await voidCount()).toBe(voidsBefore + 1);
     expect(await readReport()).toEqual(report);
+  });
+});
+
+describe("a counter order's adjustment (B11c)", () => {
+  it("counts a comp on an order of no party under the person who asked for it", async () => {
+    const nora = await member("Nora");
+    const orderId = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: orderId,
+      zoneId: venue.tables.zoneId,
+      lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
+      operatorId: nora.id,
+    });
+
+    await adjust(nora, orderId, "Burger", "comp");
+
+    expect(rowOf(await readReport(), nora)).toMatchObject({
+      count: 1,
+      reduction: "12.00",
+      byAction: { comp: { count: 1, reduction: "12.00" } },
+    });
   });
 });

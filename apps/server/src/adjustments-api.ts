@@ -90,8 +90,8 @@ function requireRole(value: string | undefined): PersonRoleValue {
 
 /**
  * The till's adjustment routes (service plan Task 11, spec §7), behind the till session: apply a
- * cancel, comp or discount to a party's bill, preview what it would do, and the reasons and
- * approvers the till offers.
+ * cancel, comp or discount to an open bill, a table's or a counter order, preview what it would
+ * do, and the reasons and approvers the till offers.
  */
 export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, run: Run): void {
   const fiscal = { db: deps.db, backend: deps.backend, clock: deps.clock, log };
@@ -129,7 +129,7 @@ export function mountAdjustmentsApi(app: Hono, deps: TillApiDeps, log: Logger, r
       const id = requireBill(c.req.param("id"));
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
       const preview = await withTransaction(deps.db, (tx) =>
-        previewAdjustment(tx, deps.cfg, ask, deps.venueLocale),
+        previewAdjustment(tx, ask, deps.venueLocale),
       );
       return c.json(preview);
     }),

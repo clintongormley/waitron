@@ -22,7 +22,7 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -51,7 +51,6 @@ import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import {
-  assertPartyBillOpen,
   bumpRevision,
   extraQuantityFor,
   isReleased,
@@ -335,19 +334,27 @@ function zeroed(
     }));
 }
 
+/** The revision of an open bill, a table's or a counter order; else `tab.not_open`. */
+async function openBillRevision(tx: Transaction, orderId: string): Promise<number> {
+  const [order] = await tx
+    .select({ status: workingOrders.status, revision: workingOrders.revision })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, orderId));
+  if (order?.status !== "open") throw new AppError("tab.not_open", { tabId: orderId });
+  return order.revision;
+}
+
 /**
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount, the paid lines and the reason's policy, and the rows it would change.
  */
 async function planAdjustment(
   tx: Transaction,
-  cfg: TillConfig,
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<Plan> {
   const { orderId } = ask;
-  // The table screen is the only surface (ruling R1): an open bill of a party.
-  const revision = await assertPartyBillOpen(tx, cfg, orderId);
+  const revision = await openBillRevision(tx, orderId);
   if (revision !== ask.expectedRevision) {
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
@@ -576,11 +583,10 @@ async function pastBillDiscountLimit(
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
 export async function previewAdjustment(
   tx: Transaction,
-  cfg: TillConfig,
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  const plan = await planAdjustment(tx, cfg, ask, venueLocale);
+  const plan = await planAdjustment(tx, ask, venueLocale);
   const lines =
     ask.action === "cancel"
       ? [
@@ -692,12 +698,12 @@ async function reprice(
 }
 
 /**
- * Apply a cancellation, comp or discount to an open bill of a party, at most once per submission id
- * on the bill (plan D8): a cancel removes the part ({@link removeFromLine}), telling the kitchen; a comp or a
- * discount lowers the prices by plan D4 and D15, and tells the kitchen nothing. It moves the bill's
- * revision and the party's on, and records one adjustment. The PIN never enters the recorded
- * command. `venueLocale` is the venue's display language, which names the reason for an operator
- * with no language of their own.
+ * Apply a cancellation, comp or discount to an open bill, a table's or a counter order, at most once
+ * per submission id on the bill (plan D8): a cancel removes the part ({@link removeFromLine}),
+ * telling the kitchen; a comp or a discount lowers the prices by plan D4 and D15, and tells the
+ * kitchen nothing. It moves the bill's revision on, and its party's when it has one, and records one
+ * adjustment. The PIN never enters the recorded command. `venueLocale` is the venue's display
+ * language, which names the reason for an operator with no language of their own.
  */
 export async function applyAdjustment(
   tx: Transaction,
@@ -713,7 +719,7 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, approverId: approver?.personId },
     async () => {
-      const plan = await planAdjustment(tx, cfg, args, venueLocale);
+      const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver);
       let splits: AdjustmentSplit[] = [];
       if (args.action === "cancel") {
