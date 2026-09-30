@@ -5605,7 +5605,7 @@ ongoing overhaul listed at the top of Track A.
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
   a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
-- **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, owner
+- **The profile's "Current password" fills the signed-in person's saved password — DONE (C98, #934, owner
   2026-09-30: "the current password field doesn't autocomplete").** Every profile step that asks for
   the current password now carries a hidden, read-only `autocomplete="username"` field holding the
   signed-in email (`autofillUsername`, `apps/dashboard/src/widgets/autofill-username.ts`); a person
