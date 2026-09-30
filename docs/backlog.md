@@ -5350,15 +5350,15 @@ ongoing overhaul listed at the top of Track A.
   promotion never ran. **DONE (C94, 2026-09-30):** `PromoteApiDeps` takes a `credentialKeyRing`,
   which `boot.ts` fills with the same ring. Test: "signs in with a correct current code and
   promotes" in `apps/server/src/promote-api.authenticator.test.ts` (real database, the promote
-  itself stubbed) drew 401 `totp.invalid` before the fix and 200 after; deleting the ring from the
-  route turns it red again, and a wrong code is still refused (the case beside it). The ring is now
-  a required argument everywhere the sign-in takes it, so a caller that leaves it out no longer
-  compiles (with the route's line deleted, `tsc` reports TS2741 at `promote-api.ts`):
+  itself stubbed) drew 401 `totp.invalid` before the fix and 200 after, and a wrong code is still
+  refused (the case beside it); with the ring deleted from the route, both cases answer 500.
+  The ring is now a required argument everywhere the sign-in takes it, so a caller that leaves it
+  out no longer compiles (with the route's line deleted, `tsc` reports TS2741 at `promote-api.ts`):
   `loginManager` and `loginManagerById` (`packages/identity/src/manager-login.ts`),
   `decryptTotpSecret` (`mfa.ts`), the own-credential checks in `profile.ts`, `beginGoogleLink`
   (`google-oidc.ts`), and `credentialKeyRing` in the management, profile and promote route
-  dependencies — the management and profile routes had silently fallen back to a key of their
-  own when none was given, and that fallback is gone, with the management routes'
+  dependencies — the management and profile routes had silently fallen back to an authenticator
+  key of their own when none was given, and that fallback is gone, with the management routes'
   `accountActionCodeKey`, which fed nothing else.
   Still open, seen while looking at C87 at 390 by 900 px: the wizard's floating language button sits
   over the bottom of the connect form, covering part of the refusal message beside Connect and, in
