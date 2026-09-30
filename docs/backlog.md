@@ -3590,10 +3590,23 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         on Hold, New sale, a retrieve or a sign-out, and at the latest after the till's request
         limit (150 s). How long it lasts on a real network is not measured. **Next action:** dim
         the basket, or show a one-line note, while `editsLocked` is set.
-    - **Approver PINs are not limited** on the adjustment route, nor on the cash-drawer and refund
-      overrides; only sign-in and the dashboard's PIN route are throttled. A run-it review sent twelve
-      wrong approver PINs in a row and got twelve 401s and no 429 (2026-09-30). **Next action:** one
-      throttle for every override PIN.
+    - **Approver PINs are limited — DONE (C89).** A run-it review had sent twelve wrong approver
+      PINs in a row and got twelve 401s and no 429 (2026-09-30). Now a manager's or supervisor's PIN
+      typed on the till to approve an adjustment, to open the cash drawer for someone, or to approve
+      a refund (the PIN that confirms a hand-keyed card refund included) counts its wrong tries:
+      three are free, then each wrong one makes the till wait 2, 4, 8… up to 60 seconds before that
+      person's PIN is tried again, answered 429 `pin.throttled`, even for the right PIN. There is one
+      count per till and person, shared by the three kinds of request and separate from the
+      sign-in count; the till is the one the requesting session was opened on. A right PIN starts
+      the count again. A PIN the server never checks, because the operator may do the thing
+      themselves, neither counts nor starts it again. The till's drawer and adjustment PIN prompts
+      stay open and say "Too many wrong PINs. Wait a moment, then try again" (the till has no refund
+      screen). The counts are kept in the server's
+      memory, so a restart clears them, and like sign-in's they are capped per till
+      (`PIN_THROTTLE_MAX_KEYS_PER_DEVICE`): a till holding that many answers each new person with a
+      60-second wait. Guards: the "limit on wrong" cases in
+      `apps/server/src/till-api.receipt.test.ts`, `apps/server/src/adjustments-api.test.ts` and
+      `apps/server/src/bill-payments-api.test.ts`, and `packages/identity/src/credential.test.ts`.
     - **A reason's percentage limit can be exceeded** by combining a bill discount with a line
       discount, or two bill discounts under one reason, because a bill discount counts as 0% on
       each line (a run-it review, 2026-09-30, applied two successive 30% whole-bill discounts under a
@@ -5793,8 +5806,8 @@ ongoing overhaul listed at the top of Track A.
   warm-up pairs, 200 pairs of each kind, interleaved: the first request answered at a median
   0.864 ms for a known address against 0.862 ms for an unknown one, and the second at 1.065 ms
   against 0.326 ms. In the control the route did no later work at all (no lookup, write or email):
-  the second request answered at 0.251 ms against 0.258 ms. The override PINs have no wrong-try
-  limit (C89); refusals thrown in `apps/server`
+  the second request answered at 0.251 ms against 0.258 ms. Since C89 the override PINs have a
+  wrong-PIN back-off of their own, one per till and person; refusals thrown in `apps/server`
   itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
   (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
   approval routes no longer send for an approver — left for lane B, whose file it is; and the dashboard's
@@ -10066,7 +10079,7 @@ partial scope; the detail for a live thread is in its track.
 | 2 | Sales spine | Immutable hash-chained sales, per-node series, catalogue, the one-taxpayer model | — |
 | 3 | Fiscal layer | Verifactu lib + `FiscalBackend`; settlement, R5 rectificativas, F3 canje, invoice-first; fiscal is a module (`fiscal-verifactu`, `fiscal-none`) | F3 asesor/XSD confirmations; AEAT certificate install and renewal after setup (A9); cert distribution to a promoted node; a foreign business customer's identifier type (A1a) |
 | 4 | Payment layer | `PaymentProvider` + Stripe Terminal, manual card, integrated Stripe, Mode-3 webhook, SumUp Cloud API (#309); dashboard provider/reader configuration and adoption (#323, #329) | webhook `recordSale` hand-off; reconcile remediation UI; the handheld NFC/QR link (A6) |
-| 5 | Identity | persons/sessions, PIN (+ per-device throttle), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
+| 5 | Identity | persons/sessions, PIN (+ wrong-PIN back-off: per device at sign-in, per till for override PINs), `authorize()`, roles/permissions, passkeys, email-first dashboard login, emailed invitations and password resets, encrypted TOTP and recovery codes, user admin (#298, #328); a one-time passkey offer on first password sign-in (#347); identity state replicates to a standby | admin-editable roles; security-change emails; mid-shift-suspension enforce; discount gate; till-refund enforce |
 | 6 | Locations | provision-a-sellable-venue (`waitron-provision venue`); departments, zones and menus (#297) | multiple locations, edit/deactivate; then location-scope the by-id verb family |
 | 7 | Counter POS | walk-up cash, park/retrieve, manual + integrated card, prepare & collect, canvas/receipt editors, receipt/drawer printing, cash-drawer authorization — operable end to end | — |
 | 8 | Reporting | daily close, frozen *cierre Z*, VAT summary, modelo 303 output+input VAT + DR303 file and its download route (no dashboard screen yet), purchase-invoice UI; dashboard sales screen (with a category sales report, at time of sale or current, printable) + business-overview home | the modelo 303 screen; fiscal filing remainder parked (*Detail → Reporting*) |
