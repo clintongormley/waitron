@@ -1,13 +1,14 @@
-import { and, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
-  billPartyTableLabels,
   kitchenStations,
+  nodes,
+  orderTableLabels,
   ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { BAND_RANK, classifyBand, partyTablesName, worstBand } from "@waitron/shared";
+import { BAND_RANK, classifyBand, worstBand } from "@waitron/shared";
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { OverdueOrder, OverdueOrdersInput } from "./types.js";
 
@@ -48,13 +49,8 @@ export async function computeOverdueOrders(
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
       partyId: workingOrders.partyId,
+      deliveryTableId: workingOrders.deliveryTableId,
       label: workingOrders.label,
-      // For an order of no party: the table it is delivered to, else its own label; `null` for an
-      // unlabelled walk-up. `workingOrders` is JOINed, never this query's `.from()` base, so
-      // CLAUDE.md §3's correlated-subquery trap does not apply.
-      tableLabel: sql<string | null>`coalesce((
-        select dt.label from dining_tables dt
-        where dt.id = ${workingOrders.deliveryTableId}), ${workingOrders.label})`,
     })
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
@@ -79,8 +75,8 @@ export async function computeOverdueOrders(
   interface Candidate {
     orderNumber: number;
     partyId: string | null;
+    deliveryTableId: string | null;
     label: string | null;
-    tableLabel: string | null;
     lines: Line[];
   }
   const byOrder = new Map<string, Candidate>();
@@ -99,8 +95,8 @@ export async function computeOverdueOrders(
       order = {
         orderNumber: row.orderNumber,
         partyId: row.partyId,
+        deliveryTableId: row.deliveryTableId,
         label: row.label,
-        tableLabel: row.tableLabel,
         lines: [],
       };
       byOrder.set(row.orderId, order);
@@ -124,25 +120,25 @@ export async function computeOverdueOrders(
     late.push({ orderId, order, band, worstLine: worstLine! });
   }
 
-  const partyLabels = await billPartyTableLabels(tx, [
-    ...new Set(late.flatMap(({ order }) => order.partyId ?? [])),
-  ]);
-  const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => {
-    const tables = order.partyId === null ? null : partyLabels.get(order.partyId)!;
-    return {
-      orderId,
-      orderNumber: order.orderNumber,
-      tableLabel:
-        tables === null
-          ? order.tableLabel
-          : tables.length === 0
-            ? order.label
-            : partyTablesName(tables),
-      stationName: worstLine.stationName,
-      ageMinutes: worstLine.ageMinutes,
-      band,
-    };
-  });
+  if (late.length === 0) return [];
+  // The node exists: `ticket_items.node_id` references it, and a late order has a ticket item here.
+  const [node] = await tx
+    .select({ locationId: nodes.locationId })
+    .from(nodes)
+    .where(eq(nodes.id, input.nodeId));
+  const tableLabels = await orderTableLabels(
+    tx,
+    node!.locationId,
+    late.map(({ orderId, order }) => ({ id: orderId, ...order })),
+  );
+  const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => ({
+    orderId,
+    orderNumber: order.orderNumber,
+    tableLabel: tableLabels.get(orderId)!,
+    stationName: worstLine.stationName,
+    ageMinutes: worstLine.ageMinutes,
+    band,
+  }));
 
   // Worst-first: band rank desc, then age desc, then order number for a deterministic tiebreak.
   results.sort(

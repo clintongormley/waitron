@@ -1,7 +1,7 @@
 import "./errors.js";
 import { eq } from "drizzle-orm";
 import {
-  diningTables,
+  orderTableLabels,
   parties,
   partyTableLabels,
   sales,
@@ -13,7 +13,8 @@ import type { TillConfig } from "./till-config.js";
 
 /**
  * Resolve the commercial grouping shown on receipts and payment slips. A party bill shows the party's
- * name and its active tables ({@link partyReceiptLabel}), or its own label once the party holds none.
+ * name and its active tables ({@link partyReceiptLabel}), or its own label once the party holds none;
+ * any other order its table as {@link orderTableLabels} names it.
  */
 export async function readReceiptOrder(
   tx: Transaction,
@@ -21,7 +22,6 @@ export async function readReceiptOrder(
   workingOrderId: string,
   opts: { atIssuance?: boolean } = {},
 ): Promise<{ orderLabel: string | null; orderNumber: number }> {
-  void cfg;
   const [order] = await tx
     .select({
       orderNumber: workingOrders.orderNumber,
@@ -49,12 +49,13 @@ export async function readReceiptOrder(
       orderNumber: order.orderNumber,
     };
   }
-  if (order.deliveryTableId === null) {
-    return { orderLabel: order.label, orderNumber: order.orderNumber };
-  }
-  const [table] = await tx
-    .select({ label: diningTables.label })
-    .from(diningTables)
-    .where(eq(diningTables.id, order.deliveryTableId));
-  return { orderLabel: table!.label, orderNumber: order.orderNumber };
+  const labels = await orderTableLabels(tx, cfg.locationId, [
+    {
+      id: workingOrderId,
+      partyId: null,
+      deliveryTableId: order.deliveryTableId,
+      label: order.label,
+    },
+  ]);
+  return { orderLabel: labels.get(workingOrderId)!, orderNumber: order.orderNumber };
 }

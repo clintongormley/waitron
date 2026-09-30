@@ -1,4 +1,5 @@
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { partyTablesName } from "@waitron/shared";
 import type { Transaction } from "./client.js";
 import { diningTables } from "./schema/dining-tables.js";
 import { partyTables } from "./schema/parties.js";
@@ -60,6 +61,55 @@ export async function billPartyTableLabels(
   for (const id of seatless) {
     const survivor = survivorOf.get(id);
     if (survivor !== undefined) labels.set(id, labels.get(survivor) ?? survivors.get(survivor)!);
+  }
+  return labels;
+}
+
+/** What {@link orderTableLabels} reads of an order. */
+interface LabelledOrder {
+  id: string;
+  partyId: string | null;
+  deliveryTableId: string | null;
+  label: string | null;
+}
+
+/**
+ * The table each order belongs to, keyed by order. A party bill names the tables
+ * {@link billPartyTableLabels} gives its party, together ({@link partyTablesName}), or its own label
+ * when that list is empty. Any other order names the table of `locationId` it is delivered to, else
+ * its own label; null for an unlabelled walk-up.
+ */
+export async function orderTableLabels(
+  tx: Transaction,
+  locationId: string,
+  orders: readonly LabelledOrder[],
+): Promise<Map<string, string | null>> {
+  const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
+  const byParty = await billPartyTableLabels(tx, partyIds);
+  const deliveredTo = [
+    ...new Set(
+      orders.flatMap((order) => (order.partyId === null ? (order.deliveryTableId ?? []) : [])),
+    ),
+  ];
+  const tables =
+    deliveredTo.length === 0
+      ? []
+      : await tx
+          .select({ id: diningTables.id, label: diningTables.label })
+          .from(diningTables)
+          .where(
+            and(eq(diningTables.locationId, locationId), inArray(diningTables.id, deliveredTo)),
+          );
+  const tableById = new Map(tables.map((table) => [table.id, table]));
+  const labels = new Map<string, string | null>();
+  for (const order of orders) {
+    if (order.partyId !== null) {
+      const partyLabels = byParty.get(order.partyId)!;
+      labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
+      continue;
+    }
+    const table = order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId);
+    labels.set(order.id, table?.label ?? order.label);
   }
   return labels;
 }

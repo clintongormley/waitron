@@ -11,12 +11,11 @@
 import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import {
-  billPartyTableLabels,
-  diningTables,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
   orderGroups,
+  orderTableLabels,
   printJobs,
   printers,
   stationPrinters,
@@ -27,12 +26,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import {
-  AppError,
-  partyTablesName,
-  perDishOptionQuantity,
-  thousandthsToDecimal,
-} from "@waitron/shared";
+import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { columnsFor, enqueuePrintJob } from "@waitron/printing";
 import type { CharacterSet, PaperWidth, PrintConfig } from "@waitron/printing";
@@ -245,56 +239,6 @@ async function readStationNames(
     .from(kitchenStations)
     .where(inArray(kitchenStations.id, stationIds));
   return new Map(rows.map((row) => [row.id, row.name]));
-}
-
-/** What {@link orderTableLabels} reads of an order. */
-interface LabelledOrder {
-  id: string;
-  partyId: string | null;
-  deliveryTableId: string | null;
-  label: string | null;
-}
-
-/**
- * The table each order's kitchen work belongs to. A party bill names the active tables of its party,
- * or of the party it was merged into at the end of the chain of merges, together
- * ({@link partyTablesName}); or its own label once that party holds none, or when the chain has
- * no end. Any other order names the table it is delivered to, else its own label; null for an
- * unlabelled walk-up.
- */
-export async function orderTableLabels(
-  tx: Transaction,
-  locationId: string,
-  orders: readonly LabelledOrder[],
-): Promise<Map<string, string | null>> {
-  const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
-  const byParty = await billPartyTableLabels(tx, partyIds);
-  const deliveredTo = [
-    ...new Set(
-      orders.flatMap((order) => (order.partyId === null ? (order.deliveryTableId ?? []) : [])),
-    ),
-  ];
-  const tables =
-    deliveredTo.length === 0
-      ? []
-      : await tx
-          .select({ id: diningTables.id, label: diningTables.label })
-          .from(diningTables)
-          .where(
-            and(eq(diningTables.locationId, locationId), inArray(diningTables.id, deliveredTo)),
-          );
-  const tableById = new Map(tables.map((table) => [table.id, table]));
-  const labels = new Map<string, string | null>();
-  for (const order of orders) {
-    if (order.partyId !== null) {
-      const partyLabels = byParty.get(order.partyId)!;
-      labels.set(order.id, partyLabels.length === 0 ? order.label : partyTablesName(partyLabels));
-      continue;
-    }
-    const table = order.deliveryTableId === null ? undefined : tableById.get(order.deliveryTableId);
-    labels.set(order.id, table?.label ?? order.label);
-  }
-  return labels;
 }
 
 /** The order's table, as {@link orderTableLabels} names it. */

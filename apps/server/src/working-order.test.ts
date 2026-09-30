@@ -4955,6 +4955,26 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
+  it("names a counter order after the table it is delivered to, not its own label", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    await withTransaction(db, async (tx) => {
+      await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const cafe = await makeProduct(tx, cfg, catalogueId, {});
+      const { rows } = await tx.execute<{ id: string }>(sql`
+        insert into dining_tables (id, location_id, label, created_at)
+        values (${randomUUID()}, ${cfg.locationId}, 'Terraza 8', ${nowIso()})
+        returning id`);
+      const { id } = await placeOrderWith(tx, cfg, [line(cafe)]);
+      await tx
+        .update(workingOrders)
+        .set({ deliveryTableId: rows[0]!.id, label: "Luis" })
+        .where(eq(workingOrders.id, id));
+
+      const order = (await listExpoQueue(tx, cfg)).find((o) => o.orderId === id)!;
+      expect(order.tableLabel).toBe("Terraza 8");
+    });
+  });
+
   it("names a joined party's tables together on every bill of the party (spec decision 9)", async () => {
     const v = await setupPartyVenue(db);
     const mesa4 = await v.table("Mesa 4");
