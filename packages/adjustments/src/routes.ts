@@ -24,7 +24,7 @@ import {
   type AdjustmentReasonInput,
 } from "./operations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
-import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
+import { ADJUSTMENT_ACTIONS, isPercentBp, type AdjustmentAction } from "./policy.js";
 import {
   computeAdjustmentReport,
   listAdjustmentEntries,
@@ -33,6 +33,7 @@ import {
   type AdjustmentRequester,
   type EntryCursor,
 } from "./reports.js";
+import { readAdjustmentSettings, saveAdjustmentSettings } from "./settings.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_ADJUSTMENTS }] = ADJUSTMENTS_PERMISSIONS;
@@ -72,6 +73,13 @@ function requireActions(value: unknown): AdjustmentAction[] {
 function requireMaxPercent(value: unknown): number | null {
   if (value === null) return null;
   if (typeof value !== "number") throw invalid("maxPercentBp");
+  return value;
+}
+
+/** Required: the limit is cleared by an explicit `null`. */
+function requireMaxBillDiscount(value: unknown): number | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !isPercentBp(value)) throw invalid("maxBillDiscountBp");
   return value;
 }
 
@@ -248,6 +256,26 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const reasonId = requireUuidParam(c.req.param("reasonId"), "AdjustmentReasonId");
         await gated(sessionId, (tx) => deactivateAdjustmentReason(tx, reasonId));
         return c.body(null, 204);
+      }),
+    );
+
+    app.get("/management-api/adjustments/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        return c.json(await gated(sessionId, readAdjustmentSettings));
+      }),
+    );
+
+    app.put("/management-api/adjustments/settings", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        const settings = await gated(sessionId, (tx) =>
+          saveAdjustmentSettings(tx, {
+            maxBillDiscountBp: requireMaxBillDiscount(body.maxBillDiscountBp),
+          }),
+        );
+        return c.json(settings);
       }),
     );
 

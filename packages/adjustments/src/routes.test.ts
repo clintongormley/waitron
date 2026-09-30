@@ -307,6 +307,78 @@ describe("adjustment reason management routes", () => {
   });
 });
 
+describe("adjustment settings routes", () => {
+  const SETTINGS = "/management-api/adjustments/settings";
+
+  async function storedLimit(): Promise<unknown[]> {
+    return (await db.execute(sql`select max_bill_discount from adjustment_settings`)).rows;
+  }
+
+  it("lets a manager read no limit, set one, and clear it again", async () => {
+    const fx = await fixture();
+    const manager = fx.cookie.manager;
+    const empty = await send(fx.app, "GET", SETTINGS, manager);
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual({ maxBillDiscountBp: null });
+
+    const saved = await send(fx.app, "PUT", SETTINGS, manager, { maxBillDiscountBp: 4000 });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ maxBillDiscountBp: 4000 });
+    expect(await (await send(fx.app, "GET", SETTINGS, manager)).json()).toEqual({
+      maxBillDiscountBp: 4000,
+    });
+
+    await send(fx.app, "PUT", SETTINGS, fx.cookie.admin, { maxBillDiscountBp: null });
+    expect(await storedLimit()).toEqual([{ max_bill_discount: null }]);
+  });
+
+  it("refuses a supervisor or staff member, and writes nothing", async () => {
+    const fx = await fixture();
+    for (const role of ["staff", "supervisor"] as const) {
+      for (const [method, body] of [
+        ["GET", undefined],
+        ["PUT", { maxBillDiscountBp: 4000 }],
+      ] as const) {
+        const response = await send(fx.app, method, SETTINGS, fx.cookie[role], body);
+        expect(response.status, `${role} ${method}`).toBe(403);
+        expect(await response.json()).toEqual({
+          error: {
+            code: "authorization.not_permitted",
+            params: { permission: "adjustment.manage" },
+          },
+        });
+      }
+    }
+    expect(await storedLimit()).toEqual([]);
+  });
+
+  it("refuses a request with no management session", async () => {
+    const fx = await fixture();
+    const response = await send(fx.app, "PUT", SETTINGS, undefined, { maxBillDiscountBp: 4000 });
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management_session.required" },
+    });
+    expect(await storedLimit()).toEqual([]);
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["missing", {}],
+    ["a string", { maxBillDiscountBp: "4000" }],
+    ["zero", { maxBillDiscountBp: 0 }],
+    ["above 100%", { maxBillDiscountBp: 10001 }],
+    ["a fraction of a basis point", { maxBillDiscountBp: 12.5 }],
+  ])("refuses a limit that is %s, writing nothing", async (_case, body) => {
+    const fx = await fixture();
+    const response = await send(fx.app, "PUT", SETTINGS, fx.cookie.manager, body);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "maxBillDiscountBp" } },
+    });
+    expect(await storedLimit()).toEqual([]);
+  });
+});
+
 describe("adjustment report routes", () => {
   const REPORT = "/management-api/adjustments/report";
   const ENTRIES = "/management-api/adjustments/report/entries";
