@@ -311,9 +311,9 @@ const NAV_GROUP_KEYS = [
   "nav.group.configuration",
 ] as const;
 const shellChooser = (el: DashboardApp) =>
-  el.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
+  el.shadowRoot!.querySelector<HTMLElement>("wt-language-footer");
 const loginChooser = (el: DashboardApp) =>
-  login(el)!.shadowRoot!.querySelector<HTMLElement>("dashboard-language-chooser");
+  login(el)!.shadowRoot!.querySelector<HTMLElement>("wt-language-footer");
 
 const SCREEN_TAGS = [
   "dashboard-my-schedule-screen",
@@ -466,7 +466,7 @@ describe("dashboard-app", () => {
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
     // ...while the person explicitly picks English, which persists and repaints.
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(currentLocale()).toBe("en-GB");
     // The probe now answers with the pre-pick row.
@@ -498,7 +498,7 @@ describe("dashboard-app", () => {
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
     // The person picks English; the save is still in flight, so nothing has repainted yet.
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
     // NOW a background probe starts — after the pick, so it captures the already-bumped counter.
@@ -2524,7 +2524,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     logoutBtn(el)!.click();
     await flush(el);
-    emit(login(el)!, "locale-selected", { code: "es-ES" });
+    emit(login(el)!, "wt-locale-selected", { code: "es-ES" });
     await flush(el);
     resolveLocales({
       locales: [],
@@ -2701,7 +2701,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(login(el)).toBeTruthy();
     expect(loginChooser(el)).toBeTruthy(); // the login screen renders the chooser
 
-    emit(loginChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(loginChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(currentLocale()).toBe("en-GB"); // switched
     expect(api.putLocale).not.toHaveBeenCalled(); // but NOT persisted
@@ -2723,7 +2723,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
         passkeyName: "Work laptop",
       });
       await flush(el);
-      emit(loginChooser(el)!, "locale-selected", { code: "en-GB" });
+      emit(loginChooser(el)!, "wt-locale-selected", { code: "en-GB" });
       await flush(el);
       expect(login(el)).toBe(screen);
       expect(screen.shadowRoot!.querySelector("h1")!.textContent).toBe(
@@ -2749,10 +2749,22 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     expect(shellChooser(el)).toBeTruthy(); // the logged-in shell renders the chooser
     expect(currentLocale()).toBe("es-ES"); // manager, no stored preference, es-ES venue
 
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(putLocale).toHaveBeenCalledWith("en-GB");
     expect(currentLocale()).toBe("en-GB"); // the switch happened AFTER the persist resolved
+  });
+
+  it("names the shell's language on the chooser, and the new one once a pick is saved", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const trigger = () =>
+      shellChooser(el)!.shadowRoot!.querySelector("[data-test=lang-trigger]")!.textContent!.trim();
+    expect(trigger()).toBe("Español");
+
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
+    await flush(el);
+    expect(trigger()).toBe("English");
   });
 
   it("a rejected putLocale leaves the language unchanged (the switch is gated behind the durable write)", async () => {
@@ -2763,7 +2775,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
 
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
     expect(putLocale).toHaveBeenCalledWith("en-GB");
     expect(currentLocale()).toBe("es-ES"); // unchanged — the failed write never switched the UI
@@ -2851,7 +2863,7 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
     await flush(el); // logged in as a manager, es-ES
     expect(currentLocale()).toBe("es-ES");
 
-    emit(shellChooser(el)!, "locale-selected", { code: "en-GB" }); // putLocale now pending
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" }); // putLocale now pending
     await el.updateComplete;
     host.remove(); // torn down before putLocale resolves
     resolvePut();
@@ -3145,6 +3157,25 @@ describe("dashboard URL navigation", () => {
   });
 });
 
+it("ends the content column with the language footer, at the column's foot when the screen is short", async () => {
+  const width = window.innerWidth,
+    height = window.innerHeight;
+  await page.viewport(1280, 1600);
+  try {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
+    await flush(el);
+    const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
+    const footer = main.lastElementChild!;
+    expect(footer.localName).toBe("wt-language-footer");
+    const body = main.querySelector(".body")!.getBoundingClientRect();
+    const footerBox = footer.getBoundingClientRect();
+    expect(footerBox.top).toBeGreaterThanOrEqual(body.bottom);
+    expect(Math.abs(footerBox.bottom - main.getBoundingClientRect().bottom)).toBeLessThan(1);
+  } finally {
+    await page.viewport(width, height);
+  }
+});
+
 it("leaves long dashboard content clear of the bottom-right language chooser on a narrow screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
@@ -3169,7 +3200,7 @@ it("leaves long dashboard content clear of the bottom-right language chooser on 
     const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;
     main.scrollTo(0, main.scrollHeight);
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const chooser = el.shadowRoot!.querySelector("dashboard-language-chooser")!;
+    const chooser = el.shadowRoot!.querySelector("wt-language-footer")!;
     const trigger = chooser
       .shadowRoot!.querySelector<HTMLElement>('[data-test="lang-trigger"]')!
       .getBoundingClientRect();
@@ -4312,7 +4343,7 @@ describe("the nav search", () => {
     await search(el, "impresora");
     expect(shownItems(el)).toEqual([]);
 
-    emit(shellChooser(el)!, "locale-selected", { code: "es-ES" });
+    emit(shellChooser(el)!, "wt-locale-selected", { code: "es-ES" });
     await flush(el);
     expect(currentLocale()).toBe("es-ES");
     expect(searchBox(el).value).toBe("impresora");

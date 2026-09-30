@@ -32,7 +32,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { DASHBOARD_MODULES } from "@waitron/dashboard-modules";
 import { LocaleChangeController } from "./state/locale-controller.js";
-import "./widgets/language-chooser.js";
+import "@waitron/ui/src/components/wt-language-footer.js";
 import "./screens/login-screen.js";
 import "./screens/profile-screen.js";
 import type { ProfileScreen } from "./screens/profile-screen.js";
@@ -492,9 +492,11 @@ export class DashboardApp extends LitElement {
 
       .body {
         padding: var(--wt-space-4);
-        padding-bottom: calc(
-          var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)
-        );
+      }
+
+      .main > wt-language-footer {
+        margin-top: auto;
+        padding-inline: var(--wt-space-4);
       }
 
       /* Narrow screens (a phone or a split view): the sidebar becomes an off-canvas DRAWER inside the
@@ -1133,7 +1135,7 @@ export class DashboardApp extends LitElement {
         ${this.#banner(false, false)}
         <div
           class="body"
-          @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+          @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
         >
           <dashboard-login-screen
             .api=${this.api}
@@ -1149,7 +1151,7 @@ export class DashboardApp extends LitElement {
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
-        @locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
+        @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         <div class="banner-row">
           ${this.#banner(true, hasNav)}
@@ -1219,9 +1221,10 @@ export class DashboardApp extends LitElement {
                     : nothing
               }
             </div>
-            <dashboard-language-chooser
+            <wt-language-footer
+              .active=${currentLocale()}
               .loadLocales=${() => this.api.getLocales().then((r) => r.locales)}
-            ></dashboard-language-chooser>
+            ></wt-language-footer>
           </div>
         </div>
         ${this.#renderProfileModal()}

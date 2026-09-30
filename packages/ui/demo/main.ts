@@ -19,6 +19,7 @@ import "../src/components/wt-row-actions.js";
 import "../src/components/wt-combobox.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-toast.js";
+import "../src/components/wt-language-footer.js";
 
 registerIcons({
   check: "M2 8 L6 12 L14 4",
@@ -192,6 +193,7 @@ const panel = (theme: "light" | "dark") => `
         <wt-button variant="primary" class="save-member">Save</wt-button>
       </wt-form-actions>
     </wt-modal>
+    <wt-language-footer active="es-ES"></wt-language-footer>
   </div>
 `;
 

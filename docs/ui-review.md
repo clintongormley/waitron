@@ -139,7 +139,9 @@ Candidates from the first look (awaiting owner confirmation — not yet fixes):
       an `en-GB` locale — likely a seed-data naming choice; confirm whether the admin should have a
       real person name.
 - [x] Language label and placement decided 2026-09-06: **English**, bottom right throughout the UI.
-      Implementation is covered by the general corrections above.
+      Implementation is covered by the general corrections above. Placement changed 2026-09-30
+      (C93, owner): the setup wizard and the dashboard show the chooser in a footer below the
+      page's content instead of floating over it; the till moves later (lane B's B18).
 
 ### 3 — Counter / walk-up sales
 
