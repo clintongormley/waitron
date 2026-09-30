@@ -2208,7 +2208,7 @@ describe("an extra on its own (B11d)", () => {
     expect(previewed).toMatchObject({ reduction: "0.30", nominalValue: "3.00" });
   });
 
-  it("cancels the olives of a fired pizza alone, telling the kitchen nothing: they have no kitchen item of their own", async () => {
+  it("cancels the olives of a fired pizza alone: they have no kitchen item of their own, so the pizza's station gets one correction", async () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Bread" }]);
     const olives = await lineIdOf(venue, billId, 2);
     const ticket = await ticketOf(venue, billId, 1);
@@ -2227,8 +2227,11 @@ describe("an extra on its own (B11d)", () => {
       ["Pizza", "1.000", "9.00", null, "9.00"],
       ["Bread", "1.000", "2.50", null, "2.50"],
     ]);
-    expect(await noticesAtStation()).toEqual(notices);
-    expect(await printJobCount()).toBe(jobs);
+    expect(await noticesAtStation()).toEqual([
+      ...notices,
+      expect.objectContaining({ kind: "changed" }),
+    ]);
+    expect(await printJobCount()).toBe(jobs + 1);
     const [item] = await inTx(venue, (tx) =>
       tx
         .select({ quantity: ticketItems.quantity })
