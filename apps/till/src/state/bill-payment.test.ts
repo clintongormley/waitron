@@ -163,9 +163,16 @@ describe("the submission id of a confirmation", () => {
     expect(sentIds).toEqual(["sub-1", "sub-2", "sub-3"]);
   });
 
-  it("is fresh after a refusal, which is an answer", () => {
+  it("is kept after a refusal, which does not say what became of the send that got no answer", () => {
     const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
-    const unanswered = unansweredAfter(first, { code: "bill.allocation_changed", status: 409 });
+    const kept = unansweredAfter(first, { code: "reader.provider_disconnected", status: 503 });
+
+    expect(submissionFor("wo-1", tenEuros, kept, ids("sub-2")).request.submissionId).toBe("sub-1");
+  });
+
+  it("is fresh once the server says the id is taken by another request", () => {
+    const first = submissionFor("wo-1", tenEuros, null, ids("sub-1"));
+    const unanswered = unansweredAfter(first, { code: "submission.id_reused", status: 409 });
 
     expect(unanswered).toBeNull();
     expect(submissionFor("wo-1", tenEuros, unanswered, ids("sub-2")).request.submissionId).toBe(

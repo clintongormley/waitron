@@ -304,10 +304,10 @@ function isBillMoneyRefusal(error: unknown): boolean {
 
 /** A table refusal as said: a move that would leave the bill owing less than it has received names
  * by how much, with the offer to give that back first. */
-function billWriteError(error: unknown): CounterError {
+function billWriteError(error: unknown, lineChange = false): CounterError {
   const refused = error as { code?: unknown; excess?: unknown } | undefined;
   return refused?.code === "bill.received_exceeds_total" && typeof refused.excess === "string"
-    ? { excess: refused.excess }
+    ? { excess: refused.excess, ...(lineChange ? { lineChange: true } : {}) }
     : tableWriteError(error);
 }
 
@@ -587,7 +587,8 @@ type CounterError =
   | StringKey
   | { code: string }
   | { billPayments: string }
-  | { excess: string }
+  /** `lineChange`: refused for a change to a line, not a move of items. */
+  | { excess: string; lineChange?: true }
   | { takenOver: string; unsent?: true }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
@@ -636,7 +637,11 @@ function errorText(error: CounterError): string | TemplateResult {
   if ("excess" in error) {
     const amount = formatMoney(error.excess, currentLocale());
     return html`<span class="error-part"
-        >${t("bill.received_exceeds_total_excess").replaceAll("{amount}", () => amount)}</span
+        >${t(
+          error.lineChange === true
+            ? "bill.received_exceeds_total_line_excess"
+            : "bill.received_exceeds_total_excess",
+        ).replaceAll("{amount}", () => amount)}</span
       ><span class="error-action"
         ><wt-button
           variant="secondary"
@@ -1228,8 +1233,8 @@ export class TillApp extends LitElement {
   /** The open bill payment dialog, with what the server last answered it. */
   @state() private billPaying: BillPaying | null = null;
   #billPays = 0;
-  /** The last bill payment sent that got no answer, which the same confirmation resends under
-   * its submission id. */
+  /** The last bill payment sent that no result answered (`unansweredAfter`), which the same
+   * confirmation resends under its submission id. */
   #unansweredPayment: Submission | null = null;
   /** The open refund dialog, over the bill payment dialog. */
   @state() private billRefunding: BillRefunding | null = null;
@@ -1237,7 +1242,7 @@ export class TillApp extends LitElement {
   /** The people who can approve the refund being confirmed; set, their PIN prompt is open. */
   @state() private refundApprovers?: StaffMember[];
   @state() private refundApproverError: string | null = null;
-  /** The last refund sent that got no answer, which the same refund resends under its id. */
+  /** The last refund sent that no result answered, which the same refund resends under its id. */
   #unansweredRefund: RefundSubmission | null = null;
   /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder}; a no-op once it
    * has ended, and for a lock taken later. */
@@ -4194,7 +4199,7 @@ export class TillApp extends LitElement {
       code === "working_order.out_of_date"
         ? "held.changed_elsewhere"
         : code === "bill.received_exceeds_total"
-          ? billWriteError(outcome.error)
+          ? billWriteError(outcome.error, true)
           : lineWriteError(outcome.error);
     if (isNetworkFailure(outcome.error)) await this.#rereadAmounts(orderId, visit);
     else if (isBillMoneyRefusal(outcome.error)) await this.#loadLinesAndBills();
@@ -4833,20 +4838,26 @@ export class TillApp extends LitElement {
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
       asked.card,
     );
-    const submission = submissionFor(open.billId, confirmation, this.#unansweredPayment);
+    const before = this.#unansweredPayment;
+    const submission = submissionFor(open.billId, confirmation, before);
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    // A later operator's send may have replaced the unanswered payment while this one was out.
+    const settle = (error?: unknown) => {
+      if (this.#unansweredPayment === before)
+        this.#unansweredPayment = unansweredAfter(submission, error);
+    };
     try {
       const result = await resendUnanswered(
         (signal) => this.api.takeBillPayment(open.billId, submission.request, { signal }),
         limit.signal,
         () => session === this.#operatorSession,
       );
-      this.#unansweredPayment = null;
+      settle();
       await this.#onBillPaid(open, result);
     } catch (error) {
-      this.#unansweredPayment = unansweredAfter(submission, error);
+      settle(error);
       await this.#onBillPayRefused(open.id, error, asked, "take");
     } finally {
       limit.done();
@@ -4858,23 +4869,23 @@ export class TillApp extends LitElement {
    * ticket shows. A card the reader did not charge records nothing: the confirmation stays, saying
    * so, to be tried again as a new payment. Otherwise the dialog says the payment was taken, or for
    * a card still at the reader that it is in progress, with the bill's new balance, and the bill is
-   * read again.
+   * read again. An answer after a logout has closed the dialog changes nothing.
    */
   async #onBillPaid(open: BillPaying, result: BillPaymentResult): Promise<void> {
+    const now = this.#billPayingNow(open.id);
+    if (now === null) return;
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
     if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
-      const now = this.#billPayingNow(open.id);
-      if (now !== null)
-        this.billPaying = {
-          ...now,
-          balance: result.balance,
-          refusal: { code: result.outcome === "network_unavailable" ? "card_network" : "declined" },
-          busy: false,
-        };
+      this.billPaying = {
+        ...now,
+        balance: result.balance,
+        refusal: { code: result.outcome === "network_unavailable" ? "card_network" : "declined" },
+        busy: false,
+      };
       return;
     }
     if (result.invoice !== undefined) {
-      if (this.#billPayingNow(open.id) !== null) this.#closeBillPaying();
+      this.#closeBillPaying();
       this.result = result.invoice;
       this.#showTicket(open.billId);
       // The paid order drops off the held list.
@@ -4882,20 +4893,18 @@ export class TillApp extends LitElement {
         await this.#refreshAfterWrite("held", "refresh.held_after_sale");
       return;
     }
-    const now = this.#billPayingNow(open.id);
-    if (now !== null)
-      this.billPaying = {
-        ...now,
-        balance: result.balance,
-        asked: null,
-        preview: null,
-        refusal: null,
-        taken:
-          result.payment.state === "pending"
-            ? { change: null, pending: result.payment.applied }
-            : { change: result.payment.change },
-        busy: false,
-      };
+    this.billPaying = {
+      ...now,
+      balance: result.balance,
+      asked: null,
+      preview: null,
+      refusal: null,
+      taken:
+        result.payment.state === "pending"
+          ? { change: null, pending: result.payment.applied }
+          : { change: result.payment.change },
+      busy: false,
+    };
     await this.#rereadPayingOrder(open);
   }
 
@@ -4999,10 +5008,13 @@ export class TillApp extends LitElement {
     this.refundApproverError = null;
   }
 
-  /** How much and why, confirmed: the people who can approve it are read, and their PIN prompt
-   * opens. Every refund is approved with a PIN, which a card keyed on a separate terminal needs
-   * even from someone allowed to give refunds. Such a card is first given back on its terminal,
-   * so its PIN is asked for once, when staff confirm that. */
+  /**
+   * How much and why, confirmed: the refund is sent in the operator's own name, and only when the
+   * server answers that they cannot give refunds are the people who can approve it read and their
+   * PIN prompt opened, as the drawer does. A card keyed on a separate terminal is given back there
+   * first, and its confirmation always asks for a PIN, which the server needs even from someone
+   * allowed to give refunds.
+   */
   async #onRefundContinue(event: Event): Promise<void> {
     const asked = (event as CustomEvent<RefundAsk>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
@@ -5012,16 +5024,23 @@ export class TillApp extends LitElement {
       this.billRefunding = { ...open, asked, terminal: true, refusal: null };
       return;
     }
-    this.billRefunding = { ...open, asked, refusal: null, busy: true };
+    const sending: BillRefunding = { ...open, asked, refusal: null, busy: true };
+    this.billRefunding = sending;
+    if (asked.manualConfirmed === true) await this.#askRefundApprover(open.id);
+    else await this.#sendRefund(sending);
+  }
+
+  /** The people who can approve the refund in dialog `id` are read, and their PIN prompt opens. */
+  async #askRefundApprover(id: number): Promise<void> {
     try {
       const approvers = await this.api.listRefundAuthorizers();
-      const now = this.#billRefundingNow(open.id);
+      const now = this.#billRefundingNow(id);
       if (now === null) return;
       this.billRefunding = { ...now, busy: false };
       this.refundApproverError = null;
       this.refundApprovers = approvers;
     } catch {
-      const now = this.#billRefundingNow(open.id);
+      const now = this.#billRefundingNow(id);
       if (now !== null)
         this.billRefunding = { ...now, refusal: { code: "approvers" }, busy: false };
     }
@@ -5035,32 +5054,47 @@ export class TillApp extends LitElement {
     const open = this.billRefunding!;
     if (open.busy) return;
     this.refundApproverError = null;
-    const submission = refundSubmissionFor(
-      open.billId,
-      open.payment.id,
-      open.asked!,
-      this.#unansweredRefund,
-    );
     this.billRefunding = { ...open, refusal: null, busy: true };
+    await this.#sendRefund(open, { personId: override.personId, pin: override.pin });
+  }
+
+  /** Sends the refund the dialog asked for, approved by `override` when one is given. */
+  async #sendRefund(
+    open: BillRefunding,
+    override?: { personId: string; pin: string },
+  ): Promise<void> {
+    const before = this.#unansweredRefund;
+    const submission = refundSubmissionFor(open.billId, open.payment.id, open.asked!, before);
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    // A later operator's send may have replaced the unanswered refund while this one was out.
+    const settle = (error?: unknown) => {
+      if (this.#unansweredRefund === before)
+        this.#unansweredRefund = unansweredAfter(submission, error);
+    };
     try {
       const result = await resendUnanswered(
         (signal) =>
           this.api.refundBillPayment(
             open.billId,
             open.payment.id,
-            { ...submission.request, override: { personId: override.personId, pin: override.pin } },
+            override === undefined ? submission.request : { ...submission.request, override },
             { signal },
           ),
         limit.signal,
         () => session === this.#operatorSession,
       );
-      this.#unansweredRefund = null;
+      settle();
       await this.#onRefunded(open, result);
     } catch (error) {
-      this.#unansweredRefund = unansweredAfter(submission, error);
-      await this.#onRefundRefused(open, error);
+      settle(error);
+      if (
+        override === undefined &&
+        (error as { code?: unknown }).code === "authorization.not_permitted" &&
+        this.#billRefundingNow(open.id) !== null
+      )
+        await this.#askRefundApprover(open.id);
+      else await this.#onRefundRefused(open, error);
     } finally {
       limit.done();
     }

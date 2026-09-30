@@ -9,7 +9,6 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import { isNetworkFailure } from "../api/client.js";
 import type {
   AllocationChoice,
   AllocationPreview,
@@ -115,10 +114,17 @@ export function submissionFor(
   return { key, request: { ...confirmation, submissionId } };
 }
 
-/** What is left unanswered once a send ends: the submission, when it got no answer at all;
- * nothing, when the server answered, a refusal included. */
+/**
+ * What is left unanswered once a send ends: nothing once the server answered it with a result, and
+ * the submission otherwise. A refusal does not say what became of an earlier send of it: the server
+ * refuses the session, device, reader or approver before it looks the id up (the payment and
+ * refund routes, `apps/server/src/bill-payments-api.ts`; `refundBillPayment`,
+ * `apps/server/src/bill-refunds.ts`). Sending the id again is safe, since the server answers an id
+ * it recorded with that record; only `submission.id_reused` says it cannot be sent again.
+ */
 export function unansweredAfter<S>(sent: S, error?: unknown): S | null {
-  return isNetworkFailure(error) ? sent : null;
+  if (error === undefined) return null;
+  return (error as { code?: unknown }).code === "submission.id_reused" ? null : sent;
 }
 
 /** A refund as confirmed: without its submission id, and without the approver's PIN, which is

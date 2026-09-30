@@ -26,6 +26,7 @@ import type {
   BillPaymentRequest,
   BillPaymentResult,
   BillPaymentView,
+  BillRefundRequest,
   BillRefundResult,
   BillRefundView,
   CurrentOrders,
@@ -1070,8 +1071,9 @@ describe("till-app: a change refused on a bill that holds money", () => {
     await flush(el);
 
     expect(text(banner(el))).toContain(
-      t("bill.received_exceeds_total_excess").replaceAll("{amount}", money("5.00")),
+      t("bill.received_exceeds_total_line_excess").replaceAll("{amount}", money("5.00")),
     );
+    expect(banner(el)!.querySelector("[data-refund-excess]")).not.toBeNull();
   });
 
   it("opens only the bill payment dialog, saying so, when the payments cannot be read to give the excess back", async () => {
@@ -1334,6 +1336,71 @@ describe("till-app: a partly paid order at the counter", () => {
 
     expect(dialog(el)).toBeNull();
     expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(orderReads);
+  });
+
+  it("shows no ticket and reads nothing when the payment that issues the invoice is answered after the next operator signed in", async () => {
+    let answer: (value: BillPaymentResult) => void = () => {};
+    const takeBillPayment = vi.fn(
+      () => new Promise<BillPaymentResult>((resolve) => (answer = resolve)),
+    );
+    const el = await retrieved({ takeBillPayment });
+    await payTheRest(el);
+    emit(counter(el), "logout");
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    await flush(el);
+    const listReads = vi.mocked(api.listWorkingOrders).mock.calls.length;
+
+    answer(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { workingOrderId: "wo-1", received: "120.00", outstanding: "0.00", status: "settled" },
+        invoiceOf("120.00"),
+      ),
+    );
+    await flush(el);
+
+    expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-counter-screen")).not.toBeNull();
+    expect(api.listWorkingOrders).toHaveBeenCalledTimes(listReads);
+  });
+
+  it("keeps the next operator's payment that got no answer when an earlier operator's payment is answered late", async () => {
+    let answer: (value: BillPaymentResult) => void = () => {};
+    const takeBillPayment = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<BillPaymentResult>((resolve) => (answer = resolve)))
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await retrieved({ takeBillPayment });
+    await payTheRest(el);
+    emit(counter(el), "logout");
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    await flush(el);
+    emit(counter(el), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    await payTheRest(el);
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    const unanswered = sent().at(-1)!.submissionId;
+
+    answer(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
+      ),
+    );
+    await flush(el);
+    takeBillPayment.mockResolvedValueOnce(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
+      ),
+    );
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent().at(-1)!.submissionId).toBe(unanswered);
   });
 
   it("offers the bill payment once a card at the reader is refused because another till took a payment first", async () => {
@@ -1683,7 +1750,8 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
 
-    expect(sent()[0]).toMatchObject({ kind: "items", lines: [{ lineNo: 6 }] });
+    expect(sent()[0]!.kind).toBe("items");
+    expect(sent()[0]!.lines).toEqual([{ lineNo: 6 }]);
     expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
     await press(el, "[data-pay-close]");
     const group = tableOrder(el).shadowRoot!.querySelector<HTMLElement>('[data-group="g-2"]')!;
@@ -1965,6 +2033,28 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
   });
 
+  // The server refuses a reader it cannot reach before it looks the submission id up, so the
+  // refusal says nothing of whether the card that got no answer was charged.
+  it("sends a card that got no answer under the same submission id after the reader is refused", async () => {
+    const takeBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await takeOnReader(takeBillPayment);
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+
+    takeBillPayment.mockRejectedValueOnce({ code: "reader.provider_disconnected", status: 503 });
+    await press(el, "[data-pay-confirm]");
+    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    takeBillPayment.mockResolvedValueOnce(
+      onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+    );
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(new Set(sent().map((request) => request.submissionId)).size).toBe(1);
+  });
+
   it("says a reader that could not reach the card network took nothing", async () => {
     const el = await takeOnReader(
       vi.fn().mockResolvedValue(onReader("network_unavailable", "failed", {})),
@@ -2096,6 +2186,17 @@ describe("till-app: giving back a bill payment", () => {
     vi
       .mocked(api.refundBillPayment)
       .mock.calls.map(([billId, paymentId, request]) => ({ billId, paymentId, request }));
+  const notPermitted = {
+    code: "authorization.not_permitted",
+    status: 403,
+    permission: "sale.refund",
+  };
+  /** The server as it answers an operator who cannot give refunds: refused without a PIN, and a
+   * refund carrying one answered by `withPin`. */
+  const needsApproval =
+    (withPin: (request: BillRefundRequest) => Promise<unknown>) =>
+    (_billId: string, _paymentId: string, request: BillRefundRequest) =>
+      request.override === undefined ? Promise.reject(notPermitted) : withPin(request);
 
   /** The bill holding `payment`, its dialog open, and a refund of it asked with `reason`. */
   async function askRefund(
@@ -2109,6 +2210,15 @@ describe("till-app: giving back a bill payment", () => {
       listRefundAuthorizers: vi.fn().mockResolvedValue(manager),
       ...overrides,
     });
+    await signInAndAskRefund(el, payment, reason);
+    return el;
+  }
+
+  async function signInAndAskRefund(
+    el: TillApp,
+    payment: BillPaymentView,
+    reason = "Charged twice",
+  ): Promise<void> {
     await openTable(el);
     await openDialog(el, "rest");
     await press(el, `[data-payment-refund="${payment.id}"]`);
@@ -2118,7 +2228,6 @@ describe("till-app: giving back a bill payment", () => {
     await flush(el);
     inRefund(el, "[data-refund-continue]")!.click();
     await flush(el);
-    return el;
   }
 
   async function pinPad(el: TillApp, digits: string): Promise<void> {
@@ -2136,13 +2245,39 @@ describe("till-app: giving back a bill payment", () => {
     await flush(el);
   }
 
-  it("gives back a cash payment with a manager's PIN, opens no drawer from the till, and shows the bill after it", async () => {
+  it("gives back the cash payment of an operator who can give refunds with no PIN, and asks for none", async () => {
+    const refundBillPayment = vi.fn().mockResolvedValue(givenBack(cashPaid, refundOf()));
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+
+    expect(refunds()).toEqual([
+      {
+        billId: "wo-4",
+        paymentId: "pay-1",
+        request: {
+          submissionId: expect.any(String),
+          appliedAmount: "50.00",
+          tipAmount: "0.00",
+          reason: "Charged twice",
+        },
+      },
+    ]);
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    expect(approval(el)).toBeNull();
+    expect(refundDialog(el)).toBeNull();
+    expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
+      t("bill_refund.done_cash").replace("{amount}", money("50.00")),
+    );
+  });
+
+  it("gives back a cash payment with a manager's PIN when the operator cannot, under the same submission id, opens no drawer from the till, and shows the bill after it", async () => {
     const refunded = givenBack(cashPaid, refundOf());
     let latest = holding(cashPaid);
-    const refundBillPayment = vi.fn(async () => {
-      latest = refunded.balance;
-      return refunded;
-    });
+    const refundBillPayment = vi.fn(
+      needsApproval(async () => {
+        latest = refunded.balance;
+        return refunded;
+      }),
+    );
     const getTabLines = vi
       .fn()
       .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
@@ -2157,15 +2292,19 @@ describe("till-app: giving back a bill payment", () => {
     const readsBefore = getTabLines.mock.calls.length;
     await pinPad(el, "1234");
 
+    const ask = { appliedAmount: "50.00", tipAmount: "0.00", reason: "Charged twice" };
     expect(refunds()).toEqual([
       {
         billId: "wo-4",
         paymentId: "pay-1",
+        request: { submissionId: expect.any(String), ...ask },
+      },
+      {
+        billId: "wo-4",
+        paymentId: "pay-1",
         request: {
-          submissionId: expect.any(String),
-          appliedAmount: "50.00",
-          tipAmount: "0.00",
-          reason: "Charged twice",
+          submissionId: refunds()[0]!.request.submissionId,
+          ...ask,
           override: { personId: "m-1", pin: "1234" },
         },
       },
@@ -2225,10 +2364,10 @@ describe("till-app: giving back a bill payment", () => {
       .fn()
       .mockRejectedValue({ code: "bill.refund_unsupported", status: 422, paymentId: "pay-1" });
     const el = await askRefund({ refundBillPayment }, readerCard);
-    await pinPad(el, "1234");
 
     expect(refunds()).toHaveLength(1);
     expect(refunds()[0]!.request).not.toHaveProperty("manualConfirmed");
+    expect(approval(el)).toBeNull();
     expect(inRefund(el, "[data-refund-terminal]")).toBeNull();
     expect(inRefund(el, "wt-form-actions")!.error).toBe(codeMessage("bill.refund_unsupported"));
   });
@@ -2238,7 +2377,9 @@ describe("till-app: giving back a bill payment", () => {
     const el = await askRefund(
       {
         getBillBalance,
-        refundBillPayment: vi.fn().mockRejectedValue({ code: "pin.invalid", status: 401 }),
+        refundBillPayment: needsApproval(() =>
+          Promise.reject({ code: "pin.invalid", status: 401 }),
+        ),
       },
       cashPaid,
     );
@@ -2251,6 +2392,27 @@ describe("till-app: giving back a bill payment", () => {
     expect(getBillBalance.mock.calls.length).toBeGreaterThan(readsBefore);
   });
 
+  it("keeps the PIN prompt open after too many wrong PINs, saying to wait, with the refund open and not busy", async () => {
+    const el = await askRefund(
+      {
+        refundBillPayment: needsApproval(() =>
+          Promise.reject({
+            code: "pin.throttled",
+            params: { retryAfterSeconds: 2 },
+            status: 429,
+          }),
+        ),
+      },
+      cashPaid,
+    );
+    await pinPad(el, "7777");
+
+    expect(approval(el)!.error).toBe("pin.throttled");
+    expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.throttled"));
+    expect(refundDialog(el)).not.toBeNull();
+    expect(refundDialog(el)!.busy).toBe(false);
+  });
+
   it("shows a refund the server refused beside the refund's action, and reads the bill and its lines again", async () => {
     const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
     const getTabLines = vi
@@ -2260,9 +2422,9 @@ describe("till-app: giving back a bill payment", () => {
       {
         getBillBalance,
         getTabLines,
-        refundBillPayment: vi
-          .fn()
-          .mockRejectedValue({ code: "bill.refund_in_progress", status: 409 }),
+        refundBillPayment: needsApproval(() =>
+          Promise.reject({ code: "bill.refund_in_progress", status: 409 }),
+        ),
       },
       cashPaid,
     );
@@ -2286,7 +2448,6 @@ describe("till-app: giving back a bill payment", () => {
       },
       readerCard,
     );
-    await pinPad(el, "1234");
 
     expect(text(inDialog(el, "[data-pay-refunded]"))).toBe(
       t("bill_refund.pending").replace("{amount}", money("50.00")),
@@ -2299,7 +2460,6 @@ describe("till-app: giving back a bill payment", () => {
       .mockRejectedValueOnce(new TypeError("Failed to fetch"))
       .mockResolvedValueOnce(givenBack(cashPaid, refundOf()));
     const el = await askRefund({ refundBillPayment }, cashPaid);
-    await pinPad(el, "1234");
 
     await expect.poll(() => refundBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(2);
     await expect.poll(() => refundDialog(el)).toBeNull();
@@ -2310,23 +2470,50 @@ describe("till-app: giving back a bill payment", () => {
   it("says a refund that never got an answer may have been made, and gives the same id to the same refund again", async () => {
     const refundBillPayment = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const el = await askRefund({ refundBillPayment }, cashPaid);
-    await pinPad(el, "1234");
 
     await expect
       .poll(() => inRefund(el, "wt-form-actions")?.error, { timeout: 5_000 })
       .toBe(t("bill_refund.unconfirmed"));
     inRefund(el, "[data-refund-continue]")!.click();
     await flush(el);
-    await pinPad(el, "1234");
     await expect.poll(() => refundBillPayment.mock.calls.length, { timeout: 5_000 }).toBe(6);
 
     const ids = new Set(refunds().map(({ request }) => request.submissionId));
     expect(ids.size).toBe(1);
   });
 
+  // The server checks the approver's PIN before it looks the submission id up, so a wrong PIN says
+  // nothing of whether the refund that got no answer was made.
+  it("gives a refund that got no answer the same submission id after a wrong PIN, and again with the right one", async () => {
+    const withPin = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await askRefund({ refundBillPayment: vi.fn(needsApproval(withPin)) }, cashPaid);
+    await pinPad(el, "1234");
+    await expect
+      .poll(() => inRefund(el, "wt-form-actions")?.error, { timeout: 5_000 })
+      .toBe(t("bill_refund.unconfirmed"));
+
+    withPin
+      .mockRejectedValueOnce({ code: "pin.invalid", status: 401 })
+      .mockResolvedValueOnce(givenBack(cashPaid, refundOf()));
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+    await pinPad(el, "0000");
+    expect(approval(el)!.error).toBe("pin.invalid");
+    emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
+    await flush(el);
+
+    expect(refundDialog(el)).toBeNull();
+    const ids = refunds().map(({ request }) => request.submissionId);
+    expect(new Set(ids).size).toBe(1);
+    expect(refunds().at(-1)!.request.override).toEqual({ personId: "m-1", pin: "1234" });
+  });
+
   it("says who can approve could not be read, beside the refund's action", async () => {
     const el = await askRefund(
-      { listRefundAuthorizers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) },
+      {
+        refundBillPayment: needsApproval(vi.fn()),
+        listRefundAuthorizers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      },
       cashPaid,
     );
 
@@ -2345,7 +2532,6 @@ describe("till-app: giving back a bill payment", () => {
       },
       cashPaid,
     );
-    await pinPad(el, "1234");
 
     expect(inRefund(el, 'wt-input[name="reason"]')!.error).toBe(
       codeMessage("management.request_invalid"),
@@ -2358,14 +2544,14 @@ describe("till-app: giving back a bill payment", () => {
       () => new Promise<typeof manager>((resolve) => (approvers = resolve)),
     );
     let refunded: (result: BillRefundResult) => void = () => {};
-    const refundBillPayment = vi.fn(
-      () => new Promise<BillRefundResult>((resolve) => (refunded = resolve)),
-    );
+    const withPin = vi.fn(() => new Promise<BillRefundResult>((resolve) => (refunded = resolve)));
+    const refundBillPayment = vi.fn(needsApproval(withPin));
     const el = await askRefund({ listRefundAuthorizers, refundBillPayment }, cashPaid);
     const ask = { appliedAmount: "50.00", tipAmount: "0.00", reason: "Charged twice" };
     emit(refundDialog(el)!, "bill-refund-continue", ask);
     approvers(manager);
     await flush(el);
+    expect(refundBillPayment).toHaveBeenCalledOnce();
     expect(listRefundAuthorizers).toHaveBeenCalledOnce();
 
     const approve = () => emit(approval(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
@@ -2373,7 +2559,7 @@ describe("till-app: giving back a bill payment", () => {
     approve();
     refunded(givenBack(cashPaid, refundOf()));
     await flush(el);
-    expect(refundBillPayment).toHaveBeenCalledOnce();
+    expect(withPin).toHaveBeenCalledOnce();
   });
 
   it.each([
@@ -2392,8 +2578,12 @@ describe("till-app: giving back a bill payment", () => {
       const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
       const el = await askRefund(
         request === "approvers"
-          ? { getBillBalance, listRefundAuthorizers: vi.fn(later) }
-          : { getBillBalance, refundBillPayment: vi.fn(later) },
+          ? {
+              getBillBalance,
+              refundBillPayment: needsApproval(vi.fn()),
+              listRefundAuthorizers: vi.fn(later),
+            }
+          : { getBillBalance, refundBillPayment: needsApproval(vi.fn(later)) },
         cashPaid,
       );
       if (request === "refund") {
@@ -2417,8 +2607,50 @@ describe("till-app: giving back a bill payment", () => {
     },
   );
 
+  it("keeps the next operator's refund that got no answer when an earlier operator's refund is answered late", async () => {
+    let answer: (value: BillRefundResult) => void = () => {};
+    const refundBillPayment = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise<BillRefundResult>((resolve) => (answer = resolve)))
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+    emit(tableOrder(el), "logout");
+    await flush(el);
+    await signInAndAskRefund(el, cashPaid);
+    await expect
+      .poll(() => inRefund(el, "wt-form-actions")?.error, { timeout: 5_000 })
+      .toBe(t("bill_refund.unconfirmed"));
+    const unanswered = refunds().at(-1)!.request.submissionId;
+
+    answer(givenBack(cashPaid, refundOf()));
+    await flush(el);
+    refundBillPayment.mockResolvedValueOnce(givenBack(cashPaid, refundOf()));
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+
+    expect(refunds().at(-1)!.request.submissionId).toBe(unanswered);
+  });
+
+  it("asks for no approver when the operator's own refund is refused after they logged out", async () => {
+    let refuse: (error: unknown) => void = () => {};
+    const refundBillPayment = vi.fn(
+      () => new Promise<BillRefundResult>((_resolve, reject) => (refuse = reject)),
+    );
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+
+    emit(tableOrder(el), "logout");
+    await flush(el);
+    refuse(notPermitted);
+    await flush(el);
+
+    expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
+    expect(approval(el)).toBeNull();
+    expect(refundDialog(el)).toBeNull();
+  });
+
   it("goes back to the refund when the PIN prompt is cancelled, and closes it on Cancel", async () => {
-    const el = await askRefund({ refundBillPayment: vi.fn() }, cashPaid);
+    const withPin = vi.fn();
+    const el = await askRefund({ refundBillPayment: needsApproval(withPin) }, cashPaid);
     approval(el)!.shadowRoot!.querySelector<HTMLElement>(".cancel")!.click();
     await flush(el);
 
@@ -2428,6 +2660,6 @@ describe("till-app: giving back a bill payment", () => {
     await flush(el);
     expect(refundDialog(el)).toBeNull();
     expect(dialog(el)).not.toBeNull();
-    expect(api.refundBillPayment).not.toHaveBeenCalled();
+    expect(withPin).not.toHaveBeenCalled();
   });
 });

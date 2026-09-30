@@ -632,6 +632,8 @@ export const en = {
     "Part of this bill is already paid: take the rest as a bill payment",
   "bill.received_exceeds_total_excess":
     "Moving these items would leave this bill owing {amount} less than has already been paid on it. Move fewer items, or give {amount} back first.",
+  "bill.received_exceeds_total_line_excess":
+    "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or give {amount} back first.",
   "bill.refund_excess": "Give back {amount}",
   "bill.take_rest": "Take the rest",
   // The bill payment dialog: paying for items, contributing an amount, or an equal share.
@@ -726,7 +728,8 @@ export const en = {
   "bill_refund.reason_invalid": "Say why this is given back",
   "bill_refund.reason_long": "Keep the reason to 500 characters or fewer",
   "bill_refund.continue": "Give back {amount}",
-  "bill_refund.approval_next": "A supervisor or manager approves it with their PIN next.",
+  "bill_refund.approval_next":
+    "If you cannot give refunds yourself, a supervisor or manager approves it with their PIN next.",
   "bill_refund.terminal_next":
     "Next, give it back on the separate card terminal it was keyed on. A supervisor or manager then approves it with their PIN.",
   "bill_refund.terminal":
@@ -1394,6 +1397,8 @@ export const es: Record<StringKey, string> = {
     "Parte de esta cuenta ya está pagada: cobra el resto como pago de cuenta",
   "bill.received_exceeds_total_excess":
     "Al mover estos artículos, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Mueve menos artículos o devuelve antes {amount}.",
+  "bill.received_exceeds_total_line_excess":
+    "Con este cambio, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Cambia menos o devuelve antes {amount}.",
   "bill.refund_excess": "Devolver {amount}",
   "bill.take_rest": "Cobrar el resto",
   "bill_pay.title": "Cobrar parte de la cuenta",
@@ -1490,7 +1495,8 @@ export const es: Record<StringKey, string> = {
   "bill_refund.reason_invalid": "Indica por qué se devuelve",
   "bill_refund.reason_long": "Usa 500 caracteres como mucho para el motivo",
   "bill_refund.continue": "Devolver {amount}",
-  "bill_refund.approval_next": "A continuación lo aprueba un responsable o encargado con su PIN.",
+  "bill_refund.approval_next":
+    "Si tú no puedes hacer devoluciones, a continuación lo aprueba un responsable o encargado con su PIN.",
   "bill_refund.terminal_next":
     "A continuación, devuélvelo en el datáfono aparte en el que se cobró. Después lo aprueba un responsable o encargado con su PIN.",
   "bill_refund.terminal":
