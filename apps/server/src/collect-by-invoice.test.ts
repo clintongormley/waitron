@@ -289,6 +289,24 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(registroCount(venue, billId)).toBe(1);
   });
 
+  it("refuses a cash collection with a malformed amount on a bill that owes nothing, and leaves it open", async () => {
+    const { billId, saleId } = await correctedTarta(wholeInvoice);
+
+    await expect(
+      collectOrder(
+        { db: venue.db, backend: venue.backend, clock: venue.clock },
+        venue.cfg,
+        { id: billId, lines: [], tender: { method: "cash", amount: "not-money" } },
+        venue.operatorId,
+      ),
+    ).rejects.toMatchObject({ code: "shared.invalid_decimal", params: { value: "not-money" } });
+
+    expect(await tendersOf(saleId)).toEqual([]);
+    expect((await salesOf(billId))[0]!.settledAt).toBeNull();
+    expect(await collectedAtOf(billId)).toBeNull();
+    expect(await statusOf(venue, billId)).toBe("placed");
+  });
+
   it("refuses a correction that would take the bill below zero, and the bill still collects in full", async () => {
     const billId = await placedTarta(invoiceFirstZone);
     const [issued] = await salesOf(billId);
