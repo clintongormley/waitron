@@ -277,4 +277,44 @@ describe("withReceiptAdjustments", () => {
     ]);
     expect(printed).toContain(at80("TOTAL", "23,85 €"));
   });
+
+  it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
+    // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows, and the
+    // second is numbered after the Bread.
+    const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Bread" }]);
+    await adjust(billId, {
+      lineId: await lineIdOf(venue, billId, 1),
+      action: "discount_amount",
+      amount: "1.00",
+    });
+    const result = await payWorkingOrder(
+      { db: venue.db, backend: venue.backend, clock: venue.clock },
+      venue.cfg,
+      { id: billId, tender: { method: "cash", amount: "11.49" }, lines: [] },
+    );
+
+    const printed = printedLines(
+      formatReceipt({
+        result,
+        issuer: { venueName: "Ajustes SL", nif: "62000003K" },
+        receipt: {},
+        invoiceLocale: "es-ES",
+        printer: {
+          paperWidth: "80mm",
+          resolution: "180dpi",
+          characterSet: "wpc1252",
+          characterTable: 16,
+        },
+      }),
+    );
+    const start = printed.findIndex((line) => line.startsWith("Fecha")) + 2;
+    const at80 = (label: string, amount: string) =>
+      label + " ".repeat(42 - label.length - amount.length) + amount;
+    expect(printed.slice(start, printed.indexOf("", start))).toEqual([
+      at80("2 ud  Croquetas de jamón", "6,66 €"),
+      at80("  Descuento", "-1,00 €"),
+      at80("1 ud  Pan de pueblo", "2,50 €"),
+      at80("1 ud  Croquetas de jamón", "3,33 €"),
+    ]);
+  });
 });

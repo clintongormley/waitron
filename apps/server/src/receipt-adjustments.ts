@@ -15,10 +15,11 @@ import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sal
 import type { OrderLineIdentity } from "./working-order.js";
 
 /**
- * The comps and discounts a receipt prints as their own lines: each line's beneath the row it
- * priced, and each on the whole bill after the goods. When the bill's records no longer add up to
- * its lines (a part cancelled after it was discounted, for one) each dish instead prints what its
- * rows lost, which always adds up. Presentation only: nothing here is filed.
+ * The comps and discounts a receipt prints as their own lines: each line's beneath the row it was
+ * made on, or the part it carved off, and each on the whole bill after the goods. When the bill's
+ * records no longer add up to its lines (a part cancelled after it was discounted, for one) each
+ * dish instead prints what its rows lost, which always adds up. Presentation only: nothing here is
+ * filed.
  */
 export async function withReceiptAdjustments(
   tx: Transaction,
@@ -31,6 +32,8 @@ export async function withReceiptAdjustments(
     .select({
       lineId: adjustments.lineId,
       splits: adjustments.splits,
+      quantity: adjustments.quantity,
+      lineQuantity: adjustments.lineQuantity,
       action: adjustments.action,
       percentBp: adjustments.percentBp,
       reduction: adjustments.reduction,
@@ -39,7 +42,9 @@ export async function withReceiptAdjustments(
     .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
 
-  const rowIndex = new Map(identities.map((identity, i) => [identity.id, i]));
+  const rowIndex = new Map<string | undefined, number>(
+    identities.map((identity, i) => [identity.id, i]),
+  );
   const byLine = new Map<number, ReceiptAdjustment[]>();
   const onBill: ReceiptAdjustment[] = [];
   let placed = true;
@@ -56,7 +61,12 @@ export async function withReceiptAdjustments(
       onBill.push(entry);
       continue;
     }
-    const row = record.splits.find((split) => split.from === record.lineId)?.to ?? record.lineId;
+    // Only a part carved off the line moves to the row split from it: a whole line can also split,
+    // into two prices, and that second row can be numbered after other dishes.
+    const carved = record.quantity! < record.lineQuantity!;
+    const row = carved
+      ? record.splits.find((split) => split.from === record.lineId)?.to
+      : record.lineId;
     const at = rowIndex.get(row);
     if (at === undefined) {
       placed = false;
