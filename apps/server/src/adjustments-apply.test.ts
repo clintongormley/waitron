@@ -2361,8 +2361,9 @@ describe("part of a dish with extras (B11d)", () => {
     expect(previewed).toMatchObject({ reduction: "1.20", nominalValue: "12.00" });
   });
 
-  // An extra's quantity is always its dish's times a whole count a dish, so a part of whole dishes
-  // carries whole extras and the carved and kept rows add up to the rows they came from.
+  // An extra's quantity is its dish's times a whole count a dish on every path known to store one,
+  // so a part of whole dishes carries whole extras and the carved and kept rows add up to the rows
+  // they came from.
   it.each([
     { what: "comp", ask: { action: "comp" } },
     { what: "€1.00 off", ask: { action: "discount_amount", amount: "1.00" } },

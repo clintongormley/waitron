@@ -447,7 +447,8 @@ async function planAdjustment(
         carve = { lineNo: target.lineNo, quantity: covered };
         const carved = familyAt(family, covered);
         const kept = familyAt(family, target.quantity - covered);
-        // An extra that is not a whole count a dish would split into parts that do not add up to it.
+        // An extra that is not a whole count a dish would split into parts that do not add up to it,
+        // whatever part is asked: no part of such a dish can be taken, only the whole.
         if (family.some((row) => carved.get(row.id)! + kept.get(row.id)! !== row.quantity)) {
           throw new AppError("adjustment.quantity_invalid", {
             workingOrderId: orderId,
