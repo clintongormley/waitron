@@ -1062,3 +1062,359 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
     expect(api.recordSale).not.toHaveBeenCalled();
   });
 });
+
+// Design §3.3: €105.00 contributed on a €120.00 bill, and a guest's €25.00 steak with €15.00 left.
+describe("till-app: the steak's two choices", () => {
+  const steak = line({ lineNo: 6, name: "Chuletón", unitPriceGross: "25.00" });
+  const choices = (tip = "0.00"): AllocationPreview => ({
+    kind: "choose",
+    options: [
+      { choice: "full_with_tip", applied: "15.00", tip: `${10 + Number(tip)}.00` },
+      { choice: "use_pool", applied: "15.00", tip },
+    ],
+  });
+  const contributed = balanceOf({ received: "105.00", outstanding: "15.00" });
+
+  async function toChoices(overrides: Record<string, unknown>) {
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf({ outstanding: "15.00", hasPayments: true })]),
+      getBillBalance: vi.fn().mockResolvedValue(contributed),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ lines: [...bill120, steak], revision: 0, editSentLines: true }),
+      ...overrides,
+    });
+    await openTable(el);
+    await openDialog(el, "items");
+    await press(el, 'input[name="line"][value="6"]');
+    return el;
+  }
+
+  it("charges a card €25.00, €10.00 of it a tip, when the full price with a tip is chosen", async () => {
+    const previewBillPayment = vi.fn().mockResolvedValueOnce(choices()).mockResolvedValueOnce({
+      kind: "allocated",
+      choice: "full_with_tip",
+      applied: "15.00",
+      tip: "10.00",
+      change: null,
+      charged: "25.00",
+    });
+    const takeBillPayment = vi.fn().mockResolvedValue(
+      takenOf(
+        {
+          kind: "items",
+          method: "card",
+          applied: "15.00",
+          tip: "10.00",
+          tendered: null,
+          change: null,
+        },
+        { received: "120.00", outstanding: "0.00", status: "settled" },
+        invoiceOf("120.00"),
+      ),
+    );
+    const el = await toChoices({ previewBillPayment, takeBillPayment });
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+
+    expect(text(inDialog(el, '[data-pay-choice="full_with_tip"]'))).toBe(
+      t("bill_pay.choice_tip").replace("{amount}", money("25.00")).replace("{tip}", money("10.00")),
+    );
+    await press(el, '[data-pay-choice="full_with_tip"]');
+    expect(text(inDialog(el, "[data-pay-charged] dd"))).toBe(money("25.00"));
+    await press(el, "[data-pay-confirm]");
+
+    expect(previewBillPayment.mock.calls.map(([, ask]) => ask)).toEqual([
+      { kind: "items", lines: [{ lineNo: 6 }], method: "card" },
+      { kind: "items", lines: [{ lineNo: 6 }], method: "card", choice: "full_with_tip" },
+    ]);
+    expect(sent()).toEqual([
+      {
+        kind: "items",
+        lines: [{ lineNo: 6 }],
+        method: "card",
+        choice: "full_with_tip",
+        applied: "15.00",
+        tip: "10.00",
+        entry: "manual",
+        submissionId: expect.any(String),
+      },
+    ]);
+  });
+
+  it("takes €15.00 in cash, using €10.00 of the earlier contribution, when that is chosen", async () => {
+    const previewBillPayment = vi
+      .fn()
+      .mockResolvedValueOnce(choices())
+      .mockResolvedValueOnce({ ...cash("15.00", "0.00"), choice: "use_pool" });
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        takenOf(
+          { kind: "items", applied: "15.00", tendered: "15.00", change: "0.00" },
+          { received: "120.00", outstanding: "0.00", status: "settled" },
+          invoiceOf("120.00"),
+        ),
+      );
+    const el = await toChoices({ previewBillPayment, takeBillPayment });
+    await type(el, "tendered", "15");
+    await press(el, "[data-pay-continue]");
+
+    expect(text(inDialog(el, '[data-pay-choice="use_pool"]'))).toBe(
+      t("bill_pay.choice_pool")
+        .replace("{amount}", money("15.00"))
+        .replace("{pool}", money("10.00")),
+    );
+    await press(el, '[data-pay-choice="use_pool"]');
+    await press(el, "[data-pay-confirm]");
+
+    expect(previewBillPayment.mock.calls[1]![1]).toEqual({
+      kind: "items",
+      lines: [{ lineNo: 6 }],
+      method: "cash",
+      tendered: "15",
+      choice: "use_pool",
+    });
+    expect(sent()[0]).toMatchObject({ choice: "use_pool", applied: "15.00", tip: "0.00" });
+    expect(dialog(el)).toBeNull();
+  });
+
+  it("offers only the earlier contribution in a venue that takes no tips", async () => {
+    const el = await toChoices({
+      getTill: vi.fn().mockResolvedValue({ ...till, tipsEnabled: false }),
+      previewBillPayment: vi.fn().mockResolvedValue({
+        kind: "choose",
+        options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }],
+      }),
+    });
+    await type(el, "tendered", "15");
+    await press(el, "[data-pay-continue]");
+
+    expect(
+      [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-pay-choice]")].map(
+        (choice) => choice.dataset.payChoice,
+      ),
+    ).toEqual(["use_pool"]);
+  });
+});
+
+describe("till-app: a venue that takes no tips", () => {
+  const noTips = { getTill: vi.fn().mockResolvedValue({ ...till, tipsEnabled: false }) };
+
+  it("asks for no tip on a card, and shows under the amount the most a card can be charged", async () => {
+    const previewBillPayment = vi
+      .fn()
+      .mockRejectedValue({ code: "bill.tip_not_allowed", status: 422, chargeable: "30.00" });
+    const { el } = await mountApp({ ...noTips, previewBillPayment });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "150");
+    await press(el, 'input[name="method"][value="card"]');
+
+    expect(inDialog(el, 'wt-input[name="cardTip"]')).toBeNull();
+    await press(el, "[data-pay-continue]");
+
+    expect(previewBillPayment).toHaveBeenCalledWith("wo-4", {
+      kind: "contribution",
+      amount: "150",
+      method: "card",
+    });
+    expect(inDialog(el, 'wt-input[name="amount"]')!.error).toBe(
+      t("bill_pay.chargeable").replace("{amount}", money("30.00")),
+    );
+    expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
+  });
+
+  it("gives cash change back with no offer to leave it as a tip", async () => {
+    const { el } = await mountApp(noTips);
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+
+    expect(text(inDialog(el, "[data-pay-change] dd"))).toBe(money("10.00"));
+    expect(inDialog(el, "[data-leave-tip]")).toBeNull();
+  });
+});
+
+describe("till-app: a bill payment on the card reader", () => {
+  const readers = [
+    { id: "5b1c3a52-0000-4000-8000-000000000001", name: "Barra", provider: "stripe_terminal" },
+    { id: "5b1c3a52-0000-4000-8000-000000000002", name: "Terraza", provider: "stripe_terminal" },
+  ];
+  const withReader = {
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      cardProvider: "stripe_terminal",
+      activeReaders: readers,
+      defaultReaderId: readers[0]!.id,
+    }),
+  };
+  const cardPreview: AllocationPreview = {
+    kind: "allocated",
+    choice: null,
+    applied: "40.00",
+    tip: "0.00",
+    change: null,
+    charged: "40.00",
+  };
+  const onReader = (
+    outcome: BillPaymentResult["outcome"],
+    state: BillPaymentView["state"],
+    balance: Partial<BillBalance>,
+  ): BillPaymentResult => ({
+    ...takenOf({ method: "card", applied: "40.00", tendered: null, change: null, state }, balance),
+    outcome,
+  });
+
+  async function takeOnReader(takeBillPayment: unknown, overrides: Record<string, unknown> = {}) {
+    const { el } = await mountApp({
+      ...withReader,
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment,
+      ...overrides,
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    return el;
+  }
+
+  it("charges the card on the reader picked, and shows the bill's new balance", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const el = await takeOnReader(takeBillPayment);
+
+    expect(sent()).toEqual([
+      {
+        kind: "contribution",
+        amount: "40",
+        method: "card",
+        applied: "40.00",
+        tip: "0.00",
+        entry: "reader",
+        readerId: readers[1]!.id,
+        submissionId: expect.any(String),
+      },
+    ]);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
+  });
+
+  it("says a declined card took nothing, beside the action, and tries it again as a new payment", async () => {
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValueOnce(onReader("declined", "failed", {}))
+      .mockResolvedValueOnce(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const el = await takeOnReader(takeBillPayment);
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.card_declined"));
+    expect(inDialog(el, "[data-pay-taken]")).toBeNull();
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "0.00", "120.00"));
+    expect(inDialog(el, "[data-pay-confirm]")!.disabled).toBe(false);
+
+    await press(el, "[data-pay-confirm]");
+    expect(sent()).toHaveLength(2);
+    expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(t("bill_pay.taken"));
+  });
+
+  it("says a reader that could not reach the card network took nothing", async () => {
+    const el = await takeOnReader(
+      vi.fn().mockResolvedValue(onReader("network_unavailable", "failed", {})),
+    );
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(t("bill_pay.card_unreachable"));
+  });
+
+  it("shows a card still at the reader as in progress, its amount held on the bill, and where a manager clears it", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValue({ lines: bill120, revision: 0, editSentLines: true });
+    const readsAtTake: number[] = [];
+    const takeBillPayment = vi.fn(async () => {
+      readsAtTake.push(getTabLines.mock.calls.length);
+      return onReader("timeout", "pending", { reserved: "40.00", outstanding: "80.00" });
+    });
+    const el = await takeOnReader(takeBillPayment, { getTabLines });
+
+    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+    );
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "0.00", "80.00", "40.00"));
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(getTabLines.mock.calls.length).toBeGreaterThan(readsAtTake[0]!);
+  });
+
+  it("offers a handheld no reader: its card is keyed on a separate terminal", async () => {
+    const phoneCanvas: CanvasDef = {
+      formFactor: "phone-portrait",
+      tabs: [
+        {
+          key: "floor",
+          title: "Floor",
+          columns: 12,
+          cards: [{ type: "floor-plan", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+        {
+          key: "order",
+          title: "Order",
+          columns: 12,
+          cards: [{ type: "table-order", colSpan: 12, rowSpan: 8, config: {} }],
+        },
+      ],
+    };
+    const takeBillPayment = vi
+      .fn()
+      .mockResolvedValue(
+        onReader("received", "received", { received: "40.00", outstanding: "80.00" }),
+      );
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        canvas: phoneCanvas,
+        cardProvider: "stripe_terminal",
+        activeReaders: readers,
+        defaultReaderId: readers[0]!.id,
+      }),
+      getDeviceIdentity: vi.fn().mockResolvedValue({
+        deviceId: "d1",
+        name: "Móvil",
+        formFactor: "phone-portrait",
+        stationId: null,
+      }),
+      previewBillPayment: vi.fn().mockResolvedValue(cardPreview),
+      takeBillPayment,
+    });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Ana", canConfigureTill: false });
+    await flush(el);
+    emit(floor(el), "open-table", { tableId: "t4", seated: true });
+    await flush(el);
+    const grid = el.shadowRoot!.querySelector<HTMLElement>("till-card-grid")!;
+    emit(grid.shadowRoot!.querySelector("till-table-order-screen")!, "bill-pay", {
+      way: "contribution",
+      lines: [],
+    });
+    await flush(el);
+    await type(el, "amount", "40");
+    await press(el, 'input[name="method"][value="card"]');
+
+    expect(inDialog(el, 'input[name="reader"]')).toBeNull();
+    expect(inDialog(el, 'wt-input[name="externalRef"]')).not.toBeNull();
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    expect(sent()[0]!.entry).toBe("manual");
+  });
+});

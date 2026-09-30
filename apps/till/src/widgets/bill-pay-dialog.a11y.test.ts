@@ -128,4 +128,82 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  it("has no violations offering the steak's two choices", async () => {
+    const { el, host } = await mount({
+      lines: [
+        ...lines,
+        { lineNo: 4, name: "Chuletón", quantity: "1", total: "25.00", unitTotal: null },
+      ],
+      balance: { ...balance, received: "105.00", reserved: "0.00", outstanding: "15.00" },
+    });
+    await pressed(el, 'input[name="line"][value="4"]');
+    await typed(el, "tendered", "30");
+    await previewed(el, {
+      kind: "choose",
+      options: [
+        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
+        { choice: "use_pool", applied: "15.00", tip: "0.00" },
+      ],
+    });
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations when a venue without tips refuses a card contribution larger than is left", async () => {
+    const { el, host } = await mount({ way: "contribution", tipsEnabled: false });
+    await typed(el, "amount", "50");
+    await pressed(el, 'input[name="method"][value="card"]');
+    el.refusal = { code: "bill.tip_not_allowed", chargeable: "30.00" };
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations choosing a card reader", async () => {
+    const { el, host } = await mount({
+      way: "contribution",
+      cardReader: "stripe_terminal",
+      readers: [
+        { id: "r-1", name: "Barra", provider: "stripe_terminal" },
+        { id: "r-2", name: "Terraza", provider: "stripe_terminal" },
+      ],
+      defaultReaderId: "r-1",
+    });
+    await pressed(el, 'input[name="method"][value="card"]');
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations choosing the practice simulator's result", async () => {
+    const { el, host } = await mount({ way: "contribution", cardReader: "simulator" });
+    await pressed(el, 'input[name="method"][value="card"]');
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations while the card reader is asked, then when it declines", async () => {
+    const { el, host } = await mount({ way: "contribution", cardReader: "stripe_terminal" });
+    await typed(el, "amount", "40");
+    await pressed(el, 'input[name="method"][value="card"]');
+    await previewed(el, {
+      kind: "allocated",
+      choice: null,
+      applied: "40.00",
+      tip: "0.00",
+      change: null,
+      charged: "40.00",
+    });
+    el.busy = true;
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    el.busy = false;
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations when a card is still in progress at the reader", async () => {
+    const { host } = await mount({
+      taken: { change: null, pending: "40.00" },
+      balance: { ...balance, reserved: "40.00" },
+    });
+    await expectNoA11yViolations(host);
+  });
 });

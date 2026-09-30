@@ -30,7 +30,13 @@ export type PayChoice =
 export type PayMethod =
   { method: "cash"; tendered: string; addedTip?: string } | { method: "card"; addedTip?: string };
 
-export function paymentAsk(choice: PayChoice, pay: PayMethod): BillPaymentAsk {
+/** The ask for a payment; `allocation` names which of the server's two ways pays for items that
+ * cost more than is left. */
+export function paymentAsk(
+  choice: PayChoice,
+  pay: PayMethod,
+  allocation?: AllocationChoice,
+): BillPaymentAsk {
   const ask: BillPaymentAsk =
     choice.kind === "items"
       ? {
@@ -47,6 +53,7 @@ export function paymentAsk(choice: PayChoice, pay: PayMethod): BillPaymentAsk {
         : { kind: "share", shareOf: choice.shareOf, method: pay.method };
   if (pay.method === "cash") ask.tendered = pay.tendered;
   if (pay.addedTip !== undefined) ask.addedTip = pay.addedTip;
+  if (allocation !== undefined) ask.choice = allocation;
   return ask;
 }
 

@@ -313,3 +313,12 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "No se puede usar esa cantidad en esta línea. Comprueba cuántos hay; un extra va entero",
   );
 });
+
+it("explains a card reader a bill payment cannot use, in both languages, naming no identifier", () => {
+  for (const code of ["reader.not_found", "reader.provider_disconnected"]) {
+    expect(codeMessage(code, "en")).not.toBe(codeMessage("server.internal", "en"));
+    expect(codeMessage(code, "es")).not.toBe(codeMessage("server.internal", "es"));
+    expect(codeMessage(code, "en")).not.toContain(code);
+    expect(codeMessage(code, "es")).not.toContain(code);
+  }
+});

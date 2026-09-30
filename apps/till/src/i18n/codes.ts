@@ -171,6 +171,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "A card refund on this bill is still waiting for the card provider. The bill cannot be changed until it finishes",
     es: "Una devolución con tarjeta de esta cuenta sigue esperando al proveedor de pagos. No se puede cambiar la cuenta hasta que termine",
   },
+  "reader.not_found": {
+    en: "This device has no card reader to use. Ask a manager to set one up on the Card payments screen, or take the card on a separate terminal",
+    es: "Este dispositivo no tiene un lector de tarjetas que usar. Pide a un responsable que lo configure en la pantalla Pagos con tarjeta, o cobra la tarjeta en otro datáfono",
+  },
+  "reader.provider_disconnected": {
+    en: "The card reader's payment provider is not connected. Ask a manager to connect it on the Card payments screen, or take cash",
+    es: "El proveedor de pagos del lector no está conectado. Pide a un responsable que lo conecte en la pantalla Pagos con tarjeta, o cobra en efectivo",
+  },
   "order.payment_in_flight": {
     en: "A card payment for this order is in progress. Wait for it to finish before changing the order",
     es: "Se está cobrando este pedido con tarjeta. Espera a que termine antes de cambiarlo",

@@ -473,6 +473,13 @@ interface BillPaying {
   busy: boolean;
 }
 
+/** A card the reader did not charge: nothing was recorded on the bill. */
+const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
+  "declined",
+  "failed",
+  "network_unavailable",
+]);
+
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
 const APPROVER_REFUSALS = new Set([
   "pin.invalid",
@@ -2604,6 +2611,10 @@ export class TillApp extends LitElement {
       .refusal=${open.refusal}
       .taken=${open.taken}
       .busy=${open.busy}
+      .tipsEnabled=${this.tipsEnabled}
+      .cardReader=${this.handheldMode ? "none" : this.cardProvider}
+      .readers=${this.activeReaders}
+      .defaultReaderId=${this.defaultReaderId}
       @bill-pay-preview=${(event: Event) => void this.#onBillPayPreview(event)}
       @bill-pay-confirm=${() => void this.#onBillPayConfirm()}
       @bill-pay-edit=${() => this.#onBillPayEdit()}
@@ -4568,7 +4579,7 @@ export class TillApp extends LitElement {
     try {
       const preview = await this.api.previewBillPayment(
         open.billId,
-        paymentAsk(asked.choice, asked.pay),
+        paymentAsk(asked.choice, asked.pay, asked.allocation),
       );
       const now = this.#billPayingNow(open.id);
       if (now !== null) this.billPaying = { ...now, asked, preview, busy: false };
@@ -4588,7 +4599,7 @@ export class TillApp extends LitElement {
     if (open.busy) return;
     const asked = open.asked!;
     const confirmation = confirmationOf(
-      paymentAsk(asked.choice, asked.pay),
+      paymentAsk(asked.choice, asked.pay, asked.allocation),
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
       asked.card,
     );
@@ -4612,10 +4623,26 @@ export class TillApp extends LitElement {
     }
   }
 
-  /** A payment taken: when it issued the bill's invoice, the dialog closes and the ticket shows;
-   * otherwise the dialog says so, with the bill's new balance, and the bill is read again. */
+  /**
+   * The server's answer to a payment. When it issued the bill's invoice, the dialog closes and the
+   * ticket shows. A card the reader did not charge records nothing: the confirmation stays, saying
+   * so, to be tried again as a new payment. Otherwise the dialog says the payment was taken, or for
+   * a card still at the reader that it is in progress, with the bill's new balance, and the bill is
+   * read again.
+   */
   async #onBillPaid(open: BillPaying, result: BillPaymentResult): Promise<void> {
     if (this.activeTabId === open.billId) this.billBalance = result.balance;
+    if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
+      const now = this.#billPayingNow(open.id);
+      if (now !== null)
+        this.billPaying = {
+          ...now,
+          balance: result.balance,
+          refusal: { code: result.outcome === "network_unavailable" ? "card_network" : "declined" },
+          busy: false,
+        };
+      return;
+    }
     if (result.invoice !== undefined) {
       if (this.#billPayingNow(open.id) !== null) this.billPaying = null;
       this.result = result.invoice;
@@ -4630,7 +4657,10 @@ export class TillApp extends LitElement {
         asked: null,
         preview: null,
         refusal: null,
-        taken: { change: result.payment.change },
+        taken:
+          result.payment.state === "pending"
+            ? { change: null, pending: result.payment.applied }
+            : { change: result.payment.change },
         busy: false,
       };
     if (!this.#hasLeftOrder(open.billId, open.visit))
@@ -4651,7 +4681,12 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const now = this.#billPayingNow(id);
     if (now === null) return;
-    const refused = error as { code?: unknown; field?: unknown; preview?: unknown };
+    const refused = error as {
+      code?: unknown;
+      field?: unknown;
+      preview?: unknown;
+      chargeable?: unknown;
+    };
     const code = typeof refused.code === "string" ? refused.code : "server.internal";
     if (stage === "take" && isNetworkFailure(error)) {
       this.billPaying = { ...now, refusal: { code: "network" }, busy: false };
@@ -4668,7 +4703,11 @@ export class TillApp extends LitElement {
         ...now,
         asked: null,
         preview: null,
-        refusal: typeof refused.field === "string" ? { code, field: refused.field } : { code },
+        refusal: {
+          code,
+          ...(typeof refused.field === "string" ? { field: refused.field } : {}),
+          ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
+        },
         busy: false,
       };
     }

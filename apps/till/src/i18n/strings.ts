@@ -680,7 +680,19 @@ export const en = {
   "bill_pay.unconfirmed":
     "No answer from the server, so this payment may or may not have been taken. Check the amounts above, then take it again: it will not be recorded twice.",
   "bill_pay.choose_later":
-    "These items cost more than is left to pay on the bill. Contribute an amount instead.",
+    "These items cost more than is left to pay on the bill. Choose how to pay for them.",
+  "bill_pay.choice_legend": "How are these items paid?",
+  "bill_pay.choice_tip": "Pay {amount} with a {tip} tip",
+  "bill_pay.choice_pool": "Pay {amount}, using {pool} contributed earlier",
+  "bill_pay.tip_amount_between": "Enter a tip above {min} and no more than {amount}",
+  "bill_pay.chargeable": "This venue does not take tips, so charge at most {amount} to this card",
+  "bill_pay.reader": "Card reader",
+  "bill_pay.card_declined":
+    "The card was declined and nothing was taken. Try the card again, or go back and choose another way to pay.",
+  "bill_pay.card_unreachable":
+    "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
+  "bill_pay.card_pending":
+    "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, a manager can clear it on the dashboard's Card payments screen.",
   "bill_pay.read_failed": "The bill's payments could not be read again. Close and reopen this.",
   "bill_pay.paid": "Paid",
   "bill_pay.paid_part": "{paid} of {quantity} paid",
@@ -1384,7 +1396,20 @@ export const es: Record<StringKey, string> = {
   "bill_pay.unconfirmed":
     "El servidor no ha respondido, así que este pago puede haberse cobrado o no. Revisa los importes de arriba y vuelve a cobrarlo: no se registrará dos veces.",
   "bill_pay.choose_later":
-    "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Aporta una cantidad en su lugar.",
+    "Estos artículos cuestan más de lo que queda por pagar en la cuenta. Elige cómo se pagan.",
+  "bill_pay.choice_legend": "¿Cómo se pagan estos artículos?",
+  "bill_pay.choice_tip": "Pagar {amount} con {tip} de propina",
+  "bill_pay.choice_pool": "Pagar {amount}, usando {pool} ya aportados",
+  "bill_pay.tip_amount_between": "Introduce una propina mayor que {min} y de {amount} como mucho",
+  "bill_pay.chargeable":
+    "Este local no acepta propinas, así que cobra como mucho {amount} en esta tarjeta",
+  "bill_pay.reader": "Lector de tarjetas",
+  "bill_pay.card_declined":
+    "La tarjeta se ha rechazado y no se ha cobrado nada. Vuelve a intentarlo con la tarjeta, o vuelve atrás y elige otra forma de pago.",
+  "bill_pay.card_unreachable":
+    "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
+  "bill_pay.card_pending":
+    "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, un responsable puede anularlo en la pantalla Pagos con tarjeta del panel de gestión.",
   "bill_pay.read_failed":
     "No se han podido volver a leer los pagos de la cuenta. Cierra y vuelve a abrir.",
   "bill_pay.paid": "Pagado",
