@@ -3451,6 +3451,16 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       part of a line to another group starts with no percentage history (lines record no source line); a row a comp or discount carves keeps
       its source line's history. **Next action:**
       decide whether the per-line cap should see bill discounts.
+      _(2026-09-30, lane B item B11b: a venue can now set a limit on a bill's TOTAL discount
+      (`adjustment_settings.max_bill_discount`, adjustments migration `0002`, set on the dashboard's
+      Adjustment reasons screen). The share is measured from the bill's current rows — each row's
+      price before adjustments less its price now, leaving out the rows this bill's own comps
+      priced at zero — against the price before adjustments of what is still on the bill. A
+      discount that takes the bill past it, or a cancel that raises the share past it, needs the PIN
+      of someone at or above a manager (`apps/server/src/adjustments-apply.ts`, `shareOf`). A
+      comped row moved to another bill counts as discount there. Splits, transfers and merges are
+      not checked; the discount moves with the rows. The per-reason percentage cap itself is
+      unchanged, so the next action above still stands.)_
     - **Not offered:** a comp or a discount of part of a dish with extras
       (`adjustment.partial_with_extras`; a cancel of part of one is allowed since B11a, its extras
       following the dish), part of a weighed line (`adjustment.quantity_invalid`, a controller ruling

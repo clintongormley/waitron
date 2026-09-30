@@ -1070,9 +1070,9 @@ describe("the bill discount limit", () => {
     const el = await mount(withLimit(1250));
     const input = limit(el) as Named & { label: string; hint: string };
     expect(input.value).toBe("12.5");
-    expect(input.label).toBe("Most the discounts may take off");
+    expect(input.label).toBe("Largest total discount on one bill");
     expect(input.hint).toBe(
-      "Counts the discounts on a bill's items and on the whole bill together, as a share of the price before adjustments of what is still on the bill. Past this share, anyone below a manager needs a manager, or someone more senior, to approve with their PIN. Cancelling an item can also take a bill past it. Give-aways made on this bill do not count as discount. Leave it empty for no limit.",
+      "Discounts on a bill's items and on the whole bill, added together, as a share of the bill's full price. Going past it needs the PIN of a manager or someone more senior, and so does a cancellation that takes the bill past it. Give-aways made on this bill do not count. Leave it empty for no limit.",
     );
     expect(section(el).querySelector("h2")!.textContent!.trim()).toBe(
       "Limit on a bill's discounts",

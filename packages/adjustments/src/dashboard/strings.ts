@@ -69,9 +69,9 @@ const en = {
   "adjustments.load_error": "The adjustment reasons could not be loaded.",
   "adjustments.reorder_error": "The new order could not be saved.",
   "adjustments.limit.heading": "Limit on a bill's discounts",
-  "adjustments.limit.field": "Most the discounts may take off",
+  "adjustments.limit.field": "Largest total discount on one bill",
   "adjustments.limit.hint":
-    "Counts the discounts on a bill's items and on the whole bill together, as a share of the price before adjustments of what is still on the bill. Past this share, anyone below a manager needs a manager, or someone more senior, to approve with their PIN. Cancelling an item can also take a bill past it. Give-aways made on this bill do not count as discount. Leave it empty for no limit.",
+    "Discounts on a bill's items and on the whole bill, added together, as a share of the bill's full price. Going past it needs the PIN of a manager or someone more senior, and so does a cancellation that takes the bill past it. Give-aways made on this bill do not count. Leave it empty for no limit.",
   "adjustments.limit.save": "Save limit",
   "adjustments.limit.saved": "Limit saved.",
   "adjustments.limit.load_error": "The bill discount limit could not be loaded.",
