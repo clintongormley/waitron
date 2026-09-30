@@ -1,4 +1,4 @@
-import { classify, type ClassifiedTable } from "@waitron/sync-enrolment";
+import { appendOnly, classify, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { ChangeSource } from "@waitron/shared";
 
 export const ADJUSTMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
@@ -6,6 +6,11 @@ export const ADJUSTMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
     "adjustment_reasons",
     "state",
     "venue adjustment policy an owner edits; copied to a standby, never drained back",
+  ),
+  appendOnly(
+    "adjustments",
+    "ledger",
+    "what was taken off a bill, by whom and under which reason; nothing may change or remove it",
   ),
 ];
 

@@ -104,3 +104,25 @@ export function evaluateAdjustment(
   }
   return { kind: "allowed" };
 }
+
+/** The policy an adjustment was evaluated under, kept on the adjustment so a later edit of the
+ * reason never rewrites what was approved. */
+export interface AdjustmentPolicySnapshot {
+  actions: AdjustmentAction[];
+  maxPercentBp: number | null;
+  maxAmount: Decimal | null;
+  applyRole: PersonRoleValue;
+  approverRole: PersonRoleValue;
+  noteRequired: boolean;
+}
+
+export function policySnapshotOf(reason: AdjustmentReason): AdjustmentPolicySnapshot {
+  return {
+    actions: [...reason.actions],
+    maxPercentBp: reason.maxPercentBp,
+    maxAmount: reason.maxAmount,
+    applyRole: reason.applyRole,
+    approverRole: reason.approverRole,
+    noteRequired: reason.noteRequired,
+  };
+}

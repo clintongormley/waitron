@@ -95,6 +95,6 @@
     "name": "adjustments",
     "table": "__drizzle_migrations_adjustments",
     "from": "../adjustments/drizzle",
-    "appendOnlyTables": []
+    "appendOnlyTables": ["adjustments"]
   }
 ]
