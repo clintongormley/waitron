@@ -5498,7 +5498,10 @@ ongoing overhaul listed at the top of Track A.
   branch `fix/footer-language-chooser`, 2026-09-30):** both now end the page with one shared
   footer, `wt-language-footer` (`packages/ui/src/components/wt-language-footer.ts`), which sits in
   the page's flow below the content, so it cannot cover anything. The till still has its own
-  floating copy, which moves onto the footer in lane B's B18. Still open: (6) the setup
+  floating copy, which moves onto the footer in lane B's B18. Seen while looking at C93 and not
+  fixed there: on the dashboard at 390 px a sliver of the closed side-menu drawer's search box
+  shows at the left edge, in the page's 24 px margin; C93 does not change the drawer's rules, so I
+  believe it predates it (not checked on `main`). Still open: (6) the setup
   live-source screen's refusals go through a catch-all in `#onConfigurationRequested` that drops the
   code, so a wrong passphrase cannot be placed under its field; (7) the profile screen opens with
   Save disabled when required details are missing — the form's own check, before any press (also
