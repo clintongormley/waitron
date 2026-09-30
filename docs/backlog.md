@@ -3429,9 +3429,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     both this route and `apps/server/src/report-api.ts`. A dashboard module can now contribute
     further screens beside its first (`moreScreens`, `packages/dashboard-kit/src/contract.ts`).
     Core migration `0051_opened_at_index` indexes `working_orders.opened_at`, which both report
-    queries now search. **The upgrade was measured** (2026-09-30): a scratch venue migrated to
-    core `0050` with 20,000 bills took `applyMigrations` 16 ms to add the index, and kept all
-    20,000 bills. Left open:
+    queries now search. **The upgrade was measured** on 2026-09-30 on `node:sqlite`, Node
+    v26.7.0, with a throwaway Vitest file under `scripts/` (not committed): it migrated a scratch
+    venue through core `0050`, inserted 20,000 bills straight through `node:sqlite`, then ran
+    `applyMigrations` again. That added `working_orders_opened_at_idx` and kept all 20,000 bills,
+    in 16 ms on that run (a second run by the review, on a venue that also had its triggers
+    installed, took 51 ms); `explain query plan` on both report queries showed
+    `SEARCH working_orders USING INDEX working_orders_opened_at_idx`. Added by the review fixes:
+    the list of single adjustments comes one page at a time (200 by default, with a "Show more"
+    button under the list; the route takes `limit` and `after` and answers `{ entries, next }`),
+    and its person is chosen with `?personId=`. Choosing a person or the guests shows that
+    person's own totals by action, by stage and by reason; otherwise the totals are everyone's.
+    `@waitron/reporting` gained `validatedRangeWindow` (one call that checks a range's time zone,
+    cutover and days and builds its window, used by top sellers, category sales, the VAT summary
+    and this report) and `readLocationClock` (used by this report and the kitchen notices list).
+    `formatIsoMinute` moved to `@waitron/dashboard-kit`. A module screen may not reuse any screen
+    id, built-in ones included (`CORE_SCREENS`, `apps/dashboard/src/dashboard-app.ts`). Left open:
     - A weighed item cancelled in part can differ by a cent between the cancel's list value and
       what stays on the line, so a rate can be a cent's share off. **Next action:** none unless
       someone sees it matter.
