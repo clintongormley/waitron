@@ -127,7 +127,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    attention signals (10), applying a cancellation, comp or discount to an order (11) and its reports (12),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17). Task 13,
-   standalone ordering, is done on the branch `feat/service-standalone-ordering`.
+   standalone ordering, landed as #903.
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
 
@@ -3164,8 +3164,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         is waiting on, so a moved group is cleared once it becomes the waiting one; the reminder then
         falls due as if it had never been snoozed. Clearing a group with no snooze is accepted and
         changes nothing but the party's revision.
-  - **Task 13 (standalone ordering) DONE on this branch** (lane B item B13,
-    `feat/service-standalone-ordering`, 2026-09-30; no pull request number yet). A product's
+  - **Task 13 (standalone ordering) landed as #903** (lane B item B13, main `ba07ac061`,
+    2026-09-30). A product's
     `ordering` is Public, Staff only or Not sold separately (`products.ordering`, core migrations
     `0046`–`0048`; `products.sold_alone` is dropped). The published menu carries it, the server
     refuses a standalone line for a dish the live version publishes as Not sold separately
@@ -3199,6 +3199,15 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `apps/till/src/till-app-parties.test.ts` "shows the chosen bill when a send to it got no answer".
     None of the eight failed in this branch's runs. **Next action:** wait for what each asserts on instead
     of a fixed time.
+  - **A till request's `frozenExtras` and `frozenOptions` are taken as already settled, prices
+    included** (found 2026-09-30 in #903's review; I believe it predates that branch — `git log -S
+    frozenExtras` puts it in #696 and #719). `priceOrderLines` (`apps/server/src/working-order.ts`)
+    trusts them as sent. Run: a unit-level `parkOrder` call given a line whose `frozenExtras` priced
+    an extra `"0.00"` at quantity 7 stored it at price 0, over its list's limit of 2. Read, not run:
+    the park and held-order edit routes in `apps/server/src/till-api.ts` appear to pass `body.lines`
+    through unchanged; no request was sent through a route. **Next action:** send such a line through
+    `POST` park and the held-order edit route; if it is stored, re-price or refuse client-sent frozen
+    selections at the route boundary.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
