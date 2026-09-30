@@ -85,6 +85,7 @@ export const workingOrders = table(
   },
   (t) => [
     index("working_orders_tenant_status_idx").on(t.status),
+    index("working_orders_opened_at_idx").on(t.openedAt),
     foreignKey({
       columns: [t.nodeId],
       foreignColumns: [nodes.id],

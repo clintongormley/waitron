@@ -358,6 +358,13 @@
       "when": 1790738680057,
       "tag": "0050_line_list_price_frozen",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "6",
+      "when": 1790751342962,
+      "tag": "0051_opened_at_index",
+      "breakpoints": true
     }
   ]
 }
