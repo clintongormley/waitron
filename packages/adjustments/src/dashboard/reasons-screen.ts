@@ -20,7 +20,9 @@ import type {
   AdjustmentsApi,
   PersonRole,
 } from "./client.js";
+import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
+import { perLocale } from "./per-locale.js";
 import { actionChoice, actionName, roleName, t, tf, type StringKey } from "./strings.js";
 
 const ACTIONS: readonly AdjustmentAction[] = [
@@ -90,19 +92,6 @@ function amount(text: string): string | null | undefined {
   const whole = String(Number(match[1]));
   if (whole === "0" && Number(match[2] ?? "0") === 0) return undefined;
   return match[2] === undefined ? whole : `${whole}.${match[2]}`;
-}
-
-/** One per locale, built on first use: the list formats every row on every render. */
-function perLocale<T>(make: (locale: string) => T): (locale: string) => T {
-  const made = new Map<string, T>();
-  return (locale) => {
-    let value = made.get(locale);
-    if (value === undefined) {
-      value = make(locale);
-      made.set(locale, value);
-    }
-    return value;
-  };
 }
 
 const decimalMark = perLocale(
@@ -249,7 +238,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    let initial = !this.#loaded;
+    const initial = !this.#loaded;
     this.#loaded = true;
     try {
       await this.#queries.watch(
@@ -258,11 +247,11 @@ export class AdjustmentReasonsScreen extends LitElement {
           key: "adjustments:reasons",
           dependencies: QUERY_DEPENDENCIES.reasons.map((type) => ({ type })),
           refreshMs: 60_000,
-          read: () => {
-            const api = initial ? this.api : this.api.background;
-            initial = false;
-            return api.listReasons();
-          },
+          read: firstReadThenPassive(
+            () => this.api,
+            (api) => api.listReasons(),
+            initial,
+          ),
         },
         (reasons) => {
           this.reasons = reasons;

@@ -6,6 +6,7 @@ import {
   requireNullableBodyUuid,
   requireNullableString,
   requirePeriod,
+  requireRange,
   requireString,
   requireUuidParam,
 } from "./request-screens.js";
@@ -48,6 +49,41 @@ describe("requirePeriod (YYYY-MM-DD calendar-day screen → management.request_i
     expect(codeOfThrow(() => requirePeriod("2026-02-30", "period"))).toBe(
       "management.request_invalid",
     );
+  });
+});
+
+describe("requireRange (an inclusive pair of calendar days → management.request_invalid)", () => {
+  /** The params an AppError thrown by `fn` carries. */
+  function paramsOfThrow(fn: () => unknown): unknown {
+    try {
+      fn();
+    } catch (error) {
+      if (isAppError(error)) return { code: error.code, params: error.params };
+    }
+    throw new Error("expected an AppError");
+  }
+
+  it("returns a range whose ends are real days, one day long or longer", () => {
+    expect(requireRange("2026-09-15", "2026-09-15")).toEqual({
+      from: "2026-09-15",
+      to: "2026-09-15",
+    });
+    expect(requireRange("2026-09-15", "2026-10-01")).toEqual({
+      from: "2026-09-15",
+      to: "2026-10-01",
+    });
+  });
+  it.each([
+    ["from", undefined, "2026-09-15"],
+    ["from", "2026-02-30", "2026-03-01"],
+    ["to", "2026-09-15", undefined],
+    ["to", "2026-09-15", "15-09-2026"],
+    ["range", "2026-09-16", "2026-09-15"],
+  ])("names %s for from=%s to=%s", (field, from, to) => {
+    expect(paramsOfThrow(() => requireRange(from, to))).toEqual({
+      code: "management.request_invalid",
+      params: { field },
+    });
   });
 });
 

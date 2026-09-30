@@ -2,13 +2,10 @@ import { sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import { rawCentsToDecimal, rawThousandthsToDecimal } from "@waitron/shared";
 import {
-  businessDayRangeWindow,
   issuedSalesClause,
   nodeScopeClause,
   reversedSalesClause,
-  validateBusinessDayRange,
-  validateCutover,
-  validateTimeZone,
+  validatedRangeWindow,
 } from "./business-day.js";
 import type { TopSeller, TopSellersInput } from "./types.js";
 
@@ -27,16 +24,13 @@ export async function computeTopSellers(
   tx: Transaction,
   input: TopSellersInput,
 ): Promise<TopSeller[]> {
-  validateTimeZone(input.timeZone);
-  validateCutover(input.dayCutover);
-  validateBusinessDayRange(input);
+  const window = validatedRangeWindow(input);
   if (!Number.isInteger(input.limit) || input.limit <= 0) {
     throw new Error(
       `reporting: top-sellers limit must be a positive integer: ${JSON.stringify(input.limit)}`,
     );
   }
   const nodeClause = nodeScopeClause(input.nodeId);
-  const window = businessDayRangeWindow(input);
   // Every sum is taken by the engine over integer counts (cents, thousandths) and handed over as
   // TEXT, so a parent's figures are exact and never re-added here. One row per (parent, variant
   // group); the group with no variant name carries the parent's own sales and is not a nested row.

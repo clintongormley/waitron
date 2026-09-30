@@ -127,6 +127,13 @@ describe("working_orders", () => {
     await seed(db);
   });
 
+  it("indexes the time an order was opened, which a report selects a range of bills by", async () => {
+    const { rows } = await db.execute<{ name: string; column: string }>(sql`
+      select il.name as name, ii.name as "column"
+      from pragma_index_list('working_orders') il, pragma_index_info(il.name) ii`);
+    expect(rows).toContainEqual({ name: "working_orders_opened_at_idx", column: "opened_at" });
+  });
+
   it("opens an order in the open state with no settled_at", async () => {
     const id = await openOrder(db);
     const [row] = await db.select().from(workingOrders).where(eq(workingOrders.id, id));

@@ -1,7 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  tills,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+  type Database,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
@@ -13,11 +22,14 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId } from "@waitron/shared";
+import { decimal, locationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
+import { policySnapshotOf } from "./policy.js";
+import { recordAdjustment } from "./record.js";
 import { ADJUSTMENTS_ROUTES } from "./routes.js";
+import { seedReason } from "../test/seed.js";
 
 // A manager holds `adjustment.manage` only once the module's seat is registered, as boot does.
 registerModulePermissions(ADJUSTMENTS_PERMISSIONS);
@@ -51,7 +63,7 @@ interface Fixture {
   cookie: Record<PersonRoleValue, string>;
 }
 
-async function fixture(): Promise<Fixture> {
+async function fixture(venueLocation = "00000000-0000-4000-8000-000000000001"): Promise<Fixture> {
   await seedTenant(db);
   const cookie = {} as Record<PersonRoleValue, string>;
   await db.transaction(async (tx) => {
@@ -69,7 +81,7 @@ async function fixture(): Promise<Fixture> {
     app,
     {
       db,
-      cfg: { locationId: locationId("00000000-0000-4000-8000-000000000001") },
+      cfg: { locationId: locationId(venueLocation) },
       core: {} as ModuleRouteContext["core"],
     },
     noopLog,
@@ -292,5 +304,313 @@ describe("adjustment reason management routes", () => {
         error: { code: "management.request_invalid", params: { field: "ids" } },
       });
     }
+  });
+});
+
+describe("adjustment report routes", () => {
+  const REPORT = "/management-api/adjustments/report";
+  const ENTRIES = "/management-api/adjustments/report/entries";
+  // Business day 2026-09-15 in Madrid at a 05:00 cutover holds a bill opened at 18:00 UTC.
+  const DAY = "from=2026-09-15&to=2026-09-15";
+
+  interface ReportFixture extends Fixture {
+    supervisorId: string;
+    staffId: string;
+    billId: string;
+  }
+
+  /** A venue in Madrid with one bill: a €20.00 line credited to the supervisor, who took €5.00
+   * off it, and a guest's cancellation of a €4.00 item. */
+  async function reportFixture(): Promise<ReportFixture> {
+    const [location] = await db
+      .insert(locations)
+      .values({
+        name: "Sala",
+        invoiceLocales: ["es"],
+        operationDescription: "Restaurante",
+        timeZone: "Europe/Madrid",
+        dayCutover: "05:00:00",
+      })
+      .returning({ id: locations.id });
+    const fx = await fixture(location!.id);
+    const people = await db.select({ id: persons.id, role: persons.role }).from(persons);
+    const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
+    const [till] = await db
+      .insert(tills)
+      .values({ locationId: location!.id, name: "Till 1" })
+      .returning({ id: tills.id });
+    const [bill] = await db
+      .insert(workingOrders)
+      .values({ tillId: till!.id, orderNumber: 41, openedAt: "2026-09-15T18:00:00.000Z" })
+      .returning({ id: workingOrders.id });
+    await db.insert(workingOrderLines).values({
+      workingOrderId: bill!.id,
+      lineNo: 1,
+      name: "Paella",
+      descriptions: { es: "Paella" },
+      quantity: 1000,
+      unitPriceGross: 1500,
+      listUnitPriceGross: 2000,
+      vatClass: "general",
+      lineTotal: 1500,
+      creditedTo: idOf("supervisor"),
+    });
+    const reason = await seedReason(db);
+    const base = {
+      workingOrderId: bill!.id,
+      reason: { id: reason.id, name: reason.name, policy: policySnapshotOf(reason) },
+      percentBp: null,
+      approvedBy: null,
+      note: null,
+    };
+    await withTransaction(db, async (tx) => {
+      await recordAdjustment(tx, {
+        ...base,
+        line: {
+          id: randomUUID(),
+          name: "Paella",
+          quantity: "1",
+          listUnitPriceGross: decimal("20.00"),
+          creditedTo: idOf("supervisor"),
+          stage: "served",
+        },
+        quantity: "1",
+        action: "discount_amount",
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("15.00"),
+        reduction: decimal("5.00"),
+        nominalValue: decimal("20.00"),
+        requestedBy: idOf("supervisor"),
+      });
+      await recordAdjustment(tx, {
+        ...base,
+        line: {
+          id: randomUUID(),
+          name: "Flan",
+          quantity: "1",
+          listUnitPriceGross: decimal("4.00"),
+          creditedTo: null,
+          stage: "unsent",
+        },
+        quantity: "1",
+        action: "cancel",
+        beforeAmount: decimal("4.00"),
+        afterAmount: decimal("0.00"),
+        reduction: decimal("4.00"),
+        nominalValue: decimal("4.00"),
+        requestedBy: idOf("staff"),
+        byGuest: true,
+      });
+    });
+    return { ...fx, supervisorId: idOf("supervisor"), staffId: idOf("staff"), billId: bill!.id };
+  }
+
+  it("answers a supervisor the day's report, amounts as decimal strings, read on the venue's clock", async () => {
+    const fx = await reportFixture();
+
+    const response = await send(fx.app, "GET", `${REPORT}?${DAY}`, fx.cookie.supervisor);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      fromBusinessDay: string;
+      overall: Record<string, unknown>;
+      people: Record<string, unknown>[];
+      guests: Record<string, unknown>;
+    };
+    expect(body.fromBusinessDay).toBe("2026-09-15");
+    expect(body.overall).toMatchObject({
+      count: 2,
+      reduction: "9.00",
+      cancelledNominalValue: "4.00",
+      // The guest's cancelled €4.00 stays in the day's sales.
+      sales: "24.00",
+      ratePercent: "37.5",
+    });
+    expect(body.people).toMatchObject([
+      {
+        personId: fx.supervisorId,
+        name: "A supervisor",
+        count: 1,
+        reduction: "5.00",
+        sales: "20.00",
+        ratePercent: "25.0",
+        byAction: {
+          discount_amount: { count: 1, reduction: "5.00", cancelledNominalValue: "0.00" },
+        },
+      },
+    ]);
+    expect(body.guests).toMatchObject({ count: 1, reduction: "4.00" });
+    // The bill was opened at 20:00 in Madrid on the 15th, so the 16th holds none of it.
+    const nextDay = await send(
+      fx.app,
+      "GET",
+      `${REPORT}?from=2026-09-16&to=2026-09-16`,
+      fx.cookie.supervisor,
+    );
+    expect(((await nextDay.json()) as { overall: { count: number } }).overall.count).toBe(0);
+  });
+
+  it("drills down to everyone's rows, one person's, or the guests'", async () => {
+    const fx = await reportFixture();
+    const read = async (query: string) => {
+      const response = await send(fx.app, "GET", `${ENTRIES}?${DAY}${query}`, fx.cookie.manager);
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { entries: Record<string, unknown>[] }).entries;
+    };
+
+    const everyone = await read("");
+    const supervisor = await read(`&personId=${fx.supervisorId.toUpperCase()}`);
+    const guests = await read("&guests=true");
+    const notGuests = await read("&guests=false");
+
+    expect(everyone).toHaveLength(2);
+    expect(notGuests).toEqual(everyone);
+    expect(supervisor).toEqual([
+      expect.objectContaining({
+        action: "discount_amount",
+        lineName: "Paella",
+        reduction: "5.00",
+        nominalValue: "20.00",
+        requestedBy: { personId: fx.supervisorId, name: "A supervisor" },
+        workingOrderId: fx.billId,
+        orderNumber: 41,
+      }),
+    ]);
+    expect(guests).toEqual([
+      expect.objectContaining({
+        action: "cancel",
+        byGuest: true,
+        requestedBy: { personId: fx.staffId, name: "A staff" },
+      }),
+    ]);
+  });
+
+  it("refuses a staff member without report.view, and a request with no session", async () => {
+    const fx = await reportFixture();
+    for (const path of [`${REPORT}?${DAY}`, `${ENTRIES}?${DAY}`]) {
+      const refused = await send(fx.app, "GET", path, fx.cookie.staff);
+      expect(refused.status, path).toBe(403);
+      expect(await refused.json()).toEqual({
+        error: { code: "authorization.not_permitted", params: { permission: "report.view" } },
+      });
+      const anonymous = await send(fx.app, "GET", path);
+      expect(anonymous.status, path).toBe(401);
+    }
+  });
+
+  it.each<[string, string]>([
+    ["from", "to=2026-09-15"],
+    ["from", "from=&to="],
+    ["from", "from=2026-02-30&to=2026-03-01"],
+    ["to", "from=2026-09-15"],
+    ["to", "from=2026-09-15&to=15-09-2026"],
+    ["range", "from=2026-09-16&to=2026-09-15"],
+  ])("refuses a report whose %s is malformed (%s)", async (field, query) => {
+    const fx = await reportFixture();
+    for (const path of [REPORT, ENTRIES]) {
+      const response = await send(fx.app, "GET", `${path}?${query}`, fx.cookie.manager);
+      expect(response.status, path).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+  });
+
+  it("drills down a page at a time, each page naming the next until the last", async () => {
+    const fx = await reportFixture();
+    const read = async (query: string) => {
+      const response = await send(fx.app, "GET", `${ENTRIES}?${DAY}${query}`, fx.cookie.manager);
+      expect(response.status).toBe(200);
+      return (await response.json()) as { entries: { id: string }[]; next: string | null };
+    };
+
+    const whole = await read("");
+    const first = await read("&limit=1");
+    const second = await read(`&limit=1&after=${encodeURIComponent(first.next!)}`);
+
+    expect(whole.next).toBeNull();
+    expect(first.entries).toEqual([whole.entries[0]]);
+    expect(first.next).toEqual(expect.any(String));
+    expect(second).toEqual({ entries: [whole.entries[1]], next: null });
+  });
+
+  it("refuses a drill-down whose person id is not a UUID", async () => {
+    const fx = await reportFixture();
+    const response = await send(
+      fx.app,
+      "GET",
+      `${ENTRIES}?${DAY}&personId=not-a-uuid`,
+      fx.cookie.manager,
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "shared.invalid_id", params: { kind: "PersonId", value: "not-a-uuid" } },
+    });
+  });
+
+  it.each<[string, string]>([
+    ["guests", "&guests=yes"],
+    ["guests", `&guests=true&personId=${MISSING}`],
+    ["limit", "&limit="],
+    ["limit", "&limit=0"],
+    ["limit", "&limit=1.5"],
+    ["limit", "&limit=01"],
+    ["limit", "&limit=501"],
+    ["limit", "&limit=ten"],
+    ["after", "&after="],
+    ["after", "&after=nope"],
+    ["after", `&after=2026-09-15T20:00:00.000Z_not-a-uuid`],
+    ["after", `&after=2026-09-15_${MISSING}`],
+    ["after", `&after=2026-09-15T20:00:00.000Z${MISSING}`],
+  ])("refuses a drill-down whose %s is malformed (%s)", async (field, query) => {
+    const fx = await reportFixture();
+    const response = await send(fx.app, "GET", `${ENTRIES}?${DAY}${query}`, fx.cookie.manager);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
+  describe("with no range asked for", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Only `Date`: the database and the request still run on real timers. */
+    function nowIs(instant: string): void {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(instant));
+    }
+
+    it.each<[string, string, string, number]>([
+      ["22:00 in Madrid", "2026-09-15T20:00:00.000Z", "2026-09-15", 2],
+      ["04:30 in Madrid, before the 05:00 cutover", "2026-09-16T02:30:00.000Z", "2026-09-15", 2],
+      ["05:30 in Madrid, after the cutover", "2026-09-16T03:30:00.000Z", "2026-09-16", 0],
+    ])(
+      "reads the venue's current business day at %s",
+      async (_when, instant, businessDay, count) => {
+        const fx = await reportFixture();
+        nowIs(instant);
+
+        const report = await send(fx.app, "GET", REPORT, fx.cookie.supervisor);
+        const entries = await send(fx.app, "GET", ENTRIES, fx.cookie.supervisor);
+
+        expect(report.status).toBe(200);
+        expect(await report.json()).toMatchObject({
+          fromBusinessDay: businessDay,
+          toBusinessDay: businessDay,
+          overall: { count },
+        });
+        expect(entries.status).toBe(200);
+        expect(((await entries.json()) as { entries: unknown[] }).entries).toHaveLength(count);
+      },
+    );
+  });
+
+  it("answers a server fault when the module's location is not in the database", async () => {
+    const fx = await fixture();
+    const response = await send(fx.app, "GET", `${REPORT}?${DAY}`, fx.cookie.manager);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "server.internal" } });
   });
 });

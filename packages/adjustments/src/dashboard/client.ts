@@ -24,6 +24,83 @@ export interface AdjustmentReason extends AdjustmentReasonInput {
   position: number;
 }
 
+/** Amounts are decimal strings with two places, as the report routes write them. */
+export interface AdjustmentTally {
+  count: number;
+  reduction: string;
+  cancelledNominalValue: string;
+}
+
+export type AdjustmentStageGroup = "beforeFiring" | "afterFiring" | "afterServing" | "billDiscount";
+
+export interface ReasonTally extends AdjustmentTally {
+  reasonId: string;
+  reasonName: string;
+}
+
+export interface AdjustmentTotals extends AdjustmentTally {
+  byAction: Record<AdjustmentAction, AdjustmentTally>;
+  byStage: Record<AdjustmentStageGroup, AdjustmentTally>;
+  byReason: ReasonTally[];
+}
+
+export interface PersonRef {
+  personId: string;
+  name: string | null;
+}
+
+export interface PersonAdjustments extends AdjustmentTotals, PersonRef {
+  sales: string;
+  /** One decimal place; null when there are no sales. */
+  ratePercent: string | null;
+  approvers: (PersonRef & { count: number })[];
+  approvalsGiven: number;
+}
+
+export interface AdjustmentReport {
+  fromBusinessDay: string;
+  toBusinessDay: string;
+  overall: AdjustmentTotals & { sales: string; ratePercent: string | null };
+  people: PersonAdjustments[];
+  guests: AdjustmentTotals;
+}
+
+export interface AdjustmentEntry {
+  id: string;
+  createdAt: string;
+  action: AdjustmentAction;
+  stage: "unsent" | "held" | "fired" | "served" | null;
+  /** The stage group the report's totals count this row under. */
+  stageGroup: AdjustmentStageGroup;
+  reasonId: string;
+  reasonName: string;
+  note: string | null;
+  lineName: string | null;
+  /** Three decimal places; null on a discount on the whole bill. */
+  quantity: string | null;
+  percentBp: number | null;
+  beforeAmount: string;
+  afterAmount: string;
+  reduction: string;
+  nominalValue: string;
+  requestedBy: PersonRef;
+  approvedBy: PersonRef | null;
+  creditedTo: PersonRef | null;
+  byGuest: boolean;
+  workingOrderId: string;
+  orderNumber: number;
+}
+
+/** One page of the drill-down, newest first. */
+export interface AdjustmentEntryPage {
+  entries: AdjustmentEntry[];
+  /** Passed back as `after` for the following page; null on the last page. */
+  next: string | null;
+}
+
+/** Whose adjustments the drill-down lists. */
+export type EntriesOf = "everyone" | "guests" | { personId: string };
+
 export class AdjustmentsApi {
   constructor(
     private readonly request: DashboardRequest,
@@ -60,5 +137,36 @@ export class AdjustmentsApi {
   /** `ids` is every active reason, once each, in the new order. */
   reorderReasons(ids: readonly string[]): Promise<void> {
     return this.request("/management-api/adjustments/reason-order", "PUT", { ids });
+  }
+
+  /** Without a range, the routes answer the venue's current business day. */
+  getReport(range?: { from: string; to: string }): Promise<AdjustmentReport> {
+    const query = range === undefined ? "" : `?${new URLSearchParams(range)}`;
+    return this.request<AdjustmentReport>(
+      `/management-api/adjustments/report${query}`,
+      "GET",
+      undefined,
+      { passive: this.passive },
+    );
+  }
+
+  /** Without a `limit`, the route chooses the page size. */
+  listEntries(
+    from: string,
+    to: string,
+    of: EntriesOf,
+    page: { after?: string; limit?: number } = {},
+  ): Promise<AdjustmentEntryPage> {
+    const query = new URLSearchParams({ from, to });
+    if (of === "guests") query.set("guests", "true");
+    else if (of !== "everyone") query.set("personId", of.personId);
+    if (page.after !== undefined) query.set("after", page.after);
+    if (page.limit !== undefined) query.set("limit", String(page.limit));
+    return this.request<AdjustmentEntryPage>(
+      `/management-api/adjustments/report/entries?${query}`,
+      "GET",
+      undefined,
+      { passive: this.passive },
+    );
   }
 }

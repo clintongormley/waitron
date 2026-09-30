@@ -31,6 +31,15 @@ export function requirePeriod(value: unknown, field: string): string {
   return value;
 }
 
+/** Both ends passed `requirePeriod`'s fixed "YYYY-MM-DD" shape, so a string compare orders them. */
+export function requireRange(from: unknown, to: unknown): { from: string; to: string } {
+  const range = { from: requirePeriod(from, "from"), to: requirePeriod(to, "to") };
+  if (range.from > range.to) {
+    throw new AppError("management.request_invalid", { field: "range" });
+  }
+  return range;
+}
+
 export function requireBodyUuid(v: unknown, field: string): string {
   if (typeof v !== "string" || !isUuid(v))
     throw new AppError("management.request_invalid", { field });

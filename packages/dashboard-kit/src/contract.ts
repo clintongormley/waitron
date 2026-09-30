@@ -2,11 +2,12 @@ import type { LiveData } from "./live-data.js";
 import type { TemplateResult } from "lit";
 import type { DashboardRequest } from "./request.js";
 
-// The contract a dashboard module UI fills to contribute a screen. A module hands the app one
-// DashboardContribution; the app validates its nav group, registers its strings, and mounts its screen.
+// The contract a dashboard module UI fills to contribute its screens. A module hands the app one
+// DashboardContribution; the app validates its nav groups, registers its strings, and mounts its screens.
 // It names no concrete module.
 
-/** A dashboard nav-group id; the app validates a contribution's group against its own known ids. */
+/** A dashboard nav-group id; the app validates each contributed screen's group against its own
+ * known ids. */
 export type NavGroupId = string;
 
 /** What a contributed screen is handed at construction. */
@@ -20,17 +21,26 @@ export interface DashboardScreenHandle {
   render(): TemplateResult;
 }
 
-/** One module's dashboard contribution: its identity, the screen's nav placement + permission, its
- * localised strings, and a factory the app calls with the module context. */
-export interface DashboardContribution {
-  module: string; // == the server descriptor name
-  screen: {
-    id: string;
-    navLabelKey: string;
-    group: NavGroupId;
-    order?: number;
-    requiresPermission: string;
-  };
-  strings: { en: Record<string, string>; es: Record<string, string> };
+/** Where a contributed screen sits in the nav, and the permission that opens it. */
+export interface DashboardScreenPlacement {
+  id: string;
+  navLabelKey: string;
+  group: NavGroupId;
+  order?: number;
+  requiresPermission: string;
+}
+
+/** A contributed screen: where it sits and how it is built. */
+export interface DashboardFurtherScreen {
+  screen: DashboardScreenPlacement;
   create(ctx: DashboardModuleContext): DashboardScreenHandle;
+}
+
+/** One module's dashboard contribution: its identity, its first screen's placement and factory, any
+ * further screens, and its localised strings. */
+export interface DashboardContribution extends DashboardFurtherScreen {
+  module: string; // == the server descriptor name
+  strings: { en: Record<string, string>; es: Record<string, string> };
+  /** Mounted, listed, searched and permission-gated exactly as `screen` is. */
+  moreScreens?: readonly DashboardFurtherScreen[];
 }

@@ -22,6 +22,18 @@ describe("DASHBOARD_MODULES honesty", () => {
     const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
     expect(adjustments?.screen.requiresPermission).toBe("adjustment.manage");
   });
+
+  it("registers the adjustment report in the reports group for anyone who may view reports", () => {
+    const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
+    expect(adjustments?.moreScreens?.map((more) => more.screen)).toEqual([
+      {
+        id: "adjustment-report",
+        navLabelKey: "nav.adjustment_report",
+        group: "reports",
+        requiresPermission: "report.view",
+      },
+    ]);
+  });
 });
 
 describe("CARD_PROVIDER_PANELS honesty", () => {

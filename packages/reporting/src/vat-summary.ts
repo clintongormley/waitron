@@ -11,14 +11,11 @@ import {
   toScale,
 } from "@waitron/shared";
 import {
-  businessDayRangeWindow,
   businessDayWindow,
   issuedSalesClause,
   nodeScopeClause,
   reversedSalesClause,
-  validateBusinessDayRange,
-  validateCutover,
-  validateTimeZone,
+  validatedRangeWindow,
 } from "./business-day.js";
 import type { DailyCloseInput, PeriodVatInput, VatSummary } from "./types.js";
 
@@ -124,10 +121,7 @@ export async function computeVatSummaryForPeriod(
   tx: Transaction,
   input: PeriodVatInput,
 ): Promise<VatSummary> {
-  validateTimeZone(input.timeZone);
-  validateCutover(input.dayCutover);
-  validateBusinessDayRange(input);
-  const window = businessDayRangeWindow(input);
+  const window = validatedRangeWindow(input);
   return aggregateVatByRate(tx, {
     nodeId: input.nodeId,
     counted: issuedSalesClause(window),

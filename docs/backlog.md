@@ -122,11 +122,11 @@ Ranked 2026-09-27, after the specs still in `docs/superpowers/specs/` were check
 (each spec's state is under *Reference → Specs still in the tree*). Each item is its own brainstorm →
 spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 
-1. **Finish table service and paying a bill in parts** (A4, lane B). Fourteen of the service
-   plan's eighteen tasks are done: 0–11, 13 and 14 have landed (Task 9, marking dishes served, as
-   #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 13,
-   standalone ordering, as #903). Left: the till's Cancel
-   taking a reason (waits on the owner, see Task 11's entry), the adjustment reports (12),
+1. **Finish table service and paying a bill in parts** (A4, lane B). Fifteen of the service
+   plan's eighteen tasks are done: 0–14 have landed (Task 9, marking dishes served, as
+   #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
+   the adjustment reports; Task 13, standalone ordering, as #903). Left: the till's Cancel
+   taking a reason (waits on the owner, see Task 11's entry),
    several payments on the till (15 — the server side landed as #721 and nothing on
    the till calls it yet), counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
@@ -3470,6 +3470,78 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     through unchanged; no request was sent through a route. **Next action:** send such a line through
     `POST` park and the held-order edit route; if it is stored, re-price or refuse client-sent frozen
     selections at the route boundary.
+  - **Task 12 (adjustment reports)** DONE (lane B item B12, 2026-09-30). A Reports screen in the
+    adjustments module (`packages/adjustments/src/dashboard/adjustment-report-screen.ts`, under
+    `report.view`) shows, for a range of business days, the cancellations, comps and discounts
+    overall, per person and for guests: counts and amounts by action, by reason (grouped by reason,
+    named as recorded) and by how far the dish had got (before firing, after firing, after serving,
+    whole-bill), who approved each person's requests, the list value of cancelled items apart from
+    what they took off, and each person's rate — what they took off ÷ the sales credited to them at
+    their prices before any adjustment (plan D21). A person, the guests or everyone opens the list of
+    single adjustments. Computed by `computeAdjustmentReport` and `listAdjustmentEntries`
+    (`packages/adjustments/src/reports.ts`) behind `GET /management-api/adjustments/report` and
+    `…/report/entries`; with no range asked for they answer the venue's current business day. A
+    bill counts on the business day it was OPENED, for both its credited sales and its adjustments;
+    lines on an abandoned bill are not sales. `requireRange` moved to `@waitron/server-kit` for
+    both this route and `apps/server/src/report-api.ts`. A dashboard module can now contribute
+    further screens beside its first (`moreScreens`, `packages/dashboard-kit/src/contract.ts`).
+    Core migration `0051_opened_at_index` indexes `working_orders.opened_at`. **The upgrade was
+    measured** on 2026-09-30 on `node:sqlite`, Node v26.7.0, with a throwaway Vitest file under
+    `scripts/` (not committed): it migrated a scratch venue through core `0050`, inserted 20,000
+    bills straight through `node:sqlite`, then ran `applyMigrations` again. That added
+    `working_orders_opened_at_idx` and kept all 20,000 bills, in 16 ms on that run (a second run by
+    the review, on a venue that also had its triggers installed, took 51 ms). **The report's three
+    queries were measured** on 2026-09-30 on `node:sqlite`, Node v26.7.0, with a throwaway Vitest
+    file (not committed) that seeded a scratch venue through `useVenueDb` with 8,000 bills, 24,000
+    lines and 20,000 adjustments over September 2026 and ran each read seven times. `explain query
+    plan` showed each of the three — the totals (`readReportRows`), the credited sales
+    (`readCreditedSales`) and the list (`readEntryRows`: a first and a later page, for everyone and
+    for one person) — reading the bills through `SEARCH working_orders USING INDEX
+    working_orders_opened_at_idx`, and both adjustment reads sorting in a `USE TEMP B-TREE FOR
+    ORDER BY`. The timings were taken on the development Mac (Apple M5 Pro, 64 GiB of memory).
+    Over the whole month the medians were 125 ms for a `computeAdjustmentReport` call (the route
+    around it was not timed), 32 ms for the list's first page and 29 ms for its 21st, and 20 ms for
+    one person's page; over one day, 5 ms for `computeAdjustmentReport` and under 2 ms for any
+    page. No index was added for the list. One on `adjustments (created_at, id)`, in that run,
+    with no `ANALYZE` statistics, was not chosen by the planner: every plan stayed the same and
+    every median within 2 ms. The same measuring run reported that with `ANALYZE` run in the
+    scratch database the planner did use it, and the list's month pages took 1.46 ms and
+    1.36 ms. Nothing in the product runs `ANALYZE`: `git grep -niw analyze` over `packages/`,
+    `apps/`, `scripts/` and `deploy/` found nothing on 2026-09-30. One on `adjustments
+    (requested_by, created_at, id)` was used for one person's page, and on a year of data (96,000
+    bills, 240,000 adjustments) took that page from about 25 ms to 0.8 ms over the newest month,
+    but from about 1 ms to about 39 ms over a single day. Added by the review fixes: the list of
+    single adjustments comes one page at a time (200 by default, with a "Show more"
+    button under the list; the route takes `limit` and `after` and answers `{ entries, next }`),
+    and its person is chosen with `?personId=`. The open list is read again every 60 seconds and
+    whenever any adjustment, bill, person or location in the venue changes. That read starts at
+    the top and stops at the first page holding a row already on screen, reading at most 500 rows
+    (the largest page): the new rows go on top, the rows it read again are shown as they now read,
+    and the rows below them and the "Show more" position stay as they were, so rows loaded with
+    "Show more" stay and a "Show more" on its way still adds its page. If 500 new rows come before
+    any row on screen, or the list ends before reaching one, the list starts again from what it
+    read and a "Show more" on its way is dropped. The cost: rows below those read again are not
+    read again, so they keep an old name, or an old range after a change to the location's day
+    cutover or time zone, until the list is opened again. A row that now sorts below the rows on
+    screen (the server clock stepping back, two adjustments saved in the same millisecond, or a
+    changed cutover or time zone) shows up through "Show more", or at once when there is no
+    further page and the read reached the last row on screen; a list longer than one page with no
+    further page shows it only when opened again. A new range or person starts from
+    the first page. Choosing a person or the guests shows that person's own totals by action, by
+    stage and by reason; otherwise the totals are everyone's.
+    `@waitron/reporting` gained `validatedRangeWindow` (one call that checks a range's time zone,
+    cutover and days and builds its window, used by top sellers, category sales, the VAT summary
+    and this report) and `readLocationClock` (used by this report and the kitchen notices list).
+    `formatIsoMinute` now lives in `@waitron/dashboard-kit`; `apps/dashboard/src/date-utils.ts`
+    re-exports it for the app's screens and for main's `date-utils.test.ts`. A module screen may
+    not reuse any screen id, built-in ones included (`CORE_SCREENS`,
+    `apps/dashboard/src/dashboard-app.ts`). Left open:
+    - A weighed item cancelled in part can differ by a cent between the cancel's list value and
+      what stays on the line, so a rate can be a cent's share off. **Next action:** none unless
+      someone sees it matter.
+    - With no day picked, a screen left open past the day's cutover moves to the new, empty day;
+      the date inputs show it, nothing announces it. **Next action:** decide whether it should
+      keep the day it opened on.
   - **Task 14 landed as #721** (lane B item B14, landed by the owner 2026-09-27, main
     `ca5aa51dd`). The server lets a bill take several payments
     before its invoice (an amount, chosen items or an equal share; cash, a hand-keyed card or a card
@@ -3576,9 +3648,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     recording which element has focus just before the Escape; then press a real Escape during a save
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
-  - **Tasks left: 10 to 12 and 15 to 17.** The menus tasks that change the same order and till code
+  - **Tasks left: 15 to 17** (2026-09-30; 10 to 12 have landed). The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
-    plan's order among them: 12 after 11; 16 after 10. Task 15 is the till side of
+    plan's order among them: 16 after 10. Task 15 is the till side of
     Task 14 — no till code calls the bill-payment routes yet.
   - **Task 17** (unpaid departure) also waits for asesor Q28.
   - **Asesor questions to send:**
