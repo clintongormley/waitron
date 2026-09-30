@@ -405,4 +405,21 @@ describe("printer Bluetooth commands", () => {
     commands.accept("agent-1", outcomes);
     expect(commands.unpaired("agent-1", outcomes)).toEqual([]);
   });
+
+  it("judges an unpairing reported twice in one batch by its first outcome, as accept settles it", () => {
+    const { commands } = store();
+    commands.enqueue("agent-1", "forget", A);
+    commands.enqueue("agent-1", "forget", B);
+    const outcomes = [
+      { id: "c1", ok: false, error: "refused" },
+      { id: "c1", ok: true },
+      { id: "c2", ok: true },
+      { id: "c2", ok: false, error: "refused" },
+    ];
+
+    expect(commands.unpaired("agent-1", outcomes)).toEqual([B]);
+    commands.accept("agent-1", outcomes);
+    expect(commands.latest("agent-1", A)).toMatchObject({ state: "failed" });
+    expect(commands.latest("agent-1", B)).toMatchObject({ state: "succeeded" });
+  });
 });

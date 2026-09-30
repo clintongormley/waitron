@@ -638,6 +638,11 @@ export class PrintersScreen extends LitElement {
   }
 
   override disconnectedCallback(): void {
+    const readding = this.#readdingId;
+    this.#readdingId = undefined;
+    // Not #deactivatePrinter, whose reload would read the lists again for a screen that is gone, and
+    // a gone screen has nowhere to show a refusal.
+    if (readding !== undefined) void this.api.deactivatePrinter(readding).catch(() => undefined);
     this.#endScan();
     this.#stopRenewing();
     this.#stopAgentModal();
@@ -1951,6 +1956,7 @@ export class PrintersScreen extends LitElement {
   }
 
   #printerActions(p: Printer): TemplateResult {
+    const unpair = this.#forgetAction(p);
     return html`<dashboard-row-actions
       .label=${t("printers.row_actions").replace("{name}", p.name)}
     >
@@ -1961,8 +1967,8 @@ export class PrintersScreen extends LitElement {
       >
       ${
         // Unpair switches the printer off too (the job pull, `apps/server/src/print-api.ts`).
-        this.#pairedReport(p)
-          ? this.#forgetAction(p)
+        unpair !== nothing
+          ? unpair
           : html`<wt-button
               variant="danger"
               data-test=${`deactivate-printer-${p.id}`}

@@ -5964,6 +5964,15 @@ describe("printers-screen Bluetooth pairing", () => {
       expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p9");
     });
 
+    it("switches the printer off again when the screen is left during calibration", async () => {
+      const { el, api } = await addAgain();
+      expect(api.deactivatePrinter).not.toHaveBeenCalled();
+
+      el.remove();
+
+      await vi.waitFor(() => expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p9"));
+    });
+
     it("leaves the printer switched on once its calibration is saved", async () => {
       const { el, api } = await addAgain();
       for (let step = 1; step < 4; step++) {
@@ -7123,6 +7132,28 @@ describe("printers-screen Bluetooth pairing", () => {
       await fadeNotice(el, "printer-command-p4");
       expect(q(el, sel("printer-command-p4"))).toBeNull();
       expect(q(el, sel("forget-pairing-p4"))).toBeNull();
+    });
+
+    it("offers Disable in place of the hidden Unpair while the pairing report lingers, since the server may have kept the printer on", async () => {
+      const done = { ...reported, bluetoothCommand: finishedCommand("forget", "succeeded") };
+      const listPrinters = vi.fn().mockResolvedValue([...printers, btPrinter("p4", ADDRESS, true)]);
+      const { el, api } = await mountForget([], {
+        listPrinters,
+        background: stubApi({
+          listPrinters,
+          listDiscoveredPrinters: vi.fn().mockResolvedValue([done]),
+        }),
+      });
+      await forget(el);
+      await vi.advanceTimersByTimeAsync(SCAN_POLL_MS);
+      await flush(el);
+      expect(text(el, sel("printer-command-p4"))).toBe(t("printers.bluetooth_forgotten"));
+      expect(q(el, sel("forget-pairing-p4"))).toBeNull();
+      expect(text(el, sel("deactivate-printer-p4"))).toBe(t("printers.disable"));
+      expect(isDisabled(el, sel("deactivate-printer-p4"))).toBe(false);
+      q(el, sel("deactivate-printer-p4"))!.click();
+      await flush(el);
+      expect(api.deactivatePrinter).toHaveBeenCalledExactlyOnceWith("p4");
     });
 
     it("offers Unpair again once the list, after an unpairing succeeded, leaves the device out and then reports it paired", async () => {
