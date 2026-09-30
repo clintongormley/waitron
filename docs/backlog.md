@@ -191,8 +191,10 @@ slices, each with its own plan and pull request:
    split off to another station.
 
 Slice 3 needs slice 1. Slice 2 is independent of both. Several entries below are overtaken by this
-design, and each carries a dated note. **Next action:** write slice 1's plan; slice 2's can be
-written beside it.
+design, and each carries a dated note. Slice 1's plan is being built (campaign lane D, PF1).
+Slice 2's [plan](superpowers/plans/2026-09-30-menus-include-menus-slice-2.md) is written and
+reviewed twice; it also drops per-menu extras (owner, 2026-10-01). **Next action:** the owner
+approves slice 2's plan, then campaign lane E builds it (PF2b).
 
 **Planned for one campaign lane (owner, 2026-09-25): sales classification, then menus, reusable
 sections and home layouts.** Two specs and two plans, revised twice the same day after outside

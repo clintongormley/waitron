@@ -488,6 +488,9 @@ These were not discussed. Each is the default this document takes.
 2. **The price rule applies to every price a menu can set:** a product's price, a variant's price
    override (`menu_item_variant_overrides`) and an extra's price on the menu
    (`menu_item_extra_items`). Each is merged and clash-checked the same way.
+   _2026-10-01: the owner dropped per-menu extras while slice 2 was planned, so the rule covers a
+   product's price and each variant's; a menu offer carries its product's extras lists at the
+   lists' prices ([slice 2 plan](../plans/2026-09-30-menus-include-menus-slice-2.md))._
 3. **An included menu's folder shows the included menu's customer-facing name.** The including menu
    cannot rename it. To show a different name, include it inside a section of your own.
 4. **A folder with a claim that is deleted** takes its claim with it. Its products then fall to the
