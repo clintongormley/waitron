@@ -803,6 +803,12 @@ order refuse `bill.payments_received` for a bill holding ANY pending or received
 including one refunded in full (`refuseBillWithPayments`, `apps/server/src/bill-payments.ts`).
 Abandoning a bill and merging it into another still go through once every payment is refunded in
 full (§4.5; `refuseBillHoldingMoney`, the same file).)_
+_(2026-09-30: no longer true of merging. The table-actions design's decision 5 (owner, 2026-09-28,
+`docs/superpowers/specs/2026-09-28-table-actions-design.md`) lets only an untouched bill merge, and
+the code refuses merging two bills, or moving items between them, with `bill.payments_received`
+while either has any pending or received payment, one refunded in full included
+(`requireUntouchedPair`, `apps/server/src/bill-actions.ts`). Abandoning still goes through once
+every payment is refunded in full.)_
 
 The helper calls `recordSale` with immediate settlement and the tenders of §2.5, links every card
 bill payment's `payments` row to the sale, settles the order and queues the receipt (which lists

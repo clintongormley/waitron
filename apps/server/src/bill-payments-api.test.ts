@@ -480,6 +480,51 @@ describe("the balance", () => {
     });
   });
 
+  it("says how each card was taken: keyed on a separate terminal, or at a reader; cash says neither", async () => {
+    const billId = await bill120();
+    const cash = await contribute(billId, "10.00");
+    const keyed = await pay(billId, {
+      kind: "contribution",
+      amount: "20.00",
+      method: "card",
+      entry: "manual",
+      applied: "20.00",
+      tip: "0.00",
+    });
+    const read = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "30.00",
+      method: "card",
+      entry: "reader",
+      applied: "30.00",
+      tip: "0.00",
+      simulationOutcome: "captured",
+    });
+    const declined = await request("POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "5.00",
+      method: "card",
+      entry: "reader",
+      applied: "5.00",
+      tip: "0.00",
+      simulationOutcome: "declined",
+    });
+
+    expect(keyed.json).toMatchObject({ payment: { entry: "manual" } });
+    expect(read.json).toMatchObject({ payment: { entry: "reader" } });
+    const { json } = await balance(billId);
+    const entryOf = (result: { json: Record<string, unknown> }) =>
+      (json.payments as { id: string; entry: unknown }[]).find(
+        (payment) => payment.id === (result.json.payment as { id: string }).id,
+      )!.entry;
+    expect(entryOf(cash)).toBeNull();
+    expect(entryOf(keyed)).toBe("manual");
+    expect(entryOf(read)).toBe("reader");
+    expect(entryOf(declined)).toBe("reader");
+  });
+
   it("answers an unknown bill as not found", async () => {
     const { status, json } = await balance(randomUUID());
     expect(status).toBe(404);
@@ -1339,6 +1384,43 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     const [sale] = await saleOf(billId);
     expect(sale!.total).toBe(2500);
     expect(registroCount(billId)).toBe(1);
+  });
+
+  it("refuses product.unavailable, changing nothing, for a void that would issue the invoice while an unsent line's product is off sale", async () => {
+    const billId = await tabWith("Chuletón", "Tarta");
+    expect((await contribute(billId, "25.00")).status).toBe(200);
+    const steakId = venue.productIds.get("Chuletón")!;
+    const snapshot = () => ({
+      order: suite.db.all(sql`select * from working_orders where id = ${billId}`),
+      lines: suite.db.all(
+        sql`select * from working_order_lines where working_order_id = ${billId} order by line_no`,
+      ),
+      payments: suite.db.all(sql`select * from bill_payments where working_order_id = ${billId}`),
+      adjustments: suite.db.all(sql`select * from adjustments where working_order_id = ${billId}`),
+    });
+    const body = await cancelBody(suite.db, billId, 2);
+    const before = snapshot();
+    expect(before.lines.map((line) => (line as { sent_at: unknown }).sent_at)).toEqual([
+      null,
+      null,
+    ]);
+
+    suite.db.run(sql`update products set available = 0 where id = ${steakId}`);
+    try {
+      const refused = await request("POST", `/api/working-orders/${billId}/adjustments`, body);
+
+      expect(refused.status).toBe(409);
+      expect(refused.json).toMatchObject({
+        code: "product.unavailable",
+        params: { productId: steakId },
+      });
+      expect(snapshot()).toEqual(before);
+      expect(await statusOf(billId)).toBe("open");
+      expect(await saleOf(billId)).toEqual([]);
+      expect(registroCount(billId)).toBe(0);
+    } finally {
+      suite.db.run(sql`update products set available = 1 where id = ${steakId}`);
+    }
   });
 });
 
