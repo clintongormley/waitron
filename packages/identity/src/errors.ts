@@ -17,14 +17,18 @@ declare module "@waitron/shared" {
     "management_session.required": Record<string, never>;
     /** The management session idled past the timeout. */
     "management_session.expired": Record<string, never>;
+    /** Every PIN login refusal, whatever the cause. This package's refusals carry the cause in the
+     * log-only `reason`. */
     "pin.invalid": Record<string, never>;
     /** `min` is the policy, never the PIN. */
     "pin.too_short": { min: number };
-    /** Too many wrong PINs for this (device, person). `retryAfterSeconds` is the whole seconds to wait
-     * before another attempt. */
+    /** Too many wrong PINs for this (device, person), or a new person on a device whose back-off
+     * table is full. `retryAfterSeconds` is the whole seconds to wait before another attempt. */
     "pin.throttled": { retryAfterSeconds: number };
     /** `min` is the policy, never the password. */
     "password.too_short": { min: number };
+    /** Every password login refusal, whatever the cause, and a wrong current password on a profile
+     * change. This package's login refusals carry the cause in the log-only `reason`. */
     "password.invalid": Record<string, never>;
     /** Also thrown for a malformed token. */
     "totp.invalid": Record<string, never>;
@@ -34,7 +38,8 @@ declare module "@waitron/shared" {
     "google.already_linked": Record<string, never>;
     "google.second_factor_required": Record<string, never>;
     "person.not_found": { personId: string };
-    /** The person exists but is suspended — cannot log in or authorize. */
+    /** A live management session's person has been suspended, or an account action was asked for a
+     * suspended person. */
     "person.suspended": { personId: string };
     "person.self_deactivation": Record<string, never>;
     /** Failed `isValidEmail` at a write boundary. */

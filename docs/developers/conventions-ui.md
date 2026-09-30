@@ -183,21 +183,45 @@ active-account reset, with the same acknowledgement for every address. Owner dec
 ## A login's refusal never says whether the account exists
 
 The owner's rule (2026-09-30): "reasons for login shouldn't expose the existence or non existence
-of a user. so any failure should just report that the login failed." Every sign-in answers an
-unknown account, a suspended or pending one, one with no credential set, a wrong password or PIN
-and a wrong authenticator or recovery code with ONE code, the same params and the same status —
-`password.invalid` for a password login, `pin.invalid` for a PIN — each after the same hashing
-work, and a screen shows it as one sentence for every cause, marking no field — "the login failed"
-beside the action on the dashboard and the setup wizard, "Wrong PIN" on the till, where the PIN is
-the only thing typed.
-The real cause goes to the server log only: throw with `new AppError(code, {}, { reason })`, which
-the route error boundary logs as `logReason` and never answers. Validation that does not depend on
-the account (an empty required field, a malformed code) may still sit under its field; a signed-in
-person re-checking their OWN password or code may be told which one was wrong. Two answers are
-reachable only after a credential was proved and stay: `totp.required` and
-`google.second_factor_required`. Guards: the one-answer cases in
-`packages/identity/src/manager-login.test.ts` and `packages/identity/src/login.test.ts`, and in each
-login route's suite — a new sign-in route is seen by none of them. Built in C95.
+of a user. so any failure should just report that the login failed." Every password and PIN
+sign-in answers an unknown account, a suspended or pending one, one with no credential set, a wrong
+password or PIN and a wrong authenticator or recovery code with ONE code, the same params and the
+same status — `password.invalid` for a password login, `pin.invalid` for a PIN — each after the
+same hashing work, and a screen shows it as one sentence for every cause — "the login failed"
+beside the action on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
+the PIN is the only thing typed. It marks no field, with one exception: the setup wizard's Reset
+form marks its person-ID and password fields together (`apps/setup/src/screens/reset-screen.ts`),
+naming neither as the wrong one.
+Passkey and Google sign-in keep their own codes, each one answer for an unknown account and a
+non-active one: `passkey.verification_failed` for a credential nobody holds or whose owner is not
+active (`packages/identity/src/passkey.ts`), `google.invalid` for a Google account linked to nobody
+or to a person who is not active (`loginWithGoogle`, `packages/identity/src/google-oidc.ts`).
+Identity's password and PIN refusals carry the real cause for the server log only:
+`new AppError(code, {}, { reason })`, whose `reason` a route using `createErrorBoundary`
+(`packages/server-kit/src/error-boundary.ts`) logs as `logReason` and never answers. No reason is
+carried by the refusals `apps/server` throws itself — a malformed id or body, a missing credential,
+the setup Reset's proof check (`till-api.ts`, `management-api.ts`, `mirror-bundle-api.ts`,
+`promote-api.ts`, `setup-api.ts`) — nor by the standby box's relayed `password.invalid`
+(`mirror-bundle-fetch.ts`), nor by the passkey and Google refusals. Validation that does not depend
+on the account (an empty required field, a malformed code) may still sit under its field; a
+signed-in person re-checking their OWN password or code may be told which one was wrong. These
+answers are reachable only after a credential was proved and stay: `totp.required` (the
+dashboard's code step, after a right password), `google.second_factor_required` (after a valid
+Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote and
+`GET /management-api/membership` when the password and code are right but the person lacks the
+permission, and from the drawer and refund overrides (`authorize`,
+`packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
+person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
+right PIN whose role is too low (`apps/server/src/adjustments-apply.ts`). Guards: the one-answer cases in `packages/identity/src/manager-login.test.ts` and
+`packages/identity/src/login.test.ts`, and route cases in `apps/server/src/management-api.test.ts`
+(the dashboard sign-in), `mirror-bundle-api.test.ts` (standby connect),
+`promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
+`till-api.receipt.test.ts` (a drawer override) — weaker than the set looks:
+`GET /management-api/membership` (whose suite, `management-api.membership.test.ts`, tries a wrong
+password and a wrong code, not every cause), the adjustment approver
+(`apps/server/src/adjustments-apply.ts`), the refund override and the manual-refund confirmer
+(`apps/server/src/bill-refunds.ts`) rest on identity's cases alone, and a new sign-in route is seen
+by none of them. Built in C95.
 
 **UI primitives in `packages/ui`**
 

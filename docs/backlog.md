@@ -5400,8 +5400,9 @@ ongoing overhaul listed at the top of Track A.
   account exists, so both pass-throughs are gone. The primary now refuses every credential cause
   (unknown id, suspended, wrong password, wrong or missing code) as `password.invalid`; the box
   relays that one code (401, rebuilt with no params) and the wizard shows one "the login failed"
-  sentence beside Connect, marking no field (`shell.adopt.login_failed`). The suspended-admin
-  question above is answered by the same decision. See "Every login failure is one answer" below.
+  sentence beside Connect, marking no field (`shell.adopt.login_failed`). The same decision answers
+  #924's review question of whether a suspended admin should get its own sentence under the
+  person-ID field: it does not. See "Every login failure is one answer" below.
   A CORRECT code
   was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
   without the key ring that decrypts a stored authenticator secret, so an admin with an
@@ -5481,9 +5482,13 @@ ongoing overhaul listed at the top of Track A.
   params, each after one password-hash check. A PIN login (`verifyPersonCredential`,
   `packages/identity/src/credential.ts`: the till's sign-in, the drawer, refund and adjustment
   overrides, payment attest) refuses every cause as 401 `pin.invalid`, each after one PIN-hash
-  check; a malformed person id is `pin.invalid` too. On the till every refused sign-in now counts
-  toward the wrong-PIN back-off, so an unknown id reaches `pin.throttled` as a known one does, and
-  the back-off table is capped (`PIN_THROTTLE_MAX_KEYS`, `packages/identity/src/pin-throttle.ts`).
+  check; a malformed person id is `pin.invalid` too. On the till every refused sign-in with a
+  well-formed person id now counts toward the wrong-PIN back-off, so an unknown id reaches
+  `pin.throttled` as a known one does, and
+  the back-off table is capped per device (`PIN_THROTTLE_MAX_KEYS_PER_DEVICE`,
+  `packages/identity/src/pin-throttle.ts`): a device holding its limit answers each new person
+  with a 60-second wait, and room returns only as that device's entries fall idle, fifteen minutes
+  after each was last used; every other till keeps working.
   The real cause reaches the server log only: an `AppError` can carry a `reason` that is not
   enumerable, and the route error boundary logs it as `logReason`
   (`packages/server-kit/src/error-boundary.ts`). The dashboard login and the setup wizard's Connect
@@ -5491,16 +5496,32 @@ ongoing overhaul listed at the top of Track A.
   PIN, try again", the PIN being the only thing typed. Guards: the one-answer cases in
   `packages/identity/src/manager-login.test.ts`, `login.test.ts` and the route suites
   (`till-api.test.ts`, `till-api.receipt.test.ts`, `mirror-bundle-api.test.ts`,
-  `promote-api.authenticator.test.ts`, `management-api.test.ts`, `setup-api.test.ts`). Kept on purpose, both
-  reachable only after a credential was proved: `totp.required` (the dashboard's code step, after a
-  right password) and `google.second_factor_required` (after a valid Google sign-in); a signed-in
+  `promote-api.authenticator.test.ts`, `management-api.test.ts`); the membership route, the
+  adjustment approver, the refund override and the manual-refund confirmer have no such case of
+  their own. Kept on
+  purpose, each reachable only after a credential was proved: `totp.required` (the dashboard's code
+  step, after a right password), `google.second_factor_required` (after a valid Google sign-in) and
+  `authorization.not_permitted` (right credentials, a role without the permission — a sign-in
+  route, or a PIN override after a right PIN: the drawer and refund overrides and the manual-refund
+  confirmer), and the adjustment approver's `adjustment.approval_required` for a right PIN whose
+  role is too low; a signed-in
   person's re-check of their OWN password or code (`profile.ts`) still names the field. Still open:
   a password-reset request for a known address writes a token row and one for an unknown address
   does not, so its response time may differ (read in `packages/identity/src/account-action.ts`, not
   measured); the override PINs have no wrong-try limit (C89); refusals thrown in `apps/server`
   itself (a malformed id or PIN) carry no `reason`; the till's `APPROVER_REFUSALS`
   (`apps/till/src/till-app.ts`) still lists `person.not_found` and `person.suspended`, which the
-  approval routes no longer send.
+  approval routes no longer send for an approver — left for lane B, whose file it is; the setup
+  wizard's `shell.adopt.bundle_fetch_failed` sentence (`apps/setup/src/i18n/strings/shell.ts`,
+  English and Spanish) still names "it refused the login" among its causes, though a refused login
+  now arrives as `password.invalid` and shows `shell.adopt.login_failed`, so that sentence is
+  reached only for an account without the permission, another refusal from the primary, or a
+  fetch that failed; the setup wizard's Reset form still marks both its person-ID and password
+  fields on `password.invalid` (`resetCredentialsRejected`, `apps/setup/src/setup-app.ts`;
+  `apps/setup/src/screens/reset-screen.ts`), naming neither as the wrong one; and the dashboard's
+  password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
+  is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
+  a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
 - **Review every permission: fewer, coarser, and consistently named** (owner, 2026-09-26). The list in
   `packages/identity/src/permissions.ts` has grown one permission per action, and the owner finds it
   too fine-grained: one permission such as `node.manage` might cover what `mirror.create` and
@@ -8567,8 +8588,6 @@ and `apps/dashboard` moved from `@simplewebauthn/server` 13.3.2 / `@simplewebaut
     registration helper, instead of inline in the login screen. C57 left the automatic attempt on
     page load unchanged; C58, above, later changed it. No visible change: the login and profile
     screen suites pass unedited.
-- The till renders `person.suspended` as "Account suspended" — align with the dashboard's Disabled
-  terminology.
 - The dev `?dev` chooser shows `label · kind` rather than `name · profile · register`; the Spanish
   form-factor label differs between two pickers ("TPV" vs "Caja registradora") — an owner copy call.
 - An `int4InRange` helper collapsing four int4-bounds parsers; an options object for the positional

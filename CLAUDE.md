@@ -283,8 +283,9 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   Required fields visibly marked; an invalid submission explains itself beside every bad field and in
   one localized message beside the action, which stays disabled until the fields are fixed — no
   summary at the top (owner, 2026-09-28). A refusal from a request never disables the action by
-  itself, and one that names a shown field says so under that field (owner, 2026-09-29). Every input
-  has a semantic `name`, never a generated widget id.
+  itself, and one that names a shown field says so under that field (owner, 2026-09-29) — except a
+  login's refusal, which singles out no field (below). Every input has a semantic `name`, never a
+  generated widget id.
 - **Resolve live content and receipt snapshots separately.** Filtering snapshots by enabled content
   languages hid recorded names. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Each surface shows ONE of a product's three names — staff, customer-facing or kitchen — and a
@@ -331,10 +332,11 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   and the successful method only with Remember selected, never in tab storage.
 - **A login's refusal never says whether the account exists** (owner, 2026-09-30): unknown,
   suspended, pending, wrong password or PIN and wrong code all answer one code (`password.invalid`
-  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause that marks
-  no field; the real cause goes to the log only, as an `AppError`'s `reason`. Guards: each login
-  route's one-answer case — a new sign-in route is seen by none of them. See
-  [conventions-ui.md](docs/developers/conventions-ui.md).
+  or `pin.invalid`) after the same hashing work, shown as one sentence for every cause, naming no
+  field as the wrong one; identity's refusals carry the real cause as a log-only `reason`, which
+  `createErrorBoundary` logs. Guards: the one-answer cases in identity's login suites and the route
+  suites conventions-ui.md names, weaker than the set looks — some sign-in routes have no case of
+  their own, and a new one is seen by none. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Markup a screen hands to `wt-data-table` as a cell is styled with `part=`/`::part()`, never a CSS
   class.** The cell's nodes live in the TABLE's shadow root, so the screen's own class rules reach
   nothing and the element renders unstyled while every attribute assertion still passes. Cost: the
