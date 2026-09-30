@@ -202,6 +202,16 @@ describe("the print-agent image and its compose wiring", () => {
     );
   });
 
+  it("ships the Bluetooth sender beside the agent's bundle, with a python3 to run it", () => {
+    // The transport finds the script beside the module that loads it (apps/print-agent/src/rfcomm.ts).
+    expect(DOCKERFILE).toContain(
+      "COPY --from=build --chown=node:node /src/apps/print-agent/src/rfcomm-send.py /app/rfcomm-send.py",
+    );
+    expect(DOCKERFILE).toContain(
+      "apt-get install -y --no-install-recommends bluez python3-minimal",
+    );
+  });
+
   it("runs the agent as an on-by-default compose service with the measured USB shape", () => {
     expect(COMPOSE).toContain("print-agent:");
     expect(COMPOSE).toContain(
@@ -286,6 +296,11 @@ describe("the print-agent image and its compose wiring", () => {
       "member",
     ]);
     expect(unnamedBusFields(rule("member=StartDiscovery"))).toEqual(["interface"]);
+  });
+
+  it("smokes the agent's Bluetooth sender under that profile", () => {
+    expect(IMAGE_SMOKE).toContain("python3 /app/rfcomm-send.py 66:55:44:33:22:11 1 5");
+    expect(IMAGE_SMOKE).toContain("[Errno 13]");
   });
 
   it("smokes the agent under that profile against a stand-in BlueZ, with docker-default as the control", () => {

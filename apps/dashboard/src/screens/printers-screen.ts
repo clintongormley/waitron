@@ -2065,21 +2065,12 @@ export class PrintersScreen extends LitElement {
         sortValue: (p) => p.name,
         cell: (p) =>
           html`<wt-button
-              variant="ghost"
-              part="printer-name"
-              data-test=${`printer-row-${p.id}`}
-              @click=${() => this.#showPrinterStatus(p.id)}
-              >${p.name}</wt-button
-            >${
-              p.transport === "bluetooth"
-                ? html`<div
-                    part="printer-meta"
-                    data-test=${`printer-bluetooth-unavailable-${p.id}`}
-                  >
-                    ${codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)}
-                  </div>`
-                : nothing
-            }`,
+            variant="ghost"
+            part="printer-name"
+            data-test=${`printer-row-${p.id}`}
+            @click=${() => this.#showPrinterStatus(p.id)}
+            >${p.name}</wt-button
+          >`,
       },
       {
         key: "agent",
@@ -2407,7 +2398,6 @@ export class PrintersScreen extends LitElement {
       <div class="form-fields">
         ${this.#renderRefreshError()}
         ${this.calibrationStep ? html`<p role="status">${t("printers.calibration_progress").replace("{step}", String(this.calibrationStep))}</p>` : nothing}
-        ${p.transport === "bluetooth" ? html`<p class="hint" data-test="bluetooth-printing-unavailable">${codeMessage(BLUETOOTH_PRINTING_UNAVAILABLE)}</p>` : nothing}
         ${this.#renderCalibrationFailure()}
         ${
           this.calibrationStep === 0

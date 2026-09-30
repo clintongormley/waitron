@@ -60,18 +60,21 @@ RUN set -eux; \
 # A SEPARATE image from the app (its own compose service), built with
 # `--target print-agent`. bluez supplies bluetoothctl, which the Bluetooth
 # pair path spawns (deploy/apparmor/waitron-print-agent allows pairing with a
-# PIN; receipts in its header); node:24-alpine never carried it.
+# PIN; receipts in its header); node:24-alpine never carried it. Node has no
+# Bluetooth sockets, so a Bluetooth print job goes through rfcomm-send.py, run
+# by python3-minimal, whose socket module has them.
 # Runs as the unprivileged `node` user the base image already ships (uid 1000).
 # ---------------------------------------------------------------------------
 FROM node:26-slim AS print-agent
 RUN set -eux; \
   apt-get update; \
-  apt-get install -y --no-install-recommends bluez; \
+  apt-get install -y --no-install-recommends bluez python3-minimal; \
   rm -rf /var/lib/apt/lists/*
 # The state volume's mount path, pre-created and chowned so a fresh named volume comes up writable by
 # the non-root process (same rule as the app image's /var/lib/waitron paths).
 RUN install -d -o node -g node /var/lib/waitron-print-agent
 COPY --from=build --chown=node:node /src/apps/print-agent/dist/print-agent.js /app/print-agent.js
+COPY --from=build --chown=node:node /src/apps/print-agent/src/rfcomm-send.py /app/rfcomm-send.py
 ENV NODE_ENV=production \
   WAITRON_STATE_DIR=/var/lib/waitron-print-agent \
   WAITRON_SETUP_PORT=9110

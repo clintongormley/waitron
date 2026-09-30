@@ -317,6 +317,24 @@ jobs:
           grep -q 'member="Set"' "$RUNNER_TEMP/bt-refusals.txt"
           if grep -v 'member="Set"' "$RUNNER_TEMP/bt-refusals.txt"; then exit 1; fi
 
+      # The agent's Bluetooth sender, run as the agent runs it, under the shipped profile. The runner's
+      # kernel has no Bluetooth at all (probe run 36656859928 on 6.17.0-1022-azure: `modprobe
+      # bluetooth` found no module), so the socket can never open here and Python reports errno 97; a
+      # profile refusal reports errno 13 instead, as the same probe printed under the profile plus
+      # `deny network bluetooth`. A job reaching a real printer is checked only on the box.
+      - name: The print agent's Bluetooth sender runs in the image, and its profile does not refuse the socket
+        run: |
+          set -euo pipefail
+          agent=$(docker compose ps -q print-agent)
+          set +e
+          printf 'x' | docker exec -i "$agent" python3 /app/rfcomm-send.py 66:55:44:33:22:11 1 5 > "$RUNNER_TEMP/bt-send.txt" 2>&1
+          sent=$?
+          set -e
+          cat "$RUNNER_TEMP/bt-send.txt"
+          [ "$sent" -eq 1 ]
+          grep -qF "rfcomm 66:55:44:33:22:11 channel 1: [Errno " "$RUNNER_TEMP/bt-send.txt"
+          if grep -qF "[Errno 13]" "$RUNNER_TEMP/bt-send.txt"; then exit 1; fi
+
       - name: Tear the stack down, volumes and all
         if: always()
         run: docker compose down -v --remove-orphans

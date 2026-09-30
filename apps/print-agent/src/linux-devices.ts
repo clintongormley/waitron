@@ -1,16 +1,17 @@
 import dgram from "node:dgram";
 import { connectTcp } from "./tcp-probe.js";
 import { networkInterfaces } from "node:os";
-import type {
-  BluetoothCommandResult,
-  DiscoveredDevice,
-  Host,
-  HostLog,
-  PairResult,
-  PairedBluetoothDevice,
-  PrinterTarget,
-  VisibleDevice,
-  WireJob,
+import {
+  type BluetoothCommandResult,
+  type DiscoveredDevice,
+  type Host,
+  type HostLog,
+  type PairResult,
+  type PairedBluetoothDevice,
+  type PrinterTarget,
+  type VisibleDevice,
+  type WireJob,
+  isBluetoothAddress,
 } from "@waitron/print-agent";
 import { type BluetoothDevice, type BluetoothHost, createBluetoothctlHost } from "./bluetooth.js";
 import { runBluetoothctl } from "./bluetooth-command.js";
@@ -141,7 +142,6 @@ export function createLinuxDevices(
           : sharedListing().catch(() => []);
       const usbDevices = (await usb()).map(dropPath);
       const paired = await listing;
-      // While `liveBtDevicePath` throws, this catch drops EVERY paired Bluetooth device in production.
       let btDevices: VisibleDevice[];
       try {
         btDevices = toLocal(paired).map(dropPath);
@@ -194,8 +194,7 @@ export function createLinuxDevices(
       return bluetooth.forget(mac);
     },
 
-    // Only a device path someone supplies can print: `liveBtDevicePath` is not built.
-    bluetoothPrinting: () => opts.btDevicePath !== undefined,
+    bluetoothPrinting: () => true,
 
     async resolve(job: WireJob): Promise<PrinterTarget> {
       if (job.transport === "network_tcp") {
@@ -225,6 +224,14 @@ export function createLinuxDevices(
   };
 }
 
+/** The host's Bluetooth transport sends to the printer's address itself. */
+function liveBtDevicePath(mac: string): string {
+  if (!isBluetoothAddress(mac)) {
+    throw new Error(`bluetooth device ${mac} is not a Bluetooth address`);
+  }
+  return mac;
+}
+
 /** A minimal mDNS PTR/IN query for the PDL service. */
 export function buildPdlQuery(): Buffer {
   const header = Buffer.alloc(12);
@@ -242,13 +249,6 @@ export function buildPdlQuery(): Buffer {
 
 /* v8 ignore start -- opens the mDNS and port-9100 sockets; covered by the
    receipts, not unit tests (no radio or LAN in CI). */
-
-/** There is no per-MAC RFCOMM node yet, and a shared `/dev/rfcomm0` would route two paired printers
- * to the same node, so this throws; `visibleDevices` then leaves the device out, and no Bluetooth job
- * is handed to this agent. */
-function liveBtDevicePath(mac: string): string {
-  throw new Error(`bluetooth device ${mac} resolution not implemented (Step 6c receipt)`);
-}
 
 /** An announced entry, which carries the printer's own name, wins over a swept duplicate. */
 async function liveNetworkScan(): Promise<DiscoveredDevice[]> {

@@ -132,11 +132,12 @@ describe("createLinuxDevices — visibleDevices()", () => {
 });
 
 describe("createLinuxDevices — a paired printer with no device path", () => {
+  // The production path names only a Bluetooth address, so a paired entry that is not one has none.
   it("leaves it out of the inventory while the radio still reads available", async () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
       devRoot: "/dev",
-      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF" }] }),
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "/dev/rfcomm0" }] }),
     });
     expect(await devices.visibleDevices()).toEqual([
       {
@@ -147,6 +148,20 @@ describe("createLinuxDevices — a paired printer with no device path", () => {
       },
     ]);
     expect(devices.bluetoothAvailability()).toEqual({ available: true });
+  });
+});
+
+describe("createLinuxDevices — visibleDevices() with the production device path", () => {
+  it("lists a paired printer", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      devRoot: "/dev",
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF" }] }),
+    });
+    expect(await devices.visibleDevices()).toContainEqual({
+      transport: "bluetooth",
+      localKey: "AA:BB:CC:DD:EE:FF",
+    });
   });
 });
 
@@ -457,9 +472,9 @@ describe("createLinuxDevices — forgetBluetooth()", () => {
 });
 
 describe("createLinuxDevices — bluetoothPrinting()", () => {
-  it("says it cannot print over Bluetooth with the production device path, which is not built", () => {
+  it("says it can print over Bluetooth with the production device path", () => {
     const devices = createLinuxDevices({ sysfsRoot: root, bluetooth: fakeBluetooth() });
-    expect(devices.bluetoothPrinting()).toBe(false);
+    expect(devices.bluetoothPrinting()).toBe(true);
   });
 
   it("says it can print over Bluetooth once it is given a device path", () => {
@@ -511,16 +526,32 @@ describe("createLinuxDevices — resolve()", () => {
     });
   });
 
-  it("throws for a bluetooth job when the live per-MAC binding is not implemented (default btDevicePath)", async () => {
+  it("resolves a paired Bluetooth job to the printer's address with the production device path", async () => {
     const devices = createLinuxDevices({
       sysfsRoot: root,
       bluetooth: fakeBluetooth({
         paired: async () => [{ mac: "AA:BB:CC:DD:EE:FF", name: "Star" }],
       }),
     });
+    expect(
+      await devices.resolve(wireJob({ transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" })),
+    ).toEqual({
+      id: "p1",
+      transport: "bluetooth",
+      host: null,
+      port: null,
+      devicePath: "AA:BB:CC:DD:EE:FF",
+    });
+  });
+
+  it("refuses, with the production device path, a paired entry that is not a Bluetooth address", async () => {
+    const devices = createLinuxDevices({
+      sysfsRoot: root,
+      bluetooth: fakeBluetooth({ paired: async () => [{ mac: "/dev/rfcomm0" }] }),
+    });
     await expect(
-      devices.resolve(wireJob({ transport: "bluetooth", localKey: "AA:BB:CC:DD:EE:FF" })),
-    ).rejects.toThrow(/not implemented/);
+      devices.resolve(wireJob({ transport: "bluetooth", localKey: "/dev/rfcomm0" })),
+    ).rejects.toThrow("bluetooth device /dev/rfcomm0 is not a Bluetooth address");
   });
 
   it("passes a network_tcp job's host/port through, with no device path", async () => {

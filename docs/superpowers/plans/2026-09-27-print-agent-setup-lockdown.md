@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-09-30:** Bluetooth printing, which this plan leaves unbuilt, was built later by A140
+> (`docs/backlog.md`, A140's entry): the agent sends a job over RFCOMM to the printer's own
+> address, `liveBtDevicePath` no longer throws, and the dashboard no longer says Bluetooth
+> printing is not available yet.
+
 **Goal:** Close a joined print agent's unauthenticated LAN setup page, let an out-of-touch agent deliberately restart joining after five minutes, remember venue servers across restarts, and move safe Bluetooth pairing and forgetting behind the dashboard's manager permission.
 
 **Architecture:** Ship this in three pull requests that are independently green. The first changes only the agent's persisted state, control loop, and setup page. The second adds backward-compatible Bluetooth inventory and command wire support to the agent without any server issuing commands yet. The third adds the server's bounded in-memory command channel and the dashboard controls; Bluetooth delivery remains unavailable and continues to fail loudly at `liveBtDevicePath`.

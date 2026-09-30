@@ -13,8 +13,9 @@ export interface PrinterTarget {
   transport: PrintTransport;
   host: string | null;
   port: number | null;
-  /** A `/dev/usb/lp*` node for USB or a paired RFCOMM node for Bluetooth, resolved from the printer's
-   * `local_key` by {@link Host.resolve}. */
+  /** A `/dev/usb/lp*` node for USB; for Bluetooth, what the host's Bluetooth transport sends to (the
+   * box's agent: the printer's address). Resolved from the printer's `local_key` by
+   * {@link Host.resolve}. */
   devicePath: string | null;
 }
 

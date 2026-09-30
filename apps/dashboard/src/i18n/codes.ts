@@ -153,8 +153,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este agente de impresión ya no indica que ese dispositivo Bluetooth esté emparejado.",
   },
   "printer.bluetooth_printing_unavailable": {
-    en: "Printing to a Bluetooth printer is not available yet.",
-    es: "Aún no se puede imprimir en una impresora Bluetooth.",
+    en: "This printer's print agent cannot print to Bluetooth printers.",
+    es: "El agente de impresión de esta impresora no puede imprimir en impresoras Bluetooth.",
   },
   "content.language_invalid": {
     en: "Choose a recognised language.",
