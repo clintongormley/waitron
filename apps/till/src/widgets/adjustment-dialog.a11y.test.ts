@@ -106,7 +106,7 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations saying the bill's discount limit is why a manager must approve", async () => {
+  it("has no violations saying a discount leaves the bill past the venue's limit", async () => {
     const { el, host } = await mount({ kind: "discount" });
     await pressed(el, 'input[name="reason"]');
     const input = el
@@ -117,6 +117,26 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     await el.updateComplete;
     await previewed(el, {
       reduction: "15.00",
+      nominalValue: "50.00",
+      needsApproval: "manager",
+      overBillDiscountLimit: true,
+      lines: [],
+    });
+    expect(el.shadowRoot!.querySelector("[data-over-bill-limit]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations saying a cancel leaves the bill past the venue's limit", async () => {
+    const { el, host } = await mount({ kind: "cancel", target: { ...steaks, started: true } });
+    await pressed(el, 'input[name="reason"]');
+    const note = el
+      .shadowRoot!.querySelector('wt-input[name="note"]')!
+      .shadowRoot!.querySelector("input")!;
+    note.value = "Mal marcado";
+    note.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    await previewed(el, {
+      reduction: "50.00",
       nominalValue: "50.00",
       needsApproval: "manager",
       overBillDiscountLimit: true,
