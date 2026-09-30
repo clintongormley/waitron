@@ -3065,8 +3065,9 @@ describe("login-screen: a step's links are one bulleted list with its buttons on
     setLocale("es-ES");
     await page.viewport(1280, 900);
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api: stubApi() });
-    el.style.setProperty("--wt-font-family", "Verdana");
-    el.style.letterSpacing = "6px";
+    // Wide enough in any font: the extra spacing alone makes the first link wider than the room
+    // the button leaves.
+    el.style.letterSpacing = "24px";
     await flush(el);
     await openGoogle(el);
     const list = el.shadowRoot!.querySelector("ul.alternative-list")!;
