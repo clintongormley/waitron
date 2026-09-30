@@ -312,7 +312,9 @@ cannot see it, so assert a computed width or colour when you add a styled cell.
 **A last column with `pinned: "end"` stays at the trailing edge of the table's box while the other
 columns scroll sideways under it**, so a row menu can be kept on a phone's screen without the table
 fitting it. It is set per column, and every row-menu column keyed `actions` sets it (A155; guard:
-`scripts/pinned-actions-column.test.ts`, which knows a row-menu column only by that key). The
+`scripts/pinned-actions-column.test.ts`, weaker than its name: it knows a row-menu column only by
+a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`; its
+header lists the rest). The
 pinned header and cells paint the row's own
 background (`--wt-color-surface`, and `--wt-color-surface-raised` while the row is hovered, or a
 clickable row focused), sit above a clickable row's lifted controls, and draw a `--wt-color-border`
@@ -320,8 +322,10 @@ line on their leading side from the cell's own `::before`: the table collapses i
 the 2026-09-30 screenshots a border set on the pinned cell itself showed only once the table was
 scrolled to its end, never while the cell was held at the edge. A table with no pinned column puts
 no `data-pinned` attribute on any cell. Guards: the pinned cases in
-`packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, and the
-phone-width cases in `apps/dashboard/src/screens/printers-screen.test.ts`. In a table with
+`packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`, a phone-width
+case per dashboard table in its own suite, most built on `expectRowMenusOnScreen`
+(`packages/ui/src/test-helpers.ts`) — the alerts and in-use products tables, whose column holds a
+button, check it by hand — and `scripts/pinned-actions-column.test.ts`. In a table with
 `rowClick`, a click on a pinned cell's empty space opens the row, and a click on anything inside
 the cell does not (the pinned-click cases in `wt-data-table.test.ts`).
 

@@ -1,6 +1,7 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanupWidgets, expectRowMenusOnScreen, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { roleName, statusName } from "../i18n/domain.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { PersonSummary } from "../api/client.js";

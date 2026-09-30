@@ -1,11 +1,7 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import {
-  cleanupWidgets,
-  customSquarePixels,
-  expectRowMenusOnScreen,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+import { cleanupWidgets, customSquarePixels, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { SectionsScreen } from "./sections-screen.js";
 import type {
   CategorySummary,

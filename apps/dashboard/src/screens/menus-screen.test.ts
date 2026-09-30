@@ -4,11 +4,11 @@ import { LiveData } from "@waitron/dashboard-kit";
 import {
   cleanupWidgets,
   documentProduct,
-  expectRowMenusOnScreen,
   documentSection,
   menuDocument,
   mountWidget,
 } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type {
   CatalogueSummary,

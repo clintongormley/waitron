@@ -2667,10 +2667,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `packages/ui/src/components/wt-data-table.test.ts` and `wt-data-table.a11y.test.ts`.
 - **DONE (2026-09-30, A155): every `wt-data-table` whose row menu sits in its last column pins
   that column** (owner's answer "a" to A145's question). `pinned: "end"` stays a per-column option,
-  now set on every column keyed `actions`: the Printers screen's Agents tab, the categories screen
+  now set on every row-menu column keyed `actions` (the adjustment reasons screen's menu, keyed
+  `manage` and not its last column, is left unpinned — recorded below): the Printers screen's Agents
+  tab, the categories screen
   and its products-in-category table, the units screen and its in-use products table, the menus,
   sections, servers, payments, alerts, modifiers (Extras and Options) and labels screens, the
-  product and staff lists, and venue operations' five tables. In a table with `rowClick` (the units
+  product and staff lists, venue operations' five tables and the `packages/ui` demo's table (`packages/ui/demo/main.ts`). In a table with `rowClick` (the units
   screen), a click on a pinned cell's empty space now opens the row; a click on anything inside the
   cell does not. Measured 2026-09-30 in headless Chromium with a long unbroken name, before the
   change: at 390 px the right edge of each table's first-row ⋮ (or, in the alerts and in-use
@@ -2678,11 +2680,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   ending at 390 px or less (373 px in the two tables inside a dialog); the servers table (which wraps its addresses) did so only at 320 px with
   larger text, and the menus list (whose narrow layout starts at 480 px) only between 500 and 700
   px. At 1280 px pinning changes no column's width (849/262/169 px pinned and unpinned, same rows).
-  Guards: a phone-width case per table in each screen's own suite (English and Spanish; the shared
-  check is `expectRowMenusOnScreen`, `apps/dashboard/src/widgets/test-helpers.ts`), the pinned-click
+  Guards: a phone-width case per dashboard table in each screen's own suite (English and Spanish;
+  most use `expectRowMenusOnScreen`, `packages/ui/src/test-helpers.ts`, and the alerts and in-use
+  products tables, whose column holds a button, check it by hand; the demo has none), the pinned-click
   cases in `packages/ui/src/components/wt-data-table.test.ts`, and
-  `scripts/pinned-actions-column.test.ts`, weaker than its name — it parses each file and knows a
-  column only by its key `"actions"`, so a row menu under another key is invisible to it.
+  `scripts/pinned-actions-column.test.ts`, weaker than its name — it knows a row-menu column only by
+  a literal `key: "actions"` and reads only non-test `.ts` files under `apps/` and `packages/`; its
+  header lists the rest.
 - **The adjustment reasons table's row menu leaves a phone's screen when a reason's name is long.**
   Its menu is not in the last column: the `manage` column (move up, move down and ⋮) is second, on
   purpose, "so a phone reaches the controls without scrolling the table"
@@ -8518,8 +8522,8 @@ Either bring the three decisions across and re-baseline, or change the sentence 
   in any case. typescript-eslint tracks the work in its issue 10940,
   and the message it prints today names version **7.1** as the target. When a typescript-eslint
   release supports it, the root entry goes back to a plain `^7` range and the alias disappears.
-  `scripts/comments-only.mjs` and `scripts/apply-migrations-callers.test.ts` parse with the version
-  6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them, before that
+  `scripts/comments-only.mjs`, `scripts/apply-migrations-callers.test.ts` and
+  `scripts/pinned-actions-column.test.ts` parse with the version 6 API (`ts.createSourceFile`), so they have to be ported, or the alias kept for them, before that
   move. The whole arrangement, with the receipts, is in
   [ci-and-gates.md](developers/ci-and-gates.md) → *Two TypeScript compilers are installed, and that
   is deliberate*.

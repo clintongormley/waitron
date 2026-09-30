@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import type { VenueServiceApi, VenueServiceView } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
 import "./venue-operations-screen.js";
@@ -1975,28 +1976,6 @@ describe("the setting for the reminder to fire the next group", () => {
     ]);
   });
 });
-
-/**
- * Holds that `table` (a `wt-data-table`) is wider than its box, is unscrolled, and shows each of its
- * `rows` row menus inside the box and the window with nothing painted over the menu's button.
- */
-function expectRowMenusOnScreen(table: Element, rows: number): void {
-  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
-  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
-  expect(scroll.scrollLeft).toBe(0);
-  const box = scroll.getBoundingClientRect();
-  const menus = [...table.shadowRoot!.querySelectorAll("wt-row-actions")];
-  expect(menus).toHaveLength(rows);
-  for (const [index, menu] of menus.entries()) {
-    const button = menu.shadowRoot!.querySelector("button")!;
-    const at = button.getBoundingClientRect();
-    expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
-    expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
-    expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
-    const hit = menu.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
-    expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
-  }
-}
 
 describe("the venue tables at phone width", () => {
   // A long name in each table's first column widens it past a 390 px screen.

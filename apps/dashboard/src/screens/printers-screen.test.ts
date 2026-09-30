@@ -1,6 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupWidgets, expectRowMenusOnScreen, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { jobStatusName, transportName } from "../i18n/domain.js";
@@ -845,7 +846,11 @@ describe("the Agents tab at phone width", () => {
         await flush(el);
         await selectTab(el, "agents");
         await filterAgents(el, "all");
-        expectRowMenusOnScreen(q(el, '[data-test="agents-table"]')!, phoneAgents.length);
+        expectRowMenusOnScreen(
+          q(el, '[data-test="agents-table"]')!,
+          phoneAgents.length,
+          "dashboard-row-actions",
+        );
       } finally {
         setLocale(before);
         await page.viewport(width, height);

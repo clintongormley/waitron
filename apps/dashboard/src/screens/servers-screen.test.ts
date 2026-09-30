@@ -1,12 +1,8 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import {
-  cleanupWidgets,
-  closeReportsDelivered,
-  expectRowMenusOnScreen,
-  mountWidget,
-} from "../widgets/test-helpers.js";
+import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
+import { expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import "./servers-screen.js";
 import type { ServersScreen } from "./servers-screen.js";
 import type { DashboardApi, ServerListing } from "../api/client.js";

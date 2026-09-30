@@ -7,22 +7,28 @@ import { describe, expect, it } from "vitest";
  * Contract: every `wt-data-table` column keyed `"actions"` (the row's ⋮ menu) is declared
  * `pinned: "end"`, so the menu stays on a phone's screen while the other columns scroll sideways.
  *
- * Weaker than its name: it parses each file and looks for object literals whose own `key` property
- * is the string `"actions"`, so a row-menu column under another key, or one whose key or `pinned`
- * arrives through a variable or a spread, is invisible to it; and it does not know which objects are
- * table columns, so any such object under `apps/` or `packages/` (less tests and
- * `packages/ui/demo`) is held to the rule. `NOT_A_ROW_MENU` excuses data columns by file and label.
+ * Weaker than its name: it reads only `.ts` files under `apps/` and `packages/`, less `*.test.ts`
+ * (never `.tsx`, `.mts`, `.cts`, `.js` or `.mjs`), and looks for object literals whose own `key` is
+ * written as the string `"actions"`. A row-menu column under another key, or whose key is a variable,
+ * a shorthand, a computed name or an `as const`, is invisible to it; a key spread in from another
+ * object is judged on that object. Its own `pinned` must be written as the string `"end"`: one set
+ * through a variable, a spread or an `as const` is reported even when it holds `"end"`. It does not
+ * know which objects are table columns, so any such object is held to the rule. `NOT_A_ROW_MENU`
+ * excuses data columns by file and label.
  */
 
 const repoRoot = join(import.meta.dirname, "..");
 const ROOTS = ["apps", "packages"];
-const SKIPPED_DIRS = [join(repoRoot, "packages/ui/demo")];
 
 /** Columns keyed `"actions"` that hold data, not the row's menu: file → the column's `label` code. */
 const NOT_A_ROW_MENU: Readonly<Record<string, string>> = {
   // The actions a reason allows; the row menu is the "manage" column.
   "packages/adjustments/src/dashboard/reasons-screen.ts": 't("adjustments.column.actions")',
 };
+
+function isDataColumn(file: string, label: string | undefined): boolean {
+  return Object.hasOwn(NOT_A_ROW_MENU, file) && NOT_A_ROW_MENU[file] === label;
+}
 
 interface Unpinned {
   line: number;
@@ -90,6 +96,12 @@ describe("the matcher", () => {
     expect(unpinnedActionsColumns(source)).toEqual([{ line: 1, label: undefined }]);
   });
 
+  it("excuses a data column only in the file listed for it", () => {
+    const [file, label] = Object.entries(NOT_A_ROW_MENU)[0]!;
+    expect(isDataColumn(file, label)).toBe(true);
+    expect(isDataColumn("packages/unlisted.ts", undefined)).toBe(false);
+  });
+
   it("ignores the string when it is not the key, and the key inside a comment", () => {
     const source = ['// { key: "actions" }', 'const c = { key: "name", label: "actions" };'].join(
       "\n",
@@ -107,7 +119,6 @@ function sourceFilesIn(dir: string): string[] {
   for (const entry of readdirSync(dir)) {
     if (entry === "node_modules" || entry === "dist" || entry.startsWith(".")) continue;
     const full = join(dir, entry);
-    if (SKIPPED_DIRS.includes(full)) continue;
     const stats = statSync(full);
     if (stats.isDirectory()) out.push(...sourceFilesIn(full));
     else if (stats.isFile() && full.endsWith(".ts") && !full.endsWith(".test.ts")) out.push(full);
@@ -123,7 +134,7 @@ describe("the tree", () => {
     if (!source.includes("actions")) continue;
     const name = relative(repoRoot, file);
     for (const column of unpinnedActionsColumns(source))
-      if (NOT_A_ROW_MENU[name] === column.label) excused.add(name);
+      if (isDataColumn(name, column.label)) excused.add(name);
       else offenders.push(`${name}:${column.line}`);
   }
 

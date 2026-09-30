@@ -1,3 +1,4 @@
+import { expect } from "vitest";
 import { applyTokens } from "./tokens/index.js";
 
 /** The wrapper element of the most recent mount. Live binding — reassigned by mount(). */
@@ -37,4 +38,31 @@ export async function mountInShadowRoot(html: string): Promise<HTMLElement> {
   const el = shadow.firstElementChild as HTMLElement & { updateComplete: Promise<unknown> };
   await el.updateComplete;
   return el;
+}
+
+/**
+ * Holds that `table` (a `wt-data-table`) is wider than its box, is unscrolled, and shows each of its
+ * `rows` row menus inside the box and the window with nothing painted over the menu's button.
+ * `menu` is the CSS selector for the row menu element the table renders.
+ */
+export function expectRowMenusOnScreen(
+  table: Element,
+  rows: number,
+  menu = "wt-row-actions",
+): void {
+  const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  expect(scroll.scrollWidth, "the table overflows its box").toBeGreaterThan(scroll.clientWidth);
+  expect(scroll.scrollLeft).toBe(0);
+  const box = scroll.getBoundingClientRect();
+  const menus = [...table.shadowRoot!.querySelectorAll(menu)];
+  expect(menus).toHaveLength(rows);
+  for (const [index, found] of menus.entries()) {
+    const button = found.shadowRoot!.querySelector("button")!;
+    const at = button.getBoundingClientRect();
+    expect(at.right, `row ${index}`).toBeLessThanOrEqual(box.right);
+    expect(at.left, `row ${index}`).toBeGreaterThanOrEqual(box.left);
+    expect(at.right, `row ${index} against the screen`).toBeLessThanOrEqual(window.innerWidth);
+    const hit = found.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
+    expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
+  }
 }
