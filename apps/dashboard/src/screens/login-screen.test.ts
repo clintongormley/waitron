@@ -109,11 +109,20 @@ function input(el: LoginScreen, name: string, value: string): void {
   );
 }
 
-/** The one message beside the current form's action; "" when there is none. */
-async function bottomOf(el: LoginScreen): Promise<string> {
+/** The current form's one message about a failed submission: shown by the form itself above a
+ * row of links and buttons, or else by its action row. */
+async function bottomMessageOf(el: LoginScreen): Promise<Element | null> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   await actions.updateComplete;
-  return actions.shadowRoot!.querySelector("[data-error]")?.textContent?.trim() ?? "";
+  return (
+    el.shadowRoot!.querySelector("[data-error]") ??
+    actions.shadowRoot!.querySelector("[data-error]")
+  );
+}
+
+/** The current form's one message about a failed submission; "" when there is none. */
+async function bottomOf(el: LoginScreen): Promise<string> {
+  return (await bottomMessageOf(el))?.textContent?.trim() ?? "";
 }
 
 async function mountPasskeyOffer(overrides: Partial<DashboardApi> = {}) {
@@ -1341,6 +1350,36 @@ describe("login-screen", () => {
       "passkey.challenge_expired",
     );
   });
+
+  it.each([1280, 390])(
+    "puts a refused passkey sign-in's message on its own line at the form's left edge, above the links and the button (%ipx)",
+    async (width) => {
+      await page.viewport(width, 900);
+      try {
+        const api = stubApi({
+          passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+        });
+        const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+        await continueWithEmail(el);
+        el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+        await flush(el);
+        const message = (await bottomMessageOf(el))!;
+        expect(message.textContent!.trim()).not.toBe("");
+        const row = el.shadowRoot!.querySelector(".links-and-actions")!.getBoundingClientRect();
+        const button = el
+          .shadowRoot!.querySelector("[data-test=passkey-login]")!
+          .getBoundingClientRect();
+        const box = message.getBoundingClientRect();
+        expect(box.bottom).toBeLessThanOrEqual(row.top);
+        expect(box.bottom).toBeLessThanOrEqual(button.top);
+        expect(box.left).toBeCloseTo(row.left, 0);
+        expect(box.right).toBeCloseTo(row.right, 0);
+        expect(getComputedStyle(message).textAlign).toBe("start");
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
 
   it("falls back to passkey.verification_failed when a rejected passkey step carries no code", async () => {
     const api = stubApi({ passkeyAuthOptions: vi.fn().mockRejectedValue({}) });

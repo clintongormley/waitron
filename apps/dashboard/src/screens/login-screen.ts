@@ -11,7 +11,13 @@ import type {
   AuthenticationResponseJSON,
   PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { focusFirstInvalid, submitOnEnter, baseStyles } from "@waitron/ui";
+import {
+  focusFirstInvalid,
+  formMessage,
+  formMessageStyles,
+  submitOnEnter,
+  baseStyles,
+} from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -55,6 +61,7 @@ function actionEmailFromUrl(): string {
 export class LoginScreen extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: block;
@@ -952,13 +959,15 @@ export class LoginScreen extends LitElement {
     ];
   }
 
-  #linksAndActions(links: TemplateResult[], actions: TemplateResult) {
-    return html`<div class="links-and-actions">
-      <ul class="alternative-list">
-        ${links.map((link) => html`<li>${link}</li>`)}
-      </ul>
-      ${actions}
-    </div>`;
+  /** `message` goes above the row, at the form's left edge, not inside the narrower action row. */
+  #linksAndActions(links: TemplateResult[], actions: TemplateResult, message: string) {
+    return html`${formMessage(message)}
+      <div class="links-and-actions">
+        <ul class="alternative-list">
+          ${links.map((link) => html`<li>${link}</li>`)}
+        </ul>
+        ${actions}
+      </div>`;
   }
 
   /** A stable field, so the footer's `loadLocales` property does not change on every render. */
@@ -1225,7 +1234,7 @@ export class LoginScreen extends LitElement {
                     <p class="alternative-hint">${t("login.google_hint")}</p>
                     ${this.#linksAndActions(
                       this.#alternatives(),
-                      html`<wt-form-actions .error=${form.bottom}
+                      html`<wt-form-actions
                         ><wt-button
                           variant="primary"
                           data-test="google-login"
@@ -1234,6 +1243,7 @@ export class LoginScreen extends LitElement {
                           >${t("login.with_google")}</wt-button
                         ></wt-form-actions
                       >`,
+                      form.bottom,
                     )}
                   `
                 : this.step === "passkey"
@@ -1243,7 +1253,7 @@ export class LoginScreen extends LitElement {
                       <p class="alternative-hint">${t("login.passkey_hint")}</p>
                       ${this.#linksAndActions(
                         this.#alternatives(),
-                        html`<wt-form-actions .error=${form.bottom}>
+                        html`<wt-form-actions>
                           <wt-button
                             variant="primary"
                             data-test="passkey-login"
@@ -1252,6 +1262,7 @@ export class LoginScreen extends LitElement {
                             >${t("login.with_passkey")}</wt-button
                           >
                         </wt-form-actions>`,
+                        form.bottom,
                       )}
                     `
                   : this.step === "password"
@@ -1298,7 +1309,7 @@ export class LoginScreen extends LitElement {
                         </wt-input>
                         ${this.#linksAndActions(
                           this.#alternatives(),
-                          html`<wt-form-actions .error=${form.bottom}>
+                          html`<wt-form-actions>
                             <wt-button
                               variant="primary"
                               data-test="submit"
@@ -1307,6 +1318,7 @@ export class LoginScreen extends LitElement {
                               >${t("action.login")}</wt-button
                             >
                           </wt-form-actions>`,
+                          form.bottom,
                         )}
                       `
                     : this.step === "factor"
@@ -1354,7 +1366,7 @@ export class LoginScreen extends LitElement {
                                 },
                               ),
                             ],
-                            html`<wt-form-actions .error=${form.bottom}>
+                            html`<wt-form-actions>
                               <wt-button
                                 slot="cancel"
                                 variant="secondary"
@@ -1375,6 +1387,7 @@ export class LoginScreen extends LitElement {
                                 >${t("action.login")}</wt-button
                               >
                             </wt-form-actions>`,
+                            form.bottom,
                           )}
                         `
                       : this.step === "reset-sent"
