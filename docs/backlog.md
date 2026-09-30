@@ -680,7 +680,7 @@ notice when a shortcut disappears.
 **Some secret checks still hold the venue's write lock while scrypt runs.** Every check against a
 stored hash from `packages/identity/src/secret-hash.ts` now derives the key with
 `verifySecretAsync` on Node's thread pool, so the event loop keeps turning while it runs.
-**Done (2026-09-30, lane A's A125):** the print agent's token (`authenticateAgent`,
+**Done (2026-09-30, lane A's A125, #912):** the print agent's token (`authenticateAgent`,
 `packages/printing/src/agent.ts`, called by `requireAgent` in
 `apps/server/src/print-agent-session.ts`) reads the stored hash, derives the key and re-reads the
 row with no transaction open, refusing the token if the agent was revoked or re-keyed meanwhile, and
@@ -716,6 +716,15 @@ event loop, not covered by this entry's work: `hashSecret` derives with `scryptS
 and `deriveKey` (`apps/server/src/scrypt-kdf.ts`) runs `scryptSync` too, which the server reaches
 when it encrypts or decrypts a configuration bundle, decrypts a restore archive or a sealed node
 state, or encrypts a recovery bundle.
+Left open by #912's review, not changed there: (1) the two join-status readers answer from a hash
+read just before the key is derived, so a request denied or revoked in that window can get one
+stale `pending` or `approved`; both routes return only `{ status }` and issue no credential, and
+the joiner's next request goes through `tryReadDevice` or `authenticateAgent`, which re-read the
+row (the till and print-agent clients were not traced). (2) With the blocking twin gone,
+`verifySecretAsync` could be renamed `verifySecret` across the tree (optional). (3) Not checked:
+`tryReadDevice`'s last-seen write may not re-check that the device is still active, the gap #912
+closed for the print agent. **Next action:** read `tryReadDevice` and add the re-check if it is
+missing.
 
 **The till's removed-layout warning outlives a sign-out.** When the home layout a device's profile
 chose is removed, the till warns (naming the layout if it had shown it, otherwise the menu) until
