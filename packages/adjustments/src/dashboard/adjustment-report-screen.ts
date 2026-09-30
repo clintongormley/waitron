@@ -14,6 +14,7 @@ import type {
   EntriesOf,
   PersonRef,
 } from "./client.js";
+import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
 import { actionName, actionTotalName, stageName, t, tf } from "./strings.js";
@@ -30,12 +31,6 @@ const STAGES: readonly AdjustmentStageGroup[] = [
   "afterServing",
   "billDiscount",
 ];
-const STAGE_OF: Record<NonNullable<AdjustmentEntry["stage"]>, AdjustmentStageGroup> = {
-  unsent: "beforeFiring",
-  held: "beforeFiring",
-  fired: "afterFiring",
-  served: "afterServing",
-};
 /** Shown where a value does not apply: a guest's sales, a rate without sales, a missing note. */
 const NONE = "—";
 
@@ -265,16 +260,6 @@ export class AdjustmentReportScreen extends LitElement {
     return this.from !== undefined && this.to !== undefined && this.from > this.to;
   }
 
-  /** The first read of each range is the person's; the refreshes live data asks for are passive. */
-  #reader<T>(read: (api: AdjustmentsApi) => Promise<T>): () => Promise<T> {
-    let initial = true;
-    return () => {
-      const api = initial ? this.api : this.api.background;
-      initial = false;
-      return read(api);
-    };
-  }
-
   /** Cleared before the request, so a refusal never sits beside an older report. */
   #load(): void {
     this.report = undefined;
@@ -296,7 +281,10 @@ export class AdjustmentReportScreen extends LitElement {
           key: JSON.stringify(["adjustments:report", range ?? "current"]),
           dependencies: QUERY_DEPENDENCIES.report.map((type) => ({ type })),
           refreshMs: 60_000,
-          read: this.#reader((api) => api.getReport(range)),
+          read: firstReadThenPassive(
+            () => this.api,
+            (api) => api.getReport(range),
+          ),
         },
         (report) => this.#answered(report),
       )
@@ -330,7 +318,10 @@ export class AdjustmentReportScreen extends LitElement {
           key: JSON.stringify(["adjustments:entries", from, to, of]),
           dependencies: QUERY_DEPENDENCIES.entries.map((type) => ({ type })),
           refreshMs: 60_000,
-          read: this.#reader(async (api) => (await api.listEntries(from, to, of)).entries),
+          read: firstReadThenPassive(
+            () => this.api,
+            async (api) => (await api.listEntries(from, to, of)).entries,
+          ),
         },
         (entries) => {
           this.entries = entries;
@@ -498,7 +489,7 @@ export class AdjustmentReportScreen extends LitElement {
         key: "stage",
         label: t("adjustment_report.entries.when"),
         choosable: "shown",
-        cell: (entry) => stageName(entry.stage === null ? "billDiscount" : STAGE_OF[entry.stage]),
+        cell: (entry) => stageName(entry.stageGroup),
       },
       {
         key: "reason",

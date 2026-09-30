@@ -20,6 +20,7 @@ import type {
   AdjustmentsApi,
   PersonRole,
 } from "./client.js";
+import { firstReadThenPassive } from "./first-read.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import { perLocale } from "./per-locale.js";
 import { actionChoice, actionName, roleName, t, tf, type StringKey } from "./strings.js";
@@ -237,7 +238,7 @@ export class AdjustmentReasonsScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    let initial = !this.#loaded;
+    const initial = !this.#loaded;
     this.#loaded = true;
     try {
       await this.#queries.watch(
@@ -246,11 +247,11 @@ export class AdjustmentReasonsScreen extends LitElement {
           key: "adjustments:reasons",
           dependencies: QUERY_DEPENDENCIES.reasons.map((type) => ({ type })),
           refreshMs: 60_000,
-          read: () => {
-            const api = initial ? this.api : this.api.background;
-            initial = false;
-            return api.listReasons();
-          },
+          read: firstReadThenPassive(
+            () => this.api,
+            (api) => api.listReasons(),
+            initial,
+          ),
         },
         (reasons) => {
           this.reasons = reasons;
