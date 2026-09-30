@@ -163,7 +163,9 @@ describe("formatCategorySalesPage", () => {
   });
 
   it("sizes the columns by the widest figure on the page, the total included", () => {
-    const lines = page({ report: sampleReport({ gross: decimal("1234.56") }) });
+    const lines = page({
+      report: sampleReport({ gross: decimal("1234.56"), net: decimal("98765.43") }),
+    });
     const grossEnd = (line: string, amount: string) => line.indexOf(amount) + amount.length;
     const drinks = lineFor(lines, "Drinks");
     expect(grossEnd(lineFor(lines, "Total"), "€1,234.56")).toBe(grossEnd(drinks, "€5.50"));

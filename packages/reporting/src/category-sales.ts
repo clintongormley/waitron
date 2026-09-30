@@ -91,16 +91,13 @@ interface Segment {
   name: string;
 }
 
-interface Tally {
+interface Node {
+  kind: CategoryTotal["kind"];
+  id: string;
   name: string;
   rank: Rank;
   netCents: number;
   grossCents: number;
-}
-
-interface Node extends Tally {
-  kind: CategoryTotal["kind"];
-  id: string;
   directNetCents: number;
   directGrossCents: number;
   directLines: number;
@@ -128,7 +125,7 @@ function cents(raw: string): number {
   return decimalToCents(rawCentsToDecimal(raw));
 }
 
-function tally(target: Tally, name: string, rank: Rank, net: number, gross: number | null): void {
+function tally(target: Node, name: string, rank: Rank, net: number, gross: number | null): void {
   target.netCents += net;
   target.grossCents += gross ?? 0;
   if (isLater(rank, target.rank)) {
