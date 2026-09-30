@@ -134,6 +134,7 @@ import type { SeatedPartyFacts } from "./table-signals.js";
 import type { UnsentDraft } from "./order-drafts.js";
 import {
   correctHoldTickets,
+  correctJoin,
   fireHeldGroupsOfCourse,
   onShownBill,
   printedHeldGroups,
@@ -719,7 +720,7 @@ export async function readLockedLines(
 }
 
 /**
- * Each stored line's unit price before a cancel, comp or discount changed it
+ * Each stored line's unit price before a comp or discount changed it
  * (`list_unit_price_gross`), or null, in the order {@link readLockedLines} reads the lines: the
  * receipt's list prices, read in the transaction that prices the lines they go with.
  */
@@ -3385,7 +3386,7 @@ interface EditableLine {
   sentAt: string | null;
   groupId: string | null;
   creditedTo: string | null;
-  /** A cancel, comp or discount has set its price (`list_unit_price_gross` is set). */
+  /** A comp or discount has set its price (`list_unit_price_gross` is set). */
   adjusted: boolean;
   ticket: {
     id: string;
@@ -3709,7 +3710,9 @@ async function assertProductsSellable(
  * On a party: an added extra takes its dish's group and credit; a fired line's raised quantity
  * goes in a new fired group, and a new dish in a new group fired or held as `newWork` says, both at
  * the end of the sequence and credited to `operatorId`, a held one printing its HOLD ticket where the
- * venue prints held work in advance; a held group the edit empties is removed;
+ * venue prints held work in advance; the units added to a comped or discounted line the kitchen has
+ * not fired go on a new line, priced now, in that line's group and kitchen state (ruling R12), a
+ * held one correcting its group's HOLD ticket; a held group the edit empties is removed;
  * the party's revision moves on.
  */
 async function applyLineEdits(
@@ -3803,7 +3806,14 @@ async function applyLineEdits(
   // line's check, whose rows are discarded.
   const pricing: RequestedLine[] = [...plan.fresh];
   const pricedAs: (
-    { kind: "line"; kitchen: EditableOrder["newWork"] } | { kind: "extras" } | { kind: "check" }
+    | {
+        kind: "line";
+        kitchen: EditableOrder["newWork"];
+        /** The stored line whose group the new one joins, for units added apart from it. */
+        joins?: EditableParent;
+      }
+    | { kind: "extras" }
+    | { kind: "check" }
   )[] = plan.fresh.map(() => ({ kind: "line", kitchen: order.newWork }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
@@ -3878,7 +3888,11 @@ async function applyLineEdits(
         ...asOffered(subtractDecimal(requested, parent.quantity)),
         courseId: parent.courseId,
       });
-      pricedAs.push({ kind: "line", kitchen: addedApart ? kitchenStateOf(parent) : "fire" });
+      pricedAs.push(
+        addedApart
+          ? { kind: "line", kitchen: kitchenStateOf(parent), joins: parent }
+          : { kind: "line", kitchen: "fire" },
+      );
     }
     if (action === "free" && rise > 0 && !addedApart) raised.push(asOffered(requested));
     if (action === "change") {
@@ -3949,7 +3963,14 @@ async function applyLineEdits(
   const newGroups = new Map<string, string>();
   if (order.partyId !== null) {
     for (const as of pricedAs) {
-      if (as.kind !== "line" || as.kitchen === "none" || newGroups.has(as.kitchen)) continue;
+      if (
+        as.kind !== "line" ||
+        as.joins !== undefined ||
+        as.kitchen === "none" ||
+        newGroups.has(as.kitchen)
+      ) {
+        continue;
+      }
       const actorId = requireOperator(operatorId);
       const groupId = await startGroup(tx, order.partyId, as.kitchen, actorId);
       await recordGroupEvent(tx, {
@@ -4079,10 +4100,15 @@ async function applyLineEdits(
     }
   }
 
+  // Units added apart from an adjusted line join its group, so it and they are released together.
+  const joinedHeld: { groupId: string; lineId: string }[] = [];
   groups.forEach((group, index) => {
     const as = pricedAs[index]!;
     if (as.kind !== "line") return;
-    const groupId = newGroups.get(as.kitchen) ?? null;
+    const groupId = as.joins === undefined ? (newGroups.get(as.kitchen) ?? null) : as.joins.groupId;
+    if (as.joins !== undefined && groupId !== null && as.kitchen === "hold") {
+      joinedHeld.push({ groupId, lineId: group.rows[0]!.id! });
+    }
     for (const [rowIndex, row] of group.rows.entries()) {
       inserted.push({ ...row, lineNo: ++nextLineNo, groupId, creditedTo: operatorId ?? null });
       insertedContexts.push(group.contexts[rowIndex]!);
@@ -4116,6 +4142,8 @@ async function applyLineEdits(
   await fireLines(tx, cfg, orderId, fireNow);
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
+  // As a raise of the line itself would: `+N` on its group's queued HOLD ticket, not a new one.
+  for (const { groupId, lineId } of joinedHeld) await correctJoin(tx, cfg, groupId, [lineId]);
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);
     await tx

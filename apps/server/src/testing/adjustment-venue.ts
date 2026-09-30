@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -169,6 +169,15 @@ const MENU: {
     name: "Olives",
     customer: "Aceitunas",
     kitchen: "ACEIT",
+    price: "1.50",
+    unit: "each",
+    vat: "general",
+  },
+  // Poured at the bar: routed to no preparation, so it is stamped sent and gets no kitchen item.
+  {
+    name: "Coffee",
+    customer: "Café solo",
+    kitchen: "CAFE",
     price: "1.50",
     unit: "each",
     vat: "general",
@@ -343,6 +352,9 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     await writeProductModifiers(tx, productIds.get("Pizza")!, [{ kind: "extras", id: extras.id }]);
     await assignCatalogueToLocation(tx, provisioned.locationId, cat.id);
     const tables = await offerProducts(tx, cfg, { zone: "tables" });
+    await tx.run(sql`
+      update preparation_routes set station_id = null, no_preparation = 1
+      where product_id = ${productIds.get("Coffee")!}`);
     const people = await tx
       .insert(persons)
       .values([
