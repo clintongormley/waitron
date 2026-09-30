@@ -126,6 +126,14 @@ async function findReason(tx: Transaction, reasonId: string): Promise<ReasonRow>
   return row;
 }
 
+/** One reason by its id, active or not; `adjustment_reason.not_found` when none has it. */
+export async function findAdjustmentReason(
+  tx: Transaction,
+  reasonId: string,
+): Promise<AdjustmentReason> {
+  return toReason(await findReason(tx, reasonId));
+}
+
 /** Reasons in the order staff see them. Active ones only unless asked. */
 export async function listAdjustmentReasons(
   tx: Transaction,

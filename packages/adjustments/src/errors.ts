@@ -21,5 +21,8 @@ declare module "@waitron/shared" {
     "adjustment.partial_with_extras": { workingOrderId: string; lineNo: number };
     /** An extras row named on its own; an adjustment names the dish it belongs to. */
     "adjustment.line_not_adjustable": { workingOrderId: string; lineNo: number };
+    /** Not a positive quantity in the line's unit, no larger than the line, or part of a weighed
+     * line, which is comped or discounted only whole. */
+    "adjustment.quantity_invalid": { workingOrderId: string; lineNo: number; quantity: string };
   }
 }
