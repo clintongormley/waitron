@@ -437,7 +437,7 @@ describe("readCompedLines", () => {
 
   it("reads the bill's adjustments through the index that leads with the working order", async () => {
     const plan = await db.execute<{ detail: string }>(
-      sql`explain query plan select line_id, splits, action from adjustments
+      sql`explain query plan select line_id, splits, comped_extras, action from adjustments
         where working_order_id = ${randomUUID()} order by rowid`,
     );
     expect(plan.rows.map((row) => row.detail).join("\n")).toContain(

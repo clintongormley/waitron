@@ -363,6 +363,60 @@ describe("a comp (plan D4)", () => {
   });
 });
 
+describe("the extras rows an adjustment records as comped with their dish (B11f)", () => {
+  /** A bill of Pizza × `quantity` with olives, and the ids of the pizza and its one extras row. */
+  async function pizzaWithOlives(quantity = "1") {
+    const { billId } = await bill([{ name: "Pizza", quantity, olives: 1 }]);
+    const pizza = await lineIdOf(venue, billId, 1);
+    const extras = (await rowsOf(venue, billId))
+      .filter((row) => row.parentLineId === pizza)
+      .map((row) => row.id);
+    expect(extras).toHaveLength(1);
+    return { billId, pizza, extras };
+  }
+
+  it("records the dish's extras row on a whole comp of the dish", async () => {
+    const { billId, pizza, extras } = await pizzaWithOlives();
+
+    await adjust(billId, { lineId: pizza, action: "comp" });
+
+    expect(await recordedOn(billId)).toMatchObject([
+      { lineId: pizza, action: "comp", splits: [], compedExtras: extras },
+    ]);
+  });
+
+  it("records none on a comp of part of the dish", async () => {
+    const { billId, pizza } = await pizzaWithOlives("2");
+
+    await adjust(billId, { lineId: pizza, action: "comp", quantity: "1" });
+
+    const [row] = await recordedOn(billId);
+    expect(row).toMatchObject({ lineId: pizza, action: "comp", quantity: 1000 });
+    expect(row!.splits).not.toEqual([]);
+    expect(row!.compedExtras).toEqual([]);
+  });
+
+  it("records none on a comp of the extras row on its own", async () => {
+    const { billId, extras } = await pizzaWithOlives();
+
+    await adjust(billId, { lineId: extras[0]!, action: "comp" });
+
+    expect(await recordedOn(billId)).toMatchObject([
+      { lineId: extras[0], action: "comp", compedExtras: [] },
+    ]);
+  });
+
+  it("records none on a percent discount of the dish", async () => {
+    const { billId, pizza } = await pizzaWithOlives();
+
+    await adjust(billId, { lineId: pizza, action: "discount_percent", percentBp: 1000 });
+
+    expect(await recordedOn(billId)).toMatchObject([
+      { lineId: pizza, action: "discount_percent", compedExtras: [] },
+    ]);
+  });
+});
+
 describe("the receipt (ruling R13)", () => {
   /** A ticket's lines as `[customer name, gross, total before the change, what was taken off]`. */
   const shown = (ticket: TillSaleResult) =>

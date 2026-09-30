@@ -48,7 +48,7 @@ export const adjustments = table(
      * them back and `readCompedLines` forward. A bill discount records its splits too. */
     splits: json<AdjustmentSplit[]>("splits").notNull(),
     /** The extras rows a whole comp of a dish priced at zero with it; empty on every other
-     * adjustment. No check holds that: adding one would rebuild this append-only table. */
+     * adjustment, which no check holds. */
     compedExtras: json<string[]>("comped_extras").notNull().default([]),
     lineName: label("line_name"),
     lineQuantity: quantity("line_quantity"),
