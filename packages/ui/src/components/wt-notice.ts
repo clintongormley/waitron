@@ -37,6 +37,9 @@ export class WtNotice extends LitElement {
   @state() private fading?: boolean;
 
   #timer: ReturnType<typeof setTimeout> | undefined;
+  // Only a notice that hid itself shows again; a `hidden` its consumer set while it showed is
+  // theirs to lift.
+  #hidItself = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -44,8 +47,21 @@ export class WtNotice extends LitElement {
     this.#schedule();
   }
 
+  static override get observedAttributes(): string[] {
+    return [...super.observedAttributes, "hidden"];
+  }
+
+  override attributeChangedCallback(name: string, old: string | null, value: string | null): void {
+    super.attributeChangedCallback(name, old, value);
+    if (name !== "hidden") return;
+    if (value === null) this.#hidItself = false;
+    // Hidden before its fade has started, no end or cancel event arrives.
+    else if (this.fading) this.#gone();
+  }
+
   override disconnectedCallback(): void {
     clearTimeout(this.#timer);
+    this.fading = false;
     super.disconnectedCallback();
   }
 
@@ -55,6 +71,8 @@ export class WtNotice extends LitElement {
 
   #schedule(): void {
     clearTimeout(this.#timer);
+    if (!this.isConnected) return;
+    if (this.#hidItself) this.hidden = this.#hidItself = false;
     this.fading = false;
     if (this.duration <= 0) return;
     this.#timer = setTimeout(() => this.#timeUp(), this.duration);
@@ -63,26 +81,29 @@ export class WtNotice extends LitElement {
   #timeUp(): void {
     const reduce =
       this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) this.#gone();
+    if (reduce || this.hidden) this.#gone();
     else this.fading = true;
   }
 
   #gone(): void {
-    this.hidden = true;
+    this.fading = false;
+    if (!this.hidden) this.hidden = this.#hidItself = true;
     this.dispatchEvent(
       new CustomEvent("wt-notice-gone", { bubbles: true, composed: true, detail: {} }),
     );
   }
 
-  // A slotted element's own animation ending bubbles through here too.
+  // A slotted element's own animation ending bubbles through here too. A fade cut short (its
+  // surroundings hidden) cancels rather than ends.
   readonly #onAnimationEnd = (event: AnimationEvent): void => {
-    if (event.target === event.currentTarget) this.#gone();
+    if (event.target === event.currentTarget && this.fading) this.#gone();
   };
 
   override render() {
     return html`<span
       class=${this.fading ? "fading" : nothing}
       @animationend=${this.#onAnimationEnd}
+      @animationcancel=${this.#onAnimationEnd}
       ><slot></slot
     ></span>`;
   }
