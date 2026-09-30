@@ -139,6 +139,10 @@ export class LoginScreen extends LitElement {
         margin-block: var(--wt-space-2);
       }
 
+      .form-message {
+        margin: var(--wt-space-4) 0 0;
+      }
+
       /* The list's top padding centres the first link on the buttons. Text-baseline alignment
          put the buttons 16 px high on steps with no Cancel, because wt-form-actions takes its
          baseline from its empty cancel slot. */

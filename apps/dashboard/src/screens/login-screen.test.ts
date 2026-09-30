@@ -1381,6 +1381,20 @@ describe("login-screen", () => {
     },
   );
 
+  it("leaves the spacing token between the hint and a refused passkey sign-in's message", async () => {
+    const api = stubApi({
+      passkeyAuthVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
+    });
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
+    await continueWithEmail(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=passkey-login]")!.click();
+    await flush(el);
+    el.style.setProperty("--wt-space-4", "23px");
+    const hint = el.shadowRoot!.querySelector(".alternative-hint")!.getBoundingClientRect();
+    const message = (await bottomMessageOf(el))!.getBoundingClientRect();
+    expect(message.top - hint.bottom).toBeCloseTo(23, 0);
+  });
+
   it("falls back to passkey.verification_failed when a rejected passkey step carries no code", async () => {
     const api = stubApi({ passkeyAuthOptions: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", { api });
