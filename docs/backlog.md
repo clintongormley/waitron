@@ -3906,7 +3906,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       cash or by manual card through `POST /api/sales` sent no dish to the kitchen at all, because
       `payWorkingOrder` (`apps/server/src/till-sale.ts`) sent dishes only for a walk-up it had just
       created, and the till never calls the separate send-to-kitchen route. Found by Task 7's
-      review, checked and FIXED: `POST /api/sales` now gives the kitchen the dishes it has not
+      review, checked and FIXED (#914): `POST /api/sales` now gives the kitchen the dishes it has not
       been given, a later course's dish held for its course, through `firePrepayOrder`, as the
       card-reader route does. New cases in `apps/server/src/till-api.fiscal-sale-paths.test.ts`
       park a pay-first order, pay it in cash and by manual card, and find its dish sent once, and
