@@ -1342,11 +1342,16 @@ html`<wt-tabs
 ```
 
 Your selection handler receives `event.detail.value`. The strip's event has its own name, so a
-`wt-change` from a control inside a panel never reaches it. The component updates its own
-selection, while your screen records it with `UrlStateController`. An unknown or omitted value shows
-the first tab. Arrow keys wrap between tabs; Home and End select the first and last tab.
-The tab strip scrolls on narrow screens. Hidden panels remain mounted, so switching tabs retains
-their input values. Supply unique, nonempty keys and a localized `label` for the tab group.
+`wt-change` from a control inside a panel does not trigger a `wt-tab-change` handler. A `wt-tabs`
+inside another strip's panel sends a `wt-tab-change` that bubbles out to the outer strip's
+listener, carrying the inner strip's key; a listener that returns early unless
+`event.target === event.currentTarget` ignores it and still handles the outer strip's own choice,
+so a screen that nests one strip inside another's panel needs that check on the outer listener.
+The component updates its own selection, while your screen records it with `UrlStateController`.
+An unknown or omitted value shows the first tab. Arrow keys wrap between tabs; Home and End
+select the first and last tab. The tab strip scrolls on narrow screens. Hidden panels remain
+mounted, so switching tabs retains their input values. Supply unique, nonempty keys and a
+localized `label` for the tab group.
 
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
 hamburger; it opens a small menu of actions for one row, not the app's whole navigation, so it

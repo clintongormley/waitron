@@ -121,6 +121,79 @@ test("arrow keys wrap, Home/End select extremes, and unrelated keys remain untou
   expect(event.defaultPrevented).toBe(false);
 });
 
+test("each keyboard selection emits one wt-tab-change naming the newly selected tab", async () => {
+  const el = await setup();
+  const listener = vi.fn();
+  el.addEventListener("wt-tab-change", listener);
+  try {
+    el.focus();
+    for (const [key, expected] of [
+      ["ArrowLeft", 2],
+      ["ArrowRight", 0],
+      ["End", 2],
+      ["Home", 0],
+      ["ArrowRight", 1],
+    ] as const) {
+      listener.mockClear();
+      (el.shadowRoot!.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+      await el.updateComplete;
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0]![0].detail).toEqual({ value: items[expected]!.key });
+    }
+    listener.mockClear();
+    buttons(el)[2]!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+    );
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+  } finally {
+    el.removeEventListener("wt-tab-change", listener);
+  }
+});
+
+test("a strip nested in another's panel reaches the outer listener, which the target check ignores", async () => {
+  const outer = (await mountThemed(
+    `<wt-tabs label="Outer"><div slot="first"><wt-tabs label="Inner"><div slot="left">Left</div><div slot="right">Right</div></wt-tabs></div><div slot="second">Second</div></wt-tabs>`,
+  )) as WtTabs;
+  outer.items = [
+    { key: "first", label: "First" },
+    { key: "second", label: "Second" },
+  ];
+  const inner = outer.querySelector<WtTabs>("wt-tabs")!;
+  inner.items = [
+    { key: "left", label: "Left" },
+    { key: "right", label: "Right" },
+  ];
+  await outer.updateComplete;
+  await inner.updateComplete;
+  const plain = vi.fn();
+  const handled = vi.fn();
+  const guarded = (event: Event) => {
+    if (event.target !== event.currentTarget) return;
+    handled(event);
+  };
+  outer.addEventListener("wt-tab-change", plain);
+  outer.addEventListener("wt-tab-change", guarded);
+  try {
+    buttons(inner)[1]!.click();
+    await inner.updateComplete;
+    expect(plain).toHaveBeenCalledTimes(1);
+    expect(plain.mock.calls[0]![0].detail).toEqual({ value: "right" });
+    expect(handled).not.toHaveBeenCalled();
+    expect(outer.value).toBe("");
+
+    buttons(outer)[1]!.click();
+    await outer.updateComplete;
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(handled.mock.calls[0]![0].detail).toEqual({ value: "second" });
+  } finally {
+    outer.removeEventListener("wt-tab-change", plain);
+    outer.removeEventListener("wt-tab-change", guarded);
+  }
+});
+
 test("accepts a restored selection and falls back when its item disappears", async () => {
   const el = await setup();
   el.value = "routes";
