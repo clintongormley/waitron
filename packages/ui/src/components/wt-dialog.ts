@@ -78,8 +78,8 @@ export class WtDialog extends LitElement {
 
   private readonly headingId = uniqueId("wt-dialog-heading");
 
-  /** The message of the `wt-form-actions` in the footer, shown at the end of the body instead, so
-   * it sits below the fields it is about rather than between the pinned buttons. */
+  /** The messages of the `wt-form-actions` rows in the footer, shown at the end of the body instead,
+   * so they sit below the fields they are about rather than between the pinned buttons. */
   @state() private footerMessage = "";
   private footerActions: WtFormActions[] = [];
 
@@ -92,14 +92,14 @@ export class WtDialog extends LitElement {
   }
 
   override updated(changed: Map<string, unknown>): void {
-    // Absent after the first render even when the footer carries a message: `firstUpdated` reads
-    // it only after that render, and the update it schedules brings it into view.
-    if (changed.has("footerMessage")) {
+    if (changed.has("open")) {
+      if (this.open && !this.dialog.open) this.dialog.showModal();
+      if (!this.open && this.dialog.open) this.dialog.close();
+    }
+    // A message set while the dialog was shut could not be scrolled to then, so opening does it.
+    if (changed.has("footerMessage") || changed.has("open")) {
       this.renderRoot.querySelector(".body > [data-error]")?.scrollIntoView({ block: "nearest" });
     }
-    if (!changed.has("open")) return;
-    if (this.open && !this.dialog.open) this.dialog.showModal();
-    if (!this.open && this.dialog.open) this.dialog.close();
   }
 
   private onClose(): void {
@@ -118,21 +118,32 @@ export class WtDialog extends LitElement {
     if (!this.dismissible) event.preventDefault();
   }
 
-  // Toggled imperatively rather than through a reactive property, so a `slotchange` does not
-  // schedule another Lit update just to flip a class.
   private updateHasFooter(): void {
     const assigned = this.footerSlot.assignedNodes({ flatten: true });
+    // Toggled imperatively rather than through a reactive property, so a `slotchange` does not
+    // schedule another Lit update just to flip a class.
     this.footerEl.classList.toggle("has-content", assigned.length > 0);
     const actions = assigned.filter((node) => node instanceof WtFormActions);
     for (const gone of this.footerActions) if (!actions.includes(gone)) gone.showError = true;
     for (const each of actions) each.showError = false;
     this.footerActions = actions;
-    this.footerMessage = actions.at(-1)?.error ?? "";
+    this.readFooterMessage();
   }
 
-  private onFooterMessage(event: FormErrorEvent): void {
-    if (event.target instanceof WtFormActions && this.footerActions.includes(event.target)) {
-      this.footerMessage = event.detail.message;
+  /** Every footer row's message, so one row's change cannot hide or clear another's. */
+  private readFooterMessage(): void {
+    this.footerMessage = this.footerActions
+      .map((each) => each.error)
+      .filter((message) => message !== "")
+      .join(" ");
+  }
+
+  /** A row in the body shows its own message, which may be below the scrolled-to part of a long
+   * body. The row dispatches the event once it has rendered, so the message is already there. */
+  private onBodyMessage(event: FormErrorEvent): void {
+    const row = event.composedPath()[0];
+    if (row instanceof WtFormActions) {
+      row.shadowRoot!.querySelector("[data-error]")?.scrollIntoView({ block: "nearest" });
     }
   }
 
@@ -156,14 +167,14 @@ export class WtDialog extends LitElement {
              flagged. Removing this attribute would silently blind wt-dialog.a11y.test.ts. -->
         <div class="body">
           ${this.heading ? html`<h2 id=${this.headingId}>${this.heading}</h2>` : nothing}
-          <slot></slot>
+          <slot @wt-form-error=${this.onBodyMessage}></slot>
           ${formMessage(this.footerMessage)}
         </div>
         <div class="footer">
           <slot
             name="footer"
             @slotchange=${this.updateHasFooter}
-            @wt-form-error=${this.onFooterMessage}
+            @wt-form-error=${this.readFooterMessage}
           ></slot>
         </div>
       </dialog>

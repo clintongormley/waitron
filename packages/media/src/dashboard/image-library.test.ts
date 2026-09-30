@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { setContentLanguages } from "@waitron/ui";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage, setLocale, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import "./image-library.js";
 import type { ImageLibrary } from "./image-library.js";
@@ -43,10 +44,7 @@ async function bottomOf(): Promise<string> {
   const actions = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
     "wt-modal wt-form-actions",
   )!;
-  await actions.updateComplete;
-  const modal = el.shadowRoot!.querySelector("wt-modal")!;
-  await modal.updateComplete;
-  return modal.shadowRoot!.querySelector(".body [data-error]")?.textContent?.trim() ?? "";
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 function field(name: string, value: string) {
   el.shadowRoot!.querySelector(`[name="${name}"]`)!.dispatchEvent(

@@ -1,7 +1,8 @@
 import { expect, test, afterEach, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
+import { cleanup, formMessageOf, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import "./wt-dialog.js";
+import "./wt-form-actions.js";
 
 /**
  * Resolves once every `<dialog>` close already queued has been delivered. The browser reports a
@@ -414,4 +415,25 @@ test("stays shut when another property changes just after the dialog was closed"
 
   expect(dialog.open).toBe(false);
   expect(dialog.matches(":modal")).toBe(false);
+});
+
+test("shows its footer actions' message at the end of the body, below the last field", async () => {
+  const el = (await mount(`<wt-dialog heading="Add passkey">
+    <label>Passkey name <input name="passkey-name" /></label>
+    <wt-form-actions slot="footer"><button>Save</button></wt-form-actions>
+  </wt-dialog>`)) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const actions = el.querySelector("wt-form-actions")!;
+  actions.error = "This device already holds a passkey for your account.";
+  const message = (await formMessageOf(actions))!;
+
+  const body = el.shadowRoot!.querySelector(".body")!;
+  expect(message.textContent).toBe("This device already holds a passkey for your account.");
+  expect(message.parentElement).toBe(body);
+  expect(body.lastElementChild).toBe(message);
+  const field = el.querySelector("input")!.getBoundingClientRect();
+  expect(message.getBoundingClientRect().top).toBeGreaterThanOrEqual(field.bottom);
+  expect(el.shadowRoot!.querySelector(".footer [data-error]")).toBeNull();
+  expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });

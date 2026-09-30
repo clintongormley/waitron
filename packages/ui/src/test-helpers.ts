@@ -1,5 +1,7 @@
 import { expect } from "vitest";
 import { applyTokens } from "./tokens/index.js";
+import type { WtDialog } from "./components/wt-dialog.js";
+import type { WtFormActions } from "./components/wt-form-actions.js";
 
 /** The wrapper element of the most recent mount. Live binding — reassigned by mount(). */
 export let host: HTMLElement;
@@ -65,4 +67,18 @@ export function expectRowMenusOnScreen(
     const hit = found.shadowRoot!.elementFromPoint(at.x + at.width / 2, at.y + at.height / 2);
     expect(hit !== null && button.contains(hit), `row ${index} is covered`).toBe(true);
   }
+}
+
+/**
+ * The one message shown for a form's action row: in the row itself, or — when the row sits in a
+ * dialog's footer — at the end of that dialog's body, where the dialog shows it instead.
+ */
+export async function formMessageOf(actions: WtFormActions): Promise<Element | null> {
+  await actions.updateComplete;
+  const dialog = actions.slot === "footer" ? actions.parentElement : null;
+  if (dialog?.localName === "wt-dialog" || dialog?.localName === "wt-modal") {
+    await (dialog as WtDialog).updateComplete;
+    return dialog.shadowRoot!.querySelector(".body > [data-error]");
+  }
+  return actions.shadowRoot!.querySelector("[data-error]");
 }

@@ -421,9 +421,9 @@ export class CategoriesScreen extends LitElement {
       ...(fieldMarked ? [t("form.fix_fields")] : []),
     ].join(" ");
   }
-  #dialogMessage(fieldMarked: boolean) {
-    const message = this.#dialogError(fieldMarked);
-    return message ? html`<p role="alert">${message}</p>` : nothing;
+  /** While the main-category window is open over the products window, a refusal is that window's. */
+  #productsMessage(): string {
+    return this.mainCategoryProduct ? "" : this.saveError;
   }
   #focusRefused(dialog: "delete-dialog" | "main-category-dialog"): void {
     void this.updateComplete.then(() => {
@@ -814,7 +814,7 @@ export class CategoriesScreen extends LitElement {
           )}
         ></wt-data-table>`,
       )}
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${this.#productsMessage()}
         ><wt-button
           slot="cancel"
           data-test="close-products"
@@ -847,7 +847,7 @@ export class CategoriesScreen extends LitElement {
         .rowKey=${(product: Product) => product.id}
         .emptyMessage=${t("categories.no_products_to_add")}
       ></wt-data-table>
-      <wt-form-actions slot="footer"
+      <wt-form-actions slot="footer" .error=${this.#productsMessage()}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -914,7 +914,6 @@ export class CategoriesScreen extends LitElement {
           if (!this.busy) this.#closeProducts();
         }}
       >
-        ${this.saveError && !mainProduct ? html`<p role="alert">${this.saveError}</p>` : nothing}
         ${
           this.selected === null
             ? nothing
@@ -983,8 +982,11 @@ export class CategoriesScreen extends LitElement {
         }}
       >
         ${this.deleting ? this.#renderDependants(this.deleting) : nothing}
-        ${this.#dialogMessage(Object.values(this.reassignErrors).some(Boolean))}
-        <wt-form-actions slot="footer"
+        <wt-form-actions
+          slot="footer"
+          .error=${
+            this.deleting ? this.#dialogError(Object.values(this.reassignErrors).some(Boolean)) : ""
+          }
           ><wt-button
             slot="cancel"
             variant="secondary"

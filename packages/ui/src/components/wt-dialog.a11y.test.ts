@@ -1,8 +1,9 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-dialog.js";
 import "./wt-button.js";
+import "./wt-form-actions.js";
 
 afterEach(cleanup);
 
@@ -29,6 +30,26 @@ describe.each(["light", "dark"] as const)("wt-dialog a11y (%s theme)", (theme) =
     )) as Openable;
     el.open = true;
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  test("open, with the footer actions' message at the end of the body", async () => {
+    const el = (await mountThemed(
+      `<wt-dialog heading="Add passkey">
+        <label>Passkey name <input name="passkey-name" /></label>
+        <wt-form-actions slot="footer" error="This device already holds a passkey for your account.">
+          <wt-button slot="cancel" variant="secondary">Cancel</wt-button>
+          <wt-button>Save</wt-button>
+        </wt-form-actions>
+      </wt-dialog>`,
+      theme,
+    )) as Openable;
+    el.open = true;
+    await el.updateComplete;
+    const actions = el.querySelector("wt-form-actions")!;
+    await actions.updateComplete;
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector(".body > [data-error]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

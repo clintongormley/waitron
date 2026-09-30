@@ -197,8 +197,8 @@ it("keeps the confirmation open and explains a rejected delete, then closes on s
   )!;
   await vi.waitFor(() => expect(deleteButton.disabled).toBe(false));
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  await vi.waitFor(() => expect(modal.querySelector('p[role="alert"]')).not.toBeNull());
-  expect(modal.querySelector('p[role="alert"]')!.textContent!.trim()).not.toBe("");
+  await vi.waitFor(async () => expect(await saveMessage(modal)).not.toBeNull());
+  expect(await saveMessage(modal)).not.toBe("");
   expect(modal.open).toBe(true);
   // Retrying the same delete succeeds, and the dialog closes itself.
   deleteButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -1500,7 +1500,7 @@ async function openMainCategory(el: CategoriesScreen, remove: boolean) {
   await mainCategoryCombobox(el).updateComplete;
   return dialog;
 }
-/** The main-category dialog's one message about a failed Save. */
+/** A dialog's one message about a failed action, from the action row in its footer. */
 async function saveMessage(dialog: Element): Promise<string | null> {
   const actions = dialog.querySelector("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? null;
@@ -1812,10 +1812,8 @@ it("explains a refused add and keeps the add list and its picks open", async () 
   add.click();
   await confirmMove(el);
   const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
-  await vi.waitFor(() =>
-    expect(products.querySelector('p[role="alert"]')?.textContent).toBe(
-      codeMessage("product.not_found"),
-    ),
+  await vi.waitFor(async () =>
+    expect(await saveMessage(products)).toBe(codeMessage("product.not_found")),
   );
   expect(
     el.shadowRoot!.querySelector('wt-data-table[data-test="category-add-products"]'),
@@ -1998,7 +1996,7 @@ it.each(["Cancel", "a close"])(
     await el.updateComplete;
     expect(dialog.open).toBe(false);
     const products = el.shadowRoot!.querySelector('wt-modal[data-test="products-modal"]')!;
-    expect(products.querySelector('p[role="alert"]')).toBeNull();
+    expect(await saveMessage(products)).toBeNull();
   },
 );
 
@@ -2256,7 +2254,8 @@ it.each([
     remove.click();
     await vi.waitFor(() => expect(picker(name).error).toBe(codeMessage(code)));
     await el.updateComplete;
-    expect(alertTexts(dialog)).toEqual([t("form.fix_fields")]);
+    expect(alertTexts(dialog)).toEqual([]);
+    expect(await saveMessage(dialog)).toBe(t("form.fix_fields"));
     await vi.waitFor(() => expect(holdsFocus(picker(name))).toBe(true));
     await remove.updateComplete;
     expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
@@ -2266,6 +2265,7 @@ it.each([
     await el.updateComplete;
     expect(picker(name).error).toBe("");
     expect(alertTexts(dialog)).toEqual([]);
+    expect(await saveMessage(dialog)).toBeNull();
     await remove.updateComplete;
     expect(remove.shadowRoot!.querySelector("button")!.disabled).toBe(false);
   },
@@ -2280,7 +2280,10 @@ it("keeps a delete refusal that names no picker in the dialog's alert", async ()
   });
   const { dialog, picker, remove } = await openFoodDelete(el);
   remove.click();
-  await vi.waitFor(() => expect(alertTexts(dialog)).toEqual([codeMessage("category.not_found")]));
+  await vi.waitFor(async () =>
+    expect(await saveMessage(dialog)).toBe(codeMessage("category.not_found")),
+  );
+  expect(alertTexts(dialog)).toEqual([]);
   expect(picker("products-to").error).toBe("");
   expect(picker("children-to").error).toBe("");
 });

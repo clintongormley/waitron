@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { setLocale } from "@waitron/dashboard-kit";
-import { cleanup, host } from "@waitron/ui/src/test-helpers.js";
+import { cleanup, formMessageOf, host } from "@waitron/ui/src/test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "@waitron/ui/src/a11y-helpers.js";
 import type { VenueServiceApi } from "./client.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
@@ -265,10 +265,7 @@ describe.each(["light", "dark"] as const)("department editor accessibility (%s)"
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-    await actions.updateComplete;
-    const modal = el.shadowRoot!.querySelector("wt-modal")!;
-    await modal.updateComplete;
-    expect(modal.shadowRoot!.querySelector(".body [data-error]")).not.toBeNull();
+    expect(await formMessageOf(actions)).not.toBeNull();
     expect(el.shadowRoot!.querySelector('[data-field-error="department-name"]')).not.toBeNull();
     await expectNoA11yViolations(host);
   });

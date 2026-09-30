@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanup, host, mount } from "../test-helpers.js";
+import { cleanup, formMessageOf, host, mount } from "../test-helpers.js";
 import { WtModal } from "./wt-modal.js";
 import "./wt-form-actions.js";
 import "./wt-button.js";
@@ -322,5 +322,92 @@ test("opens with a message its footer actions already carry, and shows it in the
     expect(errors).toEqual([]);
   } finally {
     window.removeEventListener("unhandledrejection", onError);
+  }
+});
+
+async function mountTwoRows(first: string, second: string) {
+  const modal = (await mount(`<wt-modal heading="Add printer" open>
+    <wt-input name="name" label="Name"></wt-input>
+    <wt-form-actions slot="footer" error="${first}"><wt-button>Test</wt-button></wt-form-actions>
+    <wt-form-actions slot="footer" error="${second}"><wt-button>Save</wt-button></wt-form-actions>
+  </wt-modal>`)) as WtModal;
+  const [one, two] = modal.querySelectorAll("wt-form-actions");
+  await one!.updateComplete;
+  await two!.updateComplete;
+  await modal.updateComplete;
+  return { modal, one: one!, two: two! };
+}
+
+function bodyMessage(modal: WtModal): string | undefined {
+  return modal.shadowRoot!.querySelector(".body > [data-error]")?.textContent;
+}
+
+test("shows the first footer row's message when a second, empty row follows it", async () => {
+  const { modal, one, two } = await mountTwoRows("The printer did not answer.", "");
+  expect(bodyMessage(modal)).toBe("The printer did not answer.");
+  expect(one.shadowRoot!.querySelector("[data-error]")).toBeNull();
+  expect(two.shadowRoot!.querySelector("[data-error]")).toBeNull();
+});
+
+test("keeps one footer row's message when another row's message is cleared", async () => {
+  const { modal, two } = await mountTwoRows("The printer did not answer.", "Enter a name.");
+  expect(bodyMessage(modal)).toBe("The printer did not answer. Enter a name.");
+  two.error = "";
+  await two.updateComplete;
+  await modal.updateComplete;
+  expect(bodyMessage(modal)).toBe("The printer did not answer.");
+});
+
+/** A body taller than the dialog, so a message at its end starts out of view. */
+const LONG_BODY = `<div style="height: 2000px">Long settings</div>`;
+
+function expectInsideBody(modal: WtModal, message: Element): void {
+  const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!.getBoundingClientRect();
+  const box = message.getBoundingClientRect();
+  expect(box.top).toBeGreaterThanOrEqual(body.top - 1);
+  expect(box.bottom).toBeLessThanOrEqual(body.bottom + 1);
+}
+
+test("brings a message it already carries into view when it opens", async () => {
+  await page.viewport(390, 500);
+  try {
+    const modal = (await mount(`<wt-modal heading="Add printer">
+      ${LONG_BODY}
+      <wt-form-actions slot="footer" error="The printer did not answer.">
+        <wt-button>Save</wt-button>
+      </wt-form-actions>
+    </wt-modal>`)) as WtModal;
+    const actions = modal.querySelector("wt-form-actions")!;
+    const message = (await formMessageOf(actions))!;
+    expect(message.textContent).toBe("The printer did not answer.");
+    modal.open = true;
+    await modal.updateComplete;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+    expectInsideBody(modal, message);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("brings the message of actions placed in the body into view when it appears", async () => {
+  await page.viewport(390, 500);
+  try {
+    const modal = (await mount(`<wt-modal heading="Pay">
+      ${LONG_BODY}
+      <wt-form-actions><wt-button>Pay</wt-button></wt-form-actions>
+    </wt-modal>`)) as WtModal;
+    modal.open = true;
+    await modal.updateComplete;
+    const body = modal.shadowRoot!.querySelector<HTMLElement>(".body")!;
+    body.scrollTop = 0;
+    const actions = modal.querySelector("wt-form-actions")!;
+    actions.error = "Choose a payment method.";
+    const message = (await formMessageOf(actions))!;
+    expect(message.textContent).toBe("Choose a payment method.");
+    await vi.waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+    expectInsideBody(modal, message);
+  } finally {
+    await page.viewport(1280, 900);
   }
 });

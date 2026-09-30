@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { registerCodeMessages, type DashboardRequest } from "@waitron/dashboard-kit";
+import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { t } from "./strings.js";
 import { SumUpAddReader, PAIRING_LIFETIME_MS, PAIRING_POLL_MS } from "./sumup-add-reader.js";
@@ -75,11 +76,8 @@ async function setInput(el: SumUpAddReader, testId: string, value: string): Prom
 }
 
 async function bottomOf(el: SumUpAddReader): Promise<string> {
-  const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
-  await actions.updateComplete;
-  const dialog = q(el, "wt-dialog") as HTMLElement & { updateComplete: Promise<unknown> };
-  await dialog.updateComplete;
-  return dialog.shadowRoot!.querySelector(".body [data-error]")?.textContent?.trim() ?? "";
+  const actions = q(el, "wt-form-actions") as HTMLElementTagNameMap["wt-form-actions"];
+  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
 
 function fieldError(el: SumUpAddReader, testId: string): string {

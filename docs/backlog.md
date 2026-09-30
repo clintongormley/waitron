@@ -5698,6 +5698,12 @@ ongoing overhaul listed at the top of Track A.
   from `@waitron/ui`), and the Add printer dialog's address check lets its button row take the
   panel's full width while it has a message. A dialog that opened with a message already in its
   footer threw and never opened on the first version of this change; fixed on the same branch.
+  A dialog with more than one action row in its footer shows every row's message, joined; a dialog
+  opened with a message already present scrolls it into view as it opens; and a row placed in a
+  dialog's body, which keeps its own message, has that message scrolled into view when it appears.
+  Two screens drew their own message instead and now pass it to their footer `wt-form-actions`: the
+  categories screen's delete dialog (`#dialogMessage`, removed) and its products window, which drew
+  a refused add at the top of its body.
   Browser tests hold the placement on location settings, the setup wizard's connect form, the
   profile screen's Add passkey dialog, the sign-in passkey step and the address check, at 1280 and
   390 pixels wide where the width matters. A `wt-form-actions` wrapped in another element inside a
@@ -6041,15 +6047,16 @@ ongoing overhaul listed at the top of Track A.
   highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`
   and `apps/dashboard/src/screens/categories-screen.a11y.test.ts`. Still open there, read and not
   run: the same screen's delete dialog draws its message in the dialog's body, below the preview,
-  rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`);
+  rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`)
+  _(2026-10-01, C97: done — `#dialogMessage` is gone and the delete dialog passes its message to its
+  footer `wt-form-actions`)_;
   (14) on the Cloud restore screen a `setup.request_invalid` naming `oldBoxGone` or `pointId` (the
   server raises both, through the Cloud restore route's `invalidRequest` calls in
   `apps/server/src/setup-api.ts`) shows "Cloud recovery is unavailable. Check the connection or
   request expiry, then try again." (`shell.cloud.unavailable`), because `#onCloudRestoreAction` in
   `apps/setup/src/setup-app.ts` places no field and `CLOUD_ERROR_MESSAGES` has no
   `setup.request_invalid` entry. It predates A152; found in A152's review, read and not run.
-  **Next action:** the other open points, and the delete dialog's message noted above, still wait
-  for the owner to say which are worth doing.
+  **Next action:** the other open points still wait for the owner to say which are worth doing.
 
 - **Every login failure is one answer — DONE (C95, #930, owner decision 2026-09-30).** The owner's rule:
   "reasons for login shouldn't expose the existence or non existence of a user. so any failure should

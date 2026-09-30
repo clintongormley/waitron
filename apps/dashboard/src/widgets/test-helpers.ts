@@ -296,18 +296,4 @@ function frozenOffer(
   };
 }
 
-/**
- * The one message shown for a form's action row: in the row itself, or — when the row sits in a
- * dialog's footer — at the end of that dialog's body, where the dialog shows it instead.
- */
-export async function formMessageOf(
-  actions: HTMLElementTagNameMap["wt-form-actions"],
-): Promise<Element | null> {
-  await actions.updateComplete;
-  const dialog = actions.slot === "footer" ? actions.parentElement : null;
-  if (dialog?.localName === "wt-dialog" || dialog?.localName === "wt-modal") {
-    await (dialog as HTMLElementTagNameMap["wt-dialog"]).updateComplete;
-    return dialog.shadowRoot!.querySelector(".body > [data-error]");
-  }
-  return actions.shadowRoot!.querySelector("[data-error]");
-}
+export { formMessageOf } from "@waitron/ui/src/test-helpers.js";
