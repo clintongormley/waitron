@@ -6,6 +6,11 @@ import { AppError, FALLBACK_LOCALE, decimal, type Decimal } from "@waitron/share
 import { products, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   addCatalogueToLocation,
+  moveCatalogueItems,
+  deleteCatalogueItems,
+  summariseFolders,
+  type CatalogueSelection,
+  type FolderContents,
   catalogueExists,
   readContentLanguages,
   writeContentLanguages,
@@ -184,6 +189,19 @@ function idList(value: unknown, field: string, kind: string): string[] {
 }
 
 /** A position or index, shape only: the section writes refuse a negative or fractional one. */
+function selectionBody(body: Record<string, unknown>): CatalogueSelection {
+  const ids = (field: "productIds" | "categoryIds", kind: string): string[] => {
+    const list = idList(body[field], field, kind);
+    if (new Set(list).size !== list.length)
+      throw new AppError("management.request_invalid", { field });
+    return list;
+  };
+  return {
+    productIds: ids("productIds", "ProductId"),
+    categoryIds: ids("categoryIds", "CategoryId"),
+  };
+}
+
 function numberField(value: unknown, field: string): number {
   if (typeof value !== "number") throw new AppError("management.request_invalid", { field });
   return value;
@@ -246,6 +264,10 @@ const STATUS: Record<string, ContentfulStatusCode> = {
 };
 
 const run = createErrorBoundary(STATUS, "catalogue.failed");
+const runFolder = createErrorBoundary(
+  { ...STATUS, "category.parent_cycle": 409 },
+  "catalogue.failed",
+);
 
 /**
  * Nothing below this screen objects to a malformed id — every id column is plain `text`, so the
@@ -1033,6 +1055,36 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
       const input = categoryInput(body, true) as CategoryInput;
       const created = await gated(sessionId, (tx) => createCategory(tx, input));
       return c.json(created, 201);
+    }),
+  );
+
+  app.post("/management-api/folders/move", (c) =>
+    runFolder(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const selection = selectionBody(body);
+      const to = nullOrUuid(body.to, "to");
+      await gated(session, (tx) => moveCatalogueItems(tx, selection, to));
+      return c.body(null, 204);
+    }),
+  );
+  app.post("/management-api/folders/delete", (c) =>
+    runFolder(c, log, async () => {
+      const session = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const selection = selectionBody(body);
+      if (body.contents !== "move_up" && body.contents !== "delete")
+        throw new AppError("management.request_invalid", { field: "contents" });
+      const contents: FolderContents = body.contents;
+      await gated(session, (tx) => deleteCatalogueItems(tx, selection, contents));
+      return c.body(null, 204);
+    }),
+  );
+  app.get("/management-api/folders/summary", (c) =>
+    runFolder(c, log, async () => {
+      const session = requireManagementSession(c);
+      const ids = (c.req.queries("id") ?? []).map((id) => requireUuidParam(id, "CategoryId"));
+      return c.json(await gated(session, (tx) => summariseFolders(tx, ids)));
     }),
   );
 

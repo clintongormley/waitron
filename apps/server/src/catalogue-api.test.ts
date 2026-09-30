@@ -32,6 +32,165 @@ import "./errors.js";
 // staff refusal over every write route is in `catalogue-api.full-manifest.test.ts`.
 const noopLog: Logger = () => {};
 
+describe("folder selection routes", () => {
+  async function folder(app: Hono, name: string, parentId: string | null = null) {
+    const response = await send(app, "POST", "/management-api/categories", {
+      body: { name, parentId },
+    });
+    expect(response.status).toBe(201);
+    return ((await response.json()) as { id: string }).id;
+  }
+  it("moves a selection, reports its contents, then deletes it", async () => {
+    const app = mountApp();
+    const parent = await folder(app, "Drinks");
+    const child = await folder(app, "Beer");
+    expect(
+      (
+        await send(app, "POST", "/management-api/folders/move", {
+          body: { productIds: [], categoryIds: [child], to: parent },
+        })
+      ).status,
+    ).toBe(204);
+    const summary = await send(
+      app,
+      "GET",
+      `/management-api/folders/summary?id=${parent}&id=${child}`,
+    );
+    expect(summary.status).toBe(200);
+    expect(await summary.json()).toEqual([
+      { id: parent, folders: 1, products: 0, routes: 0 },
+      { id: child, folders: 0, products: 0, routes: 0 },
+    ]);
+    expect(
+      (
+        await send(app, "POST", "/management-api/folders/delete", {
+          body: { productIds: [], categoryIds: [parent, child], contents: "delete" },
+        })
+      ).status,
+    ).toBe(204);
+    expect((await send(app, "GET", `/management-api/categories/${child}`)).status).toBe(404);
+  });
+
+  it("answers a cycle with 409 and leaves the selected product where it was", async () => {
+    const app = mountApp();
+    const parent = await folder(app, "Drinks");
+    const child = await folder(app, "Beer", parent);
+    const menu = await createCatalogueVia(app, "Folder refusal");
+    const created = await send(app, "POST", "/management-api/products", {
+      body: {
+        catalogueId: menu,
+        categoryId: parent,
+        name: "Cola",
+        pricingUnit: "each",
+        unitPrice: "2",
+        vatClass: "general",
+      },
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const refusal = await send(app, "POST", "/management-api/folders/move", {
+      body: { productIds: [id], categoryIds: [parent], to: child },
+    });
+    expect(refusal.status).toBe(409);
+    expect(await refusal.json()).toMatchObject({ error: { code: "category.parent_cycle" } });
+    const listed = await send(app, "GET", "/management-api/products");
+    expect(await listed.json()).toContainEqual(
+      expect.objectContaining({ id, primaryCategoryId: parent }),
+    );
+  });
+
+  it.each([
+    ["move", { productIds: [], categoryIds: [] }, "management.request_invalid", "to"],
+    [
+      "move",
+      { productIds: null, categoryIds: [], to: null },
+      "management.request_invalid",
+      "productIds",
+    ],
+    [
+      "move",
+      { productIds: [], categoryIds: null, to: null },
+      "management.request_invalid",
+      "categoryIds",
+    ],
+    [
+      "move",
+      { productIds: ["invalid"], categoryIds: [], to: null },
+      "shared.invalid_id",
+      undefined,
+    ],
+    [
+      "move",
+      { productIds: [], categoryIds: ["invalid"], to: null },
+      "shared.invalid_id",
+      undefined,
+    ],
+    [
+      "delete",
+      { productIds: [], categoryIds: [], contents: "archive" },
+      "management.request_invalid",
+      "contents",
+    ],
+    [
+      "delete",
+      { productIds: [], categoryIds: [], contents: null },
+      "management.request_invalid",
+      "contents",
+    ],
+  ] as const)("validates %s body %j", async (action, body, code, field) => {
+    const response = await send(mountApp(), "POST", `/management-api/folders/${action}`, { body });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code, ...(field === undefined ? {} : { params: { field } }) },
+    });
+  });
+
+  it.each(["productIds", "categoryIds"] as const)("refuses repeated %s", async (field) => {
+    const id = crypto.randomUUID();
+    const response = await send(mountApp(), "POST", "/management-api/folders/move", {
+      body: { productIds: [], categoryIds: [], [field]: [id, id], to: null },
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+  });
+
+  it("validates summary IDs and allows an empty summary", async () => {
+    const app = mountApp();
+    const bad = await send(app, "GET", "/management-api/folders/summary?id=invalid");
+    expect(bad.status).toBe(400);
+    expect(await bad.json()).toMatchObject({ error: { code: "shared.invalid_id" } });
+    const empty = await send(app, "GET", "/management-api/folders/summary");
+    expect(empty.status).toBe(200);
+    expect(await empty.json()).toEqual([]);
+  });
+
+  it.each(["move", "delete", "summary"] as const)(
+    "protects folder %s with manager authorization",
+    async (action) => {
+      for (const [cookie, status, code] of [
+        [null, 401, "management_session.required"],
+        [staffCookie, 403, "authorization.not_permitted"],
+      ] as const) {
+        const response = await send(
+          mountApp(),
+          action === "summary" ? "GET" : "POST",
+          `/management-api/folders/${action}`,
+          {
+            cookie,
+            ...(action === "summary"
+              ? {}
+              : { body: { productIds: [], categoryIds: [], to: null, contents: "delete" } }),
+          },
+        );
+        expect(response.status).toBe(status);
+        expect(await response.json()).toMatchObject({ error: { code } });
+      }
+    },
+  );
+});
+
 let locationId: string;
 let managerCookie: string;
 let managerPersonId: string;

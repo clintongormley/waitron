@@ -51,12 +51,21 @@ export async function readCategory(tx: Transaction, id: string): Promise<Categor
   if (!row) throw new AppError("category.not_found", { categoryId: id });
   return row;
 }
-async function validateParent(tx: Transaction, id: string, parentId: string | null): Promise<void> {
+export async function validateParent(
+  tx: Transaction,
+  id: string,
+  parentId: string | null,
+  snapshot?: readonly Category[],
+): Promise<void> {
+  const byId =
+    snapshot === undefined ? undefined : new Map(snapshot.map((folder) => [folder.id, folder]));
   const seen = new Set([id]);
   while (parentId !== null) {
     if (seen.has(parentId)) throw new AppError("category.parent_cycle", {});
     seen.add(parentId);
-    parentId = (await readCategory(tx, parentId)).parentId;
+    const parent = byId === undefined ? await readCategory(tx, parentId) : byId.get(parentId);
+    if (parent === undefined) throw new AppError("category.not_found", { categoryId: parentId });
+    parentId = parent.parentId;
   }
 }
 /**

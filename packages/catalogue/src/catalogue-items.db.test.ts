@@ -1,0 +1,232 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { products, withTransaction, type Transaction } from "@waitron/db";
+import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedLegacySellingUnits, useCatalogueDb } from "../test/fixtures.js";
+import {
+  createCategory,
+  listCategories,
+  readCategory,
+  setMainReportingCategory,
+} from "./categories.js";
+import { createCatalogue, createProduct, deactivateProduct } from "./operations.js";
+import { setProductVariants } from "./variants.js";
+import { deleteCatalogueItems, moveCatalogueItems, summariseFolders } from "./catalogue-items.js";
+
+const suite = useCatalogueDb();
+const app = <T>(action: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, action);
+let d: string, b: string, f: string, cola: string, lager: string, burger: string, variant: string;
+
+beforeEach(async () => {
+  await seedTenant(suite.db);
+  await seedLegacySellingUnits(suite.db);
+  await app(async (tx) => {
+    d = (await createCategory(tx, { name: "Drinks" })).id;
+    b = (await createCategory(tx, { name: "Beer", parentId: d })).id;
+    f = (await createCategory(tx, { name: "Food" })).id;
+    const menu = await createCatalogue(tx, { name: "Menu" });
+    const make = async (name: string, categoryId: string) =>
+      (
+        await createProduct(tx, {
+          catalogueId: menu.id,
+          categoryId,
+          name,
+          pricingUnit: "each",
+          unitPrice: "2",
+          vatClass: "general",
+        })
+      ).id;
+    cola = await make("Cola", d);
+    lager = await make("Lager", b);
+    burger = await make("Burger", f);
+    variant = (
+      await setProductVariants(
+        tx,
+        lager,
+        [
+          {
+            name: "Half",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: null,
+            available: true,
+          },
+        ],
+        "en",
+      )
+    )[0]!.id;
+  });
+});
+
+async function product(id: string) {
+  const [row] = await suite.db
+    .select({
+      active: products.active,
+      categoryId: products.categoryId,
+      parentId: products.parentId,
+    })
+    .from(products)
+    .where(eq(products.id, id));
+  return row!;
+}
+
+describe("moveCatalogueItems", () => {
+  it("moves products and folders together into a folder and to the top level", async () => {
+    await app((tx) => moveCatalogueItems(tx, { productIds: [cola], categoryIds: [b] }, f));
+    expect((await product(cola)).categoryId).toBe(f);
+    expect((await app((tx) => readCategory(tx, b))).parentId).toBe(f);
+    expect((await product(lager)).categoryId).toBe(b);
+    expect((await product(variant)).parentId).toBe(lager);
+    await app((tx) => moveCatalogueItems(tx, { productIds: [cola], categoryIds: [b] }, null));
+    expect((await product(cola)).categoryId).toBeNull();
+    expect((await app((tx) => readCategory(tx, b))).parentId).toBeNull();
+  });
+
+  it("refuses self and descendant destinations without moving a selected product", async () => {
+    for (const to of [d, b]) {
+      await expect(
+        app((tx) => moveCatalogueItems(tx, { productIds: [cola], categoryIds: [d] }, to)),
+      ).rejects.toMatchObject({ code: "category.parent_cycle" });
+      expect((await product(cola)).categoryId).toBe(d);
+      expect((await app((tx) => readCategory(tx, d))).parentId).toBeNull();
+    }
+  });
+
+  it("checks every selected identity and the destination before writing", async () => {
+    const missing = crypto.randomUUID();
+    for (const bad of [missing, variant]) {
+      await expect(
+        app((tx) => moveCatalogueItems(tx, { productIds: [cola, bad], categoryIds: [] }, f)),
+      ).rejects.toMatchObject({ code: "product.not_found", params: { productId: bad } });
+    }
+    for (const selection of [
+      { productIds: [cola], categoryIds: [missing] },
+      { productIds: [cola], categoryIds: [] },
+    ]) {
+      await expect(app((tx) => moveCatalogueItems(tx, selection, missing))).rejects.toMatchObject({
+        code: "category.not_found",
+        params: { categoryId: missing },
+      });
+    }
+    expect((await product(cola)).categoryId).toBe(d);
+  });
+
+  it("reads the folder tree once even when several folders move below a deep destination", async () => {
+    const leaf = await app((tx) => createCategory(tx, { name: "Leaf", parentId: b }));
+    const other = await app((tx) => createCategory(tx, { name: "Other" }));
+    await app(async (tx) => {
+      const reads = vi.spyOn(tx, "select");
+      try {
+        await moveCatalogueItems(tx, { productIds: [], categoryIds: [f, other.id] }, leaf.id);
+        expect(reads).toHaveBeenCalledTimes(1);
+      } finally {
+        reads.mockRestore();
+      }
+    });
+    expect((await app((tx) => readCategory(tx, f))).parentId).toBe(leaf.id);
+    expect((await app((tx) => readCategory(tx, other.id))).parentId).toBe(leaf.id);
+  });
+});
+
+describe("deleteCatalogueItems", () => {
+  it("switches selected products off without moving them", async () => {
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [cola], categoryIds: [] }, "move_up"));
+    expect(await product(cola)).toMatchObject({ active: false, categoryId: d });
+    expect((await product(lager)).active).toBe(true);
+  });
+
+  it("moves the contents of a deleted folder to its parent", async () => {
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [d] }, "move_up"));
+    expect(await product(cola)).toMatchObject({ active: true, categoryId: null });
+    expect((await app((tx) => readCategory(tx, b))).parentId).toBeNull();
+    expect((await product(lager)).categoryId).toBe(b);
+    await expect(app((tx) => readCategory(tx, d))).rejects.toMatchObject({
+      code: "category.not_found",
+    });
+  });
+
+  it.each(["parent-first", "child-first"])(
+    "moves nested selected folders' contents to their grandparent (%s)",
+    async (order) => {
+      await app((tx) =>
+        deleteCatalogueItems(
+          tx,
+          { productIds: [], categoryIds: order === "parent-first" ? [d, b] : [b, d] },
+          "move_up",
+        ),
+      );
+      expect(await product(lager)).toMatchObject({ active: true, categoryId: null });
+      expect((await app(listCategories)).map((row) => row.id)).toEqual([f]);
+    },
+  );
+
+  it.each(["parent-first", "child-first"])(
+    "deletes a subtree selected with its child only once (%s)",
+    async (order) => {
+      await app((tx) =>
+        deleteCatalogueItems(
+          tx,
+          { productIds: [], categoryIds: order === "parent-first" ? [d, b] : [b, d] },
+          "delete",
+        ),
+      );
+      expect((await app(listCategories)).map((row) => row.id)).toEqual([f]);
+      for (const id of [cola, lager])
+        expect(await product(id)).toMatchObject({ active: false, categoryId: null });
+      expect(await product(burger)).toMatchObject({ active: true, categoryId: f });
+    },
+  );
+
+  it("moves a variant's own category out of a deleted subtree while retaining its product", async () => {
+    await app((tx) => setMainReportingCategory(tx, variant, b, "any"));
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [b] }, "delete"));
+    expect(await product(variant)).toMatchObject({ categoryId: d, parentId: lager });
+    expect(await product(lager)).toMatchObject({ active: false, categoryId: d });
+    expect((await product(cola)).active).toBe(true);
+  });
+
+  it("refuses unknown or variant identities and rolls back the whole selection", async () => {
+    const missing = crypto.randomUUID();
+    for (const bad of [missing, variant]) {
+      await expect(
+        app((tx) =>
+          deleteCatalogueItems(tx, { productIds: [cola, bad], categoryIds: [d] }, "delete"),
+        ),
+      ).rejects.toMatchObject({ code: "product.not_found", params: { productId: bad } });
+    }
+    await expect(
+      app((tx) =>
+        deleteCatalogueItems(tx, { productIds: [cola], categoryIds: [missing] }, "delete"),
+      ),
+    ).rejects.toMatchObject({ code: "category.not_found", params: { categoryId: missing } });
+    expect(await product(cola)).toMatchObject({ active: true, categoryId: d });
+    expect(await app(listCategories)).toHaveLength(3);
+  });
+});
+
+describe("summariseFolders", () => {
+  it("counts descendants and active or inactive top-level products in request order", async () => {
+    await app((tx) => deactivateProduct(tx, lager));
+    await app((tx) => setMainReportingCategory(tx, variant, b, "any"));
+    expect(await app((tx) => summariseFolders(tx, [f, d, b]))).toEqual([
+      { id: f, folders: 0, products: 1, routes: 0 },
+      { id: d, folders: 1, products: 2, routes: 0 },
+      { id: b, folders: 0, products: 1, routes: 0 },
+    ]);
+  });
+  it("refuses unknown folders rather than reporting them as empty", async () => {
+    const missing = crypto.randomUUID();
+    await expect(app((tx) => summariseFolders(tx, [d, missing]))).rejects.toMatchObject({
+      code: "category.not_found",
+      params: { categoryId: missing },
+    });
+  });
+  it("accepts empty selections and summaries", async () => {
+    await app((tx) => moveCatalogueItems(tx, { productIds: [], categoryIds: [] }, null));
+    await app((tx) => deleteCatalogueItems(tx, { productIds: [], categoryIds: [] }, "delete"));
+    expect(await app((tx) => summariseFolders(tx, []))).toEqual([]);
+    expect((await product(cola)).active).toBe(true);
+    expect(await app(listCategories)).toHaveLength(3);
+  });
+});

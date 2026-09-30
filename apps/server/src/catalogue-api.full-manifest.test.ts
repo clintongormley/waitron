@@ -29,6 +29,44 @@ const suite = useVenueDb({
 /** A no-op logger: only the HTTP responses and the database state matter here. */
 const noopLog: Logger = () => {};
 
+it("folder summaries include descendant preparation routes and subtree deletion removes them", async () => {
+  const v = await setupVenue();
+  const app = mountApp();
+  const parent = await createCategory(app, v.managerCookie, "Drinks");
+  const child = await createCategory(app, v.managerCookie, "Beer");
+  expect(
+    (
+      await send(app, "PATCH", `/management-api/categories/${child}`, v.managerCookie, {
+        parentId: parent,
+      })
+    ).status,
+  ).toBe(200);
+  await suite.db
+    .insert(preparationRoutes)
+    .values({ locationId: v.locationId, categoryId: child, noPreparation: true });
+  const summary = await send(
+    app,
+    "GET",
+    `/management-api/folders/summary?id=${parent}`,
+    v.managerCookie,
+  );
+  expect(summary.status).toBe(200);
+  expect(await summary.json()).toEqual([{ id: parent, folders: 1, products: 0, routes: 1 }]);
+  expect(
+    (
+      await send(app, "POST", "/management-api/folders/delete", v.managerCookie, {
+        productIds: [],
+        categoryIds: [child, parent],
+        contents: "delete",
+      })
+    ).status,
+  ).toBe(204);
+  expect(
+    (await suite.db.execute(sql`select id from preparation_routes where category_id = ${child}`))
+      .rows,
+  ).toEqual([]);
+});
+
 interface Venue {
   /**
    * This venue's single location id — the `:locationId` the location-menu routes act on, and the

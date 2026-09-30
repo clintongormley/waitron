@@ -12,6 +12,40 @@ function emptyResponse(): Response {
 }
 
 describe("DashboardApi", () => {
+  it("moves a mixed folder selection through its dedicated route", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.moveCatalogueItems({ productIds: ["p"], categoryIds: ["f"] }, null);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/folders/move",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ productIds: ["p"], categoryIds: ["f"], to: null }),
+      }),
+    );
+  });
+  it("sends the selected folder contents choice on deletion", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+    await api.deleteCatalogueItems({ productIds: [], categoryIds: ["f"] }, "move_up");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/folders/delete",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ productIds: [], categoryIds: ["f"], contents: "move_up" }),
+      }),
+    );
+  });
+  it("reads ordered folder summaries using encoded repeated query parameters", async () => {
+    const summaries = [{ id: "a&b", folders: 2, products: 3, routes: 1 }];
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(summaries));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.summariseFolders(["a&b", "c d"])).toEqual(summaries);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/folders/summary?id=a%26b&id=c%20d",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
   it("uses the discovery, adoption and separate reader-management routes", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     const api = new DashboardApi("", fetchImpl);

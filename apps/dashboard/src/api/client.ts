@@ -273,6 +273,17 @@ export interface CategoryInput {
   name: string;
   parentId?: string | null;
 }
+export interface CatalogueSelection {
+  productIds: string[];
+  categoryIds: string[];
+}
+export type FolderContents = "move_up" | "delete";
+export interface FolderSummary {
+  id: string;
+  folders: number;
+  products: number;
+  routes: number;
+}
 export interface CategoryDependants {
   /** Every product whose own main category is this one, variants included. */
   products: { id: string; name: string }[];
@@ -1689,6 +1700,19 @@ export class DashboardApi {
 
   listCategories(): Promise<CategorySummary[]> {
     return this.#request<CategorySummary[]>("/management-api/categories", "GET");
+  }
+
+  moveCatalogueItems(selection: CatalogueSelection, to: string | null): Promise<void> {
+    return this.#request("/management-api/folders/move", "POST", { ...selection, to });
+  }
+
+  deleteCatalogueItems(selection: CatalogueSelection, contents: FolderContents): Promise<void> {
+    return this.#request("/management-api/folders/delete", "POST", { ...selection, contents });
+  }
+
+  summariseFolders(categoryIds: string[]): Promise<FolderSummary[]> {
+    const query = categoryIds.map((id) => `id=${encodeURIComponent(id)}`).join("&");
+    return this.#request(`/management-api/folders/summary?${query}`, "GET");
   }
 
   createCategory(input: CategoryInput): Promise<CategorySummary> {
