@@ -1548,31 +1548,47 @@ describe("setup-app", () => {
       expect(input(connect, "password").value).toBe(TYPED.password);
     });
 
-    it("shows the primary's refusal of the one-time code under that field, empty and focused", async () => {
-      const adopt = vi.fn().mockRejectedValue({ code: "totp.invalid", params: {}, status: 401 });
+    // Owner rule (C95): a refused login must not say whether the person exists, so it marks no
+    // field; a message under the code or the password would say the details before it were right.
+    it("says only that the login failed, beside Connect, when the primary refuses the login", async () => {
+      const adopt = vi
+        .fn()
+        .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });
       const el = await mountSetupApp(stubApi({ adopt }));
       await typeAndConnect(el);
       await new Promise((resolve) => setTimeout(resolve));
       const connect = await screenHost(el, "connect");
-      const totp = connect.shadowRoot!.querySelector<HTMLElement>("[data-test=totp]")!;
-      expect(totp.getAttribute("error")).toBe("Check the authenticator code (if required).");
+      expect(await bottomOf(connect)).toBe(
+        "The login failed. Check the admin person ID, password and authenticator code, then try again.",
+      );
+      for (const field of ["primaryUrl", "personId", "password", "totp"] as const) {
+        expect(
+          connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
+        ).toBe("");
+        expect(input(connect, field).getAttribute("aria-invalid")).toBe("false");
+      }
+      expect(input(connect, "personId").value).toBe(TYPED.personId);
+      expect(input(connect, "password").value).toBe(TYPED.password);
       expect(input(connect, "totp").value).toBe("");
-      expect(totp.shadowRoot!.activeElement).toBe(input(connect, "totp"));
-      expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
+      expect(connect.shadowRoot!.activeElement).toBeNull();
     });
 
-    it("shows the primary's person.not_found under the person ID field", async () => {
-      const adopt = vi
-        .fn()
-        .mockRejectedValue({ code: "person.not_found", params: { personId: "op-7" }, status: 404 });
+    it.each([
+      ["totp.invalid", 401],
+      ["person.not_found", 404],
+    ])("marks no field for %s", async (code, status) => {
+      const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
       const el = await mountSetupApp(stubApi({ adopt }));
       await typeAndConnect(el);
       const connect = await screenHost(el, "connect");
-      expect(connect.shadowRoot!.querySelector("[data-test=personId]")!.getAttribute("error")).toBe(
-        "Check the admin login (person id).",
+      for (const field of ["personId", "totp"] as const) {
+        expect(
+          connect.shadowRoot!.querySelector(`[data-test=${field}]`)!.getAttribute("error"),
+        ).toBe("");
+      }
+      expect(await bottomOf(connect)).toBe(
+        "Couldn't connect to the primary. Check the address and login, then try again.",
       );
-      expect(input(connect, "personId").value).toBe(TYPED.personId);
-      expect(await bottomOf(connect)).toBe("Correct the highlighted fields to continue.");
     });
 
     it("shows a refusal of the one-time code under that field, empty and focused", async () => {

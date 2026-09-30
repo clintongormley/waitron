@@ -140,6 +140,7 @@ const VENUE_ERROR_MESSAGES: Record<string, StringKey> = {
 
 const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "mirror.bundle_fetch_failed": "shell.adopt.bundle_fetch_failed",
+  "password.invalid": "shell.adopt.login_failed",
   "setup.request_invalid": "shell.adopt.request_invalid",
   "setup.not_ready": "shell.not_ready",
 };
@@ -173,8 +174,6 @@ const RESET_FIELD_PATHS: Record<string, ResetField> = {
 
 const ADOPT_FIELD_CODES: Record<string, ConnectField> = {
   "mirror.primary_url_invalid": "primaryUrl",
-  "person.not_found": "personId",
-  "totp.invalid": "totp",
 };
 
 const ADOPT_FIELD_PATHS: Record<string, ConnectField> = {
