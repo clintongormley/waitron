@@ -700,83 +700,139 @@ describe("more of a long list", () => {
     return { el, liveData, api, refresh };
   }
 
-  const EVERYONE = ["2026-09-29", "2026-09-29", "everyone"] as const;
-  const newest = () => ({ ...samEntry(), id: "e5", createdAt: "2026-09-29T21:30:00.000Z" });
+  /** Live data reads the list again, and the screen takes what it read. */
+  async function refreshed(
+    el: AdjustmentReportScreen,
+    liveData: LiveData,
+    refresh: Fake,
+    requests: number,
+  ): Promise<void> {
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(requests));
+    await settle(el);
+  }
 
-  it("keeps the rows already shown when live data reads the list again", async () => {
+  const EVERYONE = ["2026-09-29", "2026-09-29", "everyone"] as const;
+  const newer = (id: string) => ({ ...samEntry(), id, createdAt: "2026-09-29T21:30:00.000Z" });
+  const many = (from: number, count: number) =>
+    Array.from({ length: count }, (_, i) => newer(`m${from + i}`));
+
+  it("reads only the first page again when it holds a row already shown", async () => {
     const { el, liveData, refresh } = await watchedList(twoPages(), twoPages());
     await showMore(el);
     expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(2));
-    await settle(el);
-    expect(refresh.listEntries.mock.calls).toEqual([
-      [...EVERYONE],
-      [...EVERYONE, { after: "c1", limit: 1 }],
-    ]);
+    await refreshed(el, liveData, refresh, 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(refresh.listEntries.mock.calls).toEqual([[...EVERYONE]]);
     expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
     expect(part(el, "show-more")).toBeNull();
     liveData.clear();
   });
 
-  it("puts a new adjustment at the top and keeps every row loaded below it", async () => {
+  it("puts a new adjustment on top, and keeps the rows loaded below it and where the list goes on", async () => {
     const { el, liveData, api, refresh } = await watchedList(
-      twoPages(),
       pagesAfter({
-        "": { entries: [newest(), ...alexEntries().slice(0, 2)], next: "c2" },
-        c2: { entries: [alexEntries()[2], samEntry()], next: "c4" },
+        "": { entries: alexEntries(), next: "c1" },
+        c1: { entries: [samEntry()], next: "c4" },
       }),
+      pagesAfter({ "": { entries: [newer("e5"), ...alexEntries().slice(0, 2)], next: "c2" } }),
     );
     await showMore(el);
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(2));
-    await settle(el);
-    expect(refresh.listEntries).toHaveBeenLastCalledWith(...EVERYONE, { after: "c2", limit: 2 });
+    await refreshed(el, liveData, refresh, 1);
     expect(keys(el)).toEqual(["e5", "e3", "e2", "e1", "e4"]);
-    await showMore(el);
+    part(el, "show-more")!.click();
     expect(api.listEntries).toHaveBeenLastCalledWith(...EVERYONE, { after: "c4" });
     liveData.clear();
   });
 
-  it("reads the rows shown again a largest page at a time", async () => {
-    const many = (from: number, count: number) =>
-      Array.from({ length: count }, (_, i) => ({ ...samEntry(), id: `m${from + i}` }));
-    const pages = {
-      "": { entries: many(0, 200), next: "p1" },
-      p1: { entries: many(200, 500), next: "p2" },
-      p2: { entries: many(700, 100), next: null },
-    };
-    const { el, liveData, refresh } = await watchedList(pagesAfter(pages), pagesAfter(pages));
-    await showMore(el);
-    await showMore(el);
-    expect(keys(el)).toHaveLength(800);
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(3));
-    await settle(el);
-    expect(refresh.listEntries.mock.calls).toEqual([
-      [...EVERYONE],
-      [...EVERYONE, { after: "p1", limit: 500 }],
-      [...EVERYONE, { after: "p2", limit: 100 }],
-    ]);
-    expect(keys(el)).toEqual(many(0, 800).map((entry) => entry.id));
-    liveData.clear();
-  });
-
-  it("stops reading again once a further page holds none of the rows it showed", async () => {
+  it("reads further pages only until it meets a row already shown", async () => {
     const { el, liveData, refresh } = await watchedList(
       twoPages(),
       pagesAfter({
-        "": { entries: [alexEntries()[0]], next: "cx" },
-        cx: { entries: [newest()], next: "cy" },
+        "": { entries: [newer("e6"), newer("e5")], next: "cx" },
+        cx: { entries: alexEntries(), next: "c1" },
       }),
     );
     await showMore(el);
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(2));
+    await refreshed(el, liveData, refresh, 2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(refresh.listEntries.mock.calls).toEqual([
+      [...EVERYONE],
+      [...EVERYONE, { after: "cx", limit: 498 }],
+    ]);
+    expect(keys(el)).toEqual(["e6", "e5", "e3", "e2", "e1", "e4"]);
+    expect(part(el, "show-more")).toBeNull();
+    liveData.clear();
+  });
+
+  it("shows the rows it read again as they now read", async () => {
+    const renamed = alexEntries().map((entry) => ({
+      ...entry,
+      requestedBy: { ...entry.requestedBy, name: "Alexandra" },
+    }));
+    const { el, liveData, refresh } = await watchedList(
+      twoPages(),
+      pagesAfter({ "": { entries: renamed, next: "c1" } }),
+    );
+    await refreshed(el, liveData, refresh, 1);
+    expect(row(part(el, "entries")!, "e3")["Requested by"]).toBe("Alexandra");
+    liveData.clear();
+  });
+
+  it("starts again from what it read once the new rows fill the largest page, dropping a page on its way", async () => {
+    let resolve!: (page: unknown) => void;
+    const { el, liveData, api, refresh } = await watchedList(
+      twoPages(() => new Promise((done) => (resolve = done))),
+      pagesAfter({
+        "": { entries: many(0, 200), next: "p1" },
+        p1: { entries: many(200, 300), next: "p2" },
+        p2: { entries: alexEntries(), next: "c1" },
+      }),
+    );
+    await showMore(el);
+    await refreshed(el, liveData, refresh, 2);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(refresh.listEntries.mock.calls).toEqual([
+      [...EVERYONE],
+      [...EVERYONE, { after: "p1", limit: 300 }],
+    ]);
+    expect(keys(el)).toEqual(many(0, 500).map((entry) => entry.id));
+    resolve(onePage([samEntry()]));
     await settle(el);
-    expect(refresh.listEntries).toHaveBeenLastCalledWith(...EVERYONE, { after: "cx", limit: 3 });
-    expect(keys(el)).toEqual(["e3", "e5"]);
-    expect(part(el, "show-more")).not.toBeNull();
+    expect(keys(el)).toHaveLength(500);
+    expect(part(el, "show-more")!.hasAttribute("loading")).toBe(false);
+    part(el, "show-more")!.click();
+    expect(api.listEntries).toHaveBeenLastCalledWith(...EVERYONE, { after: "p2" });
+    liveData.clear();
+  });
+
+  it("starts again from what it read when none of the rows shown come back", async () => {
+    const { el, liveData, refresh } = await watchedList(
+      twoPages(),
+      pagesAfter({ "": { entries: [newer("e5")], next: null } }),
+    );
+    await refreshed(el, liveData, refresh, 1);
+    expect(keys(el)).toEqual(["e5"]);
+    expect(part(el, "show-more")).toBeNull();
+    liveData.clear();
+  });
+
+  it("stops reading once a new range starts the list again", async () => {
+    let first!: (page: unknown) => void;
+    const background = vi.fn((_f: string, _t: string, _o: unknown, page?: { after?: string }) =>
+      page?.after === undefined
+        ? new Promise((done) => (first = done))
+        : Promise.resolve(onePage([])),
+    );
+    const { el, liveData } = await watchedList(twoPages(), background);
+    liveData.invalidate([{ type: "adjustments" }]);
+    await vi.waitFor(() => expect(background).toHaveBeenCalledOnce());
+    await pick(el, "to", "2026-09-30");
+    first({ entries: [newer("e5")], next: "cx" });
+    await settle(el);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(background).toHaveBeenCalledOnce();
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
     liveData.clear();
   });
 
@@ -784,16 +840,15 @@ describe("more of a long list", () => {
     let resolve!: (page: unknown) => void;
     const { el, liveData, refresh } = await watchedList(
       twoPages(() => new Promise((done) => (resolve = done))),
-      twoPages(),
+      pagesAfter({ "": { entries: [newer("e5"), ...alexEntries().slice(0, 2)], next: "c2" } }),
     );
     await showMore(el);
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledOnce());
-    await settle(el);
+    await refreshed(el, liveData, refresh, 1);
+    expect(keys(el)).toEqual(["e5", "e3", "e2", "e1"]);
     expect(part(el, "show-more")!.hasAttribute("loading")).toBe(true);
     resolve(onePage([samEntry()]));
     await settle(el);
-    expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
+    expect(keys(el)).toEqual(["e5", "e3", "e2", "e1", "e4"]);
     expect(part(el, "show-more")).toBeNull();
     liveData.clear();
   });
@@ -806,42 +861,46 @@ describe("more of a long list", () => {
     await vi.waitFor(() => expect(background).toHaveBeenCalledOnce());
     await showMore(el);
     expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
-    answer({ entries: alexEntries(), next: "c1" });
+    answer({ entries: [newer("e5"), ...alexEntries().slice(0, 2)], next: "c2" });
     await settle(el);
-    expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
+    expect(keys(el)).toEqual(["e5", "e3", "e2", "e1", "e4"]);
     expect(part(el, "show-more")).toBeNull();
     liveData.clear();
   });
 
-  it("does not repeat a row the list read again already shows", async () => {
+  it("leaves rows it read past the last one shown to Show more, which adds them once", async () => {
     let resolve!: (page: unknown) => void;
     const { el, liveData, refresh } = await watchedList(
       twoPages(() => new Promise((done) => (resolve = done))),
       pagesAfter({ "": { entries: [...alexEntries(), samEntry()], next: "c9" } }),
     );
     await showMore(el);
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledOnce());
-    await settle(el);
+    await refreshed(el, liveData, refresh, 1);
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
     resolve(onePage([samEntry()]));
     await settle(el);
     expect(keys(el)).toEqual(["e3", "e2", "e1", "e4"]);
-    expect(part(el, "show-more")).not.toBeNull();
+    expect(part(el, "show-more")).toBeNull();
     liveData.clear();
+  });
+
+  it("offers no more once a further page comes back empty and the last", async () => {
+    const el = await mount(
+      fakeApi({ listEntries: twoPages(() => Promise.resolve({ entries: [], next: null })) }),
+    );
+    await showAll(el);
+    await showMore(el);
+    expect(keys(el)).toEqual(["e3", "e2", "e1"]);
+    expect(part(el, "show-more")).toBeNull();
   });
 
   it("keeps focus on Show more when live data reads the list again", async () => {
     const { el, liveData, refresh } = await watchedList(
       twoPages(),
-      pagesAfter({
-        "": { entries: [newest(), ...alexEntries().slice(0, 2)], next: "c2" },
-        c2: { entries: [alexEntries()[2]], next: "c1" },
-      }),
+      pagesAfter({ "": { entries: [newer("e5"), ...alexEntries().slice(0, 2)], next: "c2" } }),
     );
     part(el, "show-more")!.focus();
-    liveData.invalidate([{ type: "adjustments" }]);
-    await vi.waitFor(() => expect(refresh.listEntries).toHaveBeenCalledTimes(2));
-    await settle(el);
+    await refreshed(el, liveData, refresh, 1);
     expect(keys(el)).toEqual(["e5", "e3", "e2", "e1"]);
     expect(el.shadowRoot!.activeElement).toBe(part(el, "show-more"));
     liveData.clear();

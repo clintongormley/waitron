@@ -109,19 +109,9 @@ function sameEntries(a: EntriesOf, b: EntriesOf): boolean {
   return typeof a === "string" || typeof b === "string" ? a === b : a.personId === b.personId;
 }
 
-/** A read of the list, and the rows shown when it began. */
-interface ListRead {
-  page: AdjustmentEntryPage;
-  shown: readonly AdjustmentEntry[];
-}
-
-/** The rows of `more` that `entries` does not already hold. */
-function withoutRepeats(
-  entries: readonly AdjustmentEntry[],
-  more: readonly AdjustmentEntry[],
-): AdjustmentEntry[] {
-  const ids = new Set(entries.map((entry) => entry.id));
-  return more.filter((entry) => !ids.has(entry.id));
+/** The rows a read of the list brought, from the top; `met` when they reached a row shown. */
+interface ListRead extends AdjustmentEntryPage {
+  met: boolean;
 }
 
 @customElement("dashboard-adjustment-report-screen")
@@ -271,7 +261,7 @@ export class AdjustmentReportScreen extends LitElement {
   @state() private moreError?: string;
   /** What the shown list asked for, so a further page asks for the same rows. */
   #listed?: { from: string; to: string; of: EntriesOf };
-  /** Moved on whenever a different list starts from its first page, so a further page asked for
+  /** Moved on whenever the list starts again from its first page, so a further page asked for
    * before then is dropped. */
   #pagesGeneration = 0;
   /** Set once the person picks a day; until then the report follows the venue's current business
@@ -380,36 +370,55 @@ export class AdjustmentReportScreen extends LitElement {
   }
 
   /**
-   * The first page, then as many rows after it as it takes to hold every row shown again, so a
-   * refresh keeps what the person has loaded. New rows arrive at the top, pushing shown rows onto
-   * later pages; it stops early once a further page brings back none of them.
+   * Adjustments are never changed or removed, so between two reads a list gains rows only at the
+   * top, unless the location's day cutover or time zone moved the range. A refresh reads from the
+   * top until it meets a row already shown, at most a largest page of rows.
    */
   async #readList(api: AdjustmentsApi, from: string, to: string, of: EntriesOf): Promise<ListRead> {
-    const shown = this.entries ?? [];
+    const generation = this.#pagesGeneration;
+    const shown = new Set((this.entries ?? []).map((entry) => entry.id));
+    const meets = (page: AdjustmentEntryPage) => page.entries.some((entry) => shown.has(entry.id));
     const first = await api.listEntries(from, to, of);
     const entries = [...first.entries];
     let next = first.next;
-    let missing = withoutRepeats(entries, shown).length;
-    while (missing > 0 && next !== null) {
+    let met = meets(first);
+    while (
+      !met &&
+      shown.size > 0 &&
+      next !== null &&
+      entries.length < MAX_ENTRY_PAGE_SIZE &&
+      generation === this.#pagesGeneration
+    ) {
       const page = await api.listEntries(from, to, of, {
         after: next,
-        limit: Math.min(missing, MAX_ENTRY_PAGE_SIZE),
+        limit: MAX_ENTRY_PAGE_SIZE - entries.length,
       });
       entries.push(...page.entries);
       next = page.next;
-      const left = withoutRepeats(entries, shown).length;
-      if (left === missing) break;
-      missing = left;
+      met = meets(page);
     }
-    return { page: { entries, next }, shown };
+    return { entries, next, met };
   }
 
-  /** Only Show more changes the rows while a read is on its way, and only by adding to the end. */
-  #listRead({ page, shown }: ListRead): void {
-    const added = withoutRepeats(page.entries, (this.entries ?? []).slice(shown.length));
-    this.entries = [...page.entries, ...added];
-    if (added.length === 0) this.entriesNext = page.next;
+  /**
+   * A read that met the list replaces it down to the last row both hold; the rows below, and the
+   * cursor after them, stay, so a Show more on its way still continues the list. Any other read
+   * starts the list again.
+   */
+  #listRead({ entries, next, met }: ListRead): void {
     this.entriesError = undefined;
+    if (!met) {
+      this.#firstPage();
+      this.entries = entries;
+      this.entriesNext = next;
+      return;
+    }
+    const shown = this.entries!;
+    const read = new Set(entries.map((entry) => entry.id));
+    let last = shown.length - 1;
+    while (!read.has(shown[last]!.id)) last -= 1;
+    const upTo = entries.findIndex((entry) => entry.id === shown[last]!.id);
+    this.entries = [...entries.slice(0, upTo + 1), ...shown.slice(last + 1)];
   }
 
   /** Drops any further page still on its way, and what the list said about the last one. */
@@ -432,10 +441,8 @@ export class AdjustmentReportScreen extends LitElement {
     try {
       const page = await this.api.listEntries(from, to, of, { after: this.entriesNext! });
       if (generation !== this.#pagesGeneration) return;
-      // A refresh that landed first may already hold some of these rows.
-      const added = withoutRepeats(this.entries!, page.entries);
-      this.entries = [...this.entries!, ...added];
-      if (added.length > 0) this.entriesNext = page.next;
+      this.entries = [...this.entries!, ...page.entries];
+      this.entriesNext = page.next;
     } catch (error) {
       if (generation !== this.#pagesGeneration) return;
       this.moreError = tf("adjustment_report.entries.more_error", {
