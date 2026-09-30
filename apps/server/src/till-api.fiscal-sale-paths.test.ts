@@ -816,6 +816,52 @@ describe("/api/working-orders → pay (park & retrieve, idempotent over HTTP)", 
   });
 });
 
+describe("paying a parked pay-first order over POST /api/sales sends its dishes to the kitchen", () => {
+  it.each(["cash", "card"] as const)(
+    "a %s payment sends each unsent dish exactly once, and a replay sends nothing more",
+    async (method) => {
+      const { cfg, available, operatorId } = await setupVenue(); // default mode: prepay
+      const each = available.find((p) => p.pricingUnit === "each")!;
+      const app = new Hono();
+      mountTillApi(app, apiDeps(cfg), noopLog);
+      const cookie = await loginSession(app, cfg, operatorId);
+      const deviceCookie = await enrolTillCookie(cfg);
+      const fired = async (id: string) =>
+        (await suite.db.execute(sql`select 1 from ticket_items where working_order_id = ${id}`))
+          .rows;
+
+      const workingOrderId = randomUUID();
+      const park = await app.request("/api/working-orders", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+          label: "Mesa 3",
+        }),
+      });
+      expect(park.status).toBe(200);
+      expect(await fired(workingOrderId)).toHaveLength(0);
+
+      const pay = () =>
+        app.request("/api/sales", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+          body: JSON.stringify({
+            workingOrderId,
+            lines: [],
+            tender: { method, amount: "5.00" },
+          }),
+        });
+      expect((await pay()).status).toBe(200);
+      expect(await fired(workingOrderId)).toHaveLength(1);
+
+      expect((await pay()).status).toBe(200);
+      expect(await fired(workingOrderId)).toHaveLength(1);
+    },
+  );
+});
+
 // POST /api/pay resolves the reader (request `readerId`, else the paying device's default in
 // `device_card_readers`), pre-checks its provider is connected, and drives it through
 // `payWorkingOrderIntegrated` over a `FakeStripe`-backed provider. These cases pin the reader

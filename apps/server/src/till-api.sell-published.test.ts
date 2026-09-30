@@ -741,7 +741,8 @@ describe("who may order a product on its own (spec §9, D12)", () => {
     expect(paid.status).toBe(200);
     expect(((await paid.json()) as { total: string }).total).toBe("2.00");
     const sent = await send(v, "POST", `/api/working-orders/${id}/prep`);
-    expect(sent.status).toBe(200);
+    expect(sent.status).toBe(409);
+    expect(await sent.json()).toMatchObject({ error: { code: "ticket.already_fired" } });
     const tickets = await suite.db
       .select({ lineId: ticketItems.workingOrderLineId })
       .from(ticketItems)
