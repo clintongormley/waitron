@@ -93,17 +93,26 @@ type CommandState = BluetoothCommandStatus["state"] | "no_answer";
 type TrackedCommand = Omit<BluetoothCommandStatus, "state" | "expiresInMs"> & {
   state: CommandState;
   answerBy: number;
+  /** `#readCount` when the screen learned this state, for `#noteUnpaired`. */
+  learnedAt: number;
   /** A Pair's device as listed when its Pair dialog was opened, so its status keeps a row once the
    * scan loses it. */
   device?: DiscoveredPrinter;
   /** A success notice that has faded; the command stays, so a lingering pairing report does not
    * bring Unpair back. */
   noticeGone?: true;
+  /** A read sent after this unpairing succeeded did not list the device paired. */
+  listedUnpaired?: true;
 };
 
-/** How long a command's success notice stays before it fades. A failure stays until the next
- * command for that device replaces it. */
+/** How long a command's success notice stays before it fades. */
 const NOTICE_MS = 4000;
+
+const isProblem = ({ state }: TrackedCommand): boolean =>
+  state === "failed" || state === "no_answer";
+
+const hidesUnpair = (command: TrackedCommand | undefined): boolean =>
+  command?.kind === "forget" && command.state === "succeeded" && !command.listedUnpaired;
 
 const COMMAND_TEXT: Record<BluetoothCommandStatus["kind"], Record<CommandState, StringKey>> = {
   pair: {
@@ -543,8 +552,7 @@ export class PrintersScreen extends LitElement {
   @state() private pairSubmitting = false;
   #pairEpoch = 0;
   @state() private commands: Record<string, TrackedCommand> = {};
-  /** Command key to answerBy for each pairing that succeeded while Add a printer is open. Kept apart
-   * from `commands`, so a new command on the device leaves it counted as paired. */
+  /** Command key to answerBy for each pairing that succeeded while Add a printer is open. */
   @state() private pairedDevices: Record<string, number> = {};
   @state() private forgetting = false;
   #commandTimer?: ReturnType<typeof setInterval>;
@@ -553,6 +561,12 @@ export class PrintersScreen extends LitElement {
   #printerCommands = new Map<string, [string, TrackedCommand]>();
   #pairedReports = new Map<string, DiscoveredPrinter>();
   #commandEpoch = 0;
+  /** Bumped as each scan or poll read starts, and as each live answer arrives, so a read can be
+   * placed before or after the moment a command's outcome was learned. */
+  #readCount = 0;
+  /** `#readCount` at the live query's last answer. The query starts its next read only after that
+   * answer (`#schedule`, `packages/dashboard-kit/src/live-data.ts`), so the read began later. */
+  #liveReadFloor = 0;
   /** The refresh error a failed status read showed, so the next good read can take it back. */
   #commandReadError: string | null = null;
   /** Not `submitting`: the listen runs for seconds and must not block Add or Register. */
@@ -659,9 +673,10 @@ export class PrintersScreen extends LitElement {
         this.view = this.#defaultView();
         if (this.#url.read("dashboard") === "printers") this.#url.write({ view: this.view }, true);
       }
-      await this.#queries.watch("listDiscoveredPrinters", [], (devices) =>
-        this.#setDiscovered(devices),
-      );
+      await this.#queries.watch("listDiscoveredPrinters", [], (devices) => {
+        this.#setDiscovered(devices, this.#liveReadFloor);
+        this.#liveReadFloor = ++this.#readCount;
+      });
     } catch (error) {
       this.refreshErrorKey = codeOf(error);
     } finally {
@@ -888,19 +903,22 @@ export class PrintersScreen extends LitElement {
 
   async #loadDiscovered(epoch = this.#scanEpoch, passive = false): Promise<void> {
     const api = passive ? (this.api.background ?? this.api) : this.api;
+    const started = ++this.#readCount;
     const devices = await api.listDiscoveredPrinters();
     if (epoch !== this.#scanEpoch || !this.addingPrinter || !this.isConnected) return;
-    this.#setDiscovered(devices);
+    this.#setDiscovered(devices, started);
   }
 
   // Keep successful additions hidden even if the subsequent inventory refresh fails.
-  #setDiscovered(devices: DiscoveredPrinter[]): void {
+  /** `started` is a `#readCount` no later than the read's start. */
+  #setDiscovered(devices: DiscoveredPrinter[], started: number): void {
     this.discovered = devices.map((device) => ({
       ...device,
       alreadyRegistered:
         device.alreadyRegistered || this.#registeredDevices.has(this.#deviceKey(device)),
     }));
     this.#absorbCommands(devices);
+    this.#noteUnpaired(devices, started);
     const target = this.#probeTarget;
     if (target && this.probeStatus === "pending") {
       const match = this.discovered.find(
@@ -1154,6 +1172,7 @@ export class PrintersScreen extends LitElement {
       ...command,
       // A pending status naming no deadline is due at once rather than on a guessed one.
       answerBy: Date.now() + (expiresInMs ?? 0),
+      learnedAt: this.#readCount,
       ...(device && { device }),
     };
     const key = commandKey(agentId, status.address);
@@ -1191,6 +1210,7 @@ export class PrintersScreen extends LitElement {
         next[key] = {
           ...tracked,
           state: reported.state,
+          learnedAt: this.#readCount,
           ...(reported.error !== undefined && { error: reported.error }),
         };
         changed = true;
@@ -1207,6 +1227,26 @@ export class PrintersScreen extends LitElement {
       ...Object.fromEntries(paired.map(([key, { answerBy }]) => [key, answerBy])),
     };
     for (const [key, tracked] of paired) if (this.#addPaired(key, tracked)) break;
+  }
+
+  /** Ends an unpairing's hold on Unpair once a read sent after it succeeded does not list the device
+   * paired, whether it lists it unpaired or leaves it out. */
+  #noteUnpaired(devices: DiscoveredPrinter[], started: number): void {
+    const paired = new Set(
+      devices
+        .filter((d) => d.transport === "bluetooth" && d.paired === true)
+        .map((d) => this.#commandKeyOf(d)),
+    );
+    const noted = Object.entries(this.commands).filter(
+      ([key, command]) => hidesUnpair(command) && started > command.learnedAt && !paired.has(key),
+    );
+    if (noted.length === 0) return;
+    this.commands = {
+      ...this.commands,
+      ...Object.fromEntries(
+        noted.map(([key, command]) => [key, { ...command, listedUnpaired: true }]),
+      ),
+    };
   }
 
   /** Carries a successful pairing straight on into the form to add the device, unless another dialog
@@ -1240,6 +1280,7 @@ export class PrintersScreen extends LitElement {
     this.#commandReadInFlight = true;
     const epoch = this.#commandEpoch;
     let devices: DiscoveredPrinter[] | undefined;
+    const started = ++this.#readCount;
     try {
       devices = await (this.api.background ?? this.api).listDiscoveredPrinters();
     } catch (error) {
@@ -1254,7 +1295,7 @@ export class PrintersScreen extends LitElement {
       if (this.#commandReadError !== null && this.refreshErrorKey === this.#commandReadError)
         this.refreshErrorKey = null;
       this.#commandReadError = null;
-      this.#setDiscovered(devices);
+      this.#setDiscovered(devices, started);
     } else this.#absorbCommands([]);
     this.#settleCommandPoll();
   }
@@ -1350,7 +1391,7 @@ export class PrintersScreen extends LitElement {
 
   #renderCommand(key: string, command: TrackedCommand | undefined, test: string) {
     if (command === undefined || command.noticeGone) return nothing;
-    const problem = command.state === "failed" || command.state === "no_answer";
+    const problem = isProblem(command);
     return html`<span part="bluetooth-progress"
       >${
         command.kind === "pair" && command.state === "pending"
@@ -1929,8 +1970,7 @@ export class PrintersScreen extends LitElement {
     if (device === undefined) return nothing;
     // The agent's pairing report can outlast a successful forget by up to the discovered list's own
     // expiry (`isListed`, `apps/server/src/print-api.ts`).
-    const sent = this.commands[this.#commandKeyOf(device)];
-    if (sent?.kind === "forget" && sent.state === "succeeded") return nothing;
+    if (hidesUnpair(this.commands[this.#commandKeyOf(device)])) return nothing;
     return html`<wt-button
       variant="danger"
       data-test=${`forget-pairing-${p.id}`}
@@ -2853,7 +2893,7 @@ export class PrintersScreen extends LitElement {
   ): TemplateResult | typeof nothing {
     if (d.paired !== true || d.printerId !== null) return nothing;
     // As on a printer row (#forgetAction): hidden once an unpairing succeeds, while the report lingers.
-    if (command?.kind === "forget" && command.state === "succeeded") return nothing;
+    if (hidesUnpair(command)) return nothing;
     return html`<wt-button
       variant="danger"
       data-test=${`forget-device-${this.#deviceKey(d)}`}
@@ -2978,8 +3018,14 @@ export class PrintersScreen extends LitElement {
         this.namingPrinter = null;
         this.#endScan();
         this.#stopRenewing();
+        // An unpairing's failure goes unless a printer row shows it; a success stays, to keep Unpair
+        // hidden while the agent's report lags.
+        const onPrinterRow = new Set([...this.#printerCommands.values()].map(([key]) => key));
         this.commands = Object.fromEntries(
-          Object.entries(this.commands).filter(([, command]) => command.kind !== "pair"),
+          Object.entries(this.commands).filter(
+            ([key, command]) =>
+              command.kind === "forget" && (onPrinterRow.has(key) || !isProblem(command)),
+          ),
         );
         this.pairedDevices = {};
         this.#settleCommandPoll();
