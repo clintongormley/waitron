@@ -116,8 +116,9 @@ a venue and serves the real till.
 > still out. Built in #61.
 >
 > **2026-09-30 (lane B item B15):** a bill can now be paid in several payments, and the bill payment
-> dialog gives a payment back before the invoice, approved with a supervisor's or manager's PIN. So
-> "No refunds" below no longer covers a bill payment given back before its invoice.
+> dialog gives a payment back before the invoice: given back by someone who may give refunds, or
+> approved with a supervisor's or manager's PIN; a card keyed on a separate terminal always takes one
+> PIN. So "No refunds" below no longer covers a bill payment given back before its invoice.
 
 **In scope (slice 1 / 7a):** one walk-up **cash** sale — choose products, weigh or count them, take
 cash, print the filed ticket with its Veri\*Factu QR.

@@ -3948,9 +3948,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     request, not yet landed). A table's bill, or a retrieved counter order's, can be paid in parts:
     by items, an amount or an equal share, in cash (change or tip) or by card (keyed on a separate
     terminal, or on a card reader). The bill payment dialog lists the bill's payments and gives one
-    back with a supervisor's or manager's PIN. A partly paid table bill shows what it still owes,
-    "Paid so far" and a button opening the dialog; the counter shows "{amount} to pay" and "Take
-    the rest" above the pay card. The ticket lists every payment. Server: `GET
+    back: given back by someone who may give refunds, or approved with a supervisor's or manager's
+    PIN; a card keyed on a separate terminal always takes one PIN. A partly paid table bill shows
+    what it still owes, "Paid so far" and a button opening the dialog; the counter shows "{amount}
+    to pay" and "Take the rest" above the pay card. The ticket lists every payment. Server: `GET
     /api/refund-authorizers` and `BillPaymentView.entry`. Open:
     - **OPEN, owner decision — the till tells staff to give the money back before a merge, and a
       merge is refused even then.** The till's `bill.payments_received` message says "To discard or
@@ -3960,6 +3961,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       a merge still answered 409 `bill.payments_received`. The wording is pinned by a test on
       `main` (`apps/till/src/i18n/codes.test.ts`), so B15 left it. **Next action:** the owner
       decides whether the message drops "or merge" or the server lets a fully refunded bill merge.
+    - **OPEN — the generic "received more than the bill" text also answers a comp or discount.**
+      The till's `bill.received_exceeds_total` text (`apps/till/src/i18n/codes.ts`, "Move fewer
+      items, or refund the difference first") is on `main`, and the adjustment dialog shows it
+      when a comp or discount is refused for that code
+      (`apps/till/src/widgets/adjustment-dialog.test.ts`, "shows %s in its own words"), where
+      nothing is being moved. B15 gave a move and a line change their own texts
+      (`bill.received_exceeds_total_excess`, `bill.received_exceeds_total_line_excess`) and left
+      this one. No assertion on `main` pins its wording: at `3f013dd40` a `git grep` for its
+      English and Spanish sentences finds them only in `codes.ts`, and the two till suites that name
+      the code (`codes.test.ts`, `adjustment-dialog.test.ts`) check only that it differs from the
+      generic server text, that it names no identifier, and that the dialog shows what
+      `codeMessage` gives. **Next action:** word it so it
+      also fits a comp or discount.
     - **OPEN, owner call on wording:** the table's button is labelled with the whole sentence "Part
       of this bill is already paid: take the rest as a bill payment", while the counter's says
       "Take the rest". Left as it is.

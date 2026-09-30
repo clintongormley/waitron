@@ -540,6 +540,11 @@ const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
   "network_unavailable",
 ]);
 
+/** Fields of a payment's ask that a preview refuses for what was typed alone; `lines` is not one,
+ * as the server also refuses it for a line another device has changed (`itemsDue`,
+ * `apps/server/src/bill-payments.ts`). */
+const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
+
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
 const APPROVER_REFUSALS = new Set([
   "pin.invalid",
@@ -1237,6 +1242,9 @@ export class TillApp extends LitElement {
   /** The last bill payment sent that no result answered (`unansweredAfter`), which the same
    * confirmation resends under its submission id. */
   #unansweredPayment: Submission | null = null;
+  /** Each payment send. Only the one started last writes {@link #unansweredPayment}, so an earlier
+   * operator's send answered late neither replaces nor clears a later one's. */
+  #paymentSends = 0;
   /** The open refund dialog, over the bill payment dialog. */
   @state() private billRefunding: BillRefunding | null = null;
   #billRefunds = 0;
@@ -1245,6 +1253,9 @@ export class TillApp extends LitElement {
   @state() private refundApproverError: string | null = null;
   /** The last refund sent that no result answered, which the same refund resends under its id. */
   #unansweredRefund: RefundSubmission | null = null;
+  /** Each refund send. Only the one started last writes {@link #unansweredRefund}, so an earlier
+   * operator's send answered late neither replaces nor clears a later one's. */
+  #refundSends = 0;
   /** Ends the basket's edit lock taken by the latest {@link #reloadCounterOrder}; a no-op once it
    * has ended, and for a lock taken later. */
   #endReloadLock: () => void = () => {};
@@ -4847,15 +4858,13 @@ export class TillApp extends LitElement {
       open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
       asked.card,
     );
-    const before = this.#unansweredPayment;
-    const submission = submissionFor(open.billId, confirmation, before);
+    const submission = submissionFor(open.billId, confirmation, this.#unansweredPayment);
+    const turn = ++this.#paymentSends;
     this.billPaying = { ...open, refusal: null, taken: null, refunded: null, busy: true };
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    // A later operator's send may have replaced the unanswered payment while this one was out.
     const settle = (error?: unknown) => {
-      if (this.#unansweredPayment === before)
-        this.#unansweredPayment = unansweredAfter(submission, error);
+      if (turn === this.#paymentSends) this.#unansweredPayment = unansweredAfter(submission, error);
     };
     try {
       const result = await resendUnanswered(
@@ -4919,7 +4928,7 @@ export class TillApp extends LitElement {
 
   /**
    * A refusal shows beside the dialog's action, or under the field it names, and the bill is read
-   * again, unless it was a preview refused for a field, which changed nothing on the bill.
+   * again, unless it was a preview refused for a field typed into the dialog.
    * `bill.allocation_changed` reopens the confirmation with the amounts the server now gives, and
    * sends nothing; a payment that got no answer stays on its confirmation, to be taken again under
    * the same submission id. Any other refusal goes back to the form.
@@ -4947,7 +4956,12 @@ export class TillApp extends LitElement {
     } else {
       this.billPaying = { ...now, asked: null, preview: null, refusal, busy: false };
     }
-    if (stage === "preview" && refusal.code === "management.request_invalid") return;
+    if (
+      stage === "preview" &&
+      refusal.code === "management.request_invalid" &&
+      TYPED_FIELDS.has(refusal.field ?? "")
+    )
+      return;
     const balance = await this.#rereadBillPaying(id, now.billId);
     await this.#rereadPayingOrder(now, balance);
   }
@@ -5059,14 +5073,17 @@ export class TillApp extends LitElement {
     open: BillRefunding,
     override?: { personId: string; pin: string },
   ): Promise<void> {
-    const before = this.#unansweredRefund;
-    const submission = refundSubmissionFor(open.billId, open.payment.id, open.asked!, before);
+    const submission = refundSubmissionFor(
+      open.billId,
+      open.payment.id,
+      open.asked!,
+      this.#unansweredRefund,
+    );
+    const turn = ++this.#refundSends;
     const session = this.#operatorSession;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    // A later operator's send may have replaced the unanswered refund while this one was out.
     const settle = (error?: unknown) => {
-      if (this.#unansweredRefund === before)
-        this.#unansweredRefund = unansweredAfter(submission, error);
+      if (turn === this.#refundSends) this.#unansweredRefund = unansweredAfter(submission, error);
     };
     try {
       const result = await resendUnanswered(

@@ -10,6 +10,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -796,6 +797,30 @@ describe("till-app: the bill's balance is read once for each answer", () => {
     expect(inDialog(el, 'wt-input[name="tendered"]')!.error).toBe(t("bill_pay.tendered_short"));
     expect(readCounts()).toEqual(before);
   });
+
+  it("reads the bill again after a preview refused for its lines, which another device may have changed", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn().mockResolvedValue(heldMoney),
+      previewBillPayment: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "lines" }),
+    });
+    await openTable(el);
+    await openDialog(el, "items");
+    await press(el, 'input[name="line"][value="1"]');
+    await type(el, "tendered", "50");
+    const before = readCounts();
+    await press(el, "[data-pay-continue]");
+    await expect.poll(() => readCounts().bills).toBeGreaterThan(before.bills);
+    await flush(el);
+
+    expect(readCounts()).toEqual({
+      balance: before.balance + 1,
+      bills: before.bills + 1,
+      lines: before.lines + 1,
+    });
+  });
 });
 
 describe("till-app: the bill payment dialog's own steps", () => {
@@ -1498,6 +1523,78 @@ describe("till-app: a partly paid order at the counter", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(sent().at(-1)!.submissionId).toBe(unanswered);
+  });
+
+  it("resends the next operator's unanswered payment under its own id when an earlier operator's payment is refused while it is out", async () => {
+    let refuseEarlier: (error: unknown) => void = () => {};
+    let failNext: (error: unknown) => void = () => {};
+    const takeBillPayment = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<BillPaymentResult>((_resolve, reject) => (refuseEarlier = reject)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<BillPaymentResult>((_resolve, reject) => (failNext = reject)),
+      )
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await retrieved({ takeBillPayment });
+    await payTheRest(el);
+    emit(counter(el), "logout");
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    await flush(el);
+    emit(counter(el), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    await payTheRest(el);
+    const [earlier, next] = sent().map((request) => request.submissionId);
+    expect(next).not.toBe(earlier);
+
+    refuseEarlier({ code: "session.expired", status: 401 });
+    await flush(el);
+    failNext(new TypeError("Failed to fetch"));
+    await expect
+      .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
+      .toBe(t("bill_pay.unconfirmed"));
+    takeBillPayment.mockResolvedValueOnce(
+      takenOf(
+        { applied: "70.00", tendered: "70.00" },
+        { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
+      ),
+    );
+    await press(el, "[data-pay-confirm]");
+
+    expect(sent().at(-1)!.submissionId).toBe(next);
+  });
+
+  it("sends the next operator's same payment under the id of one that got no answer after its operator logged out", async () => {
+    let failEarlier: (error: unknown) => void = () => {};
+    const takeBillPayment = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<BillPaymentResult>((_resolve, reject) => (failEarlier = reject)),
+      )
+      .mockResolvedValue(
+        takenOf(
+          { applied: "70.00", tendered: "70.00" },
+          { workingOrderId: "wo-1", received: "100.00", outstanding: "20.00" },
+        ),
+      );
+    const el = await retrieved({ takeBillPayment });
+    await payTheRest(el);
+    emit(counter(el), "logout");
+    await flush(el);
+    failEarlier(new TypeError("Failed to fetch"));
+    // The send waits one retry pause, then sees the session has ended and gives up.
+    await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS));
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p2", displayName: "Luis", canConfigureTill: false });
+    await flush(el);
+    emit(counter(el), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    await payTheRest(el);
+
+    const [earlier, next] = sent().map((request) => request.submissionId);
+    expect(next).toBe(earlier);
   });
 
   it("offers the bill payment once a card at the reader is refused because another till took a payment first", async () => {
@@ -2760,6 +2857,59 @@ describe("till-app: giving back a bill payment", () => {
     await flush(el);
 
     expect(refunds().at(-1)!.request.submissionId).toBe(unanswered);
+  });
+
+  it("resends the next operator's unanswered refund under its own id when an earlier operator's refund is refused while it is out", async () => {
+    let refuseEarlier: (error: unknown) => void = () => {};
+    let failNext: (error: unknown) => void = () => {};
+    const refundBillPayment = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<BillRefundResult>((_resolve, reject) => (refuseEarlier = reject)),
+      )
+      .mockImplementationOnce(
+        () => new Promise<BillRefundResult>((_resolve, reject) => (failNext = reject)),
+      )
+      .mockRejectedValue(new TypeError("Failed to fetch"));
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+    emit(tableOrder(el), "logout");
+    await flush(el);
+    await signInAndAskRefund(el, cashPaid);
+    const [earlier, next] = refunds().map(({ request }) => request.submissionId);
+    expect(next).not.toBe(earlier);
+
+    refuseEarlier({ code: "session.expired", status: 401 });
+    await flush(el);
+    failNext(new TypeError("Failed to fetch"));
+    await expect
+      .poll(() => inRefund(el, "wt-form-actions")?.error, { timeout: 5_000 })
+      .toBe(t("bill_refund.unconfirmed"));
+    refundBillPayment.mockResolvedValueOnce(givenBack(cashPaid, refundOf()));
+    inRefund(el, "[data-refund-continue]")!.click();
+    await flush(el);
+
+    expect(refunds().at(-1)!.request.submissionId).toBe(next);
+  });
+
+  it("sends the next operator's same refund under the id of one that got no answer after its operator logged out", async () => {
+    let failEarlier: (error: unknown) => void = () => {};
+    const refundBillPayment = vi
+      .fn()
+      .mockImplementationOnce(
+        () => new Promise<BillRefundResult>((_resolve, reject) => (failEarlier = reject)),
+      )
+      .mockResolvedValue(givenBack(cashPaid, refundOf()));
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+    emit(tableOrder(el), "logout");
+    await flush(el);
+    failEarlier(new TypeError("Failed to fetch"));
+    // The send waits one retry pause, then sees the session has ended and gives up.
+    await new Promise((resolve) => setTimeout(resolve, SUBMIT_RETRY_PAUSE_MS));
+    await flush(el);
+    await signInAndAskRefund(el, cashPaid);
+
+    const [earlier, next] = refunds().map(({ request }) => request.submissionId);
+    expect(next).toBe(earlier);
   });
 
   it("asks for no approver when the operator's own refund is refused after they logged out", async () => {

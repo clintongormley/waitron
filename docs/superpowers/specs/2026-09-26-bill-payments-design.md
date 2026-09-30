@@ -574,7 +574,10 @@ A pending bill payment is resolved from the provider's row, never from its age:
   applied; or, when the payer asks for the whole payment back, its net applied plus its net tip.
   It needs the existing `sale.refund` permission (`packages/identity/src/permissions.ts:7`),
   approved on the operator's device with the manager PIN override that keeps the waiter signed in
-  (`authorize`). A cash refund opens the drawer through an audited drawer job (`bill_refund`); a
+  (`authorize`). _(2026-09-30, B15: the override is needed only when the operator may not give
+  refunds. The till sends a cash or card-reader refund in the operator's own name first, and opens
+  the PIN prompt only on `authorization.not_permitted`; a card keyed on a separate terminal always
+  takes one PIN, `apps/server/src/bill-refunds.ts`.)_ A cash refund opens the drawer through an audited drawer job (`bill_refund`); a
   card refund goes through §6b's durable path, which asks the provider for the EXACT amount, never
   the whole capture (`refund` returns the whole capture, tip included,
   `packages/payments/src/provider.ts:124-125`). Every provider declares `partialRefund: true` on

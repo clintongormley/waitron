@@ -24,9 +24,11 @@ const REASON_MAX = 500;
 /**
  * Gives back one payment of a bill: the whole of what is left of it, its tip included, or part of
  * it without the tip; a payment for particular items only whole. It asks why. It holds no request
- * of its own: `bill-refund-continue` carries the ask, which the app sends with an approver's PIN.
+ * of its own: `bill-refund-continue` carries the ask, which the app sends in the operator's name,
+ * or with a supervisor's or manager's PIN when they may not give refunds.
  * For a card keyed on a separate terminal the app sets {@link terminal} first, and the dialog asks
- * staff to give it back on that terminal and confirm, sending the same ask confirmed.
+ * staff to give it back on that terminal and confirm, sending the same ask confirmed, which always
+ * takes one PIN.
  */
 @customElement("till-bill-refund-dialog")
 export class TillBillRefundDialog extends LitElement {
