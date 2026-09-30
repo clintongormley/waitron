@@ -37,7 +37,7 @@ export class SetupRestoreScreen extends LitElement {
   ];
 
   @property() errorMessage?: string;
-  /** The field `errorMessage` is about; the message then shows under it, not beside Restore. */
+  /** The field `errorMessage` is about; the message then shows under it, not above Restore. */
   @property() invalidField?: RestoreField;
   /** Set by the shell from `restore.stream_source_live`: when the old server last wrote to its bucket. */
   @property() liveSince?: string;

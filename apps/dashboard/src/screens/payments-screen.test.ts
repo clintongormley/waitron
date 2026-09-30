@@ -463,7 +463,7 @@ describe("reader discovery and status", () => {
     expect(api.adoptReader).not.toHaveBeenCalled();
   });
 
-  it("shows a refused adoption beside the dialog's actions and leaves Add working", async () => {
+  it("shows a refused adoption in the dialog's bottom message and leaves Add working", async () => {
     const { el, api } = await mount(
       stubApi({
         availableReaders: vi.fn().mockResolvedValue(VENDOR_READERS),
@@ -781,7 +781,7 @@ describe("reader dialog request lifetime", () => {
     expect(q(el, "[data-test=reader-discovery]")).toBeNull();
   });
 
-  it("shows an unpair failure beside the confirmation's action, not above it, and permits retry", async () => {
+  it("shows an unpair failure only in the confirmation's bottom message, with no alert of its own, and permits retry", async () => {
     const { el, api } = await mount(
       stubApi({
         unpairReader: vi

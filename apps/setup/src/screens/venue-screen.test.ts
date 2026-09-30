@@ -27,7 +27,7 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupVenueScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** The form's one message beside Next, shown by `wt-form-actions`. */
+/** The form's one message above Next, shown by `wt-form-actions`. */
 async function bottomOf(el: SetupVenueScreen): Promise<string> {
   const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
   await actions.updateComplete;
@@ -368,7 +368,7 @@ describe("setup-venue-screen", () => {
     expect(q(el, "[data-test=fiscalTerritory]")!.textContent).toContain("ES-canary");
   });
 
-  it("renders a routed-back server error beside Next when errorMessage is set (no field marked yet)", async () => {
+  it("renders a routed-back server error above Next when errorMessage is set (no field marked yet)", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       errorMessage: "The country must match the fiscal territory.",
     });
@@ -535,7 +535,7 @@ describe("setup-venue-screen form errors", () => {
     expect(errorOf(el, "legalName")).toBe("");
   });
 
-  it("on a failed press marks each bad field, says so beside Next, focuses the first and disables Next", async () => {
+  it("on a failed press marks each bad field, says so above Next, focuses the first and disables Next", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
     await fillValid(el, { legalName: "", city: "" });
@@ -605,7 +605,7 @@ describe("setup-venue-screen form errors", () => {
     expect(next(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("shows a refusal that names no field beside Next, leaves Next working, and drops it on the next press", async () => {
+  it("shows a refusal that names no field above Next, leaves Next working, and drops it on the next press", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       errorMessage: "The country must match the fiscal territory.",
     });
@@ -621,7 +621,7 @@ describe("setup-venue-screen form errors", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("puts both sentences beside Next when a refusal that names no field meets field errors", async () => {
+  it("puts both sentences above Next when a refusal that names no field meets field errors", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     next(el).click();
     await el.updateComplete;
@@ -820,7 +820,7 @@ it.each([
   ["rectificativeSeriesCode", "server_fields.series_code"],
   ["location.operationDescription", "server_fields.operation_description"],
 ] as const)(
-  "shows a Demo refusal of the hidden %s beside Next, and pressing Next tries again",
+  "shows a Demo refusal of the hidden %s above Next, and pressing Next tries again",
   async (invalidField, message) => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },

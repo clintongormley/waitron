@@ -198,7 +198,7 @@ describe("person-form", () => {
     expect(event.detail.telephone).toBe("+44 20 7946 0958");
   });
 
-  it("explains every missing required field under it, with one message beside a disabled Create", async () => {
+  it("explains every missing required field under it, with one message at the bottom of the form and Create disabled", async () => {
     const { el } = await mountWidget<PersonForm>("dashboard-person-form", { open: true });
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await el.updateComplete;

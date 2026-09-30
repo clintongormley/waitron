@@ -55,8 +55,8 @@ const occurrenceParent = (row: Occurrence) => row.parentKey;
 
 const NO_USAGES: SectionUsages = { menus: [], sections: [] };
 
-/** The message beside a form's primary action: every message not under a field `shown` names, then
- * the generic sentence when one is. */
+/** A form's one message at its bottom: every message not under a field `shown` names, then the
+ * generic sentence when one is. */
 function bottomMessage(errors: Record<string, string>, shown: ReadonlySet<string>): string {
   const marked = Object.entries(errors).some(([key, message]) => message && shown.has(key));
   const others = Object.entries(errors)

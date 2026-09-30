@@ -43,7 +43,7 @@ describe.each(["light", "dark"] as const)("Cloud restore screen at phone width (
     await expectNoA11yViolations(host);
   });
 
-  it("has no axe violations with the field marked and the message beside Restore", async () => {
+  it("has no axe violations with the field marked and the message above Restore", async () => {
     await page.viewport(375, 812);
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
       "setup-cloud-restore-screen",

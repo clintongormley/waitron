@@ -22,7 +22,7 @@ function collect(host: HTMLElement): Emitted[] {
 
 const q = (el: SetupCertScreen, sel: string) => el.shadowRoot!.querySelector<HTMLElement>(sel);
 
-/** The form's one message beside Next, shown by `wt-form-actions`. */
+/** The form's one message above Next, shown by `wt-form-actions`. */
 async function bottomOf(el: SetupCertScreen): Promise<string> {
   const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
   await actions.updateComplete;
@@ -339,7 +339,7 @@ describe("setup-cert-screen form errors", () => {
     expect(q(el, "[data-test=passphrase]")!.getAttribute("error")).toBe("");
   });
 
-  it("on a failed press marks both fields, says so beside Next, focuses the file field and disables Next", async () => {
+  it("on a failed press marks both fields, says so above Next, focuses the file field and disables Next", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     next(el).click();
     await el.updateComplete;

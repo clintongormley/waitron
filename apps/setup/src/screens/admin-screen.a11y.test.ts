@@ -20,7 +20,7 @@ describe.each(["light", "dark"] as const)("setup-admin-screen a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the message beside Next and invalid fields shown", async () => {
+  it("has no violations with the message above Next and invalid fields shown", async () => {
     const { el, host } = await mountWidget<SetupAdminScreen>("setup-admin-screen", {}, theme);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
     await el.updateComplete;

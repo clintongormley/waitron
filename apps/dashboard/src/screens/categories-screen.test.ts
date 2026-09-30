@@ -683,7 +683,7 @@ it.each([
   ["category.image_not_found", "image", "dashboard-image-upload"],
   ["category.color_invalid", "color", "input[type=color]"],
 ])(
-  "explains %s beside the rejected field, and says to correct it beside a Save that still works",
+  "explains %s beside the rejected field, and says to correct it in the bottom message, leaving Save working",
   async (code, field, selector) => {
     const { el, api } = await mount();
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();

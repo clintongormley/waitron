@@ -791,7 +791,7 @@ describe("purchase-form — a server refusal", () => {
     expect(el.shadowRoot!.querySelector("[data-test=lines-error]")).toBeNull();
   });
 
-  it("says a refusal naming no field beside Create, leaves Create working, and drops it on the next submit", async () => {
+  it("says a refusal naming no field in the bottom message, leaves Create working, and drops it on the next submit", async () => {
     const { el } = await mountWidget<PurchaseForm>("dashboard-purchase-form", baseProps());
     await fillValid(el);
     el.fieldErrors = { _form: codeMessage("purchase.duplicate") };

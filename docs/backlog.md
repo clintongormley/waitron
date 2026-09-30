@@ -2192,22 +2192,22 @@ says whether it was seen in a run or only read in the code:
 - *In Demo, a server refusal of a field Demo hides can only be retried unchanged.* The shell routes
   a refused `seriesCode`, `rectificativeSeriesCode` or `operationDescription` back to the venue
   screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
-  The refusal's sentence shows beside Next and pressing Next moves on to the review screen, which
+  The refusal's sentence shows above Next and pressing Next moves on to the review screen, which
   sends the same series codes and description again, so the operator has nothing to change if the
   server refused them. The venue screen's half is pinned by the `shows a Demo refusal of the hidden
-  %s beside Next, and pressing Next tries again` cases in `apps/setup/src/screens/venue-screen.test.ts`;
+  %s above Next, and pressing Next tries again` cases in `apps/setup/src/screens/venue-screen.test.ts`;
   the move to the review screen (`#onAdvance` in `setup-app.ts`) was read, not run. Whether the
   server ever refuses Demo's fixed series codes is not established.
 - *In Demo with a draft country that has no venue-setup pack*, the screen says from the start that
   Demo's invoice settings have not loaded, even when they have (the unknown country names no filing
   module to take a description from), and Next only moves focus to that sentence. When the draft
   carries an operation description but no tax ID, a press puts "Enter the tax ID. Choose one or two
-  invoice languages." beside Next, ahead of the generic sentence — two fields Demo does not show.
+  invoice languages." above Next, ahead of the generic sentence — two fields Demo does not show.
   Seen in a throwaway test on 2026-09-29, since deleted; nothing pins it.
 - *In Demo, a local check that fails only on a field Demo hides* — for example a draft whose series
-  code equals its refund-invoice series code — shows its message beside Next once Next has been
+  code equals its refund-invoice series code — shows its message above Next once Next has been
   pressed, while Next stays enabled (it is disabled only by errors on fields the screen shows).
-  In that example both hidden fields carry the same message, and the message beside Next is built
+  In that example both hidden fields carry the same message, and the message above Next is built
   from every hidden field's error (the `bottom` list in `render`,
   `apps/setup/src/screens/venue-screen.ts`), so "Use different codes for ordinary and correction
   invoices." would appear twice. Every press only runs the focus-the-first-invalid-field step and
@@ -5696,11 +5696,10 @@ ongoing overhaul listed at the top of Track A.
   shares a line with something else, the screen places the message itself: the dashboard's sign-in
   steps show it above the list of other ways to sign in and the buttons (`formMessage`, now exported
   from `@waitron/ui`), and the Add printer dialog's address check lets its button row take the
-  panel's full width while it has a message. A dialog that opened with a message already in its
-  footer threw and never opened on the first version of this change; fixed on the same branch.
-  A dialog with more than one action row in its footer shows every row's message, joined; a dialog
-  opened with a message already present scrolls it into view as it opens; and a row placed in a
-  dialog's body, which keeps its own message, has that message scrolled into view when it appears.
+  panel's full width while it has a message. A dialog with more than one action row in its footer
+  shows every row's message, joined; a dialog opened with a message already present scrolls it into
+  view as it opens; and a row placed in a dialog's body, which keeps its own message, has that
+  message scrolled into view when it appears.
   Two screens drew their own message instead and now pass it to their footer `wt-form-actions`: the
   categories screen's delete dialog (`#dialogMessage`, removed) and its products window, which drew
   a refused add at the top of its body.
@@ -5889,7 +5888,8 @@ ongoing overhaul listed at the top of Track A.
   the tick box drops the refusal, and the no-field sentence;
   `apps/setup/src/screens/restore-bucket-screen.test.ts` checks that replacing the kit drops it,
   whether it showed under the tick box or beside Restore, and that one already dropped by changing
-  the tick box does not reappear beside Restore; none checks the Spanish wording. The server
+  the tick box does not reappear beside Restore; none checks the Spanish wording. _(2026-10-01,
+  C97: that sentence now sits above Restore.)_ The server
   refuses those two only when they are the wrong type
   (`apps/server/src/setup-api.ts`), which the wizard's own request never sends: the wizard types
   them `boolean` and `string | null` (`BucketRestoreRequestDetail`, `apps/setup/src/events.ts`),
@@ -5915,7 +5915,7 @@ ongoing overhaul listed at the top of Track A.
   `apps/dashboard/src/screens/backup-screen.test.ts`. A blank is read as invalid, not "keep the
   current value", because the server's `readRetention` (`apps/server/src/backup-api.ts`) takes no
   absent value. Still open there: a refusal naming `destinationDir` or `schedule` still shows in the
-  page banner rather than under the folder field or beside the button (both seen by running, in the
+  page banner rather than under the folder field or above the button (both seen by running, in the
   Codex run-it review of C63), and so, read and not run, does every other refusal; the backup folder is required but not
   marked, and Turn on backups stays disabled before the first press until the folder is filled and
   the key is saved — the same shape as (7) (both seen by running, in the Codex run-it review); and,
@@ -5966,7 +5966,8 @@ ongoing overhaul listed at the top of Track A.
   account exists, so both pass-throughs are gone. The primary now refuses every credential cause
   (unknown id, suspended, wrong password, wrong or missing code) as `password.invalid`; the box
   relays that one code (401, rebuilt with no params) and the wizard shows one "the login failed"
-  sentence beside Connect, marking no field (`shell.adopt.login_failed`). The same decision answers
+  sentence beside Connect, marking no field (`shell.adopt.login_failed`). _(2026-10-01, C97: that
+  sentence now sits above Connect.)_ The same decision answers
   #924's review question of whether a suspended admin should get its own sentence under the
   person-ID field: it does not. See "Every login failure is one answer" below.
   A CORRECT code
@@ -6044,7 +6045,8 @@ ongoing overhaul listed at the top of Track A.
   (13) **DONE (C65, #861, 2026-09-29):** the categories screen's change-main-category dialog now says its
   message beside Save, through `wt-form-actions`' `error`, instead of above the picker: a refusal
   naming no field shows its own sentence there, and one placed under the picker shows "Correct the
-  highlighted fields to continue." there. Tests: `apps/dashboard/src/screens/categories-screen.test.ts`
+  highlighted fields to continue." there. _(2026-10-01, C97: the dialog now shows that message at
+  the end of its body.)_ Tests: `apps/dashboard/src/screens/categories-screen.test.ts`
   and `apps/dashboard/src/screens/categories-screen.a11y.test.ts`. Still open there, read and not
   run: the same screen's delete dialog draws its message in the dialog's body, below the preview,
   rather than beside Delete (`#dialogMessage` in `apps/dashboard/src/screens/categories-screen.ts`)
@@ -6077,7 +6079,8 @@ ongoing overhaul listed at the top of Track A.
   The real cause reaches the server log only: an `AppError` can carry a `reason` that is not
   enumerable, and the route error boundary logs it as `logReason`
   (`packages/server-kit/src/error-boundary.ts`). The dashboard login and the setup wizard's Connect
-  show one "the login failed" sentence beside the action and mark no field; the till keeps "Wrong
+  show one "the login failed" sentence beside the action and mark no field _(2026-10-01, C97: it
+  now sits on its own line above the buttons)_; the till keeps "Wrong
   PIN, try again", the PIN being the only thing typed. Guards: the one-answer cases in
   `packages/identity/src/manager-login.test.ts`, `login.test.ts` and the route suites
   (`till-api.test.ts`, `till-api.receipt.test.ts`, `mirror-bundle-api.test.ts`,
@@ -6160,7 +6163,8 @@ ongoing overhaul listed at the top of Track A.
   the buttons: a longer later link breaks onto a second line inside the list instead, so a wider
   system font (Linux's, which CI uses) does not push them below. A refusal's message
   sits beside the action, so a message too long to share the row takes the buttons below the list
-  with it; C97, queued next, is to move it to the bottom of the form. Layout only,
+  with it; C97, queued next, is to move it to the bottom of the form. _(2026-10-01, C97: done —
+  the message now sits on its own line above the list of links and the buttons.)_ Layout only,
   `apps/dashboard/src/screens/login-screen.ts`.
 - **A new passkey is listed under the person's email, with their name as its display name — DONE
   (C99, #939, owner 2026-09-30, on Google Password Manager showing a waitron.local passkey with

@@ -168,7 +168,7 @@ describe("purchases-screen", () => {
     expect(api.listPurchaseInvoices).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps the form open and says a create refusal beside Create, not on the page", async () => {
+  it("keeps the form open and says a create refusal in its bottom message, not on the page", async () => {
     const api = stubApi({
       createPurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.duplicate" }),
     });

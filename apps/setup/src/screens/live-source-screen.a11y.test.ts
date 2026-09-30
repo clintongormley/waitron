@@ -24,7 +24,7 @@ describe.each(["light", "dark"] as const)("setup-live-source-screen a11y (%s the
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the fields marked and the message beside Import", async () => {
+  it("has no violations with the fields marked and the message above Import", async () => {
     const { el, host } = await mountWidget<SetupLiveSourceScreen>(
       "setup-live-source-screen",
       {},
@@ -36,7 +36,7 @@ describe.each(["light", "dark"] as const)("setup-live-source-screen a11y (%s the
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a refused import shown beside Import", async () => {
+  it("has no violations with a refused import shown above Import", async () => {
     const { el, host } = await mountWidget<SetupLiveSourceScreen>(
       "setup-live-source-screen",
       { errorMessage: "The configuration export could not be opened." },

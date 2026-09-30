@@ -712,7 +712,7 @@ describe("catalogue-screen", () => {
     expect(await bottomOf(form)).toBe(t("form.fix_fields"));
   });
 
-  it("still says a nested unit or category refusal that names no field of the form, beside its Save", async () => {
+  it("still says a nested unit or category refusal that names no field of the form, in its bottom message", async () => {
     const api = stubApi({
       createUnit: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
       createCategory: vi

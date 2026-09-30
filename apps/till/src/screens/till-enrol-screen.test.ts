@@ -31,7 +31,7 @@ function query(el: TillEnrolScreen, selector: string): HTMLElement | null {
   return el.shadowRoot!.querySelector<HTMLElement>(selector);
 }
 
-/** The form's one message beside Ask to join. */
+/** The form's one message above Ask to join. */
 function bottomMessage(el: TillEnrolScreen): string {
   return (query(el, "wt-form-actions") as HTMLElement & { error: string }).error;
 }

@@ -229,7 +229,7 @@ describe("recipe-screen", () => {
     expect(api.createIngredient).not.toHaveBeenCalled();
   });
 
-  it("keeps the form open and says a create refusal beside Create, not on the page", async () => {
+  it("keeps the form open and says a create refusal in its bottom message, not on the page", async () => {
     const api = stubApi({
       createIngredient: vi.fn().mockRejectedValue({ code: "allergen.invalid_code" }),
     });

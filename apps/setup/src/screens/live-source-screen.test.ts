@@ -32,7 +32,7 @@ function fieldErrors(el: SetupLiveSourceScreen): string[] {
   return [...exportErrors, ...(passphrase === "" ? [] : [passphrase])];
 }
 
-/** The message element `wt-form-actions` shows beside Import, or null when there is none. */
+/** The message element `wt-form-actions` shows above Import, or null when there is none. */
 async function bottomElement(el: SetupLiveSourceScreen): Promise<HTMLElement | null> {
   const actions = q(el, "wt-form-actions") as HTMLElement & { updateComplete: Promise<unknown> };
   await actions.updateComplete;
@@ -131,7 +131,7 @@ describe("SetupLiveSourceScreen", () => {
     expect(alert?.textContent).toBe("The export could not be decrypted.");
   });
 
-  describe("messages beside Import (owner's forms rule, 2026-09-28)", () => {
+  describe("messages above Import (design-system.md, Forms)", () => {
     it("says nothing and leaves Import working before the first press", async () => {
       const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
       expect(await bottomOf(el)).toBe("");
@@ -140,7 +140,7 @@ describe("SetupLiveSourceScreen", () => {
       expect(q(el, "[data-test=import]")!.hasAttribute("disabled")).toBe(false);
     });
 
-    it("marks both fields once each, says one sentence beside Import, focuses the export, and holds Import", async () => {
+    it("marks both fields once each, says one sentence above Import, focuses the export, and holds Import", async () => {
       const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
       q(el, "[data-test=import]")!.click();
       await el.updateComplete;

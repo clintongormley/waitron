@@ -3183,7 +3183,7 @@ export class PrintersScreen extends LitElement {
   }
 
   override render(): TemplateResult {
-    // Each of these dialogs shows the refusal beside its own action, and the failed read itself.
+    // Each of these dialogs shows the refusal and the failed read itself.
     const dialogOpen =
       this.addingAgent || this.addingPrinter || this.editingAgent || this.editingPrinter;
     return html`${

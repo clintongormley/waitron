@@ -220,7 +220,7 @@ export class SetupVenueScreen extends LitElement {
     return filing === undefined ? "" : (this.defaults[filing]?.operationDescription ?? "");
   }
 
-  /** A server-side venue error that names no field, routed back by the shell and shown beside
+  /** A server-side venue error that names no field, routed back by the shell and shown above
    * Next until the operator presses it again. */
   @property() errorMessage?: string;
 

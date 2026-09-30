@@ -728,7 +728,7 @@ it("refuses a variant's malformed price beside that variant's field", async () =
   expect(await bottomOf(el)).toBe(t("form.fix_fields"));
 });
 
-it("shows a refusal naming the menu price beside it, with the generic sentence beside a working Save", async () => {
+it("shows a refusal naming the menu price beside it, with the generic sentence in the bottom message and Save working", async () => {
   const el = await mount({ editing: "mi-lemonade" });
   el.refusal = { field: "grossPrice", message: "Refused here" };
   await el.updateComplete;

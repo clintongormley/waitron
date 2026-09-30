@@ -1084,7 +1084,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expectReadAgain(reads);
   });
 
-  it("shows a Cancel refused because issuing the invoice finds a sold-out dish beside the Cancel, and reads the bill again", async () => {
+  it("shows a Cancel refused because issuing the invoice finds a sold-out dish above the Cancel, and reads the bill again", async () => {
     const { el, order, reads } = await openHolding({
       ...adjustmentStubs(),
       applyAdjustment: vi
@@ -2641,7 +2641,7 @@ describe("till-app: giving back a bill payment", () => {
     expect(refundDialog(el)!.busy).toBe(false);
   });
 
-  it("shows a refund the server refused beside the refund's action, and reads the bill and its lines again", async () => {
+  it("shows a refund the server refused above the refund's action, and reads the bill and its lines again", async () => {
     const getBillBalance = vi.fn().mockResolvedValue(holding(cashPaid));
     const getTabLines = vi
       .fn()
@@ -2736,7 +2736,7 @@ describe("till-app: giving back a bill payment", () => {
     expect(refunds().at(-1)!.request.override).toEqual({ personId: "m-1", pin: "1234" });
   });
 
-  it("says who can approve could not be read, beside the refund's action", async () => {
+  it("says who can approve could not be read, above the refund's action", async () => {
     const el = await askRefund(
       {
         refundBillPayment: needsApproval(vi.fn()),

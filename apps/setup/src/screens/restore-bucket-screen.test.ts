@@ -25,7 +25,7 @@ function requested(host: HTMLElement): Promise<BucketRestoreRequestDetail> {
     ),
   );
 }
-/** The one message `wt-form-actions` shows beside Restore; "" when there is none. */
+/** The one message `wt-form-actions` shows above Restore; "" when there is none. */
 async function bottomOf(el: SetupRestoreBucketScreen): Promise<string> {
   const actions = q<HTMLElement & { updateComplete: Promise<unknown> }>(el, "wt-form-actions")!;
   await actions.updateComplete;
@@ -317,7 +317,7 @@ describe("SetupRestoreBucketScreen", () => {
     ]);
   });
 
-  it("shows the server's refusal beside Restore and leaves Restore working", async () => {
+  it("shows the server's refusal above Restore and leaves Restore working", async () => {
     const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
       errorMessage: "The bucket in this kit holds no copy of this restaurant.",
     });
@@ -459,7 +459,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
 
     it.each(TICK_BOXES)(
-      "shows the %s refusal beside Restore while its tick box is not on screen, and drops it when another kit is pasted",
+      "shows the %s refusal above Restore while its tick box is not on screen, and drops it when another kit is pasted",
       async (field, _question, box, message) => {
         const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
           request: REQUEST,
@@ -476,7 +476,7 @@ describe("SetupRestoreBucketScreen", () => {
     );
   });
 
-  describe("messages beside Restore (owner's forms rule, 2026-09-28)", () => {
+  describe("messages above Restore (design-system.md, Forms)", () => {
     it("says nothing and leaves Restore working before the first press", async () => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {
         venue: VENUE,

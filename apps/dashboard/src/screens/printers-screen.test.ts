@@ -4934,7 +4934,7 @@ describe("printers-screen pairing renewal and stale scan edges", () => {
   });
 });
 
-describe("printers-screen forms say what is wrong beside the field and the action", () => {
+describe("printers-screen forms say what is wrong beside the field and in the bottom message", () => {
   async function mounted(overrides: Partial<DashboardApi> = {}) {
     const api = stubApi(overrides);
     const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
@@ -5366,7 +5366,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(q(el, sel("show-all-bluetooth"))).toBeNull();
   });
 
-  it("asks for the PIN, checks it beside the field and the action, then pairs through the named agent", async () => {
+  it("asks for the PIN, checks it beside the field and in the bottom message, then pairs through the named agent", async () => {
     const { el, api } = await mountPairing([barPrinter]);
     await openDiscovery(el);
     await openPair(el);

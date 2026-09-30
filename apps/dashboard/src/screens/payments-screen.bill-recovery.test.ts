@@ -446,7 +446,7 @@ describe("bill payment recovery on the Payments screen", () => {
     expect(attestDisabled(el)).toBe(false);
   });
 
-  it("shows a refusal that names no field beside Record and leaves Record working", async () => {
+  it("shows a refusal that names no field in the dialog's bottom message and leaves Record working", async () => {
     const attest = vi.fn().mockRejectedValue({ code: "bill.attestation_contradicted" });
     const el = await mount(stubApi({ attestStuckBillPayment: attest }));
     q(el, "[data-test=attest-bill-payment-bp-1]")!.click();

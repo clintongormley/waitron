@@ -26,7 +26,7 @@ describe.each(["light", "dark"] as const)(
       await expectNoA11yViolations(host);
     });
 
-    it("has no violations with the fields marked and the message beside Restore", async () => {
+    it("has no violations with the fields marked and the message above Restore", async () => {
       const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
         "setup-restore-bucket-screen",
         {

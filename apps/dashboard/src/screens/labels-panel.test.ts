@@ -130,7 +130,7 @@ it("creates a label from the Add label form, then refreshes the list", async () 
   await vi.waitFor(() => expect(api.listLabels.mock.calls.length).toBe(loads + 1));
 });
 
-it("explains a blank name beside the field and beside a disabled Save, and sends nothing", async () => {
+it("explains a blank name beside the field and in the bottom message, disables Save, and sends nothing", async () => {
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-label"]')!.click();
   await el.updateComplete;
@@ -182,7 +182,7 @@ it("drops a refusal beside the name when the form is submitted again", async () 
   creating.resolve({ id: "l-new", name: "Alcoholic" });
 });
 
-it("says why a rename of a label that no longer exists was refused, beside a Save that still works", async () => {
+it("says why a rename of a label that no longer exists was refused, in the bottom message, leaving Save working", async () => {
   const { el, api } = await mount();
   api.renameLabel.mockRejectedValueOnce({ code: "label.not_found" });
   await rowAction(el, "l-alc", "rename-label");

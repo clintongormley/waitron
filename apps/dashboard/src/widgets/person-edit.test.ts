@@ -389,7 +389,7 @@ describe("person-edit validation and keyboard submit", () => {
     expect(saveOf(el).hasAttribute("disabled")).toBe(false);
   });
 
-  it("on an invalid submission shows one message beside a disabled Save and focuses the first invalid field", async () => {
+  it("on an invalid submission shows one message at the bottom of the form, disables Save and focuses the first invalid field", async () => {
     const { el } = await mountWidget<PersonEdit>("dashboard-person-edit", { person, open: true });
     change(el, "edit-last-names", "");
     change(el, "edit-email", "ada@");

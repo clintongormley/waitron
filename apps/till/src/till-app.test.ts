@@ -4394,7 +4394,7 @@ describe("till-app", () => {
         expect(getTabLines).toHaveBeenCalledTimes(1);
       });
 
-      it("a refused cancel shows the refusal beside the cancel dialog's action", async () => {
+      it("a refused cancel shows the refusal above the cancel dialog's action", async () => {
         const { el } = await mountApp({
           getTablesState: vi.fn().mockResolvedValue([openTable]),
           listZones: vi.fn().mockResolvedValue([floorZone]),
