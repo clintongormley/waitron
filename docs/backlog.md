@@ -4037,17 +4037,31 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         breakdown from the typed lines again failed that core case and the new suite's two cases
         about a derived tax and a summed base. `write-path.e2e.test.ts`, `inmutabilidad`,
         `correction-path.e2e.test.ts` and the rest of `record-correction.test.ts` passed unedited.
-        **Still open: an ordinary sale and a substitution have the same shape.** `recordSale`
+        **Checked (A148, 2026-09-30): no product path hands an ordinary sale or a substitution a
+        third decimal place, so nothing was changed.** `recordSale`
         (`packages/core/src/record-sale.ts`) and `recordSubstitution`
-        (`packages/core/src/record-substitution.ts`) store the total rounded to the cent,
-        `total: stringToCents(input.total)`, but hand the backend the total as typed,
-        `total: decimal(input.total)`, and build the breakdown from the lines as typed (`recordSale`
-        only when the caller supplies none). Whether their product callers can pass a third decimal
-        place was not checked: a grep finds six calls of `recordSale` in `apps/server/src` (three in
-        `till-sale.ts`, one each in `bill-payments.ts`, `working-order.ts` and
-        `fiscal-readiness-runner.ts`) and no call of `recordSubstitution` outside test files.
-        **Next action:** trace how each of those callers builds its amounts, and if any can carry a
-        third decimal place, apply the same rounding.
+        (`packages/core/src/record-substitution.ts`) still store the total rounded to the cent and
+        hand the backend the total as given. A grep for `recordSubstitution` outside test files
+        finds no caller beyond the fiscal backends and core's own export. A grep for `recordSale(`
+        outside test files finds five product calls in `apps/server/src` (three in `till-sale.ts`,
+        one each in `bill-payments.ts` and `working-order.ts`), each passing the `total`, `lines`
+        and `vatBreakdown` that `issueMoment` gets from `rateLines`
+        (`packages/catalogue/src/pricing.ts`), plus `fiscal-readiness-runner.ts`, which passes
+        two-place literals. Every gross line `rateLines` is given in `apps/server/src` comes from
+        `grossBasketWithOptions` or `grossLockedLines`, both built by `grossRows`, which rounds
+        each line's gross to the cent; each base is divided out at two places and each
+        tax is gross less base. Two probes, not committed: (1) every weighed quantity from 0.001 to
+        3.000 kg at seven prices and three VAT classes, priced alone, beside a second weighed line,
+        and with a three-times option: 189,000 baskets, none with an amount past two places, an
+        amount that changed on a round trip through cents, or a breakdown not summing to the
+        total. The control, a hand-built gross line of 8.2917 fed to `rateLines`, was reported.
+        (2) A 0.333 kg sale at 24.90/kg (8.2917 before rounding) plus one 1.50 item through
+        `POST /api/sales` with the Veri\*Factu backend, in the harness of
+        `apps/server/src/till-api.fiscal-sale-paths.test.ts`: the backend was handed a total of
+        9.79 with bases 7.54 and 1.24, the row stored 979 cents with line totals of 754 and 124,
+        and the record filed `importe_total` 9.79 and `cuota_total` 1.01. The shape would matter
+        only for a new caller that builds its amounts some other way, and nothing guards against
+        one. The demo scripts under `apps/server/scripts` were not checked.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.
