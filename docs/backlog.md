@@ -5312,7 +5312,7 @@ ongoing overhaul listed at the top of Track A.
   as `totp.invalid`, and this box's fetch turned any refused answer into
   `mirror.bundle_fetch_failed`, which names no field (`apps/server/src/mirror-bundle-fetch.ts`), so
   it showed beside Connect with the code field empty and unmarked (owner 2026-09-30: pass
-  `totp.invalid` through so it sits under the code field; queued as lane C's C92). **DONE (C92,
+  `totp.invalid` through so it sits under the code field; queued as lane C's C92). **DONE (C92, #924,
   2026-09-30):** the box's fetch passes two of the primary's refusals through under their own
   codes, rebuilt on the box so nothing else the primary sent travels on: `totp.invalid` (the box
   answers it 401) and `person.not_found` (404, naming the person id the box sent) — the only two of
@@ -5330,6 +5330,8 @@ ongoing overhaul listed at the top of Track A.
   `apps/server/src/mirror-bundle-fetch.test.ts`, "answers the primary's refusal %s from adopt…" in
   `apps/server/src/setup-api.test.ts`, and "shows the primary's refusal of the one-time code under
   that field…" and "shows the primary's person.not_found…" in `apps/setup/src/setup-app.test.ts`).
+  Open, a question to the owner from #924's review: whether a suspended admin should get its own
+  sentence under the person-ID field; today it shows the general message beside Connect.
   A CORRECT code
   was refused the same way until C91: the primary's mirror-bundle route called `loginManagerById`
   without the key ring that decrypts a stored authenticator secret, so an admin with an
