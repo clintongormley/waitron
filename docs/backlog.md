@@ -2202,7 +2202,7 @@ the registry test now looks packs up by `countryCode` and checks that no install
 `apps/server/src/setup-api.country-pack.test.ts`, `apps/setup/src/screens/venue-screen.test.ts`)
 no longer set one.
 
-**A refused dropdown now gets the red outline — DONE (lane A's A151, 2026-09-30).** The shared
+**A refused dropdown now gets the red outline — DONE (lane A's A151, #944, 2026-09-30).** The shared
 dropdown style (`selectStyles`, `packages/ui/src/base-styles.ts`) draws a `select` marked
 `aria-invalid="true"` with the `--wt-color-danger` border, and the two restore screens
 (`apps/setup/src/screens/restore-screen.ts`, `restore-bucket-screen.ts`) now use that style; the
@@ -2211,8 +2211,11 @@ province one is the case tested). Two dashboard screens also use that style, mar
 `aria-invalid` and have no invalid-dropdown rule of their own, so they gain the outline too: the
 product editor (`apps/dashboard/src/widgets/product-editor.ts`, its routing, VAT and unit
 dropdowns) and the venue operations screen
-(`packages/venue-service/src/dashboard/venue-operations-screen.ts`). Neither was opened and looked
-at, and no test of theirs asserts the outline. On both restore screens (backup restore and bucket
+(`packages/venue-service/src/dashboard/venue-operations-screen.ts`). Looked at after the review
+(#944's comment): the product editor's kitchen station and course dropdowns refused, and the venue
+operations screen's "Identical dishes on a kitchen ticket" dropdown after a refused save, in light
+and dark at 1280 and 390 wide — the outline shows and nothing else moved. The product editor's VAT
+and unit dropdowns were not looked at, and no test of either screen asserts the outline. On both restore screens (backup restore and bucket
 restore) the environment dropdown now spans the column and takes the shared padding and border,
 where before it kept the browser's own size. Seen in both themes, English and Spanish, at 1280 and
 390 wide. Cases: the invalid-select case in `packages/ui/src/base-styles.test.ts`, and the
