@@ -3905,15 +3905,51 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         captured card payment with no sale still takes the recovery branch first, settling at the
         captured amount with all of it recorded as tip; the below-zero case with a capture was not
         run. The branch for an order with no sale yet was not run with a zero total.
-        **Still open: a correction's third decimal place (queued as A144).** `recordCorrection` stores the
-        correction's total rounded to the cent on the `sales` row but hands the unrounded input to
-        the fiscal backend (`total: decimal(input.total)`,
-        `packages/core/src/record-correction.ts:263`), so a -14.414 correction stores -14.41 on the
-        row and passes -14.414 to the backend. `git blame` puts that line in commit 58e50479e
-        (2026-08-02), before C66. What the Veri\*Factu backend does with a third decimal place was
-        not run. **Next action:** run a sub-cent correction through the Veri\*Factu backend and
-        see what it records, then either round before the hand-off or refuse a third decimal place
-        at the input.
+        **DONE (A144, 2026-09-30): a correction is filed at the cent amounts its rows store.**
+        Measured first, with a new suite that drives core's `recordCorrection` through the real
+        Veri\*Factu backend (`packages/fiscal-verifactu/src/correction-amount.huella.test.ts`). On
+        the code before the change, the TOTAL was not the problem there: a -1.005 correction was
+        stored as -101 cents and filed as "-1.01", because the Veri\*Factu library rounds every
+        amount it files to two places, half away from zero, by itself (`formatAmountExact`,
+        `@waitron/verifactu` 0.1.0). Core's fake backend did store the "-1.005" it was handed. The
+        real gap was the VAT breakdown, built from the lines as typed: a -0.045 line at 10% was
+        stored as -5 cents, but `sales.vat_breakdown` held base "-0.045" and tax "0.00", and the
+        record was filed with base "-0.05", tax "0.00" and a hashed `cuota_total` of "0.00", where
+        10% of the stored -0.05 is -0.005, which rounds to -0.01. Two -0.005 lines at 21% were
+        stored as -1 cent each but filed with a base of "-0.01", the typed sum -0.010 rounded,
+        where the rows hold -0.02 (the base is not hashed). The choice was to round rather than
+        refuse: C66's case "records a correction whose total rounds to exactly what is left on the
+        invoice" requires a -14.414 correction to record as -14.41, and an ordinary sale's row
+        stores its total rounded to the cent too. Now `recordCorrection` works out the total's
+        cents once and uses that one amount for the "more than is left" check, the row and the
+        backend, and builds the breakdown from each line's stored cent amount. So the -0.045 line
+        is filed as base -0.05, tax -0.01 and `cuota_total` -0.01 (its huella changes with it), and
+        the two -0.005 lines as base -0.02. A two-decimal correction (-1.00, one -0.83 line at 21%)
+        files the same huella as before; that literal was captured on the old code. A whole-cent
+        amount not written with exactly two decimal places (such as "-10" or "-1.000") keeps its
+        value but changes its text: as a line total it now reaches `sales.vat_breakdown` and the
+        backend's breakdown as a two-place base ("-10.00"), and as a total it reaches the backend
+        as "-10.00", because `centsToDecimal` always renders two places, where `decimal()` and
+        `addDecimal` kept the typed scale. Its rate and tax are unchanged, and so is the filed
+        record, because `@waitron/verifactu` formats every amount it files to two places. Tests:
+        the four cases in the new suite, and "hands the backend the cent amounts the rows store,
+        not the amounts as typed" in `packages/core/src/record-correction.test.ts`. Deletion
+        probes: handing the backend the typed total again failed only that core case (the
+        Veri\*Factu suite stayed green, since the library rounds the total itself); building the
+        breakdown from the typed lines again failed that core case and the new suite's two cases
+        about a derived tax and a summed base. `write-path.e2e.test.ts`, `inmutabilidad`,
+        `correction-path.e2e.test.ts` and the rest of `record-correction.test.ts` passed unedited.
+        **Still open: an ordinary sale and a substitution have the same shape.** `recordSale`
+        (`packages/core/src/record-sale.ts`) and `recordSubstitution`
+        (`packages/core/src/record-substitution.ts`) store the total rounded to the cent,
+        `total: stringToCents(input.total)`, but hand the backend the total as typed,
+        `total: decimal(input.total)`, and build the breakdown from the lines as typed (`recordSale`
+        only when the caller supplies none). Whether their product callers can pass a third decimal
+        place was not checked: a grep finds six calls of `recordSale` in `apps/server/src` (three in
+        `till-sale.ts`, one each in `bill-payments.ts`, `working-order.ts` and
+        `fiscal-readiness-runner.ts`) and no call of `recordSubstitution` outside test files.
+        **Next action:** trace how each of those callers builds its amounts, and if any can carry a
+        third decimal place, apply the same rounding.
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.

@@ -315,6 +315,20 @@ describe("recordCorrection — the sale being corrected", () => {
 });
 
 describe("recordCorrection — the corrective sale", () => {
+  /** Keeps the VAT breakdown each correction hands the backend. */
+  class FilesBreakdownsBackend extends FakeFiscalBackend {
+    readonly filed: SaleForFiscalRecord["vatBreakdown"][] = [];
+
+    override recordCorrection(
+      tx: Transaction,
+      sale: SaleForFiscalRecord,
+      correction: { correctsSaleId: SaleId },
+    ) {
+      this.filed.push(sale.vatBreakdown);
+      return super.recordCorrection(tx, sale, correction);
+    }
+  }
+
   it("records a negative-total corrective sale linked to the original, in state recorded", async () => {
     const backend = new FakeFiscalBackend(suite.db);
     const { saleId: originalId } = await sell(backend);
@@ -380,6 +394,25 @@ describe("recordCorrection — the corrective sale", () => {
     const correction = records[1];
     expect(correction?.saleId).toBe(correctiveId);
     expect(correction?.total).toBe("-14.41");
+  });
+
+  it("hands the backend the cent amounts the rows store, not the amounts as typed", async () => {
+    const backend = new FilesBreakdownsBackend(suite.db);
+    const { saleId: originalId } = await sell(backend);
+
+    // -1.005 is stored as -1.01 and the -0.045 line as -0.05, whose 10% is -0.005, rounded -0.01.
+    const { saleId: correctiveId } = await correct(
+      backend,
+      originalId,
+      credit("0.045", "-1.005", "10.00"),
+    );
+
+    expect((await backend.recordsFor(nodeId))[1]?.total).toBe("-1.01");
+    const breakdown = [{ rate: "10.00", base: "-0.05", tax: "-0.01" }];
+    expect(backend.filed[0]).toEqual(breakdown);
+    const [row] = await suite.db.select().from(sales).where(eq(sales.id, correctiveId));
+    expect(row?.total).toBe(-101);
+    expect(row?.vatBreakdown).toEqual(breakdown);
   });
 });
 
