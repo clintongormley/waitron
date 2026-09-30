@@ -1504,7 +1504,7 @@ What Task 11 left open:
   case in `apps/dashboard/src/widgets/category-form.test.ts` pins this, so a decision to change it
   changes that case. **Next action:** try (1) in Safari or Playwright's WebKit, and (2) by hand in
   Chromium.
-- **DONE (lane A's A150): `wt-tabs` sends its own `wt-tab-change`, and the seven screens'
+- **DONE (2026-09-30, lane A's A150, #937): `wt-tabs` sends its own `wt-tab-change`, and the seven screens'
   `event.target !== event.currentTarget` checks are gone.**
 - **Two things on the Venue operations screen that #546's review raised and left for the owner**
   (`packages/venue-service/src/dashboard/venue-operations-screen.ts`; found 2026-09-24, not fixed
