@@ -68,7 +68,7 @@ export function isRootScopePath(path) {
 
 /**
  * Files outside `deploy/` that image-smoke runs, so a change to one is run against the box image
- * nowhere else. The print agent's Bluetooth sender is one: nothing but the image runs it for real.
+ * nowhere else. The print agent's Bluetooth sender is one: only the image gives it a real socket.
  * It must hold every `scripts/` file `.github/workflows/image-smoke.yml` runs. Guard: the
  * image-smoke case in scripts/changed-scope.test.mjs, weaker than its name — it reads the workflow
  * as text and sees only literal `scripts/…` paths. The workflow file itself is not an image input,

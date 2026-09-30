@@ -374,9 +374,10 @@ area** — these lines tell you what the rule is, not why it exists or how it br
   Cost: on the owner's box (2026-09-29) Docker's default profile refused
   the agent's first bus message and it silently listed no Bluetooth printers. Guards, weaker than
   their names: image-smoke runs only the agent's paired listing and the commands its Bluetooth steps
-  name, pairing through its own driver rather than the agent's Pair code, and not on a pull request
-  that changed no image input; `scripts/deploy-image-env.test.ts`
-  reads the profile as TEXT for globbed bus rules, not for a grown literal list. See
+  name, pairing through its own driver rather than the agent's Pair code, plus the Bluetooth sender
+  invoked directly and only as far as creating its socket (the runner has no Bluetooth), and not on
+  a pull request that changed no image input (`apps/print-agent/src/rfcomm-send.py` is one);
+  `scripts/deploy-image-env.test.ts` reads the profile as TEXT for globbed bus rules, not for a grown literal list. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
   code; its log tail shows the failed start's own lines — the error, its cause chain (up to five

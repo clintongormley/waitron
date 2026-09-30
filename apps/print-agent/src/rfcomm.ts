@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { type PrinterTarget, type Transport, isBluetoothAddress } from "@waitron/print-agent";
 
-/** The channel measured on the owner's printer; see A140's entry in `docs/backlog.md`. */
+/** The channel the owner's printer printed on; the receipt is in A140's entry in `docs/backlog.md`. */
 export const RFCOMM_CHANNEL = 1;
 export const RFCOMM_TIMEOUT_MS = 20_000;
 /** How long past twice its own timeout the helper may run before it is killed: the timeout bounds

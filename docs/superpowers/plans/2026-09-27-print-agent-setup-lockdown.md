@@ -4,8 +4,8 @@
 
 > **2026-09-30:** Bluetooth printing, which this plan leaves unbuilt, was built later by A140
 > (`docs/backlog.md`, A140's entry): the agent sends a job over RFCOMM to the printer's own
-> address, `liveBtDevicePath` no longer throws, and the dashboard no longer says Bluetooth
-> printing is not available yet.
+> address, `liveBtDevicePath` names the printer's address instead of always throwing, and the
+> dashboard no longer says Bluetooth printing is not available yet.
 
 **Goal:** Close a joined print agent's unauthenticated LAN setup page, let an out-of-touch agent deliberately restart joining after five minutes, remember venue servers across restarts, and move safe Bluetooth pairing and forgetting behind the dashboard's manager permission.
 

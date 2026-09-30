@@ -6,8 +6,8 @@ the owner's review.
 
 > **2026-09-30:** Bluetooth printing, which this design leaves unbuilt, was built later by A140
 > (`docs/backlog.md`, A140's entry): the agent sends a job over RFCOMM to the printer's own
-> address, `liveBtDevicePath` no longer throws, and the dashboard no longer says Bluetooth
-> printing is not available yet.
+> address, `liveBtDevicePath` names the printer's address instead of always throwing, and the
+> dashboard no longer says Bluetooth printing is not available yet.
 
 ## The problem
 
