@@ -1060,7 +1060,7 @@ export const es: Record<StringKey, string> = {
   "adjust.amount_invalid": "Introduce un importe, por ejemplo 2,50",
   "adjust.amount_too_large": "Introduce como máximo {total}",
   "adjust.no_reasons":
-    "Todavía no hay ningún motivo que lo permita. Un responsable puede añadir uno en el panel, en Motivos de ajuste.",
+    "Todavía no hay ningún motivo que lo permita. Un encargado puede añadir uno en el panel, en Motivos de ajuste.",
   "adjust.takes_off": "Quita {amount} de la cuenta",
   "adjust.nearest": "Los precios permiten quitar {amount}, no los {asked} pedidos.",
   "adjust.quantity_shown": "Cuántos: 1 de {n}",

@@ -197,7 +197,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "adjustment.over_limit": {
     en: "That goes over what this reason allows on this bill. Choose another reason or ask a manager",
-    es: "Supera lo que permite este motivo en esta cuenta. Elige otro motivo o pregunta a un responsable",
+    es: "Supera lo que permite este motivo en esta cuenta. Elige otro motivo o pregunta a un encargado",
   },
   "adjustment.note_required": {
     en: "This reason needs a note. Add one and try again",
