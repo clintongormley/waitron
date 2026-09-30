@@ -138,7 +138,7 @@ interface LineGroup {
  * lines still reconcile with the filed total. A child with no dish before it becomes its own group
  * rather than being dropped, so no filed line vanishes from a legal receipt.
  */
-function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
+export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   const groups: LineGroup[] = [];
   for (const line of lines) {
     const current = groups[groups.length - 1];
