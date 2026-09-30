@@ -651,11 +651,7 @@ export class ModifiersScreen extends LitElement {
                 { key: "extras", label: t("extras.title") },
                 { key: "options", label: t("options.title") },
               ]}
-              @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                // A panel's content is slotted INTO this element, so any composed `wt-change` a
-                // control inside a tab dispatches passes this listener with the same name. Only the
-                // tab strip's own event — the one whose target is this element — is a tab choice.
-                if (event.target !== event.currentTarget) return;
+              @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
                 this.tab = event.detail.value === "options" ? "options" : "extras";
                 this.#url.write({ dashboard: "modifiers", view: this.tab });
               }}

@@ -236,8 +236,7 @@ export class AlertsScreen extends LitElement {
           { key: "open", label: t("alerts.tab_open") },
           { key: "handled", label: t("alerts.tab_handled") },
         ]}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          if (event.target !== event.currentTarget) return;
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           this.view = event.detail.value as View;
           this.#url.write({ dashboard: "alerts", view: this.view });
         }}

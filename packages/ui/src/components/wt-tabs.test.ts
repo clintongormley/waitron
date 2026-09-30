@@ -49,7 +49,7 @@ test("selects one associated panel and removes hidden content from layout", asyn
 test("emits one composed selection event only for a different tab", async () => {
   const el = await setup(true);
   const listener = vi.fn();
-  document.addEventListener("wt-change", listener);
+  document.addEventListener("wt-tab-change", listener);
   try {
     buttons(el)[1]!.click();
     await el.updateComplete;
@@ -57,7 +57,44 @@ test("emits one composed selection event only for a different tab", async () => 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0]![0].detail).toEqual({ value: "menus" });
   } finally {
-    document.removeEventListener("wt-change", listener);
+    document.removeEventListener("wt-tab-change", listener);
+  }
+});
+
+test("a control inside a panel announces its change under a name the strip does not use", async () => {
+  const el = await setup(true);
+  const dispatch = vi.spyOn(el, "dispatchEvent");
+  buttons(el)[1]!.click();
+  await el.updateComplete;
+  const stripEvent = dispatch.mock.calls[0]![0].type;
+  dispatch.mockRestore();
+  const listener = vi.fn();
+  el.addEventListener(stripEvent, listener);
+  el.querySelector("input")!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "routes" }, bubbles: true, composed: true }),
+  );
+  expect(listener).not.toHaveBeenCalled();
+});
+
+test("choosing a tab emits wt-tab-change, bubbling and composed, and stops the click", async () => {
+  const el = await setup(true);
+  const listener = vi.fn();
+  const clicks = vi.fn();
+  document.addEventListener("wt-tab-change", listener);
+  document.addEventListener("click", clicks);
+  try {
+    buttons(el)[2]!.click();
+    await el.updateComplete;
+    expect(clicks).not.toHaveBeenCalled();
+    buttons(el)[2]!.click();
+    expect(listener).toHaveBeenCalledTimes(1);
+    const event = listener.mock.calls[0]![0] as CustomEvent;
+    expect(event.detail).toEqual({ value: "routes" });
+    expect(event.bubbles).toBe(true);
+    expect(event.composed).toBe(true);
+  } finally {
+    document.removeEventListener("wt-tab-change", listener);
+    document.removeEventListener("click", clicks);
   }
 });
 
@@ -82,6 +119,79 @@ test("arrow keys wrap, Home/End select extremes, and unrelated keys remain untou
   const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
   buttons(el)[1]!.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(false);
+});
+
+test("each keyboard selection emits one wt-tab-change naming the newly selected tab", async () => {
+  const el = await setup();
+  const listener = vi.fn();
+  el.addEventListener("wt-tab-change", listener);
+  try {
+    el.focus();
+    for (const [key, expected] of [
+      ["ArrowLeft", 2],
+      ["ArrowRight", 0],
+      ["End", 2],
+      ["Home", 0],
+      ["ArrowRight", 1],
+    ] as const) {
+      listener.mockClear();
+      (el.shadowRoot!.activeElement as HTMLElement).dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+      await el.updateComplete;
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0]![0].detail).toEqual({ value: items[expected]!.key });
+    }
+    listener.mockClear();
+    buttons(el)[2]!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true }),
+    );
+    await el.updateComplete;
+    expect(listener).not.toHaveBeenCalled();
+  } finally {
+    el.removeEventListener("wt-tab-change", listener);
+  }
+});
+
+test("a strip nested in another's panel reaches the outer listener, which the target check ignores", async () => {
+  const outer = (await mountThemed(
+    `<wt-tabs label="Outer"><div slot="first"><wt-tabs label="Inner"><div slot="left">Left</div><div slot="right">Right</div></wt-tabs></div><div slot="second">Second</div></wt-tabs>`,
+  )) as WtTabs;
+  outer.items = [
+    { key: "first", label: "First" },
+    { key: "second", label: "Second" },
+  ];
+  const inner = outer.querySelector<WtTabs>("wt-tabs")!;
+  inner.items = [
+    { key: "left", label: "Left" },
+    { key: "right", label: "Right" },
+  ];
+  await outer.updateComplete;
+  await inner.updateComplete;
+  const plain = vi.fn();
+  const handled = vi.fn();
+  const guarded = (event: Event) => {
+    if (event.target !== event.currentTarget) return;
+    handled(event);
+  };
+  outer.addEventListener("wt-tab-change", plain);
+  outer.addEventListener("wt-tab-change", guarded);
+  try {
+    buttons(inner)[1]!.click();
+    await inner.updateComplete;
+    expect(plain).toHaveBeenCalledTimes(1);
+    expect(plain.mock.calls[0]![0].detail).toEqual({ value: "right" });
+    expect(handled).not.toHaveBeenCalled();
+    expect(outer.value).toBe("");
+
+    buttons(outer)[1]!.click();
+    await outer.updateComplete;
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(handled.mock.calls[0]![0].detail).toEqual({ value: "second" });
+  } finally {
+    outer.removeEventListener("wt-tab-change", plain);
+    outer.removeEventListener("wt-tab-change", guarded);
+  }
 });
 
 test("accepts a restored selection and falls back when its item disappears", async () => {
@@ -202,7 +312,7 @@ test("a click from a tab that has since been removed still reports that tab", as
   const el = await setup();
   const menus = buttons(el)[1]!;
   const listener = vi.fn();
-  el.addEventListener("wt-change", listener);
+  el.addEventListener("wt-tab-change", listener);
 
   el.items = [];
   await el.updateComplete;

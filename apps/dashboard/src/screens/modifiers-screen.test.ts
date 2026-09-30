@@ -258,9 +258,6 @@ it("switches to the Options tab and lists options lists there", async () => {
   expect(options.rows).toEqual([optionList]);
 });
 
-// A control inside a tab panel is slotted into `wt-tabs`, so a composed `wt-change` it dispatches
-// reaches the screen's tab listener under the same event name. Only the tab strip's own choice may
-// move the tabs.
 it("does not change tab when a control inside a panel announces a change", async () => {
   const el = await mount();
   await selectTab(el, "options");
@@ -274,6 +271,16 @@ it("does not change tab when a control inside a panel announces a change", async
       .shadowRoot!.querySelector('[role="tab"][data-key="options"]')!
       .getAttribute("aria-selected"),
   ).toBe("true");
+});
+
+it("keeps the Extras tab and its path when a control inside it announces a change", async () => {
+  const el = await mount();
+  el.shadowRoot!.querySelector('[slot="extras"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "options" }, bubbles: true, composed: true }),
+  );
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-tabs")!.value).toBe("extras");
+  expect(location.pathname).toBe("/manage/modifiers/view/extras");
 });
 
 it("records the chosen tab in the path and walks back to the previous one", async () => {

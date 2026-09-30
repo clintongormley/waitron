@@ -2241,8 +2241,7 @@ export class MenusScreen extends LitElement {
           { key: "home", label: t("menus.tab_home") },
           { key: "preview", label: t("menus.tab_preview") },
         ]}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          if (event.target !== event.currentTarget) return;
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           this.#showView(event.detail.value as Tab);
           this.#url.write({ view: event.detail.value });
         }}

@@ -894,10 +894,7 @@ export class CategoriesScreen extends LitElement {
           { key: "categories", label: t("nav.categories") },
           { key: "labels", label: t("labels.title") },
         ]}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-          // A panel's controls are slotted INTO the tab strip, so their own composed wt-change
-          // passes this listener too; only the strip's own event is a tab choice.
-          if (event.target !== event.currentTarget) return;
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           this.tab = event.detail.value === "labels" ? "labels" : "categories";
           this.#url.write({ dashboard: "categories", view: this.tab });
         }}

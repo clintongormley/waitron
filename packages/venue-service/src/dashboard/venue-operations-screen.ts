@@ -213,8 +213,6 @@ export class VenueOperationsScreen extends LitElement {
     });
   }
   #selectView(event: CustomEvent<{ value: View }>): void {
-    // Panel content may emit its own change events; only the strip owns navigation.
-    if (event.target !== event.currentTarget) return;
     this.view = event.detail.value;
     this.#url.write({ dashboard: "venue-operations", view: this.view });
   }
@@ -1169,7 +1167,7 @@ export class VenueOperationsScreen extends LitElement {
                   { key: "zones", label: t("venue.zones") },
                   { key: "routing", label: t("venue.routing") },
                 ]}
-                @wt-change=${this.#selectView}
+                @wt-tab-change=${this.#selectView}
               >
                 <div slot="status">${this.#readiness()}</div>
                 <div slot="departments">${this.#departments()}</div>

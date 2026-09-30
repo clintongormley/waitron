@@ -2486,7 +2486,11 @@ describe("tabs", () => {
     expect(tabs(el).value).toBe("categories");
     expect(location.pathname).toBe("/manage/categories/view/categories");
     tabs(el).dispatchEvent(
-      new CustomEvent("wt-change", { detail: { value: "labels" }, bubbles: true, composed: true }),
+      new CustomEvent("wt-tab-change", {
+        detail: { value: "labels" },
+        bubbles: true,
+        composed: true,
+      }),
     );
     await el.updateComplete;
     expect(location.pathname).toBe("/manage/categories/view/labels");

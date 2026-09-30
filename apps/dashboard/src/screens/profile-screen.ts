@@ -690,8 +690,6 @@ export class ProfileScreen extends LitElement {
     }
   }
   #selectTab(event: CustomEvent<{ value: string }>): void {
-    // wt-change is composed, so only the tab strip's own event is a tab choice.
-    if (event.target !== event.currentTarget) return;
     this.activeTab = event.detail.value as "details" | "security";
     this.#announceTab();
   }
@@ -704,7 +702,7 @@ export class ProfileScreen extends LitElement {
           { key: "details", label: t("profile.details") },
           { key: "security", label: t("profile.security") },
         ]}
-        @wt-change=${(event: CustomEvent<{ value: string }>) => this.#selectTab(event)}
+        @wt-tab-change=${(event: CustomEvent<{ value: string }>) => this.#selectTab(event)}
       >
         <div slot="details">
           <div class="row">

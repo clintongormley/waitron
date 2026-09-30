@@ -3131,8 +3131,7 @@ export class PrintersScreen extends LitElement {
                   { key: "printers", label: t("printers.list_title") },
                   { key: "agents", label: t("printers.agents_title") },
                 ]}
-                @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                  if (event.target !== event.currentTarget) return;
+                @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
                   this.view = event.detail.value;
                   this.#url.write({ dashboard: "printers", view: this.view });
                 }}
