@@ -1459,7 +1459,8 @@ export function toPayOutcome(
  *  - a sale exists: collect SETTLES it and files NO second fiscal record. When something is owed,
  *    a `card` tender also writes the manual-card `payments` row, so reconciliation sees it. A bill
  *    whose amount due is exactly zero settles with no tender, no `payments` row and no drawer
- *    opening; one below zero is refused with `sale.tender_shortfall` and stays placed.
+ *    opening; one below zero is refused with `sale.tender_shortfall` and stays placed
+ *    (`recordCorrection` refuses a correction that would make one: `sale.correction_exceeds_total`).
  *  - no sale: collect files one from the order's stored locked lines (`fileImmediateSale`).
  *
  * No duplicate backstop is needed: a concurrent collect's whole transaction runs after the winner

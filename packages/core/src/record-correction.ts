@@ -1,7 +1,7 @@
 import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   allocateInvoiceNumber,
   invoiceSeries,
@@ -12,7 +12,15 @@ import {
   tills,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { AppError, decimal, stringToCents } from "@waitron/shared";
+import {
+  AppError,
+  centsToDecimal,
+  compareDecimal,
+  decimal,
+  rawCentsToDecimal,
+  stringToCents,
+  sumDecimals,
+} from "@waitron/shared";
 import type { NodeId, SaleId, SeriesId, TillId } from "@waitron/shared";
 import type { FiscalBackend, FiscalRecordRef, TrustedClock } from "@waitron/fiscal";
 import { authorize, type AuthzInput } from "@waitron/identity";
@@ -67,8 +75,14 @@ export async function recordCorrection(
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
   // The corrective inherits the original's `locale` and `invoiceLocales`.
+  // `${sales}.id`, not `${sales.id}`: see the same subquery in `settleSale`.
   const [original] = await tx
-    .select({ locale: sales.locale, invoiceLocales: sales.invoiceLocales })
+    .select({
+      locale: sales.locale,
+      invoiceLocales: sales.invoiceLocales,
+      total: sales.total,
+      corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
+    })
     .from(sales)
     .where(eq(sales.id, input.correctsSaleId));
 
@@ -127,6 +141,19 @@ export async function recordCorrection(
     permission: "sale.rectify",
     override: input.authz.override,
   });
+
+  // After the gate, so a session that may not correct is not told what is left on the invoice.
+  const remaining = sumDecimals([
+    centsToDecimal(original.total),
+    rawCentsToDecimal(original.corrections),
+  ]);
+  if (compareDecimal(sumDecimals([remaining, decimal(input.total)]), decimal("0")) < 0) {
+    throw new AppError("sale.correction_exceeds_total", {
+      saleId: input.correctsSaleId,
+      remaining,
+      correction: input.total,
+    });
+  }
 
   // Nothing branches on `verification.ok`: a failed check records one incident carrying every
   // issue, once `saleId` exists, and the correction is chained anyway.

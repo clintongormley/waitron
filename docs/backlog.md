@@ -3747,13 +3747,21 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         it in cash and by manual card; both failed with `CHECK constraint failed:
         tenders_amount_ck` before the change. A control case shows an ordinary cash collection of
         a corrected bill does open the drawer.
-        **Still open: a bill corrected BELOW zero** (the customer is owed money), collected in
-        cash or by manual card, is refused and stays open, now with the domain code `sale.tender_shortfall` (due -2.00, charged 0) where
-        it failed with the raw `tenders_amount_ck` error; measured by a case correcting the bill by
-        -20.00. That case records a correction larger than the invoice through `recordCorrection`
-        on the Verifactu backend, and nothing refuses it. **Next action:** decide what should
-        happen to such a bill (an owner call): refuse the over-sized correction when it is
-        recorded, or pay the difference back at collection.
+        **DONE (C66, PR pending, 2026-09-30): a correction that would take an invoice below zero
+        is refused when it is recorded.** The owner's answer (2026-09-30): refuse it, in place of
+        paying the difference back at collection. `recordCorrection` (`packages/core/src/record-correction.ts`)
+        adds the invoice's total to the corrections already recorded against it, and refuses a
+        correction that would take the sum below zero with `sale.correction_exceeds_total`
+        (params: the invoice, what is left on it, the correction), before an invoice number is
+        allocated or anything is written; a correction down to exactly zero still records. It runs
+        after the permission check, so a person who may not correct is not told the invoice's
+        amounts. The -20.00-on-18.00 case in `apps/server/src/collect-by-invoice.test.ts` is now
+        that refusal, and the bill then collects its full 18.00. `collectOrder`'s refusal of a
+        bill below zero (`sale.tender_shortfall`) stays as a guard. Cases in
+        `packages/core/src/record-correction.test.ts` (one cent over, over after an earlier
+        correction, exactly zero, a raise, an unauthorised session) each failed under one of three
+        probes: the check deleted, moved before the permission check, or its `< 0` widened to
+        `<= 0`.
         **Still open: the card-reader path.** `payWorkingOrderIntegrated`
         (`apps/server/src/till-sale.ts`) is unchanged: for a bill with a sale it asks the card
         reader to collect the amount due plus any tip, so on a bill corrected to zero it would ask
@@ -3761,8 +3769,9 @@ approved print agents to try it, so a printer the two discovery passes cannot se
         What the payment provider does with either was not run. **Next action:** a test driving
         `payWorkingOrderIntegrated` on a bill corrected to zero, then close such a bill without
         asking the reader, as `collectOrder` does (the owner's answer "just close the bill" covers
-        it); and a test on a bill corrected below zero, refused as `collectOrder` refuses it until
-        the owner decides the below-zero case above.
+        it); and a guard for a bill below zero, refused with the code `collectOrder` uses, never
+        asking the reader for a negative amount (`recordCorrection` refuses a correction that would
+        make one, C66 above).
     - In the till's table screen, the check that treats an unreadable reminder time as "never due"
       (`#reminderDueAt`, `apps/till/src/screens/till-table-order-screen.ts`) has no test of its own:
       the review removed it and no test failed. **Next action:** a case with a malformed `dueAt`.

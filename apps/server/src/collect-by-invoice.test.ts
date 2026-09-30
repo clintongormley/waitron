@@ -130,6 +130,14 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     credit: { base: string; total: string } = { base: "2.00", total: "-2.42" },
   ): Promise<{ billId: string; saleId: string }> {
     const billId = await placedTarta(invoiceFirstZone);
+    return { billId, saleId: await correctBill(billId, credit) };
+  }
+
+  /** Records `credit` against the bill's issued invoice and returns that invoice's id. */
+  async function correctBill(
+    billId: string,
+    credit: { base: string; total: string },
+  ): Promise<string> {
     const [issued] = await salesOf(billId);
     await inTx(venue, async (tx) => {
       const [series] = await tx
@@ -167,7 +175,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         authz: { sessionId: session.id },
       });
     });
-    return { billId, saleId: issued!.id };
+    return issued!.id;
   }
 
   function tendersOf(saleId: string) {
@@ -280,18 +288,20 @@ describe("collecting an invoice that carries a corrective invoice", () => {
     expect(registroCount(venue, billId)).toBe(1);
   });
 
-  it("refuses to close a bill corrected below zero, with the domain code, and leaves it open", async () => {
-    // A 16.53 base at 21% is 20.00: the customer is owed 2.00, which collecting cannot pay out.
-    const { billId, saleId } = await correctedTarta({ base: "16.53", total: "-20.00" });
+  it("refuses a correction that would take the bill below zero, and the bill still collects in full", async () => {
+    const billId = await placedTarta(invoiceFirstZone);
+    const [issued] = await salesOf(billId);
 
-    await expect(collectCash(billId)).rejects.toMatchObject({
-      code: "sale.tender_shortfall",
-      params: { due: "-2.00", charged: "0" },
+    // A 16.53 base at 21% is 20.00, more than Tarta's 18.00 invoice.
+    await expect(correctBill(billId, { base: "16.53", total: "-20.00" })).rejects.toMatchObject({
+      code: "sale.correction_exceeds_total",
+      params: { saleId: issued!.id, remaining: "18.00", correction: "-20.00" },
     });
 
-    expect(await tendersOf(saleId)).toEqual([]);
-    expect(await salesOf(billId)).toEqual([{ id: saleId, total: 1800, settledAt: null }]);
-    expect(await collectedAtOf(billId)).toBeNull();
-    expect(await statusOf(venue, billId)).toBe("placed");
+    expect(await salesOf(billId)).toEqual([{ id: issued!.id, total: 1800, settledAt: null }]);
+    expect(registroCount(venue, billId)).toBe(1);
+    await collectCash(billId);
+    expect(await tendersOf(issued!.id)).toEqual([{ method: "cash", amount: 1800, cash: 2000 }]);
+    expect(await statusOf(venue, billId)).toBe("settled");
   });
 });
