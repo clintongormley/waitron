@@ -21,12 +21,11 @@ const SIGHTING_INTERVAL_MS = 60_000;
  * salt is per row) and the secret validates it. Every failure throws the same `agent.unauthorized`,
  * so the response confirms neither an agent's existence nor its revocation.
  *
- * The key is derived on the thread pool with no transaction open, so neither the event loop nor the
- * venue's write lock waits on scrypt. The transaction that follows re-reads the row, so a revoke or a
- * re-key that commits while the key is derived still refuses this token.
+ * The key is derived on the thread pool and the row re-read afterwards, both with no transaction
+ * open, so a revoke or a re-key committed while the key was derived refuses this token.
  *
  * Auth runs on every pull and report, so the sighting write is gated to one per
- * {@link SIGHTING_INTERVAL_MS}.
+ * {@link SIGHTING_INTERVAL_MS}, and the venue's write lock is taken only when that write is due.
  */
 export async function authenticateAgent(db: Database, token: string): Promise<{ agentId: string }> {
   const dot = token.indexOf(".");
@@ -37,36 +36,40 @@ export async function authenticateAgent(db: Database, token: string): Promise<{ 
 
   // `active = true` is the revocation filter, so a revoke takes effect at once.
   const current = and(eq(printAgents.id, agentId), eq(printAgents.active, true));
-  const [row] = await db
-    .select({ tokenHash: printAgents.tokenHash })
-    .from(printAgents)
-    .where(current);
-  if (row === undefined) throw new AppError("agent.unauthorized", {});
-  if (!(await verifySecretAsync(secret, row.tokenHash))) {
+  const readRow = async () => {
+    const [found] = await db
+      .select({ tokenHash: printAgents.tokenHash, lastSeenAt: printAgents.lastSeenAt })
+      .from(printAgents)
+      .where(current);
+    return found;
+  };
+  const checked = await readRow();
+  if (checked === undefined) throw new AppError("agent.unauthorized", {});
+  if (!(await verifySecretAsync(secret, checked.tokenHash))) {
+    throw new AppError("agent.unauthorized", {});
+  }
+  const row = await readRow();
+  if (row === undefined || row.tokenHash !== checked.tokenHash) {
     throw new AppError("agent.unauthorized", {});
   }
 
-  await withTransaction(db, async (tx) => {
-    const [still] = await tx
-      .select({ tokenHash: printAgents.tokenHash })
-      .from(printAgents)
-      .where(current);
-    if (still?.tokenHash !== row.tokenHash) throw new AppError("agent.unauthorized", {});
-
-    // `last_seen_at` is text, so `<` is a string comparison, a correct time order only for the
-    // `toISOString()` spelling `nowIso` writes.
-    const seenAt = nowIso();
-    const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
-    await tx
-      .update(printAgents)
-      .set({ lastSeenAt: seenAt })
-      .where(
-        and(
-          eq(printAgents.id, agentId),
-          // `<` is UNKNOWN for NULL, so a never-seen agent needs its own alternative.
-          or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
+  // `last_seen_at` is text, so `<` is a string comparison, a correct time order only for the
+  // `toISOString()` spelling `nowIso` writes.
+  const seenAt = nowIso();
+  const staleBefore = new Date(Date.parse(seenAt) - SIGHTING_INTERVAL_MS).toISOString();
+  if (row.lastSeenAt === null || row.lastSeenAt < staleBefore) {
+    await withTransaction(db, (tx) =>
+      tx
+        .update(printAgents)
+        .set({ lastSeenAt: seenAt })
+        .where(
+          and(
+            eq(printAgents.id, agentId),
+            // `<` is UNKNOWN for NULL, so a never-seen agent needs its own alternative.
+            or(isNull(printAgents.lastSeenAt), lt(printAgents.lastSeenAt, staleBefore)),
+          ),
         ),
-      );
-  });
+    );
+  }
   return { agentId };
 }

@@ -136,6 +136,34 @@ describe("authenticateAgent", () => {
     expect(order).toEqual(["writer", "authenticated"]);
   });
 
+  it("authenticates while another caller holds the write lock, when no sighting is due", async () => {
+    const { agentId, token } = await enrolled();
+    await suite.db
+      .update(printAgents)
+      .set({ lastSeenAt: new Date().toISOString() })
+      .where(eq(printAgents.id, agentId));
+    let release!: () => void;
+    const held = withTransaction(
+      suite.db,
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const auth = authenticateAgent(suite.db, token);
+    try {
+      const outcome = await Promise.race([
+        auth.then((result) => result.agentId),
+        new Promise((resolve) => setTimeout(() => resolve("still waiting"), 2_000)),
+      ]);
+      expect(outcome).toBe(agentId);
+    } finally {
+      release();
+      await held;
+      await auth;
+    }
+  });
+
   it("refuses an agent revoked while its key is being derived", async () => {
     const { agentId, token } = await enrolled();
     const revoked = new Promise<void>((resolve, reject) => {
