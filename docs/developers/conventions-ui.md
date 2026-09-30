@@ -189,9 +189,9 @@ password or PIN and a wrong authenticator or recovery code with ONE code, the sa
 same status — `password.invalid` for a password login, `pin.invalid` for a PIN — each after the
 same hashing work, and a screen shows it as one sentence for every cause — "the login failed"
 beside the action on the dashboard and the setup wizard's Connect, "Wrong PIN" on the till, where
-the PIN is the only thing typed. A refused login marks no field anywhere, the setup wizard's Reset
-form included (`apps/setup/src/screens/reset-screen.ts`); a field is marked only when its value is
-missing or malformed (owner, 2026-09-30, A153).
+the PIN is the only thing typed. A refused sign-in marks no field on any sign-in form, the setup
+wizard's Reset form included (`apps/setup/src/screens/reset-screen.ts`); there a field is marked
+only when its value is missing or malformed (owner, 2026-09-30, A153).
 Passkey and Google sign-in keep their own codes: `passkey.verification_failed` for a passkey whose
 owner is not active, a bad signature or a used-up challenge (`packages/identity/src/passkey.ts`),
 `google.invalid` for a Google account linked to nobody or to a person who is not active
@@ -217,7 +217,7 @@ the setup Reset's proof check (`till-api.ts`, `management-api.ts`, `mirror-bundl
 `promote-api.ts`, `setup-api.ts`) — nor by the standby box's relayed `password.invalid`
 (`mirror-bundle-fetch.ts`), nor by the passkey and Google refusals. Validation that does not depend
 on the account (an empty required field, a malformed code) may still sit under its field; a
-signed-in person re-checking their OWN password or code may be told which one was wrong. These
+signed-in person re-checking their OWN password, PIN or code may be told which one was wrong. These
 answers are reachable only after a credential was proved and stay: `totp.required` (the
 dashboard's code step, after a right password), `google.second_factor_required` (after a valid
 Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote and

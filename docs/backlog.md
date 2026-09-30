@@ -5800,8 +5800,8 @@ ongoing overhaul listed at the top of Track A.
   approval routes no longer send for an approver — left for lane B, whose file it is; and the dashboard's
   password throttle (`apps/server/src/password-throttle.ts`, unchanged by C95) answers any email it
   is not already tracking with `password.throttled` (retry in 60 seconds) while it tracks 1000, so
-  a flood of made-up addresses delays the sign-in of anyone it is not already tracking. Done since
-  (A153): the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
+  a flood of made-up addresses delays the sign-in of anyone it is not already tracking.
+  **Done since (2026-09-30, lane A's A153):** the setup wizard's `shell.adopt.bundle_fetch_failed` sentence
   (`apps/setup/src/i18n/strings/shell.ts`, English and Spanish) no longer names a refused login among
   its causes, a refused login now arriving as `password.invalid` and showing
   `shell.adopt.login_failed`; and the setup wizard's Reset form no longer marks its person-ID and
