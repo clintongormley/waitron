@@ -5,7 +5,7 @@ describe("ADJUSTMENTS_CONFIGURATION_TRANSFER", () => {
   it("transfers the reasons, which are venue policy rather than trading history", () => {
     expect(ADJUSTMENTS_CONFIGURATION_TRANSFER).toEqual({
       kind: "tables",
-      tables: [{ name: "adjustment_reasons" }],
+      tables: [{ name: "adjustment_reasons" }, { name: "adjustment_settings" }],
     });
   });
 });

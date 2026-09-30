@@ -324,3 +324,52 @@ describe("the adjustments table", () => {
     expect(triggerRaised(remove, "adjustments is append-only")).toBe(true);
   });
 });
+
+function insertSettings(id: number, maxBillDiscount: number | null) {
+  return db.execute(sql`insert into adjustment_settings (id, max_bill_discount, updated_at)
+    values (${id}, ${maxBillDiscount}, ${new Date().toISOString()})`);
+}
+
+async function settingsRefused(
+  id: number,
+  maxBillDiscount: number | null,
+  constraint: string,
+): Promise<void> {
+  const error = await captureError(() => insertSettings(id, maxBillDiscount));
+  expect(isRefusal(error, CHECK_VIOLATION), constraint).toBe(true);
+  expect(engineErrorMessage(error), constraint).toContain(constraint);
+}
+
+describe("the adjustment_settings table", () => {
+  it("has one optional limit beside its pinned id and its timestamp", async () => {
+    const columns = await db.execute<{ name: string; notnull: number; pk: number }>(
+      sql`select name, "notnull", pk from pragma_table_info('adjustment_settings')`,
+    );
+    expect(
+      Object.fromEntries(columns.rows.map((c) => [c.name, { notNull: c.notnull, pk: c.pk }])),
+    ).toEqual({
+      id: { notNull: 1, pk: 1 },
+      max_bill_discount: { notNull: 0, pk: 0 },
+      updated_at: { notNull: 1, pk: 0 },
+    });
+  });
+
+  it("holds one row at most, with id 1", async () => {
+    await settingsRefused(2, null, "adjustment_settings_singleton_ck");
+    await insertSettings(1, null);
+    const second = await captureError(() => insertSettings(1, 5000));
+    expect(isRefusal(second, UNIQUE_VIOLATION)).toBe(true);
+  });
+
+  it("takes a limit from 1 to 10000 basis points, or none", async () => {
+    await settingsRefused(1, 0, "adjustment_settings_max_bill_discount_ck");
+    await settingsRefused(1, 10001, "adjustment_settings_max_bill_discount_ck");
+    for (const limit of [null, 1, 10000]) {
+      await db.execute(sql`delete from adjustment_settings`);
+      await insertSettings(1, limit);
+    }
+    expect((await db.execute(sql`select max_bill_discount from adjustment_settings`)).rows).toEqual(
+      [{ max_bill_discount: 10000 }],
+    );
+  });
+});

@@ -335,6 +335,8 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "adjustment_reasons_max_percent_ck",
   "adjustment_reasons_name_ck",
   "adjustment_reasons_position_ck",
+  "adjustment_settings_max_bill_discount_ck",
+  "adjustment_settings_singleton_ck",
   "adjustments_action_ck",
   "adjustments_amounts_ck",
   "adjustments_bill_level_ck",

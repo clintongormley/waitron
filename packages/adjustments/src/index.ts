@@ -3,6 +3,7 @@ import "./errors.js";
 export * from "./schema/index.js";
 export * from "./policy.js";
 export * from "./operations.js";
+export * from "./settings.js";
 export * from "./record.js";
 export * from "./spread.js";
 export * from "./reports.js";
