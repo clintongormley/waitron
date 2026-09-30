@@ -5497,7 +5497,8 @@ ongoing overhaul listed at the top of Track A.
   language choice into one shared footer) — **DONE for the setup wizard and the dashboard (C93,
   branch `fix/footer-language-chooser`, 2026-09-30):** both now end the page with one shared
   footer, `wt-language-footer` (`packages/ui/src/components/wt-language-footer.ts`), which sits in
-  the page's flow below the content, so it cannot cover anything. The till still has its own
+  the page's flow below the content, so the closed chooser no longer floats over the page (its open
+  menu still opens upwards over the content above it). The till still has its own
   floating copy, which moves onto the footer in lane B's B18. Seen while looking at C93 and not
   fixed there: on the dashboard at 390 px a sliver of the closed side-menu drawer's search box
   shows at the left edge, in the page's 24 px margin; C93 does not change the drawer's rules, so I

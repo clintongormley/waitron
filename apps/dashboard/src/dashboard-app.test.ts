@@ -3312,7 +3312,7 @@ it("ends the content column with the language footer, at the column's foot when 
   }
 });
 
-it("leaves long dashboard content clear of the bottom-right language chooser on a narrow screen", async () => {
+it("ends long dashboard content above the language button on a narrow screen", async () => {
   const width = window.innerWidth,
     height = window.innerHeight;
   await page.viewport(375, 667);
