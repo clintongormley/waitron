@@ -563,7 +563,7 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
   });
 
-  it("refuses an admin with an authenticator who sends a wrong code with 401 totp.invalid", async () => {
+  it("refuses an admin with an authenticator who sends a wrong code with 401 password.invalid", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
     const app = mountApp(designated, "https://relay.example:9000/");
@@ -575,7 +575,50 @@ describe("POST /management-api/mirror-bundle (primary endpoint)", () => {
       ...validStandby(),
     });
     expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("totp.invalid");
+    expect((await res.json()).error.code).toBe("password.invalid");
+  });
+
+  it("answers every login that fails identically, whatever the cause, and reserves nothing", async () => {
+    const { designated, adminPersonId } = await setupVenue();
+    const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const suspendedAdminId = await withTransaction(db, async (tx) => {
+      const [row] = await tx
+        .insert(persons)
+        .values({
+          displayName: "Administradora suspendida",
+          pinHash: hashPin("1234"),
+          passwordHash: hashPassword(ADMIN_PASSWORD),
+          role: "admin",
+          status: "suspended",
+        })
+        .returning({ id: persons.id });
+      return row!.id;
+    });
+    const app = mountApp(designated, "https://relay.example:9000/");
+    const counterBefore = await installationCounter();
+
+    const causes: Record<string, Record<string, unknown>> = {
+      unknown: { personId: crypto.randomUUID(), password: ADMIN_PASSWORD },
+      // The suspended admin's own password, so only the suspension can be the cause.
+      suspended: { personId: suspendedAdminId, password: ADMIN_PASSWORD },
+      wrongPassword: { personId: adminPersonId, password: "wrong", totp: generateSync({ secret }) },
+      wrongCode: { personId: adminPersonId, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
+      missingCode: { personId: adminPersonId, password: ADMIN_PASSWORD },
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [cause, credential] of Object.entries(causes)) {
+      const res = await post(app, { ...credential, ...validStandby() });
+      answers[cause] = { status: res.status, body: await res.json() };
+    }
+    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
+    expect(answers).toEqual({
+      unknown: refused,
+      suspended: refused,
+      wrongPassword: refused,
+      wrongCode: refused,
+      missingCode: refused,
+    });
+    expect(await installationCounter()).toEqual(counterBefore);
   });
 
   it("refuses mirror.no_relay (400) when no relay is configured, AFTER authorizing", async () => {

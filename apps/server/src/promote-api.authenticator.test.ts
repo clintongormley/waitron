@@ -19,7 +19,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-async function seedAdmin(): Promise<string> {
+async function seedAdmin(status: "active" | "suspended" = "active"): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const [person] = await tx
       .insert(persons)
@@ -28,6 +28,7 @@ async function seedAdmin(): Promise<string> {
         pinHash: hashPin("1234"),
         passwordHash: hashPassword(ADMIN_PASSWORD),
         role: "admin",
+        status,
       })
       .returning({ id: persons.id });
     return person!.id;
@@ -68,7 +69,7 @@ describe("POST /management-api/promote — an admin with an authenticator", () =
     expect(run).toHaveBeenCalledOnce();
   });
 
-  it("refuses a wrong code with 401 totp.invalid and never promotes", async () => {
+  it("refuses a wrong code with 401 password.invalid and never promotes", async () => {
     const personId = await seedAdmin();
     const secret = await enrolAuthenticator(suite.db, personId, ADMIN_PASSWORD, TOTP_KEY_RING);
     const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
@@ -79,7 +80,38 @@ describe("POST /management-api/promote — an admin with an authenticator", () =
       totp: wrongTotpCode(secret),
     });
     expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("totp.invalid");
+    expect((await res.json()).error.code).toBe("password.invalid");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("answers every login that fails identically, whatever the cause, and never promotes", async () => {
+    const personId = await seedAdmin();
+    const secret = await enrolAuthenticator(suite.db, personId, ADMIN_PASSWORD, TOTP_KEY_RING);
+    const suspendedId = await seedAdmin("suspended");
+    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
+    const app = appWith(run);
+
+    const causes: Record<string, Record<string, unknown>> = {
+      unknown: { personId: crypto.randomUUID(), password: ADMIN_PASSWORD },
+      // The suspended admin's own password, so only the suspension can be the cause.
+      suspended: { personId: suspendedId, password: ADMIN_PASSWORD },
+      wrongPassword: { personId, password: "wrong", totp: generateSync({ secret }) },
+      wrongCode: { personId, password: ADMIN_PASSWORD, totp: wrongTotpCode(secret) },
+      missingCode: { personId, password: ADMIN_PASSWORD },
+    };
+    const answers: Record<string, unknown> = {};
+    for (const [cause, body] of Object.entries(causes)) {
+      const res = await post(app, body);
+      answers[cause] = { status: res.status, body: await res.json() };
+    }
+    const refused = { status: 401, body: { error: { code: "password.invalid", params: {} } } };
+    expect(answers).toEqual({
+      unknown: refused,
+      suspended: refused,
+      wrongPassword: refused,
+      wrongCode: refused,
+      missingCode: refused,
+    });
     expect(run).not.toHaveBeenCalled();
   });
 });

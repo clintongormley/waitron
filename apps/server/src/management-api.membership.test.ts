@@ -170,7 +170,7 @@ describe("GET /management-api/membership", () => {
     expect(res.status, JSON.stringify(await res.clone().json())).toBe(200);
   });
 
-  it("refuses an admin with an authenticator who sends a wrong code with 401 totp.invalid", async () => {
+  it("refuses an admin with an authenticator who sends a wrong code with 401 password.invalid", async () => {
     const { designated, adminPersonId } = await setupVenue();
     const secret = await enrolAuthenticator(db, adminPersonId, ADMIN_PASSWORD, TOTP_KEY_RING);
     const app = mountApp(designated);
@@ -181,7 +181,7 @@ describe("GET /management-api/membership", () => {
       totp: wrongTotpCode(secret),
     });
     expect(res.status).toBe(401);
-    expect((await res.json()).error.code).toBe("totp.invalid");
+    expect((await res.json()).error.code).toBe("password.invalid");
   });
 
   it("refuses a non-admin (staff) credential with 403", async () => {
