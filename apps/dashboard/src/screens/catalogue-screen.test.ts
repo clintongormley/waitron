@@ -19,7 +19,7 @@ import type {
 import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { ProductEditor } from "../widgets/product-editor.js";
-import type { ProductList } from "../widgets/product-list.js";
+import type { CatalogueBrowser } from "../widgets/catalogue-browser.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "../widgets/test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -212,8 +212,8 @@ const editor = (el: CatalogueScreen): ProductEditor =>
   el.shadowRoot!.querySelector("dashboard-product-editor")!;
 const step = (el: CatalogueScreen): AddToMenus =>
   el.shadowRoot!.querySelector("dashboard-add-to-menus")!;
-const list = (el: CatalogueScreen): ProductList =>
-  el.shadowRoot!.querySelector("dashboard-product-list")!;
+const list = (el: CatalogueScreen): CatalogueBrowser =>
+  el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
 function emit(source: Element, type: string, detail: unknown): void {
   source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 }
@@ -558,6 +558,8 @@ describe("catalogue-screen", () => {
   }
   /** A form's one message about a failed submission, or "" when it shows none. */
   async function bottomOf(form: Element): Promise<string> {
+    if (form.tagName === "DASHBOARD-CATEGORY-FORM")
+      return form.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? "";
     const actions = form.shadowRoot!.querySelector("wt-form-actions")!;
     return (await formMessageOf(actions))?.textContent?.trim() ?? "";
   }
@@ -1613,4 +1615,41 @@ describe("catalogue-screen", () => {
       expect(api.getMenuStructure).not.toHaveBeenCalled();
     });
   });
+});
+
+it("reads and writes folder paths and passes the folder to new products", async () => {
+  history.replaceState(null, "", "/manage/catalogue/folder/c1");
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  const browser = el.shadowRoot!.querySelector("dashboard-catalogue-browser")!;
+  expect(browser.folderId).toBe("c1");
+  emit(browser, "open-folder", { folderId: "b" });
+  await el.updateComplete;
+  expect(location.pathname).toBe("/manage/catalogue/folder/b");
+  emit(browser, "open-folder", { folderId: "c1" });
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+  await el.updateComplete;
+  expect(editor(el).newCategoryId).toBe("c1");
+  emit(editor(el), "wt-cancel", {});
+  await el.updateComplete;
+  emit(browser, "view-change", { view: "all" });
+  await el.updateComplete;
+  expect(location.pathname).toContain("/view/all");
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+  await el.updateComplete;
+  expect(editor(el).newCategoryId).toBeNull();
+});
+
+it("creates an unfiled product when the addressed folder no longer exists", async () => {
+  history.replaceState(null, "", "/manage/catalogue/folder/gone");
+  const { el } = await mountWidget<CatalogueScreen>("dashboard-catalogue-screen", {
+    api: stubApi(),
+  });
+  await flush(el);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+  await el.updateComplete;
+  expect(editor(el).newCategoryId).toBeNull();
 });

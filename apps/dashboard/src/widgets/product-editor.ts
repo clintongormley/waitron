@@ -364,6 +364,7 @@ export class ProductEditor extends LitElement {
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) childOpen = false;
   @property({ attribute: false }) locales: string[] = [];
+  @property({ attribute: false }) newCategoryId: string | null = null;
   @property({ attribute: false }) value: ProductEditorDraft | null = null;
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
@@ -421,7 +422,9 @@ export class ProductEditor extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("value") || (changed.has("open") && this.open)) {
-      this.draft = this.value ? structuredClone(this.value) : emptyDraft();
+      this.draft = this.value
+        ? structuredClone(this.value)
+        : { ...emptyDraft(), primaryCategoryId: this.newCategoryId };
       this.generation++;
       this.imageOpen = false;
       this.attempted = false;

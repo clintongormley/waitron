@@ -43,7 +43,7 @@ import { categoryRefusalErrors } from "../widgets/category-form.js";
 import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
-import "../widgets/product-list.js";
+import "../widgets/catalogue-browser.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 
 /** The staff names of the extras lists a `product.offered_as_extra` refusal carries. */
@@ -149,6 +149,8 @@ export class CatalogueScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "catalogue") return;
+      this.folderId = this.#url.read("folder");
+      this.view = this.#url.read("view") === "all" ? "all" : "folders";
       this.#linkedProduct = this.#url.read("product");
       if (this.#linkedProduct === null) this.#closeEditor(false);
       else void this.#openLinkedProduct();
@@ -244,7 +246,15 @@ export class CatalogueScreen extends LitElement {
     return this.shadowRoot?.querySelector<ProductEditor>("dashboard-product-editor") ?? null;
   }
 
+  @state() private folderId: string | null = null;
+  @state() private view: "folders" | "all" = "folders";
+  @state() private newCategoryId: string | null = null;
+
   #openCreate(): void {
+    this.newCategoryId =
+      this.view === "folders" && this.categories.some(({ id }) => id === this.folderId)
+        ? this.folderId
+        : null;
     this.#editorGeneration++;
     this.#resetEditorState();
     this.editorValue = null;
@@ -591,7 +601,21 @@ export class CatalogueScreen extends LitElement {
       </div>
       ${
         this.catalogues.length
-          ? html`<dashboard-product-list
+          ? html`<dashboard-catalogue-browser
+              .api=${this.api}
+              .folderId=${this.folderId}
+              .view=${this.view}
+              @open-folder=${(event: CustomEvent<{ folderId: string | null }>) => {
+                event.stopPropagation();
+                this.folderId = event.detail.folderId;
+                this.view = "folders";
+                this.#url.write({ folder: this.folderId, view: null }, false);
+              }}
+              @view-change=${(event: CustomEvent<{ view: "folders" | "all" }>) => {
+                event.stopPropagation();
+                this.view = event.detail.view;
+                this.#url.write({ view: this.view === "all" ? "all" : null }, true);
+              }}
               .products=${this.products}
               .categories=${this.categories}
               .extraLists=${this.extraLists}
@@ -608,7 +632,7 @@ export class CatalogueScreen extends LitElement {
                 event.stopPropagation();
                 void this.#restoreProduct(event.detail.productId);
               }}
-            ></dashboard-product-list>`
+            ></dashboard-catalogue-browser>`
           : html`<p data-test="no-catalogue">${t("catalogue.empty_prompt")}</p>`
       }
       ${
@@ -622,6 +646,7 @@ export class CatalogueScreen extends LitElement {
         .childOpen=${this.#child.kind !== null}
         .locales=${locales}
         .value=${this.editorValue}
+        .newCategoryId=${this.newCategoryId}
         .fieldErrors=${this.editorFieldErrors}
         .units=${this.units}
         .categories=${this.categories}

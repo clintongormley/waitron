@@ -308,69 +308,6 @@ describe("product-list", () => {
     },
   );
 
-  // A term typed from the keyboard carries an ordinary space where Spanish shows a no-break one.
-  it.each([
-    { locale: "es-ES", term: "12,00", want: ["twelve"] },
-    { locale: "es-ES", term: "12,00 €", want: ["twelve"] },
-    { locale: "en-GB", term: "€12.00", want: ["twelve"] },
-    { locale: "es-ES", term: "12.00", want: ["twelve"] },
-    { locale: "es-ES", term: "7,50", want: ["sized"] },
-    { locale: "es-ES", term: "7.50", want: ["sized"] },
-  ])(
-    "finds a product in $locale by the price as shown, or as its raw amount: $term",
-    async ({ locale, term, want }) => {
-      setLocale(locale);
-      try {
-        const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-          products: [
-            product({ id: "twelve", name: "Tortilla", unitPrice: "12.00" }),
-            product({ id: "other", name: "Pan", unitPrice: "8.50" }),
-            product({
-              id: "sized",
-              name: "Café",
-              variants: [
-                { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
-                { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
-              ],
-            }),
-          ],
-        });
-        const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        const root = await tableRoot(el);
-        const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-        search.value = term;
-        search.dispatchEvent(new Event("input", { bubbles: true }));
-        await table.updateComplete;
-        expect(rowKeys(root)).toEqual(want);
-      } finally {
-        setLocale("es-ES");
-      }
-    },
-  );
-
-  it("finds a middle variant's price on the variant, not on its product's range", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({
-          id: "sized",
-          name: "Café",
-          variants: [
-            { ...bunVariant, id: "small", name: "Pequeño", unitPrice: "4.00" },
-            { ...bunVariant, id: "mid", name: "Mediano", unitPrice: "5.50" },
-            { ...bunVariant, id: "large", name: "Grande", unitPrice: "7.50" },
-          ],
-        }),
-      ],
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = "5.50";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["sized", "sized:mid"]);
-  });
-
   it("prices a variant with no price of its own at its product's price", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
@@ -588,7 +525,7 @@ describe("product-list", () => {
     expect(rowKeys(root)).toEqual(["dish"]);
   });
 
-  it("leaves a variant row's ordering cell muted and out of the search", async () => {
+  it("leaves a variant row's ordering cell muted", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({ id: "dish", ordering: "public" }),
@@ -602,14 +539,9 @@ describe("product-list", () => {
     const cell = cellUnder(root, "bun:small", t("product.ordering"));
     expect(cell.querySelector("[data-test=ordering-badge]")).toBeNull();
     expect(cell.textContent!.trim()).toBe("—");
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = t("product.ordering_not_sold_separately");
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await table.updateComplete;
-    expect(rowKeys(root)).toEqual(["bun"]);
   });
 
-  it("is searchable and expands a parent product to its variant rows", async () => {
+  it("expands a parent product to its variant rows", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [
         product({
@@ -641,7 +573,7 @@ describe("product-list", () => {
       ],
     });
     const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    expect(table.searchable).toBe(true);
+    expect(table.searchable).toBe(false);
     expect(table.rowParent).toBeDefined();
     const root = await tableRoot(el);
     expect(root.querySelectorAll("tbody tr")).toHaveLength(1);
@@ -654,51 +586,6 @@ describe("product-list", () => {
     );
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("Taza pequeña");
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
-  });
-
-  it("shows a matching variant and its product while branches are initially collapsed", async () => {
-    const { el } = await mountWidget<ProductList>("dashboard-product-list", {
-      products: [
-        product({
-          id: "coffee",
-          name: "Coffee",
-          variants: [
-            {
-              id: "small",
-              name: "Small",
-              customerName: { es: "Taza pequeña" },
-              kitchenName: "SM",
-              image: null,
-              unitPrice: "2.00",
-              available: true,
-              active: true,
-            },
-            {
-              id: "large",
-              name: "Large",
-              customerName: { es: "Taza grande" },
-              kitchenName: "LG",
-              image: null,
-              unitPrice: "3.00",
-              available: true,
-              active: true,
-            },
-          ],
-        }),
-      ],
-    });
-    const table = el.shadowRoot!.querySelector("wt-data-table")!;
-    const root = await tableRoot(el);
-    const search = root.querySelector<HTMLInputElement>('input[name="search"]')!;
-    search.value = "Small";
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await table.updateComplete;
-    const rows = [...root.querySelectorAll("tbody tr")];
-    expect(rows).toHaveLength(2);
-    expect(rows[0]!.textContent).toContain("Coffee");
-    expect(rows[1]!.textContent).toContain("Small");
-    expect(rows[1]!.textContent).not.toContain("Taza pequeña");
-    expect(rows[1]!.textContent).not.toContain("SM");
   });
 
   it("shows an active/inactive badge carrying text, not colour alone", async () => {

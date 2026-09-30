@@ -2655,3 +2655,22 @@ it("frees Open once a save hands the editor the saved product back", async () =>
   await el.updateComplete;
   expect((variantTable(el) as unknown as { openBlocked: boolean }).openBlocked).toBe(false);
 });
+
+it("submits the current folder for a new product", async () => {
+  const { el } = await mountWidget<ProductEditor>("dashboard-product-editor", {
+    open: true,
+    locales: ["en"],
+    units: [unit],
+    categories,
+    newCategoryId: "drinks",
+  });
+  const submitted = vi.fn();
+  el.addEventListener("wt-submit", submitted);
+  await input(el, "name", "Tea");
+  await input(el, "unit-price", "3.00");
+  save(el);
+  expect(submitted).toHaveBeenCalledOnce();
+  expect((submitted.mock.calls[0]![0] as CustomEvent).detail.value.primaryCategoryId).toBe(
+    "drinks",
+  );
+});

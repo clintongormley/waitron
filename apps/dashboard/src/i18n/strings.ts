@@ -1,4 +1,13 @@
 export const en = {
+  "folders.all_products": "All products",
+  "folders.view_folders": "Folders",
+  "folders.view_all": "All products",
+  "folders.search": "Search products and folders",
+  "folders.new": "New folder",
+  "folders.rename": "Rename",
+  "folders.breadcrumb": "Folder path",
+  "folders.open_named": "Open {name}",
+
   "nav.cloud": "Cloud services",
   "cloud.intro": "Connect this venue to your Waitron Cloud account.",
   "cloud.replacement_intro": "Reconnect this restored test server to its existing Cloud venue.",
@@ -1912,6 +1921,15 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "folders.all_products": "Todos los productos",
+  "folders.view_folders": "Carpetas",
+  "folders.view_all": "Todos los productos",
+  "folders.search": "Buscar productos y carpetas",
+  "folders.new": "Nueva carpeta",
+  "folders.rename": "Cambiar nombre",
+  "folders.breadcrumb": "Ruta de carpetas",
+  "folders.open_named": "Abrir {name}",
+
   "nav.cloud": "Servicios Cloud",
   "cloud.intro": "Conecta este local con tu cuenta de Waitron Cloud.",
   "cloud.replacement_intro":

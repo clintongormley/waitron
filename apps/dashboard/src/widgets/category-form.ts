@@ -104,6 +104,7 @@ export class CategoryForm extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ type: Boolean }) busy = false;
+  @property({ attribute: false }) defaultParentId: string | null = null;
   @property({ attribute: false }) value: CategorySummary | null = null;
   @property({ attribute: false }) categories: readonly CategorySummary[] = [];
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
@@ -119,7 +120,7 @@ export class CategoryForm extends LitElement {
         this.value?.id !== (changes.get("value") as CategorySummary | null | undefined)?.id)
     ) {
       this.name = this.value?.name ?? "";
-      this.parentId = this.value?.parentId ?? null;
+      this.parentId = this.value ? this.value.parentId : this.defaultParentId;
       this.attempted = false;
       this.dismissed = new Set();
     }
@@ -236,8 +237,9 @@ export class CategoryForm extends LitElement {
             this.#dismiss("parent");
           }}
         ></wt-combobox>
+        ${bottom ? html`<p role="alert">${bottom}</p>` : ""}
       </div>
-      <wt-form-actions slot="footer" .error=${bottom}
+      <wt-form-actions slot="footer"
         ><wt-button
           slot="cancel"
           variant="secondary"

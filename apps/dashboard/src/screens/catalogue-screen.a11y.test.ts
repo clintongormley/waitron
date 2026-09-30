@@ -136,7 +136,7 @@ describe.each(["light", "dark"] as const)("catalogue-screen a11y (%s theme)", (t
       theme,
     );
     await flush(el);
-    el.shadowRoot!.querySelector("dashboard-product-list")!.dispatchEvent(
+    el.shadowRoot!.querySelector("dashboard-catalogue-browser")!.dispatchEvent(
       new CustomEvent("delete-product", {
         detail: { productId: "p1" },
         bubbles: true,

@@ -1,7 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
-import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import {
   CategoryForm,
   categoryAncestors,
@@ -25,8 +24,8 @@ const child: CategorySummary = {
 };
 
 async function bottomOf(el: CategoryForm): Promise<string> {
-  const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
-  return (await formMessageOf(actions))?.textContent?.trim() ?? "";
+  await el.updateComplete;
+  return el.shadowRoot!.querySelector('[role="alert"]')?.textContent?.trim() ?? "";
 }
 
 const nameOf = (el: CategoryForm) =>
