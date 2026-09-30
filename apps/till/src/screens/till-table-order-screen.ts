@@ -472,8 +472,6 @@ export class TillTableOrderScreen extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
-      /* The line's actions take a row of their own: Change, Recall and Cancel together do not fit
-         beside the name in the drawer at phone width. */
       .line-actions {
         grid-column: 1 / -1;
         display: flex;

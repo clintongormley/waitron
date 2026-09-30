@@ -358,6 +358,38 @@ describe("till-adjustment-dialog: the form", () => {
   });
 });
 
+describe("till-adjustment-dialog: what a request out holds still", () => {
+  it("holds every field while a request is out", async () => {
+    const el = await mount({ kind: "discount", target: steaks, busy: true });
+    const fieldsets = [...root(el).querySelectorAll<HTMLFieldSetElement>("fieldset")];
+    expect(fieldsets.length).toBeGreaterThan(0);
+    expect(fieldsets.every((fieldset) => fieldset.disabled)).toBe(true);
+    for (const name of ["percent", "note"])
+      expect((field(el, name) as unknown as { disabled: boolean }).disabled).toBe(true);
+  });
+
+  it("confirms the choice it was previewed with, whatever the form now holds", async () => {
+    const el = await mount({ kind: "comp", target: steaks });
+    await chooseReason(el, "Complaint");
+    const previewed: AdjustmentChoice = {
+      action: "comp",
+      reasonId: "Staff meal",
+      note: "cold",
+      quantity: "1",
+    };
+    el.choice = previewed;
+    el.preview = { reduction: "25.00", nominalValue: "25.00", needsApproval: null, lines: [] };
+    await el.updateComplete;
+    const confirmed = capture<AdjustmentChoice>(el, "adjust-confirm");
+
+    expect(root(el).querySelector("[data-quantity-shown]")).not.toBeNull();
+    expect(text(root(el))).toContain(t("adjust.reason_shown").replace("{reason}", "Staff meal"));
+    expect(text(root(el))).toContain(t("adjust.note_shown").replace("{note}", "cold"));
+    await press(confirmButton(el), el);
+    expect(confirmed).toEqual([previewed]);
+  });
+});
+
 describe("till-adjustment-dialog: before confirming", () => {
   const preview = (over: Partial<AdjustmentPreview> = {}): AdjustmentPreview => ({
     reduction: "12.00",
@@ -377,6 +409,7 @@ describe("till-adjustment-dialog: before confirming", () => {
     await fill(el);
     await press(continueButton(el), el);
     expect(asked).toHaveLength(1);
+    el.choice = asked[0]!;
     el.preview = answer ?? preview();
     await el.updateComplete;
     return { el, asked };
@@ -511,8 +544,10 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
 
   it("shows a refusal on the confirm step beside the action", async () => {
     const el = await mount({ kind: "comp" });
+    const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await chooseReason(el, "Complaint");
     await press(continueButton(el), el);
+    el.choice = asked[0]!;
     el.preview = { reduction: "12.00", nominalValue: "12.00", needsApproval: null, lines: [] };
     el.refusal = "order.payment_in_flight";
     await el.updateComplete;

@@ -2433,6 +2433,7 @@ export class TillApp extends LitElement {
         .target=${open.target}
         .reasons=${open.reasons}
         .preview=${open.preview}
+        .choice=${open.choice}
         .refusal=${open.refusal}
         .busy=${open.busy}
         @adjust-preview=${(event: Event) => void this.#onAdjustPreview(event)}
@@ -2445,6 +2446,7 @@ export class TillApp extends LitElement {
           ? nothing
           : html`<till-supervisor-override-dialog
               data-adjust-approval
+              .approverRole=${open.preview?.needsApproval ?? null}
               .authorizers=${this.adjustApprovers}
               .error=${this.adjustApproverError}
               @override-confirm=${(event: Event) => void this.#onAdjustApproverConfirm(event)}

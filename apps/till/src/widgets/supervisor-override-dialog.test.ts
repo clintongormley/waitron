@@ -161,3 +161,42 @@ describe("till-supervisor-override-dialog", () => {
     expect(alert!.textContent).not.toContain("server.internal");
   });
 });
+
+describe("till-supervisor-override-dialog: naming the role that must approve", () => {
+  it.each(["en", "es-ES"])(
+    "names a manager throughout when one must approve (%s)",
+    async (locale) => {
+      setLocale(locale);
+      const { el } = await mountWidget<TillSupervisorOverrideDialog>(
+        "till-supervisor-override-dialog",
+        { authorizers, approverRole: "manager" },
+      );
+      const dialog = root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!;
+      expect(dialog.heading).toBe(t("approval.title_manager"));
+      expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
+        t("approval.pick_manager"),
+      );
+      await pick(el, "sup-1");
+      expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
+        t("approval.enter_pin_manager"),
+      );
+
+      el.authorizers = [];
+      await pick(el, "sup-1").catch(() => undefined);
+      root(el).querySelector<HTMLElement>(".back")?.click();
+      await el.updateComplete;
+      expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
+        t("approval.none_manager"),
+      );
+    },
+  );
+
+  it("keeps the supervisor wording when no role is given", async () => {
+    const { el } = await mount();
+    const dialog = root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!;
+    expect(dialog.heading).toBe(t("override.title"));
+    expect(root(el).querySelector(".prompt")!.textContent!.trim()).toBe(
+      t("override.pick_supervisor"),
+    );
+  });
+});

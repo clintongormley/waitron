@@ -819,3 +819,50 @@ describe("till-app: answers that arrive after the flow moved on", () => {
     expect(banner(el)!.textContent).toBe(t("adjust.changed_bill"));
   });
 });
+
+describe("till-app: what is confirmed is what was previewed (review fix I1)", () => {
+  it("applies and shows the choice the preview was asked for, even after a field is pressed while it was out", async () => {
+    let answer!: (value: AdjustmentPreview) => void;
+    const steaks: TabLine = { ...wine, name: "Steak", quantity: "2.000", unitPriceGross: "25.00" };
+    const { el } = await mountApp({
+      getTabLines: vi.fn().mockResolvedValue({ lines: [steaks], revision: 6, editSentLines: true }),
+      previewAdjustment: vi.fn(
+        () => new Promise<AdjustmentPreview>((resolve) => (answer = resolve)),
+      ),
+    });
+    const order = await openMesa4(el);
+    await press(el, order.shadowRoot!.querySelector<HTMLElement>('[data-comp-line="1"]')!);
+    await chooseReason(el, "Complaint");
+    await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    // Pressed while the preview is out: it must change nothing that is confirmed.
+    await press(el, inDialog(el, 'input[name="quantity"][value="all"]'));
+    answer(preview({ reduction: "25.00" }));
+    await flush(el);
+
+    expect(inDialog(el, "[data-quantity-shown]").textContent!.trim()).toBe(
+      t("adjust.quantity_shown").replace("{n}", "2"),
+    );
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(applied()).toEqual([
+      {
+        orderId: "wo-4",
+        command: { ...ask, quantity: "1", submissionId: expect.any(String) },
+      },
+    ]);
+  });
+
+  it("names the role that must approve in the PIN prompt", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const order = await openMesa4(el);
+    await previewComp(el, order);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(
+      approval(el)!.shadowRoot!.querySelector<HTMLElement & { heading: string }>("wt-dialog")!
+        .heading,
+    ).toBe(t("approval.title_manager"));
+  });
+});

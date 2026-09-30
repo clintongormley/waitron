@@ -188,8 +188,11 @@ export class TillAdjustmentDialog extends LitElement {
   @property({ attribute: false }) target: AdjustTarget | null = null;
   /** The venue's active reasons; the form offers those allowing the action. */
   @property({ attribute: false }) reasons: AdjustmentReason[] = [];
-  /** The server's answer to the last `adjust-preview`; set, the dialog asks for confirmation. */
+  /** The server's answer to the last `adjust-preview`; set with {@link choice}, the dialog asks for
+   * confirmation. */
   @property({ attribute: false }) preview: AdjustmentPreview | null = null;
+  /** The choice the preview was asked for: what the confirm step shows and confirms. */
+  @property({ attribute: false }) choice: AdjustmentChoice | null = null;
   /** The code of the last request's refusal. */
   @property() refusal: string | null = null;
   /** A request is out. */
@@ -333,9 +336,9 @@ export class TillAdjustmentDialog extends LitElement {
     this.#emit("adjust-preview", this.#choice());
   }
 
-  #confirm(): void {
+  #confirm(choice: AdjustmentChoice): void {
     this.shownRefusal = null;
-    this.#emit("adjust-confirm", this.#choice());
+    this.#emit("adjust-confirm", choice);
   }
 
   override render() {
@@ -359,9 +362,9 @@ export class TillAdjustmentDialog extends LitElement {
         ${
           noReasons
             ? this.#noReasons()
-            : this.preview === null
+            : this.preview === null || this.choice === null
               ? this.#form(target)
-              : this.#confirmStep(this.preview)
+              : this.#confirmStep(this.preview, this.choice)
         }
       </div>
     </wt-dialog>`;
@@ -432,6 +435,7 @@ export class TillAdjustmentDialog extends LitElement {
       <wt-input
         name="note"
         autocomplete="off"
+        .disabled=${this.busy}
         .maxlength=${500}
         .label=${t("adjust.note")}
         .value=${this.note}
@@ -469,7 +473,7 @@ export class TillAdjustmentDialog extends LitElement {
 
   #quantityChoice(target: AdjustTarget, error: string | undefined): TemplateResult {
     const invalid = error === undefined ? {} : { errorId: "quantity-error" };
-    return html`<fieldset class="choice" data-quantity>
+    return html`<fieldset class="choice" data-quantity ?disabled=${this.busy}>
       <legend>${t("adjust.quantity")}</legend>
       <div class="options">
         ${this.#radio(
@@ -513,7 +517,7 @@ export class TillAdjustmentDialog extends LitElement {
     };
     return html`${
         kinds.length > 1
-          ? html`<fieldset class="choice" data-discount-kind>
+          ? html`<fieldset class="choice" data-discount-kind ?disabled=${this.busy}>
               <legend>${t("adjust.kind")}</legend>
               <div class="options">
                 ${kinds.map((kind) =>
@@ -532,6 +536,7 @@ export class TillAdjustmentDialog extends LitElement {
       <wt-input
         name=${this.discountKind}
         autocomplete="off"
+        .disabled=${this.busy}
         required
         .label=${t(this.discountKind === "percent" ? "adjust.percent" : "adjust.amount")}
         .value=${this.value}
@@ -546,7 +551,7 @@ export class TillAdjustmentDialog extends LitElement {
 
   #reasonChoice(error: string | undefined): TemplateResult {
     const invalid = { required: true, ...(error === undefined ? {} : { errorId: "reason-error" }) };
-    return html`<fieldset class="choice" data-reasons>
+    return html`<fieldset class="choice" data-reasons ?disabled=${this.busy}>
       <legend>
         ${t("adjust.reason")}<span class="required" data-reason-required aria-hidden="true">*</span>
       </legend>
@@ -569,9 +574,8 @@ export class TillAdjustmentDialog extends LitElement {
     </fieldset>`;
   }
 
-  #confirmStep(preview: AdjustmentPreview): TemplateResult {
-    const choice = this.#choice();
-    const reason = this.#reason();
+  #confirmStep(preview: AdjustmentPreview, choice: AdjustmentChoice): TemplateResult {
+    const reason = this.reasons.find((candidate) => candidate.id === choice.reasonId);
     const bottom = this.#bottomMessage(new Map());
     const asked =
       choice.amount !== undefined &&
@@ -627,7 +631,7 @@ export class TillAdjustmentDialog extends LitElement {
           data-adjust-confirm
           .loading=${this.busy}
           .disabled=${this.busy}
-          @click=${() => this.#confirm()}
+          @click=${() => this.#confirm(choice)}
         >
           ${preview.needsApproval === null ? t(DO[this.kind]) : t("adjust.ask_approval")}
         </wt-button>

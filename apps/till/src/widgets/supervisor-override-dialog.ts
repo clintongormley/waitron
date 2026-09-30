@@ -6,7 +6,7 @@ import { baseStyles } from "@waitron/ui";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import "./numeric-pad.js";
-import type { StaffMember } from "../api/client.js";
+import type { PersonRole, StaffMember } from "../api/client.js";
 
 export interface OverrideConfirmDetail {
   personId: string;
@@ -70,6 +70,10 @@ export class TillSupervisorOverrideDialog extends LitElement {
 
   @property() error: string | null = null;
 
+  /** The role that must approve, which the prompt then names; without one it asks for a
+   * supervisor. */
+  @property({ attribute: false }) approverRole: PersonRole | null = null;
+
   @state() private selected?: StaffMember;
   @state() private pin = "";
   @state() private dismissed = false;
@@ -78,6 +82,17 @@ export class TillSupervisorOverrideDialog extends LitElement {
    * after the operator dismissed the previous one by typing — so any change to `error` re-arms it. */
   override willUpdate(changed: PropertyValues): void {
     if (changed.has("error")) this.dismissed = false;
+  }
+
+  #text(which: "title" | "none" | "pick" | "enter_pin"): string {
+    if (this.approverRole !== null) return t(`approval.${which}_${this.approverRole}`);
+    const supervisor: Record<typeof which, StringKey> = {
+      title: "override.title",
+      none: "override.no_supervisors",
+      pick: "override.pick_supervisor",
+      enter_pin: "override.enter_pin",
+    };
+    return t(supervisor[which]);
   }
 
   #select(person: StaffMember): void {
@@ -120,7 +135,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
-      .heading=${t("override.title")}
+      .heading=${this.#text("title")}
       @wt-close=${() => this.#cancel()}
     >
       ${this.selected ? this.#renderPin(this.selected) : this.#renderPicker()}
@@ -131,9 +146,9 @@ export class TillSupervisorOverrideDialog extends LitElement {
     return html`
       ${
         this.authorizers.length === 0
-          ? html`<p class="prompt">${t("override.no_supervisors")}</p>`
+          ? html`<p class="prompt">${this.#text("none")}</p>`
           : html`
-              <p class="prompt">${t("override.pick_supervisor")}</p>
+              <p class="prompt">${this.#text("pick")}</p>
               <div class="roster">
                 ${this.authorizers.map(
                   (person) => html`
@@ -159,7 +174,7 @@ export class TillSupervisorOverrideDialog extends LitElement {
     const showError = this.error !== null && !this.dismissed;
     return html`
       <p class="operator">${person.displayName}</p>
-      <p class="prompt">${t("override.enter_pin")}</p>
+      <p class="prompt">${this.#text("enter_pin")}</p>
       <div class="pin-display" aria-hidden="true">${"●".repeat(this.pin.length)}</div>
       ${
         showError

@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./adjustment-dialog.js";
-import type { AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
+import type { AdjustmentPreview, AdjustmentReason } from "../api/client.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));
@@ -38,6 +38,18 @@ const steaks: AdjustTarget = {
   total: "50.00",
   unitTotal: "25.00",
 };
+
+/** Continue, answered as the app answers it: the choice previewed, and the preview. */
+async function previewed(el: TillAdjustmentDialog, preview: AdjustmentPreview): Promise<void> {
+  let asked: AdjustmentChoice | undefined;
+  el.addEventListener("adjust-preview", (event) => {
+    asked = (event as CustomEvent<AdjustmentChoice>).detail;
+  });
+  await pressed(el, "[data-adjust-continue]");
+  el.choice = asked!;
+  el.preview = preview;
+  await el.updateComplete;
+}
 
 const pressed = async (el: TillAdjustmentDialog, selector: string) => {
   el.shadowRoot!.querySelector<HTMLElement>(selector)!.click();
@@ -84,9 +96,12 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     const { el, host } = await mount({});
     await pressed(el, 'input[name="quantity"][value="1"]');
     await pressed(el, 'input[name="reason"]');
-    await pressed(el, "[data-adjust-continue]");
-    el.preview = { reduction: "50.00", nominalValue: "50.00", needsApproval: "manager", lines: [] };
-    await el.updateComplete;
+    await previewed(el, {
+      reduction: "50.00",
+      nominalValue: "50.00",
+      needsApproval: "manager",
+      lines: [],
+    });
     await expectNoA11yViolations(host);
   });
 
@@ -100,8 +115,12 @@ describe.each(["light", "dark"] as const)("till-adjustment-dialog a11y (%s theme
     input.value = "3,27";
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
     await el.updateComplete;
-    await pressed(el, "[data-adjust-continue]");
-    el.preview = { reduction: "3.28", nominalValue: "50.00", needsApproval: null, lines: [] };
+    await previewed(el, {
+      reduction: "3.28",
+      nominalValue: "50.00",
+      needsApproval: null,
+      lines: [],
+    });
     el.refusal = "order.payment_in_flight";
     await el.updateComplete;
     await expectNoA11yViolations(host);

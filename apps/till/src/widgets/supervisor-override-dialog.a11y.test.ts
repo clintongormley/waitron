@@ -15,6 +15,18 @@ afterEach(cleanupWidgets);
 describe.each(["light", "dark"] as const)(
   "till-supervisor-override-dialog a11y (%s theme)",
   (theme) => {
+    it("has no violations asking a manager for their PIN", async () => {
+      setLocale("es-ES");
+      const { el, host } = await mountWidget<TillSupervisorOverrideDialog>(
+        "till-supervisor-override-dialog",
+        { authorizers, approverRole: "manager" },
+        theme,
+      );
+      el.shadowRoot!.querySelector<HTMLElement>('[data-person="sup-1"]')!.click();
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    });
+
     it("has no violations in the supervisor picker", async () => {
       setLocale("es-ES");
       const { host } = await mountWidget<TillSupervisorOverrideDialog>(
