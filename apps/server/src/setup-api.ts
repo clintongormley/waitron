@@ -10,7 +10,12 @@ import {
   resolveFiscalJurisdiction,
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
-import { hashPassword, hashPin, normalizeAndValidateEmail, verifySecret } from "@waitron/identity";
+import {
+  hashPassword,
+  hashPin,
+  normalizeAndValidateEmail,
+  verifySecretAsync,
+} from "@waitron/identity";
 import { AppError, FALLBACK_LOCALE, SUPPORTED_LOCALE_CODES, isAppError } from "@waitron/shared";
 import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
@@ -218,12 +223,17 @@ const runReset = createErrorBoundary(RESET_STATUS, "setup.reset_failed");
 /**
  * Whether `personId` and `password` are the admin login the primary accepted for the adopt that
  * stopped partway. It does NOT establish that the admin is still active on the primary, and the
- * one-time code is not checked again.
+ * one-time code is not checked again. The key is derived on the thread pool, so the event loop keeps
+ * turning meanwhile.
  */
-function matchesResetProof(proof: unknown, personId: string, password: string): boolean {
+async function matchesResetProof(
+  proof: unknown,
+  personId: string,
+  password: string,
+): Promise<boolean> {
   const saved =
     typeof proof === "object" && proof !== null ? (proof as Record<string, unknown>) : {};
-  const passwordMatches = verifySecret(
+  const passwordMatches = await verifySecretAsync(
     password,
     typeof saved.passwordHash === "string" ? saved.passwordHash : "",
   );
@@ -846,7 +856,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         const finish = resetThrottle.begin(record.id);
         let outcome: "success" | "invalid" | "error" = "error";
         try {
-          outcome = matchesResetProof(record.data.resetProof, personId, password)
+          outcome = (await matchesResetProof(record.data.resetProof, personId, password))
             ? "success"
             : "invalid";
         } finally {

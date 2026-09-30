@@ -408,9 +408,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const joinId = dot > 0 ? bearer.slice(0, dot) : "";
       const secret = dot > 0 ? bearer.slice(dot + 1) : "";
       if (!isUuid(joinId)) return c.json({ status: "not_approved" as const });
-      const status = await withTransaction(deps.db, async (tx) => {
-        return readAgentJoinStatus(tx, deps.cfg, joinId, secret);
-      });
+      const status = await readAgentJoinStatus(deps.db, deps.cfg, joinId, secret);
       return c.json({ status });
     }),
   );

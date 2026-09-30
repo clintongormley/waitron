@@ -3,7 +3,7 @@
 import "./errors.js";
 import type { Context } from "hono";
 import { AppError } from "@waitron/shared";
-import { withTransaction, type Database } from "@waitron/db";
+import type { Database } from "@waitron/db";
 import { authenticateAgent } from "@waitron/printing";
 
 export interface PrintAgentSessionDeps {
@@ -21,7 +21,5 @@ export async function requireAgent(
   const header = c.req.header("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
   if (token.length === 0) throw new AppError("agent.unauthorized", {});
-  return withTransaction(deps.db, async (tx) => {
-    return authenticateAgent(tx, token);
-  });
+  return authenticateAgent(deps.db, token);
 }

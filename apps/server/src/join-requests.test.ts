@@ -28,7 +28,7 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import { verifySecret } from "@waitron/identity";
+import { verifySecretAsync } from "@waitron/identity";
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -56,6 +56,20 @@ async function seedProfile(
 function asApp<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(suite.db, async (tx) => {
     return fn(tx);
+  });
+}
+
+/** On the next turn of the event loop, commit a write transaction and record "writer" once it has. */
+function writeOnNextTurn(order: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    setImmediate(() => {
+      withTransaction(suite.db, (tx) => tx.execute(sql`select 1`))
+        .then(() => {
+          order.push("writer");
+          resolve();
+        })
+        .catch(reject);
+    });
   });
 }
 
@@ -101,16 +115,14 @@ describe("pending joins belong to the node that received them", () => {
       createJoinRequest(tx, venue.cfg, { kind: "print_agent", label: "kitchen-pi" }),
     );
 
-    expect(await asApp((tx) => readJoinStatus(tx, venue.cfg, device.joinId, device.token))).toBe(
-      "pending",
-    );
-    expect(await asApp((tx) => readJoinStatus(tx, otherNode, device.joinId, device.token))).toBe(
+    expect(await readJoinStatus(suite.db, venue.cfg, device.joinId, device.token)).toBe("pending");
+    expect(await readJoinStatus(suite.db, otherNode, device.joinId, device.token)).toBe(
       "not_approved",
     );
-    expect(await asApp((tx) => readAgentJoinStatus(tx, venue.cfg, agent.joinId, agent.token))).toBe(
+    expect(await readAgentJoinStatus(suite.db, venue.cfg, agent.joinId, agent.token)).toBe(
       "pending",
     );
-    expect(await asApp((tx) => readAgentJoinStatus(tx, otherNode, agent.joinId, agent.token))).toBe(
+    expect(await readAgentJoinStatus(suite.db, otherNode, agent.joinId, agent.token)).toBe(
       "not_approved",
     );
     expect(await asApp((tx) => joinRequestKind(tx, venue.cfg, device.joinId))).toBe("device");
@@ -430,33 +442,31 @@ describe("createJoinRequest — serialization of number allocation and the cap o
 describe("readJoinStatus", () => {
   it("is pending for a live request with the right token", async () => {
     const venue = await setupVenue(suite.db);
-    await withTransaction(suite.db, async (tx) => {
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
-      const status = await readJoinStatus(tx, venue.cfg, made.joinId, made.token);
-      expect(status).toBe("pending");
+    const made = await withTransaction(suite.db, async (tx) => {
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
+    expect(status).toBe("pending");
   });
 
   it("is not_approved for a wrong token on a live request", async () => {
     const venue = await setupVenue(suite.db);
-    await withTransaction(suite.db, async (tx) => {
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
-      const status = await readJoinStatus(tx, venue.cfg, made.joinId, "wrong-token");
-      expect(status).toBe("not_approved");
+    const made = await withTransaction(suite.db, async (tx) => {
+      return createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
     });
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, "wrong-token");
+    expect(status).toBe("not_approved");
   });
 
   it("is not_approved for an id that never existed", async () => {
     const venue = await setupVenue(suite.db);
-    await withTransaction(suite.db, async (tx) => {
-      const status = await readJoinStatus(
-        tx,
-        venue.cfg,
-        "00000000-0000-4000-8000-000000000000",
-        "irrelevant-token",
-      );
-      expect(status).toBe("not_approved");
-    });
+    const status = await readJoinStatus(
+      suite.db,
+      venue.cfg,
+      "00000000-0000-4000-8000-000000000000",
+      "irrelevant-token",
+    );
+    expect(status).toBe("not_approved");
   });
 
   it("is not_approved once the request has lapsed", async () => {
@@ -469,11 +479,22 @@ describe("readJoinStatus", () => {
     await suite.db.execute(
       sql`update join_requests set created_at = ${lapsed} where id = ${made.joinId}`,
     );
-    await withTransaction(suite.db, async (tx) => {
-      const status = await readJoinStatus(tx, venue.cfg, made.joinId, made.token);
-      expect(status).toBe("not_approved");
-    });
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
+    expect(status).toBe("not_approved");
   });
+  it("lets another writer commit while it derives the key", async () => {
+    const venue = await setupVenue(suite.db);
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
+    );
+    const order: string[] = [];
+    const read = readJoinStatus(suite.db, venue.cfg, made.joinId, made.token).then((status) =>
+      order.push(status),
+    );
+    await Promise.all([read, writeOnNextTurn(order)]);
+    expect(order).toEqual(["writer", "pending"]);
+  });
+
   // The `approved` case needs an accepted device — see acceptDeviceJoinRequest's own first test below,
   // which asserts it via this same function.
 });
@@ -566,18 +587,15 @@ describe("acceptDeviceJoinRequest", () => {
   it("creates the device with the request's OWN id, so the joiner's cookie survives", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
-    const { made, accepted, status } = await withTransaction(suite.db, async (tx) => {
+    const { made, accepted } = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
         choice: made.verificationNumber,
         profileId,
       });
-      return {
-        made,
-        accepted,
-        status: await readJoinStatus(tx, venue.cfg, made.joinId, made.token),
-      };
+      return { made, accepted };
     });
+    const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token);
     expect(accepted).toMatchObject({ ok: true, deviceId: made.joinId, formFactor: "till" });
     expect(status).toBe("approved");
   });
@@ -638,9 +656,7 @@ describe("acceptDeviceJoinRequest", () => {
     // header comment) — a genuine retry must still find the request PENDING, not gone, once the
     // blocker device row (a fixture artefact, not a real collision) is cleared.
     await suite.db.execute(sql`delete from devices where id = ${made.joinId}`);
-    await withTransaction(suite.db, async (tx) => {
-      expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("pending");
-    });
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("pending");
   });
 
   it("DENIES on a wrong choice, and the deny SURVIVES THE TRANSACTION", async () => {
@@ -665,8 +681,8 @@ describe("acceptDeviceJoinRequest", () => {
           profileId,
         }),
       ).rejects.toMatchObject({ code: "join_request.not_found" });
-      expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("not_approved");
     });
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("not_approved");
   });
 
   it("refuses a print_agent request — a device accept cannot turn an agent's ask into a device", async () => {
@@ -774,9 +790,7 @@ describe("denyJoinRequest", () => {
     await withTransaction(suite.db, async (tx) => {
       await denyJoinRequest(tx, venue.cfg, made.joinId);
     });
-    await withTransaction(suite.db, async (tx) => {
-      expect(await readJoinStatus(tx, venue.cfg, made.joinId, made.token)).toBe("not_approved");
-    });
+    expect(await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token)).toBe("not_approved");
   });
 
   it("throws join_request.not_found for an unknown id", async () => {
@@ -819,7 +833,7 @@ describe("acceptPrintAgentJoinRequest", () => {
     );
     expect(agent).toMatchObject({ id: made.joinId, name: "kitchen-pi", active: true });
     // At the VERB layer `token` IS the bare secret; the route composes `${joinId}.${secret}`.
-    expect(verifySecret(made.token, agent!.tokenHash)).toBe(true);
+    expect(await verifySecretAsync(made.token, agent!.tokenHash)).toBe(true);
 
     const gone = await asApp((tx) =>
       tx.select().from(joinRequests).where(eq(joinRequests.id, made.joinId)),
@@ -872,21 +886,28 @@ describe("readAgentJoinStatus", () => {
     const made = await asApp((tx) =>
       createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
     );
-    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
-      "pending",
+    expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("pending");
+    expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, "wrong")).toBe("not_approved");
+    await asApp((tx) =>
+      acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
     );
-    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, made.joinId, "wrong"))).toBe(
-      "not_approved",
+    expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("approved");
+    expect(await readAgentJoinStatus(suite.db, cfg, randomUUID(), made.token)).toBe("not_approved");
+  });
+  it("lets another writer commit while it derives the key", async () => {
+    const cfg = (await setupVenue(suite.db)).cfg;
+    const made = await asApp((tx) =>
+      createJoinRequest(tx, cfg, { kind: "print_agent", label: "a" }),
     );
     await asApp((tx) =>
       acceptPrintAgentJoinRequest(tx, cfg, made.joinId, { choice: made.verificationNumber }),
     );
-    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, made.joinId, made.token))).toBe(
-      "approved",
+    const order: string[] = [];
+    const read = readAgentJoinStatus(suite.db, cfg, made.joinId, made.token).then((status) =>
+      order.push(status),
     );
-    expect(await asApp((tx) => readAgentJoinStatus(tx, cfg, randomUUID(), made.token))).toBe(
-      "not_approved",
-    );
+    await Promise.all([read, writeOnNextTurn(order)]);
+    expect(order).toEqual(["writer", "approved"]);
   });
 });
 
@@ -898,7 +919,7 @@ describe("selfEnrolNodeAgent", () => {
       selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
     );
     // The token is the accept-shape `${id}.${secret}` and authenticates as this agent.
-    const auth = await asApp((tx) => authenticateAgent(tx, token));
+    const auth = await authenticateAgent(suite.db, token);
     expect(auth.agentId).toBe(agentId);
   });
 
@@ -916,8 +937,8 @@ describe("selfEnrolNodeAgent", () => {
     expect(rows).toHaveLength(1);
 
     // The old token no longer authenticates; the new one does, as the same agent.
-    await expect(asApp((tx) => authenticateAgent(tx, first.token))).rejects.toThrow(/unauthorized/);
-    expect((await asApp((tx) => authenticateAgent(tx, second.token))).agentId).toBe(first.agentId);
+    await expect(authenticateAgent(suite.db, first.token)).rejects.toThrow(/unauthorized/);
+    expect((await authenticateAgent(suite.db, second.token)).agentId).toBe(first.agentId);
   });
 
   it("refuses a revoked node's re-enrol with device.join_revoked and does NOT reactivate it", async () => {

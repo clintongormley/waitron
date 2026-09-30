@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tenants, withTransaction } from "@waitron/db";
+import { locations, tenants } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { authenticateAgent } from "@waitron/printing";
@@ -118,9 +118,7 @@ async function errorCodeOf(res: Response): Promise<string> {
 
 /** Resolve a minted agent token through the production auth path. */
 async function authenticate(token: string): Promise<{ agentId: string }> {
-  return withTransaction(suite.db, async (tx) => {
-    return authenticateAgent(tx, token);
-  });
+  return authenticateAgent(suite.db, token);
 }
 
 /** Read straight off the table, so the assertion is about what landed, not what the route

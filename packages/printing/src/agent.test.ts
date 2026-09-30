@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, locations, printAgents, withTransaction } from "@waitron/db";
-import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hashSecret } from "@waitron/identity";
@@ -24,12 +23,6 @@ async function setup(): Promise<PrintAgentConfig> {
     })
     .returning({ id: locations.id });
   return { locationId: row!.id };
-}
-
-function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T> {
-  return withTransaction(db, async (tx) => {
-    return fn(tx);
-  });
 }
 
 async function lastSeenAt(agentId: string): Promise<string | null> {
@@ -73,7 +66,7 @@ describe("authenticateAgent", () => {
     const { agentId, token } = await enrolled();
     expect(await lastSeenAt(agentId)).toBeNull();
 
-    const result = await asApp(suite.db, (tx) => authenticateAgent(tx, token));
+    const result = await authenticateAgent(suite.db, token);
     expect(result.agentId).toBe(agentId);
 
     expect(await lastSeenAt(agentId)).not.toBeNull();
@@ -90,7 +83,7 @@ describe("authenticateAgent", () => {
       .update(printAgents)
       .set({ lastSeenAt: fresh })
       .where(eq(printAgents.id, agentId));
-    await asApp(suite.db, (tx) => authenticateAgent(tx, token));
+    await authenticateAgent(suite.db, token);
     expect(await lastSeenAt(agentId)).toBe(fresh);
 
     const stale = ago(90_000);
@@ -98,7 +91,7 @@ describe("authenticateAgent", () => {
       .update(printAgents)
       .set({ lastSeenAt: stale })
       .where(eq(printAgents.id, agentId));
-    await asApp(suite.db, (tx) => authenticateAgent(tx, token));
+    await authenticateAgent(suite.db, token);
     const written = await lastSeenAt(agentId);
     expect(written).not.toBe(stale);
     expect(Date.parse(written!)).toBeGreaterThan(Date.parse(stale));
@@ -107,31 +100,80 @@ describe("authenticateAgent", () => {
   it("a wrong token (tampered secret) → agent.unauthorized", async () => {
     const { agentId } = await enrolled();
     const forged = `${agentId}.${randomBytes(32).toString("base64url")}`;
-    expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, forged)))).toBe(
-      "agent.unauthorized",
-    );
+    expect(await codeOf(() => authenticateAgent(suite.db, forged))).toBe("agent.unauthorized");
   });
 
   it("a revoked (active=false) agent → agent.unauthorized", async () => {
     const { agentId, token } = await enrolled();
     await suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId));
-    expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, token)))).toBe(
-      "agent.unauthorized",
-    );
+    expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
   });
 
   it("an unknown agent id → agent.unauthorized", async () => {
     const token = `${randomUUID()}.${randomBytes(32).toString("base64url")}`;
-    expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, token)))).toBe(
-      "agent.unauthorized",
+    expect(await codeOf(() => authenticateAgent(suite.db, token))).toBe("agent.unauthorized");
+  });
+
+  it("lets another writer commit while it derives the key", async () => {
+    const { cfg, token } = await enrolled();
+    const order: string[] = [];
+    const authenticated = authenticateAgent(suite.db, token).then(() =>
+      order.push("authenticated"),
     );
+    const written = new Promise<void>((resolve, reject) => {
+      setImmediate(() => {
+        withTransaction(suite.db, (tx) =>
+          tx.update(locations).set({ name: "Bar" }).where(eq(locations.id, cfg.locationId)),
+        )
+          .then(() => {
+            order.push("writer");
+            resolve();
+          })
+          .catch(reject);
+      });
+    });
+    await Promise.all([authenticated, written]);
+    expect(order).toEqual(["writer", "authenticated"]);
+  });
+
+  it("refuses an agent revoked while its key is being derived", async () => {
+    const { agentId, token } = await enrolled();
+    const revoked = new Promise<void>((resolve, reject) => {
+      setImmediate(() => {
+        withTransaction(suite.db, (tx) =>
+          tx.update(printAgents).set({ active: false }).where(eq(printAgents.id, agentId)),
+        )
+          .then(() => resolve())
+          .catch(reject);
+      });
+    });
+    const code = await codeOf(() => authenticateAgent(suite.db, token));
+    await revoked;
+    expect(code).toBe("agent.unauthorized");
+  });
+
+  it("refuses a token whose agent was re-keyed while its key was being derived", async () => {
+    const { agentId, token } = await enrolled();
+    const rekeyed = new Promise<void>((resolve, reject) => {
+      setImmediate(() => {
+        withTransaction(suite.db, (tx) =>
+          tx
+            .update(printAgents)
+            .set({ tokenHash: hashSecret(randomBytes(32).toString("base64url")) })
+            .where(eq(printAgents.id, agentId)),
+        )
+          .then(() => resolve())
+          .catch(reject);
+      });
+    });
+    const code = await codeOf(() => authenticateAgent(suite.db, token));
+    await rekeyed;
+    expect(code).toBe("agent.unauthorized");
   });
 
   it("a malformed token — no separator, trailing dot, or non-uuid selector — → agent.unauthorized", async () => {
     for (const bad of ["nodothere", "abc.", "not-a-uuid.somesecret"]) {
-      expect(await codeOf(() => asApp(suite.db, (tx) => authenticateAgent(tx, bad)))).toBe(
-        "agent.unauthorized",
-      );
+      expect(await codeOf(() => authenticateAgent(suite.db, bad))).toBe("agent.unauthorized");
     }
   });
 });

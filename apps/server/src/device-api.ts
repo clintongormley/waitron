@@ -172,9 +172,7 @@ export function mountDeviceApi(app: Hono, deps: DeviceApiDeps, log: Logger): voi
       // The selector goes into a by-id comparison that refuses nothing and would match nothing, so
       // this screen is what turns a non-uuid into a clean refusal.
       if (!isUuid(joinId)) throw new AppError("device.unauthorized", {});
-      const status = await withTransaction(deps.db, async (tx) => {
-        return readJoinStatus(tx, deps.cfg, joinId, token);
-      });
+      const status = await readJoinStatus(deps.db, deps.cfg, joinId, token);
       return c.json({ status }, 200);
     }),
   );
