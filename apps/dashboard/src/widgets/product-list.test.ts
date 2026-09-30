@@ -1180,4 +1180,27 @@ describe("the product list at phone width", () => {
       }
     },
   );
+
+  it("lines each name up with the price beside it, with a thumbnail, a placeholder or neither", async () => {
+    const products = [
+      product({ id: "pictured", image: "abc123.webp" }),
+      product({ id: "plain", variants: [{ ...bunVariant, unitPrice: "2.00" }] }),
+    ];
+    const { el } = await mountWidget<ProductList>("dashboard-product-list", { products });
+    const root = await tableRoot(el);
+    root.querySelector<HTMLButtonElement>(".tree-toggle")!.click();
+    await el.shadowRoot!.querySelector("wt-data-table")!.updateComplete;
+    const bottom = (node: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return range.getBoundingClientRect().bottom;
+    };
+    const keys = rowKeys(root);
+    expect(keys).toHaveLength(3);
+    for (const key of keys) {
+      const name = cellUnder(root, key, t("product.name")).querySelector("strong")!;
+      const price = cellUnder(root, key, t("product.price")).querySelector('[data-test="price"]')!;
+      expect(Math.abs(bottom(name) - bottom(price)), key).toBeLessThanOrEqual(1);
+    }
+  });
 });

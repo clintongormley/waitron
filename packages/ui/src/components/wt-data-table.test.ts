@@ -7,6 +7,8 @@ import type {} from "../a11y-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-button.js";
 import "./wt-data-table.js";
+import { registerIcons } from "./wt-icon.js";
+import "./wt-row-actions.js";
 
 afterEach(() => {
   cleanup();
@@ -2560,4 +2562,73 @@ test("a click on a pinned cell's empty space raises no error in a table without 
   onTestFinished(() => removeEventListener("error", record));
   await clickPinnedPadding(el);
   expect(errors).toEqual([]);
+});
+
+/** The glyph box of a text node; two runs in the same font share a baseline when these bottoms match. */
+function textBox(parent: Element): DOMRect {
+  const text = [...parent.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
+  )!;
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  return range.getBoundingClientRect();
+}
+
+test("lines a multi-line cell's first line up with the buttons beside it, at the row's top", async () => {
+  registerIcons({ "baseline-kebab": "M7 2h2v2H7zM7 7h2v2H7zM7 12h2v2H7z" });
+  const el = await table({
+    rows: [{ id: "a", name: "Kitchen printer", count: 1 }],
+    columns: [
+      {
+        key: "name",
+        label: "Name",
+        cell: (row) =>
+          html`<strong data-test="first-line">${row.name}</strong>
+            <div>Network</div>
+            <div>192.168.1.50:9100</div>
+            <div>Seen on Kitchen tablet</div>`,
+      },
+      { key: "add", label: "Add", cell: () => html`<wt-button variant="primary">Add</wt-button>` },
+      {
+        key: "actions",
+        label: "Actions",
+        pinned: "end",
+        cell: () =>
+          html`<wt-row-actions label="More" icon="baseline-kebab" align="end"
+            ><wt-button align="start">Edit</wt-button></wt-row-actions
+          >`,
+      },
+    ],
+  });
+  const root = el.shadowRoot!;
+  const row = root.querySelector("tbody tr")!.getBoundingClientRect();
+  const firstLine = textBox(root.querySelector('[data-test="first-line"]')!);
+  const add = root.querySelector<HTMLElement>("tbody td > wt-button")!;
+  const addText = textBox(add);
+  const addBox = add.getBoundingClientRect();
+  const padding = parseFloat(getComputedStyle(add.closest("td")!).paddingTop);
+  const icon = root.querySelector("wt-row-actions")!.shadowRoot!.querySelector("wt-icon")!;
+  const iconBox = icon.getBoundingClientRect();
+  const iconMiddle = iconBox.top + iconBox.height / 2;
+
+  expect(Math.abs(addText.bottom - firstLine.bottom), "the two baselines").toBeLessThanOrEqual(2);
+  expect(addBox.top - row.top, "the button's distance from the row's top").toBeLessThanOrEqual(
+    padding + 2,
+  );
+  expect(iconMiddle, "the menu icon against the first line").toBeGreaterThanOrEqual(firstLine.top);
+  expect(iconMiddle, "the menu icon against the first line").toBeLessThanOrEqual(firstLine.bottom);
+});
+
+test("lines each tree row's name up with the text beside it, with a toggle or without", async () => {
+  const el = await treeTable({
+    columns: [...treeColumns, { key: "id", label: "Key", cell: (r: TreeRow) => r.id }],
+  });
+  for (const row of el.shadowRoot!.querySelectorAll("tbody tr")) {
+    const [name, key] = row.querySelectorAll("td");
+    const beside = textBox(key!).bottom;
+    expect(
+      Math.abs(textBox(name!.querySelector(".tree-cell")!).bottom - beside),
+      row.getAttribute("data-row-key")!,
+    ).toBeLessThanOrEqual(1);
+  }
 });

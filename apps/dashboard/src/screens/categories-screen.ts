@@ -97,25 +97,27 @@ export class CategoriesScreen extends LitElement {
          the nodes are parented in THAT element's shadow root, not this screen's. A class selector in
          this stylesheet can never reach them; a part= attribute on the markup plus ::part() here
          crosses exactly that one boundary — the pattern printers-screen.ts uses for its cell markup. */
+      /* Inline, not flex: the table lines a row up by its cells' first baselines, and a flex row
+         would give the cell the thumbnail's bottom edge as its baseline instead of the name's. */
+      wt-data-table::part(thumbnail),
+      wt-data-table::part(thumbnail-placeholder),
+      wt-data-table::part(swatch) {
+        display: inline-block;
+        vertical-align: middle;
+        margin-inline-end: var(--wt-space-2);
+      }
       wt-data-table::part(thumbnail),
       wt-data-table::part(thumbnail-placeholder) {
         width: var(--wt-tap-min);
         height: var(--wt-tap-min);
-        flex: none;
       }
       wt-data-table::part(thumbnail) {
         object-fit: cover;
         border-radius: var(--wt-radius-sm);
       }
-      wt-data-table::part(name-cell) {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--wt-space-2);
-      }
       wt-data-table::part(swatch) {
         width: var(--wt-space-4);
         height: var(--wt-space-4);
-        flex: none;
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
       }
@@ -447,7 +449,7 @@ export class CategoriesScreen extends LitElement {
     // visible; the table reports that through the cell's `ancestorOnly` context. Mute those so
     // the match itself stands out.
     const muted = this.mode === "tree" && ancestorOnly;
-    return html`<span part="name-cell">
+    return html`<span>
       ${
         category.image
           ? html`<img
@@ -456,9 +458,7 @@ export class CategoriesScreen extends LitElement {
               alt=""
             />`
           : html`<span part="thumbnail-placeholder" aria-hidden="true"></span>`
-      }
-      ${this.#swatch(category.color)}
-      <wt-button
+      }${this.#swatch(category.color)}<wt-button
         part=${muted ? "name name-muted" : "name"}
         variant="ghost"
         data-category=${category.id}

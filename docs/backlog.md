@@ -2446,10 +2446,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     agent reports the device paired, its row offers Add. A Pair whose device drops out of the list
     keeps a row in the dialog showing its status, and Dismiss once it has an outcome, until it is
     dismissed or the device comes back, marked "No longer found by the scan" while the scan does
-    not report the device.
+    not report the device. _2026-09-30 (C103): no Dismiss; a success fades after about four
+    seconds, a failure stays until the next Pair or Unpair on that device, or until Add a printer
+    closes._
   - **Forget pairing** sits in the row menu of a switched-off Bluetooth printer whose agent reports
     it paired now, and asks for a second, confirming click. _2026-09-30 (A141): switched on or
-    off._ Switching a printer off does not forget its pairing (read, not run: the screen's Disable
+    off._ _2026-09-30 (C103): named Unpair, and it acts on one press._ Switching a printer off does not forget its pairing (read, not run: the screen's Disable
     calls only `deactivatePrinter`, in `apps/dashboard/src/screens/printers-screen.ts`).
   - Both need the existing `printer.manage` permission. The server takes a Pair only for a device
     the same agent's scan reported within the last 15 seconds, and a Forget only for a device the
@@ -2474,6 +2476,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the agent's own reason for a failure, or, once the `expiresInMs` the server sent with the
     accepted command has passed, "No answer from the print agent — try again". It asks the server
     in the background and stops at the outcome, at that cut-off, or when the screen closes.
+    _2026-09-30 (C103): "Unpairing…" and "Unpaired"._
 
   What was run, on 2026-09-29: the focused suites Task 12 of the plan
   (`docs/superpowers/plans/2026-09-27-print-agent-setup-lockdown.md`) lists — the four server files
@@ -2501,7 +2504,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   to add the printer and shows Add at once, the screen keeps reading after a success until the
   device is reported paired, that pairing's deadline passes, or Add a printer closes, and a paired
   device with no printer row also offers Forget pairing;
-  see the A138 entry below._
+  see the A138 entry below._ _2026-09-30 (C103): named Unpair._
 - **Follow-ups from P2c** (read, not run, unless a line says otherwise):
   - A command queued behind a slow pair can run out of time. The 120 seconds count from queueing
     (`enqueue` in `apps/server/src/printer-bluetooth-commands.ts`), the agent runs commands one at a
@@ -2573,6 +2576,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   Forget pairing is in its row menu (A141). While pairing, the row shows a spinner and says it can
   take up to two minutes, the server's command lifetime (`COMMAND_TTL_MS`,
   `apps/server/src/printer-bluetooth-commands.ts`) after which the dashboard reports no answer.
+  _2026-09-30 (C103): Forget pairing is named Unpair, and the spinner's message is only "Pairing…"._
   **The waits in the flow, read from the code and not timed:** the agent asks the server for work
   every 2 s when idle (`POLL_INTERVAL_MS`, `packages/print-agent/src/agent.ts`); while Add a
   printer's discovery window is open (`DISCOVERY_WINDOW_MS`, 3 minutes, `apps/server/src/print-api.ts`)
@@ -2655,13 +2659,36 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   - Left open: print jobs now wait behind scan passes while the dialog is open and for about three
     minutes after (B6, "While Add a printer is open, print jobs wait behind each scan pass").
     _(2026-09-30: done in C117, #955 — the scan now runs beside the job pull.)_
+- **Bluetooth printer rows: details at the top, buttons side by side, Unpair on one press, messages
+  that fade, and "Pairing…" beside the buttons (C103, owner 2026-09-30) — DONE (2026-09-30).** The
+  owner: _"The printer name and details should be vertically aligned to the top. the action buttons
+  can be side by side. Forget pairing -> Unpair. We don't need a confirm button when unpairing, it
+  is easy to re-pair. We don't need the dismiss button - show the notification for a few seconds
+  then let it fade away."_ and _"the line 'Pairing, this could take up to 2 minutes. The form to add
+  the printer...' Can just be replaced with 'Pairing...', and this could be to the right of the
+  buttons, not underneath"_.
+  - Every `wt-data-table` cell now lines up by its first line of text (`vertical-align: baseline`),
+    not the cell's middle, so a many-line cell starts level with the buttons beside it. The product
+    list's and categories' name cells and the print queue's status dot were changed to sit on that
+    line.
+  - "Forget pairing" is Unpair (ES "Desvincular"), in the Add a printer list and the printer's row
+    menu, with no confirming second press. A print agent's Disable and Enable, and a join request's
+    Deny, keep theirs.
+  - A new shared `wt-notice` (`packages/ui`) shows a message and fades it after four seconds (at once,
+    with no fade, under reduced motion). A command's success message on the Printers screen uses it,
+    with no Dismiss. A failure stays until the next Pair or Unpair on that device; closing Add a
+    printer also clears it, unless the device's printer row in the table shows it.
+  - While pairing the row says only "Pairing…" ("Emparejando…", matching the Emparejar button), to
+    the right of the buttons; at phone width it wraps below them.
+
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
   `apps/dashboard/src/screens/printers-screen.ts`), and a printer you have just added is switched
   on. Now the row offers it whether the printer is switched on or off, as long as an agent reports
   the printer paired. It is in the printer's row on the Printers tab, behind the three-dot button
-  (⋮) in the Actions column, below Edit and Disable; a second click confirms it. A printer
+  (⋮) in the Actions column, below Edit and Disable; a second click confirms it.
+  _2026-09-30 (C103): named Unpair, and it acts on one press._ A printer
   forgotten while switched on stays switched on and registered. While no agent reports it paired,
   anything sent to it stays waiting and the jobs list gives no reason; this is the case A139's
   **Not covered** names. Once an agent reports it paired again, the box's agent ends those jobs
@@ -2674,10 +2701,12 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   disabled while the pairing is pending, so a pairing the agent never confirms can be retried; once
   an agent reports it paired, the row loses its Pair button and keeps only its Paired status until
   that is dismissed or Add a printer closes, and Forget pairing is back in the printer's row menu.
+  _2026-09-30 (C103): no Dismiss; the Paired status fades after about four seconds._
   On a phone-width screen the Actions column starts off the right-hand edge, so the table has to be scrolled sideways to reach the three dots (observed 2026-09-30 in screenshots taken
   during the A141 work, not kept; the A141 finish-branch run-it review (Codex) reported the same at
   390 px). _(2026-09-30: A145, below, pins the Actions column so the menu stays on screen.)_ In
-  Spanish the action is now "Desvincular" ("¿Desvincular?" to confirm; `printers.bluetooth_forget` and its
+  Spanish the action is now "Desvincular" ("¿Desvincular?" to confirm,
+  _2026-09-30 (C103): no longer asked_; `printers.bluetooth_forget` and its
   siblings in `apps/dashboard/src/i18n/strings.ts`). The suspect that was ruled out: the agent's
   paired listing does not drop paired devices. `pairedBluetooth()` in
   `apps/print-agent/src/linux-devices.ts` never asks for a device path, and the test "lists every
@@ -2753,7 +2782,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
 - **DONE (2026-09-30, A145, #935): on a phone, a printer's row menu on the Printers tab stays on
   screen.** The Printers tab's Actions column is pinned to the right-hand edge of the table's box
   with `wt-data-table`'s new opt-in `pinned: "end"` column option, so the three-dot button (⋮)
-  holding Edit, Disable and Forget pairing is in view without scrolling; the other columns still
+  holding Edit, Disable and Forget pairing (_2026-09-30 (C103): named Unpair_) is in view without
+  scrolling; the other columns still
   scroll sideways under it. Measured 2026-09-30 in headless Chromium, with a long printer name and
   a long agent name: before the change the table was 1175 px (English) to 1402 px (Spanish in
   Verdana) wide in a 388 px box at 390 px (a review re-run the same day measured 1192 to 1443 px),
