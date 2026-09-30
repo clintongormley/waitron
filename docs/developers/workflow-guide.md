@@ -111,7 +111,7 @@ What still needs a person:
 approval; nothing else is.
 
 **Merging requires resolved conversations** (`mergeStateStatus: BLOCKED` with green checks). Copilot
-is switched off here (2026-09-06): the second model on the diff is Codex (`gpt-6-astra`) in
+is switched off here (2026-09-06): the second model on the diff is Codex (`gpt-6.1-sol`) in
 `/finish-branch`'s run-it seat, before the PR exists, so its findings are triaged with the others and leave no
 thread. Copilot's lesson stands — its one reliable class was the sibling-file convention the branch
 missed — so the convention reviewer's brief asks for siblings. A thread that does appear is resolved
@@ -307,8 +307,7 @@ on 2.1.278, `claude -p --model 'claude-opus-5-5[1m]'` failed with "API Error: 40
 to 2.1.280, `claude -p` with no `--model` under the runners' `~/.claude` profile reported
 `claude-opus-5-5[1m]`. What 2.1.278 does with the runners' own call (no `--model`, profile alias
 `opus[1m]`) was not measured. Codex
-(`gpt-6-astra` at medium effort — measured against Sol on one commit with one bounded brief: faster,
-fewer tokens, and it found the real defect that Sol at low missed)
+(`gpt-6.1-sol` at medium effort, owner decision 2026-09-30)
 holds exactly one seat **in a Claude-driven session** — when Codex drives, the roles reverse and
 Codex implements while Claude reviews (owner, 2026-09-12), so a Codex implementation is not a rule
 violation; ask who is driving. That one seat is `/finish-branch`'s run-it reviewer, dispatched through
