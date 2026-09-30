@@ -866,3 +866,173 @@ describe("till-app: what is confirmed is what was previewed (review fix I1)", ()
     ).toBe(t("approval.title_manager"));
   });
 });
+
+describe("till-app: cancelling a dish", () => {
+  /** Chooses Mistake, whose note is required, types one and presses Continue. */
+  async function previewCancel(el: TillApp): Promise<void> {
+    await chooseReason(el, "Mistake");
+    const note = inDialog(el, 'wt-input[name="note"]').shadowRoot!.querySelector("input")!;
+    note.value = "wrong table";
+    note.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await flush(el);
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+  }
+  const cancelButton = (order: TillTableOrderScreen, lineNo: number) =>
+    order.shadowRoot!.querySelector<HTMLElement>(`[data-cancel-line="${lineNo}"]`)!;
+  const cancelAsk = {
+    expectedRevision: 6,
+    lineId: "line-1",
+    reasonId: "r-mistake",
+    action: "cancel",
+    note: "wrong table",
+  };
+
+  it("asks for a reason that allows a cancel, records the cancel, then reads the bill, its party and what it owes again", async () => {
+    const getTabLines = vi
+      .fn()
+      .mockResolvedValueOnce({ lines: [wine], revision: 6, editSentLines: true })
+      .mockResolvedValue({ lines: [], revision: 7, editSentLines: true });
+    const { el } = await mountApp({ getTabLines });
+    const order = await openMesa4(el);
+    const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+    const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
+
+    await press(el, cancelButton(order, 1));
+    expect(dialog(el)!.kind).toBe("cancel");
+    expect(dialog(el)!.shadowRoot!.textContent).toContain(t("table.cancel_sent"));
+    const names = [
+      ...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="reason"]'),
+    ].map((radio) => radio.closest("label")!.textContent!.trim());
+    expect(names).toEqual(["Mistake"]);
+    await previewCancel(el);
+    expect(api.previewAdjustment).toHaveBeenCalledWith("wo-4", cancelAsk);
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(applied()).toEqual([
+      { orderId: "wo-4", command: { ...cancelAsk, submissionId: expect.any(String) } },
+    ]);
+    expect(dialog(el)).toBeNull();
+    expect(order.revision).toBe(7);
+    expect(order.shadowRoot!.querySelector('[data-cancel-line="1"]')).toBeNull();
+    expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
+    expect(vi.mocked(api.getTablesState).mock.calls.length).toBeGreaterThan(floorReads);
+    expect(banner(el)).toBeNull();
+  });
+
+  it("shows the bill paid once a cancel leaves nothing to pay on it", async () => {
+    const server = { cancelled: false };
+    const { el } = await mountApp({
+      getTabLines: vi.fn(async () => ({
+        lines: server.cancelled ? [] : [wine],
+        revision: server.cancelled ? 7 : 6,
+        editSentLines: true,
+      })),
+      getPartyBills: vi.fn(async () => [
+        server.cancelled
+          ? { ...bill, status: "settled", total: "0.00", outstanding: "0.00" }
+          : bill,
+      ]),
+      applyAdjustment: vi.fn(async () => {
+        server.cancelled = true;
+        return { adjustmentIds: ["a-1"], revision: 7, party: { id: "v1", revision: 4 } };
+      }),
+    });
+    const order = await openMesa4(el);
+
+    await press(el, cancelButton(order, 1));
+    await previewCancel(el);
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+    expect(tableOrder(el).bills.map((shown) => shown.status)).toEqual(["settled"]);
+  });
+
+  it("sends nothing when the cancel dialog is closed", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa4(el);
+    await press(el, cancelButton(order, 1));
+    await press(el, inDialog(el, "[data-adjust-close]"));
+    expect(dialog(el)).toBeNull();
+    expect(api.previewAdjustment).not.toHaveBeenCalled();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
+  describe("a dish of two, with an extra on each", () => {
+    const pair: TabLine = { ...wine, quantity: "2.000", unitPriceGross: "15.00" };
+    const extra: TabLine = {
+      ...wine,
+      id: "line-2",
+      lineNo: 2,
+      name: "Cheese",
+      parentLineNo: 1,
+      quantity: "2.000",
+      unitPrecision: null,
+      unitPriceGross: "1.00",
+      state: null,
+    };
+    const mountPair = () =>
+      mountApp({
+        getTabLines: vi
+          .fn()
+          .mockResolvedValue({ lines: [pair, extra], revision: 6, editSentLines: true }),
+      });
+
+    it("cancels one of them when One is chosen", async () => {
+      const { el } = await mountPair();
+      const order = await openMesa4(el);
+      await press(el, cancelButton(order, 1));
+      await press(el, inDialog(el, 'input[name="quantity"][value="1"]'));
+      await previewCancel(el);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+      expect(applied()).toEqual([
+        {
+          orderId: "wo-4",
+          command: { ...cancelAsk, quantity: "1", submissionId: expect.any(String) },
+        },
+      ]);
+    });
+
+    it("cancels both, sending no quantity, when All is left chosen", async () => {
+      const { el } = await mountPair();
+      const order = await openMesa4(el);
+      await press(el, cancelButton(order, 1));
+      await previewCancel(el);
+      await press(el, inDialog(el, "[data-adjust-confirm]"));
+
+      expect(applied()).toEqual([
+        { orderId: "wo-4", command: { ...cancelAsk, submissionId: expect.any(String) } },
+      ]);
+    });
+  });
+
+  it("asks the manager for their PIN when the reason needs approval, and cancels under it", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
+    });
+    const order = await openMesa4(el);
+    await press(el, cancelButton(order, 1));
+    await previewCancel(el);
+    expect(inDialog(el, "[data-needs-approval]").textContent!.trim()).toBe(
+      t("adjust.approval_manager"),
+    );
+
+    await press(el, inDialog(el, "[data-adjust-confirm]"));
+    expect(api.listAdjustmentApprovers).toHaveBeenCalledWith("manager");
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+    await pinPad(el, "7777");
+
+    expect(applied()).toEqual([
+      {
+        orderId: "wo-4",
+        command: {
+          ...cancelAsk,
+          submissionId: expect.any(String),
+          approver: { personId: "m-1", pin: "7777" },
+        },
+      },
+    ]);
+    expect(dialog(el)).toBeNull();
+  });
+});

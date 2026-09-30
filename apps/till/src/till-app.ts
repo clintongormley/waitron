@@ -376,7 +376,6 @@ const LINE_REFUSALS = new Set([
   "product.not_sold_separately",
   "ticket.already_started",
   "ticket.already_fired",
-  "tab.void_quantity_invalid",
   "tab.serve_quantity_invalid",
   "group.not_held",
   "group.not_waiting",
@@ -3528,41 +3527,16 @@ export class TillApp extends LitElement {
     await this.#loadTabLines();
   }
 
-  /** Already confirmed on the screen; an absent `quantity` cancels the whole line. The reload runs on
-   * both paths, as in {@link #onRecallLines}; a cancel that may have landed also reads the party's
-   * bills and what it still owes. */
-  async #onVoidLine(event: Event): Promise<void> {
-    const { lineNo, quantity } = (event as CustomEvent<{ lineNo: number; quantity?: string }>)
-      .detail;
-    const orderId = this.activeTabId;
-    if (orderId === undefined) return;
-    const orderVisit = this.#orderVisit;
-    this.errorKey = undefined;
-    try {
-      const { party } = await (quantity === undefined
-        ? this.api.voidLine(orderId, lineNo)
-        : this.api.voidLine(orderId, lineNo, quantity));
-      this.#noteBillParty(party);
-    } catch (error) {
-      this.errorKey = lineWriteError(error);
-      if (!isNetworkFailure(error)) {
-        await this.#loadTabLines();
-        return;
-      }
-    }
-    await this.#rereadAmounts(orderId, orderVisit);
-  }
-
-  /** Give away or Discount pressed: the reasons are read, then the dialog opens on the bill as the
-   * screen last read it. */
+  /** Cancel, Give away or Discount pressed, or Cancel offered: the reasons are read, then the dialog
+   * opens on the bill as the screen last read it. */
   async #onAdjust(event: Event): Promise<void> {
-    const { kind, target } = (event as CustomEvent<AdjustDetail>).detail;
+    const { kind, target, offered } = (event as CustomEvent<AdjustDetail>).detail;
     const orderId = this.activeTabId;
     if (orderId === undefined || this.adjusting !== null || this.#adjustOpening) return;
     const revision = this.tabRevision;
     const visit = this.#orderVisit;
     const session = this.#operatorSession;
-    this.errorKey = undefined;
+    if (offered !== true) this.errorKey = undefined;
     this.#adjustOpening = true;
     let reasons: AdjustmentReason[];
     try {
@@ -4689,7 +4663,6 @@ export class TillApp extends LitElement {
         @set-line-course=${(event: Event) => void this.#onSetLineCourse(event)}
         @send-lines=${(event: Event) => void this.#onSendLines(event)}
         @recall-lines=${(event: Event) => void this.#onRecallLines(event)}
-        @void-line=${(event: Event) => void this.#onVoidLine(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}

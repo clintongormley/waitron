@@ -73,11 +73,7 @@ it("tells staff a card payment is running on the order, and that a dish has sold
 });
 
 it("localises the refusals of changing or cancelling a sent line in both languages", () => {
-  for (const code of [
-    "ticket.already_started",
-    "ticket.already_fired",
-    "tab.void_quantity_invalid",
-  ]) {
+  for (const code of ["ticket.already_started", "ticket.already_fired"]) {
     const generic = codeMessage("some.unmapped_code", "en");
     expect(codeMessage(code, "en")).not.toBe(generic);
     expect(codeMessage(code, "es")).not.toBe(codeMessage("some.unmapped_code", "es"));

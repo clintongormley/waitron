@@ -1,9 +1,10 @@
 import axe from "axe-core";
 import { commands } from "vitest/browser";
-import { beforeEach, expect, vi } from "vitest";
+import { beforeEach, expect, vi, type Mock } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { normaliseDraftLines } from "@waitron/shared";
 import type {
+  AdjustmentReason,
   Draft,
   DraftLine,
   DraftSave,
@@ -363,3 +364,73 @@ function refusal(code: string, draft: Draft) {
 }
 
 export type DraftServer = ReturnType<typeof draftServer>;
+
+/** A reason that allows a cancel and needs nobody's approval. */
+export const cancelReason: AdjustmentReason = {
+  id: "r-cancel",
+  name: "Mistake",
+  actions: ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "staff",
+  approverRole: "staff",
+};
+
+/** An app API stub's adjustment calls: the cancel reason, a preview nobody need approve, and an
+ * apply answering the party at `partyRevision`. */
+export function adjustmentStubs(
+  partyRevision = 4,
+): Record<"listAdjustmentReasons" | "previewAdjustment" | "applyAdjustment", Mock> {
+  return {
+    listAdjustmentReasons: vi.fn().mockResolvedValue([cancelReason]),
+    previewAdjustment: vi.fn().mockResolvedValue({
+      reduction: "1.00",
+      nominalValue: "1.00",
+      needsApproval: null,
+      lines: [],
+    }),
+    applyAdjustment: vi.fn().mockResolvedValue({
+      adjustmentIds: ["a-1"],
+      revision: 1,
+      party: { id: "v1", revision: partyRevision },
+    }),
+  };
+}
+
+function emitFrom(source: Element, type: string, detail: unknown = {}): void {
+  source.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+}
+
+/**
+ * Cancels line `lineId` of the app's open order as a waiter does: the table screen asks for the
+ * cancel dialog, {@link cancelReason} is chosen and previewed, then confirmed unless the preview
+ * was refused. `quantity` "1" takes one unit of several. `settle` lets the app finish each step's
+ * requests.
+ */
+export async function cancelThroughDialog(
+  app: HTMLElement,
+  screen: Element,
+  lineId: string,
+  settle: () => Promise<void>,
+  quantity?: "1",
+): Promise<void> {
+  const target = {
+    lineId,
+    name: lineId,
+    quantity: quantity === undefined ? "1" : "2",
+    total: "2.00",
+    unitTotal: quantity === undefined ? null : "1.00",
+  };
+  emitFrom(screen, "adjust", { kind: "cancel", target });
+  await settle();
+  const dialog = app.shadowRoot!.querySelector("till-adjustment-dialog")!;
+  expect(dialog).not.toBeNull();
+  const choice = { action: "cancel", reasonId: cancelReason.id, note: null };
+  emitFrom(dialog, "adjust-preview", quantity === undefined ? choice : { ...choice, quantity });
+  await settle();
+  // A refused preview leaves the dialog on its form, where there is nothing to confirm.
+  if ((dialog as HTMLElement & { preview: unknown }).preview === null) return;
+  emitFrom(dialog, "adjust-confirm");
+  await settle();
+}

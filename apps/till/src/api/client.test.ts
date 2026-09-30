@@ -1557,26 +1557,6 @@ describe("TillApi", () => {
     });
   });
 
-  it("voidLine DELETEs the tab line's path (no request body), and resolves the party the server answers", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify({ party: { id: "v1", revision: 4 } }), { status: 200 }),
-      );
-
-    await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).resolves.toEqual({
-      party: { id: "v1", revision: 4 },
-    });
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/ord-1/lines/2",
-      expect.objectContaining({ method: "DELETE", credentials: "include" }),
-    );
-    const init = fetchStub.mock.calls[0]![1] as RequestInit;
-    expect(init.body).toBeUndefined();
-    expect(init.headers).toBeUndefined();
-  });
-
   describe("adjustments (service plan Task 11)", () => {
     const ask = {
       expectedRevision: 7,
@@ -1669,19 +1649,6 @@ describe("TillApi", () => {
     });
   });
 
-  it("voidLine with a quantity voids that part only, as a query parameter", async () => {
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ party: null }), { status: 200 }));
-
-    await new TillApi("", fetchStub).voidLine("ord-1", 2, "1.5");
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/working-orders/ord-1/lines/2?quantity=1.5",
-      expect.objectContaining({ method: "DELETE" }),
-    );
-  });
-
   it("updateOrderLine PUTs the changed fields of one line with the revision it was read at, and resolves the one the server answers", async () => {
     const fetchStub = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ revision: 8, party: { id: "v1", revision: 5 } }), {
@@ -1705,18 +1672,6 @@ describe("TillApi", () => {
         body: JSON.stringify({ quantity: "2", note: null, extras: [], revision: 7 }),
       }),
     );
-  });
-
-  it("voidLine surfaces { code } when the tab line is not found", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { code: "tab.line_not_found" } }), {
-        status: 404,
-      }),
-    );
-
-    await expect(new TillApi("", fetchStub).voidLine("ord-1", 2)).rejects.toMatchObject({
-      code: "tab.line_not_found",
-    });
   });
 
   it("setTableStatus POSTs { statusId } to the TABLE's /status route (empty 200 body)", async () => {

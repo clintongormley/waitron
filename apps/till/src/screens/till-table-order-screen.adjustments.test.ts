@@ -181,6 +181,29 @@ describe("till-table-order-screen: giving away and discounting a dish", () => {
   });
 });
 
+describe("till-table-order-screen: cancelling a dish", () => {
+  it("asks the app to cancel a dish, which one at a time covers even with its extras, where Give away takes it whole", async () => {
+    const el = await mountScreen({ lines: [{ ...pizza, quantity: "2.000" }, olives] });
+    const asked = capture(el);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="2"]')!.click();
+    action(el, "comp", 2)!.click();
+    expect(asked).toEqual([
+      {
+        kind: "cancel",
+        target: {
+          lineId: "line-2",
+          name: "Pizza",
+          quantity: "2",
+          total: "19.50",
+          unitTotal: "9.75",
+          started: false,
+        },
+      },
+      { kind: "comp", target: expect.objectContaining({ unitTotal: null }) },
+    ]);
+  });
+});
+
 describe("till-table-order-screen: discounting the whole bill", () => {
   it("asks the app to discount the bill on screen, naming it and its total", async () => {
     const el = await mountScreen();

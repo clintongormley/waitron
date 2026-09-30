@@ -7,7 +7,13 @@ import {
   servedMenus,
 } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
-import type { TableServiceStatus, TillTableOrderScreen } from "./till-table-order-screen.js";
+import "../widgets/adjustment-dialog.js";
+import type {
+  AdjustDetail,
+  TableServiceStatus,
+  TillTableOrderScreen,
+} from "./till-table-order-screen.js";
+import type { TillAdjustmentDialog } from "../widgets/adjustment-dialog.js";
 import type {
   OfferedModifier,
   OrderGroup,
@@ -17,6 +23,7 @@ import type {
   TillProduct,
   TillZoneMenu,
   PartyBill,
+  AdjustmentReason,
 } from "../api/client.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
@@ -42,6 +49,17 @@ const menus: TillZoneMenu[] = servedMenus(
   [{ id: "menu-carta", name: "Carta", isDefault: true, versionId: "v1" }],
   [{ id: "offer-cafe", menuId: "menu-carta", productId: "cafe" }],
 );
+
+const mistake: AdjustmentReason = {
+  id: "error",
+  name: "Error",
+  actions: ["cancel"],
+  noteRequired: false,
+  maxPercentBp: null,
+  maxAmount: null,
+  applyRole: "staff",
+  approverRole: "staff",
+};
 
 const lines: TabLine[] = [
   {
@@ -287,10 +305,19 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     });
 
     it("has no violations in the dialog asking how many to cancel", async () => {
-      const { el, host } = await mountDrawer([sentLine]);
+      const { el } = await mountDrawer([sentLine]);
+      let asked: AdjustDetail | undefined;
+      el.addEventListener("adjust", (e) => (asked = (e as CustomEvent<AdjustDetail>).detail));
       el.shadowRoot!.querySelector<HTMLElement>('[data-cancel-line="5"]')!.click();
-      await el.updateComplete;
-      await settle(el);
+      // The app opens the dialog on what the screen asked for.
+      const { el: dialog, host } = await mountWidget<TillAdjustmentDialog>(
+        "till-adjustment-dialog",
+        { kind: asked!.kind, target: asked!.target, reasons: [mistake] },
+        theme,
+      );
+      expect(dialog.shadowRoot!.querySelector("[data-quantity]")).not.toBeNull();
+      dialog.shadowRoot!.querySelector<HTMLElement>('input[name="quantity"][value="1"]')!.click();
+      await dialog.updateComplete;
       await expectNoA11yViolations(host);
     });
   });

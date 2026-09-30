@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  adjustmentStubs,
+  cancelThroughDialog,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -241,6 +243,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     moveBill: vi.fn().mockResolvedValue({ partyId: null, billId: "wo-check", merged: false }),
     reprint: vi.fn().mockResolvedValue(undefined),
     logout: vi.fn().mockResolvedValue(undefined),
+    ...adjustmentStubs(),
     listDrafts: drafts.listDrafts,
     saveDraft: drafts.saveDraft,
     submitDraft: drafts.submitDraft,
@@ -264,6 +267,21 @@ async function mountApp(overrides: Record<string, unknown> = {}) {
   api = stubApi(overrides);
   return mountWidget<TillApp>("till-app", { api });
 }
+
+/** A recorded cancel's answer, naming the bill's party as `party`. */
+const cancelAnswer = (party: { id: string; revision: number } | null) => ({
+  adjustmentIds: ["a-1"],
+  revision: 1,
+  party,
+});
+
+/** Cancels `lineId` of the open order through its dialog. */
+const cancelLine = (el: TillApp, order: TillTableOrderScreen, lineId = "line-1") =>
+  cancelThroughDialog(el, order, lineId, () => flush(el));
+
+/** Long enough for a cancel that gets no answer to be sent again until it gives up. */
+const unanswered = () =>
+  new Promise((resolve) => setTimeout(resolve, 2 * SUBMIT_RETRY_PAUSE_MS + 50));
 
 async function flush(el: TillApp, rounds = 3): Promise<void> {
   for (let i = 0; i < rounds; i++) {
@@ -488,9 +506,9 @@ describe("till-app: the party's bills and Finish table", () => {
     const server = { voided: false };
     const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
     const { el } = await mountApp({
-      voidLine: vi.fn(async () => {
+      applyAdjustment: vi.fn(async () => {
         server.voided = true;
-        return { party: { id: "v1", revision: 4 } };
+        return cancelAnswer({ id: "v1", revision: 4 });
       }),
       getPartyBills: vi.fn(async () =>
         server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
@@ -506,8 +524,7 @@ describe("till-app: the party's bills and Finish table", () => {
     await flush(el);
     expect(figures(el)).toEqual(figuresOf("14.00", "44.00"));
 
-    emit(order, "void-line", { lineNo: 1 });
-    await flush(el);
+    await cancelLine(el, order);
 
     expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
   });
@@ -516,7 +533,7 @@ describe("till-app: the party's bills and Finish table", () => {
     const server = { voided: false };
     const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
     const { el } = await mountApp({
-      voidLine: vi.fn(async () => {
+      applyAdjustment: vi.fn(async () => {
         server.voided = true;
         throw new TypeError("Failed to fetch");
       }),
@@ -533,25 +550,29 @@ describe("till-app: the party's bills and Finish table", () => {
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
-    emit(order, "void-line", { lineNo: 1 });
+    await cancelLine(el, order);
+    await unanswered();
     await flush(el);
 
     expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
   });
 
-  it("a refused cancel reads the order's lines again and nothing else", async () => {
+  it("a refused cancel stays in its dialog, saying why, and reads nothing again", async () => {
     const { el } = await mountApp({
-      voidLine: vi.fn().mockRejectedValue({ code: "tab.void_quantity_invalid" }),
+      applyAdjustment: vi.fn().mockRejectedValue({ code: "adjustment.quantity_invalid" }),
     });
     const order = await openMesa(el);
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const floorReads = vi.mocked(api.getTablesState).mock.calls.length;
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
 
-    emit(order, "void-line", { lineNo: 1 });
-    await flush(el);
+    await cancelLine(el, order);
 
-    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads + 1);
+    const dialog = el.shadowRoot!.querySelector("till-adjustment-dialog")!;
+    expect(
+      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+    ).toBe(codeMessage("adjustment.quantity_invalid"));
+    expect(api.getTabLines).toHaveBeenCalledTimes(lineReads);
     expect(api.getPartyBills).toHaveBeenCalledTimes(billReads);
     expect(api.getTablesState).toHaveBeenCalledTimes(floorReads);
   });
@@ -560,9 +581,9 @@ describe("till-app: the party's bills and Finish table", () => {
     const server = { voided: false };
     const cancelled = { ...tabBill, total: "9.00", outstanding: "9.00" };
     const { el } = await mountApp({
-      voidLine: vi.fn(async () => {
+      applyAdjustment: vi.fn(async () => {
         server.voided = true;
-        return { party: { id: "v1", revision: 4 } };
+        return cancelAnswer({ id: "v1", revision: 4 });
       }),
       getPartyBills: vi.fn(async () =>
         server.voided ? [cancelled, checkBill] : [tabBill, checkBill],
@@ -576,8 +597,7 @@ describe("till-app: the party's bills and Finish table", () => {
     order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
     await flush(el);
 
-    emit(order, "void-line", { lineNo: 1 });
-    await flush(el);
+    await cancelLine(el, order);
 
     expect(figures(el)).toEqual(figuresOf("9.00", "39.00"));
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
@@ -586,9 +606,9 @@ describe("till-app: the party's bills and Finish table", () => {
   it("says so when the bills cannot be read after a cancel", async () => {
     const server = { voided: false };
     const { el } = await mountApp({
-      voidLine: vi.fn(async () => {
+      applyAdjustment: vi.fn(async () => {
         server.voided = true;
-        return { party: { id: "v1", revision: 4 } };
+        return cancelAnswer({ id: "v1", revision: 4 });
       }),
       getPartyBills: vi.fn(async () => {
         if (server.voided) throw new TypeError("Failed to fetch");
@@ -597,8 +617,7 @@ describe("till-app: the party's bills and Finish table", () => {
     });
     const order = await openMesa(el);
 
-    emit(order, "void-line", { lineNo: 1 });
-    await flush(el);
+    await cancelLine(el, order);
 
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
   });
@@ -711,7 +730,7 @@ describe("till-app: the party's bills and Finish table", () => {
     const partyless = table({ state: "open-tab", hasOpenTab: true });
     const floor = { phase: "seated" as "seated" | "left" | "unreadable" };
     const { el } = await mountApp({
-      voidLine: vi.fn().mockResolvedValue({ party: null }),
+      applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer(null)),
       getTablesState: vi.fn(async () => {
         if (floor.phase === "unreadable") throw new TypeError("Failed to fetch");
         return [floor.phase === "seated" ? mesa4 : partyless, mesa7, mesa9];
@@ -724,8 +743,7 @@ describe("till-app: the party's bills and Finish table", () => {
     expect(tableOrder(el)!.party).toBeNull();
     floor.phase = "unreadable";
 
-    emit(tableOrder(el)!, "void-line", { lineNo: 1 });
-    await flush(el);
+    await cancelLine(el, tableOrder(el)!);
 
     expect(tableOrder(el)!.party).toBeNull();
     expect(banner(el)!.textContent).toContain(t("table.reread_failed"));
@@ -1003,9 +1021,9 @@ describe("till-app: the party's bills and Finish table", () => {
   });
 
   it("a cancel answering once the waiter is back on the floor, with the floor unread, says nothing", async () => {
-    let answerVoid!: (answer: { party: { id: string; revision: number } }) => void;
+    let answerVoid!: (answer: ReturnType<typeof cancelAnswer>) => void;
     const { el } = await mountApp({
-      voidLine: vi.fn(
+      applyAdjustment: vi.fn(
         () =>
           new Promise((resolve) => {
             answerVoid = resolve;
@@ -1013,14 +1031,13 @@ describe("till-app: the party's bills and Finish table", () => {
       ),
     });
     const order = await openMesa(el);
-    emit(order, "void-line", { lineNo: 1 });
-    await flush(el);
+    await cancelLine(el, order);
     emit(tableOrder(el)!, "back-to-floor");
     await flush(el);
     expect(floor(el)).not.toBeNull();
     vi.mocked(api.getTablesState).mockRejectedValue(new TypeError("Failed to fetch"));
 
-    answerVoid({ party: { id: "v1", revision: 4 } });
+    answerVoid(cancelAnswer({ id: "v1", revision: 4 }));
     await flush(el);
 
     expect(banner(el)).toBeNull();
@@ -4010,24 +4027,26 @@ describe("till-app: the order's groups", () => {
   });
 
   it("keeps the higher revision when two answers about the party arrive out of order", async () => {
-    const answers: ((value: { party: { id: string; revision: number } }) => void)[] = [];
-    const { el } = await mountApp({
-      voidLine: vi.fn(
-        () =>
-          new Promise((resolve) => {
-            answers.push(resolve);
-          }),
-      ),
-    });
+    const answers: ((value: object) => void)[] = [];
+    const later = () =>
+      new Promise((resolve) => {
+        answers.push(resolve);
+      });
+    const { el } = await mountApp({ applyAdjustment: vi.fn(later), updateOrderLine: vi.fn(later) });
     const order = await openMesa(el);
-    emit(order, "void-line", { lineNo: 1 });
-    emit(order, "void-line", { lineNo: 2 });
+    await cancelLine(el, order);
+    emit(order, "change-line", {
+      lineNo: 2,
+      lineName: "Vino",
+      patch: { note: "sin hielo" },
+      revision: 0,
+    });
     await flush(el);
     expect(answers).toHaveLength(2);
 
-    answers[1]!({ party: { id: "v1", revision: 5 } });
+    answers[1]!({ revision: 1, party: { id: "v1", revision: 5 } });
     await flush(el);
-    answers[0]!({ party: { id: "v1", revision: 4 } });
+    answers[0]!(cancelAnswer({ id: "v1", revision: 4 }));
     await flush(el);
 
     emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
@@ -4662,14 +4681,13 @@ describe("till-app: the order's groups", () => {
       it("a round sent after a void carries the revision the void answered", async () => {
         const { el } = await mountApp(
           withGroups({
-            voidLine: vi.fn().mockResolvedValue({ party: { id: "v1", revision: 4 } }),
+            applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer({ id: "v1", revision: 4 })),
             submitDraft: submitAt(4),
           }),
         );
         const order = await openMesa(el);
 
-        emit(order, "void-line", { lineNo: 1 });
-        await flush(el);
+        await cancelLine(el, order);
         await ringRound(el, tableOrder(el)!);
         emit(
           tableOrder(el)!,
@@ -4678,7 +4696,11 @@ describe("till-app: the order's groups", () => {
         );
         await flush(el);
 
-        expect(api.voidLine).toHaveBeenCalledWith("wo-4", 1);
+        expect(api.applyAdjustment).toHaveBeenCalledWith(
+          "wo-4",
+          expect.objectContaining({ lineId: "line-1", action: "cancel" }),
+          expect.anything(),
+        );
         expect(vi.mocked(api.submitDraft).mock.calls[0]![2].expectedPartyRevision).toBe(4);
         expect(banner(el)).toBeNull();
       });
@@ -4728,11 +4750,12 @@ describe("till-app: the order's groups", () => {
 
       it("a round sent after a void that got no answer carries the floor's revision", async () => {
         const { el } = await mountApp(
-          withGroups({ ...floorMovedBy("voidLine"), submitDraft: submitAt(4) }),
+          withGroups({ ...floorMovedBy("applyAdjustment"), submitDraft: submitAt(4) }),
         );
         const order = await openMesa(el);
 
-        emit(order, "void-line", { lineNo: 1 });
+        await cancelLine(el, order);
+        await unanswered();
         await flush(el);
         await ringRound(el, tableOrder(el)!);
         emit(
@@ -4794,18 +4817,24 @@ describe("till-app: the order's groups", () => {
 
       it("a void that got no answer, with the floor unread, keeps the revision an earlier void answered", async () => {
         const { el } = await mountApp(
-          withGroups(offlineAfterOneAnswer("voidLine", { party: { id: "v1", revision: 4 } })),
+          withGroups(
+            offlineAfterOneAnswer("applyAdjustment", cancelAnswer({ id: "v1", revision: 4 })),
+          ),
         );
         const order = await openMesa(el);
 
-        emit(order, "void-line", { lineNo: 1 });
-        await flush(el);
-        emit(tableOrder(el)!, "void-line", { lineNo: 2 });
+        await cancelLine(el, order);
+        await cancelLine(el, tableOrder(el)!, "line-2");
+        await unanswered();
         await flush(el);
         emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
         await flush(el);
 
-        expect(api.voidLine).toHaveBeenCalledTimes(2);
+        // A resend after no answer keeps its cancel's submission id, so two ids are two cancels.
+        const cancels = vi
+          .mocked(api.applyAdjustment)
+          .mock.calls.map(([, command]) => command.submissionId);
+        expect(new Set(cancels).size).toBe(2);
         expect(api.moveGuests).toHaveBeenCalledWith("v1", "t9", "merge", {
           expectedPartyRevision: 4,
           otherPartyId: null,
@@ -4848,12 +4877,11 @@ describe("till-app: the order's groups", () => {
         ["another party", { id: "v7", revision: 10 }],
       ])("a void answering %s leaves the revision the screen showed", async (_name, answered) => {
         const { el } = await mountApp(
-          withGroups({ voidLine: vi.fn().mockResolvedValue({ party: answered }) }),
+          withGroups({ applyAdjustment: vi.fn().mockResolvedValue(cancelAnswer(answered)) }),
         );
         const order = await openMesa(el);
 
-        emit(order, "void-line", { lineNo: 1 });
-        await flush(el);
+        await cancelLine(el, order);
         emit(tableOrder(el)!, "move-guests", { toTableId: "t9", bills: "merge" });
         await flush(el);
 
