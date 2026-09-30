@@ -45,12 +45,14 @@ async function screen(
   return el;
 }
 
-async function openAlex(el: AdjustmentReportScreen): Promise<void> {
+async function openRow(el: AdjustmentReportScreen, key: string): Promise<void> {
   el.shadowRoot!.querySelector("wt-data-table")!
-    .shadowRoot!.querySelector<HTMLButtonElement>(`tr[data-row-key="${ALEX}"] .row-activate`)!
+    .shadowRoot!.querySelector<HTMLButtonElement>(`tr[data-row-key="${key}"] .row-activate`)!
     .click();
   await settle(el);
 }
+
+const openAlex = (el: AdjustmentReportScreen) => openRow(el, ALEX);
 
 describe.each(["light", "dark"] as const)("adjustment report accessibility (%s)", (theme) => {
   test("the report over a day with adjustments", async () => {
@@ -69,6 +71,19 @@ describe.each(["light", "dark"] as const)("adjustment report accessibility (%s)"
     const el = await screen(theme);
     await openAlex(el);
     expect(el.shadowRoot!.querySelector('[data-test="entries"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="by-action-heading"]')!.textContent).toBe(
+      "Alex's adjustments by action",
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("the guests' adjustments listed, with their breakdowns", async () => {
+    const el = await screen(theme, { listEntries: vi.fn().mockResolvedValue(onePage([])) });
+    await openRow(el, "guests");
+    expect(el.shadowRoot!.querySelector('[data-test="no-reasons"]')).not.toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-test="by-action-heading"]')!.textContent).toBe(
+      "Guests' adjustments by action",
+    );
     await expectNoA11yViolations(host);
   });
 

@@ -31,6 +31,24 @@ const STAGES: readonly AdjustmentStageGroup[] = [
   "afterServing",
   "billDiscount",
 ];
+const NO_TALLY: AdjustmentTally = { count: 0, reduction: "0.00", cancelledNominalValue: "0.00" };
+/** The breakdowns of a person the range holds no row for. */
+const NO_TOTALS: AdjustmentTotals = {
+  ...NO_TALLY,
+  byAction: {
+    cancel: NO_TALLY,
+    comp: NO_TALLY,
+    discount_percent: NO_TALLY,
+    discount_amount: NO_TALLY,
+  },
+  byStage: {
+    beforeFiring: NO_TALLY,
+    afterFiring: NO_TALLY,
+    afterServing: NO_TALLY,
+    billDiscount: NO_TALLY,
+  },
+  byReason: [],
+};
 /** Shown where a value does not apply: a guest's sales, a rate without sales, a missing note. */
 const NONE = "—";
 
@@ -573,7 +591,7 @@ export class AdjustmentReportScreen extends LitElement {
   ): TemplateResult {
     const id = `${test}-heading`;
     return html`<section>
-      <h2 id=${id}>${heading}</h2>
+      <h2 id=${id} data-test=${id}>${heading}</h2>
       <table data-test=${test} aria-labelledby=${id}>
         <thead>
           <tr>
@@ -647,35 +665,52 @@ export class AdjustmentReportScreen extends LitElement {
     </section>`;
   }
 
+  /** The open list's person, or the guests, when one is open; everyone's otherwise. */
+  #breakdownOf(report: AdjustmentReport): {
+    totals: AdjustmentTotals;
+    heading: (by: "action" | "stage" | "reason") => string;
+  } {
+    const of = this.entriesOf;
+    if (of === undefined || of === "everyone")
+      return { totals: report.overall, heading: (by) => t(`adjustment_report.by_${by}`) };
+    if (of === "guests")
+      return { totals: report.guests, heading: (by) => t(`adjustment_report.guests_by_${by}`) };
+    const name = this.entriesName;
+    return {
+      totals: report.people.find((person) => person.personId === of.personId) ?? NO_TOTALS,
+      heading: (by) => tf(`adjustment_report.person_by_${by}`, { name }),
+    };
+  }
+
   #breakdowns(report: AdjustmentReport): TemplateResult {
-    const { overall } = report;
+    const { totals, heading } = this.#breakdownOf(report);
     return html`<div class="breakdowns">
       ${this.#breakdown(
         "by-action",
-        t("adjustment_report.by_action"),
+        heading("action"),
         t("adjustment_report.column.action"),
         ACTIONS.map((action) => ({
           label: actionTotalName(action),
-          tally: overall.byAction[action],
+          tally: totals.byAction[action],
         })),
       )}
       ${this.#breakdown(
         "by-stage",
-        t("adjustment_report.by_stage"),
+        heading("stage"),
         t("adjustment_report.column.stage"),
-        STAGES.map((stage) => ({ label: stageName(stage), tally: overall.byStage[stage] })),
+        STAGES.map((stage) => ({ label: stageName(stage), tally: totals.byStage[stage] })),
       )}
       ${
-        overall.byReason.length === 0
+        totals.byReason.length === 0
           ? html`<section>
-              <h2 id="by-reason-heading">${t("adjustment_report.by_reason")}</h2>
+              <h2 id="by-reason-heading" data-test="by-reason-heading">${heading("reason")}</h2>
               <p class="hint" data-test="no-reasons">${t("adjustment_report.no_reasons")}</p>
             </section>`
           : this.#breakdown(
               "by-reason",
-              t("adjustment_report.by_reason"),
+              heading("reason"),
               t("adjustment_report.column.reason"),
-              overall.byReason.map((reason) => ({ label: reason.reasonName, tally: reason })),
+              totals.byReason.map((reason) => ({ label: reason.reasonName, tally: reason })),
             )
       }
     </div>`;

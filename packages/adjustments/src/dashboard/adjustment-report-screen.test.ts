@@ -108,6 +108,13 @@ async function open(el: AdjustmentReportScreen, key: string): Promise<void> {
   await settle(el);
 }
 
+/** Each line of a breakdown table: its label, then its figures. */
+function breakdown(el: AdjustmentReportScreen, test: string): string[][] {
+  return [...part(el, test)!.querySelectorAll("tbody tr")].map((tr) =>
+    [...tr.querySelectorAll("th, td")].map((cell) => text(cell)),
+  );
+}
+
 async function pick(
   el: AdjustmentReportScreen,
   field: "from" | "to",
@@ -232,6 +239,85 @@ describe("the adjustment report", () => {
       ["Cold food", "1", "€12.00", "€0.00"],
       ["Staff meal", "1", "€3.00", "€0.00"],
     ]);
+  });
+
+  it("breaks down only the open person's adjustments, under headings that name them", async () => {
+    const el = await mount(fakeApi());
+    await open(el, ALEX);
+    expect(text(part(el, "by-action-heading"))).toBe("Alex's adjustments by action");
+    expect(text(part(el, "by-stage-heading"))).toBe("Alex's adjustments by stage");
+    expect(text(part(el, "by-reason-heading"))).toBe("Alex's adjustments by reason");
+    expect(breakdown(el, "by-action")).toEqual([
+      ["Cancellations", "2", "€25.00", "€37.00"],
+      ["Give-aways", "1", "€12.00", "€0.00"],
+      ["Percentage discounts", "0", "€0.00", "€0.00"],
+      ["Amount discounts", "0", "€0.00", "€0.00"],
+    ]);
+    expect(breakdown(el, "by-stage")).toEqual([
+      ["Before firing", "0", "€0.00", "€0.00"],
+      ["After firing", "1", "€25.00", "€25.00"],
+      ["After serving", "2", "€12.00", "€12.00"],
+      ["Whole bill", "0", "€0.00", "€0.00"],
+    ]);
+    expect(breakdown(el, "by-reason")).toEqual([
+      ["Entry error", "2", "€25.00", "€37.00"],
+      ["Cold food", "1", "€12.00", "€0.00"],
+    ]);
+    await open(el, SAM);
+    expect(text(part(el, "by-action-heading"))).toBe("Sam's adjustments by action");
+    expect(breakdown(el, "by-action")).toEqual([
+      ["Cancellations", "0", "€0.00", "€0.00"],
+      ["Give-aways", "0", "€0.00", "€0.00"],
+      ["Percentage discounts", "0", "€0.00", "€0.00"],
+      ["Amount discounts", "1", "€3.00", "€0.00"],
+    ]);
+    expect(breakdown(el, "by-stage")[3]).toEqual(["Whole bill", "1", "€3.00", "€0.00"]);
+    expect(breakdown(el, "by-reason")).toEqual([["Staff meal", "1", "€3.00", "€0.00"]]);
+  });
+
+  it("breaks down the guests' adjustments apart, and everyone's again once the list shows everyone or closes", async () => {
+    const el = await mount(fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([])) }));
+    await open(el, "guests");
+    expect(text(part(el, "by-action-heading"))).toBe("Guests' adjustments by action");
+    expect(text(part(el, "by-stage-heading"))).toBe("Guests' adjustments by stage");
+    expect(text(part(el, "by-reason-heading"))).toBe("Guests' adjustments by reason");
+    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0", "0", "0"]);
+    expect(part(el, "no-reasons")).not.toBeNull();
+    part(el, "show-all")!.click();
+    await settle(el);
+    expect(text(part(el, "by-action-heading"))).toBe("By action");
+    expect(breakdown(el, "by-reason")).toHaveLength(3);
+    await open(el, ALEX);
+    part(el, "close-entries")!.click();
+    await settle(el);
+    expect(text(part(el, "by-action-heading"))).toBe("By action");
+    expect(text(part(el, "by-stage-heading"))).toBe("By stage");
+    expect(text(part(el, "by-reason-heading"))).toBe("By reason");
+    expect(breakdown(el, "by-action")[3]).toEqual(["Amount discounts", "1", "€3.00", "€0.00"]);
+  });
+
+  it("breaks down nothing for an open person the range holds no row for", async () => {
+    const getReport = vi
+      .fn()
+      .mockImplementationOnce((range?: Range) => Promise.resolve(answer(fixtureReport, range)))
+      .mockImplementation((range?: Range) => Promise.resolve(answer(emptyReport, range)));
+    const el = await mount(fakeApi({ getReport }));
+    await open(el, ALEX);
+    await pick(el, "from", "2026-09-01");
+    expect(text(part(el, "by-action-heading"))).toBe("Alex's adjustments by action");
+    expect(breakdown(el, "by-action").map((line) => line[1])).toEqual(["0", "0", "0", "0"]);
+    expect(part(el, "no-reasons")).not.toBeNull();
+  });
+
+  it("names the open person in Spanish breakdown headings", async () => {
+    setLocale("es-ES");
+    const el = await mount(fakeApi());
+    await open(el, ALEX);
+    expect(text(part(el, "by-action-heading"))).toBe("Ajustes de Alex por acción");
+    expect(text(part(el, "by-stage-heading"))).toBe("Ajustes de Alex por momento");
+    expect(text(part(el, "by-reason-heading"))).toBe("Ajustes de Alex por motivo");
+    await open(el, "guests");
+    expect(text(part(el, "by-action-heading"))).toBe("Ajustes de los clientes por acción");
   });
 
   it("says so in words when there were no adjustments, and keeps the guests' row", async () => {
