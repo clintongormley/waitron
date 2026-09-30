@@ -37,6 +37,7 @@ import type {
 } from "../api/client.js";
 import type { BumpMode, FireControlMode } from "./station-queue.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
+import type { StoredLines } from "./basket.js";
 import type { OtherDraft } from "../screens/till-table-order-screen.js";
 import type { CardOutcome, CardProvider } from "./tender-pay.js";
 
@@ -66,6 +67,8 @@ export class TillCardGrid extends LitElement {
 
   @property({ attribute: false }) tab?: TabDef;
   @property({ attribute: false }) store!: WorkingOrderStore;
+  /** The stored order in {@link store}, as the server lists its lines; see the basket's own. */
+  @property({ attribute: false }) storedLines: StoredLines | null = null;
   @property({ attribute: false }) products: TillProduct[] = [];
   @property({ attribute: false }) heldOrders: HeldOrderSummary[] = [];
   @property({ attribute: false }) stationQueue: StationQueueGroup[] = [];
@@ -183,7 +186,10 @@ export class TillCardGrid extends LitElement {
         ></till-menu-browser>`;
       }
       case "basket":
-        return html`<till-basket .store=${this.store}></till-basket>`;
+        return html`<till-basket
+          .store=${this.store}
+          .storedLines=${this.storedLines}
+        ></till-basket>`;
       case "total":
         return html`<till-total .store=${this.store}></till-total>`;
       case "tender-pay":

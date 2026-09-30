@@ -11,7 +11,6 @@ import {
   addDecimal,
   compareDecimal,
   decimal,
-  divideDecimal,
   formatMoney,
   grossOf,
   MONEY_SCALE,
@@ -57,6 +56,13 @@ import {
   type SeatedRead,
 } from "../widgets/table-targets.js";
 import { owing, paidInPart } from "../state/bill-state.js";
+import {
+  isStarted,
+  lineAdjustTarget,
+  listedGross,
+  moreThanOneWholeUnit,
+} from "../state/adjust-target.js";
+import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
 import "../widgets/party-name-dialog.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
@@ -294,6 +300,9 @@ export interface AdjustDetail {
   target: AdjustTarget;
   /** Opened by the app's Cancel offer, so the message saying why stays on screen. */
   offered?: true;
+  /** Pressed in the counter's basket, on the stored order it holds, rather than on the table's
+   * open bill. */
+  counter?: true;
 }
 
 /** `change-line`: one sent line's edit, from the copy of the order read at `revision`. */
@@ -340,6 +349,7 @@ class TabPayStore extends WorkingOrderStore {
 @customElement("till-table-order-screen")
 export class TillTableOrderScreen extends LitElement {
   static override styles = [
+    priceWasStyles,
     css`
       .modifier-answer,
       .line-note {
@@ -528,19 +538,6 @@ export class TillTableOrderScreen extends LitElement {
 
       .line-total {
         font-variant-numeric: tabular-nums;
-      }
-
-      .list-total {
-        color: var(--wt-color-text-muted);
-      }
-
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        clip-path: inset(50%);
-        white-space: nowrap;
       }
 
       .bill-adjust {
@@ -1642,7 +1639,7 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #isStarted(line: TabLine): boolean {
-    return line.state === "preparing" || line.state === "ready";
+    return isStarted(line);
   }
 
   /** Sent and still holding a ticket item, with the venue's setting off: the server refuses to change
@@ -1777,28 +1774,10 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** A dish with its extras. Part of it can be adjusted only when it is several whole units, as the
-   * server allows: with no extras, or for a cancel, which takes each unit's share of them. */
   #lineTarget(line: TabLine, kind: AdjustKind): AdjustTarget {
-    const extras = this.lines.filter((row) => row.parentLineNo === line.lineNo);
-    const total = toScale(
-      sumDecimals([line, ...extras].map((row) => this.#lineGross(row))),
-      MONEY_SCALE,
+    return lineAdjustTarget(line, this.lines, kind, this.#nameForLine(line), (row) =>
+      this.#lineGross(row),
     );
-    let unitTotal: string | null = null;
-    if (this.#moreThanOneWholeUnit(line)) {
-      if (extras.length === 0) unitTotal = toScale(decimal(line.unitPriceGross), MONEY_SCALE);
-      else if (kind === "cancel")
-        unitTotal = divideDecimal(total, decimal(line.quantity), MONEY_SCALE);
-    }
-    return {
-      lineId: line.id,
-      name: this.#nameForLine(line),
-      quantity: this.#displayQty(line.quantity),
-      total,
-      unitTotal,
-      started: this.#isStarted(line),
-    };
   }
 
   #adjust(kind: AdjustKind, target: AdjustTarget, also: { offered?: true } = {}): void {
@@ -1830,18 +1809,8 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  /** A line's total; after a give-away or a discount, the total it had first, struck through. */
   #lineTotal(line: TabLine): TemplateResult {
-    const now = this.#lineGross(line);
-    const listed = line.listUnitPriceGross;
-    const before = listed === undefined ? now : grossOf(listed, line.quantity);
-    if (compareDecimal(before, now) === 0)
-      return html`<span class="line-total">${formatMoney(now, currentLocale())}</span>`;
-    return html`<span class="line-total"
-      ><span class="visually-hidden" data-price-was>${t("table.price_was")} </span
-      ><s class="list-total">${formatMoney(before, currentLocale())}</s>
-      ${formatMoney(now, currentLocale())}</span
-    >`;
+    return lineTotal(listedGross(line), this.#lineGross(line));
   }
 
   #sendLine(lineNo: number): void {
@@ -1866,7 +1835,7 @@ export class TillTableOrderScreen extends LitElement {
 
   /** Such a line can be cancelled, or split, one unit at a time; a weighed line cannot. */
   #moreThanOneWholeUnit(line: TabLine): boolean {
-    return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
+    return moreThanOneWholeUnit(line);
   }
 
   #openChange(line: TabLine): void {
