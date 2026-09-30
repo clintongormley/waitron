@@ -34,7 +34,6 @@ import {
 import { customerOptionSnapshotLabels } from "@waitron/catalogue";
 import {
   addDecimal,
-  compareDecimal,
   decimal,
   perDishOptionQuantity,
   resolveSnapshotText,
@@ -123,8 +122,7 @@ function lineName(descriptions: Record<string, string>, locale: string): string 
  */
 function lineAmount(line: TillSaleLine, locale: string): string {
   const gross = formatMoney(line.gross, locale);
-  return line.listGross === undefined ||
-    compareDecimal(decimal(line.listGross), decimal(line.gross)) === 0
+  return line.listGross === undefined
     ? gross
     : `${formatMoney(line.listGross, locale)} -> ${gross}`;
 }

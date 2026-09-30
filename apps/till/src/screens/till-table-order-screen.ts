@@ -282,6 +282,11 @@ export interface UnsnoozeGroupDetail {
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
 
+const LINE_ADJUSTMENTS = [
+  { kind: "comp", label: "table.comp_line" },
+  { kind: "discount", label: "table.discount_line" },
+] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
+
 /** `adjust`: Give away or Discount pressed on a dish, or Discount on the bill on screen. */
 export interface AdjustDetail {
   kind: AdjustKind;
@@ -472,6 +477,8 @@ export class TillTableOrderScreen extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
 
+      /* The line's actions take a row of their own: Change, Recall and Cancel together do not fit
+         beside the name in the drawer at phone width. */
       .line-actions {
         grid-column: 1 / -1;
         display: flex;
@@ -1751,29 +1758,20 @@ export class TillTableOrderScreen extends LitElement {
   #adjustActions(line: TabLine): TemplateResult[] {
     if (this.#isChild(line) || !this.#adjustable()) return [];
     const name = this.#nameForLine(line);
-    const adjust = (kind: AdjustKind) => () => this.#adjust(kind, this.#lineTarget(line));
-    return [
-      html`<wt-button
-        class="line-adjust"
-        size="sm"
-        variant="secondary"
-        data-comp-line=${line.lineNo}
-        aria-label=${`${t("table.comp_line")} · ${name}`}
-        @click=${adjust("comp")}
-      >
-        ${t("table.comp_line")}
-      </wt-button>`,
-      html`<wt-button
-        class="line-adjust"
-        size="sm"
-        variant="secondary"
-        data-discount-line=${line.lineNo}
-        aria-label=${`${t("table.discount_line")} · ${name}`}
-        @click=${adjust("discount")}
-      >
-        ${t("table.discount_line")}
-      </wt-button>`,
-    ];
+    return LINE_ADJUSTMENTS.map(
+      ({ kind, label }) =>
+        html`<wt-button
+          class="line-adjust"
+          size="sm"
+          variant="secondary"
+          data-comp-line=${kind === "comp" ? line.lineNo : nothing}
+          data-discount-line=${kind === "discount" ? line.lineNo : nothing}
+          aria-label=${`${t(label)} · ${name}`}
+          @click=${() => this.#adjust(kind, this.#lineTarget(line))}
+        >
+          ${t(label)}
+        </wt-button>`,
+    );
   }
 
   /** A dish with its extras. Part of it can be adjusted only when it is several whole units with no

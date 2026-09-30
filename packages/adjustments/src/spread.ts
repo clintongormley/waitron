@@ -13,6 +13,7 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
+import { isPercentBp } from "./policy.js";
 import "./errors.js";
 
 /**
@@ -181,7 +182,7 @@ export function splitDiscreteLine(
 
 /** `percentBp` of `gross`, rounded to whole cents half up: the reduction a percentage asks for. */
 export function percentReduction(gross: Decimal, percentBp: number): Decimal {
-  if (!Number.isInteger(percentBp) || percentBp < 1 || percentBp > 10000) {
+  if (!isPercentBp(percentBp)) {
     throw new RangeError("percentBp is not in 1..10000");
   }
   return percentOf(gross, basisPointsToDecimal(percentBp));

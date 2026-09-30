@@ -7,6 +7,7 @@ import {
   createCategory,
   createExtraList,
   createProduct,
+  setProductVariants,
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { createAdjustmentReason, type AdjustmentReasonInput } from "@waitron/adjustments";
@@ -173,6 +174,15 @@ const MENU: {
     unit: "each",
     vat: "general",
   },
+  // Sold only as its variant, the Wine glass (below).
+  {
+    name: "Wine",
+    customer: "Vino de la casa",
+    kitchen: "VINO",
+    price: "18.00",
+    unit: "each",
+    vat: "general",
+  },
   // Poured at the bar: routed to no preparation, so it is stamped sent and gets no kitchen item.
   {
     name: "Coffee",
@@ -233,6 +243,8 @@ export interface AdjustmentVenue {
   item(name: string): string;
   /** The extras list offered with the Pizza, holding the Olives at €1.50. */
   pizzaExtras: string;
+  /** The Wine's one variant, whose staff, customer-facing and kitchen names all differ from the Wine's. */
+  wineGlassId: string;
   olivesId: string;
   stationId: string;
   printerId: string;
@@ -329,6 +341,21 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       });
       productIds.set(item.name, product.id);
     }
+    const [wineGlass] = await setProductVariants(
+      tx,
+      productIds.get("Wine")!,
+      [
+        {
+          name: "Wine glass",
+          customerName: { [LOCALE]: "Copa de tinto" },
+          kitchenName: "COPA",
+          image: null,
+          unitPrice: "4.00",
+          available: true,
+        },
+      ],
+      LOCALE,
+    );
     const extras = await createExtraList(
       tx,
       {
@@ -377,6 +404,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
       stationId: station!.id,
       printerId: printer.id,
       pizzaExtras: extras.id,
+      wineGlassId: wineGlass!.id,
       people: people.map((person) => person.id),
       profileId: profile!.id,
       reasonId,
@@ -401,6 +429,7 @@ export async function provisionAdjustmentVenue(db: Database): Promise<Adjustment
     tables: seeded.tables,
     item: (name) => seeded.tables.offerFor(seeded.productIds.get(name)!),
     pizzaExtras: seeded.pizzaExtras,
+    wineGlassId: seeded.wineGlassId,
     olivesId: seeded.productIds.get("Olives")!,
     stationId: seeded.stationId,
     printerId: seeded.printerId,
@@ -421,10 +450,12 @@ export function inTx<T>(venue: Pick<AdjustmentVenue, "db">, fn: (tx: Transaction
   return withTransaction(venue.db, fn);
 }
 
-/** One round line: a product by name, a quantity, and extras picks for the Pizza. */
+/** One round line: a product by name, a quantity, the variant it is sold as, and extras picks for
+ * the Pizza. */
 export interface RoundLine {
   name: string;
   quantity?: string;
+  variantId?: string;
   olives?: number;
 }
 
@@ -455,6 +486,7 @@ export async function billWith(
             lines: lines.map((line) => ({
               menuItemId: venue.item(line.name),
               quantity: line.quantity ?? "1",
+              ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
               ...(line.olives === undefined
                 ? {}
                 : {

@@ -21,7 +21,7 @@ describe("ticketLinesFrom", () => {
   it("carries a line's total at its list price only where a comp or a discount changed it", () => {
     const lines = ticketLinesFrom(
       { lines: [filed("1.000", "3.00"), filed("1.000", "3.33"), filed("2.500", "29.23")] },
-      [null, decimal("3.33"), decimal("12.99")],
+      [null, decimal("3.33"), decimal("12.99")].map((listUnitGross) => ({ listUnitGross })),
     );
 
     expect(lines.map((line) => [line.gross, line.listGross])).toEqual([
@@ -31,11 +31,5 @@ describe("ticketLinesFrom", () => {
       ["29.23", "32.48"],
     ]);
     expect(lines.map((line) => Object.hasOwn(line, "listGross"))).toEqual([false, false, true]);
-  });
-
-  it("refuses list prices that do not line up with the lines", () => {
-    expect(() => ticketLinesFrom({ lines: [filed("1.000", "3.00")] }, [])).toThrow(
-      "ticketLinesFrom: 0 list prices for 1 lines",
-    );
   });
 });

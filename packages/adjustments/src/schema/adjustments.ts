@@ -25,6 +25,12 @@ export const adjustmentStage = enumType(["unsent", "held", "fired", "served"]);
 
 export type AdjustmentStage = (typeof adjustmentStage.enumValues)[number];
 
+/** A row an adjustment split off `from` as the new row `to`. */
+export interface AdjustmentSplit {
+  from: string;
+  to: string;
+}
+
 /**
  * One cancellation, comp or discount taken off a bill, with the line and the reason copied as they
  * were. Declared `appendOnly()` in `../classification.ts`. A row with no `line_id` is a discount on
@@ -38,8 +44,9 @@ export const adjustments = table(
     // No foreign key: a cancel deletes the line, and a key from a row nothing may change would
     // refuse that delete.
     lineId: id("line_id"),
-    /** Rows this adjustment carved off `line_id`; `readReasonTotals` follows them back. */
-    splitLineIds: json<string[]>("split_line_ids").notNull(),
+    /** Each row this adjustment split off, with the row it came from; `readReasonTotals` follows
+     * them back. A bill discount records its splits too. */
+    splits: json<AdjustmentSplit[]>("splits").notNull(),
     lineName: label("line_name"),
     lineQuantity: quantity("line_quantity"),
     /** The line's unit price before any adjustment touched it. */
@@ -102,8 +109,7 @@ export const adjustments = table(
       "adjustments_bill_level_ck",
       sql`${t.lineId} is not null or (${t.lineName} is null and ${t.lineQuantity} is null
           and ${t.lineListUnitPrice} is null and ${t.creditedTo} is null and ${t.quantity} is null
-          and ${t.stage} is null and json_array_length(${t.splitLineIds}) = 0
-          and ${t.action} in ('discount_percent', 'discount_amount'))`,
+          and ${t.stage} is null and ${t.action} in ('discount_percent', 'discount_amount'))`,
     ),
   ],
 );

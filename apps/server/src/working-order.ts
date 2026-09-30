@@ -645,6 +645,7 @@ async function priceOrderLines(
     id: ids[index]!,
     productId: meta.productId,
     classification: classifications[index]!,
+    listUnitGross: null,
   }));
   const lineContexts = lineMeta.map((meta, index) => ({
     workingOrderLineId: ids[index]!,
@@ -679,6 +680,7 @@ const storedLineColumns = {
   productId: workingOrderLines.productId,
   parentLineId: workingOrderLines.parentLineId,
   grossUnitPrice: workingOrderLines.unitPriceGross,
+  listUnitPriceGross: workingOrderLines.listUnitPriceGross,
   quantity: workingOrderLines.quantity,
   vatClass: workingOrderLines.vatClass,
   name: workingOrderLines.name,
@@ -719,23 +721,6 @@ export async function readLockedLines(
   );
 }
 
-/**
- * Each stored line's unit price before a comp or discount changed it
- * (`list_unit_price_gross`), or null, in the order {@link readLockedLines} reads the lines: the
- * receipt's list prices, read in the transaction that prices the lines they go with.
- */
-export async function readListUnitPrices(
-  tx: Transaction,
-  workingOrderId: string,
-): Promise<(Decimal | null)[]> {
-  const rows = await tx
-    .select({ list: workingOrderLines.listUnitPriceGross })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
-    .orderBy(workingOrderLines.lineNo);
-  return rows.map(({ list }) => (list === null ? null : centsToDecimal(list)));
-}
-
 /** {@link readLockedLines}, with whether each line may be paid now, read in the same query. */
 async function readLockedLinesForIssuance(
   tx: Transaction,
@@ -769,7 +754,13 @@ function toStoredLines(stored: readonly StoredLineRow[]): StoredOrderLine[] {
   // them would file a child under the wrong parent in the immutable record.
   const positionById = new Map(stored.map((line, i) => [line.id, i + 1]));
   return stored.map((line) => ({
-    identity: { id: line.id, productId: line.productId, classification: line.classification },
+    identity: {
+      id: line.id,
+      productId: line.productId,
+      classification: line.classification,
+      listUnitGross:
+        line.listUnitPriceGross === null ? null : centsToDecimal(line.listUnitPriceGross),
+    },
     locked: {
       grossUnitPrice: centsToDecimal(line.grossUnitPrice),
       quantity: thousandthsToDecimal(line.quantity),
@@ -802,6 +793,8 @@ export interface OrderLineIdentity {
   productId: string | null;
   /** Recorded when the line was added. */
   classification: SaleLineClassification | null;
+  /** The unit price before a comp or a discount changed it, or null. */
+  listUnitGross: Decimal | null;
 }
 
 /** Gross lines together with, at the same index, the working-order line each was priced from. */
@@ -816,7 +809,19 @@ export async function priceStoredOrder(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<GrossLines> {
-  return grossLockedLines((await readLockedLines(tx, workingOrderId)).map(({ locked }) => locked));
+  return (await readStoredOrder(tx, workingOrderId)).gross;
+}
+
+/** {@link priceStoredOrder}, with the working-order line each gross line was priced from. */
+export async function readStoredOrder(
+  tx: Transaction,
+  workingOrderId: string,
+): Promise<GrossOrder> {
+  const stored = await readLockedLines(tx, workingOrderId);
+  return {
+    gross: grossLockedLines(stored.map(({ locked }) => locked)),
+    identities: stored.map(({ identity }) => identity),
+  };
 }
 
 /**
@@ -1067,20 +1072,28 @@ export async function openTab(
   return { tabId, orderNumber };
 }
 
-/** This working order is an open bill of a party, else `tab.not_open`. A counter order is not. */
+/**
+ * This working order is an open bill of a party, else `tab.not_open`; answers its revision. A counter
+ * order is not.
+ */
 export async function assertPartyBillOpen(
   tx: Transaction,
   cfg: TillConfig,
   tabId: string,
-): Promise<void> {
+): Promise<number> {
   void cfg;
   const [order] = await tx
-    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .select({
+      status: workingOrders.status,
+      partyId: workingOrders.partyId,
+      revision: workingOrders.revision,
+    })
     .from(workingOrders)
     .where(eq(workingOrders.id, tabId));
   if (order?.status !== "open" || order.partyId === null) {
     throw new AppError("tab.not_open", { tabId });
   }
+  return order.revision;
 }
 
 /** The columns of a stored line {@link fireLines} reads. */
@@ -1877,7 +1890,7 @@ export async function insertTabRound(
  * its station has a printer. A held line of a group whose HOLD ticket was queued records a `void`
  * notice for what was removed and gets a HOLD CANCELLED slip instead.
  *
- * Voiding stays open with changes to sent items switched off: it is then the only correction.
+ * Voiding stays open with changes to sent items switched off.
  */
 export async function voidTabLine(
   tx: Transaction,
@@ -2108,9 +2121,29 @@ async function reduceLine(
 }
 
 /**
+ * `quantity` of a line as thousandths, else `refused()`: a positive decimal no larger than the line,
+ * in the line's unit's decimal places.
+ */
+export function quantityOfLine(
+  quantity: string,
+  line: { quantity: number; unitPrecision: number | null },
+  refused: () => AppError,
+): number {
+  let asked: number;
+  try {
+    assertQuantityPrecision(quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, { positive: true });
+    asked = stringToThousandths(quantity);
+  } catch {
+    throw refused();
+  }
+  if (asked > line.quantity) throw refused();
+  return asked;
+}
+
+/**
  * The part of a line a void removes, as thousandths, or `null` for the whole line. Refused
- * `tab.void_quantity_invalid` unless it is a positive decimal no larger than the line, in the line's
- * unit's decimal places, and the whole of an extras child, whose quantity follows its dish.
+ * `tab.void_quantity_invalid` unless it is a {@link quantityOfLine}, and the whole of an extras
+ * child, whose quantity follows its dish.
  */
 function voidQuantity(
   tabId: string,
@@ -2119,14 +2152,7 @@ function voidQuantity(
   line: { quantity: number; parentLineId: string | null; unitPrecision: number | null },
 ): number | null {
   const invalid = () => new AppError("tab.void_quantity_invalid", { tabId, lineNo, quantity });
-  let asked: number;
-  try {
-    assertQuantityPrecision(quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, { positive: true });
-    asked = stringToThousandths(quantity);
-  } catch {
-    throw invalid();
-  }
-  if (asked > line.quantity) throw invalid();
+  const asked = quantityOfLine(quantity, line, invalid);
   if (asked === line.quantity) return null;
   if (line.parentLineId !== null) throw invalid();
   return asked;
@@ -3698,8 +3724,9 @@ async function assertProductsSellable(
  * - A stored line keeps its gross price, names and the other facts it was added with; only what the
  *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
  *   carries no price. A kept extra is matched by list, product and quantity.
- * - A line with no ticket item, or a held or recalled one, is changed in place. A held one whose
- *   group has a queued HOLD ticket also prints HOLD corrections for its change or its removal
+ * - A line with no ticket item, or a held or recalled one, is changed in place, except that units
+ *   added to one a comp or a discount repriced go on a new line, priced now (ruling R12). A held one
+ *   whose group has a queued HOLD ticket also prints HOLD corrections for its change or its removal
  *   ({@link planHeldCorrections}).
  * - A line the kitchen has, not started: a change recalls the old item with a notice and slip and
  *   fires the changed line as a new item; a quantity rise leaves the item and adds the difference as
@@ -4479,10 +4506,8 @@ export async function placeOrder(
     let placeResult: PlaceOrderResult = { id, status: "placed" };
     let issuedOrderLabel: string | null | undefined;
     if (orderFlow === "invoice_first") {
-      const { priced, clock } = issueMoment(
-        deps.clock,
-        await issuancePass(tx, cfg, id, await priceStoredOrderForIssuance(tx, id)),
-      );
+      const order = await priceStoredOrderForIssuance(tx, id);
+      const { priced, clock } = issueMoment(deps.clock, await issuancePass(tx, cfg, id, order));
       // The fiscal record's `till_id` is the DEVICE till, while the amendment below records the box's
       // CONFIGURED register. The chain is keyed by the node, not the device.
       const { saleId, fiscal } = await recordSale(tx, deps.backend, {
@@ -4508,7 +4533,7 @@ export async function placeOrder(
         total: priced.total,
         qr: fiscal.verificationUrl ?? "",
         vatBreakdown: toVatBreakdown(priced.vatBreakdown),
-        lines: ticketLinesFrom(priced, await readListUnitPrices(tx, id)),
+        lines: ticketLinesFrom(priced, order.identities),
         tender: { method: "unpaid" },
       };
       placeResult = {

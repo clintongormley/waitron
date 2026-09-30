@@ -632,15 +632,4 @@ describe("till-ticket-view: a line given away or discounted (service plan Task 1
     expect(norm(rows[0]!.querySelector("s")!.textContent!)).toBe("12,00 €");
     expect(rows[3]!.querySelector("s")).toBeNull();
   });
-
-  it("shows a line whose original price equals its price plainly", async () => {
-    const { el } = await mount({
-      lines: [
-        { descriptions: { "es-ES": "Pan" }, quantity: "1", gross: "2.50", listGross: "2.50" },
-      ],
-    });
-    const row = el.shadowRoot!.querySelector(".lines > .line")!;
-    expect(row.querySelector("s")).toBeNull();
-    expect(grossOf(row)).toBe("2,50 €");
-  });
 });

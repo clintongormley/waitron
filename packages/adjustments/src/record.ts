@@ -7,7 +7,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "./policy.js";
-import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
+import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "./schema/adjustments.js";
 
 /** An adjustment to record. `line` is null for a discount on the whole bill. */
 export interface NewAdjustment {
@@ -21,9 +21,9 @@ export interface NewAdjustment {
     listUnitPriceGross: Decimal;
     creditedTo: string | null;
     stage: AdjustmentStage;
-    /** Rows this adjustment carved off the line. */
-    splitLineIds?: readonly string[];
   } | null;
+  /** The rows this adjustment split off, each with the row it came from. */
+  splits?: readonly AdjustmentSplit[];
   /** How much of the line the adjustment covered; null exactly when `line` is. */
   quantity: string | null;
   reason: { id: string; name: string; policy: AdjustmentPolicySnapshot };
@@ -48,7 +48,7 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
     .values({
       workingOrderId: row.workingOrderId,
       lineId: line?.id ?? null,
-      splitLineIds: [...(line?.splitLineIds ?? [])],
+      splits: [...(row.splits ?? [])],
       lineName: line?.name ?? null,
       lineQuantity: line === null ? null : stringToThousandths(line.quantity),
       lineListUnitPrice: line === null ? null : decimalToCents(line.listUnitPriceGross),
@@ -81,11 +81,11 @@ export interface ReasonTotals {
 
 /**
  * This reason's earlier reductions on the bill, bill-level discounts included, and its earlier
- * percentage discounts on `lineId`. A line carved off another by an adjustment on this bill also
- * counts the percentages taken off the line it came from, at any remove — including ones taken
- * after the carve, which err toward refusing. A split made by anything other than an adjustment is
- * not recorded here, so a row carved that way starts with none. `lineId` null asks for a bill-level
- * discount, which has no line percentage.
+ * percentage discounts on `lineId`. A row split off another by an adjustment on this bill, a bill
+ * discount included, also counts the percentages taken off the row it came from, at any remove —
+ * including ones taken after the split, which err toward refusing. A split made by anything other
+ * than an adjustment is not recorded here, so a row split that way starts with none. `lineId` null
+ * asks for a bill-level discount, which has no line percentage.
  */
 export async function readReasonTotals(
   tx: Transaction,
@@ -103,9 +103,9 @@ export async function readReasonTotals(
     with recursive lineage(line_id) as (
       select ${lineId}
       union
-      select a.line_id
-      from adjustments a, json_each(a.split_line_ids) carved
-      join lineage on carved.value = lineage.line_id
+      select json_extract(split.value, '$.from')
+      from adjustments a, json_each(a.splits) split
+      join lineage on json_extract(split.value, '$.to') = lineage.line_id
       where a.working_order_id = ${workingOrderId}
     )
     select coalesce(sum(percent_bp), 0) as total

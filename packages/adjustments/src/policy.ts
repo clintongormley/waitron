@@ -10,6 +10,11 @@ export const ADJUSTMENT_ACTIONS = [
 
 export type AdjustmentAction = (typeof ADJUSTMENT_ACTIONS)[number];
 
+/** A whole count of basis points from 1 to 10000: a percentage from 0.01% to 100%. */
+export function isPercentBp(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= 10000;
+}
+
 export interface AdjustmentReason {
   id: string;
   name: string;
@@ -60,10 +65,7 @@ function assertWellFormed(req: AdjustmentRequest): void {
     throw new RangeError("priorPercentOnLineBp is not a whole count of basis points");
   }
   const percent = req.percentBp;
-  if (
-    req.action === "discount_percent" &&
-    (percent === null || !Number.isInteger(percent) || percent < 1 || percent > 10000)
-  ) {
+  if (req.action === "discount_percent" && !isPercentBp(percent)) {
     throw new RangeError("a percentage discount needs percentBp in 1..10000");
   }
 }

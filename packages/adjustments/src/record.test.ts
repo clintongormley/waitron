@@ -7,7 +7,7 @@ import { decimal, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import { readReasonTotals, recordAdjustment, type NewAdjustment } from "./record.js";
-import { adjustments } from "./schema/adjustments.js";
+import { adjustments, type AdjustmentSplit } from "./schema/adjustments.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, ADJUSTMENTS_MIGRATIONS] });
@@ -57,13 +57,14 @@ function percent(
   reason: AdjustmentReason,
   lineId: string,
   percentBp: number,
-  splitLineIds: string[] = [],
+  splits: AdjustmentSplit[] = [],
 ): NewAdjustment {
   const reduction = decimal(((10 * percentBp) / 10000).toFixed(2));
   const base = comp(workingOrderId, reason);
   return {
     ...base,
-    line: { ...base.line!, id: lineId, listUnitPriceGross: decimal("10.00"), splitLineIds },
+    line: { ...base.line!, id: lineId, listUnitPriceGross: decimal("10.00") },
+    splits,
     action: "discount_percent",
     percentBp,
     beforeAmount: decimal("10.00"),
@@ -97,8 +98,13 @@ describe("recordAdjustment", () => {
           listUnitPriceGross: decimal("25.00"),
           creditedTo: null,
           stage: "fired",
-          splitLineIds: ["44444444-4444-4444-8444-444444444444"],
         },
+        splits: [
+          {
+            from: "33333333-3333-4333-8333-333333333333",
+            to: "44444444-4444-4444-8444-444444444444",
+          },
+        ],
         beforeAmount: decimal("50.00"),
         afterAmount: decimal("25.00"),
         reduction: decimal("25.00"),
@@ -110,7 +116,12 @@ describe("recordAdjustment", () => {
       id,
       workingOrderId: order,
       lineId: "33333333-3333-4333-8333-333333333333",
-      splitLineIds: ["44444444-4444-4444-8444-444444444444"],
+      splits: [
+        {
+          from: "33333333-3333-4333-8333-333333333333",
+          to: "44444444-4444-4444-8444-444444444444",
+        },
+      ],
       lineName: "Steak",
       lineQuantity: 2000,
       lineListUnitPrice: 2500,
@@ -160,7 +171,7 @@ describe("recordAdjustment", () => {
     const [row] = await db.select().from(adjustments).where(eq(adjustments.id, id));
     expect(row).toMatchObject({
       lineId: null,
-      splitLineIds: [],
+      splits: [],
       lineName: null,
       lineQuantity: null,
       lineListUnitPrice: null,
@@ -232,10 +243,11 @@ describe("readReasonTotals", () => {
     // carving `carvedAgain` off it.
     await record(
       comp(order, another, {
-        line: { ...comp(order, another).line!, id: line, splitLineIds: [carved] },
+        line: { ...comp(order, another).line!, id: line },
+        splits: [{ from: line, to: carved }],
       }),
     );
-    await record(percent(order, reason, carved, 2000, [carvedAgain]));
+    await record(percent(order, reason, carved, 2000, [{ from: carved, to: carvedAgain }]));
     expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(3000);
     expect((await totals(order, reason.id, carvedAgain)).priorPercentOnLineBp).toBe(3000);
     // What a row carved off a line takes never counts against the line it came from; what the line
@@ -245,12 +257,35 @@ describe("readReasonTotals", () => {
     expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(3500);
   });
 
+  it("follows a split a bill discount made back to the row it came from", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const another = await seedReason(db);
+    const [line, neighbour, carved] = [randomUUID(), randomUUID(), randomUUID()];
+    await record(percent(order, reason, line, 3000));
+    await record(percent(order, reason, neighbour, 1000));
+    // Another reason's discount on the whole bill splits `carved` off `line`.
+    await record(
+      comp(order, another, {
+        line: null,
+        quantity: null,
+        action: "discount_amount",
+        beforeAmount: decimal("20.00"),
+        afterAmount: decimal("19.99"),
+        reduction: decimal("0.01"),
+        nominalValue: decimal("20.00"),
+        splits: [{ from: line, to: carved }],
+      }),
+    );
+    expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(3000);
+  });
+
   it("does not follow a split recorded on another bill", async () => {
     const order = await seedWorkingOrder(db);
     const other = await seedWorkingOrder(db);
     const reason = await seedReason(db);
     const [line, carved] = [randomUUID(), randomUUID()];
-    await record(percent(other, reason, line, 1000, [carved]));
+    await record(percent(other, reason, line, 1000, [{ from: line, to: carved }]));
     await record(percent(order, reason, line, 2000));
     expect((await totals(order, reason.id, carved)).priorPercentOnLineBp).toBe(0);
   });

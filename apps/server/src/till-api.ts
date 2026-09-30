@@ -448,7 +448,7 @@ function requireCapacity(capacity: number | undefined): void {
 }
 
 /** A non-UUID names no open tab, so it gets the absent tab's `tab.not_open`. */
-function requireTabParam(id: string): string {
+export function requireTabParam(id: string): string {
   if (!isUuid(id)) {
     throw new AppError("tab.not_open", { tabId: id });
   }
@@ -459,11 +459,12 @@ function requireTabParam(id: string): string {
  * A revision as a body carries it, an order's or a party's: a whole number from 0, else
  * `management.request_invalid` naming `field`.
  */
-function requireRevision(
+export function requireRevision(
   value: unknown,
   field:
     | "revision"
     | "draftRevision"
+    | "expectedRevision"
     | "expectedPartyRevision"
     | "expectedOtherPartyRevision" = "revision",
 ): number {

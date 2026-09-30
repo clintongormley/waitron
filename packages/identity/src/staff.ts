@@ -596,14 +596,7 @@ export async function listActivePersonsWithPermission(
   tx: Transaction,
   permission: Permission,
 ): Promise<StaffListEntry[]> {
-  const rows = await tx
-    .select({ personId: persons.id, displayName: persons.displayName, role: persons.role })
-    .from(persons)
-    .where(eq(persons.status, "active"))
-    .orderBy(persons.displayName);
-  return rows
-    .filter((r) => roleHasPermission(r.role as PersonRoleValue, permission))
-    .map((r) => ({ personId: r.personId, displayName: r.displayName }));
+  return listActivePersonsWhose(tx, (role) => roleHasPermission(role, permission));
 }
 
 /**
@@ -614,13 +607,20 @@ export async function listActivePersonsAtOrAboveRole(
   tx: Transaction,
   role: PersonRoleValue,
 ): Promise<StaffListEntry[]> {
+  return listActivePersonsWhose(tx, (held) => roleAtLeast(held, role));
+}
+
+async function listActivePersonsWhose(
+  tx: Transaction,
+  admits: (role: PersonRoleValue) => boolean,
+): Promise<StaffListEntry[]> {
   const rows = await tx
     .select({ personId: persons.id, displayName: persons.displayName, role: persons.role })
     .from(persons)
     .where(eq(persons.status, "active"))
     .orderBy(persons.displayName);
   return rows
-    .filter((r) => roleAtLeast(r.role as PersonRoleValue, role))
+    .filter((r) => admits(r.role as PersonRoleValue))
     .map((r) => ({ personId: r.personId, displayName: r.displayName }));
 }
 

@@ -10,7 +10,7 @@ import {
   decimalToCents,
   type Decimal,
 } from "@waitron/shared";
-import type { AdjustmentAction, AdjustmentReason } from "./policy.js";
+import { isPercentBp, type AdjustmentAction, type AdjustmentReason } from "./policy.js";
 import { adjustmentReasons } from "./schema/reasons.js";
 import "./errors.js";
 
@@ -80,7 +80,7 @@ function reasonValues(input: AdjustmentReasonInput) {
     throw invalid("actions");
   }
   const percent = input.maxPercentBp;
-  if (percent !== null && (!Number.isInteger(percent) || percent <= 0 || percent > 10000)) {
+  if (percent !== null && !isPercentBp(percent)) {
     throw invalid("maxPercentBp");
   }
   const amount = input.maxAmount;

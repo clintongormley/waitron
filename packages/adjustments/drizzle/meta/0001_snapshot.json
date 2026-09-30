@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "126ed66b-9997-43ae-a318-10b2f03554ed",
+  "id": "8c5dc6dc-17af-4482-9a9c-8a6ac1d734f0",
   "prevId": "67d6aa98-7798-4999-b663-56d4e03349fd",
   "tables": {
     "adjustment_reasons": {
@@ -162,8 +162,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "split_line_ids": {
-          "name": "split_line_ids",
+        "splits": {
+          "name": "splits",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -365,7 +365,7 @@
         },
         "adjustments_bill_level_ck": {
           "name": "adjustments_bill_level_ck",
-          "value": "\"adjustments\".\"line_id\" is not null or (\"adjustments\".\"line_name\" is null and \"adjustments\".\"line_quantity\" is null\n          and \"adjustments\".\"line_list_unit_price\" is null and \"adjustments\".\"credited_to\" is null and \"adjustments\".\"quantity\" is null\n          and \"adjustments\".\"stage\" is null and json_array_length(\"adjustments\".\"split_line_ids\") = 0\n          and \"adjustments\".\"action\" in ('discount_percent', 'discount_amount'))"
+          "value": "\"adjustments\".\"line_id\" is not null or (\"adjustments\".\"line_name\" is null and \"adjustments\".\"line_quantity\" is null\n          and \"adjustments\".\"line_list_unit_price\" is null and \"adjustments\".\"credited_to\" is null and \"adjustments\".\"quantity\" is null\n          and \"adjustments\".\"stage\" is null and \"adjustments\".\"action\" in ('discount_percent', 'discount_amount'))"
         }
       }
     }

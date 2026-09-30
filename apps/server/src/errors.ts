@@ -522,8 +522,9 @@ declare module "@waitron/shared" {
      * on a party's bills, is an open order of no party: a counter order.
      */
     "tab.not_open": { tabId: string };
-    /** A per-line void named no line on the open tab. Pre-fiscal: a void of an open tab files nothing. */
-    /** An adjustment names its line by id, the other line routes by number. */
+    /**
+     * No such line on the open bill: an adjustment names its line by id, every other caller by number.
+     */
     "tab.line_not_found": { tabId: string; lineNo: number } | { tabId: string; lineId: string };
     /**
      * A bill named as BOTH source and destination of a merge (`mergeBills`, or `moveOrderLines`).

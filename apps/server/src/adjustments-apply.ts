@@ -2,6 +2,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import {
   evaluateAdjustment,
   findAdjustmentReason,
+  isPercentBp,
   percentReduction,
   policySnapshotOf,
   readReasonTotals,
@@ -9,11 +10,12 @@ import {
   spreadBillDiscount,
   type AdjustmentAction,
   type AdjustmentReason,
+  type AdjustmentSplit,
   type AdjustmentStage,
   type PricedRow,
   type SpreadLine,
 } from "@waitron/adjustments";
-import { assertQuantityPrecision, MAX_UNIT_PRECISION } from "@waitron/catalogue";
+import { staffPresentationName } from "@waitron/catalogue";
 import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -28,16 +30,15 @@ import {
   compareDecimal,
   decimal,
   decimalToCents,
-  decimalToThousandths,
+  grossOf,
   MONEY_SCALE,
-  multiplyDecimal,
-  stringToThousandths,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
   toScale,
   type Decimal,
 } from "@waitron/shared";
+import { invalid, money } from "./bill-allocation.js";
 import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
@@ -46,12 +47,14 @@ import {
   bumpRevision,
   isReleased,
   partyAfterEdit,
+  quantityOfLine,
   readOrderRevision,
-  readVoidTarget,
   refusePaymentInFlight,
   removeFromLine,
   splitLinesWithinOrder,
+  type VoidTarget,
 } from "./working-order.js";
+import { firedQuantity, type TicketState } from "./kitchen-print.js";
 import "./errors.js";
 
 /** What an adjustment asks, as a preview and an apply share it. */
@@ -99,6 +102,7 @@ interface Row {
   lineNo: number;
   parentLineId: string | null;
   name: string;
+  variantName: string | null;
   quantity: number;
   unit: number;
   list: number | null;
@@ -110,6 +114,9 @@ interface Row {
   sentAt: string | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
+  stationId: string | null;
+  ticketState: TicketState | null;
+  firedQuantity: number;
 }
 
 /** New prices for one row: `carve` thousandths are first split off it into the row they apply
@@ -140,19 +147,12 @@ interface Plan {
 const ZERO = decimal("0");
 
 function gross(unitCents: number, quantity: number): Decimal {
-  return toScale(
-    multiplyDecimal(centsToDecimal(unitCents), thousandthsToDecimal(quantity)),
-    MONEY_SCALE,
-  );
+  return grossOf(centsToDecimal(unitCents), thousandthsToDecimal(quantity));
 }
 
 /** A row's value before any adjustment (plan D21), for `quantity` of it. */
 function listValue(row: Row, quantity: number): Decimal {
   return gross(row.list ?? row.unit, quantity);
-}
-
-function invalid(field: string): AppError {
-  return new AppError("management.request_invalid", { field });
 }
 
 async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
@@ -162,6 +162,7 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
       name: workingOrderLines.name,
+      variantName: workingOrderLines.variantName,
       quantity: workingOrderLines.quantity,
       unit: workingOrderLines.unitPriceGross,
       list: workingOrderLines.listUnitPriceGross,
@@ -173,12 +174,32 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      stationId: ticketItems.stationId,
+      ticketState: ticketItems.state,
+      firedQuantity,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, orderId))
     .orderBy(workingOrderLines.lineNo);
+}
+
+/** The dish as `removeFromLine` takes it, from the row the plan read. */
+function voidTargetOf(dish: Row): VoidTarget {
+  return {
+    id: dish.id,
+    parentLineId: dish.parentLineId,
+    groupId: dish.groupId,
+    quantity: dish.quantity,
+    unitPrecision: dish.unitPrecision,
+    unitPriceGross: dish.unit,
+    ticketItemId: dish.ticketItemId,
+    firedAt: dish.ticketFiredAt,
+    stationId: dish.stationId,
+    state: dish.ticketState,
+    firedQuantity: dish.firedQuantity,
+  };
 }
 
 /** How far the dish had got (ruling R8). */
@@ -205,23 +226,16 @@ export function reasonNameIn(
 /** The part of the dish covered, in thousandths, else `adjustment.quantity_invalid`. */
 function coveredQuantity(orderId: string, dish: Row, quantity: string | undefined): number {
   if (quantity === undefined) return dish.quantity;
-  const refused = () =>
-    new AppError("adjustment.quantity_invalid", {
-      workingOrderId: orderId,
-      lineNo: dish.lineNo,
-      quantity,
-    });
-  let asked: number;
-  try {
-    assertQuantityPrecision(quantity, dish.unitPrecision ?? MAX_UNIT_PRECISION, {
-      positive: true,
-    });
-    asked = stringToThousandths(quantity);
-  } catch {
-    throw refused();
-  }
-  if (asked > dish.quantity) throw refused();
-  return asked;
+  return quantityOfLine(
+    quantity,
+    dish,
+    () =>
+      new AppError("adjustment.quantity_invalid", {
+        workingOrderId: orderId,
+        lineNo: dish.lineNo,
+        quantity,
+      }),
+  );
 }
 
 /** The discount a percentage or an amount asks for off `base`, checked against the action. */
@@ -229,9 +243,7 @@ function requestedDiscount(ask: AdjustmentAsk, base: Decimal): Decimal {
   if (ask.action === "discount_percent") {
     if (ask.amount !== undefined) throw invalid("amount");
     const bp = ask.percentBp;
-    if (bp === undefined || !Number.isInteger(bp) || bp < 1 || bp > 10000) {
-      throw invalid("percentBp");
-    }
+    if (!isPercentBp(bp)) throw invalid("percentBp");
     return percentReduction(base, bp);
   }
   if (ask.percentBp !== undefined) throw invalid("percentBp");
@@ -247,7 +259,6 @@ function requestedDiscount(ask: AdjustmentAsk, base: Decimal): Decimal {
     return amount;
   }
   if (ask.amount !== undefined) throw invalid("amount");
-  // A comp takes everything.
   return base;
 }
 
@@ -272,6 +283,21 @@ function spread(
   });
 }
 
+/** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
+ * whose total merely rounds to nothing. */
+function zeroed(
+  subjects: readonly { row: Row; quantity: number; carve: number | null }[],
+): Change[] {
+  return subjects
+    .filter(({ row }) => row.unit !== 0)
+    .map(({ row, quantity, carve }) => ({
+      row,
+      carve,
+      rows: [{ quantity: thousandthsToDecimal(quantity), unitGross: ZERO }],
+      reduction: gross(row.unit, quantity),
+    }));
+}
+
 /**
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount, the paid lines and the reason's policy, and the rows it would change.
@@ -284,8 +310,7 @@ async function planAdjustment(
 ): Promise<Plan> {
   const { orderId } = ask;
   // The table screen is the only surface (ruling R1): an open bill of a party, as a void needs.
-  await assertPartyBillOpen(tx, cfg, orderId);
-  const revision = await readOrderRevision(tx, orderId);
+  const revision = await assertPartyBillOpen(tx, cfg, orderId);
   if (revision !== ask.expectedRevision) {
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
@@ -377,7 +402,8 @@ async function planAdjustment(
             exact: family.length === 1 && !weighed,
           }));
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row.unit, quantity)));
-      changes = spread(subjects, requestedDiscount(ask, before));
+      const discount = requestedDiscount(ask, before);
+      changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
       await refusePaidLines(
@@ -420,10 +446,6 @@ async function planAdjustment(
     stage: dish === null ? null : stageOf(dish),
     approverRole: verdict.kind === "needs_approval" ? verdict.approverRole : null,
   };
-}
-
-function money(value: Decimal): string {
-  return toScale(value, MONEY_SCALE);
 }
 
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
@@ -476,12 +498,11 @@ async function approvedBy(
 }
 
 async function setPrice(tx: Transaction, lineId: string, row: PricedRow): Promise<void> {
-  const unit = decimalToCents(row.unitGross);
   await tx
     .update(workingOrderLines)
     .set({
-      unitPriceGross: unit,
-      lineTotal: decimalToCents(gross(unit, decimalToThousandths(decimal(row.quantity)))),
+      unitPriceGross: decimalToCents(row.unitGross),
+      lineTotal: decimalToCents(grossOf(row.unitGross, row.quantity)),
     })
     .where(eq(workingOrderLines.id, lineId));
 }
@@ -494,13 +515,13 @@ async function lineNoOf(tx: Transaction, lineId: string): Promise<number> {
   return row!.lineNo;
 }
 
-/** Writes the plan's new prices; answers the ids of the rows it split off. */
+/** Writes the plan's new prices; answers each row it split off, with the row it came from. */
 async function reprice(
   tx: Transaction,
   cfg: TillConfig,
   orderId: string,
   changes: readonly Change[],
-): Promise<string[]> {
+): Promise<AdjustmentSplit[]> {
   const touched = changes.map(({ row }) => row.id);
   // Before any split, so a split row copies the price its line had (plan D21).
   await tx
@@ -509,7 +530,7 @@ async function reprice(
       listUnitPriceGross: sql`coalesce(${workingOrderLines.listUnitPriceGross}, ${workingOrderLines.unitPriceGross})`,
     })
     .where(inArray(workingOrderLines.id, touched));
-  const carved: string[] = [];
+  const splits: AdjustmentSplit[] = [];
   const subjects: { id: string; lineNo: number; change: Change }[] = [];
   for (const change of changes) {
     if (change.carve === null) {
@@ -520,7 +541,7 @@ async function reprice(
       { lineNo: change.row.lineNo, quantity: thousandthsToDecimal(change.carve) },
     ]);
     const id = split.get(change.row.id)!;
-    carved.push(id);
+    splits.push({ from: change.row.id, to: id });
     subjects.push({ id, lineNo: await lineNoOf(tx, id), change });
   }
   const twoRows = subjects.filter(({ change }) => change.rows.length === 2);
@@ -537,11 +558,11 @@ async function reprice(
     await setPrice(tx, id, change.rows[0]!);
     const second = seconds.get(id);
     if (second !== undefined) {
-      carved.push(second);
+      splits.push({ from: id, to: second });
       await setPrice(tx, second, change.rows[1]!);
     }
   }
-  return carved;
+  return splits;
 }
 
 /**
@@ -558,8 +579,7 @@ export async function applyAdjustment(
   args: AdjustmentArgs,
   venueLocale: string,
 ): Promise<{ adjustmentIds: string[]; revision: number }> {
-  const { submissionId, approver, expectedRevision, ...command } = args;
-  void expectedRevision;
+  const { submissionId, approver, ...command } = args;
   return runServiceCommand(
     tx,
     { kind: "bill", workingOrderId: args.orderId },
@@ -569,12 +589,18 @@ export async function applyAdjustment(
     async () => {
       const plan = await planAdjustment(tx, cfg, args, venueLocale);
       const approved = await approvedBy(tx, plan.approverRole, approver);
-      let carved: string[] = [];
+      let splits: AdjustmentSplit[] = [];
       if (args.action === "cancel") {
-        const target = await readVoidTarget(tx, args.orderId, plan.dish!.lineNo);
-        await removeFromLine(tx, cfg, args.orderId, target, plan.removed, args.operatorId);
+        await removeFromLine(
+          tx,
+          cfg,
+          args.orderId,
+          voidTargetOf(plan.dish!),
+          plan.removed,
+          args.operatorId,
+        );
       } else {
-        carved = await reprice(tx, cfg, args.orderId, plan.changes);
+        splits = await reprice(tx, cfg, args.orderId, plan.changes);
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId);
@@ -587,13 +613,13 @@ export async function applyAdjustment(
             ? null
             : {
                 id: dish.id,
-                name: dish.name,
+                name: staffPresentationName(dish),
                 quantity: thousandthsToDecimal(dish.quantity),
                 listUnitPriceGross: centsToDecimal(dish.list ?? dish.unit),
                 creditedTo: dish.creditedTo,
                 stage: plan.stage!,
-                splitLineIds: carved,
               },
+        splits,
         quantity: plan.covered === null ? null : thousandthsToDecimal(plan.covered),
         reason: {
           id: plan.reason.id,

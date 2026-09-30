@@ -30,7 +30,6 @@ export interface AdjustTarget {
   /** One unit's price when the dish is several whole units the action may take one of; null when
    * only the whole of it can be adjusted (a weighed dish, or one with extras). */
   unitTotal: string | null;
-  /** The kitchen has started the dish. */
   started?: boolean;
 }
 
@@ -195,7 +194,6 @@ export class TillAdjustmentDialog extends LitElement {
   @property({ attribute: false }) choice: AdjustmentChoice | null = null;
   /** The code of the last request's refusal. */
   @property() refusal: string | null = null;
-  /** A request is out. */
   @property({ type: Boolean }) busy = false;
 
   @state() private quantity: "1" | "all" = "all";
@@ -253,6 +251,11 @@ export class TillAdjustmentDialog extends LitElement {
     return formatMoney(amount, currentLocale());
   }
 
+  /** The typed value with a decimal comma read as a point. */
+  #typedNumber(): string {
+    return this.value.trim().replace(",", ".");
+  }
+
   /** The form's own checks, by field; an empty map when it can be sent. */
   #ownErrors(): Map<Field, string> {
     const errors = new Map<Field, string>();
@@ -262,13 +265,14 @@ export class TillAdjustmentDialog extends LitElement {
       errors.set("note", t("adjust.note_required"));
     if (this.kind === "discount") {
       const typed = this.value.trim();
+      const number = this.#typedNumber();
       if (this.discountKind === "percent") {
-        const percent = Number(typed.replace(",", "."));
+        const percent = Number(number);
         if (!TYPED_AMOUNT.test(typed) || percent <= 0 || percent > 100)
           errors.set("value", t("adjust.percent_invalid"));
-      } else if (!TYPED_AMOUNT.test(typed) || Number(typed.replace(",", ".")) <= 0) {
+      } else if (!TYPED_AMOUNT.test(typed) || Number(number) <= 0) {
         errors.set("value", t("adjust.amount_invalid"));
-      } else if (compareDecimal(decimal(typed.replace(",", ".")), decimal(this.#covered())) > 0) {
+      } else if (compareDecimal(decimal(number), decimal(this.#covered())) > 0) {
         errors.set(
           "value",
           t("adjust.amount_too_large").replace("{total}", () => this.#money(this.#covered())),
@@ -284,10 +288,9 @@ export class TillAdjustmentDialog extends LitElement {
       : refusalField(this.shownRefusal, this.kind, this.#partial());
   }
 
-  /** What each field shows under it: the server's refusal of it, else its own check once a
-   * submission was tried. */
-  #fieldErrors(): Map<Field, string> {
-    const errors = this.attempted ? this.#ownErrors() : new Map<Field, string>();
+  /** What each field shows under it: the server's refusal of it, else its own check in `own`. */
+  #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
+    const errors = new Map(own);
     const field = this.#refusalField();
     if (field !== null) errors.set(field, codeMessage(this.shownRefusal!));
     return errors;
@@ -315,7 +318,7 @@ export class TillAdjustmentDialog extends LitElement {
       note: note === "" ? null : note,
     };
     if (this.#partial() && this.quantity === "1") choice.quantity = "1";
-    const typed = this.value.trim().replace(",", ".");
+    const typed = this.#typedNumber();
     if (choice.action === "discount_percent") choice.percentBp = Math.round(Number(typed) * 100);
     if (choice.action === "discount_amount") choice.amount = typed;
     return choice;
@@ -419,7 +422,8 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #form(target: AdjustTarget): TemplateResult {
-    const errors = this.#fieldErrors();
+    const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
+    const errors = this.#fieldErrors(own);
     const bottom = this.#bottomMessage(errors);
     const reason = this.#reason();
     const cancelWording =
@@ -453,7 +457,7 @@ export class TillAdjustmentDialog extends LitElement {
           variant="primary"
           data-adjust-continue
           .loading=${this.busy}
-          .disabled=${this.busy || (this.attempted && this.#ownErrors().size > 0)}
+          .disabled=${this.busy || own.size > 0}
           @click=${() => void this.#continue()}
         >
           ${t("adjust.continue")}

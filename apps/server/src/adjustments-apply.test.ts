@@ -296,7 +296,20 @@ describe("a comp (plan D4)", () => {
       lineQuantity: 2000,
       reduction: 2500,
       nominalValue: 2500,
-      splitLineIds: [await lineIdOf(venue, billId, 2)],
+      splits: [{ from: steak, to: await lineIdOf(venue, billId, 2) }],
+    });
+  });
+
+  it("comps 0.005 kg of ham at €24.00/kg to a unit price of exactly €0.00", async () => {
+    const { billId } = await bill([{ name: "Ham", quantity: "0.005" }]);
+
+    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+
+    expect(await priced(billId)).toEqual([["Ham", "0.005", "0.00", "24.00", "0.00"]]);
+    expect((await recordedOn(billId))[0]).toMatchObject({
+      beforeAmount: 12,
+      afterAmount: 0,
+      reduction: 12,
     });
   });
 
@@ -310,6 +323,33 @@ describe("a comp (plan D4)", () => {
       ["Olives", "1.000", "0.00", "1.50", "0.00"],
     ]);
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 1050, nominalValue: 1050 });
+  });
+
+  it("records a variant line under the variant's staff name, as the till shows it, not the Wine's", async () => {
+    const glass = { name: "Wine", variantId: venue.wineGlassId };
+    const comped = await bill([glass]);
+    const cancelled = await bill([glass]);
+
+    await adjust(comped.billId, {
+      lineId: await lineIdOf(venue, comped.billId, 1),
+      action: "comp",
+    });
+    await adjust(cancelled.billId, {
+      lineId: await lineIdOf(venue, cancelled.billId, 1),
+      action: "cancel",
+    });
+
+    expect((await recordedOn(comped.billId))[0]).toMatchObject({
+      action: "comp",
+      lineName: "Wine glass",
+      lineListUnitPrice: 400,
+    });
+    // The cancel deleted the line, so the record is the only place the variant is still named.
+    expect(await rowsOf(venue, cancelled.billId)).toEqual([]);
+    expect((await recordedOn(cancelled.billId))[0]).toMatchObject({
+      action: "cancel",
+      lineName: "Wine glass",
+    });
   });
 });
 
@@ -505,9 +545,10 @@ describe("a line discount (plan D4)", () => {
     ]);
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({ quantity: 3000, beforeAmount: 999, reduction: 100 });
-    expect(row!.splitLineIds).toEqual([
-      await lineIdOf(venue, billId, 2),
-      await lineIdOf(venue, billId, 3),
+    const [first, second, third] = [1, 2, 3].map((lineNo) => lineIdOf(venue, billId, lineNo));
+    expect(row!.splits).toEqual([
+      { from: await first, to: await second },
+      { from: await second, to: await third },
     ]);
   });
 });
@@ -1121,6 +1162,49 @@ describe("cumulative limits (plan D6)", () => {
     await adjust(billId, await discount());
 
     await refusedWith(billId, await discount(), "adjustment.over_limit");
+  });
+
+  it("counts a line's percentages on the row a bill discount split off it", async () => {
+    // Half off a line at most, and no cap on the bill, so only the line's percentage can refuse.
+    const reasonId = await inTx(venue, async (tx) => {
+      return (
+        await createAdjustmentReason(tx, {
+          ...REASONS.house,
+          name: "Half off D6",
+          names: {},
+          maxPercentBp: 5000,
+        })
+      ).id;
+    });
+    const { billId } = await bill([{ name: "Bottle", quantity: "3" }]);
+    const bottles = await lineIdOf(venue, billId, 1);
+    await adjust(billId, {
+      lineId: bottles,
+      action: "discount_percent",
+      percentBp: 3000,
+      reasonId,
+    });
+    await adjust(billId, { action: "discount_amount", amount: "0.01" });
+    expect(await priced(billId)).toEqual([
+      ["Bottle", "2.000", "21.00", "30.00", "42.00"],
+      ["Bottle", "1.000", "20.99", "30.00", "20.99"],
+    ]);
+    const carved = await lineIdOf(venue, billId, 2);
+    expect((await recordedOn(billId))[1]).toMatchObject({
+      lineId: null,
+      splits: [{ from: bottles, to: carved }],
+    });
+
+    await refusedWith(
+      billId,
+      {
+        lineId: carved,
+        action: "discount_percent",
+        percentBp: 3000,
+        reasonId,
+      },
+      "adjustment.over_limit",
+    );
   });
 });
 

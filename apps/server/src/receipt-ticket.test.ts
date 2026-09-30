@@ -1292,23 +1292,6 @@ describe("a line a comp or a discount changed (plan D4, ruling R13)", () => {
     expect(lines).toContain(`TOTAL${" ".repeat(30)}31,00 €`);
   });
 
-  it("prints no change where the list total is the price", () => {
-    const lines = printedLines(
-      formatReceipt({
-        result: {
-          ...FILED_SALE,
-          lines: [{ ...FILED_SALE.lines[0]!, listGross: FILED_SALE.lines[0]!.gross }],
-        },
-        issuer: ISSUER,
-        receipt: {},
-        invoiceLocale: "es-ES",
-        printer: PRINTER_80,
-      }),
-    );
-    expect(lines).toContain(`1  Menú del día${" ".repeat(20)}12,10 €`);
-    expect(lines.join("\n")).not.toContain("->");
-  });
-
   it("puts the change under a long name on the narrow roll, right-aligned", () => {
     const lines = printedLines(
       formatReceipt({

@@ -5,7 +5,6 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles } from "@waitron/ui";
 import {
   addDecimal,
-  compareDecimal,
   decimal,
   formatMoney,
   perDishOptionQuantity,
@@ -91,11 +90,7 @@ function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
  * printed receipt writes `12,00 € -> 0,00 €`. Presentation only: no fiscal figure changes. */
 function lineGross(line: TillSaleLine, locale: string) {
   const now = formatMoney(line.gross, locale);
-  if (
-    line.listGross === undefined ||
-    compareDecimal(decimal(line.listGross), decimal(line.gross)) === 0
-  )
-    return html`<span class="line-gross">${now}</span>`;
+  if (line.listGross === undefined) return html`<span class="line-gross">${now}</span>`;
   return html`<span class="line-gross"
     ><span class="visually-hidden">${LABEL.was} </span
     ><s class="list-gross">${formatMoney(line.listGross, locale)}</s> ${now}</span

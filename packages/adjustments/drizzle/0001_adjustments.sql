@@ -2,7 +2,7 @@ CREATE TABLE `adjustments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
 	`line_id` text,
-	`split_line_ids` text NOT NULL,
+	`splits` text NOT NULL,
 	`line_name` text,
 	`line_quantity` integer,
 	`line_list_unit_price` integer,
@@ -38,8 +38,7 @@ CREATE TABLE `adjustments` (
           and "adjustments"."quantity" <= "adjustments"."line_quantity")),
 	CONSTRAINT "adjustments_bill_level_ck" CHECK("adjustments"."line_id" is not null or ("adjustments"."line_name" is null and "adjustments"."line_quantity" is null
           and "adjustments"."line_list_unit_price" is null and "adjustments"."credited_to" is null and "adjustments"."quantity" is null
-          and "adjustments"."stage" is null and json_array_length("adjustments"."split_line_ids") = 0
-          and "adjustments"."action" in ('discount_percent', 'discount_amount')))
+          and "adjustments"."stage" is null and "adjustments"."action" in ('discount_percent', 'discount_amount')))
 );
 --> statement-breakpoint
 CREATE INDEX `adjustments_order_reason_idx` ON `adjustments` (`working_order_id`,`reason_id`);

@@ -9,7 +9,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import { requireNullableBodyUuid, requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
-import { AppError, decimal } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import {
   applyAdjustment,
   previewAdjustment,
@@ -18,22 +18,30 @@ import {
 } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
-import { asObject, submissionIdOf, withSaleTillWhenIssuing } from "./bill-payments-api.js";
+import {
+  asObject,
+  optionalMoney,
+  submissionIdOf,
+  withSaleTillWhenIssuing,
+} from "./bill-payments-api.js";
 import type { Logger } from "./logger.js";
 import { partyRevisionOfOrder } from "./parties.js";
-import { parseDrawerOverride, type TillApiDeps } from "./till-api.js";
-import { isUuid, requireSession } from "./till-session.js";
+import {
+  parseDrawerOverride,
+  requireRevision,
+  requireTabParam,
+  type TillApiDeps,
+} from "./till-api.js";
+import { requireSession } from "./till-session.js";
 import "./errors.js";
 
 type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Response>;
 
-const MONEY = /^\d{1,12}(\.\d{1,2})?$/;
 const NOTE_LIMIT = 500;
 
 /** A non-UUID names no open bill, so it gets the void route's `tab.not_open`. */
 function requireBill(id: string): string {
-  if (!isUuid(id)) throw new AppError("tab.not_open", { tabId: id });
-  return id.toLowerCase();
+  return requireTabParam(id).toLowerCase();
 }
 
 /** The body an apply and a preview share, screened field by field as `management.request_invalid`. */
@@ -42,14 +50,8 @@ function parseAsk(
   operatorId: string,
   body: Record<string, unknown>,
 ): AdjustmentAsk {
-  const { expectedRevision, action, quantity, percentBp, amount, note } = body;
-  if (
-    typeof expectedRevision !== "number" ||
-    !Number.isInteger(expectedRevision) ||
-    expectedRevision < 0
-  ) {
-    throw invalid("expectedRevision");
-  }
+  const { action, quantity, percentBp, note } = body;
+  const expectedRevision = requireRevision(body.expectedRevision, "expectedRevision");
   if (typeof action !== "string" || !(ADJUSTMENT_ACTIONS as readonly string[]).includes(action)) {
     throw invalid("action");
   }
@@ -57,9 +59,7 @@ function parseAsk(
   const lineId = requireNullableBodyUuid(body.lineId, "lineId");
   if (quantity !== undefined && typeof quantity !== "string") throw invalid("quantity");
   if (percentBp !== undefined && typeof percentBp !== "number") throw invalid("percentBp");
-  if (amount !== undefined && (typeof amount !== "string" || !MONEY.test(amount))) {
-    throw invalid("amount");
-  }
+  const amount = optionalMoney(body.amount, "amount");
   if (
     note !== undefined &&
     note !== null &&

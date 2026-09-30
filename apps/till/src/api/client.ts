@@ -699,7 +699,8 @@ export interface AdjustmentCommand extends AdjustmentAsk {
 }
 
 /** What an adjustment would do, read before it is confirmed. `reduction` is what the bill actually
- * loses, which can differ from a discount asked for on a weighed line. */
+ * loses, which can differ from the discount asked for when a line cannot take its share in whole
+ * cents per unit (a weighed dish, or a dish with extras). */
 export interface AdjustmentPreview {
   reduction: string;
   nominalValue: string;
@@ -747,7 +748,8 @@ export interface TillSaleLine {
   unitPrecision?: number | null;
   quantity: string;
   gross: string;
-  /** The line's total before a comp or a discount changed it; absent when nothing did. */
+  /** The line's total before a comp or a discount changed it; present only when that differs from
+   *  `gross`. */
   listGross?: string;
   /** The `lineNo` of this row's PARENT dish when it is a CHILD modifier line, else null/absent.
    *  Presentation only — never hashed, never a fiscal figure. */

@@ -116,7 +116,7 @@ async function adjustmentRow(
     id: randomUUID(),
     working_order_id: await seedWorkingOrder(db),
     line_id: randomUUID(),
-    split_line_ids: "[]",
+    splits: "[]",
     line_name: "Steak",
     line_quantity: 2000,
     line_list_unit_price: 2500,
@@ -188,7 +188,7 @@ describe("the adjustments table", () => {
       id: 1,
       working_order_id: 1,
       line_id: 0,
-      split_line_ids: 1,
+      splits: 1,
       line_name: 0,
       line_quantity: 0,
       line_list_unit_price: 0,
@@ -212,9 +212,14 @@ describe("the adjustments table", () => {
     });
   });
 
-  it("accepts a line adjustment and a bill-level discount", async () => {
+  it("accepts a line adjustment and a bill-level discount, which may split rows", async () => {
     await insertAdjustment(await adjustmentRow());
-    await insertAdjustment(await adjustmentRow(BILL_LEVEL));
+    await insertAdjustment(
+      await adjustmentRow({
+        ...BILL_LEVEL,
+        splits: JSON.stringify([{ from: randomUUID(), to: randomUUID() }]),
+      }),
+    );
     await insertAdjustment(
       await adjustmentRow({
         action: "discount_percent",
@@ -273,7 +278,7 @@ describe("the adjustments table", () => {
     await adjustmentRefused({ quantity: 3000 }, "adjustments_line_level_ck");
   });
 
-  it("refuses a bill-level row that carries a line's snapshot, a split, or a line action", async () => {
+  it("refuses a bill-level row that carries a line's snapshot or a line action", async () => {
     await adjustmentRefused({ ...BILL_LEVEL, line_name: "Steak" }, "adjustments_bill_level_ck");
     await adjustmentRefused({ ...BILL_LEVEL, line_quantity: 1000 }, "adjustments_bill_level_ck");
     await adjustmentRefused(
@@ -286,10 +291,6 @@ describe("the adjustments table", () => {
     );
     await adjustmentRefused({ ...BILL_LEVEL, quantity: 1000 }, "adjustments_bill_level_ck");
     await adjustmentRefused({ ...BILL_LEVEL, stage: "fired" }, "adjustments_bill_level_ck");
-    await adjustmentRefused(
-      { ...BILL_LEVEL, split_line_ids: JSON.stringify([randomUUID()]) },
-      "adjustments_bill_level_ck",
-    );
     await adjustmentRefused({ ...BILL_LEVEL, action: "comp" }, "adjustments_bill_level_ck");
   });
 
