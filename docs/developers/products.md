@@ -162,6 +162,7 @@ Where each one surfaces:
 | Till screens showing an options ANSWER | the reader each one names at the call site — kitchen on the rail and the pass, customer on the settled ticket, staff in the basket and the tab drawer | `optionAnswers`, `apps/till/src/widgets/option-snapshot.ts` |
 | Printed allergen sheet | the customer-facing name held in the menu's published version | `apps/till/src/screens/till-allergen-screen.ts` |
 | Top-sellers report | the product's frozen staff name, with each variant's own frozen staff name on a row nested under it | `packages/reporting/src/top-sellers.ts` |
+| An adjustment record's `line_name` | the line's frozen staff names through `staffPresentationName`: the variant's staff name on a variant line, else the product's | `recordAdjustment`, `packages/adjustments/src/record.ts`, given it by `applyAdjustment`, `apps/server/src/adjustments-apply.ts` |
 
 Two of those rows are worth reading twice.
 
