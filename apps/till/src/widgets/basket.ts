@@ -4,15 +4,7 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import {
-  MONEY_SCALE,
-  type Decimal,
-  decimal,
-  formatMoney,
-  grossOf,
-  sumDecimals,
-  toScale,
-} from "@waitron/shared";
+import { type Decimal, decimal, formatMoney, grossOf } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -32,10 +24,11 @@ import type { StringKey } from "../i18n/strings.js";
 import { lineProductName, productUnit } from "./product-name.js";
 import { lineTotal, priceWasStyles } from "./price-was.js";
 import {
+  LINE_ADJUSTMENTS,
   adjustableListing,
+  billGross,
   lineAdjustTarget,
   storedListing,
-  tabLineGross,
 } from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
@@ -73,11 +66,6 @@ export interface StoredLines {
   revision: number;
   lines: readonly TabLine[];
 }
-
-const LINE_ADJUSTMENTS = [
-  { kind: "comp", label: "table.comp_line" },
-  { kind: "discount", label: "table.discount_line" },
-] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
 
 /**
  * The running order. It holds no basket state of its own, so it can never disagree with the store the
@@ -408,7 +396,7 @@ export class TillBasket extends LitElement {
       if (siblings === undefined) this.#listedExtras.set(parent, [row]);
       else siblings.push(row);
     }
-    this.#listedTotal = toScale(sumDecimals(rows.map(tabLineGross)), MONEY_SCALE);
+    this.#listedTotal = billGross(rows);
   }
 
   override render() {

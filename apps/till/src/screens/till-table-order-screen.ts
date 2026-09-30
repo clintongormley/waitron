@@ -12,12 +12,8 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
-  grossOf,
-  MONEY_SCALE,
   subtractDecimal,
-  sumDecimals,
   perDishOptionQuantity,
-  toScale,
   type Decimal,
 } from "@waitron/shared";
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
@@ -57,10 +53,13 @@ import {
 } from "../widgets/table-targets.js";
 import { owing, paidInPart } from "../state/bill-state.js";
 import {
+  LINE_ADJUSTMENTS,
+  billGross,
   isStarted,
   lineAdjustTarget,
   listedGross,
   moreThanOneWholeUnit,
+  tabLineGross,
 } from "../state/adjust-target.js";
 import { lineTotal, priceWasStyles } from "../widgets/price-was.js";
 import { delayUntil, reminderDueAt } from "../state/release-reminder.js";
@@ -288,11 +287,6 @@ export interface UnsnoozeGroupDetail {
 
 /** How far one press of Snooze puts a release reminder off. */
 export const SNOOZE_MINUTES = 5;
-
-const LINE_ADJUSTMENTS = [
-  { kind: "comp", label: "table.comp_line" },
-  { kind: "discount", label: "table.discount_line" },
-] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
 
 /** `adjust`: Cancel, Give away or Discount pressed on a dish, or Discount on the bill on screen. */
 export interface AdjustDetail {
@@ -1309,12 +1303,15 @@ export class TillTableOrderScreen extends LitElement {
       this.takeOverSent = null;
       this.takeOverPending = null;
     }
-    // The gross map is filled BEFORE `#tabTotal` sums it below.
+    // The gross map is filled BEFORE the total is summed from it below.
     if (changed.has("lines") || this.#payStore === undefined) {
       this.#lineGrossByLineNo = new Map(
-        this.lines.map((line) => [line.lineNo, grossOf(line.unitPriceGross, line.quantity)]),
+        this.lines.map((line) => [line.lineNo, tabLineGross(line)]),
       );
-      this.#payStore = new TabPayStore(this.#tabTotal(), this.lines.length);
+      this.#payStore = new TabPayStore(
+        billGross(this.lines, (line) => this.#lineGross(line)),
+        this.lines.length,
+      );
       this.#lineById = new Map(this.lines.map((line) => [line.id, line]));
       this.#dishesWithExtras = new Set(this.lines.flatMap((line) => line.parentLineNo ?? []));
     }
@@ -1389,10 +1386,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #lineGross(line: TabLine): Decimal {
     return this.#lineGrossByLineNo.get(line.lineNo)!;
-  }
-
-  #tabTotal(): Decimal {
-    return toScale(sumDecimals(this.lines.map((line) => this.#lineGross(line))), MONEY_SCALE);
   }
 
   #pending(): TabLine[] {
@@ -1638,10 +1631,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #isStarted(line: TabLine): boolean {
-    return isStarted(line);
-  }
-
   /** Sent and still holding a ticket item, with the venue's setting off: the server refuses to change
    * or recall it (`ticket.already_fired`), so it offers Cancel in their place. */
   #lockedBySetting(line: TabLine): boolean {
@@ -1660,7 +1649,7 @@ export class TillTableOrderScreen extends LitElement {
   /** A no-route line (no ticket item) is changed whatever its `sentAt`; a line with a ticket item once
    * it was sent, or while its group is held, because a held line outside one keeps Send alone. */
   #canChange(line: TabLine): boolean {
-    if (this.#isChild(line) || this.#isStarted(line) || this.#lockedBySetting(line)) return false;
+    if (this.#isChild(line) || isStarted(line) || this.#lockedBySetting(line)) return false;
     if (line.state !== null && line.sentAt === null && !inHeldGroup(line, this.#heldGroupIds!))
       return false;
     return this.#liveProduct(line) !== undefined;
@@ -1682,7 +1671,7 @@ export class TillTableOrderScreen extends LitElement {
     if (this.#isChild(line)) return false;
     if (inHeldGroup(line, this.#heldGroupIds!)) return true;
     const queued = line.state === "queued" && (line.firedAt !== null || line.sentAt !== null);
-    return this.#isStarted(line) || queued;
+    return isStarted(line) || queued;
   }
 
   /** A CHILD extras row is part of its dish and offers no action of its own. */
@@ -1831,11 +1820,6 @@ export class TillTableOrderScreen extends LitElement {
         composed: true,
       }),
     );
-  }
-
-  /** Such a line can be cancelled, or split, one unit at a time; a weighed line cannot. */
-  #moreThanOneWholeUnit(line: TabLine): boolean {
-    return moreThanOneWholeUnit(line);
   }
 
   #openChange(line: TabLine): void {
@@ -3406,8 +3390,7 @@ export class TillTableOrderScreen extends LitElement {
                 lineId: line.id,
                 name,
                 quantity: line.quantity,
-                splits:
-                  this.#moreThanOneWholeUnit(line) && !this.#dishesWithExtras.has(line.lineNo),
+                splits: moreThanOneWholeUnit(line) && !this.#dishesWithExtras.has(line.lineNo),
               },
               group,
             )

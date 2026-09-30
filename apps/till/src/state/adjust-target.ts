@@ -11,6 +11,7 @@ import {
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { TabLine } from "../api/client.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
+import type { StringKey } from "../i18n/strings.js";
 import type { StoredLines } from "../widgets/basket.js";
 import type { WorkingOrderStore } from "./working-order.js";
 
@@ -40,11 +41,17 @@ export function adjustableListing(
     : null;
 }
 
+export const LINE_ADJUSTMENTS = [
+  { kind: "comp", label: "table.comp_line" },
+  { kind: "discount", label: "table.discount_line" },
+] as const satisfies readonly { kind: AdjustKind; label: StringKey }[];
+
 /** The kitchen is making the line, or has made it. */
 export function isStarted(line: TabLine): boolean {
   return line.state === "preparing" || line.state === "ready";
 }
 
+/** Such a line can be cancelled, or split, one unit at a time; a weighed line cannot. */
 export function moreThanOneWholeUnit(line: TabLine): boolean {
   return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
 }
@@ -52,6 +59,14 @@ export function moreThanOneWholeUnit(line: TabLine): boolean {
 /** The line's total at its price now. */
 export function tabLineGross(line: TabLine): Decimal {
   return grossOf(line.unitPriceGross, line.quantity);
+}
+
+/** The bill's total at its prices now. */
+export function billGross(
+  lines: readonly TabLine[],
+  gross: (line: TabLine) => Decimal = tabLineGross,
+): Decimal {
+  return toScale(sumDecimals(lines.map(gross)), MONEY_SCALE);
 }
 
 /** The line's total before a give-away or a discount changed its price; its total now when none
