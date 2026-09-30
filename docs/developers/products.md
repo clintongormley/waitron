@@ -247,7 +247,7 @@ A menu may leave any product's price blank (`menu_items.gross_price` is nullable
 product's own price, and the menu screen shows that price as the empty field's hint. The
 product-editor save accepts a blank variant price both in the parent's variants list and on the
 variant's own page (`parseProductEditorInput`, `packages/catalogue/src/product-editor-input.ts`),
-and `setProductVariants` (`packages/catalogue/src/variants.ts`) stores it blank.
+and `writeProductVariants` (`packages/catalogue/src/variants.ts`) stores it blank.
 
 A variant follows its parent onto every menu the parent is on; it never gets a `menu_items` row of
 its own (`addProductToMenu` refuses one with `menu_item.variant_not_allowed`, and a section refuses
@@ -300,7 +300,7 @@ Tapping a parent sold in whole units, and not tied to a scale, opens the picker 
 (`pickProduct`, `apps/till/src/widgets/product-pick.ts`). A parent sold by weight or in fractions, or
 tied to a scale, asks for its quantity on the keypad first and then opens the same picker (`#addWeight`,
 `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
-`products.variant_order`, set by the product editor (`setProductVariants` writes the order the
+`products.variant_order`, set by the product editor (`writeProductVariants` writes the order the
 variants were sent in). The first available one is chosen to start with; an unavailable one stays
 listed, drawn disabled; each is labelled with its difference from the parent's price on that menu
 ("+€1.50") where it has one (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`;
@@ -457,7 +457,7 @@ dietary declarations, the two required state flags `active` and `available` (bel
 `ordering` (a body carrying the retired `soldAlone` is refused), and `variants`
 — each variant carrying `name`, `customerName`, `kitchenName`, `image`, `unitPrice`, `available` and
 a required `active`, plus `id` when it already exists. Each variant's `active` is written as sent,
-and a saved variant left out of the body is made Inactive (`setProductVariants`,
+and a saved variant left out of the body is made Inactive (`writeProductVariants`,
 `packages/catalogue/src/variants.ts`). A customer-facing name whose every entry is blank parses to
 `null`, so "I typed spaces" and "I left it empty" store identically.
 

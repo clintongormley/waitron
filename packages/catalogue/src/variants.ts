@@ -1,8 +1,8 @@
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { now, products, type Transaction } from "@waitron/db";
 import { AppError, decimal, decimalToCents, toScale } from "@waitron/shared";
-import type { Decimal } from "@waitron/shared";
-import { validateContentTranslations } from "./content-languages.js";
+import type { ContentLanguages, Decimal } from "@waitron/shared";
+import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
 import { reachableMenuItem } from "./menu-structure.js";
 import { batches } from "./batches.js";
 import { menuItems } from "./schema/menu.js";
@@ -153,6 +153,21 @@ export async function setProductVariants(
   inputs: readonly VariantWrite[],
   fallbackLanguage: string,
 ): Promise<ProductVariant[]> {
+  return writeProductVariants(
+    tx,
+    productId,
+    inputs,
+    await readContentLanguages(tx, fallbackLanguage),
+  );
+}
+
+/** {@link setProductVariants} with the venue's content languages already read. */
+export async function writeProductVariants(
+  tx: Transaction,
+  productId: string,
+  inputs: readonly VariantWrite[],
+  config: ContentLanguages,
+): Promise<ProductVariant[]> {
   const seen = new Set<string>();
   const checked: (VariantWrite & { cents: number | null })[] = [];
   for (const input of inputs) {
@@ -178,7 +193,7 @@ export async function setProductVariants(
     // it is checked when next saved Active; checking it here would let a change of default content
     // language after its removal block every save of its parent.
     if (active && input.customerName != null)
-      await validateContentTranslations(tx, input.customerName, fallbackLanguage);
+      assertContentTranslations([input.customerName], config);
     normalized.push({ ...input, active });
   }
   const currentIds = new Set(currentActive.keys());

@@ -35,7 +35,7 @@ The product editor binds a refused save to an editor field. `product.invalid` ca
 is about, but `content.translation_required` — the refusal the editor's own translated inputs
 produce — carries only the missing `language`, and one product save can have several translated
 values checked (the product's customer name and one per variant saved Active; an Inactive variant is
-never checked, `setProductVariants` in `packages/catalogue/src/variants.ts`), so the language alone
+never checked, `writeProductVariants` in `packages/catalogue/src/variants.ts`), so the language alone
 does not say which. What the save path can carry is pinned where it is thrown, in
 `packages/catalogue/src/product-editor.test.ts` ("names the missing language, and nothing else" and
 "refuses nutrition input without naming any field"): a refusal of an allergen or a dietary

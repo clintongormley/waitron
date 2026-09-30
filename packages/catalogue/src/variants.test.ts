@@ -155,6 +155,28 @@ describe("product variants", () => {
     ).rejects.toMatchObject({ code: "content.translation_required" });
   });
 
+  it("refuses the first Active variant's missing default language before a later variant's malformed name", async () => {
+    const missingDefault = { ...variant("Small", "2.00"), customerName: { es: "Pequeño" } };
+    const laterNames: Record<string, string>[] = [
+      { "!!": "Large" },
+      { en: 3 as unknown as string },
+    ];
+    for (const later of laterNames)
+      await expect(
+        run((tx) =>
+          setProductVariants(
+            tx,
+            productId,
+            [missingDefault, { ...variant("Large", "3.00"), customerName: later }],
+            "en",
+          ),
+        ),
+      ).rejects.toMatchObject({
+        code: "content.translation_required",
+        params: { language: "en" },
+      });
+  });
+
   it("offers new variants at once and keeps a menu price independent of the variant's own", async () => {
     const variants = await run((tx) =>
       setProductVariants(tx, productId, [variant("Small", "2.00"), variant("Large", "3.00")], "en"),

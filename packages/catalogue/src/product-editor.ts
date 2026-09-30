@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { catalogues, products, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { setMainReportingCategory } from "./categories.js";
-import { validateContentTranslations } from "./content-languages.js";
+import { assertContentTranslations, readContentLanguages } from "./content-languages.js";
 import { validateDietaryDeclarations } from "./dietary-declarations.js";
 import { createProduct, updateProduct } from "./operations.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
@@ -11,7 +11,7 @@ import { productLabels } from "./schema/labels.js";
 import { productUnits } from "./schema/units.js";
 import { priceOrNull } from "./offer-price.js";
 import { productWithId } from "./variant-fallback.js";
-import { listProductVariants, setProductVariants } from "./variants.js";
+import { listProductVariants, writeProductVariants } from "./variants.js";
 import { parseProductEditorInput } from "./product-editor-input.js";
 export { parseProductEditorInput, type ProductEditorInput } from "./product-editor-input.js";
 import type { InheritedValues, ProductEditorValue } from "./product-types.js";
@@ -138,12 +138,12 @@ export async function saveProductEditor(
     throw new AppError("product.invalid", { field: "parentId" });
   // The staff `name` is plain required text, checked by the parser; the customer-facing name is what
   // must satisfy the default content language. A blank one is legal (it falls back to `name`), so
-  // only a supplied customer name is validated — validateContentTranslations({}) would wrongly
-  // demand a default-language entry. A variant saved Inactive is skipped, as its product's save
-  // skips it (`setProductVariants`), so removing it is never refused for its customer name; it is
-  // checked on every save as Active.
+  // only a supplied customer name is validated. A variant saved Inactive is skipped, as its
+  // product's save skips it (`writeProductVariants`), so removing it is never refused for its
+  // customer name; it is checked on every save as Active.
+  const config = await readContentLanguages(tx, fallbackLanguage);
   if (value.customerName !== null && (!isVariant || value.active))
-    await validateContentTranslations(tx, value.customerName, fallbackLanguage);
+    assertContentTranslations([value.customerName], config);
   if (productId === null) {
     const [catalogue] = await tx
       .select({ id: catalogues.id })
@@ -192,7 +192,7 @@ export async function saveProductEditor(
   await setMainReportingCategory(tx, productId, value.primaryCategoryId, "any");
   if (!isVariant) {
     await setProductLabels(tx, productId, value.labelIds);
-    await setProductVariants(tx, productId, value.variants, fallbackLanguage);
+    await writeProductVariants(tx, productId, value.variants, config);
     await writeProductModifiers(tx, productId, value.modifiers);
   }
   return readProductEditor(tx, productId);
