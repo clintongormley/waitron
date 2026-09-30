@@ -145,8 +145,9 @@ export async function recordCorrection(
   });
 
   // After the gate, so a session that may not correct is not told what is left on the invoice.
-  // Compared at the cent amount the row stores, not the unrounded input.
-  const correction = centsToDecimal(stringToCents(input.total));
+  // Compared, stored and filed at the cent amount the row stores, not the unrounded input.
+  const totalCents = stringToCents(input.total);
+  const correction = centsToDecimal(totalCents);
   const remaining = sumDecimals([
     centsToDecimal(original.total),
     rawCentsToDecimal(original.corrections),
@@ -189,8 +190,14 @@ export async function recordCorrection(
 
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
-  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value.
-  const vatBreakdown = buildVatBreakdown(input.lines);
+  // Resolved once so the stored `sales.vat_breakdown` and the filed breakdown are the same value,
+  // built from each `lineTotal` rounded to the cent as `saleLineRows` stores it.
+  const vatBreakdown = buildVatBreakdown(
+    input.lines.map((line) => ({
+      ...line,
+      lineTotal: centsToDecimal(stringToCents(line.lineTotal)),
+    })),
+  );
 
   // No settlement and no tenders: the refund is a separate action.
   const [inserted] = await tx
@@ -203,7 +210,7 @@ export async function recordCorrection(
       invoiceNumber,
       issuedAt: now.instant.toISOString(),
       issuedOffsetMinutes: now.offsetMinutes,
-      total: stringToCents(input.total),
+      total: totalCents,
       locale: original.locale,
       invoiceLocales: original.invoiceLocales,
       fiscalBackend: backend.id,
@@ -260,7 +267,7 @@ export async function recordCorrection(
       issuedAt: now.instant,
       offsetMinutes: now.offsetMinutes,
       descriptionOfOperation: location.operationDescription,
-      total: decimal(input.total),
+      total: correction,
       vatBreakdown,
       counterparty: null,
     },
