@@ -127,7 +127,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    #814; Task 10, the attention signals, as #908; Task 11, comps and discounts, as #916; Task 12,
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
    taking a reason is done by lane B item B11a, and Task 15, several payments on the till, is
-   built by lane B item B15 (B15's pull request; the server side landed as #721). Left:
+   built by lane B item B15 (#956; the server side landed as #721). Left:
    counter handover (16) and a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
@@ -10650,7 +10650,7 @@ while it holds decisions still open.
 | [Menus, sections and home layouts](superpowers/specs/2026-09-20-menus-categories-and-home-layouts-design.md) and its plan | built (#729 last); owner decisions still open | Track A (menus entries) |
 | [Service, ordering and billing](superpowers/specs/2026-09-20-service-ordering-and-billing-design.md) and its plan | 11 of 18 tasks landed; Task 13 done on a branch | A4 |
 | [Sales classification](superpowers/specs/2026-09-25-sales-classification-and-category-reports-design.md) and its plan | built (#738 last); a code comment points at it | Track A (classification entries) |
-| [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till side built by lane B item B15 (B15's pull request) | A4 |
+| [Bill payments](superpowers/specs/2026-09-26-bill-payments-design.md) | server built (#721); the till side built by lane B item B15 (#956) | A4 |
 | [Print agent setup lockdown](superpowers/specs/2026-09-27-print-agent-setup-lockdown-design.md) and its plan | all three branches built (#732, P2b in #877, and P2c in #884); a real pairing at the box to go | A3 |
 
 **Dev stack from a worktree.** `wa-wt demo|onboarding <worktree-name>` and
