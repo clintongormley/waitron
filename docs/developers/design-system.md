@@ -265,7 +265,7 @@ this floor — removing the `min-width` regresses that guard.
 | `wt-dialog` | `open`, `heading`, `aria-label` (fallback name when there is no `heading`), `dismissible` (default true; set the property `.dismissible=${false}` so Escape cannot close it, which holds through repeated Escape presses; while it is off and `open` is still true, a close the caller did not ask for shows the dialog again and sends no `wt-close`); default slot (body), `footer` slot | `wt-close` |
 | `wt-modal` | `open`, `heading`, `aria-label`, `dismissible`; default slot (scrolling body), `footer` slot (fixed actions) | `wt-close` |
 | `wt-form-error-summary` | `heading`, `errors`. Retiring: a form no longer shows a summary (see Forms); no product form uses it any more; it is deleted once its remaining users, listed in `docs/backlog.md`, are gone | — |
-| `wt-form-actions` | `error` (the form's one message about a failed submission: shown beside the primary action, announced as an alert, painted `--wt-color-danger`; on a narrow row it wraps onto its own line above the actions); `cancel`, `secondary`, and default slots | — |
+| `wt-form-actions` | `error` (the form's one message about a failed submission: shown on its own line above the buttons, full width and aligned to the start, announced as an alert, painted `--wt-color-danger`); `showError` (property only, default `true`; `wt-dialog` turns it off for the row in its footer and shows the message itself); `cancel`, `secondary`, and default slots. The same module exports `formMessage(message)` and `formMessageStyles`, which draw that message for a screen that has to place it itself; a shadow root using `formMessage` includes `formMessageStyles` | `wt-form-error` — `detail: { message: string }` (whenever `error` changes) |
 | `wt-help-tooltip` | `aria-label`; default slot | — |
 | `wt-tabs` | `items` (`{ key, label }[]`), `value`, `label`; named slots matching item keys | `wt-tab-change` — `detail: { value: string }` |
 | `wt-row-actions` | `label`, `icon` (default `kebab`), `iconSize` (property; `wt-icon`'s `sm`\|`md`\|`lg`, default `md`), `align` (`start`\|`end`, default `start` — which trigger edge the popup lines up with; the popup's text starts at the start edge either way); default slot of action buttons; `badge` slot (drawn inside the trigger, in its top trailing corner); `part="popup"` (so a consumer can size the menu); methods `show()` and `hide()` open and close it from code | native events from actions |
@@ -424,7 +424,11 @@ query cannot read a custom property, and the no-hardcoded-chrome guard
 `packages/ui` primitive. Unlike `wt-dialog`, it is not held to 90% of the viewport. The body scrolls
 independently, so your footer actions stay visible. It uses the raised surface and shadow tokens:
 white in the light theme, with the matching dark surface in the dark theme. Put `wt-form-actions` in
-its `footer` slot to keep Cancel on the left and Save on the right:
+its `footer` slot to keep Cancel on the left and Save on the right. The dialog then shows that row's
+message at the end of its scrolling body, below the last field, and scrolls it into view; the footer
+holds only the buttons. This needs the `wt-form-actions` itself in the footer slot: one wrapped in
+another element keeps its message in the footer. One placed in the body shows its own message above
+its buttons:
 
 ```html
 <wt-modal heading="Add printer">
@@ -618,7 +622,8 @@ does (owner rule, 2026-09-29).
   the native constraint;
 - the primary action works until the first submission. If that submission is invalid, pass a
   plain-language sentence to each invalid field's `error` property, pass ONE localized sentence to
-  `wt-form-actions`'s `error` property (it shows beside the primary action and is announced), move
+  `wt-form-actions`'s `error` property (it shows on its own line at the bottom of the form, above
+  the buttons — in a dialog, at the end of the dialog's body — and is announced), move
   focus to the first invalid field with `focusFirstInvalid(form)`, passing the shadow root when it
   holds only the form, and the form or dialog element when the shadow root holds more (a table,
   other panels), so focus cannot land on a marked control elsewhere on the page, and keep the
@@ -659,7 +664,11 @@ inside the field only while it contains an action.
 Put the final action row at the bottom of the form with `wt-form-actions`. Its default slot stays on
 the bottom right. Put the expected primary action there. Put Cancel or Back in the `cancel` slot so
 it stays on the bottom left (the sign-in code step is an exception; see the login section). A
-secondary action that belongs beside the primary action goes in the `secondary` slot.
+secondary action that belongs beside the primary action goes in the `secondary` slot. The row's
+message runs from the form's left edge only when the row is the form's full width. Where the row
+shares a line with something else, show the message with `formMessage` directly before that line,
+as the sign-in steps do, or let the row take the full width while it has a message, as the Add
+printer dialog's address check does.
 
 ```ts
 html`
@@ -906,8 +915,8 @@ the right; where that row is too narrow for both, they wrap below the list, stil
 a form at its full width only the first link has to fit beside the buttons, and a longer later link
 breaks inside the list; on a narrower form the row is sized by the widest link. On the code screen
 Back therefore sits beside Log in at the right, an exception to the Forms rule that puts Back
-bottom left. A refusal's message sits beside the action, so a message too long to share
-the row takes the buttons below the list with it.
+bottom left. A refusal's message sits on its own line above the list and the buttons, from the
+form's left edge.
 Recovery opens **Check your email** with the address, delivery
 guidance and a one-minute resend countdown. Use the same public acknowledgement for every address:
 pending accounts receive a setup link and active accounts receive a reset link. Invitation emails

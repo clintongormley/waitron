@@ -70,7 +70,7 @@ describe.each(["light", "dark"] as const)("image library accessibility (%s)", (t
     await library.updateComplete;
     await expectNoA11yViolations(host);
   });
-  it("announces missing upload metadata beside fields and beside the Save button", async () => {
+  it("announces missing upload metadata beside fields and above the Save button", async () => {
     const library = await mount(theme);
     await openDialog(library, "upload");
     library.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();

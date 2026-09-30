@@ -222,7 +222,7 @@ describe.each(["light", "dark"] as const)("categories (%s)", (theme) => {
     await expectNoA11yViolations(host);
   });
 
-  it("shows a refused main-category save beside Save accessibly", async () => {
+  it("shows a refused main-category save above Save accessibly", async () => {
     const api = {
       ...membersApi(),
       setMainCategory: () =>

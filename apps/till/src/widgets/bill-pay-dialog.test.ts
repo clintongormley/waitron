@@ -276,7 +276,7 @@ describe("till-bill-pay-dialog: its own checks", () => {
     expect(field(el, "cardTip")!.required).toBe(false);
   });
 
-  it("explains an empty submission beside each field and once beside the action, which waits until they are fixed", async () => {
+  it("explains an empty submission beside each field and once above the action, which waits until they are fixed", async () => {
     const el = await mount({ way: "items" });
     const asked = capture<PayRequest>(el, "bill-pay-preview");
     await click(el, "[data-pay-continue]");
@@ -526,7 +526,7 @@ describe("till-bill-pay-dialog: moving between steps", () => {
 });
 
 describe("till-bill-pay-dialog: refusals and answers", () => {
-  it("shows a refusal that names no field beside the action, which stays enabled", async () => {
+  it("shows a refusal that names no field above the action, which stays enabled", async () => {
     const el = await mount({ refusal: { code: "bill.nothing_outstanding" } });
     expect(actions(el).error).toBe(codeMessage("bill.nothing_outstanding"));
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
@@ -565,7 +565,7 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
     ["a field the form does not show", { field: "lines" }, "cash"],
     ["the cash handed over, on a card", { field: "tendered" }, "card"],
     ["a tip left from cash change", { field: "addedTip" }, "cash"],
-  ] as const)("puts a refusal naming %s beside the action", async (_case, named, method) => {
+  ] as const)("puts a refusal naming %s above the action", async (_case, named, method) => {
     const el = await mount({ way: "contribution" });
     if (method === "card") await pick(el, "method", "card");
     el.refusal = { code: "management.request_invalid", ...named };
@@ -881,7 +881,7 @@ describe("till-bill-pay-dialog: a venue that takes no tips", () => {
     expect(field(el, "amount")!.error).toBe("");
   });
 
-  it("says the most a card can be charged beside the action when no amount was typed", async () => {
+  it("says the most a card can be charged above the action when no amount was typed", async () => {
     const el = await mount({ way: "share", tipsEnabled: false });
     await pick(el, "method", "card");
     el.refusal = { code: "bill.tip_not_allowed", chargeable: "30.00" };
@@ -964,7 +964,7 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(text(root(el).querySelector("[data-pay-collecting]"))).toBe(t("card.collecting"));
   });
 
-  it("says a declined card took nothing, beside the action", async () => {
+  it("says a declined card took nothing, above the action", async () => {
     const el = await mount({ refusal: { code: "declined" } });
     expect(actions(el).error).toBe(t("bill_pay.card_declined"));
   });

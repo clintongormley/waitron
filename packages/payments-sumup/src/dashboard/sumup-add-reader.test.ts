@@ -408,7 +408,7 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("keeps the form and says a refused pair POST beside Pair, and does NOT unpair", async () => {
+  it("keeps the form and says a refused pair POST above Pair, and does NOT unpair", async () => {
     vi.useFakeTimers();
     try {
       const request = stubRequest({
@@ -436,7 +436,7 @@ describe("sumup-add-reader", () => {
     }
   });
 
-  it("says the shared code copy beside Pair for any other refusal of the pair POST", async () => {
+  it("says the shared code copy above Pair for any other refusal of the pair POST", async () => {
     vi.useFakeTimers();
     try {
       registerCodeMessages({
@@ -902,7 +902,7 @@ describe("sumup-add-reader", () => {
     expect(pairDisabled(el)).toBe(false);
   });
 
-  it("on an invalid press marks the fields, says so beside Pair, focuses the first and disables Pair", async () => {
+  it("on an invalid press marks the fields, says so above Pair, focuses the first and disables Pair", async () => {
     const request = stubRequest({});
     const { el } = await mountWidget<SumUpAddReader>("sumup-add-reader", { request });
 

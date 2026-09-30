@@ -1287,7 +1287,7 @@ describe("setup-app", () => {
     ["server.internal", 500, "Couldn't connect"],
     ["some.unexpected_code", 400, "Couldn't connect"],
   ])(
-    "routes the adopt failure %s (HTTP %i) back to the connect form with a message beside Connect",
+    "routes the adopt failure %s (HTTP %i) back to the connect form with a message above Connect",
     async (code, status, fragment) => {
       const adopt = vi.fn().mockRejectedValue({ code, params: {}, status });
       const el = await mountSetupApp(stubApi({ adopt }));
@@ -1371,7 +1371,7 @@ describe("setup-app", () => {
     },
   );
 
-  it("keeps an adopt refusal of a field the connect form does not show beside Connect", async () => {
+  it("keeps an adopt refusal of a field the connect form does not show above Connect", async () => {
     const adopt = vi.fn().mockRejectedValue({
       code: "setup.request_invalid",
       params: { field: "credential" },
@@ -1579,7 +1579,7 @@ describe("setup-app", () => {
 
     // Owner rule (C95): a refused login must not say whether the person exists, so it marks no
     // field; a message under the code or the password would say the details before it were right.
-    it("says only that the login failed, beside Connect, when the primary refuses the login", async () => {
+    it("says only that the login failed, above Connect, when the primary refuses the login", async () => {
       const adopt = vi
         .fn()
         .mockRejectedValue({ code: "password.invalid", params: {}, status: 401 });

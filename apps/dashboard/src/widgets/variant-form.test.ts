@@ -139,7 +139,7 @@ it("falls back to the plain price label when the product has no unit yet", async
   expect(field(el, "unitPrice").label).toBe(t("editor.price"));
 });
 
-it("refuses a blank name, explains it beside the field and beside Save, and keeps the draft", async () => {
+it("refuses a blank name, explains it beside the field and above Save, and keeps the draft", async () => {
   const el = await mountForm({ value: halfPortion });
   const submit = vi.fn();
   el.addEventListener("wt-submit", submit);

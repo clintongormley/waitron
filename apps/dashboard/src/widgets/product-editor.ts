@@ -84,7 +84,7 @@ type SectionName = keyof typeof SECTION_FIELDS;
 /**
  * The field names the SERVER uses when it rejects a product body
  * (`packages/catalogue/src/product-editor-input.ts`), mapped onto this editor's field names, or a
- * key only the message beside Save shows. A value ending in "-" names a translated field: the server
+ * key only the message above Save shows. A value ending in "-" names a translated field: the server
  * names such a field once for all of its languages, so there is no single language to point at and
  * the default content language's input is used.
  */
@@ -107,7 +107,7 @@ const SERVER_FIELDS: Record<string, string> = {
 
 /**
  * The editor field a rejected product write's `field` belongs to, or null when this editor cannot
- * show it. A key with no input of its own (`active`) is shown in the message beside Save alone.
+ * show it. A key with no input of its own (`active`) is shown in the message above Save alone.
  */
 export function productEditorField(field: string, defaultLanguage: string): string | null {
   const variant = /^variants\.(\d+)\.(name|unitPrice|active)$/.exec(field);
@@ -549,7 +549,7 @@ export class ProductEditor extends LitElement {
     return { ...own, ...refused };
   }
   /** What the form says now: the messages under fields, the rows marked, and the one sentence
-   * beside Save. */
+   * above Save. */
   private assess(local: Record<string, string>) {
     const errors = this.standingErrors(local);
     const rows = this.variantRows(local);

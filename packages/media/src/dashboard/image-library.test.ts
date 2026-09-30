@@ -1228,7 +1228,7 @@ it("sends again when Save is pressed with a refused field unchanged, and drops t
   expect(await bottomOf()).toBe("");
 });
 
-it("says a refused translation in a language the form does not show beside Save, and leaves Save working", async () => {
+it("says a refused translation in a language the form does not show above Save, and leaves Save working", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({
     code: "image.translation_required",
@@ -1249,7 +1249,7 @@ it("says a refused translation in a language the form does not show beside Save,
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 });
 
-it("says a photo refusal on an edit, which has no photo field, beside Save and leaves Save working", async () => {
+it("says a photo refusal on an edit, which has no photo field, above Save and leaves Save working", async () => {
   const client = api();
   client.updateImage.mockRejectedValueOnce({ code: "image.too_large", params: {}, status: 400 });
   await mount(client);

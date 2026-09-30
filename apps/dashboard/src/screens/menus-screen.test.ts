@@ -693,7 +693,7 @@ it("replaces an address naming an unknown menu or tab rather than adding a histo
   expect(history.length).toBe(before);
 });
 
-it("creating a menu needs a name: an empty one is explained beside the field and beside Save", async () => {
+it("creating a menu needs a name: an empty one is explained beside the field and above Save", async () => {
   const client = api();
   const el = await mount(client);
   await click(el, "add-menu");
@@ -960,7 +960,7 @@ it("puts a refused copy's reason beside the name only when the refusal names tha
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await vi.waitFor(() => expect(name.error).toBe(codeMessage("menu_section.invalid")));
   expect(await bottom(el, "duplicate")).toBe(t("form.fix_fields"));
-  // A language's name is not on this form, so its refusal is beside Save alone.
+  // A language's name is not on this form, so its refusal is above Save alone.
   inModal(el, "duplicate", '[data-test="duplicate-save"]').click();
   await vi.waitFor(async () =>
     expect(await bottom(el, "duplicate")).toBe(codeMessage("menu_section.translation_required")),

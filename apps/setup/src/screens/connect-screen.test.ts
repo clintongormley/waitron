@@ -160,7 +160,7 @@ describe("setup-connect-screen", () => {
     expect(await bottomOf(el)).toBe("");
   });
 
-  it("shows a routed-back server error beside Connect as one alert, leaving Connect working", async () => {
+  it("shows a routed-back server error above Connect as one alert, leaving Connect working", async () => {
     const { el } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {
       errorMessage: "Couldn't reach the primary server.",
     });

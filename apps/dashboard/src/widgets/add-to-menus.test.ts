@@ -183,7 +183,7 @@ describe("dashboard-add-to-menus", () => {
     expect(event.bubbles && event.composed).toBe(true);
   });
 
-  it("explains, beside the places and beside Add, that nothing was chosen", async () => {
+  it("explains, beside the places and above Add, that nothing was chosen", async () => {
     const el = await mount();
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);

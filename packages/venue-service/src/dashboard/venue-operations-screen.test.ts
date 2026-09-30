@@ -189,7 +189,7 @@ describe("venue operations screen", () => {
     expect(pageAlert(el)).toContain("could not be loaded");
   });
 
-  it("shows a message under every missing required department field, and one beside Save", async () => {
+  it("shows a message under every missing required department field, and one above Save", async () => {
     const api = {
       load: vi.fn().mockResolvedValue(model),
       createDepartment: vi.fn(),
@@ -1011,9 +1011,9 @@ describe("an editor's messages", () => {
     expect(saveDisabled(el)).toBe(false);
   });
 
-  // Fails if a failed press stops marking a field, saying so beside Save, moving focus or holding
+  // Fails if a failed press stops marking a field, saying so above Save, moving focus or holding
   // Save.
-  it("marks the fields, says so beside Save, focuses the first and holds Save after a failed press", async () => {
+  it("marks the fields, says so above Save, focuses the first and holds Save after a failed press", async () => {
     const el = await newDepartment();
     await action(el, "save-editor");
     expect(invalid(el, "department-name")).toBe("true");
@@ -1043,7 +1043,7 @@ describe("an editor's messages", () => {
   });
 
   // Fails if a refusal that names no field disables Save, marks a field, or outlives the next press.
-  it("says a refusal beside Save and leaves Save usable, until Save is pressed again", async () => {
+  it("says a refusal above Save and leaves Save usable, until Save is pressed again", async () => {
     const el = await newDepartment({
       createDepartment: vi
         .fn()
@@ -1100,7 +1100,7 @@ describe("an editor's messages", () => {
     expect(pageAlert(el)).toBe("");
   });
 
-  // Fails if the Spanish catalogue loses the sentence beside Save.
+  // Fails if the Spanish catalogue loses the sentence above Save.
   it("says it in Spanish", async () => {
     setLocale("es");
     const el = await newDepartment();
@@ -1110,7 +1110,7 @@ describe("an editor's messages", () => {
 
   // Fails if a refresh behind the editor clears a refusal the operator has not answered by saving
   // again, or repeats it at the top of the screen.
-  it("keeps a refusal beside Save when the list refreshes behind the editor", async () => {
+  it("keeps a refusal above Save when the list refreshes behind the editor", async () => {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(structuredClone(model));
     const el = await newDepartment({
@@ -1132,9 +1132,9 @@ describe("an editor's messages", () => {
     expect(saveDisabled(el)).toBe(false);
   });
 
-  // Fails if a refresh failing behind an open editor is said beside Save, as though the save had
+  // Fails if a refresh failing behind an open editor is said above Save, as though the save had
   // failed, or is said nowhere.
-  it("says a failed refresh at the top of the screen while an editor is open, not beside Save", async () => {
+  it("says a failed refresh at the top of the screen while an editor is open, not above Save", async () => {
     const liveData = new LiveData();
     const load = vi.fn().mockResolvedValue(structuredClone(model));
     const el = await newDepartment({ load, liveData } as Partial<VenueServiceApi>);
@@ -1343,7 +1343,7 @@ describe("an editor's messages", () => {
   });
 
   // Fails if a refusal naming a field the editor does not show marks a field or holds Save.
-  it("says a refusal naming a field the editor does not show beside Save, and leaves Save usable", async () => {
+  it("says a refusal naming a field the editor does not show above Save, and leaves Save usable", async () => {
     const el = await mount({
       load: vi.fn().mockResolvedValue(model),
       replaceHours: vi.fn().mockRejectedValue(invalidRequest("hours.0")),

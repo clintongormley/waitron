@@ -609,7 +609,7 @@ describe("till-app: an adjustment with no answer", () => {
 });
 
 describe("till-app: a refused adjustment", () => {
-  it("shows a refusal that names no field beside the action, and the action stays usable", async () => {
+  it("shows a refusal that names no field above the action, and the action stays usable", async () => {
     const { el } = await mountApp({
       applyAdjustment: vi.fn().mockRejectedValue({ code: "bill.line_paid", status: 409 }),
     });
@@ -660,7 +660,7 @@ describe("till-app: a refused adjustment", () => {
     ).toBe(codeMessage("adjustment.reason_inactive"));
   });
 
-  it("shows a preview that got no answer as a failure beside the action", async () => {
+  it("shows a preview that got no answer as a failure above the action", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
@@ -669,7 +669,7 @@ describe("till-app: a refused adjustment", () => {
     expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
   });
 
-  it("says so beside the action when the approvers cannot be read", async () => {
+  it("says so above the action when the approvers cannot be read", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
       listAdjustmentApprovers: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
@@ -681,7 +681,7 @@ describe("till-app: a refused adjustment", () => {
     expect(bottomMessage(el)).toBe(codeMessage("server.internal"));
   });
 
-  it("closes the approver prompt and shows another refusal beside the action", async () => {
+  it("closes the approver prompt and shows another refusal above the action", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi.fn().mockResolvedValue(preview({ needsApproval: "manager" })),
       applyAdjustment: vi

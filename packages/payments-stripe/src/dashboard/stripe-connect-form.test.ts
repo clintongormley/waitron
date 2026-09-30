@@ -100,7 +100,7 @@ describe("stripe-connect-form", () => {
 
   // `payment.provider_credential_rejected` carries only `{ providerId }` and is also thrown when
   // the call to Stripe fails for any other reason, so it names no field.
-  it("shows the not-accepted copy beside Connect, not under the key, when the key is rejected", async () => {
+  it("shows the not-accepted copy above Connect, not under the key, when the key is rejected", async () => {
     const request = vi.fn(async () => {
       throw { code: "payment.provider_credential_rejected" };
     }) as unknown as DashboardRequest;
@@ -199,7 +199,7 @@ describe("stripe-connect-form", () => {
     expect(connectDisabled(el)).toBe(false);
   });
 
-  it("on an invalid press marks the key, says so beside Connect, focuses the key and disables Connect", async () => {
+  it("on an invalid press marks the key, says so above Connect, focuses the key and disables Connect", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeConnectForm>("stripe-connect-form", { request });
 

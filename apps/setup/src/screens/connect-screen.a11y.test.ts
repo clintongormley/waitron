@@ -17,7 +17,7 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with the message beside Connect and invalid fields shown", async () => {
+  it("has no violations with the message above Connect and invalid fields shown", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>("setup-connect-screen", {}, theme);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=connect]")!.click();
     await el.updateComplete;
@@ -25,7 +25,7 @@ describe.each(["light", "dark"] as const)("setup-connect-screen a11y (%s theme)"
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations with a routed-back server error shown beside Connect", async () => {
+  it("has no violations with a routed-back server error shown above Connect", async () => {
     const { el, host } = await mountWidget<SetupConnectScreen>(
       "setup-connect-screen",
       { errorMessage: "Couldn't reach the primary server." },

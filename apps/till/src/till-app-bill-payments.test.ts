@@ -615,7 +615,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     expect(sent()[1]!.submissionId).not.toBe(sent()[0]!.submissionId);
   });
 
-  it("shows a refusal beside the action and reads the balance again", async () => {
+  it("shows a refusal above the action and reads the balance again", async () => {
     const takeBillPayment = vi.fn().mockRejectedValue({ code: "bill.line_paid", lineNo: 1 });
     const getBillBalance = vi
       .fn()
@@ -2207,7 +2207,7 @@ describe("till-app: a bill payment on the card reader", () => {
     expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
   });
 
-  it("says a declined card took nothing, beside the action, and tries it again as a new payment", async () => {
+  it("says a declined card took nothing, above the action, and tries it again as a new payment", async () => {
     const takeBillPayment = vi
       .fn()
       .mockResolvedValueOnce(onReader("declined", "failed", {}))
@@ -2553,7 +2553,7 @@ describe("till-app: giving back a bill payment", () => {
     );
   });
 
-  it("shows beside the action a card taken at a reader that the server cannot give back, and asks for no terminal", async () => {
+  it("shows above the action a card taken at a reader that the server cannot give back, and asks for no terminal", async () => {
     const refundBillPayment = vi
       .fn()
       .mockRejectedValue({ code: "bill.refund_unsupported", status: 422, paymentId: "pay-1" });

@@ -288,7 +288,7 @@ export class LoginScreen extends LitElement {
     });
   }
 
-  /** Records a refusal, under `field` when this form shows it, otherwise beside the action. */
+  /** Records a refusal, under `field` when this form shows it, otherwise above the action. */
   #refuse(code: string, field: string): void {
     this.errorKey = code;
     if (this.#shownFields().has(field)) {
@@ -358,7 +358,7 @@ export class LoginScreen extends LitElement {
     } else if (this.step === "password" || this.step === "factor") {
       if (this.step === "factor" && this.secondFactor === "")
         errors["one-time-code"] = t("form.factor_required");
-      // On the code step the password is not shown, so this reaches the message beside the action.
+      // On the code step the password is not shown, so this reaches the message above the action.
       if (this.password === "") errors.password = t("form.password_required");
     } else if (this.step === "setup-passkey") {
       if (this.passkeyName.trim().length > 80)
@@ -385,7 +385,7 @@ export class LoginScreen extends LitElement {
     return { ...(this.attempted ? this.#validate() : {}), ...refused };
   }
 
-  /** Each shown field's message, the one message beside the action, and whether the action waits
+  /** Each shown field's message, the one message above the action, and whether the action waits
    * for a field to be corrected. Only the form's own checks make it wait. */
   #formState(): { fields: Record<string, string>; bottom: string; blocked: boolean } {
     const errors = this.#errors();

@@ -183,7 +183,7 @@ describe("purchases-screen", () => {
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
-  it("keeps the form open and says an update refusal beside Save, not on the page", async () => {
+  it("keeps the form open and says an update refusal above Save, not on the page", async () => {
     const api = stubApi({
       updatePurchaseInvoice: vi.fn().mockRejectedValue({ code: "purchase.not_found" }),
     });

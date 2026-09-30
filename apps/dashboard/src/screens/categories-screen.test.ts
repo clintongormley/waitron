@@ -1626,7 +1626,7 @@ it("puts a missing-translation refusal beside the name field for the language it
 
 // `categoryInput` in apps/server/src/catalogue-api.ts refuses a malformed parent as
 // `management.request_invalid` with `field: "parentId"`.
-it("puts a refused parent beside the parent field, and says to correct it beside the actions", async () => {
+it("puts a refused parent beside the parent field, and says to correct it above the actions", async () => {
   setLocale("en-GB");
   const { el, api } = await mount();
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="create-category"]')!.click();

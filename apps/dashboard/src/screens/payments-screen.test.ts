@@ -685,7 +685,7 @@ describe("reader discovery and status", () => {
     expect(isDisabled(el, "save-reader")).toBe(true);
   });
 
-  it("shows a refused rename beside Save and leaves Save working", async () => {
+  it("shows a refused rename above Save and leaves Save working", async () => {
     const { el, api } = await mount(
       stubApi({ renameReader: vi.fn().mockRejectedValue({ code: "server.internal" }) }),
     );

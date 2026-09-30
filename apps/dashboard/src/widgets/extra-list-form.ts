@@ -258,7 +258,7 @@ export class ExtraListForm extends LitElement {
 
   /** A path naming the list as a whole or an item's id has no input of its own, so it is shown under
    * the items table with the rest of the list-level refusals. `_form` names no field, and is shown
-   * beside Save alone. */
+   * above Save alone. */
   #formKey(field: string): string {
     if (field === "_form") return field;
     const item = /^items\.(\d+)(?:\.(.+))?$/.exec(field);
@@ -343,7 +343,7 @@ export class ExtraListForm extends LitElement {
     this.#edit(change, "items", ...keys);
   }
 
-  /** `cell` is the refusal the change answers; a preselection's is shown beside Save alone, and goes
+  /** `cell` is the refusal the change answers; a preselection's is shown above Save alone, and goes
    * only when the list is submitted again. */
   #editItem(id: string, patch: Partial<DraftItem>, cell?: string): void {
     this.#editItems(

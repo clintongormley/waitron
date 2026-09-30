@@ -5,7 +5,7 @@ import type { SetupLiveSourceScreen } from "./live-source-screen.js";
 
 afterEach(cleanupWidgets);
 
-/** The message beside the primary action, which `wt-form-actions` draws in its own shadow root. */
+/** The form's one message, which `wt-form-actions` draws in its own shadow root. */
 async function bottomOf(el: HTMLElement): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & {
     updateComplete: Promise<unknown>;

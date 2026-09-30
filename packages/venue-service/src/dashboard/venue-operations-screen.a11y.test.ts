@@ -232,7 +232,7 @@ describe.each(["light", "dark"] as const)(
 );
 
 describe.each(["light", "dark"] as const)("department editor accessibility (%s)", (theme) => {
-  test("after a failed press: the marked fields and the message beside Save", async () => {
+  test("after a failed press: the marked fields and the message above Save", async () => {
     setLocale("en");
     await mountThemed("<div></div>", theme);
     const el = document.createElement("dashboard-venue-operations-screen") as VenueOperationsScreen;

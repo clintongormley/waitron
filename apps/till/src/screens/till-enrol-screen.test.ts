@@ -91,7 +91,7 @@ it("asks only for a name — no key field, no profile picker, no binding picker"
   expect(query(el, "[data-submit]")!.hasAttribute("disabled")).toBe(false);
 });
 
-it("explains an attempted empty submission beside the field and once beside the button, with no summary", async () => {
+it("explains an attempted empty submission beside the field and once above the button, with no summary", async () => {
   const join = vi.fn();
   const { el } = await mountWidget<TillEnrolScreen>("till-enrol-screen", {
     api: stubApi({ join }),
@@ -286,7 +286,7 @@ it("tells the operator to ask for pairing mode when the server says pairing_clos
   // Without this, the assertion above passes by degrading with the resolver's table.
   expect(bottomMessage(el)).not.toBe(codeMessage("server.internal"));
   expect(bottomMessage(el)).toContain("Allow new devices");
-  // The one message sits beside the button, announced there; nothing is left at the top.
+  // The one message sits above the button, announced there; nothing is left at the top.
   const actions = query(el, "wt-form-actions")!;
   await (actions as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(actions.shadowRoot!.querySelector("[data-error]")!.getAttribute("role")).toBe("alert");

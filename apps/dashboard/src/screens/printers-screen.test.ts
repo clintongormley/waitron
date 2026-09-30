@@ -5413,7 +5413,7 @@ describe("printers-screen Bluetooth pairing", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
-  it("shows a refusal naming the PIN under the field and one naming no field beside the action, never disabling Pair", async () => {
+  it("shows a refusal naming the PIN under the field and one naming no field above the action, never disabling Pair", async () => {
     const pair = vi
       .fn()
       .mockRejectedValueOnce({ code: "management.request_invalid", params: { field: "pin" } })

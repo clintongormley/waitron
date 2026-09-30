@@ -1133,7 +1133,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
     expect(field(el, "currentPassword").error).toBe("");
   });
 
-  it("puts a taken display name beside its field, the generic sentence beside Save, and clears the field when it is edited", async () => {
+  it("puts a taken display name beside its field, the generic sentence above Save, and clears the field when it is edited", async () => {
     const saveProfile = vi.fn().mockRejectedValue({ code: "person.display_name_taken" });
     const { el } = await mount({ saveProfile });
     await editDetails(el);
@@ -1195,7 +1195,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
   });
 });
 
-describe("your profile — errors beside Save, not above the form", () => {
+describe("your profile — errors at the bottom of the form, not above it", () => {
   function field(el: ProfileScreen, name: string) {
     return el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(`wt-input[name=${name}]`)!;
   }

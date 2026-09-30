@@ -301,7 +301,7 @@ describe("stripe-add-reader", () => {
     expect(addDisabled(el)).toBe(false);
   });
 
-  it("on an invalid press marks the fields, says so beside Add, focuses the first and disables Add", async () => {
+  it("on an invalid press marks the fields, says so above Add, focuses the first and disables Add", async () => {
     const request = vi.fn() as unknown as DashboardRequest;
     const { el } = await mountWidget<StripeAddReader>("stripe-add-reader", { request });
 

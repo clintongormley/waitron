@@ -1567,7 +1567,7 @@ export class MenusScreen extends LitElement {
     save: string;
     saveLabel: string;
     saveVariant?: "primary" | "danger";
-    /** The message beside Save, and whether a field the form finds wrong holds it. */
+    /** The message above Save, and whether a field the form finds wrong holds it. */
     errors?: { blocked: boolean; bottom: string };
     close: () => void;
     submit: () => void;

@@ -1034,7 +1034,7 @@ it("adds a member and shows the list the server then holds", async () => {
   expect(client.listSectionMembers).toHaveBeenCalledWith("s-drinks");
 });
 
-it("shows a refused nesting beside the member list, not beside Save", async () => {
+it("shows a refused nesting beside the member list, not above Save", async () => {
   const client = api({
     addSectionMember: vi.fn().mockRejectedValue({
       code: "menu_section.member_cycle",

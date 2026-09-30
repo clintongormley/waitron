@@ -248,7 +248,7 @@ describe("recipe-screen", () => {
     expect(api.listIngredients).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps the form open and says the fallback beside Save when an update fails without a code", async () => {
+  it("keeps the form open and says the fallback above Save when an update fails without a code", async () => {
     const api = stubApi({ updateIngredient: vi.fn().mockRejectedValue({}) });
     const { el } = await mountWidget<RecipeScreen>("dashboard-recipe-screen", { api });
     await flush(el);

@@ -1706,7 +1706,7 @@ it("marks the variant row a reported problem belongs to", async () => {
   save(el);
   await el.updateComplete;
   expect(submit).not.toHaveBeenCalled();
-  // The message beside Save alone cannot say WHICH variant is wrong, and a variant has no field in
+  // The message above Save alone cannot say WHICH variant is wrong, and a variant has no field in
   // this form.
   expect(variantTable(el)!.errors).toEqual({ 1: t("editor.price_invalid") });
 });

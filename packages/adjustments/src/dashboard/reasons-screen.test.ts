@@ -599,7 +599,7 @@ describe("the editor", () => {
     });
   });
 
-  it("explains an invalid submission beside each field and in one message beside Save, keeping the values", async () => {
+  it("explains an invalid submission beside each field and in one message above Save, keeping the values", async () => {
     const api = fakeApi();
     const el = await mount(api);
     await press(el, "add-reason");
@@ -695,7 +695,7 @@ describe("the editor", () => {
     expect(api.createReason).toHaveBeenCalledTimes(1);
   });
 
-  it("puts the server's refusal of a field beside that field, and says so beside Save", async () => {
+  it("puts the server's refusal of a field beside that field, and says so above Save", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi.fn().mockRejectedValue({
@@ -755,7 +755,7 @@ describe("the editor", () => {
     expect(modal(el)).not.toBeNull();
   });
 
-  it("explains any other refusal beside Save and keeps the editor open", async () => {
+  it("explains any other refusal above Save and keeps the editor open", async () => {
     const el = await mount(
       fakeApi({
         updateReason: vi
@@ -885,7 +885,7 @@ describe("the editor's messages", () => {
     expect(el.shadowRoot!.querySelector("wt-form-error-summary")).toBeNull();
   });
 
-  it("marks the fields on a failed press, says so beside Save, focuses the first and holds Save", async () => {
+  it("marks the fields on a failed press, says so above Save, focuses the first and holds Save", async () => {
     const el = await mount(fakeApi());
     await press(el, "add-reason");
     await press(el, "save-editor");
@@ -973,7 +973,7 @@ describe("the editor's messages", () => {
     expect(button(el, "save-editor").disabled).toBe(false);
   });
 
-  it("says a refusal that names no field beside Save and keeps Save working, until the next press", async () => {
+  it("says a refusal that names no field above Save and keeps Save working, until the next press", async () => {
     const api = fakeApi({
       updateReason: vi.fn().mockRejectedValueOnce({ code: "server.internal" }),
     });
@@ -1215,7 +1215,7 @@ describe("the bill discount limit", () => {
   });
 
   it.each(["0", "0.00", "100.01", "150", "12.345", "abc", "-5", "1e2"])(
-    "refuses %j beside the field and beside Save, focuses it, and holds Save until it is fixed",
+    "refuses %j beside the field and above Save, focuses it, and holds Save until it is fixed",
     async (typed) => {
       const api = withLimit(null);
       const el = await mount(api);
@@ -1257,7 +1257,7 @@ describe("the bill discount limit", () => {
     expect(limitBottom(el)).toBe("");
   });
 
-  it("says any other refusal beside Save, keeps Save working, and says it until the next press", async () => {
+  it("says any other refusal above Save, keeps Save working, and says it until the next press", async () => {
     const api = withLimit(null, {
       saveSettings: vi
         .fn()
