@@ -13,6 +13,7 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
+import { DEFAULT_ENTRY_PAGE_SIZE, MAX_ENTRY_PAGE_SIZE } from "./entry-pages.js";
 import { ADJUSTMENT_ACTIONS, type AdjustmentAction } from "./policy.js";
 import { adjustments, type AdjustmentStage } from "./schema/adjustments.js";
 
@@ -127,8 +128,7 @@ export interface AdjustmentEntryPage {
   next: EntryCursor | null;
 }
 
-export const DEFAULT_ENTRY_PAGE_SIZE = 200;
-export const MAX_ENTRY_PAGE_SIZE = 500;
+export { DEFAULT_ENTRY_PAGE_SIZE, MAX_ENTRY_PAGE_SIZE };
 
 const ZERO = decimal("0.00");
 const HUNDRED = decimal("100");
