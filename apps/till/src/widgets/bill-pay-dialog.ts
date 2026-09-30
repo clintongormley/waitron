@@ -2,7 +2,6 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, state } from "lit/decorators.js";
 import {
   MONEY_SCALE,
-  addDecimal,
   compareDecimal,
   decimal,
   formatMoney,
@@ -26,7 +25,14 @@ import type {
   BillPaymentView,
   TillActiveReader,
 } from "../api/client.js";
-import { refundOffered, refundableOf } from "../state/bill-payment.js";
+import {
+  PAY_WAYS,
+  moneyPlus,
+  paidQuantities,
+  refundOffered,
+  refundableOf,
+  typedAmount,
+} from "../state/bill-payment.js";
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { CardProvider } from "./tender-pay.js";
 
@@ -136,20 +142,7 @@ function refusalText(refusal: PayRefusal): string {
   return codeMessage(refusal.code);
 }
 
-const TYPED_AMOUNT = /^\d{1,9}([.,]\d{1,2})?$/;
 const PEOPLE = /^[1-9]\d{0,2}$/;
-
-/** A typed amount with a decimal comma read as a point, or null when it is not an amount. */
-export function typedAmount(value: string): string | null {
-  const typed = value.trim();
-  return TYPED_AMOUNT.test(typed) ? typed.replace(",", ".") : null;
-}
-
-const WAYS: { way: PayWay; label: StringKey }[] = [
-  { way: "items", label: "bill_pay.way_items" },
-  { way: "contribution", label: "bill_pay.way_contribution" },
-  { way: "share", label: "bill_pay.way_share" },
-];
 
 /**
  * Takes part of a bill: chosen items, an amount, or an equal share among the people still to pay,
@@ -441,8 +434,8 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #paidUnits(lineNo: number): Decimal {
-    const paid = this.balance?.paidLines.find((line) => line.lineNo === lineNo);
-    return decimal(paid?.paidQuantity ?? "0");
+    const paid = this.balance === null ? undefined : paidQuantities(this.balance).get(lineNo);
+    return decimal(paid ?? "0");
   }
 
   /** The units of `line` still to pay: all of a line paid only whole, or none once any is paid. */
@@ -659,7 +652,7 @@ export class TillBillPayDialog extends LitElement {
     };
     const method = t(payment.method === "cash" ? "tender.cash" : "tender.card");
     const left = refundableOf(payment);
-    const leftTotal = toScale(addDecimal(decimal(left.applied), decimal(left.tip)), MONEY_SCALE);
+    const leftTotal = moneyPlus(left.applied, left.tip);
     return html`<li class="payment" data-payment=${payment.id}>
       <div class="payment-text">
         <span class="payment-head">
@@ -676,12 +669,7 @@ export class TillBillPayDialog extends LitElement {
           (refund) =>
             html`<p class="muted" data-payment-refunded>
               ${t(REFUNDS[refund.state]).replace("{amount}", () =>
-                this.#money(
-                  toScale(
-                    addDecimal(decimal(refund.appliedAmount), decimal(refund.tipAmount)),
-                    MONEY_SCALE,
-                  ),
-                ),
+                this.#money(moneyPlus(refund.appliedAmount, refund.tipAmount)),
               )}
             </p>`,
         )}
@@ -849,7 +837,7 @@ export class TillBillPayDialog extends LitElement {
     return html`<fieldset class="choice" data-pay-way ?disabled=${this.busy}>
         <legend>${t("bill_pay.way")}</legend>
         <div class="options">
-          ${WAYS.map(({ way, label }) =>
+          ${PAY_WAYS.map(({ way, label }) =>
             this.#radio("way", way, t(label), this.chosenWay === way, () => {
               this.chosenWay = way;
             }),
@@ -1070,7 +1058,7 @@ export class TillBillPayDialog extends LitElement {
 
   /** The change and tip together: what "all of the change" leaves as a tip. */
   #changeAndTip(preview: CashPreview): Decimal {
-    return toScale(addDecimal(decimal(preview.change), decimal(preview.tip)), MONEY_SCALE);
+    return moneyPlus(preview.change, preview.tip);
   }
 
   /** The tip the payment carries before any change is left: the tip of the full price with a
@@ -1273,9 +1261,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #choiceLabel(option: Choices["options"][number]): string {
-    const amount = this.#money(
-      toScale(addDecimal(decimal(option.applied), decimal(option.tip)), MONEY_SCALE),
-    );
+    const amount = this.#money(moneyPlus(option.applied, option.tip));
     if (option.choice === "full_with_tip")
       return t("bill_pay.choice_tip")
         .replace("{amount}", () => amount)

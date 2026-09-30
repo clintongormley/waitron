@@ -104,7 +104,7 @@ import { signalChipStyles, signalChips } from "../widgets/signal-chips.js";
 import { billRequestOf } from "../state/table-signals.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
-import { payLines } from "../state/bill-payment.js";
+import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
 
 export type { TableServiceStatus };
 
@@ -2793,13 +2793,8 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #payWays(): TemplateResult {
-    const ways = [
-      { way: "items", label: "bill_pay.way_items" },
-      { way: "contribution", label: "bill_pay.way_contribution" },
-      { way: "share", label: "bill_pay.way_share" },
-    ] as const satisfies readonly { way: PayWay; label: StringKey }[];
     return html`<div class="bill-pay-ways">
-      ${ways.map(
+      ${PAY_WAYS.map(
         ({ way, label }) =>
           html`<wt-button
             variant="secondary"
@@ -2817,11 +2812,7 @@ export class TillTableOrderScreen extends LitElement {
   #payPart(way: PayWay, amount?: string): void {
     const detail: BillPayDetail = {
       way,
-      lines: payLines(
-        this.lines,
-        (line) => this.#nameForLine(line),
-        (line) => this.#lineGross(line),
-      ),
+      lines: payLines(this.lines, (line) => this.#nameForLine(line)),
       ...(amount === undefined ? {} : { amount }),
     };
     this.#dispatch("bill-pay", detail);
@@ -2829,16 +2820,16 @@ export class TillTableOrderScreen extends LitElement {
 
   /** What is paid of the line numbered `lineNo` on the bill on screen, when any is. */
   #paidMark(lineNo: number, quantity: string): TemplateResult | typeof nothing {
-    const paid = this.#balanceShown()?.paidLines.find((line) => line.lineNo === lineNo);
-    if (paid === undefined || compareDecimal(decimal(paid.paidQuantity), decimal("0")) <= 0)
-      return nothing;
-    const whole = compareDecimal(decimal(paid.paidQuantity), decimal(quantity)) >= 0;
+    const balance = this.#balanceShown();
+    const paid = balance === null ? undefined : paidQuantities(balance).get(lineNo);
+    if (paid === undefined || compareDecimal(decimal(paid), decimal("0")) <= 0) return nothing;
+    const whole = compareDecimal(decimal(paid), decimal(quantity)) >= 0;
     return html`<span class="line-paid" data-line-paid
       >${
         whole
           ? t("bill_pay.paid")
           : t("bill_pay.paid_part")
-              .replace("{paid}", () => this.#displayQty(paid.paidQuantity))
+              .replace("{paid}", () => this.#displayQty(paid))
               .replace("{quantity}", () => this.#displayQty(quantity))
       }</span
     >`;

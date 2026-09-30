@@ -6,7 +6,6 @@ import { keyed } from "lit/directives/keyed.js";
 import { UrlStateController, baseStyles, registerIcons } from "@waitron/ui";
 import {
   MONEY_SCALE,
-  addDecimal,
   decimal,
   formatMoney,
   resolveActiveLocale,
@@ -89,10 +88,12 @@ import "./widgets/bill-refund-dialog.js";
 import type { RefundRefusal } from "./widgets/bill-refund-dialog.js";
 import {
   confirmationOf,
+  moneyPlus,
   payLines,
   paymentAsk,
   refundOffered,
   refundSubmissionFor,
+  refusalOf,
   submissionFor,
   unansweredAfter,
   type RefundAsk,
@@ -3134,11 +3135,11 @@ export class TillApp extends LitElement {
    * its bills read still the latest, what the party still owes is taken from those bills when they
    * are the party's, which is the sum the floor would have answered (`readBillsOfParties` in
    * `apps/server/src/parties.ts` feeds both). */
-  async #rereadAmounts(orderId: string, visit: number): Promise<void> {
+  async #rereadAmounts(orderId: string, visit: number, balance?: BillBalance): Promise<void> {
     const reread = ++this.#amountsReread;
     const floorRead = await this.#retakePartyFromFloor();
     if (this.activeTabId !== orderId || reread !== this.#amountsReread) return;
-    const [, bills] = await this.#loadLinesAndBills();
+    const [, bills] = await this.#loadLinesAndBills(balance);
     if (this.#hasLeftOrder(orderId, visit) || reread !== this.#amountsReread) return;
     if (
       !floorRead &&
@@ -3362,14 +3363,14 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  async #loadLinesAndBills(): Promise<[void, ReadBills]> {
-    return Promise.all([this.#loadTabLines(), this.#loadPartyBills()]);
+  async #loadLinesAndBills(balance?: BillBalance): Promise<[void, ReadBills]> {
+    return Promise.all([this.#loadTabLines(), this.#loadPartyBills(balance)]);
   }
 
   /** A failed read leaves the list empty rather than showing another party's bills. A read
    * overtaken by a later one leaves the list alone, and only its generation, compared with
    * {@link #partyBillsRead}, tells a caller so. */
-  async #loadPartyBills(): Promise<ReadBills> {
+  async #loadPartyBills(balance?: BillBalance): Promise<ReadBills> {
     const read = ++this.#partyBillsRead;
     const party = this.orderParty;
     if (party === null) {
@@ -3380,7 +3381,7 @@ export class TillApp extends LitElement {
       const bills = await this.api.getPartyBills(party.id);
       if (read === this.#partyBillsRead) {
         this.partyBills = bills;
-        void this.#loadBillBalance();
+        void this.#loadBillBalance(balance);
       }
       return { read, partyId: party.id, bills };
     } catch {
@@ -3390,13 +3391,18 @@ export class TillApp extends LitElement {
   }
 
   /** The balance of the bill on screen when its party's bills say it holds a payment; none
-   * otherwise, or when the read fails. */
-  async #loadBillBalance(): Promise<void> {
+   * otherwise, or when the read fails. A `known` balance of that bill, just read or answered, is
+   * taken rather than read again. */
+  async #loadBillBalance(known?: BillBalance): Promise<void> {
     const read = ++this.#billBalanceRead;
     const billId = this.activeTabId;
     const bill = this.partyBills.find((row) => row.workingOrderId === billId);
     if (billId === undefined || bill?.hasPayments !== true) {
       this.billBalance = null;
+      return;
+    }
+    if (known?.workingOrderId === billId) {
+      this.billBalance = known;
       return;
     }
     try {
@@ -4738,14 +4744,15 @@ export class TillApp extends LitElement {
   }
 
   /** After an answer to a payment or a refund, the order the dialog pays is read again: the table's
-   * bill with its party and what it owes, or the counter's order into the basket with the held
-   * orders. Nothing is read once the waiter has left the order. */
-  async #rereadPayingOrder(open: PayingOrder): Promise<void> {
+   * bill with its party and what it owes, taking the bill's `balance` when one was just read or
+   * answered, or the counter's order into the basket with the held orders. Nothing is read once the
+   * waiter has left the order. */
+  async #rereadPayingOrder(open: PayingOrder, balance?: BillBalance): Promise<void> {
     if (open.surface === "counter") {
       if (!this.#hasLeftCounterOrder(open.billId, open.visit))
         await this.#reloadCounterOrder(open.billId, open.visit);
     } else if (!this.#hasLeftOrder(open.billId, open.visit)) {
-      await this.#rereadAmounts(open.billId, open.visit);
+      await this.#rereadAmounts(open.billId, open.visit, balance);
     }
   }
 
@@ -4790,18 +4797,20 @@ export class TillApp extends LitElement {
     return this.billPaying?.id === id ? this.billPaying : null;
   }
 
-  /** The bill's balance read again into the dialog `id` and the screen. A failed read says so beside
-   * the dialog's action unless it already shows a refusal. */
-  async #rereadBillPaying(id: number, billId: string): Promise<void> {
+  /** The bill's balance read again into the dialog `id` and the screen, and returned. A failed read
+   * says so beside the dialog's action unless it already shows a refusal. */
+  async #rereadBillPaying(id: number, billId: string): Promise<BillBalance | undefined> {
     try {
       const balance = await this.api.getBillBalance(billId);
       if (this.activeTabId === billId) this.billBalance = balance;
       const now = this.#billPayingNow(id);
       if (now !== null) this.billPaying = { ...now, balance };
+      return balance;
     } catch {
       const now = this.#billPayingNow(id);
       if (now !== null && now.refusal === null)
         this.billPaying = { ...now, refusal: { code: "unread" } };
+      return undefined;
     }
   }
 
@@ -4905,14 +4914,15 @@ export class TillApp extends LitElement {
           : { change: result.payment.change },
       busy: false,
     };
-    await this.#rereadPayingOrder(open);
+    await this.#rereadPayingOrder(open, result.balance);
   }
 
   /**
-   * A refusal shows beside the dialog's action, or under the field it names, and the balance is read
-   * again. `bill.allocation_changed` reopens the confirmation with the amounts the server now
-   * gives, and sends nothing; a payment that got no answer stays on its confirmation, to be taken
-   * again under the same submission id. Any other refusal goes back to the form.
+   * A refusal shows beside the dialog's action, or under the field it names, and the bill is read
+   * again, unless it was a preview refused for a field, which changed nothing on the bill.
+   * `bill.allocation_changed` reopens the confirmation with the amounts the server now gives, and
+   * sends nothing; a payment that got no answer stays on its confirmation, to be taken again under
+   * the same submission id. Any other refusal goes back to the form.
    */
   async #onBillPayRefused(
     id: number,
@@ -4922,38 +4932,24 @@ export class TillApp extends LitElement {
   ): Promise<void> {
     const now = this.#billPayingNow(id);
     if (now === null) return;
-    const refused = error as {
-      code?: unknown;
-      field?: unknown;
-      preview?: unknown;
-      chargeable?: unknown;
-    };
-    const code = typeof refused.code === "string" ? refused.code : "server.internal";
-    if (stage === "take" && isNetworkFailure(error)) {
-      this.billPaying = { ...now, refusal: { code: "network" }, busy: false };
-    } else if (code === "bill.allocation_changed" && refused.preview !== undefined) {
+    const refusal = refusalOf(error, stage === "take");
+    const { preview } = error as { preview?: unknown };
+    if (refusal.code === "network") {
+      this.billPaying = { ...now, refusal, busy: false };
+    } else if (refusal.code === "bill.allocation_changed" && preview !== undefined) {
       this.billPaying = {
         ...now,
         asked,
-        preview: refused.preview as AllocationPreview,
-        refusal: { code },
+        preview: preview as AllocationPreview,
+        refusal: { code: refusal.code },
         busy: false,
       };
     } else {
-      this.billPaying = {
-        ...now,
-        asked: null,
-        preview: null,
-        refusal: {
-          code,
-          ...(typeof refused.field === "string" ? { field: refused.field } : {}),
-          ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
-        },
-        busy: false,
-      };
+      this.billPaying = { ...now, asked: null, preview: null, refusal, busy: false };
     }
-    await this.#rereadBillPaying(id, now.billId);
-    await this.#rereadPayingOrder(now);
+    if (stage === "preview" && refusal.code === "management.request_invalid") return;
+    const balance = await this.#rereadBillPaying(id, now.billId);
+    await this.#rereadPayingOrder(now, balance);
   }
 
   #onBillPayEdit(): void {
@@ -5115,15 +5111,12 @@ export class TillApp extends LitElement {
       taken: null,
       refunded: {
         state: result.refund.state,
-        amount: toScale(
-          addDecimal(decimal(result.refund.appliedAmount), decimal(result.refund.tipAmount)),
-          MONEY_SCALE,
-        ),
+        amount: moneyPlus(result.refund.appliedAmount, result.refund.tipAmount),
         method: open.payment.method,
         terminal: open.asked!.manualConfirmed === true,
       },
     };
-    await this.#rereadPayingOrder(open);
+    await this.#rereadPayingOrder(open, result.balance);
   }
 
   /**
@@ -5134,28 +5127,16 @@ export class TillApp extends LitElement {
   async #onRefundRefused(open: BillRefunding, error: unknown): Promise<void> {
     const now = this.#billRefundingNow(open.id);
     if (now === null) return;
-    const refused = error as { code?: unknown; field?: unknown };
-    const code = typeof refused.code === "string" ? refused.code : "server.internal";
-    if (APPROVER_REFUSALS.has(code)) {
-      this.refundApproverError = code;
+    const refusal = refusalOf(error);
+    if (APPROVER_REFUSALS.has(refusal.code)) {
+      this.refundApproverError = refusal.code;
       this.billRefunding = { ...now, busy: false };
     } else {
       this.#closeRefundApprovers();
-      if (isNetworkFailure(error)) {
-        this.billRefunding = { ...now, refusal: { code: "network" }, busy: false };
-      } else {
-        this.billRefunding = {
-          ...now,
-          refusal: {
-            code,
-            ...(typeof refused.field === "string" ? { field: refused.field } : {}),
-          },
-          busy: false,
-        };
-      }
+      this.billRefunding = { ...now, refusal, busy: false };
     }
-    await this.#rereadBillPaying(open.payId, open.billId);
-    await this.#rereadPayingOrder(open);
+    const balance = await this.#rereadBillPaying(open.payId, open.billId);
+    await this.#rereadPayingOrder(open, balance);
   }
 
   /**

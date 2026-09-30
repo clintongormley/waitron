@@ -1,22 +1,14 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  MONEY_SCALE,
-  addDecimal,
-  compareDecimal,
-  decimal,
-  formatMoney,
-  toScale,
-} from "@waitron/shared";
+import { MONEY_SCALE, compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
-import { typedAmount } from "./bill-pay-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { BillPaymentView } from "../api/client.js";
-import { refundableOf, type RefundAsk } from "../state/bill-payment.js";
+import { moneyPlus, refundableOf, typedAmount, type RefundAsk } from "../state/bill-payment.js";
 
 /** A refusal's code and the request field it names. The app's own codes: `network`, a refund that
  * got no answer; `approvers`, a list of who can approve that could not be read. */
@@ -155,7 +147,7 @@ export class TillBillRefundDialog extends LitElement {
     const left = refundableOf(this.payment);
     return {
       ...left,
-      total: toScale(addDecimal(decimal(left.applied), decimal(left.tip)), MONEY_SCALE),
+      total: moneyPlus(left.applied, left.tip),
     };
   }
 
@@ -410,10 +402,7 @@ export class TillBillRefundDialog extends LitElement {
 
   #terminalStep(): TemplateResult {
     const ask = this.#ask();
-    const amount = toScale(
-      addDecimal(decimal(ask.appliedAmount), decimal(ask.tipAmount)),
-      MONEY_SCALE,
-    );
+    const amount = moneyPlus(ask.appliedAmount, ask.tipAmount);
     return html`<p class="instruction" data-refund-terminal>
         ${t("bill_refund.terminal").replace("{amount}", () => this.#money(amount))}
       </p>

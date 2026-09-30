@@ -9,19 +9,21 @@ import {
   toScale,
   type Decimal,
 } from "@waitron/shared";
-import type {
-  AllocationChoice,
-  AllocationPreview,
-  BillBalance,
-  BillPaymentAsk,
-  BillPaymentRequest,
-  BillPaymentView,
-  BillRefundRequest,
-  TabLine,
+import {
+  isNetworkFailure,
+  type AllocationChoice,
+  type AllocationPreview,
+  type BillBalance,
+  type BillPaymentAsk,
+  type BillPaymentRequest,
+  type BillPaymentView,
+  type BillRefundRequest,
+  type TabLine,
 } from "../api/client.js";
+import type { StringKey } from "../i18n/strings.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";
 import { trimQuantity } from "../widgets/dish-format.js";
-import type { PayLine } from "../widgets/bill-pay-dialog.js";
+import type { PayLine, PayRefusal } from "../widgets/bill-pay-dialog.js";
 
 /** What the operator chose to pay. A pick with no `units` is the whole line. An equal share names
  * only how many people are still to pay: the server works out the share and the preview shows it. */
@@ -29,6 +31,26 @@ export type PayChoice =
   | { kind: "items"; picks: { lineNo: number; units?: number }[] }
   | { kind: "contribution"; amount: string }
   | { kind: "share"; shareOf: number };
+
+/** The three ways to pay part of a bill, in the order they are offered. */
+export const PAY_WAYS = [
+  { way: "items", label: "bill_pay.way_items" },
+  { way: "contribution", label: "bill_pay.way_contribution" },
+  { way: "share", label: "bill_pay.way_share" },
+] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
+
+const TYPED_AMOUNT = /^\d{1,9}([.,]\d{1,2})?$/;
+
+/** A typed amount with a decimal comma read as a point, or null when it is not an amount. */
+export function typedAmount(value: string): string | null {
+  const typed = value.trim();
+  return TYPED_AMOUNT.test(typed) ? typed.replace(",", ".") : null;
+}
+
+/** Two amounts added, at the money scale. */
+export function moneyPlus(a: string, b: string): Decimal {
+  return toScale(addDecimal(decimal(a), decimal(b)), MONEY_SCALE);
+}
 
 /** How it is paid. `addedTip` is, for cash, the part of the change left as a tip and, for a card,
  * what is charged above what is due. */
@@ -91,10 +113,26 @@ export function confirmationOf(
   };
 }
 
-/** A confirmation as sent, keyed by its bill and its body. */
-export interface Submission {
+/** A request as sent: its body with a submission id, keyed by its body and what it is about. */
+interface Sent<Body> {
   key: string;
-  request: BillPaymentRequest;
+  request: Body & { submissionId: string };
+}
+
+/** A confirmation as sent, keyed by its bill and its body. */
+export type Submission = Sent<Confirmation>;
+
+/** The request for `body`, keyed by `key`. Its submission id is the one `unanswered` was sent with
+ * when that has the same key, and fresh otherwise. */
+function sentAs<Body extends object>(
+  key: string,
+  body: Body,
+  unanswered: Sent<Body> | null,
+  mint: () => string,
+): Sent<Body> {
+  const submissionId =
+    unanswered !== null && unanswered.key === key ? unanswered.request.submissionId : mint();
+  return { key, request: { ...body, submissionId } };
 }
 
 /**
@@ -108,10 +146,7 @@ export function submissionFor(
   unanswered: Submission | null,
   mint: () => string = () => crypto.randomUUID(),
 ): Submission {
-  const key = JSON.stringify([billId, confirmation]);
-  const submissionId =
-    unanswered !== null && unanswered.key === key ? unanswered.request.submissionId : mint();
-  return { key, request: { ...confirmation, submissionId } };
+  return sentAs(JSON.stringify([billId, confirmation]), confirmation, unanswered, mint);
 }
 
 /**
@@ -127,14 +162,26 @@ export function unansweredAfter<S>(sent: S, error?: unknown): S | null {
   return (error as { code?: unknown }).code === "submission.id_reused" ? null : sent;
 }
 
+/**
+ * A refused request as the dialogs show it: its code, or `server.internal` when it carries none,
+ * with the field it names and, for a tip the venue does not take, the most a card can be charged.
+ * A request that `changes` the bill and got no answer is `network`, as it may have been made.
+ */
+export function refusalOf(error: unknown, changes = true): PayRefusal {
+  if (changes && isNetworkFailure(error)) return { code: "network" };
+  const refused = error as { code?: unknown; field?: unknown; chargeable?: unknown };
+  return {
+    code: typeof refused.code === "string" ? refused.code : "server.internal",
+    ...(typeof refused.field === "string" ? { field: refused.field } : {}),
+    ...(typeof refused.chargeable === "string" ? { chargeable: refused.chargeable } : {}),
+  };
+}
+
 /** A refund as confirmed: without its submission id, and without the approver's PIN, which is
  * never kept. */
 export type RefundAsk = Omit<BillRefundRequest, "submissionId" | "override">;
 
-export interface RefundSubmission {
-  key: string;
-  request: Omit<BillRefundRequest, "override">;
-}
+export type RefundSubmission = Sent<RefundAsk>;
 
 /** As {@link submissionFor}, for a refund of one payment of the bill. */
 export function refundSubmissionFor(
@@ -144,10 +191,7 @@ export function refundSubmissionFor(
   unanswered: RefundSubmission | null,
   mint: () => string = () => crypto.randomUUID(),
 ): RefundSubmission {
-  const key = JSON.stringify([billId, paymentId, ask]);
-  const submissionId =
-    unanswered !== null && unanswered.key === key ? unanswered.request.submissionId : mint();
-  return { key, request: { ...ask, submissionId } };
+  return sentAs(JSON.stringify([billId, paymentId, ask]), ask, unanswered, mint);
 }
 
 /** What is left to give back of a payment: what it took less its completed refunds. */
@@ -176,22 +220,33 @@ export function refundOffered(payment: BillPaymentView, status: BillBalance["sta
   if (status !== "open" || payment.state !== "received") return false;
   if (payment.refunds.some((refund) => refund.state === "pending")) return false;
   const left = refundableOf(payment);
-  return compareDecimal(addDecimal(decimal(left.applied), decimal(left.tip)), decimal("0")) > 0;
+  return compareDecimal(moneyPlus(left.applied, left.tip), decimal("0")) > 0;
+}
+
+const paidByBalance = new WeakMap<BillBalance, ReadonlyMap<number, string>>();
+
+/** The quantity paid of each line of `balance` by line number, worked out once per balance read. */
+export function paidQuantities(balance: BillBalance): ReadonlyMap<number, string> {
+  let paid = paidByBalance.get(balance);
+  if (paid === undefined) {
+    const byLineNo = new Map<number, string>();
+    for (const line of balance.paidLines)
+      if (!byLineNo.has(line.lineNo)) byLineNo.set(line.lineNo, line.paidQuantity);
+    paid = byLineNo;
+    paidByBalance.set(balance, paid);
+  }
+  return paid;
 }
 
 /** The bill's dishes as an item payment offers them, each with its extras, which are paid with it.
  * A dish is paid a unit at a time only when sold by the unit, in several units, with no extras; the
  * server refuses part of any other. */
-export function payLines(
-  lines: readonly TabLine[],
-  name: (line: TabLine) => string,
-  gross: (line: TabLine) => Decimal = tabLineGross,
-): PayLine[] {
+export function payLines(lines: readonly TabLine[], name: (line: TabLine) => string): PayLine[] {
   return lines
     .filter((line) => (line.parentLineNo ?? null) === null)
     .map((line) => {
       const extras = lines.filter((row) => row.parentLineNo === line.lineNo);
-      const total = toScale(sumDecimals([line, ...extras].map(gross)), MONEY_SCALE);
+      const total = toScale(sumDecimals([line, ...extras].map(tabLineGross)), MONEY_SCALE);
       return {
         lineNo: line.lineNo,
         name: name(line),

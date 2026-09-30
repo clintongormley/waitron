@@ -7,9 +7,9 @@ import {
   addDecimal,
   decimal,
   formatMoney,
+  negateDecimal,
   perDishOptionQuantity,
   resolveSnapshotText,
-  subtractDecimal,
 } from "@waitron/shared";
 import { t } from "../i18n/t.js";
 import { qrSvg } from "../qr.js";
@@ -166,7 +166,7 @@ function renderBillPayment(payment: BillTenderLine, locale: string) {
   return html`
     ${paid} ${payment.tip !== "0.00" ? tenderRow(LABEL.tip, payment.tip, locale) : nothing}
     ${payment.refunds.map((refund) =>
-      tenderRow(LABEL.refund, subtractDecimal(decimal("0.00"), given(refund)), locale),
+      tenderRow(LABEL.refund, negateDecimal(given(refund)), locale),
     )}
   `;
 }

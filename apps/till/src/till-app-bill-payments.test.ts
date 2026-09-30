@@ -701,6 +701,103 @@ describe("till-app: a bill payment's refusals and retries", () => {
   });
 });
 
+describe("till-app: the bill's balance is read once for each answer", () => {
+  const partly = billOf({ outstanding: "70.00", hasPayments: true });
+  const heldMoney = balanceOf({ received: "50.00", outstanding: "70.00", payments: [paymentOf()] });
+  const twenty = paymentOf({ id: "pay-2", applied: "20.00", tendered: "20.00" });
+  const after = balanceOf({
+    received: "70.00",
+    outstanding: "50.00",
+    payments: [paymentOf(), twenty],
+  });
+  const readCounts = () => ({
+    balance: vi.mocked(api.getBillBalance).mock.calls.length,
+    bills: vi.mocked(api.getPartyBills).mock.calls.length,
+    lines: vi.mocked(api.getTabLines).mock.calls.length,
+  });
+
+  /** The bill holding €50.00, its dialog asking for €20.00 in cash; `answer` is the server's
+   * answer to the payment, and the read counts are taken as it is sent. */
+  async function payTwenty(answer: () => Promise<BillPaymentResult>) {
+    let latest = heldMoney;
+    let atSend = { balance: 0, bills: 0, lines: 0 };
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn(async () => latest),
+      previewBillPayment: vi.fn().mockResolvedValue(cash("20.00", "0.00")),
+      takeBillPayment: vi.fn(async () => {
+        atSend = readCounts();
+        latest = after;
+        return answer();
+      }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "20");
+    await type(el, "tendered", "20");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await expect.poll(() => readCounts().bills).toBeGreaterThan(atSend.bills);
+    await flush(el);
+    return { el, atSend };
+  }
+
+  it("takes the bill's new balance from a payment's answer, and reads its lines and bills again but not its balance", async () => {
+    const { el, atSend } = await payTwenty(async () => ({
+      outcome: "received",
+      payment: twenty,
+      balance: after,
+    }));
+
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "70.00", "50.00"));
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-received]"))).toContain(
+      money("70.00"),
+    );
+    expect(readCounts()).toEqual({
+      balance: atSend.balance,
+      bills: atSend.bills + 1,
+      lines: atSend.lines + 1,
+    });
+  });
+
+  it("reads the balance once after a refused payment, for the dialog and the table alike", async () => {
+    const { el, atSend } = await payTwenty(() =>
+      Promise.reject({ code: "bill.nothing_outstanding", status: 409 }),
+    );
+
+    expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage("bill.nothing_outstanding"));
+    expect(shownBalance(el)).toEqual(balanceShows("120.00", "70.00", "50.00"));
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-received]"))).toContain(
+      money("70.00"),
+    );
+    expect(readCounts()).toEqual({
+      balance: atSend.balance + 1,
+      bills: atSend.bills + 1,
+      lines: atSend.lines + 1,
+    });
+  });
+
+  it("reads nothing again after a preview refused for a field, which changed nothing on the bill", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([partly]),
+      getBillBalance: vi.fn().mockResolvedValue(heldMoney),
+      previewBillPayment: vi
+        .fn()
+        .mockRejectedValue({ code: "management.request_invalid", field: "tendered" }),
+    });
+    await openTable(el);
+    await openDialog(el, "contribution");
+    await type(el, "amount", "20");
+    await type(el, "tendered", "10");
+    const before = readCounts();
+    await press(el, "[data-pay-continue]");
+    await flush(el);
+
+    expect(inDialog(el, 'wt-input[name="tendered"]')!.error).toBe(t("bill_pay.tendered_short"));
+    expect(readCounts()).toEqual(before);
+  });
+});
+
 describe("till-app: the bill payment dialog's own steps", () => {
   it("goes back from the confirmation to the form and asks again", async () => {
     const { el } = await mountApp();
@@ -2390,6 +2487,40 @@ describe("till-app: giving back a bill payment", () => {
     expect(approval(el)!.shadowRoot!.querySelector(".error")!.textContent).toBe(t("pin.invalid"));
     expect(refundDialog(el)).not.toBeNull();
     expect(getBillBalance.mock.calls.length).toBeGreaterThan(readsBefore);
+  });
+
+  it.each([
+    [
+      "takes the bill's new balance from a refund's answer, reading",
+      0,
+      () => givenBack(cashPaid, refundOf()),
+    ],
+    [
+      "reads the balance once after a refused refund, and reads",
+      1,
+      () => Promise.reject({ code: "bill.refund_in_progress", status: 409 }),
+    ],
+  ] as const)("%s the bill's lines and bills again", async (_case, balanceReads, answer) => {
+    const readCounts = () => ({
+      balance: vi.mocked(api.getBillBalance).mock.calls.length,
+      bills: vi.mocked(api.getPartyBills).mock.calls.length,
+      lines: vi.mocked(api.getTabLines).mock.calls.length,
+    });
+    let atSend = { balance: 0, bills: 0, lines: 0 };
+    const refundBillPayment = vi.fn(async () => {
+      atSend = readCounts();
+      return answer();
+    });
+    const el = await askRefund({ refundBillPayment }, cashPaid);
+    await expect.poll(() => readCounts().bills).toBeGreaterThan(atSend.bills);
+    await flush(el);
+
+    expect(refundBillPayment).toHaveBeenCalledOnce();
+    expect(readCounts()).toEqual({
+      balance: atSend.balance + balanceReads,
+      bills: atSend.bills + 1,
+      lines: atSend.lines + 1,
+    });
   });
 
   it("keeps the PIN prompt open after too many wrong PINs, saying to wait, with the refund open and not busy", async () => {
