@@ -382,6 +382,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     const app = mountApp(tenantA);
     const routes = [
       { method: "POST", path: "/management-api/printer-discovery/start" },
+      { method: "POST", path: "/management-api/printer-discovery/renew" },
       { method: "POST", path: "/management-api/printer-discovery/probe" },
       { method: "GET", path: "/management-api/discovered-printers" },
     ] as const;
