@@ -3498,16 +3498,18 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `apps/server/src/adjustments-apply.ts`). On the till, a stored order in the counter's basket
       that matches what the server holds offers Give away and Discount on each dish, Discount the
       bill, and Cancel on a dish the kitchen has, which then has no remove button and no `−`
-      (`apps/till/src/widgets/basket.ts`); the basket reads each line's sent state and price before
-      an adjustment from `GET /api/working-orders/:id/lines` when it loads the order, and loads the
-      order again after an adjustment is made, refused as out of date, or left unanswered, taking
-      no edit until that load answers, the basket moves on (cleared, or loaded again, the same
-      order included), the operator signs out, or the till's request limit (150 s) passes, after
-      which a late answer is dropped. An unsaved or changed basket offers none of them, nor does
-      one whose pay, place or hold is out; a changed one offers them again once it is held and
-      retrieved. The same is checked again once the reasons are read, before the dialog opens, and
-      before the adjustment is sent: when the basket changed while the dialog was open, the
-      adjustment is not sent, the dialog closes and the till says why. Left open:
+      (`apps/till/src/widgets/basket.ts`). The basket reads each line's sent state and price before
+      an adjustment from `GET /api/working-orders/:id/lines` when it loads the order. It loads the
+      order again after an adjustment is made, refused as out of date, or left unanswered while
+      its dialog is open (`#reloadCounterOrder`, `apps/till/src/till-app.ts`), taking no edit
+      until that load answers, the basket moves on (cleared, or loaded again), the operator signs
+      out, or the till's request limit (150 s) passes. An answer the basket has moved past, a load
+      of the same order again included, is dropped. An unsaved or changed basket offers none of
+      them, nor does one being loaded again or whose pay, place or hold is out; a changed one
+      offers them again once it is held and retrieved. The counter checks this again once the
+      reasons are read, and does not open the dialog if the basket changed meanwhile; and again
+      before the adjustment is sent, when a changed basket means nothing is sent, the dialog closes
+      and the till says `adjust.basket_changed`. Left open:
       - **A placed pay-later counter order (`ticket_then_pay` or `invoice_first`) still cannot be
         adjusted:** the placed-order trigger freezes its prices, and an `invoice_first` order has
         already filed its invoice. B16, the counter handover task, was kept clear of. **Next

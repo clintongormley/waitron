@@ -194,7 +194,6 @@ export class WorkingOrderStore {
   /** The server revision the persisted order's copy is at; meaningless until {@link persisted}. */
   #revision = 0;
   #sending = false;
-  /** Set by {@link lockEdits}; the lock that is current, if any. */
   #editLock: object | null = null;
   #loadGeneration = 0;
   #lastAdded?: OrderLine;

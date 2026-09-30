@@ -1735,8 +1735,7 @@ export class TillTableOrderScreen extends LitElement {
     return actions.length === 0 ? nothing : html`<span class="line-actions">${actions}</span>`;
   }
 
-  /** The server adjusts only an open bill of a party (a paid, presented or counter bill is
-   * refused), so the actions are offered only there. */
+  /** A bill with no party is adjusted from the counter's basket, not from this screen. */
   #adjustable(): boolean {
     return (
       this.party !== null && (this.#shownBill === undefined || this.#shownBill.status === "open")

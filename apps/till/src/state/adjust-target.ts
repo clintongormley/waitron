@@ -15,7 +15,6 @@ import type { StringKey } from "../i18n/strings.js";
 import type { StoredLines } from "../widgets/basket.js";
 import type { WorkingOrderStore } from "./working-order.js";
 
-/** The listing, when it is of the stored order `store` holds. */
 export function storedListing(
   store: WorkingOrderStore,
   listing: StoredLines | null,
@@ -56,7 +55,6 @@ export function moreThanOneWholeUnit(line: TabLine): boolean {
   return line.unitPrecision === 0 && compareDecimal(decimal(line.quantity), decimal("1")) > 0;
 }
 
-/** The line's total at its price now. */
 export function tabLineGross(line: TabLine): Decimal {
   return grossOf(line.unitPriceGross, line.quantity);
 }

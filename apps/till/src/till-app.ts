@@ -2368,12 +2368,9 @@ export class TillApp extends LitElement {
     return this.#store.id !== orderId || session !== this.#operatorSession;
   }
 
-  /** After an adjustment to the stored order in the basket was made, refused or got no answer: the
-   * order is loaded into the basket again, unless the basket has moved on by the time it is read —
-   * cleared, or loaded again, the same order included. Until then the basket takes no edit, which
-   * the load would otherwise replace; the lock ends when the basket moves on or the operator session
-   * ends, and at the request limit, after which a late answer is dropped. False when the order or
-   * its lines could not be read, or the basket moved on first. */
+  /** Edits are locked while the order is read, so the load cannot replace an edit made meanwhile;
+   * an answer the basket has moved past (cleared, or loaded again, the same order included) is
+   * dropped. False when the order or its lines could not be read, or the answer was dropped. */
   async #reloadCounterOrder(orderId: string, session: number): Promise<boolean> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     const unlock = this.#store.lockEdits();
@@ -4594,7 +4591,6 @@ export class TillApp extends LitElement {
     return (["station", "expo", "schedule"] as ShellAffordance[]).filter((a) => !tabKeys.has(a));
   }
 
-  /** A pay, place or hold of the counter's basket is out. */
   #counterOrderInFlight(): boolean {
     return this.submitting || this.placing || this.parking;
   }
