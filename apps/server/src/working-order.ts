@@ -2573,16 +2573,16 @@ export async function moveOrderLines(
   return source.map((line) => line.id);
 }
 
-/** Assert a working order is OPEN, else `tab.not_open`. */
-async function assertTabOpen(tx: Transaction, cfg: TillConfig, tabId: string): Promise<void> {
-  void cfg;
+/** Assert a working order is OPEN, else `tab.not_open`; its revision. */
+export async function assertTabOpen(tx: Transaction, tabId: string): Promise<number> {
   const [tab] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, revision: workingOrders.revision })
     .from(workingOrders)
     .where(eq(workingOrders.id, tabId));
   if (tab === undefined || tab.status !== "open") {
     throw new AppError("tab.not_open", { tabId });
   }
+  return tab.revision;
 }
 
 /** One line of an OPEN tab. `unitPriceGross` is the gross unit price LOCKED at add time, NOT a
@@ -2638,7 +2638,7 @@ export async function readTabLines(
   cfg: TillConfig,
   tabId: string,
 ): Promise<TabLine[]> {
-  await assertTabOpen(tx, cfg, tabId);
+  await assertTabOpen(tx, tabId);
   // `ticket_items` is unique per line, so the join never multiplies rows.
   const rows = await tx
     .select({

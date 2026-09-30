@@ -22,7 +22,7 @@ import {
   type SpreadLine,
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   persons,
@@ -51,6 +51,7 @@ import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import type { TillConfig } from "./till-config.js";
 import {
+  assertTabOpen,
   bumpRevision,
   extraQuantityFor,
   isReleased,
@@ -334,16 +335,6 @@ function zeroed(
     }));
 }
 
-/** The revision of an open bill, a table's or a counter order; else `tab.not_open`. */
-async function openBillRevision(tx: Transaction, orderId: string): Promise<number> {
-  const [order] = await tx
-    .select({ status: workingOrders.status, revision: workingOrders.revision })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
-  if (order?.status !== "open") throw new AppError("tab.not_open", { tabId: orderId });
-  return order.revision;
-}
-
 /**
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount, the paid lines and the reason's policy, and the rows it would change.
@@ -354,7 +345,8 @@ async function planAdjustment(
   venueLocale: string,
 ): Promise<Plan> {
   const { orderId } = ask;
-  const revision = await openBillRevision(tx, orderId);
+  // An open bill, a table's or a counter order.
+  const revision = await assertTabOpen(tx, orderId);
   if (revision !== ask.expectedRevision) {
     throw new AppError("working_order.out_of_date", { workingOrderId: orderId, revision });
   }
