@@ -15,8 +15,9 @@ Last revised **2026-09-30**, checked against the backlog, the owner's decisions 
 - **Q27** describes what the server now does: paying a bill in parts landed on the server (#721);
   the till does not use it yet. Part (d) added, about the daily close.
 - **Q29** describes what the till now does: comps and discounts landed (#916). The receipt prints
-  the old price beside the new one. Part (e) added, for a discount that splits one dish into two
-  lines at different prices.
+  each dish at its full price, with each comp or discount on a line of its own beneath it, and a
+  discount on the whole bill on a line of its own (owner decision 2026-09-30). Part (e) added, for a
+  discount that splits one dish into two lines at different prices.
 - **Q31 added:** whether a corrective invoice should be by differences (what the software files
   today) or by substitution. The owner raised this on 2026-09-29.
 - **Q5(a)** gains a banner: the owner shelved two servers selling at once on 2026-09-05. One server
@@ -787,19 +788,27 @@ that:
 
 **What the software does, 2026-09-30.** This is now built (service plan Task 11, #916). Staff can
 comp or discount only a bill whose invoice has not been issued yet (an open bill of a table). The
-filed record carries only the reduced price. On the printed ticket, and on the ticket the till
-shows, each adjusted line shows its total before and after: a comped burger reads
-`12,00 € -> 0,00 €` and a bottle with 10% off reads `30,00 € -> 27,00 €`. So a discount does show
-the old price, beside the line, but there is no separate discount line. One more case the list
-above does not cover: a discount on a dish sold by the piece can split its line in two, because
-every unit price must be a whole cent. Three croquetas at €3.33, less €1.00, become 2 × €3.00 and
-1 × €2.99.
+filed record carries only the reduced price. The printed ticket, and the ticket the till shows
+once the invoice is issued, use the usual layout (owner decision 2026-09-30): each dish at its full
+price, then, after its extras, a line of its own for each comp or discount made on it, naming it and
+the amount taken off. A comped burger prints at `12,00 €` with `Invitación -12,00 €` beneath it, and a bottle
+with 10% off at `30,00 €` with `Descuento 10% -3,00 €`. A discount on the whole bill prints once,
+on its own line after the goods and before the VAT breakdown. So the ticket shows each discount as
+a line of its own, while the filed record does not. When the bill's adjustment records no longer
+add up to what its lines show (part of a discounted line cancelled afterwards, for one), each dish
+instead gets one line for what it lost, and a discount on the whole bill is not shown on its own.
+One more case the list above does not cover: a discount on a dish sold by the piece can split its
+line in two, because every unit price must be a whole cent. Three croquetas at €3.33, less €1.00,
+are filed as 2 × €3.00 and 1 × €2.99; the ticket shows both lines at €3.33 a unit (`6,66 €` and
+`3,33 €`, the second possibly after other dishes) with `Descuento -1,00 €` beneath the first.
 
 > **(a)** En una factura simplificada, ¿es correcto reflejar un descuento concedido antes de la
 > expedición reduciendo directamente el precio unitario de la línea afectada, sin una línea de
 > descuento separada? ¿O debe figurar el descuento de forma expresa? *(30-09-2026: el ticket impreso
-> muestra, junto a cada línea afectada, su importe antes y después del descuento, por ejemplo
-> «30,00 € -> 27,00 €». El registro de facturación sólo recoge el precio reducido.)*
+> muestra cada línea afectada a su precio habitual y, debajo, una línea propia con el descuento o la
+> invitación y el importe descontado, por ejemplo «Descuento 10% -3,00 €» o «Invitación -12,00 €».
+> Un descuento sobre el total de la cuenta figura una sola vez, en su propia línea, antes del
+> desglose del IVA. El registro de facturación sólo recoge el precio reducido.)*
 >
 > **(b)** Cuando el descuento se aplica al total de la cuenta, ¿es correcto repartirlo entre las
 > líneas en proporción a su importe, de modo que la base imponible de cada tipo de IVA se reduzca en
@@ -819,9 +828,10 @@ every unit price must be a whole cent. Three croquetas at €3.33, less €1.00,
 >
 > **(e)** *(añadida el 30-09-2026)* Los precios unitarios van siempre en céntimos enteros. Por eso un
 > descuento sobre un producto vendido por unidades puede dividir su línea en dos, con precios
-> unitarios distintos. Por ejemplo, 3 croquetas a 3,33 € con 1,00 € de descuento quedan como
-> 2 × 3,00 € y 1 × 2,99 €. ¿Es correcto que un mismo producto figure así en dos líneas con precios
-> distintos?
+> unitarios distintos. Por ejemplo, 3 croquetas a 3,33 € con 1,00 € de descuento quedan en el
+> registro de facturación como 2 × 3,00 € y 1 × 2,99 €; el ticket muestra ambas líneas a 3,33 € la
+> unidad, con «Descuento -1,00 €» debajo de la primera. ¿Es correcto que un mismo producto figure así
+> en dos líneas con precios distintos?
 
 ---
 

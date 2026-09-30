@@ -3418,9 +3418,19 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the second re-creates the line trigger with the column in both unchanged-column lists). The
     printed receipt, the till's open bill and its on-screen receipt show that first price before the
     new one (`12,00 € -> 0,00 €` on paper: none of the printer character sets has `→`, pinned in
-    `apps/server/src/receipt-ticket.test.ts`). Raising the quantity of an adjusted line adds the new
-    units as their own line at today's price; while the adjusted line is held they wait in its
-    group and fire with it. **The upgrade was measured**
+    `apps/server/src/receipt-ticket.test.ts`). _(2026-09-30, C90: the printed receipt and the
+    till's on-screen receipt no longer do. Every row shows its first price, and after each dish and
+    its extras comes one line for each comp or discount made on them (`Invitación -12,00 €`,
+    `Descuento 20% -2,40 €`, `Descuento -1,00 €`); a discount on the whole bill is its own line
+    after the goods, before the VAT breakdown. The till's open bill still shows the first price
+    struck through. When the bill's adjustment records no longer add up to what its rows show (part
+    of a discounted line cancelled afterwards, for one) or one names a row that is not on the
+    receipt, each dish instead gets one line for what its rows lost, and a discount on the whole
+    bill is not shown on its own: `withReceiptAdjustments`,
+    `apps/server/src/receipt-adjustments.ts`.)_
+    Raising the quantity of an adjusted line adds the new units as their own line at today's price;
+    while the adjusted line is held they wait in its group and fire with it. **The upgrade was
+    measured**
     (2026-09-30; taken before the `adjustments` table's `split_line_ids` column became `splits`; the
     upgrade creates that table empty): a venue seeded with main at `1e21f89fb` (core migrations ending at `0048`) through
     `devSetup`, plus one open party bill with fired lines, one with a held group and one paid, was
