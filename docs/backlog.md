@@ -128,7 +128,7 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
    the adjustment reports, as #923; Task 13, standalone ordering, as #903), the till's Cancel
    taking a reason is done by lane B item B11a, Task 15, several payments on the till, has
    landed as lane B item B15 (#956; the server side landed as #721), and Task 16, counter
-   handover, is built by lane B item B16 (what it left open is in the B16 entry under A4). Left:
+   handover, has landed as lane B item B16 (#981; what it left open is in the B16 entry under A4). Left:
    a table that leaves without paying (17).
    **Send asesor Q27–Q29 now:** Task 17 waits on Q28, how Task 11's discount appears on the
    invoice on Q29, and printing the invoice before payment on Q27.
@@ -4827,7 +4827,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       "Take the rest". Left as it is.
     - Giving money back after the invoice stays out of scope for `BillPaymentView` (bill payments
       design §6).
-  - **Task 16, counter handover, is built by lane B item B16** (2026-10-01). A counter order sent
+  - **Task 16, counter handover, has landed as lane B item B16** (#981, 2026-10-01). A counter order sent
     to the kitchen without payment (`ticket_then_pay` or `invoice_first`) can be handed over before
     it is paid, and paying it afterwards keeps the handover time. The counter's held-orders card
     lists the orders still waiting (sent, not paid; handed over, not paid; paid, not handed over)
@@ -4915,7 +4915,7 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     on each form tried only with a hand-built event or not at all, and move the ones that close to
     `dismissible`.
   - **Tasks left: 16 and 17** (2026-09-30; 10 to 14 have landed, and Task 15, the till side of
-    Task 14, is built by lane B item B15). _(2026-10-01: Task 16 is built by lane B item B16; see
+    Task 14, is built by lane B item B15). _(2026-10-01: Task 16 has landed as lane B item B16, #981; see
     the B16 entry above. Task 17 is left.)_ The menus tasks that change the same order and till code
     have all landed (M9, the last, as #729 on 2026-09-27), so nothing on lane C blocks them now. The
     plan's order among them: 16 after 10.
