@@ -443,6 +443,11 @@ export class PrintersScreen extends LitElement {
         color: var(--wt-color-danger);
         margin-top: var(--wt-space-3);
       }
+      .sent {
+        display: block;
+        color: var(--wt-color-success);
+        margin-top: var(--wt-space-3);
+      }
     `,
   ];
 
@@ -589,6 +594,10 @@ export class PrintersScreen extends LitElement {
   #readdingId?: string;
 
   @state() private errorKey: string | null = null;
+  /** Printers whose test page request has not answered yet. */
+  @state() private testPagesPrinting: ReadonlySet<string> = new Set();
+  /** The printer a test page was last sent to, while its notice shows. */
+  @state() private testPageSent: string | null = null;
   @state() private refreshErrorKey: string | null = null;
   @state() private addedPrinterName: string | null = null;
 
@@ -1461,6 +1470,23 @@ export class PrintersScreen extends LitElement {
     await this.#mutate(() => this.api.deactivatePrinter(id));
   }
 
+  async #printTestPage(p: Printer): Promise<void> {
+    if (!p.active || this.testPagesPrinting.has(p.id)) return;
+    this.errorKey = null;
+    this.testPageSent = null;
+    this.testPagesPrinting = new Set([...this.testPagesPrinting, p.id]);
+    try {
+      await this.api.printTestPage(p.id);
+    } catch (error) {
+      this.errorKey = codeOf(error);
+      return;
+    } finally {
+      this.testPagesPrinting = new Set([...this.testPagesPrinting].filter((id) => id !== p.id));
+    }
+    this.testPageSent = p.name;
+    await this.#load();
+  }
+
   async #testPrint(id: string): Promise<void> {
     if (this.printingTest) return;
     const epoch = this.#testEpoch;
@@ -1906,6 +1932,19 @@ export class PrintersScreen extends LitElement {
     };
   }
 
+  #renderTestPageSent(): TemplateResult | typeof nothing {
+    if (this.testPageSent === null) return nothing;
+    return html`<wt-notice
+      class="sent"
+      data-test="print-test-page-notice"
+      .duration=${NOTICE_MS}
+      @wt-notice-gone=${() => {
+        this.testPageSent = null;
+      }}
+      >${t("printers.test_page_sent").replace("{name}", this.testPageSent)}</wt-notice
+    >`;
+  }
+
   #printerActions(p: Printer): TemplateResult {
     const unpair = this.#forgetAction(p);
     return html`<dashboard-row-actions
@@ -1915,6 +1954,12 @@ export class PrintersScreen extends LitElement {
         data-test=${`edit-printer-${p.id}`}
         @click=${(event: Event) => this.#openPrinter(p, event)}
         >${t("action.edit")}</wt-button
+      >
+      <wt-button
+        data-test=${`print-test-page-${p.id}`}
+        ?disabled=${!p.active || this.testPagesPrinting.has(p.id)}
+        @click=${() => void this.#printTestPage(p)}
+        >${t("printers.print_test_page")}</wt-button
       >
       ${
         // A succeeded Unpair can switch the printer off (the job pull, `apps/server/src/print-api.ts`).
@@ -3036,7 +3081,7 @@ export class PrintersScreen extends LitElement {
       }${
         dialogOpen
           ? nothing
-          : html`${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
+          : html`${this.#renderTestPageSent()}${this.errorKey ? html`<p class="error" role="alert">${codeMessage(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
       ${this.#renderAgentModal()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}

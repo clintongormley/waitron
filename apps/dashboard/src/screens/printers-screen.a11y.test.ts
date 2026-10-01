@@ -714,6 +714,33 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
+  it.each([390, 1280])(
+    "renders a printer's menu with Print test page, and the notice it leaves, accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const { el, host } = await mountWidget<PrintersScreen>(
+        "dashboard-printers-screen",
+        { api: stubApi(false, { printTestPage: vi.fn().mockResolvedValue({ jobId: "page-1" }) }) },
+        theme,
+      );
+      await flush(el);
+      q(el, "wt-tabs")!
+        .shadowRoot!.querySelector<HTMLButtonElement>('[data-key="printers"]')!
+        .click();
+      await flush(el);
+      const item = q(el, "[data-test=print-test-page-p1]")!;
+      item.closest("dashboard-row-actions")!.shadowRoot!.querySelector("button")!.click();
+      await flush(el);
+      expect(item.checkVisibility()).toBe(true);
+      await expectNoA11yViolations(host);
+      item.click();
+      await flush(el);
+      expect(q(el, "[data-test=print-test-page-notice]")!.checkVisibility()).toBe(true);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
   it("renders agent editing accessibly", async () => {
     const { el, host } = await mountWidget<PrintersScreen>(
       "dashboard-printers-screen",

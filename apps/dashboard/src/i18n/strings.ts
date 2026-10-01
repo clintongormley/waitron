@@ -767,6 +767,8 @@ export const en = {
   "printers.resolution_hint":
     "Print the width ruler, then choose the last number you can see in full and measure the QR code’s black square, excluding the white border.",
   "printers.ruler_print": "Print width ruler",
+  "printers.print_test_page": "Print test page",
+  "printers.test_page_sent": "Test page sent to {name}",
   "printers.ruler_last_number": "Last number fully visible on the ruler",
   "printers.ruler_disagrees":
     "The ruler shows {ruler} dots, but this paper width and resolution print {setting} dots. Check the ruler and the QR code’s square again.",
@@ -2664,6 +2666,8 @@ export const es: Record<StringKey, string> = {
   "printers.resolution_hint":
     "Imprime la regla de ancho, elige el último número que se ve entero y mide el cuadrado negro del código QR, sin el borde blanco.",
   "printers.ruler_print": "Imprimir regla de ancho",
+  "printers.print_test_page": "Imprimir página de prueba",
+  "printers.test_page_sent": "Página de prueba enviada a {name}",
   "printers.ruler_last_number": "Último número de la regla que se ve entero",
   "printers.ruler_disagrees":
     "La regla muestra {ruler} puntos, pero este ancho de papel y esta resolución imprimen {setting} puntos. Vuelve a comprobar la regla y el cuadrado del código QR.",
