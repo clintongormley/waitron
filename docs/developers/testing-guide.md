@@ -773,6 +773,8 @@ Not measured: a venue's own sale rate, several sellers at once, and the box's ow
 The owner chose on 2026-09-30 to leave both routine checkpoints at Litestream's defaults, so neither
 setting shipped (`docs/backlog.md`, A130's entry).
 
+**Printing on real hardware**
+
 ## How long a job of pictures takes to print on the box is not measured
 
 Since 2026-10-01 (C107) every printed line is sent as a `GS v 0` picture rather than as text

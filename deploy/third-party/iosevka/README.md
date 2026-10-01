@@ -16,11 +16,13 @@ outline. The command that made it, run from the repository root:
 node packages/printing/scripts/build-glyph-table.mjs IosevkaTerm-Bold.ttf packages/printing/src/glyphs.ts
 ```
 
-That table is a Modified Version of the font in the words of its licence, and it is distributed
-under the same licence, the SIL Open Font License, Version 1.1. `LICENSE.md` in this folder is
-that licence, with the font's copyright line, and the table's own header repeats both and points
-at `/app/third-party/iosevka/LICENSE.md`, where this file is in the image. The copyright line
-names no Reserved Font Name.
+The licence defines a Modified Version as _"any derivative made by adding to, deleting, or
+substituting -- in part or in whole -- any of the components of the Original Version, by changing
+formats or by porting the Font Software to a new environment."_ That table is a Modified Version
+of the font in those words, and it is distributed under the same licence, the SIL Open Font
+License, Version 1.1. `LICENSE.md` in this folder is that licence, with the font's copyright line,
+and the table's own header repeats both and points at `/app/third-party/iosevka/LICENSE.md`, where
+this file is in the image. The copyright line names no Reserved Font Name.
 
 ## Where the font came from
 

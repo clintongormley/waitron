@@ -152,8 +152,12 @@ spec → plan → PR; fiscal-adjacent ones take owner sign-off at land.
 5. **The displays and the printers walked at the real box** (A4, A3) — till, handheld and KDS through
    [ui-review.md](ui-review.md), and the first physical print since #327: slips, duplicates, the
    drawer pulse, the feed-before-cut. #689 printed calibration samples and a sample receipt on the
-   owner's NT-806 and fired its drawer from the calibration test; a real sale's slip, the duplicates,
-   the cash-settlement drawer job and the feed-before-cut are still unwalked.
+   owner's NT-806 and fired its drawer from the calibration test. Since C107 every printout is drawn
+   as pictures, and none of them (the ruler page, the sample receipt, a receipt, a kitchen ticket)
+   has been photographed or recorded as printed; the owner's box will not start on this version
+   until its venue is reset, read from the code and not run on a box (C107's entry, "Upgrading a
+   venue that has used its printers refuses to start"). A real sale's slip, the duplicates, the
+   cash-settlement drawer job and the feed-before-cut are still unwalked.
 
 6. **Smaller, independent pieces**, in no fixed order: a dashboard screen for the modelo 303 download
    (*Detail → Reporting*); refusing requests from a device that is not enrolled (A4); the pairing
@@ -2917,12 +2921,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     the sample receipt and the calibration pages) is drawn on the server as a picture and sent with
     `GS v 0`, one picture per line. The letters come from a table of pictures made once from Iosevka
     Term Bold 34.9.0 (`packages/printing/src/glyphs.ts`); the box carries that table, not the font
-    file, and the font's licence ships at `/app/third-party/iosevka/`. Each picture is as wide as the
-    printer's line for its paper width and resolution (360, 384, 512 or 576 dots), and the text keeps
-    its 30 columns on 58 mm paper and 42 on 80 mm, centred in the picture, so no layout changed. The
-    QR code, the feed, the cut and the drawer pulse are the printer commands they were. How it works,
-    with pointers: `docs/developers/conventions-ui.md`, "Printed documents take the printer's own
-    layout settings".
+    file, and the font's licence ships at `/app/third-party/iosevka/`. Except on the calibration
+    ruler page, whose captions are 360 dots wide on every printer, each line's picture is as wide as
+    the printer's line for its paper width and resolution (360, 384, 512 or 576 dots), and the text
+    keeps its 30 columns on 58 mm paper and 42 on 80 mm, centred in the picture, so no layout
+    changed. The QR code, the feed, the cut and the drawer pulse are the printer commands they were.
+    How it works, with pointers: `docs/developers/conventions-ui.md`, "Printed documents take the
+    printer's own layout settings".
   - Printers no longer store a character set or a character table: the two columns, their API
     fields, the dashboard's Advanced text settings and the character-table test page are gone.
   - The calibration wizard has three steps. The first prints a width ruler, a picture 576 dots wide
@@ -2930,8 +2935,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     fully visible, which sets the paper width; the resolution is still read from the size of the QR
     code's black square, and a re-run keeps what is saved. If the two answers disagree, one line
     says so and the save is not blocked. Then the sample receipt, then the cash drawer.
-  - The print preview shows the printed pictures themselves, at their width on the printer's paper,
-    and its text, which tests read too, is read back from those pictures.
+  - The print preview shows the printed pictures themselves, each at its width against a paper that
+    stands for the job's own line: the width of the job's first picture that reads back as text, or
+    the printer's setting when none does. Its text, which tests read too, is read back from those
+    pictures.
   - **Upgrading a venue that has used its printers refuses to start.** The generated migration
     (`packages/db/drizzle/0053_drop_printer_character_set.sql`) rebuilds the `printers` table. Run
     on 2026-10-01 against a database migrated to the step before it, with one printer: with nothing
@@ -2949,17 +2956,22 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       `docs/developers/testing-guide.md`, "How long a job of pictures takes to print on the box is
       not measured").
     - Whether a job of pictures still needs the print area (`GS L`/`GS W`) that receipts and category
-      pages send is not measured.
+      pages send is not measured. The calibration ruler page sends a print area of 576 dots whatever
+      the printer.
     - At 203 dpi a line could hold 32 columns on 58 mm paper (384 ÷ 12) and 48 on 80 mm (576 ÷ 12);
       it keeps 30 and 42.
     - The 28-dot line cuts letters: by the generator's own report, 67 of its characters lose at
       least one dot that was half inside the letter, most of them accented capitals losing the top
       of the accent. Measured 2026-10-01 with a copy of the generator: a 30-dot line with the
       baseline 24 dots down leaves 3 (ď, ĥ, ŉ), and 31 or 32 dots still leave those 3.
-    - The preview reads at most 1 MiB of a job: about 770 lines at 384 dots wide, about 500 at
-      576. A deep category sales page printed about 1,000 lines in a test, so its preview is cut short.
+    - The preview reads at most 4 MiB of a job and shows at most 2,048 blocks (one per printed
+      line, feed, cut or QR code, among others), so a job of more than about 2,040 lines is cut
+      short at any width; a test previews 2,000 full-width lines at 576 dots whole. A deep category
+      sales page printed about 1,000 lines in a test.
     - What a printer narrower than 576 dots does with the part of the ruler beyond its head is not
-      measured; the preview shrinks a picture wider than the printer's line instead of cutting it.
+      measured. The preview shrinks a picture wider than the job's line instead of cutting it, so on
+      the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every
+      printer.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
@@ -6036,18 +6048,17 @@ ongoing overhaul listed at the top of Track A.
   Fields on pages and in a `wt-dialog` outside a modal are unchanged.
   `docs/developers/design-system.md` → "Structure" records the standard. _(2026-10-01, C107: the
   wizard has no "Print block" button or "Advanced text settings" any more; its width-ruler row holds
-  the cap.)_ Left open: a
-  `wt-disclosure`'s heading row (the calibration wizard's "Advanced text settings") and a screen's
-  own paragraphs still run the modal's full width; the product editor's description `<textarea>`,
-  which the screen styles itself, is not capped; the content-languages editor's rows of enabled
-  languages still put each Remove button at the modal's far edge (left for C111, which rewrites that
-  screen); a native select labelled by a separate `<label for>` keeps that label, and an error
-  outside it, at the modal's full width unless its screen caps the element wrapping them (the
-  adjustments reasons screen does; no other one was found in a modal); an inline label around a
-  select is not capped, so its select would sit beside the label text (none was found in a modal);
-  and forms built in `wt-dialog` rather than `wt-modal` (the ingredient form, the till's party name
-  dialog, among others) are held only by the dialog's own 768px limit — whether they should follow
-  the modal's form width is the owner's call.
+  the cap.)_ Left open: a `wt-disclosure`'s heading row (the product editor's Kitchen, Descriptors
+  and Nutrition sections, among others) and a screen's own paragraphs still run the modal's full
+  width; the product editor's description `<textarea>`, which the screen styles itself, is not
+  capped; the content-languages editor's rows of enabled languages still put each Remove button at
+  the modal's far edge (left for C111, which rewrites that screen); a native select labelled by a
+  separate `<label for>` keeps that label, and an error outside it, at the modal's full width unless
+  its screen caps the element wrapping them (the adjustments reasons screen does; no other one was
+  found in a modal); an inline label around a select is not capped, so its select would sit beside
+  the label text (none was found in a modal); and forms built in `wt-dialog` rather than `wt-modal`
+  (the ingredient form, the till's party name dialog, among others) are held only by the dialog's
+  own 768px limit — whether they should follow the modal's form width is the owner's call.
 
 - **A field's hint shows inside the empty field as its placeholder, not as a line under it (C104,
   owner 2026-09-30) — DONE (2026-10-01, #966).** _(2026-10-01, C119: the bill discount limit's
@@ -7025,7 +7036,8 @@ approved.
     rows (read from the migration; the guard's two rows were gone after it), so a box holding
     drawer-open records when it took that migration would have lost them — inferred, not run on a
     box. Whether the owner's box held any then was not checked. Runtime: about 8.1 seconds
-    before, 9.9 after (three runs each, locally).
+    before, 9.9 after (three runs each, locally). _(2026-10-01, C107: `RESETS` now lists eight; C107
+    added core `0053_drop_printer_character_set`.)_
 
   What it still does not cover, each needed before a real venue is live:
   - **Rows.** _(2026-10-01: synthetic rows DONE by A164, above.)_ The guard now carries two

@@ -459,19 +459,22 @@ Every line is drawn on the server as a 1-bit picture 28 dots tall and sent with 
 per line (`EscBuilder`, `packages/printing/src/escpos.ts`). Each letter is a 12-dot-wide picture from
 a table derived from the font Iosevka Term Bold (`packages/printing/src/glyphs.ts`, made by
 `packages/printing/scripts/build-glyph-table.mjs`; the licence ships from `deploy/third-party/iosevka/`),
-so what prints does not depend on the character tables a printer holds. A line's picture is as wide
-as the printer's dots across for its paper width and resolution, 360, 384, 512 or 576 (`textGrid`,
-`packages/printing/src/layout.ts`, which says where each number comes from; 576 is unmeasured), and
-its text sits on a grid of 30 columns on 58mm paper and 42 on 80mm whatever the resolution, centred
-in the picture. Text is passed through `prepareText` before it is measured, which turns a character
-the table cannot draw into a fixed replacement, the same character without its accents, or `?`, and through
-`wrapText`/`labelAmountLines` before it is printed, so one character is one column. Receipts and
-category sales pages also set the printer's print area to the picture's width (`printArea`, `GS L`
-and `GS W`); whether a job made of pictures still needs that has not been measured. The fiscal QR is
-a raster image too, its dot size chosen per receipt by `chooseQrDots` for the largest fitting size
-at most 40mm, reaching 30mm where the grid and paper allow it, including its blank border when
-checking the paper width — never the printer's own built-in QR command, which cannot be sized this
-way. The feed, the cut and the drawer pulse are printer commands, not pictures.
+so what prints does not depend on the character tables a printer holds. Outside the calibration
+ruler page, a line's picture is as wide as the printer's dots across for its paper width and
+resolution, 360, 384, 512 or 576 (`textGrid`, `packages/printing/src/layout.ts`, which says where
+each number comes from; 576 is unmeasured), and its text sits on a grid of 30 columns on 58mm paper
+and 42 on 80mm whatever the resolution, centred in the picture. Text is passed through `prepareText`
+before it is measured, which turns a character the table cannot draw into a fixed replacement, the
+same character without its accents, or `?`, and through `wrapText`/`labelAmountLines` before it is
+printed, so one character is one column. Receipts and category sales pages also set the printer's
+print area to the picture's width (`printArea`, `GS L` and `GS W`). The calibration ruler page
+(`apps/server/src/test-page.ts`) is the exception to both: whatever the printer, it sets a print
+area of 576 dots and draws its captions 360 dots wide. Whether a job made of pictures still needs a
+print area has not been measured. The fiscal QR is a raster image too, its dot size chosen per
+receipt by `chooseQrDots` for the largest fitting size at most 40mm, reaching 30mm where the grid
+and paper allow it, including its blank border when checking the paper width — never the printer's
+own built-in QR command, which cannot be sized this way. The feed, the cut and the drawer pulse are
+printer commands, not pictures.
 
 The print preview shows the job's own pictures, and the text it reports is read back from them
 (`apps/server/src/print-job-preview.ts`, through `readRasterText` in
