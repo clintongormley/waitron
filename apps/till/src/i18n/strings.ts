@@ -487,8 +487,7 @@ export const en = {
     "Enter a quantity greater than zero and no more than the amount ordered",
   "table.split_options_together": "Dishes with options must be moved in full",
   "table.split_modifier_error": "Dishes with options must be moved in full",
-  "table.split_held_error":
-    "Send held items to the kitchen, or fire their group, before moving them to another bill",
+  "table.split_held_error": "Send held items to the kitchen before moving them to another bill",
   "table.round_sending": "Sending the order…",
   "table.draft_actions": "Send the order",
   "table.draft_send_all": "Send all",
@@ -1261,7 +1260,7 @@ export const es: Record<StringKey, string> = {
   "table.split_options_together": "Los platos con opciones deben moverse completos",
   "table.split_modifier_error": "Los platos con opciones deben moverse completos",
   "table.split_held_error":
-    "Envía los artículos en espera a cocina, o marcha su grupo, antes de pasarlos a otra cuenta",
+    "Envía los artículos en espera a cocina antes de pasarlos a otra cuenta",
   "table.round_sending": "Enviando el pedido…",
   "table.draft_actions": "Enviar el pedido",
   "table.draft_send_all": "Enviar todo",

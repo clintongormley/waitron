@@ -261,6 +261,7 @@ lands.
   - `splitOffCheck` needs a table pointing at the source (`:3221`) and refuses held lines
     (`tab.split_held_line`, `:2974-2976`). The owner kept that refusal on 2026-09-26: see the
     "Superseded" note under D1 of the service plan.
+    _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
 - **`assertAnchoredTabOpen` guards more than rounds.** It has eight callers:
   - `priceTabRound` (`:1783`), `carveBetweenTabs` (`:2876`) and `splitOffCheck` (`:3221`);
   - `sendLines` (`:1489`), `recallLines` (`:1594`), `voidTabLine` (`:1916`), `setLineCourse`
@@ -540,6 +541,7 @@ flagged for the owner in their PRs.**
 - **P20. Split a bill** starts from any open bill, including a counter order. The new bill copies the
   source's `party_id`, which is null for a counter order.
   - Held lines stay refused (`tab.split_held_line`, the owner's 2026-09-26 ruling).
+    _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
   - A presented bill is `bill.presented`.
   - Paid items stay where they are (`bill.line_paid`, as today).
 - **P21. Merge and Transfer** stay inside one party, between untouched bills (P3). Lines keep their
@@ -2266,6 +2268,7 @@ until Task 10, so nothing the till does changes in this PR.
   - If a line in a held GROUP (no ticket) passes the split refusal today, `splitBill` must detect a
     held line by `order_groups.state = 'held'` as well as by an unfired ticket. That keeps the
     owner's 2026-09-26 ruling (held work never goes onto a split bill).
+    _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
   - Record which it is in the ledger. The Step 1 test below fails if the detection is wrong.
 
 - [ ] **Step 1: Write the failing tests.** `apps/server/src/party-bill-actions.test.ts`, on Task 2's
@@ -2346,6 +2349,8 @@ until Task 10, so nothing the till does changes in this PR.
   - **split:** a held line is refused `tab.split_held_line` (Step 0's detection); a paid bill is
     `bill.paid`; an empty batch is `sale.empty_basket`; a stale revision is `party.out_of_date`;
     a counter order (no party) splits onto a new counter order whose `party_id` is null.
+    _(2026-10-01: the held-line refusal is lifted for held groups by B20, owner 2026-09-30; see
+    docs/backlog.md.)_
   - **merge:**
     - two untouched bills of one party: every line lands on `into` with its group and credit, and
       `from` is `abandoned`;

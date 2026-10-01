@@ -190,6 +190,7 @@ names it so the owner can overturn it at review.
     **Superseded 2026-09-26 (owner):** `tab.split_held_line` stays thrown, and a held line is still
     refused onto a check; the owner routes paying for one held item through Tasks 14 and 15's bill
     payment instead — see `docs/backlog.md`.
+    _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
   - **No unique index on `position`.** A reorder rewrites several rows one at a time, and a unique
     index there breaks midway although the final state satisfies it (CLAUDE.md §3). Lists order by
     `position`, then `created_at`. Say so at the column.
@@ -1049,6 +1050,7 @@ tests drive the routes.
   `tab.split_held_line` means after M7b. **Superseded 2026-09-26 (owner):** `tab.split_held_line`
   stays thrown and keeps its test; see the note under "The decisions this plan makes" and
   `docs/backlog.md`.
+  _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
 - [ ] **Step 1: Write the failing tests:**
   - **The spec's example (§3, §12 item 3):** a seated visit and a draft of Beer ×2 and Water
     (drinks), four cold starters, four warm starters, Steak ×2 and Fish (mains), and Flan ×2
@@ -1134,6 +1136,7 @@ tests drive the routes.
     line to another table, which `main` allows. Name each in the PR.
     **Superseded 2026-09-26 (owner):** keep the `tab.split_held_line` refusal and its test; see the
     note under "The decisions this plan makes" and `docs/backlog.md`.
+    _(2026-10-01: lifted for held groups by B20, owner 2026-09-30; see docs/backlog.md.)_
 
   Run them: they FAIL.
 - [ ] **Step 2: Implement.** Step 3: run the focused tests plus `apps/server` `test:coverage`, and

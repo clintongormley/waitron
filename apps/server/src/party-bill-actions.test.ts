@@ -16,7 +16,7 @@ import { createPinThrottle, loginWithPin } from "@waitron/identity";
 import { createPrinter } from "@waitron/printing";
 import { mergeBills, requireUntouched, splitBill, transferItems } from "./bill-actions.js";
 import { takeBillPayment } from "./bill-payments.js";
-import { placeGroups } from "./order-groups.js";
+import { fireGroup, placeGroups } from "./order-groups.js";
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -317,7 +317,7 @@ describe("split a bill", () => {
     expect(v.db.all(sql`select id from working_orders order by id`)).toEqual(billsBefore);
   });
 
-  it("refuses a dish held for the kitchen, changing nothing", async () => {
+  it("puts a dish held for the kitchen on the new bill, keeping its group", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa 7"));
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
@@ -325,18 +325,16 @@ describe("split a bill", () => {
         { names: ["Flan"], release: "hold" },
       ]),
     );
-    const before = await snapshot(partyId, [tabId]);
+    const [, held] = await linesOf(v, tabId);
 
-    const error = await captureError(() => splitOff(partyId, tabId, [2]));
+    const made = await splitOff(partyId, tabId, [2]);
 
-    expect(error).toMatchObject({
-      code: "tab.split_held_line",
-      params: { tabId, lineNo: 2 },
-    });
-    expect(await snapshot(partyId, [tabId])).toEqual(before);
+    expect(held!.groupId).not.toBeNull();
+    expect((await linesOf(v, tabId)).map((l) => l.name)).toEqual(["Burger"]);
+    expect(await linesOf(v, made)).toMatchObject([{ name: "Flan", groupId: held!.groupId }]);
   });
 
-  it("refuses a dish in a held group that the kitchen has no ticket for, changing nothing", async () => {
+  it("puts a dish in a held group that the kitchen has no ticket for on the new bill, keeping its group", async () => {
     const { partyId, tabId } = await seat(v, await v.table("Mesa 8"));
     await inTx(v, (tx) =>
       orderGroups(tx, partyId, [
@@ -344,15 +342,13 @@ describe("split a bill", () => {
         { names: ["Agua"], release: "hold" },
       ]),
     );
-    const before = await snapshot(partyId, [tabId]);
+    const [, held] = await linesOf(v, tabId);
 
-    const error = await captureError(() => splitOff(partyId, tabId, [2]));
+    const made = await splitOff(partyId, tabId, [2]);
 
-    expect(error).toMatchObject({
-      code: "tab.split_held_line",
-      params: { tabId, lineNo: 2 },
-    });
-    expect(await snapshot(partyId, [tabId])).toEqual(before);
+    expect(held!.groupId).not.toBeNull();
+    expect((await linesOf(v, tabId)).map((l) => l.name)).toEqual(["Burger"]);
+    expect(await linesOf(v, made)).toMatchObject([{ name: "Agua", groupId: held!.groupId }]);
   });
 
   it("refuses a paid bill, changing nothing", async () => {
@@ -457,6 +453,112 @@ async function orderGroups(
     operatorId: OPERATOR,
   });
 }
+
+describe("a held dish split onto a check", () => {
+  const filed = (billId: string) =>
+    v.db.all(sql`
+      select importe_total as total from registros_facturacion
+      where sale_id in (select id from sales where working_order_id = ${billId})`);
+  const flanTickets = (partyId: string) =>
+    v.db.all(sql`
+      select t.working_order_id as billId, t.fired_at is not null as fired
+      from ticket_items t
+      join working_order_lines l on l.id = t.working_order_line_id
+      join working_orders o on o.id = t.working_order_id
+      where o.party_id = ${partyId} and l.name = 'Flan'`);
+
+  async function fireHeld(partyId: string, groupId: string): Promise<void> {
+    const command = await commandFor(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, groupId, { ...command, submissionId: randomUUID() }),
+    );
+  }
+
+  /**
+   * A party whose Burger is fired and whose Flan, held in a group, is split onto a check, with a
+   * printer at the Flan's station attached only now, so it prints only what the firing sends.
+   */
+  async function heldFlanOnCheck(label: string) {
+    const { partyId, tabId } = await seat(v, await v.table(label));
+    await inTx(v, (tx) =>
+      orderGroups(tx, partyId, [
+        { names: ["Burger"], release: "fire" },
+        { names: ["Flan"], release: "hold" },
+      ]),
+    );
+    const [, flan] = await linesOf(v, tabId);
+    const [station] = v.db.all<{ stationId: string }>(sql`
+      select t.station_id as stationId from ticket_items t
+      where t.working_order_line_id = (
+        select id from working_order_lines where working_order_id = ${tabId} and line_no = 2)`);
+    const printerId = await inTx(v, async (tx) => {
+      const { id } = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        {
+          name: `P-${randomUUID().slice(0, 8)}`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        },
+      );
+      await attachPrinterToStation(tx, { stationId: station!.stationId, printerId: id });
+      return id;
+    });
+    const checkId = await splitOff(partyId, tabId, [2]);
+    return { partyId, tabId, checkId, groupId: flan!.groupId!, printerId };
+  }
+
+  /** What the kitchen got for the Flan and what each bill was charged. */
+  async function outcome(held: Awaited<ReturnType<typeof heldFlanOnCheck>>) {
+    const jobs = await inTx(v, (tx) =>
+      tx
+        .select({ payload: printJobs.payload })
+        .from(printJobs)
+        .where(eq(printJobs.printerId, held.printerId)),
+    );
+    return {
+      tickets: flanTickets(held.partyId),
+      flanTicketsPrinted: jobs.filter((job) =>
+        printedLines(job.payload).join("\n").includes("FLAN"),
+      ).length,
+      group: v.db.all(sql`select state from order_groups where id = ${held.groupId}`),
+      check: filed(held.checkId),
+      tab: filed(held.tabId),
+    };
+  }
+
+  const KITCHEN_ONCE_AND_CHARGED_ON_THE_CHECK = (checkId: string) => ({
+    tickets: [{ billId: checkId, fired: 1 }],
+    flanTicketsPrinted: 1,
+    group: [{ state: "fired" }],
+    check: [{ total: "5.00" }],
+    tab: [{ total: "12.00" }],
+  });
+
+  it("reaches the kitchen once, stamped sent, and is charged on the check alone when fired before the check is paid", async () => {
+    const held = await heldFlanOnCheck("Mesa held fired first");
+
+    await fireHeld(held.partyId, held.groupId);
+    await pay(v, held.checkId, "5.00");
+    await pay(v, held.tabId, "12.00");
+
+    expect(await outcome(held)).toEqual(KITCHEN_ONCE_AND_CHARGED_ON_THE_CHECK(held.checkId));
+    const [sent] = await lineRows(held.checkId);
+    expect(sent).toMatchObject({ name: "Flan", groupId: held.groupId });
+    expect(sent!.sentAt).not.toBeNull();
+  });
+
+  // Not asserted: the line's sent stamp; see the sent-stamp gap noted in docs/backlog.md (B20).
+  it("reaches the kitchen once and is charged on the check alone when the check is paid before it is fired", async () => {
+    const held = await heldFlanOnCheck("Mesa held paid first");
+
+    await pay(v, held.checkId, "5.00");
+    await fireHeld(held.partyId, held.groupId);
+    await pay(v, held.tabId, "12.00");
+
+    expect(await outcome(held)).toEqual(KITCHEN_ONCE_AND_CHARGED_ON_THE_CHECK(held.checkId));
+  });
+});
 
 describe("merge bills", () => {
   it("moves every line onto the bill merged into, keeping its group and credit, and abandons the other", async () => {

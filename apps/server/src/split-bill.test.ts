@@ -888,16 +888,13 @@ describe("splitting a line the kitchen has", () => {
   });
 });
 
-/**
- * A check is paid straight after the split and cannot be sent (`sendLines` refuses anything but a
- * tab), so held kitchen work never goes onto one.
- */
+/** A held round has no group, so firing a group never reaches it. */
 describe("splitting held kitchen work onto a check", () => {
   it.each([
     ["whole", undefined],
     ["part", "1"],
   ] as const)(
-    "refuses to move a held line (%s) onto a check, moving nothing, and still splits a fired one",
+    "refuses to move a held line of no group (%s) onto a check, moving nothing, and still splits a fired one",
     async (_, quantity) => {
       const { cfg, aguaId, tableId } = await setupVenue();
       await withKitchen(cfg);

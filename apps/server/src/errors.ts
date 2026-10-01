@@ -562,8 +562,8 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * A split onto a new bill named a line whose kitchen ticket is still held (not fired). `lineNo`
-     * is the offending source line.
+     * A split onto a new bill named a line whose kitchen ticket is unfired and whose group is not
+     * held (a recalled dish, or a held round with no group). `lineNo` is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };
     /** No service status with this id. */
