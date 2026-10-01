@@ -1,7 +1,12 @@
-import type { CountryPack, FiscalModules, ReceiptLanguageRules } from "@waitron/country";
+import type {
+  CountryPack,
+  FiscalModules,
+  ReceiptLabels,
+  ReceiptLanguageRules,
+} from "@waitron/country";
 import { contentLanguageRules, receiptLanguageRules, resolveCountryLocale } from "@waitron/country";
 import { contentLanguageCode, type ContentLanguageRules } from "@waitron/shared";
-import { SPAIN } from "@waitron/country-es";
+import { SPAIN, SPAIN_RECEIPT_LABELS } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
 export type { FiscalModules } from "@waitron/country";
@@ -111,4 +116,14 @@ export function resolveInstalledReceiptLanguageRules(input: VenueGeography): Rec
   const pack = packFor(input);
   if (pack === undefined) return { choices: [], defaultLocale: FALLBACK_RECEIPT_LOCALE };
   return receiptLanguageRules(pack, input.area);
+}
+
+/** A receipt's fixed words in `locale`. A locale no installed pack labels (a stored `en-GB`, a bare
+ * `es`) prints Spain's Spanish words, so a receipt never prints without them. */
+export function receiptLabelsFor(locale: string): ReceiptLabels {
+  for (const pack of COUNTRY_PACKS) {
+    const labels = pack.receiptLabels?.[locale];
+    if (labels !== undefined) return labels;
+  }
+  return SPAIN_RECEIPT_LABELS["es-ES"];
 }

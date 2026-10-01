@@ -5,6 +5,8 @@ import type {
   ValidationResult,
 } from "@waitron/country";
 
+import { SPAIN_RECEIPT_LABELS } from "./receipt-labels.js";
+
 export type SpanishNifKind = "personal" | "foreigner" | "tax-assigned-personal" | "entity";
 export type SpanishPhoneKind = "mobile" | "geographic";
 
@@ -269,6 +271,7 @@ export const SPAIN: CountryPack = {
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",
   invoiceLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
+  receiptLabels: SPAIN_RECEIPT_LABELS,
   officialLocales: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],
   moduleIds: ["workforce-es"],
   availableForVenueSetup: true,

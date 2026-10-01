@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  RECEIPT_LABEL_KEYS,
   findAdministrativeAreaByPostalCode,
   receiptLanguageRules,
   resolveFiscalJurisdiction,
@@ -219,6 +220,30 @@ describe("receipt language", () => {
         choices: OFFICIAL,
         defaultLocale: "es-ES",
       });
+    },
+  );
+});
+
+describe("receipt labels", () => {
+  it("labels exactly the pack's receipt languages", () => {
+    expect(Object.keys(SPAIN.receiptLabels ?? {}).sort()).toEqual([...SPAIN.invoiceLocales].sort());
+  });
+
+  it.each(SPAIN.invoiceLocales)("gives %s every label as non-empty text", (locale) => {
+    const labels = SPAIN.receiptLabels?.[locale];
+    expect(Object.keys(labels ?? {}).sort()).toEqual([...RECEIPT_LABEL_KEYS].sort());
+    for (const key of RECEIPT_LABEL_KEYS) {
+      expect(typeof labels?.[key], key).toBe("string");
+      expect(labels?.[key].trim(), key).not.toBe("");
+    }
+  });
+
+  it.each(SPAIN.invoiceLocales)(
+    "keeps the never-translated Veri*Factu legend and QR caption out of %s",
+    (locale) => {
+      const values = Object.values(SPAIN.receiptLabels?.[locale] ?? {});
+      expect(values).not.toContain("VERI*FACTU");
+      expect(values).not.toContain("QR tributario:");
     },
   );
 });

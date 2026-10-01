@@ -51,11 +51,37 @@ export interface FiscalJurisdiction {
   readonly modules?: FiscalModules;
 }
 
+/** The fixed words a printed receipt carries, one set per receipt language. */
+export const RECEIPT_LABEL_KEYS = [
+  "nif",
+  "invoice",
+  "date",
+  "order",
+  "base",
+  "vat",
+  "total",
+  "cash",
+  "change",
+  "card",
+  "tip",
+  "charged",
+  "refund",
+  "comp",
+  "discount",
+  "reference",
+  "duplicate",
+  "practice",
+] as const;
+
+export type ReceiptLabels = Readonly<Record<(typeof RECEIPT_LABEL_KEYS)[number], string>>;
+
 export interface CountryPack {
   readonly countryCode: string;
   readonly defaultLocale: string;
   readonly defaultTimeZone: string;
   readonly invoiceLocales: readonly string[];
+  /** Keyed by invoice locale. */
+  readonly receiptLabels?: Readonly<Record<string, ReceiptLabels>>;
   readonly officialLocales?: readonly string[];
   readonly moduleIds: readonly string[];
   /** Whether this pack has enough validated fiscal behavior to create a venue in the setup wizard. */

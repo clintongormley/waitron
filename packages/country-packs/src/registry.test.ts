@@ -6,6 +6,7 @@ import {
   findFiscalModules,
   getCountryPack,
   getVenueSetupCountryPack,
+  receiptLabelsFor,
   resolveInstalledContentLanguageRules,
   resolveInstalledCountryLocale,
   resolveInstalledDefaultContentLanguage,
@@ -156,5 +157,23 @@ describe("receipt-language rules", () => {
         choices: [],
         defaultLocale: "es-ES",
       });
+  });
+});
+
+describe("receipt labels", () => {
+  // Compared with the pack's own entries rather than spelled out: the words are Spanish-domain
+  // vocabulary, which this package's English-only guard refuses (`scripts/english-only.test.ts`).
+  const spain = getCountryPack("ES")!.receiptLabels!;
+
+  it("finds a locale's labels in the pack that has them", () => {
+    expect(receiptLabelsFor("ca-ES")).toBe(spain["ca-ES"]);
+    expect(receiptLabelsFor("ca-ES").date).toBe("Data");
+    expect(receiptLabelsFor("es-ES")).toBe(spain["es-ES"]);
+    expect(receiptLabelsFor("es-ES").date).not.toBe("Data");
+  });
+
+  it("prints Spain's Spanish labels for a locale no installed pack labels", () => {
+    for (const locale of ["en-GB", "es", "fr-FR"])
+      expect(receiptLabelsFor(locale)).toBe(spain["es-ES"]);
   });
 });
