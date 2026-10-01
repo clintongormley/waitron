@@ -1938,7 +1938,7 @@ it("finishes a product add that was out when its section left the menu, closing 
   );
 });
 
-it("shows no In this section marks from another list in a picker whose section left the menu while its add is out", async () => {
+it("hides no products from another list in a picker whose section left the menu while its add is out", async () => {
   const live = new LiveData();
   const adding = deferred<{ added: number }>();
   const client = api({ liveData: live, addSectionProducts: vi.fn(() => adding.promise) });

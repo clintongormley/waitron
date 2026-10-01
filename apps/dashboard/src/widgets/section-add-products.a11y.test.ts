@@ -23,7 +23,15 @@ const products = [
   { id: "p-burger", name: "Burger", categoryId: null },
 ];
 
-const states = ["empty", "populated", "filtered", "no-matches", "busy", "invalid"] as const;
+const states = [
+  "empty",
+  "populated",
+  "filtered",
+  "no-matches",
+  "busy",
+  "invalid",
+  "all-in-section",
+] as const;
 
 describe.each(["light", "dark"] as const)("section add products (%s)", (theme) => {
   it.each(states)("renders %s accessibly", async (state) => {
@@ -32,7 +40,7 @@ describe.each(["light", "dark"] as const)("section add products (%s)", (theme) =
       {
         products: state === "empty" ? [] : products,
         categories,
-        inSection: ["p-lemonade"],
+        inSection: state === "all-in-section" ? products.map(({ id }) => id) : ["p-lemonade"],
         onMenu: ["p-burger", "p-lemonade"],
         busy: state === "busy",
       },
