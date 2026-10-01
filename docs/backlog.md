@@ -1534,9 +1534,14 @@ out at 4.1:1 (light) and 4.49:1 (dark), under the 4.5:1 small text needs. Label,
 text reuse `--wt-color-text-muted`, `--wt-color-text` and `--wt-color-danger`, all above 4.5:1 on
 the fill in both themes.
 
-**Next action:** spec → plan from the approved mockups. The open questions above (the custom
-dropdown's keyboard and screen-reader behaviour, and whether the till follows) are still the
-spec's to settle. The mockups are drawn at 14px in the system font, which is A179.
+**Spec and plan written 2026-10-01 (A178s), waiting for the owner's approval:**
+`docs/superpowers/specs/2026-10-01-filled-form-fields-design.md` and
+`docs/superpowers/plans/2026-10-01-filled-form-fields.md`. They settle the open questions — one
+dropdown primitive (`wt-combobox`, extended, with the keyboard of a select), a new `wt-textarea`,
+the till following, every hand-drawn field listed file by file, the tokens, and a closing guard —
+and ask the owner nine points (spec §12), among them six pull requests rather than one and the
+three kinds of test edit the move needs. Nothing is built until the owner approves. The mockups
+are drawn at 14px in the system font, which is A179.
 
 **Smaller text: the system font at 14px (A179, owner 2026-10-01) — DONE 2026-10-01, #988.** The owner:
 _"i find our text to be too big"_. Body text was `--wt-font-size-md`, 15px, with
