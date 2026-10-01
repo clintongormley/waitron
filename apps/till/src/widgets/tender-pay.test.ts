@@ -560,7 +560,7 @@ describe("till-tender-pay", () => {
     expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
   });
 
-  it("Modes I/T at the order stage show Place + Hold, not Pay/Card", async () => {
+  it("Modes I/T at the order stage show Pay + Card beside Place + Hold", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -570,8 +570,8 @@ describe("till-tender-pay", () => {
     });
     expect(query(el, ".place")).not.toBeNull();
     expect(query(el, ".hold")).not.toBeNull();
-    expect(query(el, ".pay")).toBeNull();
-    expect(query(el, ".pay-card")).toBeNull();
+    expect(query(el, ".pay")).not.toBeNull();
+    expect(query(el, ".pay-card")).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("action.place"));
   });
 
