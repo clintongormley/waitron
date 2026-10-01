@@ -58,6 +58,7 @@ import {
   deletePreparationRoute,
   allowMenuInZone,
   findOrderServiceContext,
+  findOrderServiceModes,
   getOrderServiceContext,
   listDepartmentHours,
   listDepartments,
@@ -2501,6 +2502,52 @@ describe("each served menu's structure and home layouts", () => {
         sectionId: venue.drinks,
         members: [],
       });
+    });
+  });
+});
+
+describe("findOrderServiceModes", () => {
+  it("reads every named order's frozen service mode in one query, leaving out an order with none", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const dining = await openOrder(tx, venue, 1);
+      const bar = await openOrder(tx, venue, 2);
+      const none = await openOrder(tx, venue, 3);
+      await recordOrderServiceContext(tx, cfg, dining, venue.diningZone);
+      await recordOrderServiceContext(tx, cfg, bar, venue.barZone);
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      prepared.mockClear();
+
+      const modes = await findOrderServiceModes(tx, cfg, [dining, bar, none]);
+
+      expect(prepared).toHaveBeenCalledTimes(1);
+      expect(modes).toEqual(
+        new Map([
+          [dining, "table_tab"],
+          [bar, "prepay"],
+        ]),
+      );
+    });
+  });
+
+  it("reads nothing for no orders", async () => {
+    const venue = await seedSellingVenue();
+    await scoped(async (tx) => {
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+      prepared.mockClear();
+      await expect(findOrderServiceModes(tx, venue.cfg, [])).resolves.toEqual(new Map());
+      expect(prepared).not.toHaveBeenCalled();
+    });
+  });
+
+  it("does not read another location's orders", async () => {
+    const venue = await seedSellingVenue();
+    const elsewhere = { locationId: brandLocationId(await seedLocation("Elsewhere")) };
+    await scoped(async (tx) => {
+      const order = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, venue.cfg, order, venue.diningZone);
+      await expect(findOrderServiceModes(tx, elsewhere, [order])).resolves.toEqual(new Map());
     });
   });
 });

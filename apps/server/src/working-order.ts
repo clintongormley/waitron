@@ -4774,7 +4774,12 @@ async function sentUnpaidCounterOrder(
 ): Promise<boolean> {
   if (order.status !== "placed" || order.partyId !== null) return false;
   const context = await VENUE_SERVICE.findOrderContext(tx, cfg, id);
-  return PAY_AFTER_SENDING.has(context?.serviceMode ?? cfg.orderFlow);
+  return paysAfterSending(context?.serviceMode, cfg);
+}
+
+/** An order with no frozen mode takes the venue's order flow. */
+function paysAfterSending(mode: string | undefined, cfg: TillConfig): boolean {
+  return PAY_AFTER_SENDING.has(mode ?? cfg.orderFlow);
 }
 
 /** A counter order the counter is still waiting on: sent and not paid, or paid and not handed over. */
@@ -4836,15 +4841,17 @@ export async function listCounterWaiting(
       )
       .groupBy(workingOrders.id)
       .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
+    const modes = await VENUE_SERVICE.findOrderModes(
+      tx,
+      cfg,
+      rows.filter((row) => row.status === "placed").map((row) => row.id),
+    );
     const waiting: CounterWaitingOrder[] = [];
-    // One service-context read per placed row: the venue-service seat has no batch read of order
-    // modes, and adding one changes the seat's pinned key list
-    // (`packages/venue-service/src/service.test.ts`).
     for (const row of rows) {
       const eligible =
         Boolean(row.fired) &&
         row.collectedAt === null &&
-        (row.status === "settled" || (await sentUnpaidCounterOrder(tx, cfg, row.id, row)));
+        (row.status === "settled" || paysAfterSending(modes.get(row.id), cfg));
       waiting.push({
         id: row.id,
         orderNumber: row.orderNumber,

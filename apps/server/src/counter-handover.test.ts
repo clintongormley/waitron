@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { floorZones, invoiceSeries, workingOrders } from "@waitron/db";
@@ -570,6 +570,22 @@ describe("GET /api/orders/counter-waiting", () => {
     expect(ids.indexOf(older)).toBeLessThan(ids.indexOf(newer));
     const opened = (await waiting()).map((r) => r.openedAt);
     expect(opened).toEqual([...opened].sort());
+  });
+
+  it("reads the service modes once, however many placed orders it lists", async () => {
+    await placed("ticket_then_pay", "Tarta");
+    await placed("invoice_first", "Tarta");
+    const batch = vi.spyOn(VENUE_SERVICE, "findOrderModes");
+    const single = vi.spyOn(VENUE_SERVICE, "findOrderContext");
+    try {
+      const rows = await waiting();
+      expect(rows.filter((r) => r.status === "placed" && r.canHandOver).length).toBeGreaterThan(1);
+      expect(batch).toHaveBeenCalledTimes(1);
+      expect(single).not.toHaveBeenCalled();
+    } finally {
+      batch.mockRestore();
+      single.mockRestore();
+    }
   });
 
   it("requires a signed-in session", async () => {

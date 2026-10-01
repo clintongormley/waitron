@@ -747,6 +747,28 @@ export async function findOrderServiceContext(
   return row === undefined ? null : { ...row, serviceMode: row.serviceMode as ServiceMode };
 }
 
+/** Each named order's frozen service mode, read at once; an order with no context is absent. */
+export async function findOrderServiceModes(
+  tx: Transaction,
+  cfg: VenueScope,
+  workingOrderIds: readonly string[],
+): Promise<ReadonlyMap<string, ServiceMode>> {
+  if (workingOrderIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      workingOrderId: orderServiceContexts.workingOrderId,
+      serviceMode: orderServiceContexts.serviceMode,
+    })
+    .from(orderServiceContexts)
+    .where(
+      and(
+        eq(orderServiceContexts.locationId, cfg.locationId),
+        inArray(orderServiceContexts.workingOrderId, [...workingOrderIds]),
+      ),
+    );
+  return new Map(rows.map((row) => [row.workingOrderId, row.serviceMode as ServiceMode]));
+}
+
 export async function listWorkingLineContexts(
   tx: Transaction,
   cfg: VenueScope,
