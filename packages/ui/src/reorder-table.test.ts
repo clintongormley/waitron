@@ -27,6 +27,7 @@ class TestReorderHost extends LitElement {
   static override styles = [ReorderController.styles];
   @property({ attribute: false }) items: { id: string; name: string; height?: number }[] = [];
   @property({ type: Boolean }) busy = false;
+  announcementText = "{item} moved to position {index} of {total}";
   readonly #reorder = new ReorderController(
     this,
     {
@@ -40,7 +41,7 @@ class TestReorderHost extends LitElement {
       busy: () => this.busy,
       reorderLabel: "Reorder",
     } satisfies ReorderModel,
-    { announce: announcement },
+    { announce: () => this.announcementText },
   );
   override render() {
     return html`<table>
@@ -106,11 +107,10 @@ it("moves a row down with the keyboard and announces its new position politely",
 
 it("uses the injected announcement in the live region", async () => {
   const el = await mount();
+  el.announcementText = "Position {index}/{total}: {item}";
   press(el, "a", "ArrowDown");
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe(
-    "One moved to position 2 of 3",
-  );
+  expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toBe("Position 2/3: One");
 });
 
 it("leaves the order and the live region untouched at an end, on another key, and while busy", async () => {
