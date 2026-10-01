@@ -410,10 +410,10 @@ describe("search and sorting", () => {
     });
   });
 
-  it("matches whole words only, and treats a query as text", async () => {
+  it("matches a finished word whole, and treats a query as text", async () => {
     await withTransaction(suite.db, async (tx) => {
       await uploadImage(tx, { image: photo, names: { en: "Bread" } }, { fallbackLanguage: "en" });
-      expect(await listImages(tx, { query: "bre" })).toEqual({ images: [], total: 0 });
+      expect(await listImages(tx, { query: "bre " })).toEqual({ images: [], total: 0 });
       expect((await listImages(tx, { query: "'; drop table products; --" })).total).toBe(0);
     });
   });
@@ -477,6 +477,7 @@ describe("search and sorting", () => {
 describe("input boundaries", () => {
   it.each([
     { query: "x".repeat(501) },
+    { query: `${"x".repeat(499)}${" ".repeat(2)}` },
     { offset: -1 },
     { offset: 0.5 },
     { limit: 0 },
@@ -769,6 +770,24 @@ describe("relevance scores and tie-breaks", () => {
           expect(await ids(tx, { sort, direction })).toEqual([low, high]);
         }
       }
+    });
+  });
+
+  it("ranks a whole-word match above a match on the start of a longer word", async () => {
+    const low = "00000000-0000-4000-8000-000000000001";
+    const high = "00000000-0000-4000-8000-000000000002";
+    await withTransaction(suite.db, async (tx) => {
+      // The id tie-break alone would list the prefix-only match, which has the lower id, first.
+      for (const [id, filename, name] of [
+        [low, `${"b".repeat(64)}.webp`, "Chicken"],
+        [high, `${"c".repeat(64)}.webp`, "Chick peas"],
+      ] as const) {
+        await tx.insert(mediaImages).values({ id, filename, names: { en: name } });
+      }
+      const options = { fallbackLanguage: "en" } as const;
+      expect(await ids(tx, { ...options, query: "chick" })).toEqual([high, low]);
+      // With the whole word in both, the tie-break decides again.
+      expect(await ids(tx, { ...options, query: "chick OR chicken" })).toEqual([low, high]);
     });
   });
 

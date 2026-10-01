@@ -169,6 +169,7 @@ export class ImageLibrary extends LitElement {
   @state() private deleteError = false;
   @state() private busy = false;
   #deleteGeneration = 0;
+  #searchTimer?: ReturnType<typeof setTimeout>;
   #unsubscribeLocale?: () => void;
   readonly #queries = new QueryController(
     this,
@@ -192,6 +193,7 @@ export class ImageLibrary extends LitElement {
   }
   override disconnectedCallback(): void {
     this.#deleteGeneration++;
+    clearTimeout(this.#searchTimer);
     this.#unsubscribeLocale?.();
     this.#setPreview(null);
     super.disconnectedCallback();
@@ -216,6 +218,12 @@ export class ImageLibrary extends LitElement {
   }
 
   async #load(passive = false): Promise<void> {
+    if (this.#searchTimer !== undefined) {
+      clearTimeout(this.#searchTimer);
+      this.#searchTimer = undefined;
+      // This load sends the new search text, so it opens that search's first page.
+      this.offset = 0;
+    }
     this.loadError = false;
     const query: ImageQuery = {
       search: this.search,
@@ -482,7 +490,8 @@ export class ImageLibrary extends LitElement {
           .value=${this.search}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             this.search = event.detail.value;
-            this.#filter();
+            clearTimeout(this.#searchTimer);
+            this.#searchTimer = setTimeout(() => this.#filter(), 250);
           }}
         ></wt-input>
         <label

@@ -290,17 +290,21 @@ export async function deleteImage(
   return { deleted: true, uses: [] };
 }
 
-/** One term of a parsed query: a single word, or a phrase that must appear intact. */
+/**
+ * One term of a parsed query: a single word, or a phrase whose words must appear together and in
+ * order.
+ */
 interface QueryItem {
   readonly negated: boolean;
   readonly tokens: readonly string[];
+  /** The last token may match the start of a longer word: it is still being typed. */
+  readonly prefix: boolean;
 }
 
 /**
  * Words, lowercased, with everything that is not a letter or a digit treated as a separator.
  *
- * Nothing here stems: matching is by whole lowercased token, so a plural in the text is found only
- * by that plural. FTS5's `porter` tokenizer is deliberately not taken: it would need an FTS5
+ * Nothing stems. FTS5's `porter` tokenizer is deliberately not taken: it would need an FTS5
  * virtual table, and it would apply English suffix rules to every language. Stopwords are kept.
  */
 function searchTokens(value: string): string[] {
@@ -313,14 +317,19 @@ function searchTokens(value: string): string[] {
  * `or` binds LOOSER than the implicit `and`, so the result is a list of groups and a row matches
  * when ANY group does.
  *
+ * The query's last word is a prefix while it is still being typed: when the query ends in a letter
+ * or digit and that word is not excluded. A last word `or` is still the operator, not a prefix. A
+ * quote left open runs to the end of the query, so a phrase being typed stays one phrase.
+ *
  * A non-empty query that yields no groups matches NOTHING. An EMPTY query never reaches here; its
  * caller skips the filter entirely.
  */
 function parseSearch(query: string): QueryItem[][] {
   const groups: QueryItem[][] = [];
   let current: QueryItem[] = [];
-  // A phrase in double quotes, or a run of anything that is not a space or a quote.
-  for (const [raw] of query.matchAll(/-?"[^"]*"|[^\s"]+/gu)) {
+  const typing = /[\p{L}\p{N}]$/u.test(query);
+  for (const match of query.matchAll(/-?"[^"]*"?|[^\s"]+/gu)) {
+    const raw = match[0];
     if (/^or$/iu.test(raw)) {
       if (current.length > 0) groups.push(current);
       current = [];
@@ -328,16 +337,28 @@ function parseSearch(query: string): QueryItem[][] {
     }
     const negated = raw.startsWith("-");
     const tokens = searchTokens(negated ? raw.slice(1) : raw);
-    if (tokens.length > 0) current.push({ negated, tokens });
+    const prefix = typing && !negated && match.index + raw.length === query.length;
+    if (tokens.length > 0) current.push({ negated, tokens, prefix });
   }
   if (current.length > 0) groups.push(current);
   return groups;
 }
 
-/** Does `tokens` appear intact and in order inside `field`? A single word is the length-1 case. */
-function fieldHolds(field: readonly string[], tokens: readonly string[]): boolean {
+/**
+ * Does `tokens` appear intact and in order inside `field`? With `prefix`, the last may be the start
+ * of a longer word. A single word is the length-1 case.
+ */
+function fieldHolds(field: readonly string[], tokens: readonly string[], prefix: boolean): boolean {
+  const last = tokens.length - 1;
   for (let start = 0; start + tokens.length <= field.length; start += 1) {
-    if (tokens.every((token, offset) => field[start + offset] === token)) return true;
+    if (
+      tokens.every((token, offset) =>
+        prefix && offset === last
+          ? field[start + offset]!.startsWith(token)
+          : field[start + offset] === token,
+      )
+    )
+      return true;
   }
   return false;
 }
@@ -345,8 +366,10 @@ function fieldHolds(field: readonly string[], tokens: readonly string[]): boolea
 /**
  * Does any group match, and how strongly?
  *
- * `null` is "no match". The score is the number of positive terms in the best-scoring group. A
- * phrase is matched WITHIN one translation of the name, so it cannot straddle two.
+ * `null` is "no match". The score is the number of positive terms in the best-scoring group, less
+ * a half for a term found only as the start of a longer word, so among photos matching the same
+ * number of terms a whole word ranks first. A phrase is matched WITHIN one translation of the name,
+ * so it cannot straddle two.
  */
 function scoreSearch(
   groups: readonly QueryItem[][],
@@ -357,12 +380,14 @@ function scoreSearch(
     let score = 0;
     let matched = true;
     for (const item of group) {
-      const found = names.some((name) => fieldHolds(name, item.tokens));
+      const whole = names.some((name) => fieldHolds(name, item.tokens, false));
+      const found =
+        whole || (item.prefix && names.some((name) => fieldHolds(name, item.tokens, true)));
       if (item.negated === found) {
         matched = false;
         break;
       }
-      if (!item.negated) score += 1;
+      if (!item.negated) score += whole ? 1 : 0.5;
     }
     if (matched && (best === null || score > best)) best = score;
   }
@@ -389,13 +414,14 @@ export async function listImages(
   tx: Transaction,
   options: ListImagesOptions = {},
 ): Promise<{ images: ImageRecord[]; total: number }> {
-  const query = options.query?.trim() ?? "";
+  const typed = options.query ?? "";
+  const query = typed.trim();
   const sort = options.sort ?? (query ? "relevance" : "date");
   const direction = options.direction ?? (sort === "name" ? "asc" : "desc");
   const offset = options.offset ?? 0;
   const limit = options.limit ?? 40;
   if (
-    query.length > 500 ||
+    typed.length > 500 ||
     !["relevance", "date", "name"].includes(sort) ||
     !["asc", "desc"].includes(direction) ||
     !Number.isSafeInteger(offset) ||
@@ -415,7 +441,8 @@ export async function listImages(
   // empty search falls back to the date ordering, which is the ordering an absent `sort` already
   // resolves to. The library's first load sends `sort=relevance` with no query.
   const effectiveSort = sort === "relevance" && !query ? "date" : sort;
-  const groups = query ? parseSearch(query) : [];
+  // Untrimmed, so a trailing space still finishes the last word.
+  const groups = query ? parseSearch(typed) : [];
 
   if (!query && effectiveSort === "date") {
     const [{ total }] = await tx.select({ total: count() }).from(mediaImages);

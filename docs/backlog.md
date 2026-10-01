@@ -1025,6 +1025,27 @@ the photo search's "a phrase cannot straddle two translations of a name" as unte
 search code, not looked into. **Next action:** fill the list when next touching that file; the
 other two need a decision whether they are worth a change at all.
 
+**The photo library's search finds a word as you type it — DONE (2026-10-01, lane A's A156; owner,
+2026-09-30: "queue it").** Before, every keystroke in the search box asked the server again (typing
+"chick" quickly into the old screen sent five searches, one per letter), and a word matched only
+once it was complete, so nothing was found until its last letter. Now the LAST word of the query
+matches the start of a word while it is still being typed: "grilled chi" finds "Grilled chicken".
+Earlier words stay whole words. The last word counts as finished, and matches whole, once the query
+ends in anything but a letter or digit — a space, a closing quote or punctuation. A word with a
+minus in front is always a whole word, so "-chi" hides "Chi tea" and nothing that merely starts with
+"chi". A quote left open is a phrase still being typed: it runs to the end of the query, its words
+stay together and its last word is the prefix, so `"grilled chi` finds "Grilled chicken" but not
+"Chicken, grilled"; before this change an open quote was dropped and its words searched separately.
+A word with punctuation inside, such as "pan-fr", is a phrase of its parts with the last part as the
+prefix. Under the relevance sort a term found only as the start of a longer word counts a half
+rather than one, so with the same number of terms matched a whole-word match ranks first. The
+library screen waits 250 ms after the last keystroke before searching (in
+`packages/media/src/dashboard/image-library.ts`, so the image picker that the product, variant and
+section forms open waits too); the sort and direction dropdowns still search at once, carrying any
+text typed but not yet searched, and removing the screen drops a search still waiting. Any load
+made while a search is still waiting — a page button or Retry included — starts from the first page.
+The server parses the query untrimmed, so the 500-character limit counts surrounding spaces too.
+
 **Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
 resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS
 position included) and stored as WebP at quality 80 by `prepareImage`

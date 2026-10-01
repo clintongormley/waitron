@@ -313,6 +313,92 @@ it("sends search and sort to the server", async () => {
   );
 });
 
+it("searches once typing has paused for 250 ms, so a burst of keystrokes sends one request", async () => {
+  const client = await mount();
+  const before = client.listImages.mock.calls.length;
+  vi.useFakeTimers();
+  try {
+    // A wait timed from the first keystroke would fire at 250 ms, before the 449 ms check.
+    field("image-search", "c");
+    await vi.advanceTimersByTimeAsync(100);
+    field("image-search", "ch");
+    await vi.advanceTimersByTimeAsync(100);
+    field("image-search", "chi");
+    await vi.advanceTimersByTimeAsync(249);
+    expect(client.listImages).toHaveBeenCalledTimes(before);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+    expect(client.listImages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: "chi", offset: 0 }),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("changes the sort at once, with text typed but not yet searched, and does not search it again", async () => {
+  const client = await mount();
+  const before = client.listImages.mock.calls.length;
+  vi.useFakeTimers();
+  try {
+    field("image-search", "chi");
+    const sort = el.shadowRoot!.querySelector<HTMLSelectElement>("select[name=image-sort]")!;
+    sort.value = "name";
+    sort.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+    expect(client.listImages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: "chi", sort: "name" }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("starts a search still waiting from the first page when another load sends it early", async () => {
+  const client = api();
+  client.listImages.mockResolvedValue({ images: [image], total: 100 });
+  await mount(client);
+  const next = [...el.shadowRoot!.querySelectorAll<HTMLElement>("nav wt-button")].at(-1)!;
+  next.click();
+  await vi.waitFor(() =>
+    expect(client.listImages).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 24 })),
+  );
+  await el.updateComplete;
+  const before = client.listImages.mock.calls.length;
+  vi.useFakeTimers();
+  try {
+    field("image-search", "chi");
+    await vi.advanceTimersByTimeAsync(100);
+    next.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+    expect(client.listImages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ search: "chi", offset: 0 }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.listImages).toHaveBeenCalledTimes(before + 1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("drops a search still waiting when the library is removed", async () => {
+  const client = await mount();
+  const before = client.listImages.mock.calls.length;
+  vi.useFakeTimers();
+  try {
+    field("image-search", "chi");
+    el.remove();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(client.listImages).toHaveBeenCalledTimes(before);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it.each([
   { sort: "date", initial: "desc", reverse: "asc", picker: false },
   { sort: "name", initial: "asc", reverse: "desc", picker: true },
