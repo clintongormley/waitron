@@ -1030,7 +1030,7 @@ failed`), core `0044_drop_table_bill_pointer` (the same for `dining_tables`), co
 (a rebuild making a column required, refused with `NOT NULL constraint failed` on a copied row
 whose value is null), and core `0012_printer_calibration`, which rebuilds `drawer_opens` without
 copying its rows (`drawer_opens: 2 rows before, 0 after`). The steps `RESETS` lists are these,
-plus core `0054_drop_printer_character_set`, added by C107 (the `printers` rebuild, refused with
+plus core `0055_drop_printer_character_set`, added by C107 (the `printers` rebuild, refused with
 `FOREIGN KEY constraint failed` the way `0044` is): at each the guard checks the failure is still
 the listed one, then migrates an empty database to that point and carries on. A reset that expects a
 row loss must lose exactly the listed tables, so a second table losing rows at the same step fails
