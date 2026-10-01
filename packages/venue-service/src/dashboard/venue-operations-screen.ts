@@ -688,6 +688,43 @@ export class VenueOperationsScreen extends LitElement {
         ],
         (row) => row.id,
       )}
+      <h2>${t("venue.tills")}</h2>
+      ${this.#table(
+        "tills",
+        "waitron.venue.tills.table",
+        t("venue.tills"),
+        model.devices.filter((device) => device.active && device.kind !== "kds_station"),
+        [
+          {
+            key: "name",
+            label: t("venue.tills"),
+            cell: (device) => device.label,
+            sortValue: (device) => device.label,
+          },
+          {
+            key: "startsIn",
+            label: t("venue.starts_in"),
+            cell: (device) =>
+              html`<select
+                aria-label=${`${device.label}: ${t("venue.starts_in")}`}
+                .value=${model.deviceZones.find((row) => row.deviceId === device.id)?.zoneId ?? ""}
+                ?disabled=${this.busy}
+                @change=${(event: Event) => {
+                  const zoneId = (event.currentTarget as HTMLSelectElement).value;
+                  void this.#save(() =>
+                    zoneId
+                      ? this.api.setDeviceDefaultZone(device.id, zoneId)
+                      : this.api.clearDeviceDefaultZone(device.id),
+                  );
+                }}
+              >
+                <option value="">${t("venue.counter_zone")}</option>
+                ${model.zones.map((zone) => html`<option value=${zone.id}>${zone.name}</option>`)}
+              </select>`,
+          },
+        ],
+        (device) => device.id,
+      )}
       ${
         zone
           ? html` ${this.#toolbar(`${zone.name}: ${t("venue.menus")}`)}

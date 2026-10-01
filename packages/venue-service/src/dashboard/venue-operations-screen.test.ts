@@ -63,6 +63,8 @@ const model: VenueServiceView = {
     { id: "z1", name: "Dining room" },
     { id: "z2", name: "Deli counter" },
   ],
+  devices: [],
+  deviceZones: [],
   settings: { editSentLines: true },
   kitchenTicketGrouping: "combined",
   printHeldWork: false,
@@ -166,10 +168,6 @@ describe("venue operations screen", () => {
     expect(find(el, '[data-test="new-department"]')!.checkVisibility()).toBe(true);
     expect(tabs.querySelector('[slot="actions"] [data-test="new-hours"]')).not.toBeNull();
     expect(tabs.querySelector('[slot="departments"] [data-test="new-department"]')).toBeNull();
-    await selectTab(el, "routing");
-    expect(tabs.querySelector('[slot="actions"] [data-test="new-route"]')).not.toBeNull();
-    expect(find(el, '[data-test="new-route"]')!.checkVisibility()).toBe(true);
-    expect(tabs.querySelector('[slot="routing"] [data-test="new-route"]')).toBeNull();
     await selectTab(el, "zones");
     await action(el, "zone-menus-z1");
     expect(tabs.querySelector('[slot="actions"] [data-test="new-assignment-z1"]')).not.toBeNull();
@@ -188,6 +186,40 @@ describe("venue operations screen", () => {
     expect(button.hasAttribute("disabled")).toBe(true);
   });
 
+  it("lists active tills, excludes kitchen screens, and saves and clears a starting zone", async () => {
+    const view: VenueServiceView = {
+      ...model,
+      devices: [
+        { id: "t1", label: "Front till", kind: "till", active: true },
+        { id: "k1", label: "Kitchen screen", kind: "kds_station", active: true },
+        { id: "t2", label: "Old till", kind: "till", active: false },
+      ],
+      deviceZones: [],
+    };
+    const api = {
+      load: vi.fn().mockResolvedValue(view),
+      setDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+      clearDeviceDefaultZone: vi.fn().mockResolvedValue(undefined),
+    } as unknown as VenueServiceApi;
+    const el = await mount(api);
+    await selectTab(el, "zones");
+    expect(tableText(el, "tills")).toContain("Front till");
+    expect(tableText(el, "tills")).not.toContain("Kitchen screen");
+    expect(tableText(el, "tills")).not.toContain("Old till");
+    const selector = table(el, "tills").shadowRoot!.querySelector<HTMLSelectElement>(
+      'select[aria-label="Front till: Starts in"]',
+    )!;
+    expect(selector).not.toBeNull();
+    expect(selector.options[0]!.textContent).toBe("The venue's counter zone");
+    selector.value = "z1";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(el);
+    expect(api.setDeviceDefaultZone).toHaveBeenCalledWith("t1", "z1");
+    selector.value = "";
+    selector.dispatchEvent(new Event("change", { bubbles: true }));
+    await settle(el);
+    expect(api.clearDeviceDefaultZone).toHaveBeenCalledWith("t1");
+  });
   it("shows a load error when the venue configuration request fails", async () => {
     const api = {
       load: vi.fn().mockRejectedValue(new Error("offline")),

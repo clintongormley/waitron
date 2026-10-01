@@ -860,6 +860,35 @@ describe("venue service management routes", () => {
     await expect(
       withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
     ).resolves.toMatchObject({ zoneId: fx.zoneId, departmentId: department.id });
+    const listed = (await (
+      await send(fx.app, "GET", "/management-api/venue-service", fx.managerCookie)
+    ).json()) as {
+      deviceZones: { deviceId: string; zoneId: string }[];
+    };
+    expect(listed.deviceZones).toContainEqual({ deviceId: device!.id, zoneId: fx.zoneId });
+    expect(
+      (
+        await send(
+          fx.app,
+          "DELETE",
+          `/management-api/venue-service/devices/${device!.id}/default-zone`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      (
+        await send(
+          fx.app,
+          "DELETE",
+          `/management-api/venue-service/devices/${device!.id}/default-zone`,
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(204);
+    await expect(
+      withTransaction(db, (tx) => resolveNewOrderZone(tx, scope, { deviceId: device!.id })),
+    ).rejects.toMatchObject({ code: "service_zone.default_missing" });
   });
 });
 

@@ -641,6 +641,31 @@ export async function setDeviceDefaultZone(
     });
 }
 
+export async function listDeviceDefaultZones(
+  tx: Transaction,
+  cfg: VenueScope,
+): Promise<{ deviceId: string; zoneId: string }[]> {
+  return tx
+    .select({ deviceId: deviceZoneDefaults.deviceId, zoneId: deviceZoneDefaults.zoneId })
+    .from(deviceZoneDefaults)
+    .innerJoin(devices, eq(devices.id, deviceZoneDefaults.deviceId))
+    .where(eq(devices.locationId, cfg.locationId));
+}
+
+export async function clearDeviceDefaultZone(
+  tx: Transaction,
+  cfg: VenueScope,
+  deviceId: string,
+): Promise<void> {
+  const [device] = await tx
+    .select({ id: devices.id })
+    .from(devices)
+    .where(and(eq(devices.id, deviceId), eq(devices.locationId, cfg.locationId)));
+  if (device !== undefined) {
+    await tx.delete(deviceZoneDefaults).where(eq(deviceZoneDefaults.deviceId, deviceId));
+  }
+}
+
 /** Snapshot the zone's current department and payment flow when a new order opens. */
 export async function recordOrderServiceContext(
   tx: Transaction,

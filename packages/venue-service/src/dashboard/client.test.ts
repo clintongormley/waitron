@@ -114,17 +114,22 @@ describe("VenueServiceApi", () => {
         }),
       )
       .mockResolvedValueOnce(jsonResponse([{ id: "m1", name: "Restaurant", active: true }]))
-      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]));
+      .mockResolvedValueOnce(jsonResponse([{ id: "z1", name: "Upstairs" }]))
+      .mockResolvedValueOnce(
+        jsonResponse([{ id: "t1", label: "Till", kind: "till", active: true }]),
+      );
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
 
     await expect(api.load()).resolves.toMatchObject({
       menus: [{ id: "m1", name: "Restaurant" }],
       floorZones: [{ id: "z1", name: "Upstairs" }],
+      devices: [{ id: "t1", label: "Till", kind: "till", active: true }],
     });
     expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
       "/management-api/venue-service",
       "/management-api/catalogues",
       "/management-api/zones",
+      "/management-api/devices",
     ]);
   });
 
@@ -176,7 +181,7 @@ describe("VenueServiceApi", () => {
     expect(background.liveData).toBe(liveData);
 
     await background.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBe("1");
     }
@@ -184,10 +189,10 @@ describe("VenueServiceApi", () => {
 
     fetchImpl.mockClear();
     await api.load();
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
     for (const [, init] of fetchImpl.mock.calls as unknown as [string, RequestInit][]) {
       expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
     }
-    expect(onSuccess).toHaveBeenCalledTimes(3);
+    expect(onSuccess).toHaveBeenCalledTimes(4);
   });
 });

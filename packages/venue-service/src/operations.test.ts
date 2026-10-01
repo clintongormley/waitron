@@ -70,6 +70,8 @@ import {
   resolveZoneContext,
   retargetOrderServiceContext,
   setDeviceDefaultZone,
+  clearDeviceDefaultZone,
+  listDeviceDefaultZones,
   menuState,
 } from "./operations.js";
 
@@ -1034,6 +1036,29 @@ async function seedDevice(venue: SellingVenue, label: string): Promise<string> {
 describe("order service context", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("returns to the counter default after a device default is cleared", async () => {
+    const venue = await seedSellingVenue();
+    const deviceId = await seedDevice(venue, "Bar till");
+    await scoped(async (tx) => {
+      await tx.execute(
+        sql`update zone_service_policies set is_counter_default = true where zone_id = ${venue.diningZone}`,
+      );
+      await setDeviceDefaultZone(tx, venue.cfg, deviceId, venue.barZone);
+      expect(await listDeviceDefaultZones(tx, venue.cfg)).toContainEqual({
+        deviceId,
+        zoneId: venue.barZone,
+      });
+      await clearDeviceDefaultZone(tx, venue.cfg, deviceId);
+      await clearDeviceDefaultZone(tx, venue.cfg, deviceId);
+      expect(await listDeviceDefaultZones(tx, venue.cfg)).not.toContainEqual(
+        expect.objectContaining({ deviceId }),
+      );
+      expect(await resolveNewOrderZone(tx, venue.cfg, { deviceId })).toMatchObject({
+        zoneId: venue.diningZone,
+      });
+    });
   });
 
   it("starts a device's new order in its own default zone ahead of the venue's counter default", async () => {
