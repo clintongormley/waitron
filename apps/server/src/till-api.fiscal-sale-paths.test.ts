@@ -1443,8 +1443,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       },
     ]);
 
-    // 4. Advance the ticket item over HTTP, per line: queued → preparing → ready. (The handover is
-    //    the order-level `collected_at`, set at collect below.)
+    // 4. Advance the ticket item over HTTP, per line: queued → preparing → ready.
     const itemId = groups1[0]!.items[0]!.id;
     for (const to of ["preparing", "ready"]) {
       const advance = await app.request(`/api/ticket-items/${itemId}/advance`, {
@@ -1454,7 +1453,7 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       });
       expect(advance.status).toBe(200);
     }
-    // A `ready` line stays on the queue until its order collects — the display drops it on handover.
+    // A `ready` line stays on the queue until its order is handed over.
     const groupsReady = (
       (await (await app.request(queueUrl, { headers: { cookie } })).json()) as { items: unknown }
     ).items as {
@@ -1489,9 +1488,16 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
     expect(after.wo).toEqual([{ status: "settled" }]);
     expect(after.registros).toHaveLength(1); // exactly one chained record, filed at collect
 
-    // 6. Collect stamped `collected_at`, so the handed-over order drops off the station's display.
+    // 6. Collect records the payment, not the handover, so the paid order stays on the station's
+    //    display.
     const queueAfterCollect = await app.request(queueUrl, { headers: { cookie } });
-    expect(((await queueAfterCollect.json()) as { items: unknown }).items).toEqual([]);
+    const groupsAfterCollect = ((await queueAfterCollect.json()) as { items: unknown }).items as {
+      orderId: string;
+      status: string;
+    }[];
+    expect(groupsAfterCollect.map(({ orderId, status }) => ({ orderId, status }))).toEqual([
+      { orderId: workingOrderId, status: "settled" },
+    ]);
   });
 });
 

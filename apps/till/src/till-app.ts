@@ -2354,8 +2354,8 @@ export class TillApp extends LitElement {
     try {
       this.result = await this.api.collectOrder(id, tender);
       this.#showTicket(id, this.#basketFlow() !== "invoice_first");
-      // A collect sets the handover time when none was set, which takes the order off the
-      // counter's prep-queue card. Only a collect opened from the waiting list re-reads it
+      // A collect settles the order, and the counter's prep-queue card offers Collect only on a
+      // settled order. Only a collect opened from the waiting list re-reads the queue
       // (docs/backlog.md, B16).
       if (fromWaitingList) await this.#refreshAfterWrite("station", "refresh.station_after_sale");
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_sale");

@@ -9,7 +9,7 @@ import { loginWithPin } from "@waitron/identity";
 import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import type { ServiceMode } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
-import { markCollected, parkOrder, placeOrder } from "./working-order.js";
+import { listStationQueue, markCollected, parkOrder, placeOrder } from "./working-order.js";
 import { inTx, provisionBillVenue, registroCount, send, tabWith } from "./testing/bill-venue.js";
 import { runServiceCommand } from "./parties.js";
 import type { BillVenue } from "./testing/bill-venue.js";
@@ -177,7 +177,7 @@ describe("handing over a counter order sent without payment", () => {
   });
 });
 
-/** Long enough that a payment stamped at its own time cannot carry the handover's millisecond. */
+/** Long enough that two writes a case compares land on different milliseconds. */
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 
 /** Pays a placed order in cash through the till's collect. */
@@ -300,12 +300,112 @@ describe("paying a counter order that was handed over before payment", () => {
     expect(after.collectedAt).toBe(handedOverAt);
   });
 
-  it("a placed order paid without a handover is stamped handed over at payment, as before", async () => {
+  it("a placed order paid without a handover is not handed over by the payment", async () => {
     const id = await placed("ticket_then_pay", "Tarta");
     await collectCash(id);
     const after = await orderRow(id);
     expect(after.status).toBe("settled");
-    expect(after.collectedAt).toBe(after.settledAt);
+    expect(after.collectedAt).toBeNull();
+  });
+});
+
+/** The counter waiting list's row for this order, if it lists it. */
+async function waitingRow(id: string): Promise<Record<string, unknown> | undefined> {
+  const answer = await send(venue.app, venue.cookie, "GET", "/api/orders/counter-waiting");
+  expect(answer.status).toBe(200);
+  return (answer.json as unknown as Record<string, unknown>[]).find((row) => row.id === id);
+}
+
+/** How many of the stations this order's dishes went to list it on their queue, of how many. */
+async function stationQueuesListing(id: string): Promise<{ listing: number; stations: number }> {
+  const stations = venue.db.all<{ stationId: string }>(
+    sql`select distinct station_id as stationId from ticket_items where working_order_id = ${id}`,
+  );
+  let listing = 0;
+  for (const { stationId } of stations) {
+    const queue = await inTx(venue, (tx) => listStationQueue(tx, stationId));
+    if (queue.some((group) => group.orderId === id)) listing++;
+  }
+  return { listing, stations: stations.length };
+}
+
+/** Pays a placed invoice_first order whose credit note leaves nothing owed. */
+async function collectOwingNothing(id: string): Promise<void> {
+  await creditWholeInvoice(id);
+  expect((await collectCash(id)).tender).toEqual({ method: "unpaid" });
+}
+
+describe("paying a counter order sent without payment, before it is handed over", () => {
+  it.each([
+    ["ticket_then_pay", "cash", collectCash],
+    ["ticket_then_pay", "card", collectByCard],
+    ["invoice_first", "cash", collectCash],
+    ["invoice_first", "card", collectByCard],
+    ["ticket_then_pay", "card, its reply lost,", collectByCardAfterLostReply],
+    ["invoice_first", "card, its reply lost,", collectByCardAfterLostReply],
+    ["invoice_first", "a credit note owing nothing", collectOwingNothing],
+  ] as const)(
+    "a %s order paid by %s records no handover, and stays waiting and on its station queue",
+    async (mode, _method, pay) => {
+      const id = await placed(mode, "Tarta");
+
+      await pay(id);
+
+      const after = await orderRow(id);
+      expect(after.status).toBe("settled");
+      expect(after.collectedAt).toBeNull();
+      expect(await waitingRow(id)).toMatchObject({
+        status: "settled",
+        settledAt: after.settledAt,
+        collectedAt: null,
+        canHandOver: true,
+      });
+      expect(await stationQueuesListing(id)).toEqual({ listing: 1, stations: 1 });
+    },
+  );
+
+  it.each([
+    ["ticket_then_pay", "cash", collectCash],
+    ["invoice_first", "card", collectByCard],
+  ] as const)(
+    "a %s order paid by %s, then handed over, records the handover's own time and leaves the waiting list and its station queue",
+    async (mode, _method, pay) => {
+      const id = await placed(mode, "Tarta");
+      await pay(id);
+      const paidAt = (await orderRow(id)).settledAt!;
+      await tick();
+
+      const handedOver = await send(venue.app, venue.cookie, "POST", `/api/orders/${id}/collect`);
+
+      expect(handedOver.status).toBe(200);
+      const after = await orderRow(id);
+      expect(after.settledAt).toBe(paidAt);
+      expect(after.collectedAt).not.toBeNull();
+      expect(Date.parse(after.collectedAt!)).toBeGreaterThan(Date.parse(paidAt));
+      expect(await waitingRow(id)).toBeUndefined();
+      expect(await stationQueuesListing(id)).toEqual({ listing: 0, stations: 1 });
+    },
+  );
+});
+
+describe("paying a pay-first counter order", () => {
+  it("a pay-first order paid by card before it was sent records no handover, and stays waiting and on its station queue", async () => {
+    const id = randomUUID();
+    const out = await payWorkingOrderIntegrated(
+      { ...deps(), provider: venue.card },
+      venue.cfg,
+      {
+        id,
+        zoneId: zones.prepay,
+        lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "1" }],
+      },
+      venue.operatorId,
+    );
+    expect(out.outcome).toBe("captured");
+
+    expect((await orderRow(id)).collectedAt).toBeNull();
+    expect(await waitingRow(id)).toMatchObject({ status: "settled", canHandOver: true });
+    expect(await stationQueuesListing(id)).toEqual({ listing: 1, stations: 1 });
   });
 });
 

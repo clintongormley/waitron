@@ -1771,13 +1771,10 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await saleCount(id)).toBe(1);
   });
 
-  // The counter COLLECT wires `working_orders.collected_at`, so a collected counter order
-  // leaves its station queue. The end-to-end proof through `collectOrder` (not a raw UPDATE): fire a
-  // placed order to the default station, confirm it queues, collect it, and confirm it drops — with the
-  // fiscal result byte-unchanged. Both modes are pinned: Mode T settles through `fileImmediateSale`,
-  // Mode I through the direct settle UPDATE, and both stamp `collected_at` in the UPDATE that
-  // settles the order; these cases check only that it ends up set.
-  it("Mode T: collectOrder stamps collected_at, dropping the order from its station queue, fiscal result unchanged", async () => {
+  // The counter COLLECT is a payment, not a handover: a paid counter order stays on its station queue
+  // until it is handed over. Both modes are pinned: Mode T settles through `fileImmediateSale`, Mode I
+  // through the direct settle UPDATE.
+  it("Mode T: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("ticket_then_pay");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
@@ -1795,14 +1792,13 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
-    // COLLECT → Mode T files immediate at collect AND stamps collected_at in the placed → settled UPDATE.
+    // COLLECT → Mode T files immediate at collect.
     const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
       id,
       lines: [],
       tender: { method: "cash", amount: "1.50" },
     });
 
-    // Fiscal result byte-unchanged: filed once at collect, A/1, one chained registro, one tender.
     expect(collected.invoiceNumber).toBe("A/1");
     expect(collected.total).toBe("1.50");
     expect(collected.tender).toEqual({ method: "cash", change: "0.00" });
@@ -1811,14 +1807,15 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await tendersFor(id)).toEqual([{ method: "cash", amount: "1.50" }]);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
-    // The order-level handover marker is now set, so the default station drops the collected order.
-    expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
-    // The ticket item ITSELF is untouched — collected_at is an ORDER marker, not a ticket kitchen state.
+    expect(await collectedAtSet(id)).toBe(false);
+    expect(
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
+    ).toEqual([id]);
+    // Collect does not move the ticket item's kitchen state.
     expect(await ticketStateOf(id)).toBe("queued");
   });
 
-  it("Mode I: collectOrder stamps collected_at, dropping the order from its station queue, no second file", async () => {
+  it("Mode I: after collectOrder the order holds one sale and no handover, and stays on its station queue", async () => {
     const { cfg, cafe, zoneId } = await modeVenue("invoice_first");
     const station = await defaultStationId(cfg);
     const id = randomUUID();
@@ -1834,8 +1831,7 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     ).toEqual([id]);
     expect(await collectedAtSet(id)).toBe(false);
 
-    // COLLECT → settle the EXISTING invoice (file NOTHING new) AND stamp collected_at in the direct
-    // placed → settled UPDATE.
+    // COLLECT → settle the EXISTING invoice (file NOTHING new).
     const collected = await collectOrder({ db: suite.db, backend, clock }, cfg, {
       id,
       lines: [],
@@ -1846,8 +1842,10 @@ describe("prepare & collect — three-mode dispatch (order_flow)", () => {
     expect(await registroCount(id)).toBe(1);
     expect(await orderState(id)).toEqual({ status: "settled", settledAtSet: true });
 
-    expect(await collectedAtSet(id)).toBe(true);
-    expect(await asTenant(cfg, (tx) => listStationQueue(tx, station))).toEqual([]);
+    expect(await collectedAtSet(id)).toBe(false);
+    expect(
+      (await asTenant(cfg, (tx) => listStationQueue(tx, station))).map((g) => g.orderId),
+    ).toEqual([id]);
   });
 
   it("collectOrder refuses a non-placed order (open, absent) and an unsupported tender, filing nothing", async () => {
@@ -2038,11 +2036,8 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
         ?.items[0]?.state,
     ).toBe("preparing");
 
-    // COLLECT order 1 — the collect flow settles a placed order AND stamps `collected_at` in the one
-    // legal placed → settled transition (the enforce_transition trigger forbids any other edit of a
-    // placed row, save its party, delivery table and revision). The default-station display drops a
-    // collected order (§3e), so it leaves the queue.
-    // ONE clock reading bound to both columns, so they hold the same instant.
+    // Order 1 paid and handed over, written directly. The default-station display drops a
+    // handed-over order (§3e), so it leaves the queue.
     const settledNow = nowIso();
     await suite.db.execute(sql`
       update working_orders set status = 'settled', settled_at = ${settledNow}, collected_at = ${settledNow}
