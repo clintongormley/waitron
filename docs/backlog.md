@@ -5686,7 +5686,7 @@ ongoing overhaul listed at the top of Track A.
   sidebar.
 
 - **A form's message about a failed submission sits at the bottom of the form, on its own line above
-  the buttons (C97, owner 2026-09-30) — DONE (2026-10-01).** The one message a form shows about a
+  the buttons (C97, owner 2026-09-30) — DONE (2026-10-01, #961).** The one message a form shows about a
   failed submission is no longer beside the buttons: it runs full width from the form's left edge,
   aligned to the start, on its own line just above the button row, at every width. In a dialog it
   is the last thing in the dialog's scrolling body, below the last field, and is scrolled into view;
@@ -5719,6 +5719,8 @@ ongoing overhaul listed at the top of Track A.
   profile screen's Add passkey dialog, the sign-in passkey step and the address check, at 1280 and
   390 pixels wide where the width matters. A `wt-form-actions` wrapped in another element inside a
   dialog's footer would keep its message in the footer; none does today.
+  Not looked at on screen after the review fixes: the screenshots (56, light and dark, 1280 and 390,
+  EN and ES for the sign-in steps and the passkey dialog) were taken before them, on 05974c855.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now
