@@ -73,12 +73,12 @@ const bottomMessage = (...parts: (string | null)[]): string =>
 
 const refusal = (code: string | null): string | null => (code === null ? null : codeMessage(code));
 
-/** The `last_error` the server stores for a job it ended because this printer's agent cannot print
- * to it (`BLUETOOTH_PRINTING_UNAVAILABLE`, packages/printing/src/runtime.ts). */
-const BLUETOOTH_PRINTING_UNAVAILABLE = "printer.bluetooth_printing_unavailable";
+/** The `last_error` codes of a job the server ended itself, setting its attempts to the cap
+ * (`BLUETOOTH_PRINTING_UNAVAILABLE` and `PRINTER_UNPAIRED`, packages/printing/src/runtime.ts). */
+const ENDED_BY_SERVER = new Set(["printer.bluetooth_printing_unavailable", "printer.unpaired"]);
 
 const jobReason = (lastError: string): string =>
-  lastError === BLUETOOTH_PRINTING_UNAVAILABLE ? codeMessage(lastError) : lastError;
+  ENDED_BY_SERVER.has(lastError) ? codeMessage(lastError) : lastError;
 
 const refusedField = (error: unknown): unknown =>
   (error as { params?: { field?: unknown } } | null)?.params?.field;
@@ -2260,7 +2260,7 @@ export class PrintersScreen extends LitElement {
         sortValue: (j) => j.attempts,
         cell: (j) =>
           html`<span data-test=${`job-attempts-${j.id}`}
-            >${j.lastError === BLUETOOTH_PRINTING_UNAVAILABLE ? "—" : j.attempts}</span
+            >${j.lastError !== null && ENDED_BY_SERVER.has(j.lastError) ? "—" : j.attempts}</span
           >`,
       },
       {

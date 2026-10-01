@@ -33,6 +33,7 @@ import {
   createPrinter,
   deactivatePrinter,
   dpiValue,
+  endUnpairedPrinterJobs,
   enqueuePrintJob,
   failUnprintableBluetoothJobs,
   listPrinters,
@@ -424,9 +425,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   // over Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another
   // box reported it can print to that printer within `DISCOVERED_TTL_MS`. The jobs are ended anyway
   // when that report is older than the window or, being held in memory, lost to a server restart.
-  // A reported succeeded Unpair switches that Bluetooth printer off first, while the server still
-  // holds the command (`COMMAND_TTL_MS`), unless another box reported it visible within
-  // `DISCOVERED_TTL_MS`.
+  // A reported succeeded Unpair switches that Bluetooth printer off first and ends its waiting jobs
+  // (`endUnpairedPrinterJobs`), while the server still holds the command (`COMMAND_TTL_MS`), unless
+  // another box reported it visible within `DISCOVERED_TTL_MS`.
   app.post("/print-api/agent/jobs", (c) =>
     run(c, log, async () => {
       const { agentId } = await requireAgent({ db: deps.db }, c);
@@ -523,18 +524,21 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               .map((e) => e.localKey),
           );
         };
-        // An unpaired printer is switched off before the claim, so this pull hands out none of its
-        // jobs; one another box can still print to stays on.
+        // An unpaired printer is switched off and its waiting jobs ended before the claim, so this
+        // pull hands out none of them and a later Add again does not print them; one another box
+        // can still print to is left alone.
         if (unpaired.length > 0) {
           const elsewhere = printableElsewhere();
           const addresses = unpaired.filter((address) => !elsewhere.has(address));
-          if (addresses.length > 0)
+          if (addresses.length > 0) {
             await tx
               .update(printers)
               .set({ active: false })
               .where(
                 and(eq(printers.transport, "bluetooth"), inArray(printers.localKey, addresses)),
               );
+            await endUnpairedPrinterJobs(tx, agentId, addresses);
+          }
         }
         // Absent from an agent that predates the field, which then changes nothing.
         if (bluetoothPrinting === false && pairedBluetooth.length > 0) {

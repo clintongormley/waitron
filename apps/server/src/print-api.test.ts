@@ -24,6 +24,7 @@ import {
 import {
   BLUETOOTH_PRINTING_UNAVAILABLE,
   MAX_DELIVERY_ATTEMPTS,
+  PRINTER_UNPAIRED,
   enqueuePrintJob,
   esc,
 } from "@waitron/printing";
@@ -35,6 +36,8 @@ import {
   tillId as brandTillId,
   type SupportedLocale,
 } from "@waitron/shared";
+import { printingAlertSource } from "./alert-sources.js";
+import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import type { Logger } from "./logger.js";
 import { mountPrintApi } from "./print-api.js";
 import { formatTestPage } from "./test-page.js";
@@ -3401,7 +3404,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     // The mark describes Bluetooth devices only.
     expect(rows.find((r) => r.host === host)).not.toHaveProperty("printerLike");
   });
-  describe("an unpairing switches its printer off", () => {
+  describe("an unpairing switches its printer off and ends its waiting jobs", () => {
     async function registerBluetooth(app: Hono, mac: string): Promise<string> {
       const created = await send(app, "POST", "/management-api/printers", {
         cookie: managerCookie,
@@ -3446,11 +3449,10 @@ describe("Bluetooth Pair and Forget commands", () => {
       expect(await isActive(printerId)).toBe(false);
       expect(await isActive(bystanderId)).toBe(true);
       expect(reply.jobs.map((job) => job.id)).not.toContain(jobId);
-      // As for any switched-off printer, the job waits unclaimed rather than failing.
       expect(await jobRow(jobId)).toMatchObject({
-        status: "queued",
-        attempts: 0,
-        last_error: null,
+        status: "failed",
+        attempts: MAX_DELIVERY_ATTEMPTS,
+        last_error: PRINTER_UNPAIRED,
       });
       expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
         bluetoothCommand: { id, kind: "forget", state: "succeeded" },
@@ -3515,6 +3517,170 @@ describe("Bluetooth Pair and Forget commands", () => {
       await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
 
       expect(await isActive(printerId)).toBe(false);
+    });
+
+    const UNPAIRED_END = {
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      last_error: PRINTER_UNPAIRED,
+    };
+
+    it("ends the printer's waiting jobs once the agent reports the unpairing succeeded, and leaves another printer's", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const bystanderId = await registerBluetooth(app, randomMac());
+      const first = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+      const second = await enqueue(printerId, esc().text("Mesa 4").cut().bytes());
+      const bystanderJob = await enqueue(bystanderId, esc().text("Mesa 5").cut().bytes());
+      const id = await queueUnpair(app, agentId, token, mac);
+
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      expect(await jobRow(first)).toMatchObject(UNPAIRED_END);
+      expect(await jobRow(second)).toMatchObject(UNPAIRED_END);
+      expect(await jobRow(bystanderJob)).toMatchObject({
+        status: "queued",
+        attempts: 0,
+        last_error: null,
+      });
+    });
+
+    it("ends a waiting drawer kick for the unpaired printer", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const kick = await withTransaction(suite.db, async (tx) => {
+        const { jobId } = await enqueuePrintJob(
+          tx,
+          { locationId },
+          printerId,
+          esc().kick().bytes(),
+          "drawer",
+        );
+        return jobId;
+      });
+      const id = await queueUnpair(app, agentId, token, mac);
+
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      expect(await jobRow(kick)).toMatchObject(UNPAIRED_END);
+    });
+
+    it("ends none of the printer's jobs when the unpairing failed", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const jobId = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+      const id = await queueUnpair(app, agentId, token, mac);
+
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: false, error: "Not available" }] });
+
+      expect(await jobRow(jobId)).toMatchObject({
+        status: "queued",
+        attempts: 0,
+        last_error: null,
+      });
+    });
+
+    it("ends none of the printer's jobs while another box reports it can print to it", async () => {
+      const app = mountApp();
+      const holder = await joinAndAccept(app, "Holder");
+      const other = await joinAndAccept(app, "Other");
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const id = await queueUnpair(app, holder.agentId, holder.token, mac);
+      await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
+      // Enqueued after the other box's pull, so that pull has not claimed it.
+      const jobId = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+
+      await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      expect(await jobRow(jobId)).toMatchObject({
+        status: "queued",
+        attempts: 0,
+        last_error: null,
+      });
+    });
+
+    it("ends the printer's jobs when the other box's report is older than fifteen seconds", async () => {
+      const app = mountApp();
+      const holder = await joinAndAccept(app, "Holder");
+      const other = await joinAndAccept(app, "Other");
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const start = Date.now();
+      vi.spyOn(Date, "now").mockReturnValue(start);
+      await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
+      vi.spyOn(Date, "now").mockReturnValue(start + 15_001);
+      const id = await queueUnpair(app, holder.agentId, holder.token, mac);
+      const jobId = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+
+      await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      expect(await jobRow(jobId)).toMatchObject(UNPAIRED_END);
+    });
+
+    it("raises no printer alert for the ended jobs once the printer is switched back on, while a job stuck after that still raises one", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+      const id = await queueUnpair(app, agentId, token, mac);
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
+      const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+        cookie: managerCookie,
+        body: { active: true },
+      });
+      expect(reactivated.status).toBe(204);
+      const alertsFor = async (now: Date) =>
+        (await withTransaction(suite.db, (tx) => printingAlertSource().read({ tx, now }))).filter(
+          (a) => a.key === `printer.jobs_waiting:${printerId}`,
+        );
+      // Past the waiting window, so an ordinary job not yet printed counts as stuck.
+      const later = new Date(Date.now() + JOBS_WAITING_MS + 60_000);
+
+      expect(await alertsFor(later)).toEqual([]);
+
+      await enqueue(printerId, esc().text("Mesa 4").cut().bytes());
+      expect(await alertsFor(later)).toMatchObject([
+        { code: "printer.jobs_waiting", params: { count: 1 } },
+      ]);
+    });
+
+    it("hands out only the calibration test page when the printer is switched back on after the unpairing", async () => {
+      const app = mountApp();
+      const { agentId, token } = await joinAndAccept(app);
+      const mac = randomMac();
+      const printerId = await registerBluetooth(app, mac);
+      const stale = await enqueue(printerId, esc().text("Mesa 3").cut().bytes());
+      const id = await queueUnpair(app, agentId, token, mac);
+      await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
+
+      // What the dashboard's Add again sends, then the calibration wizard's first print.
+      const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
+        cookie: managerCookie,
+        body: { active: true },
+      });
+      expect(reactivated.status).toBe(204);
+      const printed = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
+        cookie: managerCookie,
+      });
+      expect(printed.status).toBe(202);
+      const { jobId: testPage } = (await printed.json()) as { jobId: string };
+
+      const reply = await pull(app, token, {
+        visible: [{ transport: "bluetooth", localKey: mac }],
+      });
+
+      expect(reply.jobs.filter((job) => job.printerId === printerId).map((job) => job.id)).toEqual([
+        testPage,
+      ]);
+      expect(await jobRow(stale)).toMatchObject(UNPAIRED_END);
     });
   });
 });

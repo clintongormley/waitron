@@ -21,6 +21,11 @@ import {
   type ReaderStatus,
 } from "@waitron/payments";
 import {
+  BLUETOOTH_PRINTING_UNAVAILABLE,
+  MAX_DELIVERY_ATTEMPTS,
+  PRINTER_UNPAIRED,
+} from "@waitron/printing";
+import {
   awaitingCertAlertSource,
   backupAlertSource,
   type BackupOutcomeHolder,
@@ -451,6 +456,7 @@ async function seedJob(t: {
   kind?: "document" | "drawer";
   status?: "queued" | "printing" | "done" | "failed";
   attempts?: number;
+  lastError?: string;
 }): Promise<void> {
   await suite.db.insert(printJobs).values({
     locationId: t.locationId,
@@ -459,6 +465,7 @@ async function seedJob(t: {
     kind: t.kind ?? "document",
     status: t.status ?? "queued",
     attempts: t.attempts ?? 0,
+    lastError: t.lastError ?? null,
     createdAt: t.createdAt,
   });
 }
@@ -579,6 +586,48 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
       createdAt: minsAgo(1),
       status: "failed",
       attempts: 5,
+    });
+    expect(await readAlerts()).toMatchObject([
+      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+    ]);
+  });
+
+  it("does not count a job ended because its printer was unpaired, and still counts an ordinary stuck job beside it", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    await seedJob({
+      locationId,
+      printerId,
+      createdAt: minsAgo(10),
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      lastError: PRINTER_UNPAIRED,
+    });
+    expect(await readAlerts()).toEqual([]);
+
+    // No last_error at all: a filter that compares it with `<>` alone would drop this job too.
+    await seedJob({ locationId, printerId, createdAt: minsAgo(3) });
+    expect(await readAlerts()).toMatchObject([
+      {
+        code: "printer.jobs_waiting",
+        params: { printer: "Barra", count: 1 },
+        since: minsAgo(3),
+      },
+    ]);
+  });
+
+  it("still counts a job ended because the box cannot print over Bluetooth", async () => {
+    await seedTenant(suite.db);
+    const locationId = await seedLocation();
+    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    await seedJob({
+      locationId,
+      printerId,
+      createdAt: minsAgo(1),
+      status: "failed",
+      attempts: MAX_DELIVERY_ATTEMPTS,
+      lastError: BLUETOOTH_PRINTING_UNAVAILABLE,
     });
     expect(await readAlerts()).toMatchObject([
       { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },

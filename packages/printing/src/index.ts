@@ -35,8 +35,10 @@ export type { PaperWidth, Resolution } from "./layout.js";
 export {
   BLUETOOTH_PRINTING_UNAVAILABLE,
   MAX_DELIVERY_ATTEMPTS,
+  PRINTER_UNPAIRED,
   PULL_BATCH_LIMIT,
   claimPrintJobs,
+  endUnpairedPrinterJobs,
   failUnprintableBluetoothJobs,
   reportPrintJob,
   runAgentOnce,

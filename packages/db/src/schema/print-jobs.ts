@@ -18,8 +18,8 @@ import { locations } from "./tenants.js";
 
 /**
  * `queued` → `printing` on an agent's claim → `done`, or `failed`, which is re-claimed until the
- * attempt cap (`packages/printing/src/runtime.ts`). `failUnprintableBluetoothJobs` sets a due job
- * to `failed` at the cap, without a claim.
+ * attempt cap (`packages/printing/src/runtime.ts`). `failUnprintableBluetoothJobs` and
+ * `endUnpairedPrinterJobs` set a job to `failed` at the cap, without a claim.
  */
 export const printJobStatus = enumType(["queued", "printing", "done", "failed"]);
 
@@ -42,7 +42,7 @@ export const printJobs = table(
       .references(() => printers.id),
     /* v8 ignore stop */
     // The agent holding the latest claim, which alone may report the job, or the agent whose pull
-    // ended it through `failUnprintableBluetoothJobs` (runtime.ts).
+    // ended it through `failUnprintableBluetoothJobs` or `endUnpairedPrinterJobs` (runtime.ts).
     /* v8 ignore start */
     claimedBy: id("claimed_by").references(() => printAgents.id),
     /* v8 ignore stop */
@@ -55,7 +55,7 @@ export const printJobs = table(
     attempts: count("attempts").notNull().default(0),
     lastError: label("last_error"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-    // The claim lease anchor, stamped on each claim and by `failUnprintableBluetoothJobs`. A
+    // The claim lease anchor, stamped on each claim and by the functions `claimed_by` names. A
     // `printing` row whose lease has expired, or whose `claimed_at` is NULL, is re-claimed, so
     // delivery is at-least-once: a reclaim may reprint.
     claimedAt: tsString("claimed_at"),
