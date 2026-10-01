@@ -12,7 +12,7 @@ export function fieldLabelState(opts: {
   type?: string;
 }): "rest" | "float" {
   if (opts.value !== "" || opts.hint !== "" || opts.placeholder !== "") return "float";
-  return ALWAYS_FLOAT.has(opts.type ?? "") ? "float" : "rest";
+  return ALWAYS_FLOAT.has((opts.type ?? "").toLowerCase()) ? "float" : "rest";
 }
 
 /** The filled field box shared by every field primitive: `.field[part=field]` holding a

@@ -22,3 +22,13 @@ test("the stylesheet floats a resting label while the browser has autofilled its
   expect(rest?.selectorText).toContain(":not(:has(:autofill))");
   expect(rest?.style.fontSize).toBe("var(--wt-field-label-rest-size)");
 });
+
+test("a date or time type floats the label whatever the case it is written in, as the browser reads it", () => {
+  const empty = { value: "", hint: "", placeholder: "" };
+  for (const type of ["DATE", "Time", "DateTime-Local", "MONTH", "Week"]) {
+    const input = document.createElement("input");
+    input.setAttribute("type", type);
+    expect(input.type, "the browser's reading").toBe(type.toLowerCase());
+    expect(fieldLabelState({ ...empty, type }), type).toBe("float");
+  }
+});
