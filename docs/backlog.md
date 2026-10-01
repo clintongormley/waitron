@@ -5725,19 +5725,26 @@ ongoing overhaul listed at the top of Track A.
 - **A form in a modal stops at one standard width instead of running edge to edge (C105, owner
   2026-09-30) — DONE (2026-10-01).** On a wide window the printer calibration wizard's selects and
   its "Print block" button ran the whole width of the modal. The owner chose one standard form width
-  inside the one standard modal, rather than a narrow and a wide modal. `--wt-form-max-width` (36rem,
-  576px at the default text size) is that width: `wt-modal` hands it to its body, and every shared
-  field (`wt-input`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, a native
-  select styled by `selectStyles`) and the form's message line stop at it. Tables, previews and
-  other wide content keep the modal's full width, the footer buttons do not move, and at 390px wide
-  nothing changes. The Printers screen's row of fields takes the same width, so "Print block" stays
-  beside its select. Fields on pages and in a `wt-dialog` outside a modal are unchanged.
-  `docs/developers/design-system.md` → "Structure" records the standard. Left open: a
-  `wt-disclosure`'s heading row (the calibration wizard's "Advanced text settings") and a screen's
-  own paragraphs still run the modal's full width; the product editor's description `<textarea>`,
-  which the screen styles itself, is not capped; and forms built in `wt-dialog` rather than
-  `wt-modal` (the ingredient form, the till's party name dialog, among others) are held only by the
-  dialog's own 768px limit — whether they should follow the modal's form width is the owner's call.
+  inside the one standard modal, rather than a narrow and a wide modal. `--wt-form-max-width`
+  (36rem, 576px at the default text size) is that width: `wt-modal` hands it to its body, and every
+  shared field (`wt-input`, `wt-combobox`, `wt-price-input`, `wt-number-stepper`, `wt-switch`, a
+  native select styled by `selectStyles` together with a label that wraps it) and the form's message
+  line stop at it, as do the native controls the profile, venue operations and content-languages
+  screens style themselves. Tables, previews and other wide content keep the modal's full width, the
+  footer buttons do not move, and at 390px wide nothing changes. The Printers screen's row of fields
+  takes the same width, so "Print block" stays beside its select. Fields on pages and in a
+  `wt-dialog` outside a modal are unchanged. `docs/developers/design-system.md` → "Structure"
+  records the standard. Left open: a `wt-disclosure`'s heading row (the calibration wizard's
+  "Advanced text settings") and a screen's own paragraphs still run the modal's full width; the
+  product editor's description `<textarea>`, which the screen styles itself, is not capped; the
+  content-languages editor's rows of enabled languages still put each Remove button at the modal's
+  far edge (left for C111, which rewrites that screen); a native select labelled by a separate
+  `<label for>` keeps that label, and an error outside it, at the modal's full width (the
+  adjustments reasons screen's role selects); an inline label around a select is not capped, so its
+  select would sit beside the label text (none was found in a modal); and forms built in `wt-dialog`
+  rather than `wt-modal` (the ingredient form, the till's party name dialog, among others) are held
+  only by the dialog's own 768px limit — whether they should follow the modal's form width is the
+  owner's call.
 
 - **A form says what went wrong under each field and once beside its action button, never in a
   box at the top (C47 part 1, #838, owner rule 2026-09-28).** _(2026-10-01, C97: the message now

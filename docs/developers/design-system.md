@@ -142,8 +142,8 @@ the filled-background idiom only for a colour that is itself the data, never as 
 `--wt-font-family-mono` (text read or copied character by character, such as a key or a log line),
 `--wt-font-size-sm|md|lg|xl`, `--wt-font-weight-normal|bold`, `--wt-shadow-1|2`,
 `--wt-focus-ring`, `--wt-focus-offset`, `--wt-dialog-max-width`, `--wt-modal-max-width`,
-`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`, `--wt-field-max-width`,
-`--wt-cell-name-max-width`,
+`--wt-modal-inline-margin`, `--wt-modal-inline-padding`, `--wt-form-max-width`,
+`--wt-field-max-width`, `--wt-cell-name-max-width`,
 `--wt-stepper-field-width`, `--wt-stepper-field-width-wide`, `--wt-price-field-width`,
 `--wt-opacity-disabled`, `--wt-opacity-hover`, `--wt-duration-fade`
 
@@ -176,12 +176,28 @@ dialog, set `--wt-dialog-max-width` (the till's device chooser does).
 inside a `wt-modal` (owner, 2026-09-30, C105): a field there grows no wider than it, however wide the
 modal is. `wt-modal` sets `--wt-field-max-width` to it on its body, and every shared field reads
 `--wt-field-max-width` as its `max-width` — `wt-input`, `wt-combobox`, `wt-price-input`,
-`wt-number-stepper`, `wt-switch`, a native `<select>` styled by `selectStyles`, and the line that
-shows a form's message (`formMessageStyles`, so both the message a dialog shows at the end of its body
-and the one a `wt-form-actions` placed in the body shows above its buttons). The cap covers a field's
-own label, hint and error, which are inside it. It narrows nothing else: a table, a preview, a
-`wt-disclosure`, a screen's own paragraphs and the footer's buttons keep the modal's full width.
-There is one standard modal size; a screen does not set its own form width.
+`wt-number-stepper`, `wt-switch`, a native `<select>` styled by `selectStyles` and a `<label>` that
+contains one (`label:has(select)`, in the same stylesheet), and the line that shows a form's message
+(`formMessageStyles`, so both the message a dialog shows at the end of its body and the one a
+`wt-form-actions` placed in the body shows above its buttons). `--wt-field-max-width` is `none` at
+the theme root. It narrows nothing else: a table, a preview, a `wt-disclosure`, a screen's own
+paragraphs and the footer's buttons keep the modal's full width. There is one standard modal size;
+a screen does not set its own form width.
+
+What the cap covers of a field's label, hint and error depends on how the field is written:
+
+- The five custom elements: the label, hint and error are inside the element, so the cap holds them.
+- A native select inside a block, grid or flex `<label>` (the Units form's Precision field is one):
+  the label holds the label text, the select, and any hint or error written inside it, and all of
+  them stop at the form width. The select is still `width: 100%` of that label, so it stays on its
+  own line below the text.
+- Not covered, measured 2026-10-01 with a temporary test in a `wt-modal` at 1280px (form width
+  576px, body 974px): a select labelled by a separate `<label for>` keeps that label, and an error
+  written outside it, at the body's width (label 974px, select 576px, error 974px; the adjustments
+  reasons screen writes its role selects this way); and an inline `<label>` ignores `max-width`, so
+  the 576px select fits on its text's line (the select's top 187px, the text's bottom 215px). The
+  select labels in the modals read for C105 are block, grid or flex; no inline one was found, but
+  nothing checks for one.
 
 Nothing outside a `wt-modal` sets `--wt-field-max-width`, so a field on a page, or in a `wt-dialog`
 that is not inside a `wt-modal`, is as wide as its container, as before; a `wt-dialog` placed
@@ -190,15 +206,23 @@ inside a modal's body inherits the cap. Page forms are bounded by their screen's
 so they were left alone. At 390px wide a modal's body is narrower than the token, so a field there
 still takes the body's whole width.
 
-A screen whose own layout makes a row of fields grow to fill the modal reads the same variable on
-that row, so a button beside a field stays beside it: the Printers screen's `.field-row` does, for the
-calibration wizard's "Print block" button. Guards: the form-width cases in
-`packages/ui/src/components/wt-modal.test.ts` (every shared field and the message at 1280px, wide
-content and the footer row at full width, each field at the body's width at 390px, each field at its
-container's width outside a modal) and the calibration case in
-`apps/dashboard/src/screens/printers-screen.test.ts`. A new field primitive that does not read
-`--wt-field-max-width` is seen by none of them, and neither is a screen-styled native control such
-as the product editor's description `<textarea>`.
+A screen that styles its own native controls reads the same variable on the element that wraps
+each field, so the label text, the control and the field's error stop together: the profile
+screen's `.select-field` (the Language label, select and error in the edit details modal), every
+`label` the venue operations screen draws (each holds one field's text and control, and its error
+when it has one), and the content-languages editor's two select labels and their `.error` lines. A screen whose own layout
+makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
+beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print block"
+button. Guards: the form-width cases in `packages/ui/src/components/wt-modal.test.ts` (every shared
+field, a native select field's label, select, hint and error, and the message at 1280px; the select
+below its label text at 1280px; wide content and the footer row at full width; each field at the
+body's width at 390px; each field at its container's width outside a modal); the calibration case in
+`apps/dashboard/src/screens/printers-screen.test.ts`; and one 1280px case each in
+`apps/dashboard/src/screens/profile-screen.test.ts`,
+`apps/dashboard/src/widgets/content-languages.test.ts` and
+`packages/venue-service/src/dashboard/venue-operations-screen.test.ts`. A new field primitive that
+does not read `--wt-field-max-width` is seen by none of them, and neither is a screen-styled native
+control such as the product editor's description `<textarea>`.
 
 `--wt-cell-name-max-width` is one sizing value for the NAME column of a table a form owns, and it
 is used in **three different directions**, which its name does not say. Grep for the token before
