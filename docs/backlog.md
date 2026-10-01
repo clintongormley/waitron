@@ -7755,20 +7755,41 @@ ongoing overhaul listed at the top of Track A.
     `sample-receipt.ts` with the formatter a sale's receipt prints from, with the unsaved header and footer, the venue's
     legal name and tax ID, the location's receipt language, and the width of the receipt printer of
     the location's till first by name (80 mm at 180 dpi, 512 dots, when there is none):
-    `POST /management-api/receipt-preview` (`apps/server/src/receipt-preview-api.ts`), which saves
-    and enqueues nothing ("saves nothing and enqueues no print job, even with a receipt printer
-    registered"). The page draws it with the same code as the print-job preview dialog
+    `POST /management-api/receipt-preview` (a GET since C121, 2026-10-01, below)
+    (`apps/server/src/receipt-preview-api.ts`), which saves and enqueues nothing ("saves nothing
+    and enqueues no print job, even with a receipt printer registered"). The page draws it with the
+    same code as the print-job preview dialog
     (`apps/dashboard/src/widgets/print-paper.ts`), outlines the header or footer line while its
     field has focus, and shows the operation description under the paper as "Sent to the tax agency
     (not printed)". A preview is sent 300 ms after typing stops, one at a time; text typed while one
     is out is sent once, as it then stands, when it returns.
   - One Save sends both settings. If one is refused, the other is still saved, the refusal is
     shown where it belongs (under its field, or at the bottom), and no "Saved" message appears.
-  - Still open: C121 (a preview the page sends because someone else saved keeps an unattended
-    page signed in) and C120 (a location whose tills print on different paper widths previews only
-    one) are queued in lane C. No test pins what the two removed addresses, `/manage/receipt` and
+  - Still open: C120 (a location whose tills print on different paper widths previews only one) is
+    queued in lane C. No test pins what the two removed addresses, `/manage/receipt` and
     `/manage/location-settings`, open now; a reading of the router says the overview page, which
     nobody has run — #993 added that test for `/manage/sections`.
+- **An open Receipts page's preview refresh does not keep an unattended dashboard signed in (C121,
+  owner 2026-10-01) — done (2026-10-01).** When another session saved a different header or footer,
+  the page redrew its preview, and every preview counted as this person's activity, so a Receipts
+  page left open stayed signed in for as long as someone else kept editing.
+  - The preview is now a GET, `GET /management-api/receipt-preview?receipt=…`, whose one `receipt`
+    parameter carries the same JSON object a save sends, so the server checks it with the save's own
+    `validateReceiptConfig` and refuses what a save refuses. A missing, repeated or unreadable
+    parameter is refused with `management.request_invalid` (`field: "receipt"`), as a body without a
+    receipt was. Being a GET, it can be sent as a passive read.
+  - A preview the page sends only because another session saved goes through the dashboard's
+    background client, which marks it passive. One sent because this person opened the page or
+    typed goes through the ordinary client and still counts as activity, including when the typing
+    happened while a passive preview was out, or when another session's save arrived while the
+    typed text waited for typing to pause.
+  - Tests: the four cases under "which client a preview goes through" in
+    `apps/dashboard/src/screens/receipts-screen.test.ts`; "marks a preview passive only when it goes
+    through the background client" in `apps/dashboard/src/api/client-routes.test.ts`; the refusal
+    cases in `apps/server/src/receipt-preview-api.test.ts`; and the preview step of
+    `assertPassiveManagementReads` in `apps/server/src/boot.test.ts`, which sends a preview through
+    the booted server with and without the passive header and checks that only the second moves the
+    session's last-seen time.
 - **One original per invoice, structurally.** `POST /api/sales/:id/receipt` has no limit and no
   idempotency; two calls produced three unmarked originals, and art. 14.1 says exactly one. Cheapest
   containment: idempotent per sale, invoice number on the slip.

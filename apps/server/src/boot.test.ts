@@ -632,6 +632,16 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     expect(mutation.status).toBe(200);
     await mutation.text();
     expect(await seen()).not.toBe(beforeMutation);
+    const beforePreview = await age();
+    const previewUrl = `http://127.0.0.1:${port}/management-api/receipt-preview?receipt=%7B%7D`;
+    const passivePreview = await fetch(previewUrl, { headers: { cookie, "x-waitron-live": "1" } });
+    expect(passivePreview.status).toBe(200);
+    await passivePreview.text();
+    expect(await seen()).toBe(beforePreview);
+    const activePreview = await fetch(previewUrl, { headers: { cookie } });
+    expect(activePreview.status).toBe(200);
+    await activePreview.text();
+    expect(await seen()).not.toBe(beforePreview);
   } finally {
     await sharedDb.execute(sql`delete from management_sessions where person_id = ${personId}`);
     await sharedDb.execute(sql`delete from persons where id = ${personId}`);

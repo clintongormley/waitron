@@ -1979,7 +1979,10 @@ export class DashboardApi {
 
   /** Draws a sample receipt with this trim; saves and prints nothing. */
   previewReceipt(receipt: ReceiptConfig): Promise<ReceiptPreview> {
-    return this.#request<ReceiptPreview>("/management-api/receipt-preview", "POST", { receipt });
+    return this.#request<ReceiptPreview>(
+      `/management-api/receipt-preview?receipt=${encodeURIComponent(JSON.stringify(receipt))}`,
+      "GET",
+    );
   }
 
   // ── Table service-status configuration ──────────────────────────────────────────────────────────
