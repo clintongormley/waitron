@@ -3309,13 +3309,20 @@ describe("a menu's structure", () => {
     expect((await send(app, "GET", path, { cookie: staffCookie })).status).toBe(403);
     const empty = await send(app, "GET", path);
     expect(empty.status).toBe(200);
-    const { rootSectionId, nodes } = (await empty.json()) as {
+    const { rootSectionId, nodes, root } = (await empty.json()) as {
+      root: {
+        internalName: string;
+        names: Record<string, string>;
+        image: string | null;
+        color: string | null;
+      };
       rootSectionId: string;
       nodes: unknown[];
     };
     expect(nodes).toEqual([]);
     const [shell] = await suite.db.select().from(menuDetails).where(eq(menuDetails.menuId, menuId));
     expect(shell).toMatchObject({ menuId, rootSectionId });
+    expect(root).toMatchObject({ names: {}, image: null, color: null });
 
     const productId = await createNamedProductVia(app, `Oferta ${crypto.randomUUID()}`);
     const drinksName = `Drinks ${crypto.randomUUID()}`;

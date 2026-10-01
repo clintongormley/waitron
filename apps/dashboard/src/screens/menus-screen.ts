@@ -5,6 +5,8 @@ import {
   baseStyles,
   focusFirstInvalid,
   setContentLanguages,
+  currentContentLanguages,
+  selectStyles,
   submitOnEnter,
   UrlStateController,
   type DataTableColumn,
@@ -16,18 +18,14 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import {
-  memberName,
-  sectionParents,
-  sectionsHolding,
-  type SectionParents,
-} from "../widgets/member-list-editor.js";
+import { memberName } from "../widgets/member-list-editor.js";
 import "../widgets/menu-structure-tree.js";
 import "../widgets/section-add-products.js";
 import "../widgets/menu-prices-table.js";
 import "../widgets/home-layout-editor.js";
 import type { OfferSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
+import "../widgets/section-details-form.js";
 import { textField } from "../widgets/form-fields.js";
 import { fieldOf, ListWriteQueue } from "../widgets/section-writes.js";
 import type {
@@ -35,7 +33,8 @@ import type {
   CategorySummary,
   DashboardApi,
   HomeLayout,
-  LibrarySection,
+  SectionDetails,
+  SectionInput,
   MemberRef,
   MenuPreview,
   MenuPriceRow,
@@ -44,7 +43,6 @@ import type {
   MenuStructureNode,
   Product,
   SectionMember,
-  SectionUsages,
 } from "../api/client.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { dashboardPath } from "../navigation.js";
@@ -65,7 +63,6 @@ interface ListTarget {
   name: string;
 }
 
-const NO_USAGES: SectionUsages = { menus: [], sections: [] };
 const NO_NAMES: ReadonlyMap<string, string> = new Map();
 
 /** A menu on the list with its publication state, or where that state's read stands. */
@@ -111,7 +108,7 @@ function bottomMessage(errors: Record<string, string>, shown: ReadonlySet<string
 const without = (errors: Record<string, string>, keys: readonly string[]) =>
   Object.fromEntries(Object.entries(errors).filter(([key]) => !keys.includes(key)));
 
-/** Every product and library section the structure holds, at any depth. */
+/** Every product and section the structure holds, at any depth. */
 function reachable(nodes: MenuStructureNode[]): { products: string[]; sections: Set<string> } {
   const products = new Set<string>();
   const sections = new Set<string>();
@@ -153,22 +150,24 @@ function sameOrder(order: readonly string[], nodes: readonly MenuStructureNode[]
 
 /** Every place `listId` appears in the structure, as that place's nodes. */
 function placesOf(structure: MenuStructure | null, listId: string): MenuStructureNode[][] {
-  if (structure === null) return [];
-  const found: MenuStructureNode[][] = listId === structure.rootSectionId ? [structure.nodes] : [];
-  const walk = (nodes: MenuStructureNode[]): void => {
+  if (!structure) return [];
+  if (listId === structure.rootSectionId) return [structure.nodes];
+  const find = (nodes: readonly MenuStructureNode[]): MenuStructureNode[] | undefined => {
     for (const node of nodes) {
-      if (node.ref.kind !== "section" || node.children === undefined) continue;
-      if (node.ref.sectionId === listId) found.push(node.children);
-      walk(node.children);
+      if (node.ref.kind !== "section" || node.includedMenuId) continue;
+      if (node.ref.sectionId === listId) return node.children ?? [];
+      const found = find(node.children ?? []);
+      if (found) return found;
     }
+    return undefined;
   };
-  walk(structure.nodes);
-  return found;
+  const found = find(structure.nodes);
+  return found ? [found] : [];
 }
 
 /**
- * The structure's nodes with every place `listId` appears in `ordered`'s order, or null when a
- * place's members are not exactly the ones `ordered` names, or a place's order is none of
+ * The owned list `listId` in `ordered`'s order, or null when its members are not exactly the
+ * ones `ordered` names, or its order is none of
  * `accepted`, which only a fresh read can resolve.
  */
 function withOrder(
@@ -192,8 +191,9 @@ function withOrder(
   };
   const walk = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
     nodes.map((node) => {
-      if (node.ref.kind !== "section" || node.children === undefined) return node;
-      const children = walk(node.children);
+      if (node.ref.kind !== "section" || node.includedMenuId || node.children === undefined)
+        return node;
+      const children = node.ref.sectionId === listId ? node.children : walk(node.children);
       return { ...node, children: node.ref.sectionId === listId ? arrange(children) : children };
     });
   const nodes = walk(structure.nodes);
@@ -211,7 +211,16 @@ function withOrder(
 export class MenusScreen extends LitElement {
   static override styles = [
     baseStyles,
+    selectStyles,
     css`
+      .required-mark {
+        color: var(--wt-color-danger);
+      }
+      .include-field {
+        display: grid;
+        gap: var(--wt-space-1);
+        max-width: var(--wt-field-max-width);
+      }
       :host {
         display: block;
       }
@@ -343,7 +352,29 @@ export class MenusScreen extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @state() private menus: CatalogueSummary[] = [];
-  @state() private sections: LibrarySection[] = [];
+  private get sections(): SectionDetails[] {
+    const result: SectionDetails[] = [];
+    const walk = (nodes: MenuStructureNode[]) => {
+      for (const node of nodes)
+        if (node.ref.kind === "section") {
+          result.push({
+            id: node.ref.sectionId,
+            internalName: node.internalName ?? "",
+            names: node.names ?? {},
+            image: node.image ?? null,
+            color: node.color ?? null,
+            members: (node.children ?? []).map((child, position) => ({
+              id: child.memberId,
+              position,
+              ref: child.ref,
+            })),
+          });
+          walk(node.children ?? []);
+        }
+    };
+    walk(this.structure?.nodes ?? []);
+    return [...new Map(result.map((section) => [section.id, section])).values()];
+  }
   @state() private products: Product[] = [];
   @state() private categories: CategorySummary[] = [];
   @state() private loading = true;
@@ -355,9 +386,6 @@ export class MenusScreen extends LitElement {
   @state() private structureError = false;
   /** The member ids followed from the menu's top level to the list being edited. */
   @state() private path: string[] = [];
-  /** Every section's wider use, by section id; null until first read. */
-  @state() private usages: Record<string, SectionUsages> | null = null;
-  @state() private usagesError = false;
   @state() private busy = false;
   @state() private memberError: string | null = null;
   @state() private view: Tab = TABS[0];
@@ -388,26 +416,20 @@ export class MenusScreen extends LitElement {
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
-  @state() private menuFormName = "";
   /** Each name form's last refusal, less its name once the operator changes it. */
   @state() private menuFormErrors: Record<string, string> = {};
   /** The name forms, by `data-test`, whose Save has been pressed since they opened. */
   @state() private attempted: ReadonlySet<string> = new Set();
 
-  @state() private duplicating: {
-    sourceId: string;
-    sourceName: string;
-    listId: string;
-    listName: string;
-    memberId: string;
-    memberIds: string[];
-  } | null = null;
-  @state() private duplicateName = "";
-  @state() private duplicateErrors: Record<string, string> = {};
-
   /** The list the new-section form adds to, while it is open. */
   @state() private creatingSection: ListTarget | null = null;
-  @state() private newSectionName = "";
+  @state() private editingSection: SectionDetails | null = null;
+  @state() private deletingSection: SectionDetails | null = null;
+  @state() private deleteSectionError = "";
+  @state() private includingMenu = false;
+  @state() private includedRoot = "";
+  @state() private includeError = "";
+  @state() private menuDetails: SectionDetails | null = null;
   @state() private newSectionErrors: Record<string, string> = {};
 
   /** The list the product picker adds to, while it is open. */
@@ -485,14 +507,6 @@ export class MenusScreen extends LitElement {
     },
   );
   #homeFor: string | null = null;
-  readonly #usageQueries = new DashboardQueries(
-    this,
-    () => this.api,
-    () => {
-      this.usagesError = true;
-    },
-  );
-
   /** An unknown menu or tab is replaced rather than pushed, so Back still leaves the screen. */
   readonly #url = new UrlStateController(this, () => this.#restore(), dashboardPath);
 
@@ -503,7 +517,6 @@ export class MenusScreen extends LitElement {
   #listSize: ResizeObserver | null = null;
   #rows: MenuRow[] = [];
   #sectionNames = new Map<string, string>();
-  #parents: SectionParents = new Map();
   /** The nodes along {@link path}, one per member id. */
   #trail: MenuStructureNode[] = [];
   #listId: string | null = null;
@@ -511,7 +524,6 @@ export class MenusScreen extends LitElement {
   #inSection: string[] = [];
   #onMenu: string[] = [];
   #onMenuSections = new Set<string>();
-  #excluded: string[] = [];
   #memberProducts: Product[] = [];
   #addable: Product[] = [];
   /** What a home page tile may point at: the active products and the sections the structure
@@ -547,9 +559,8 @@ export class MenusScreen extends LitElement {
         ...menu,
         status: this.statuses?.[menu.id] ?? (this.statusesError ? "failed" : "loading"),
       }));
-    if (changed.has("sections")) {
+    if (changed.has("structure")) {
       this.#sectionNames = new Map(this.sections.map(({ id, internalName }) => [id, internalName]));
-      this.#parents = sectionParents(this.sections);
     }
     if (changed.has("structure") || changed.has("path")) {
       this.#resolvePath();
@@ -560,8 +571,6 @@ export class MenusScreen extends LitElement {
       this.#onMenu = reached.products;
       this.#onMenuSections = reached.sections;
     }
-    if (changed.has("structure") || changed.has("path") || changed.has("sections"))
-      this.#excluded = this.path.length === 0 ? [] : sectionsHolding(this.#parents, this.#listId!);
     if (changed.has("products") || changed.has("structure") || changed.has("path")) {
       const held = new Set(this.#inSection);
       this.#memberProducts = this.products.filter(
@@ -569,7 +578,7 @@ export class MenusScreen extends LitElement {
       );
     }
     if (changed.has("products")) this.#addable = this.products.filter((product) => product.active);
-    if (changed.has("structure") || changed.has("products") || changed.has("sections")) {
+    if (changed.has("structure") || changed.has("products")) {
       const products = new Set(this.#onMenu);
       const sections = this.#onMenuSections;
       this.#tileProducts = this.products
@@ -662,19 +671,10 @@ export class MenusScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.loadError = false;
-    this.usagesError = false;
     this.#followStatus();
-    // Kept apart from the load: a failure is reported beside the list it would describe.
-    void this.#usageQueries
-      .watch("listSectionUsages", [], (value) => {
-        this.usages = value;
-        this.usagesError = false;
-      })
-      .catch(() => undefined);
     try {
       await Promise.all([
         this.#watchMenus(),
-        this.#watchSections(),
         this.#queries.watch("listLibraryProducts", [], (value) => {
           this.products = value;
         }),
@@ -699,19 +699,21 @@ export class MenusScreen extends LitElement {
     });
   }
 
-  #watchSections(): Promise<void> {
-    return this.#queries.watch("listSections", [], (value) => {
-      this.sections = value;
-    });
-  }
-
   async #watchStructure(): Promise<void> {
     const menuId = this.menuId;
     if (menuId === null) return;
     this.structureError = false;
     try {
       await this.#structureQueries.watch("getMenuStructure", [menuId], (value) => {
-        if (this.menuId === menuId) this.structure = value;
+        if (this.menuId === menuId) {
+          this.structure = value;
+          if (value.includedBy.length)
+            void this.#statusQueries
+              .watch("getMenuStatuses", [], (statuses) => {
+                this.statuses = statuses;
+              })
+              .catch(() => undefined);
+        }
       });
     } catch {
       if (this.menuId === menuId) this.structureError = true;
@@ -756,7 +758,7 @@ export class MenusScreen extends LitElement {
         .catch(() => undefined);
       return;
     }
-    this.#statusQueries.release("getMenuStatuses");
+    if (!this.structure?.includedBy.length) this.#statusQueries.release("getMenuStatuses");
     if (!sameMenu) this.status = null;
     if (again || !sameMenu) this.statusError = false;
     if (!ownQuery) {
@@ -849,7 +851,7 @@ export class MenusScreen extends LitElement {
 
   /** A write that succeeded is never reported as a failed one: a failure here is a load failure. */
   async #refresh(): Promise<void> {
-    await Promise.all([this.#watchStructure(), this.#watchSections().catch(() => undefined)]);
+    await this.#watchStructure();
   }
 
   #restore(): void {
@@ -924,21 +926,20 @@ export class MenusScreen extends LitElement {
     return last ? this.#nodeName(last) : this.#menuName();
   }
 
-  /** The list holding the section being edited: the section before it on the path, or the root. */
-  #parent(): { id: string; name: string } {
-    const parent = this.#trail.at(-2);
-    if (parent?.ref.kind === "section")
-      return { id: parent.ref.sectionId, name: this.#nodeName(parent) };
-    return { id: this.structure!.rootSectionId, name: this.#menuName() };
-  }
-
   // ── Menus ────────────────────────────────────────────────────────────────────────────────────
 
-  #openMenuForm(menu: CatalogueSummary | null): void {
-    this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
-    this.menuFormName = menu?.name ?? "";
+  async #openMenuForm(menu: CatalogueSummary | null): Promise<void> {
     this.menuFormErrors = {};
-    this.#restart("menu-form");
+    this.menuDetails = null;
+    if (menu) {
+      try {
+        this.menuDetails = (await this.api.getMenuStructure(menu.id)).root;
+      } catch {
+        this.loadError = true;
+        return;
+      }
+    }
+    this.menuForm = { id: menu?.id ?? null, name: menu?.name ?? "" };
   }
 
   #restart(form: string): void {
@@ -970,29 +971,24 @@ export class MenusScreen extends LitElement {
     return { errors, placed: { blocked: blank, bottom: bottomMessage(errors, new Set([field])) } };
   }
 
-  async #saveMenu(): Promise<void> {
+  async #saveMenu(input: SectionInput): Promise<void> {
     const form = this.menuForm;
-    if (form === null || this.busy) return;
-    this.#attempt("menu-form");
-    this.menuFormErrors = {};
-    const name = this.menuFormName.trim();
-    if (name === "") {
-      void this.#focusInvalid("menu-form");
-      return;
-    }
+    if (!form || this.busy) return;
     this.busy = true;
+    this.menuFormErrors = {};
     try {
-      if (form.id === null) await this.api.createCatalogue(name);
-      else await this.api.renameCatalogue(form.id, name);
+      if (form.id === null) {
+        const { internalName, ...details } = input;
+        await this.api.createCatalogue(internalName, details);
+      } else await this.api.updateMenuDetails(form.id, input);
     } catch (error) {
-      this.menuFormErrors = refusal(error);
+      const errors = refusal(error);
+      this.menuFormErrors = errors.name ? { internalName: errors.name } : errors;
       this.busy = false;
-      void this.#focusInvalid("menu-form");
       return;
     }
     this.busy = false;
     this.menuForm = null;
-    // A write that succeeded is never reported as a failed one: a failure here is a load failure.
     await this.#watchMenus().catch(() => undefined);
     this.#followStatus(true);
   }
@@ -1086,8 +1082,7 @@ export class MenusScreen extends LitElement {
           return;
         }
         if (this.structure === null) return;
-        // With no version to compare, the answer is shown only when the list's order on screen, at
-        // every place it appears, is exactly the one this move was sent over, one an earlier move
+        // With no version to compare, the answer is shown only when the list's order on screen, is exactly the one this move was sent over, one an earlier move
         // of this batch answered, or this answer itself; any other order may be a newer change, so
         // the menu is read again, while an accepted order can itself be a newer change that
         // recreated it, such as one undoing this move, which the answer then covers until the menu
@@ -1123,105 +1118,71 @@ export class MenusScreen extends LitElement {
     this.memberError = null;
   }
 
-  #openDuplicate(): void {
-    const node = this.#trail.at(-1)!;
-    if (node.ref.kind !== "section") return;
-    const parent = this.#parent();
-    const sourceName = this.#listName();
-    this.duplicating = {
-      sourceId: node.ref.sectionId,
-      sourceName,
-      listId: parent.id,
-      listName: parent.name,
-      memberId: node.memberId,
-      memberIds: (node.children ?? []).map(({ memberId }) => memberId),
-    };
-    this.duplicateName = t("sections.copy_name").replace("{name}", sourceName);
-    this.duplicateErrors = {};
-    this.#restart("duplicate");
-  }
-
-  #duplicate(): void {
-    const duplicating = this.duplicating;
-    if (duplicating === null || this.busy) return;
-    this.#attempt("duplicate");
-    this.duplicateErrors = {};
-    const internalName = this.duplicateName.trim();
-    if (internalName === "") {
-      void this.#focusInvalid("duplicate");
-      return;
-    }
-    this.busy = true;
-    this.#writes.run(duplicating.listId, async () => {
-      try {
-        await this.api.duplicateSection(duplicating.sourceId, {
-          internalName,
-          memberIds: duplicating.memberIds,
-          replaceIn: { sectionId: duplicating.listId, memberId: duplicating.memberId },
-        });
-      } catch (error) {
-        this.duplicateErrors = refusal(error);
-        this.busy = false;
-        void this.#focusInvalid("duplicate");
-        return;
-      }
-      this.duplicating = null;
-      await this.#refresh();
-      this.busy = false;
-    });
-  }
-
   #openNewSection(): void {
     this.creatingSection = this.#here();
-    this.newSectionName = "";
+    this.editingSection = null;
     this.newSectionErrors = {};
-    this.#restart("new-section");
   }
 
-  /** Two requests: the section, then its place in the list. A section left out of the list by a
-   * refused second request is still in the library, and offered by the list's own picker. */
-  #createSection(): void {
-    if (this.creatingSection === null || this.busy || this.#closeLostList()) return;
-    this.#attempt("new-section");
-    this.newSectionErrors = {};
-    const internalName = this.newSectionName.trim();
-    if (internalName === "") {
-      void this.#focusInvalid("new-section");
-      return;
-    }
+  #saveSection(input: SectionInput): void {
+    if (this.busy) return;
     const target = this.creatingSection;
-    const listId = target.listId;
+    const editing = this.editingSection;
+    if (!editing && (!target || this.#closeLostList())) return;
     this.busy = true;
-    this.memberError = null;
-    this.#writes.run(listId, async () => {
-      let created: LibrarySection;
+    this.newSectionErrors = {};
+    this.#writes.run(editing?.id ?? target!.listId, async () => {
       try {
-        created = await this.api.createSection({ internalName });
+        if (editing) await this.api.updateSection(editing.id, input);
+        else await this.api.createSectionIn(target!.listId, input);
       } catch (error) {
-        if (!this.#closeRefusedElsewhere(target, error)) {
+        if (editing || !this.#closeRefusedElsewhere(target!, error))
           this.newSectionErrors = refusal(error);
-          void this.#focusInvalid("new-section");
-        }
         this.busy = false;
         return;
       }
       this.creatingSection = null;
-      let added = true;
-      try {
-        await this.api.addSectionMember(listId, { kind: "section", sectionId: created.id });
-      } catch {
-        added = false;
-        this.memberError =
-          listId === this.#listId
-            ? t("menus.section_not_added").replace("{name}", created.internalName)
-            : t("menus.section_not_added_to")
-                .replace("{name}", created.internalName)
-                .replace("{list}", target.name);
-      }
+      this.editingSection = null;
       await this.#refresh();
-      if (added) this.#reportSavedToLost(target);
+      if (target) this.#reportSavedToLost(target);
       this.busy = false;
     });
+  }
+
+  async #deleteSection(): Promise<void> {
+    const section = this.deletingSection;
+    if (!section || this.busy) return;
+    this.busy = true;
+    this.deleteSectionError = "";
+    try {
+      await this.api.deleteSection(section.id);
+    } catch (error) {
+      this.deleteSectionError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.deletingSection = null;
+    await this.#refresh();
+    this.busy = false;
+  }
+
+  async #includeMenu(): Promise<void> {
+    if (!this.includedRoot || this.busy) return;
+    this.busy = true;
+    this.includeError = "";
+    try {
+      await this.api.addSectionMember(this.#listId!, {
+        kind: "section",
+        sectionId: this.includedRoot,
+      });
+    } catch (error) {
+      this.includeError = codeMessage(codeOf(error));
+      this.busy = false;
+      return;
+    }
+    this.includingMenu = false;
+    await this.#refresh();
+    this.busy = false;
   }
 
   #addProducts(productIds: string[]): void {
@@ -1586,7 +1547,8 @@ export class MenusScreen extends LitElement {
       }}
     >
       ${options.open ? options.body : nothing}
-      <wt-form-actions slot="footer" .error=${message}
+      ${options.test.startsWith("layout-") ? nothing : html`<p class="field-error" role="alert" data-test="form-error">${message || nothing}</p>`}
+      <wt-form-actions slot="footer" .error=${options.test.startsWith("layout-") ? message : ""}
         ><wt-button
           slot="cancel"
           variant="secondary"
@@ -1608,42 +1570,26 @@ export class MenusScreen extends LitElement {
   }
 
   #renderMenuForm() {
-    const form = this.menuForm;
-    const { errors, placed } = this.#nameFormErrors(
-      "menu-form",
-      this.menuFormErrors,
-      "name",
-      this.menuFormName,
-      t("menus.name_required"),
-    );
-    return this.#formModal({
-      test: "menu-form",
-      open: form !== null,
-      heading:
-        form?.id == null
-          ? t("menus.create")
-          : t("menus.rename_heading").replace("{name}", form.name),
-      body: html`<div class="fields">
-        ${this.#nameInput({
-          name: "name",
-          label: t("menus.name"),
-          value: this.menuFormName,
-          errors,
-          save: "menu-save",
-          change: (value) => {
-            this.menuFormName = value;
-            this.menuFormErrors = without(this.menuFormErrors, ["name"]);
-          },
-        })}
-      </div>`,
-      save: "menu-save",
-      saveLabel: t("action.save"),
-      errors: placed,
-      close: () => {
+    return html`<dashboard-section-details-form
+      data-test="menu-form"
+      .nameLabel=${t("menus.name")}
+      .nameRequired=${t("menus.name_required")}
+      .open=${this.menuForm !== null}
+      .busy=${this.busy}
+      .api=${this.api}
+      .languages=${currentContentLanguages()}
+      .value=${this.menuDetails}
+      .fieldErrors=${this.menuFormErrors}
+      heading=${this.menuForm?.id ? t("menus.rename_heading").replace("{name}", this.menuForm.name) : t("menus.create")}
+      @wt-submit=${(event: CustomEvent<SectionInput>) => {
+        event.stopPropagation();
+        void this.#saveMenu(event.detail);
+      }}
+      @wt-cancel=${(event: Event) => {
+        event.stopPropagation();
         this.menuForm = null;
-      },
-      submit: () => void this.#saveMenu(),
-    });
+      }}
+    ></dashboard-section-details-form>`;
   }
 
   /** The probe is observed rather than the list: the probe's width follows the list's container,
@@ -1744,56 +1690,16 @@ export class MenusScreen extends LitElement {
     </nav>`;
   }
 
-  #renderShared() {
-    if (this.path.length === 0) return nothing;
-    const duplicate = html`<div>
-      <wt-button
-        data-test="duplicate-here"
-        variant="secondary"
-        .disabled=${this.busy}
-        @click=${() => this.#openDuplicate()}
-        >${t("menus.duplicate_here")}</wt-button
-      >
-    </div>`;
-    if (this.usagesError)
-      return html`<p class="error" role="alert" data-test="usages-error">
-          ${t("sections.usages_error")}
-        </p>
-        ${duplicate}`;
-    if (this.usages === null)
-      return html`<p class="note" role="status">${t("sections.usages_loading")}</p>
-        ${duplicate}`;
-    const usages = this.usages[this.#listId!] ?? NO_USAGES;
-    const parent = this.#trail.at(-2);
-    const parentId = parent?.ref.kind === "section" ? parent.ref.sectionId : null;
-    const elsewhere = [
-      ...usages.menus.filter(({ id }) => id !== this.menuId).map(({ name }) => name),
-      ...usages.sections
-        .filter(({ id }) => id !== parentId)
-        .map(({ internalName }) => internalName),
-    ];
-    if (elsewhere.length === 0)
-      return html`<p class="note" data-test="not-shared">${t("menus.not_shared")}</p>
-        ${duplicate}`;
-    return html`<p class="note" data-test="shared">
-        ${t("menus.shared").replace("{list}", elsewhere.join(", "))}
-      </p>
-      <p class="help">${t("menus.shared_note")}</p>
-      ${duplicate}`;
-  }
-
   #renderListEditor() {
     const listName = this.#listName();
     return html`<section class="panel" aria-labelledby="list-heading">
       ${this.#renderBreadcrumb()}
       <h2 id="list-heading">${listName}</h2>
-      ${this.#renderShared()}
       <p class="help">${t("sections.members_saved_note")}</p>
       <dashboard-member-list-editor
         .members=${this.#listMembers}
         .products=${this.#memberProducts}
-        .sections=${this.sections}
-        .excludeSectionIds=${this.#excluded}
+        .nodes=${this.#trail.at(-1)?.children ?? this.structure?.nodes ?? []}
         .busy=${this.busy}
         label=${t("sections.members_label").replace("{name}", listName)}
         listName=${listName}
@@ -1811,6 +1717,18 @@ export class MenusScreen extends LitElement {
           event.stopPropagation();
           this.#move(event.detail.memberId, event.detail.to);
         }}
+        @wt-member-edit=${(event: CustomEvent<{ sectionId: string }>) => {
+          event.stopPropagation();
+          this.editingSection =
+            this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
+          this.newSectionErrors = {};
+        }}
+        @wt-member-delete=${(event: CustomEvent<{ sectionId: string }>) => {
+          event.stopPropagation();
+          this.deletingSection =
+            this.sections.find((section) => section.id === event.detail.sectionId) ?? null;
+          this.deleteSectionError = "";
+        }}
         @wt-member-open=${(event: CustomEvent<{ sectionId: string }>) => {
           event.stopPropagation();
           this.#openSection(event.detail.sectionId);
@@ -1823,6 +1741,17 @@ export class MenusScreen extends LitElement {
           .disabled=${this.busy}
           @click=${() => this.#openNewSection()}
           >${t("menus.new_section")}</wt-button
+        >
+        <wt-button
+          data-test="include-menu"
+          variant="secondary"
+          .disabled=${this.busy}
+          @click=${() => {
+            this.includingMenu = true;
+            this.includedRoot = "";
+            this.includeError = "";
+          }}
+          >${t("menus.include_menu")}</wt-button
         >
         <wt-button
           data-test="open-add-products"
@@ -1860,13 +1789,13 @@ export class MenusScreen extends LitElement {
           : html`<p role="status" data-test="structure-loading">${t("menus.structure_loading")}</p>`
       }`;
     return html`${error}
+      ${(structure.includedBy ?? []).length ? html`<p data-test="included-by">${t("menus.included_in")}: ${structure.includedBy.map((menu, index) => html`${index ? ", " : ""}<a href=${`/manage/menus/menu/${menu.id}/view/structure`}>${menu.name}${this.statuses?.[menu.id]?.clashes ? ` (${this.statuses[menu.id]!.clashes} ${t(this.statuses[menu.id]!.clashes === 1 ? "menus.clash" : "menus.clashes")})` : ""}</a>`)}</p>` : nothing}
       <div class="structure">
         <section class="panel" aria-labelledby="tree-heading">
           <h2 id="tree-heading">${t("menus.tree_heading")}</h2>
           <dashboard-menu-structure-tree
             .nodes=${structure.nodes}
             .products=${this.products}
-            .sections=${this.sections}
             .current=${this.path}
             label=${this.#menuName()}
             @wt-structure-edit=${(event: CustomEvent<{ path: string[] }>) => {
@@ -2096,81 +2025,110 @@ export class MenusScreen extends LitElement {
     return html`<p class="status-line" data-test="menu-status">${words}</p>`;
   }
 
-  #renderDuplicate() {
-    const duplicating = this.duplicating;
-    const { errors, placed } = this.#nameFormErrors(
-      "duplicate",
-      this.duplicateErrors,
-      "internalName",
-      this.duplicateName,
-      t("sections.internal_name_required"),
-    );
-    return this.#formModal({
-      test: "duplicate",
-      open: duplicating !== null,
-      heading: t("menus.duplicate_heading").replace("{name}", duplicating?.sourceName ?? ""),
-      body: html`<div class="fields">
-        ${this.#nameInput({
-          name: "internalName",
-          label: t("sections.internal_name"),
-          value: this.duplicateName,
-          errors,
-          save: "duplicate-save",
-          change: (value) => {
-            this.duplicateName = value;
-            this.duplicateErrors = without(this.duplicateErrors, ["internalName"]);
-          },
-        })}
-        <p class="help">
-          ${t("menus.duplicate_note")
-            .replaceAll("{name}", duplicating?.sourceName ?? "")
-            .replace("{list}", duplicating?.listName ?? "")}
-        </p>
-      </div>`,
-      save: "duplicate-save",
-      saveLabel: t("menus.duplicate_save"),
-      errors: placed,
-      close: () => {
-        this.duplicating = null;
-      },
-      submit: () => this.#duplicate(),
-    });
+  #renderNewSection() {
+    return html`<dashboard-section-details-form
+        data-test="section-form"
+        .open=${this.creatingSection !== null || this.editingSection !== null}
+        .busy=${this.busy}
+        .api=${this.api}
+        .languages=${currentContentLanguages()}
+        .value=${this.editingSection}
+        .fieldErrors=${this.newSectionErrors}
+        heading=${this.editingSection ? t("menus.edit_section") : t("menus.new_section_heading").replace("{list}", this.creatingSection?.name ?? "")}
+        @wt-submit=${(event: CustomEvent<SectionInput>) => {
+          event.stopPropagation();
+          this.#saveSection(event.detail);
+        }}
+        @wt-cancel=${(event: Event) => {
+          event.stopPropagation();
+          this.creatingSection = null;
+          this.editingSection = null;
+        }}
+      ></dashboard-section-details-form>
+      ${this.#formModal({
+        test: "include",
+        open: this.includingMenu,
+        heading: t("menus.include_menu"),
+        body: html`<label class="include-field"
+          ><span
+            >${t("menus.include_menu")}
+            <span class="required-mark" aria-hidden="true">*</span></span
+          ><select
+            name="included-menu"
+            required
+            .disabled=${this.busy}
+            @change=${(event: Event) => {
+              this.includedRoot = (event.target as HTMLSelectElement).value;
+            }}
+          >
+            <option value="" .selected=${!this.includedRoot}>${t("menus.choose_menu")}</option>
+            ${(this.structure?.includable ?? []).map((menu) => html`<option value=${menu.rootSectionId} .selected=${this.includedRoot === menu.rootSectionId}>${menu.name}</option>`)}
+          </select></label
+        >`,
+        save: "include-save",
+        saveLabel: t("action.add"),
+        errors: { blocked: !this.includedRoot, bottom: this.includeError },
+        close: () => {
+          this.includingMenu = false;
+        },
+        submit: () => void this.#includeMenu(),
+      })}
+      ${this.#formModal({
+        test: "delete-section",
+        open: this.deletingSection !== null,
+        heading: t("menus.delete_section"),
+        body: html`<p>
+          ${t(
+            this.deletingSection &&
+              this.#ownedDescendants(this.#sectionNode(this.deletingSection.id)?.children ?? []) ===
+                1
+              ? "menus.delete_section_one"
+              : "menus.delete_section_note",
+          )
+            .replace("{name}", this.deletingSection?.internalName ?? "")
+            .replace(
+              "{count}",
+              String(
+                this.deletingSection
+                  ? this.#ownedDescendants(
+                      this.#sectionNode(this.deletingSection.id)?.children ?? [],
+                    )
+                  : 0,
+              ),
+            )}
+        </p>`,
+        save: "delete-section-save",
+        saveLabel: t("action.delete"),
+        saveVariant: "danger",
+        errors: { blocked: false, bottom: this.deleteSectionError },
+        close: () => {
+          this.deletingSection = null;
+        },
+        submit: () => void this.#deleteSection(),
+      })}`;
   }
 
-  #renderNewSection() {
-    const { errors, placed } = this.#nameFormErrors(
-      "new-section",
-      this.newSectionErrors,
-      "internalName",
-      this.newSectionName,
-      t("sections.internal_name_required"),
+  #ownedDescendants(nodes: readonly MenuStructureNode[]): number {
+    return nodes.reduce(
+      (count, node) =>
+        count +
+        (node.ref.kind === "section" && !node.includedMenuId
+          ? 1 + this.#ownedDescendants(node.children ?? [])
+          : 0),
+      0,
     );
-    return this.#formModal({
-      test: "new-section",
-      open: this.creatingSection !== null,
-      heading: t("menus.new_section_heading").replace("{list}", this.creatingSection?.name ?? ""),
-      body: html`<div class="fields">
-        ${this.#nameInput({
-          name: "internalName",
-          label: t("sections.internal_name"),
-          value: this.newSectionName,
-          errors,
-          save: "new-section-save",
-          change: (value) => {
-            this.newSectionName = value;
-            this.newSectionErrors = without(this.newSectionErrors, ["internalName"]);
-          },
-        })}
-        <p class="help">${t("sections.internal_name_help")}</p>
-      </div>`,
-      save: "new-section-save",
-      saveLabel: t("action.save"),
-      errors: placed,
-      close: () => {
-        this.creatingSection = null;
-      },
-      submit: () => this.#createSection(),
-    });
+  }
+
+  #sectionNode(id: string): MenuStructureNode | undefined {
+    const walk = (nodes: MenuStructureNode[]): MenuStructureNode | undefined => {
+      for (const node of nodes) {
+        if (node.ref.kind === "section" && node.ref.sectionId === id) return node;
+        const child = walk(node.children ?? []);
+        if (child) return child;
+      }
+      return undefined;
+    };
+    return walk(this.structure?.nodes ?? []);
   }
 
   #renderAddProducts() {
@@ -2249,8 +2207,8 @@ export class MenusScreen extends LitElement {
         <div slot="home" class="home">${this.#renderHome()}</div>
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
-      ${this.#renderDuplicate()} ${this.#renderNewSection()} ${this.#renderAddProducts()}
-      ${this.#renderLayoutForm()} ${this.#renderDeleteLayout()}`;
+      ${this.#renderNewSection()} ${this.#renderAddProducts()} ${this.#renderLayoutForm()}
+      ${this.#renderDeleteLayout()}`;
   }
 
   override render() {

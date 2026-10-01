@@ -22,13 +22,6 @@ export interface SectionDetails {
   members: SectionMember[];
 }
 
-export type LibrarySection = SectionDetails;
-
-export interface SectionUsages {
-  menus: { id: string; name: string }[];
-  sections: { id: string; internalName: string }[];
-}
-
 /** Details for creating or changing an owned section. */
 export interface SectionInput {
   internalName: string;

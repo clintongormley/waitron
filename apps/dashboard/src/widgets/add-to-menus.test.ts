@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CatalogueSummary, LibrarySection, MenuStructure } from "../api/client.js";
+import type { CatalogueSummary, MenuStructure } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { AddToMenus, placementMenus, type PlacementMenu } from "./add-to-menus.js";
 import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
@@ -15,6 +15,11 @@ const menus: CatalogueSummary[] = [
 const beer = (memberId: string) => ({
   memberId,
   ref: { kind: "section" as const, sectionId: "s-beer" },
+  internalName: "Beer",
+  names: {},
+  image: null,
+  color: null,
+  ownerMenuId: "menu-lunch",
   children: [
     { memberId: `${memberId}-lager`, ref: { kind: "product" as const, productId: "p-lager" } },
   ],
@@ -22,6 +27,11 @@ const beer = (memberId: string) => ({
 const drinks = (memberId: string) => ({
   memberId,
   ref: { kind: "section" as const, sectionId: "s-drinks" },
+  internalName: "Drinks",
+  names: {},
+  image: null,
+  color: null,
+  ownerMenuId: "menu-lunch",
   children: [beer(`${memberId}-beer`)],
 });
 
@@ -29,38 +39,73 @@ const drinks = (memberId: string) => ({
 const structures: MenuStructure[] = [
   {
     rootSectionId: "root-lunch",
+    root: {
+      id: "root-lunch",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [{ id: "m-dinner", name: "Dinner Menu" }],
     nodes: [
       { memberId: "l1", ref: { kind: "product", productId: "p-bread" } },
-      { memberId: "l2", ref: { kind: "section", sectionId: "s-starters" }, children: [] },
+      {
+        memberId: "l2",
+        ref: { kind: "section", sectionId: "s-starters" },
+        internalName: "Starters",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
       drinks("l3"),
       {
         memberId: "l4",
         ref: { kind: "section", sectionId: "s-favourites" },
-        children: [drinks("l5")],
+        internalName: "Favourites",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children: [
+          {
+            memberId: "dessert",
+            ref: { kind: "section", sectionId: "s-desserts" },
+            internalName: "Desserts",
+            names: { en: "Sweet dishes" },
+            children: [],
+          },
+        ],
       },
     ],
   },
-  { rootSectionId: "root-dinner", nodes: [drinks("d1")] },
+  {
+    rootSectionId: "root-dinner",
+    root: {
+      id: "root-dinner",
+      internalName: "Dinner Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [
+      {
+        ...drinks("d1"),
+        includedMenuId: "m-lunch",
+        ref: { kind: "section", sectionId: "root-lunch" },
+        internalName: "Lunch Menu",
+      },
+    ],
+  },
 ];
 
-// Each section's customer-facing name differs from its internal one, so a list that read the
-// wrong one would show text the assertions below refuse.
-const section = (id: string, internalName: string, customer: string): LibrarySection => ({
-  id,
-  internalName,
-  names: { en: customer, es: customer },
-  image: null,
-  color: null,
-  members: [],
-});
-const sections: LibrarySection[] = [
-  section("s-starters", "Starters", "Small plates to begin"),
-  section("s-drinks", "Drinks", "Cold drinks"),
-  section("s-beer", "Beer", "Beers on tap"),
-  section("s-favourites", "Favourites", "House favourites"),
-];
-
-const placements: PlacementMenu[] = placementMenus(menus, structures, sections);
+const placements: PlacementMenu[] = placementMenus(menus, structures);
 
 async function mount(props: Partial<AddToMenus> = {}): Promise<AddToMenus> {
   const { el } = await mountWidget<AddToMenus>("dashboard-add-to-menus", {
@@ -93,27 +138,40 @@ async function tick(el: AddToMenus, box: HTMLInputElement): Promise<void> {
   await el.updateComplete;
 }
 
+it("shows also-on menus beside the top-level destination too", async () => {
+  const el = await mount();
+  const box = boxes(el, "m-lunch", "root-lunch")[0]!;
+  expect(box.closest("label")!.querySelector('[data-test="shared"]')?.textContent?.trim()).toBe(
+    t("add_to_menus.shared").replace("{menus}", "Dinner Menu"),
+  );
+});
+
 describe("placementMenus", () => {
   it("gives each menu its top level and its sections as a tree of internal names", () => {
     const [lunch, dinner] = placements;
     expect(lunch!.rootSectionId).toBe("root-lunch");
     expect(lunch!.sections.map(({ name }) => name)).toEqual(["Starters", "Drinks", "Favourites"]);
     expect(lunch!.sections[1]!.children.map(({ name }) => name)).toEqual(["Beer"]);
-    expect(lunch!.sections[2]!.children[0]!.children[0]!.id).toBe("s-beer");
-    expect(dinner!.sections.map(({ id }) => id)).toEqual(["s-drinks"]);
+    expect(lunch!.sections[2]!.children[0]!.id).toBe("s-desserts");
+    expect(dinner!.sections).toEqual([]);
   });
 
   it("names the other menus a section is also on, and none for a section on one menu", () => {
     const [lunch, dinner] = placements;
-    expect(lunch!.sections[0]!.sharedWith).toEqual([]);
+    expect(lunch!.sections[0]!.sharedWith).toEqual(["Dinner Menu"]);
     expect(lunch!.sections[1]!.sharedWith).toEqual(["Dinner Menu"]);
     expect(lunch!.sections[1]!.children[0]!.sharedWith).toEqual(["Dinner Menu"]);
-    expect(lunch!.sections[2]!.sharedWith).toEqual([]);
-    expect(dinner!.sections[0]!.sharedWith).toEqual(["Lunch Menu"]);
+    expect(lunch!.sections[2]!.sharedWith).toEqual(["Dinner Menu"]);
+    expect(dinner!.sections).toEqual([]);
   });
 
   it("leaves out a menu with no structure, and marks a section the library list lacks", () => {
-    const [lunch, ...rest] = placementMenus(menus, structures.slice(0, 1), sections.slice(1));
+    const [lunch, ...rest] = placementMenus(menus, [
+      {
+        ...structures[0]!,
+        nodes: [{ memberId: "missing", ref: { kind: "section", sectionId: "gone" }, children: [] }],
+      },
+    ]);
     expect(rest).toEqual([]);
     expect(lunch!.sections[0]!.name).toBe(t("members.missing"));
   });
@@ -135,8 +193,7 @@ describe("dashboard-add-to-menus", () => {
       "s-drinks",
       "s-beer",
       "s-favourites",
-      "s-drinks",
-      "s-beer",
+      "s-desserts",
     ]);
     expect(boxes(el, "m-lunch").every((box) => box.name === "section")).toBe(true);
     const lunchText = menuSet(el, "m-lunch").textContent!;
@@ -154,14 +211,14 @@ describe("dashboard-add-to-menus", () => {
     expect(
       row("m-lunch", "s-drinks").querySelector("[data-test=shared]")!.textContent!.trim(),
     ).toBe(shared);
-    expect(row("m-lunch", "s-starters").querySelector("[data-test=shared]")).toBeNull();
-    expect(row("m-dinner", "s-drinks").textContent).toContain("Lunch Menu");
+    expect(row("m-lunch", "s-starters").textContent).toContain(shared);
+    expect(boxes(el, "m-dinner").map((box) => box.value)).toEqual(["root-dinner"]);
   });
 
-  it("chooses a shared section wherever it appears, because it is one list", async () => {
+  it("offers a menu's owned sections once and omits included sections", async () => {
     const el = await mount();
-    await tick(el, boxes(el, "m-dinner", "s-drinks")[0]!);
-    expect(boxes(el, "m-lunch", "s-drinks").map((box) => box.checked)).toEqual([true, true]);
+    await tick(el, boxes(el, "m-lunch", "s-drinks")[0]!);
+    expect(boxes(el, "m-lunch", "s-drinks").map((box) => box.checked)).toEqual([true]);
     expect(boxes(el, "m-lunch", "s-starters")[0]!.checked).toBe(false);
   });
 
@@ -170,8 +227,8 @@ describe("dashboard-add-to-menus", () => {
     const submit = vi.fn();
     el.addEventListener("wt-submit", submit);
     await tick(el, boxes(el, "m-dinner", "root-dinner")[0]!);
-    await tick(el, boxes(el, "m-dinner", "s-beer")[0]!);
-    await tick(el, boxes(el, "m-lunch", "s-drinks")[1]!);
+    await tick(el, boxes(el, "m-lunch", "s-beer")[0]!);
+    await tick(el, boxes(el, "m-lunch", "s-drinks")[0]!);
     button(el, "add-to-menus")!.click();
     expect(submit).toHaveBeenCalledOnce();
     const event = submit.mock.calls[0]![0] as CustomEvent<{ sectionIds: string[] }>;
@@ -327,7 +384,9 @@ describe("dashboard-add-to-menus", () => {
   it("explains shared sections only when a menu has one", async () => {
     const shared = await mount();
     expect(root(shared).textContent).toContain(t("add_to_menus.shared_note"));
-    const alone = await mount({ menus: placementMenus(menus.slice(0, 1), structures, sections) });
+    const alone = await mount({
+      menus: placementMenus(menus.slice(0, 1), [{ ...structures[0]!, includedBy: [] }]),
+    });
     expect(root(alone).textContent).not.toContain(t("add_to_menus.shared_note"));
   });
 

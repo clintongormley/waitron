@@ -1,6 +1,6 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { CategorySummary, LibrarySection, MenuPriceRow, Product } from "../api/client.js";
+import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";
@@ -12,7 +12,7 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-const sections: LibrarySection[] = [
+const sections: SectionDetails[] = [
   { id: "s-drinks", internalName: "Drinks", names: {}, image: null, color: null, members: [] },
   { id: "s-beer", internalName: "Beer", names: {}, image: null, color: null, members: [] },
 ];

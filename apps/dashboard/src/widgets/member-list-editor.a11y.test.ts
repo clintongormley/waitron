@@ -27,7 +27,13 @@ describe.each(["light", "dark"] as const)("member list editor (%s)", (theme) => 
       {
         members: state === "empty" ? [] : members,
         products,
-        sections,
+        nodes: sections.map((section) => ({
+          memberId: `m-${section.id.slice(2)}`,
+          ref: { kind: "section" as const, sectionId: section.id },
+          internalName: section.internalName,
+          names: {},
+          children: [],
+        })),
         // Filtered: every section is excluded, so the picker offers products alone.
         excludeSectionIds: state === "filtered" ? ["s-drinks", "s-beer"] : [],
         busy: state === "busy",

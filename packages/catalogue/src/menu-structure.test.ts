@@ -177,6 +177,14 @@ describe("creating a menu", () => {
     });
     expect(await app((tx) => readMenuStructure(tx, menu.id))).toEqual({
       rootSectionId: root.id,
+      root: {
+        id: root.id,
+        internalName: "Lunch menu",
+        names: {},
+        image: null,
+        color: null,
+        members: [],
+      },
       nodes: [],
       includable: [],
       includedBy: [],
@@ -195,6 +203,36 @@ describe("creating a menu", () => {
         .where(eq(sections.id, rootSectionId)),
     );
     expect(root).toEqual({ internalName: "Weekday lunch" });
+  });
+
+  it("reads saved menu presentation back when reopening its details", async () => {
+    await seedTenant(fx.db);
+    const menu = await app((tx) =>
+      createCatalogue(tx, {
+        name: "Lunch menu",
+        names: { en: "Lunch", es: "Almuerzo" },
+        color: "#aa3300",
+      }),
+    );
+    const before = await app((tx) => readMenuStructure(tx, menu.id));
+    expect(before.root).toMatchObject({
+      internalName: "Lunch menu",
+      names: { en: "Lunch", es: "Almuerzo" },
+      image: null,
+      color: "#aa3300",
+    });
+    await app((tx) =>
+      updateMenuDetails(tx, menu.id, {
+        name: "Weekday lunch",
+        names: before.root.names,
+        image: before.root.image,
+        color: before.root.color,
+      }),
+    );
+    expect((await app((tx) => readMenuStructure(tx, menu.id))).root).toEqual({
+      ...before.root,
+      internalName: "Weekday lunch",
+    });
   });
 
   it("refuses the structure of a menu that does not exist", async () => {
@@ -704,7 +742,10 @@ describe("a menu's prices", () => {
       await addMember(tx, f.dinnerRoot, section(unrelated.id));
     });
     expect(
-      (await app((tx) => menuPrices(tx, f.lunch))).map(({ combined: _combined, ...row }) => row),
+      (await app((tx) => menuPrices(tx, f.lunch))).map(({ combined, ...row }) => {
+        void combined;
+        return row;
+      }),
     ).toEqual([
       {
         menuItemId: await itemOf(f.lunch, f.lemonade),

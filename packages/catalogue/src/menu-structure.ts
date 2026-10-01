@@ -7,7 +7,7 @@ import { sections } from "./schema/sections.js";
 import { menuItemVariantOverrides } from "./schema/variant-overrides.js";
 import { loadSectionGraph, reachableProducts, type SectionGraph } from "./section-graph.js";
 import { directIncludedMenus, includableMenus } from "./menu-inclusion.js";
-import type { MemberRef, SectionInput } from "./section-types.js";
+import type { MemberRef, SectionInput, SectionDetails } from "./section-types.js";
 import "./errors.js";
 
 /** One member of a menu's structure; `children` is present exactly when the member is a section. */
@@ -78,25 +78,23 @@ export async function requireMenuRoot(tx: Transaction, menuId: string): Promise<
 }
 
 function nodesOf(graph: SectionGraph, sectionId: string): MenuStructureNode[] {
-  return graph
-    .children(sectionId)
-    .map(({ id, ref }) =>
-      ref.kind === "product"
-        ? { memberId: id, ref }
-        : {
-            memberId: id,
-            ref,
-            children: nodesOf(graph, ref.sectionId),
-            internalName: graph.section(ref.sectionId)!.internalName!,
-            names: graph.section(ref.sectionId)!.names!,
-            image: graph.section(ref.sectionId)!.image!,
-            color: graph.section(ref.sectionId)!.color!,
-            ownerMenuId: graph.ownerMenu(ref.sectionId)!,
-            ...(graph.role(ref.sectionId) === "menu_root"
-              ? { includedMenuId: graph.ownerMenu(ref.sectionId)! }
-              : {}),
-          },
-    );
+  return graph.children(sectionId).map(({ id, ref }) =>
+    ref.kind === "product"
+      ? { memberId: id, ref }
+      : {
+          memberId: id,
+          ref,
+          children: nodesOf(graph, ref.sectionId),
+          internalName: graph.section(ref.sectionId)!.internalName!,
+          names: graph.section(ref.sectionId)!.names!,
+          image: graph.section(ref.sectionId)!.image!,
+          color: graph.section(ref.sectionId)!.color!,
+          ownerMenuId: graph.ownerMenu(ref.sectionId)!,
+          ...(graph.role(ref.sectionId) === "menu_root"
+            ? { includedMenuId: graph.ownerMenu(ref.sectionId)! }
+            : {}),
+        },
+  );
 }
 
 export async function readMenuStructure(
@@ -104,6 +102,7 @@ export async function readMenuStructure(
   menuId: string,
 ): Promise<{
   rootSectionId: string;
+  root: SectionDetails;
   nodes: MenuStructureNode[];
   includable: { id: string; name: string; rootSectionId: string }[];
   includedBy: { id: string; name: string }[];
@@ -119,7 +118,16 @@ export async function readMenuStructure(
     .roots()
     .filter((root) => directIncludedMenus(graph, root.menuId).includes(menuId))
     .map((root) => ({ id: root.menuId, name: graph.menu(root.menuId)!.name }));
-  return { rootSectionId, nodes: nodesOf(graph, rootSectionId), includable, includedBy };
+  const details = graph.section(rootSectionId)!;
+  const root: SectionDetails = {
+    id: rootSectionId,
+    internalName: details.internalName!,
+    names: details.names!,
+    image: details.image!,
+    color: details.color!,
+    members: graph.children(rootSectionId),
+  };
+  return { rootSectionId, root, nodes: nodesOf(graph, rootSectionId), includable, includedBy };
 }
 
 /**

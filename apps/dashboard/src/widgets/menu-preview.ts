@@ -446,14 +446,24 @@ export class MenuPreviewPanel extends LitElement {
         : "menu_preview.document_heading_live",
     );
     const tree = documentTree(preview.document);
+    const sectionNames = new Map(tree.sections.map(({ id, internalName }) => [id, internalName]));
+    const presented = (nodes: MenuStructureNode[]): MenuStructureNode[] =>
+      nodes.map((node) =>
+        node.ref.kind === "section"
+          ? {
+              ...node,
+              internalName: sectionNames.get(node.ref.sectionId),
+              children: presented(node.children ?? []),
+            }
+          : node,
+      );
     return html`<section data-test="document" aria-labelledby="document-heading">
       <h2 id="document-heading">${heading}</h2>
       <dashboard-menu-structure-tree
         readonly
         label=${heading}
-        .nodes=${tree.nodes}
+        .nodes=${presented(tree.nodes)}
         .products=${tree.products}
-        .sections=${tree.sections}
       ></dashboard-menu-structure-tree>
     </section>`;
   }

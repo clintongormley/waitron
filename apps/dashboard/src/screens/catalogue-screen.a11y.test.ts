@@ -6,7 +6,7 @@ import type {
   CatalogueSummary,
   CategorySummary,
   DashboardApi,
-  LibrarySection,
+  SectionDetails,
   MenuStructure,
   Product,
   ProductEditorInput,
@@ -59,13 +59,44 @@ const courses = [{ id: "k1", name: "Entrantes", displayOrder: 0, active: true }]
 const drinks = {
   memberId: "m-drinks",
   ref: { kind: "section" as const, sectionId: "s-drinks" },
+  internalName: "Drinks",
+  names: {},
+  image: null,
+  color: null,
+  ownerMenuId: "menu-lunch",
   children: [],
 };
 const structures: Record<string, MenuStructure> = {
-  "cat-a": { rootSectionId: "root-a", nodes: [drinks] },
-  "cat-b": { rootSectionId: "root-b", nodes: [drinks] },
+  "cat-a": {
+    rootSectionId: "root-a",
+    root: {
+      id: "root-a",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [drinks],
+  },
+  "cat-b": {
+    rootSectionId: "root-b",
+    root: {
+      id: "root-b",
+      internalName: "Lunch Menu",
+      names: {},
+      image: null,
+      color: null,
+      members: [],
+    },
+    includable: [],
+    includedBy: [],
+    nodes: [drinks],
+  },
 };
-const sections: LibrarySection[] = [
+const sections: SectionDetails[] = [
   {
     id: "s-drinks",
     internalName: "Drinks list",

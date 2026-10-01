@@ -9,18 +9,28 @@ const products = [
   { id: "p-lager", name: "Lager" },
   { id: "p-burger", name: "Burger" },
 ];
-const sections = [
-  { id: "s-drinks", internalName: "Drinks" },
-  { id: "s-beer", internalName: "Beer" },
-];
 const nodes: MenuStructureNode[] = [
   { memberId: "m-burger", ref: { kind: "product", productId: "p-burger" } },
   {
     memberId: "m-drinks",
     ref: { kind: "section", sectionId: "s-drinks" },
+    internalName: "Drinks",
+    names: {},
+    image: null,
+    color: null,
+    ownerMenuId: "menu-lunch",
     children: [
       { memberId: "m-lager", ref: { kind: "product", productId: "p-lager" } },
-      { memberId: "m-beer", ref: { kind: "section", sectionId: "s-beer" }, children: [] },
+      {
+        memberId: "m-beer",
+        ref: { kind: "section", sectionId: "s-beer" },
+        internalName: "Beer",
+        names: {},
+        image: null,
+        color: null,
+        ownerMenuId: "menu-lunch",
+        children: [],
+      },
     ],
   },
 ];
@@ -34,7 +44,6 @@ describe.each(["light", "dark"] as const)("menu structure tree (%s)", (theme) =>
       {
         nodes: state === "empty" ? [] : nodes,
         products,
-        sections,
         label: "Lunch Menu",
         current: state === "current" ? ["m-drinks", "m-beer"] : [],
         readonly: state === "read-only expanded",

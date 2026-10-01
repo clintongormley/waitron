@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { baseStyles, disabledStyles, selectStyles } from "@waitron/ui";
+import type { MenuStructureNode } from "../api/client.js";
 import type { MemberRef, SectionMember, TileRef } from "@waitron/catalogue/src/section-types.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
@@ -141,7 +142,7 @@ export class MemberListEditor extends LitElement {
 
   @property({ attribute: false }) members: SectionMember<TileRef>[] = [];
   @property({ attribute: false }) products: { id: string; name: string }[] = [];
-  @property({ attribute: false }) sections: { id: string; internalName: string }[] = [];
+  @property({ attribute: false }) nodes: MenuStructureNode[] = [];
   /** Sections the picker leaves out, such as ones that would contain this list. The server still
    * refuses a cycle; this only keeps the offer honest. */
   @property({ attribute: false }) excludeSectionIds: string[] = [];
@@ -152,6 +153,7 @@ export class MemberListEditor extends LitElement {
   @property() listName = "";
   /** Whether a section member offers Open, which asks the host to edit that section. */
   @property({ type: Boolean }) openable = true;
+  @property({ type: Boolean }) sectionChoices = false;
   /** A line of text shown under a member's name, by member id. */
   @property({ attribute: false }) notes: ReadonlyMap<string, string> = new Map();
   /** The members in display order, which a move rewrites before the host confirms it. */
@@ -178,15 +180,20 @@ export class MemberListEditor extends LitElement {
       this.order = [...this.members].sort((a, b) => a.position - b.position);
     if (changed.has("products"))
       this.#productNames = new Map(this.products.map((product) => [product.id, product.name]));
-    if (changed.has("sections"))
+    if (changed.has("nodes"))
       this.#sectionNames = new Map(
-        this.sections.map((section) => [section.id, section.internalName]),
+        this.nodes.flatMap((node) =>
+          node.ref.kind === "section"
+            ? [[node.ref.sectionId, node.internalName ?? t("members.missing")] as [string, string]]
+            : [],
+        ),
       );
     if (
       changed.has("order") ||
       changed.has("products") ||
-      changed.has("sections") ||
-      changed.has("excludeSectionIds")
+      changed.has("nodes") ||
+      changed.has("excludeSectionIds") ||
+      changed.has("sectionChoices")
     ) {
       this.#offer = this.#choices();
       // A choice the list now holds, or that is now excluded, is no longer on offer.
@@ -196,7 +203,10 @@ export class MemberListEditor extends LitElement {
   }
 
   #name(member: SectionMember<TileRef>): string {
-    return memberName(member.ref, this.#productNames, this.#sectionNames);
+    const name = memberName(member.ref, this.#productNames, this.#sectionNames);
+    return this.nodes.find((node) => node.memberId === member.id)?.includedMenuId
+      ? t("menus.menu_prefix").replace("{name}", name)
+      : name;
   }
 
   #choices(): { products: Choice[]; sections: Choice[] } {
@@ -216,12 +226,9 @@ export class MemberListEditor extends LitElement {
       products: offer(
         this.products.map((product) => ({ value: `product:${product.id}`, label: product.name })),
       ),
-      sections: offer(
-        this.sections.map((section) => ({
-          value: `section:${section.id}`,
-          label: section.internalName,
-        })),
-      ),
+      sections: this.sectionChoices
+        ? offer([...this.#sectionNames].map(([id, label]) => ({ value: `section:${id}`, label })))
+        : [],
     };
   }
 
@@ -269,7 +276,7 @@ export class MemberListEditor extends LitElement {
 
   #action(
     member: SectionMember<TileRef>,
-    name: "open" | "remove",
+    name: "open" | "remove" | "edit" | "delete",
     text: string,
     detail: Record<string, unknown>,
   ) {
@@ -289,6 +296,7 @@ export class MemberListEditor extends LitElement {
   #row(member: SectionMember<TileRef>) {
     const name = this.#name(member);
     const { ref } = member;
+    const included = this.nodes.find((node) => node.memberId === member.id)?.includedMenuId;
     return html`<tr data-member=${member.id}>
       <td class="handle-cell">${this.#reorder.handle(member.id)}</td>
       <td class="name" data-test="name">
@@ -305,17 +313,23 @@ export class MemberListEditor extends LitElement {
           data-test=${`actions-${member.id}`}
           label=${`${t("members.actions")}: ${name}`}
           >${
-            ref.kind === "section" && this.openable
+            ref.kind === "section" && this.openable && !included
               ? this.#action(member, "open", t("members.open"), { sectionId: ref.sectionId })
               : nothing
-          }${this.#action(
-            member,
-            "remove",
-            this.listName
-              ? t("members.remove_from").replace("{list}", this.listName)
-              : t("members.remove"),
-            { memberId: member.id },
-          )}</wt-row-actions
+          }${ref.kind === "section" && this.openable && !included ? html`${this.#action(member, "edit", t("action.edit"), { sectionId: ref.sectionId })}${this.#action(member, "delete", t("action.delete"), { sectionId: ref.sectionId })}` : nothing}${included ? html`<a href=${`/manage/menus/menu/${included}/view/structure`}>${t("menus.edit_included").replace("{name}", this.#sectionNames.get(ref.kind === "section" ? ref.sectionId : "") ?? "")}</a>` : nothing}${
+            ref.kind !== "section" || included || !this.openable
+              ? this.#action(
+                  member,
+                  "remove",
+                  included
+                    ? t("menus.remove_included")
+                    : this.listName
+                      ? t("members.remove_from").replace("{list}", this.listName)
+                      : t("members.remove"),
+                  { memberId: member.id },
+                )
+              : nothing
+          }</wt-row-actions
         >
       </td>
     </tr>`;
@@ -377,7 +391,7 @@ export class MemberListEditor extends LitElement {
               ${t("members.add_placeholder")}
             </option>
             ${this.#group(t("members.products"), this.#offer.products)}
-            ${this.#group(t("members.sections"), this.#offer.sections)}
+            ${this.sectionChoices ? this.#group(t("members.sections"), this.#offer.sections) : nothing}
           </select>
         </label>
         <wt-button

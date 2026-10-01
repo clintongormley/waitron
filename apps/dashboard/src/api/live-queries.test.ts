@@ -72,10 +72,6 @@ it.each([
   ["listExtraLists", [], ["extra_lists", "extra_list_items", "product_modifiers"]],
   ["getExtraList", ["e1"], ["extra_lists", "extra_list_items"]],
   ["listLibraryProducts", [], ["products"]],
-  // `listSections` and `librarySectionUsages` (packages/catalogue/src/sections.ts); the usages
-  // also name each menu from `catalogues`.
-  ["listSections", [], ["sections", "section_members"]],
-  ["listSectionUsages", [], ["sections", "section_members", "catalogues"]],
   // `readMenuStructure` reads the root from `menu_details`, then the whole section graph.
   ["getMenuStructure", ["menu-1"], ["menu_details", "sections", "section_members", "catalogues"]],
   [

@@ -9,7 +9,7 @@ import { isProductPrice } from "@waitron/catalogue/src/modifier-limits.js";
 import { stringToCents } from "@waitron/shared";
 import type {
   CategorySummary,
-  LibrarySection,
+  SectionDetails,
   MenuPriceRow,
   MenuVariant,
   MenuVariantWrite,
@@ -183,7 +183,7 @@ export class MenuPricesTable extends LitElement {
   @property({ type: Boolean }) loading = false;
   @property({ type: Boolean }) failed = false;
   /** The section library, for each placement's internal names. */
-  @property({ attribute: false }) sections: LibrarySection[] = [];
+  @property({ attribute: false }) sections: SectionDetails[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   /** The products with their variants, for each variant's name and own price. */
   @property({ attribute: false }) products: Product[] = [];

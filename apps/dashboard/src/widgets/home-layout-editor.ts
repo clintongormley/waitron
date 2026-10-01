@@ -349,7 +349,8 @@ export class HomeLayoutEditor extends LitElement {
       <dashboard-member-list-editor
         .members=${this.#members}
         .products=${this.#products}
-        .sections=${this.#sections}
+        .nodes=${this.#sections.map((section) => ({ memberId: section.id, ref: { kind: "section" as const, sectionId: section.id }, internalName: section.internalName }))}
+        .sectionChoices=${true}
         .notes=${this.#notes}
         .openable=${false}
         .busy=${this.busy}

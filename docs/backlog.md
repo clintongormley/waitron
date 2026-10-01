@@ -304,7 +304,8 @@ screen), landed as #654 (2026-09-25):** **Products and recipes**,
 **Sections** lists every library section with where it is used (one batch read,
 `GET /management-api/sections/usages`), shows each place a section is nested, and edits, duplicates
 and deletes sections and their members.
-_2026-09-30: the Sections screen and library sections are to be removed; each section will belong
+_2026-10-01: menus inclusion slice 2 Task 7 removes the Sections screen and its library API client; sections are edited in their owning menu. The former screen-specific residuals below are retired.
+2026-09-30: the Sections screen and library sections are to be removed; each section will belong
 to one menu, and menus share by including another menu
 ([design](superpowers/specs/2026-09-30-catalogue-menus-routing-design.md) §4). The items #654
 left below go with the screen._
@@ -321,7 +322,8 @@ prices or counts.
 top-level list (a menu-owned `sections` row, pointed at by `menu_details`); `menu_sections` is
 dropped and `menu_items` rebuilt to hang off the menu; an offer carries every section path that
 reaches it (`placements`); the menu's own price, switch, variant prices and extras for a product
-reset when the menu stops reaching it. Left by #659, none blocking: the image library
+reset when the menu stops reaching it. 2026-10-01: the image library now links menu-owned section images to their menu editor (slice 2 Task 5); Task 7 edits menu and section photos there.
+Left by #659, none blocking: the image library
 links a menu-owned section's photo to the sections screen, though nothing puts a photo on one yet;
 and `sections_owner_menu_fk` still has no delete rule (Task 1's note stands) — nothing deletes a menu
 today, so it bites only when something does. A product reached through a section offers no extras
@@ -335,6 +337,7 @@ thrower, and the demo seed that function's only caller outside tests. The code a
 **Menus Task 4 (the Menus screen), landed as #664 (2026-09-26):** **Products and recipes → Menus**
 (`/manage/menus`) lists, creates and renames menus; a menu's Structure tab shows and edits its whole
 tree; and creating a product on the Products screen ends with an optional "Add to menus" step.
+2026-10-01: slice 2 Task 7 moves New section here and menu create/rename to the full details form: internal name, customer names, image and colour. The old internal-name-only and Sections-screen editing residuals below are closed.
 Left, none blocking (the blank-name create is DONE, lane C's C9: refused as the rename is, with
 `management.request_invalid` naming `name`): "New section here" asks only for the internal name, so
 a section's customer names, image and colour are still edited on the Sections screen; which
@@ -721,10 +724,13 @@ the spec's open integration points; D6, D9, D10, D11, D12, D13 and D22 are the o
 owner. Menus Task 3 wipes existing venues (it rebuilds `menu_items`); every other migrating task
 adds tables or columns only and measures its own upgrade. Every dev venue then needs
 `wa-wt reset demo <name>`, and the owner's box should be wiped once now that menus Task 7 has landed (#719).
+2026-10-01: the photo link residual below is closed by slice 2 Task 5; menu-owned section photos link to the menu editor, where Task 7 edits them.
 A note Task 2 leaves for Task 3: the image library links every `section` use of a photo to
 `/manage/sections?section=<id>`, but that use can also be a list a menu owns, which the sections
 screen does not list and so does nothing for. So when Task 3 lets a menu's list carry a photo, link it to the menu editor or
 narrow the link to library sections.
+
+2026-10-01: the removed Sections screen is no longer the next action for the historical copy-membership proposal below; any follow-up belongs in the owning menu editor under the menu-inclusion model.
 
 **Copying some of a section's products into another section is not built** (found by the menus
 plan's closing sweep, 2026-09-27). The menus spec §2 ("Copy membership when you want independent

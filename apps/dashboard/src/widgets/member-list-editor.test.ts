@@ -36,7 +36,13 @@ async function mount(props: Partial<MemberListEditor> = {}) {
   const { el } = await mountWidget<MemberListEditor>("dashboard-member-list-editor", {
     members: members(),
     products,
-    sections,
+    nodes: sections.map((section) => ({
+      memberId: `m-${section.id.slice(2)}`,
+      ref: { kind: "section" as const, sectionId: section.id },
+      internalName: section.internalName,
+      names: section.names,
+      children: [],
+    })),
     excludeSectionIds: ["s-favourites"],
     label: "Members of Lunch specials",
     ...props,
@@ -87,7 +93,7 @@ it("lists members in position order, naming each one's kind in text and a sectio
 });
 
 it("names a member whose product or section it was not given as unavailable, keeping its kind", async () => {
-  const el = await mount({ products: [], sections: [] });
+  const el = await mount({ products: [], nodes: [] });
   const burger = q(el, 'tr[data-member="m-burger"]');
   expect(burger.querySelector('[data-test="name"]')!.textContent!.trim()).toBe(
     t("members.missing"),
@@ -226,18 +232,15 @@ it("reports nothing when the dragged member leaves the list before the drag ends
   expect(moves).toEqual([]);
 });
 
-it("offers products and sections under separate headings, leaving out held and excluded ones", async () => {
+it("offers only products, leaving out held ones", async () => {
   const el = await mount();
   const groups = [...el.shadowRoot!.querySelectorAll("optgroup")];
-  expect(groups.map((group) => group.label)).toEqual([
-    t("members.products"),
-    t("members.sections"),
-  ]);
+  expect(groups.map((group) => group.label)).toEqual([t("members.products")]);
   const texts = (group: HTMLOptGroupElement) =>
     [...group.querySelectorAll("option")].map((option) => option.textContent!.trim());
   // Burger and Lemonade are already held; Drinks is held and Favourites is excluded.
   expect(texts(groups[0]!)).toEqual(["Chips", "Salad"]);
-  expect(texts(groups[1]!)).toEqual(["Beer", "Desserts"]);
+  expect(groups).toHaveLength(1);
 });
 
 it("leaves out a heading with nothing under it", async () => {
@@ -246,10 +249,10 @@ it("leaves out a heading with nothing under it", async () => {
   expect(groups.map((group) => group.label)).toEqual([t("members.products")]);
 });
 
-it("adds the chosen product or section and resets the picker", async () => {
+it("adds the chosen product and resets the picker", async () => {
   const el = await mount();
   const adds = capture<{ ref: unknown }>(el, "wt-member-add");
-  await choose(el, "section:s-beer");
+  await choose(el, "product:p-chips");
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("");
@@ -257,7 +260,7 @@ it("adds the chosen product or section and resets the picker", async () => {
   q(el, '[data-test="add"]').click();
   await el.updateComplete;
   expect(adds).toEqual([
-    { ref: { kind: "section", sectionId: "s-beer" } },
+    { ref: { kind: "product", productId: "p-chips" } },
     { ref: { kind: "product", productId: "p-salad" } },
   ]);
 });
@@ -376,7 +379,7 @@ it("says the list is empty and still offers everything not excluded", async () =
   const options = [...el.shadowRoot!.querySelectorAll("optgroup option")].map((option) =>
     option.textContent!.trim(),
   );
-  expect(options).toEqual(["Burger", "Chips", "Lemonade", "Salad", "Beer", "Desserts", "Drinks"]);
+  expect(options).toEqual(["Burger", "Chips", "Lemonade", "Salad"]);
 });
 
 it("drops a chosen product once the list comes to hold it, so Add explains rather than repeats it", async () => {
@@ -398,12 +401,12 @@ it("drops a chosen product once the list comes to hold it, so Add explains rathe
 it("keeps a choice that is still on offer when the list changes around it", async () => {
   const el = await mount();
   const adds = capture(el, "wt-member-add");
-  await choose(el, "section:s-desserts");
+  await choose(el, "product:p-salad");
   el.members = members().filter((member) => member.id !== "m-lemonade");
   await el.updateComplete;
-  expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("section:s-desserts");
+  expect(q<HTMLSelectElement>(el, 'select[name="member-ref"]').value).toBe("product:p-salad");
   q(el, '[data-test="add"]').click();
-  expect(adds).toEqual([{ ref: { kind: "section", sectionId: "s-desserts" } }]);
+  expect(adds).toEqual([{ ref: { kind: "product", productId: "p-salad" } }]);
 });
 
 it("finds the section and every section holding it however deep, even round a loop", () => {

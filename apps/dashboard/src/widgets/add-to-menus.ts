@@ -4,12 +4,7 @@ import { baseStyles, focusFirstInvalid } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
-import type {
-  CatalogueSummary,
-  LibrarySection,
-  MenuStructure,
-  MenuStructureNode,
-} from "../api/client.js";
+import type { CatalogueSummary, MenuStructure, MenuStructureNode } from "../api/client.js";
 import { t } from "../i18n/t.js";
 
 export interface PlacementSection {
@@ -25,6 +20,7 @@ export interface PlacementMenu {
   id: string;
   name: string;
   rootSectionId: string;
+  sharedWith?: string[];
   sections: PlacementSection[];
 }
 
@@ -33,34 +29,19 @@ export interface PlacementFailure {
   reason: string;
 }
 
-function reachedSections(nodes: readonly MenuStructureNode[], into: Set<string>): Set<string> {
-  for (const node of nodes)
-    if (node.ref.kind === "section") {
-      into.add(node.ref.sectionId);
-      reachedSections(node.children ?? [], into);
-    }
-  return into;
-}
-
 /** Each menu's sections as its structure nests them; `structures[i]` is `menus[i]`'s. */
 export function placementMenus(
   menus: readonly CatalogueSummary[],
   structures: readonly MenuStructure[],
-  sections: readonly LibrarySection[],
 ): PlacementMenu[] {
-  const names = new Map(sections.map((section) => [section.id, section.internalName]));
-  const reached = structures.map((structure) => reachedSections(structure.nodes, new Set()));
   const build = (nodes: readonly MenuStructureNode[], menuIndex: number): PlacementSection[] =>
     nodes.flatMap((node) => {
-      if (node.ref.kind !== "section") return [];
-      const id = node.ref.sectionId;
+      if (node.ref.kind !== "section" || node.includedMenuId) return [];
       return [
         {
-          id,
-          name: names.get(id) ?? t("members.missing"),
-          sharedWith: menus.flatMap((menu, index) =>
-            index !== menuIndex && reached[index]?.has(id) ? [menu.name] : [],
-          ),
+          id: node.ref.sectionId,
+          name: node.internalName ?? t("members.missing"),
+          sharedWith: (structures[menuIndex]?.includedBy ?? []).map(({ name }) => name),
           children: build(node.children ?? [], menuIndex),
         },
       ];
@@ -73,6 +54,7 @@ export function placementMenus(
             id: menu.id,
             name: menu.name,
             rootSectionId: structure.rootSectionId,
+            sharedWith: structure.includedBy.map(({ name }) => name),
             sections: build(structure.nodes, index),
           },
         ]
@@ -80,12 +62,6 @@ export function placementMenus(
   });
 }
 
-/**
- * The optional step after a product is created: which menu places to add it to. A section is one
- * list wherever it appears, so it is chosen by its id — ticking it under one menu ticks it under
- * every other — and is asked for once. The host performs the writes and reports refusals back
- * through `failures`.
- */
 @customElement("dashboard-add-to-menus")
 export class AddToMenus extends LitElement {
   static override styles = [
@@ -196,6 +172,7 @@ export class AddToMenus extends LitElement {
     };
     for (const menu of this.menus ?? []) {
       add(menu.rootSectionId, menu.name, true);
+      hasShared ||= Boolean(menu.sharedWith?.length);
       walk(menu.sections);
     }
     this.#places = places;
@@ -307,7 +284,7 @@ export class AddToMenus extends LitElement {
             aria-describedby=${this.#noneChosen ? "none-chosen" : nothing}
           >
             <legend>${menu.name}</legend>
-            ${this.#pick(menu.rootSectionId, t("add_to_menus.top_level"))}
+            ${this.#pick(menu.rootSectionId, t("add_to_menus.top_level"), menu.sharedWith)}
             ${menu.sections.length ? this.#tree(menu.sections) : nothing}
           </fieldset>`,
       )}

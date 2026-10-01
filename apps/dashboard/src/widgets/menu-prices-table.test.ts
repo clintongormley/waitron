@@ -2,7 +2,7 @@ import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CategorySummary,
-  LibrarySection,
+  SectionDetails,
   MenuPriceRow,
   MenuVariantWrite,
   Product,
@@ -21,7 +21,7 @@ beforeEach(() => {
 
 /** Each section's customer names differ from its internal name, so a placement drawn from the
  * wrong one fails. */
-const sections: LibrarySection[] = [
+const sections: SectionDetails[] = [
   ["s-drinks", "Drinks", "Something to drink"],
   ["s-beer", "Beer", "Cold beers on tap"],
   ["s-fav", "Favourites", "Our picks"],
