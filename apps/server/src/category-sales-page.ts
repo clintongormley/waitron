@@ -1,11 +1,4 @@
-import {
-  esc,
-  labelAmountLines,
-  prepareText,
-  textGrid,
-  wrapText,
-  type EscSetting,
-} from "@waitron/printing";
+import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CategoryReport, CategoryReportMode, CategoryTotal } from "@waitron/reporting";
 import type { SupportedLocale } from "@waitron/shared";
 import { formatMoney } from "./receipt-money.js";
@@ -88,10 +81,10 @@ export function formatCategorySalesPage({
   printer,
 }: CategorySalesPageInput): Uint8Array {
   const s = STRINGS[locale];
-  const { columns, widthDots } = textGrid(printer.paperWidth, printer.resolution);
-  const p = prepareText;
-  const money = (value: string): string => p(formatMoney(value, locale));
-  const b = esc(printer).init().printArea(widthDots);
+  const b = esc(printer);
+  const { columns, widthDots } = b.grid;
+  b.init().printArea(widthDots);
+  const money = (value: string): string => prepareText(formatMoney(value, locale));
 
   const nameOf = (node: CategoryTotal): string =>
     node.kind === "uncategorised"
@@ -119,20 +112,20 @@ export function formatCategorySalesPage({
 
   const all = [...rows, totalRow];
   const width = Math.max(
-    p(s.gross).length,
-    p(s.net).length,
+    prepareText(s.gross).length,
+    prepareText(s.net).length,
     ...all.flatMap((row) => [money(row.gross).length, money(row.net).length]),
   );
   const amounts = (gross: string, net: string): string =>
     `${gross.padStart(width)} ${net.padStart(width)}`;
 
   const text = (value: string): void => {
-    for (const line of wrapText(p(value), columns)) b.line(line);
+    for (const line of wrapText(prepareText(value), columns)) b.line(line);
   };
   const row = ({ label, depth, gross, net }: (typeof all)[number]): void => {
     const indent = depth * INDENT;
     for (const line of labelAmountLines(
-      p(" ".repeat(indent) + label),
+      prepareText(" ".repeat(indent) + label),
       amounts(money(gross), money(net)),
       columns,
       indent + INDENT,
@@ -145,7 +138,12 @@ export function formatCategorySalesPage({
   text(from === to ? s.day(from) : s.range(from, to));
   if (extrasIntoDish) text(s.extrasIntoDish);
   b.line();
-  for (const line of labelAmountLines("", amounts(p(s.gross), p(s.net)), columns)) b.line(line);
+  for (const line of labelAmountLines(
+    "",
+    amounts(prepareText(s.gross), prepareText(s.net)),
+    columns,
+  ))
+    b.line(line);
   for (const r of rows) row(r);
   b.line("-".repeat(columns));
   row(totalRow);

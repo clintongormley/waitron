@@ -1,4 +1,4 @@
-import type { ReceiptPrinterSettings } from "./receipt-ticket.js";
+import type { EscSetting } from "@waitron/printing";
 import { formatReceipt } from "./receipt-ticket.js";
 import type { TillSaleResult } from "./till-sale.js";
 
@@ -21,7 +21,7 @@ const SAMPLE_SALE: TillSaleResult = {
 };
 
 /** A realistic but unmistakably non-fiscal receipt for checking the printer's current draft settings. */
-export function formatSampleReceipt(printer: ReceiptPrinterSettings): Uint8Array {
+export function formatSampleReceipt(printer: EscSetting): Uint8Array {
   return formatReceipt({
     result: SAMPLE_SALE,
     issuer: { venueName: "Waitron - Recibo de muestra", nif: "B00000000" },

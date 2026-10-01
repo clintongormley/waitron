@@ -1,9 +1,16 @@
-import { FEED_BEFORE_CUT, columnsFor, esc, textGrid, withQuietZone } from "@waitron/printing";
+import {
+  FEED_BEFORE_CUT,
+  columnsFor,
+  esc,
+  textGrid,
+  withQuietZone,
+  type EscSetting,
+} from "@waitron/printing";
 import { compareDecimal, decimal, sumDecimals } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 
 import { formatReceipt } from "./receipt-ticket.js";
-import type { ReceiptIssuer, ReceiptPrinterSettings, ReceiptTrim } from "./receipt-ticket.js";
+import type { ReceiptIssuer, ReceiptTrim } from "./receipt-ticket.js";
 import { qrModules } from "./qr-matrix.js";
 import {
   bytesInclude,
@@ -30,11 +37,11 @@ function fromQr(bytes: Uint8Array): ReturnType<typeof printedCommands> {
   return commands.slice(commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined));
 }
 
-const PRINTER_80: ReceiptPrinterSettings = {
+const PRINTER_80: EscSetting = {
   paperWidth: "80mm",
   resolution: "180dpi",
 };
-const PRINTER_58: ReceiptPrinterSettings = {
+const PRINTER_58: EscSetting = {
   paperWidth: "58mm",
   resolution: "180dpi",
 };
@@ -124,7 +131,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       const widthDots = widthLowByte + 256 * widthHighByte;
       const lines = printedCommands(bytes).filter((command) => command.text !== undefined);
       expect(lines.length).toBeGreaterThan(0);
-      for (const line of lines) expect((line.bytes[4]! + 256 * line.bytes[5]!) * 8).toBe(widthDots);
+      for (const line of lines) expect(line.widthDots).toBe(widthDots);
     },
   );
   it.each([
@@ -144,7 +151,7 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
           printer,
         }),
       ).map((command) => command.name);
-      for (const name of ["ESC t", "FS .", "ESC p", "text", "LF"])
+      for (const name of ["ESC t", "FS .", "ESC p", "DLE DC4", "text", "LF"])
         expect(names).not.toContain(name);
     },
   );
@@ -1045,10 +1052,9 @@ describe("formatReceipt — printer layout", () => {
           printer: { paperWidth, resolution },
         });
         expect(printedCommands(bytes).map((c) => c.name)).not.toContain("GS ( k");
-        const qr = fromQr(bytes)[0]!.bytes;
-        // GS v 0 m xL xH yL yH: x is bytes per row, y is the height in dots.
-        expect(qr[4]! + 256 * qr[5]!).toBe(widthBytes);
-        expect(qr[6]! + 256 * qr[7]!).toBe(heightDots);
+        const qr = fromQr(bytes)[0]!;
+        expect(qr.widthDots).toBe(widthBytes * 8);
+        expect(qr.heightDots).toBe(heightDots);
         const squares = qrModules(FILED_SALE.qr).length;
         expect(squares).toBe(41);
         expect(heightDots).toBe((squares + 8) * dots);

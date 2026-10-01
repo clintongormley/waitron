@@ -24,7 +24,6 @@ import {
   labelAmountLines,
   prepareText,
   safeWidthDots,
-  textGrid,
   withQuietZone,
   wrapText,
   type EscSetting,
@@ -58,8 +57,6 @@ export interface ReceiptTrim {
   footerMessage?: string;
 }
 
-export type ReceiptPrinterSettings = EscSetting;
-
 /** Everything {@link formatReceipt} needs to render one filed sale onto paper. */
 export interface FormatReceiptInput {
   /** The FILED sale to re-render — the authoritative fiscal figures and the goods composition. */
@@ -71,7 +68,7 @@ export interface FormatReceiptInput {
   /** The locale the money, discount percentages, date and product names are FORMATTED in (e.g. "es-ES"). NOT the operator UI. */
   invoiceLocale: string;
   /** The receipt printer's settings: they set the image width, the column count and the QR dot size. */
-  printer: ReceiptPrinterSettings;
+  printer: EscSetting;
   /** Marks a Demo/Prepare transaction without changing any filed fiscal value. */
   simulated?: boolean;
   duplicate?: boolean;
@@ -147,8 +144,9 @@ export function formatReceipt({
   duplicate = false,
 }: FormatReceiptInput): Uint8Array {
   const locale = invoiceLocale;
-  const { columns, widthDots } = textGrid(printer.paperWidth, printer.resolution);
-  const b = esc(printer).init().printArea(widthDots);
+  const b = esc(printer);
+  const { columns, widthDots } = b.grid;
+  b.init().printArea(widthDots);
   const text = (s: string, indent = 0): void => {
     for (const line of wrapText(prepareText(s), columns, indent)) b.line(line);
   };

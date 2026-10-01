@@ -14,12 +14,12 @@ interface Picture {
 function pictures(bytes: Uint8Array): Picture[] {
   return printedCommands(bytes)
     .filter((command) => command.name === "GS v 0" && command.text === undefined)
-    .map(({ bytes: image }) => {
-      const stride = image[4]! + 256 * image[5]!;
+    .map(({ bytes: image, widthDots, heightDots }) => {
+      const stride = widthDots! / 8;
       const data = image.subarray(8);
       return {
-        widthDots: stride * 8,
-        heightDots: image[6]! + 256 * image[7]!,
+        widthDots: widthDots!,
+        heightDots: heightDots!,
         data,
         dot: (x, y) => (data[y * stride + (x >> 3)]! & (0x80 >> (x & 7))) !== 0,
       };
@@ -52,7 +52,7 @@ describe("formatTestPage", () => {
     const en = printedLines(formatTestPage({ locale: "en-GB" })).join(" ");
     const es = printedLines(formatTestPage({ locale: "es-ES" })).join(" ");
     expect(en).toContain("last number");
-    expect(es).toContain("ultimo numero");
+    expect(es).toContain("¿Cuál es el último número de la regla");
   });
 
   it("draws a ruler 576 dots wide with a short tick every 8 dots", () => {
@@ -98,7 +98,7 @@ describe("formatTestPage", () => {
       for (const line of printedLines(bytes)) expect(line.length, line).toBeLessThanOrEqual(30);
       const captions = printedCommands(bytes).filter((command) => command.text !== undefined);
       expect(captions.length).toBeGreaterThan(0);
-      for (const { bytes: image } of captions) expect((image[4]! + 256 * image[5]!) * 8).toBe(360);
+      for (const { widthDots } of captions) expect(widthDots).toBe(360);
     }
   });
 
@@ -117,7 +117,7 @@ describe("formatTestPage", () => {
     expect(en).toContain("Ignore the white border");
     expect(en).toContain("No need to scan");
     expect(es).toContain("Mida con una regla el cuadrado negro");
-    expect(es).toContain("Mide mas cerca de 40 mm o de 45 mm");
+    expect(es).toContain("¿Mide más cerca de 40 mm o de 45 mm?");
     expect(es).toContain("Ignore el borde blanco");
     expect(es).toContain("No hace falta escanear");
     const names = printedCommands(formatTestPage({ locale: "es-ES" })).map((c) => c.name);

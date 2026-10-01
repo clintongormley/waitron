@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { FEED_BEFORE_CUT, columnsFor } from "@waitron/printing";
+import { FEED_BEFORE_CUT, columnsFor, type EscSetting } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
-import type { KitchenLayout, KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
+import type { KitchenTicket, KitchenTicketItem } from "./kitchen-ticket.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 
 // Reads the printed text back from the images each line is drawn as; the final three bytes are always
@@ -10,8 +10,8 @@ import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ti
 const CUT_BYTES = [0x1d, 0x56, 0x00];
 /** ESC d n — the shared feed before every cut, so the tear-off clears the print head. */
 const FEED_THEN_CUT = [0x1b, 0x64, FEED_BEFORE_CUT, ...CUT_BYTES];
-const KITCHEN_80: KitchenLayout = { paperWidth: "80mm", resolution: "180dpi" };
-const KITCHEN_58: KitchenLayout = { paperWidth: "58mm", resolution: "180dpi" };
+const KITCHEN_80: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
+const KITCHEN_58: EscSetting = { paperWidth: "58mm", resolution: "180dpi" };
 
 describe("formatKitchenTicket", () => {
   describe("station scope", () => {
@@ -402,7 +402,7 @@ describe("kitchen paper layout", () => {
       expect(names).not.toContain("FS .");
       expect(names).not.toContain("text");
       const lines = commands.filter((command) => command.text !== undefined);
-      for (const line of lines) expect((line.bytes[4]! + 256 * line.bytes[5]!) * 8).toBe(widthDots);
+      for (const line of lines) expect(line.widthDots).toBe(widthDots);
       expect(lines.map((line) => line.text)).toContain("1 x Café");
     },
   );

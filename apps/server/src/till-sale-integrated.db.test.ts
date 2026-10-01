@@ -74,7 +74,7 @@ import {
   releaseStalePaymentAttempts,
 } from "./till-sale.js";
 import type { IntegratedPayDeps } from "./till-sale.js";
-import { commandNames, decodeTicket } from "./testing/decode-ticket.js";
+import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
@@ -671,7 +671,7 @@ describe("payWorkingOrderIntegrated (split-transaction integrated pay, ordering 
     expect(afterFirst).toHaveLength(1);
     const payload = new Uint8Array(afterFirst[0]!);
     expect(decodeTicket(payload)).toContain("VERI*FACTU");
-    expect(commandNames(payload).includes("ESC p")).toBe(false);
+    expect(opensDrawer(payload)).toBe(false);
     expect(await drawerOpenCount(cfg)).toBe(0);
     expect(await registroCount(id)).toBe(1);
 

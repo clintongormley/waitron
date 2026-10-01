@@ -252,8 +252,8 @@ describe("formatCategorySalesPage", () => {
       ["80mm", 42],
     ] as const) {
       for (const locale of ["en-GB", "es-ES"] as const) {
-        // About a thousand lines of images, past the print preview's 1 MiB, so they are read
-        // command by command rather than through the preview.
+        // Read command by command: the preview's text skips an image that does not read as text,
+        // where here it is an undefined line.
         const lines = printedCommands(
           formatCategorySalesPage({
             report,

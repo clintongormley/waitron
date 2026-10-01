@@ -334,8 +334,8 @@ describe("print-agent end to end", () => {
     await agent.runOnce();
     expect(agent.status.phase).toBe("running");
 
-    const networkPayload = esc(WIDE).text("Mesa 4").cut().bytes();
-    const usbPayload = esc(WIDE).text("Barra 2").cut().bytes();
+    const networkPayload = esc(WIDE).line("Mesa 4").cut().bytes();
+    const usbPayload = esc(WIDE).line("Barra 2").cut().bytes();
     const { jobId } = await withTransaction(suite.db, async (tx) => {
       return enqueuePrintJob(tx, { locationId }, printerId, networkPayload);
     });
@@ -363,7 +363,7 @@ describe("print-agent end to end", () => {
     expect(await host.token()).toBeNull();
 
     const enqueuedAfterRevoke = await withTransaction(suite.db, async (tx) => {
-      return enqueuePrintJob(tx, { locationId }, printerId, esc(WIDE).text("Ignored").bytes());
+      return enqueuePrintJob(tx, { locationId }, printerId, esc(WIDE).line("Ignored").bytes());
     });
     await agent.runOnce();
     expect(agent.status.phase).toBe("unauthorized");

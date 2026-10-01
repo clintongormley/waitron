@@ -31,7 +31,7 @@ import { AppError, perDishOptionQuantity, thousandthsToDecimal } from "@waitron/
 import type { Decimal } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { enqueuePrintJob } from "@waitron/printing";
-import type { PaperWidth, PrintConfig, Resolution } from "@waitron/printing";
+import type { EscSetting, PaperWidth, PrintConfig, Resolution } from "@waitron/printing";
 import { arrangeTicketItems, formatCorrectionSlip, formatKitchenTicket } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
@@ -118,14 +118,8 @@ async function printerMappings(
     );
 }
 
-/** The settings that change a kitchen ticket's bytes: together they set the image's dot width. */
-interface KitchenPrinterLayout {
-  paperWidth: PaperWidth;
-  resolution: Resolution;
-}
-
 /** `printers` grouped by paper width and resolution, in first-seen order: one ticket per group. */
-function groupByLayout<T extends KitchenPrinterLayout>(printers: readonly T[]): T[][] {
+function groupByLayout<T extends EscSetting>(printers: readonly T[]): T[][] {
   const groups = new Map<string, T[]>();
   for (const printer of printers) {
     const key = `${printer.paperWidth}|${printer.resolution}`;
@@ -721,7 +715,7 @@ async function printCorrectionSlips(
   const stationNames = await readStationNames(tx, stationIds);
   const header = knownHeader ?? (await readOrderHeader(tx, cfg, orderId));
 
-  const printersByStation = new Map<string, (KitchenPrinterLayout & { printerId: string })[]>();
+  const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();
   for (const mapping of mappingRows) {
     const bucket = printersByStation.get(mapping.stationId) ?? [];
     bucket.push({

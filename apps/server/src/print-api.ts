@@ -28,10 +28,8 @@ import {
   claimPrintJobs,
   canResendPrintJob,
   resendPrintJob,
-  columnsFor,
   createPrinter,
   deactivatePrinter,
-  dpiValue,
   endUnpairedPrinterJobs,
   enqueuePrintJob,
   failUnprintableBluetoothJobs,
@@ -40,6 +38,7 @@ import {
   reportPrintJob,
   updatePrinter,
   esc,
+  textGrid,
   type CreatePrinterInput,
   type UpdatePrinterInput,
 } from "@waitron/printing";
@@ -1078,11 +1077,10 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .where(eq(printJobs.id, id)),
       );
       if (job === undefined) throw new AppError("print_job.not_found", { id });
-      // The printer's CURRENT settings: a job built for 42 columns previews as it would print now.
+      // The printer's setting now sizes only a job that draws no line of text.
       return c.json(
         previewPrintJob(job.payload, {
-          columns: columnsFor(job.paperWidth),
-          dpi: dpiValue(job.resolution),
+          widthDots: textGrid(job.paperWidth, job.resolution).widthDots,
         }),
       );
     }),

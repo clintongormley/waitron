@@ -162,7 +162,7 @@ function lineWidths(payload: Uint8Array): Set<number> {
   return new Set(
     printedCommands(payload)
       .filter((command) => command.text !== undefined)
-      .map((command) => (command.bytes[4]! + 256 * command.bytes[5]!) * 8),
+      .map((command) => command.widthDots!),
   );
 }
 

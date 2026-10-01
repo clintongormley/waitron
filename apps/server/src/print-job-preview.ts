@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { readRasterText } from "@waitron/printing";
+import { gridForWidth, readRasterText } from "@waitron/printing";
 
 export type PrintPreviewBlock =
   | { kind: "text"; text: string; align?: "center" | "right" }
@@ -17,9 +17,13 @@ export type PrintPreviewBlock =
     };
 
 export interface PrintJobPreview {
-  /** The printer's column count and resolution, for the dashboard to size the paper and images. */
+  /**
+   * The dots across the job's line, which the dashboard's paper stands for: the width its first drawn
+   * line of text was drawn at, every line of a job sharing it; the printer's setting now when the
+   * job draws none. `columns` is that width's grid.
+   */
+  widthDots: number;
   columns: number;
-  dpi: number;
   text: string;
   blocks: PrintPreviewBlock[];
   qrData: string[];
@@ -28,10 +32,14 @@ export interface PrintJobPreview {
   unsupported: boolean;
 }
 
-/** Every line is an image of up to 2,024 bytes (576 dots × 28), so 1 MiB holds about 500 lines. */
-const MAX_INPUT_BYTES = 1_048_576;
-const MAX_IMAGE_BYTES = 1_048_576;
-const MAX_OUTPUT_CHARACTERS = 65_536;
+/**
+ * A line is an image of 8 + W/8 × 28 bytes, 2,024 at 576 dots, so 4 MiB holds about 2,000 lines: a
+ * deep category report prints about 1,000.
+ */
+const MAX_INPUT_BYTES = 4_194_304;
+const MAX_IMAGE_BYTES = 4_194_304;
+/** About 3,000 lines of 42 columns and a newline each (43 characters a line). */
+const MAX_OUTPUT_CHARACTERS = 131_072;
 
 /**
  * Decode the commands emitted by printing's EscBuilder. Unknown commands stop the preview:
@@ -43,11 +51,12 @@ const MAX_OUTPUT_CHARACTERS = 65_536;
  */
 export function previewPrintJob(
   payload: Uint8Array,
-  printer: { columns: number; dpi: number } = { columns: 42, dpi: 180 },
+  printer: { widthDots: number } = { widthDots: 512 },
 ): PrintJobPreview {
+  let lineWidth: number | undefined;
   const result: PrintJobPreview = {
-    columns: printer.columns,
-    dpi: printer.dpi,
+    widthDots: 0,
+    columns: 0,
     text: "",
     blocks: [],
     qrData: [],
@@ -96,6 +105,7 @@ export function previewPrintJob(
       }
       result.text += `${text}\n`;
       outputLength += text.length + 1;
+      lineWidth ??= width;
     }
     imageBytes += bytes.length;
     return appendBlock({
@@ -274,5 +284,7 @@ export function previewPrintJob(
     break;
   }
   if (payload.length > MAX_INPUT_BYTES) result.truncated = true;
+  result.widthDots = lineWidth ?? printer.widthDots;
+  result.columns = gridForWidth(result.widthDots).columns;
   return result;
 }

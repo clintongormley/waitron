@@ -91,7 +91,7 @@ describe("payment slip printer layout", () => {
       expect(lines.length).toBeGreaterThan(0);
       for (const line of lines) {
         expect(line.text).toBeDefined();
-        expect((line.bytes[4]! + 256 * line.bytes[5]!) * 8).toBe(widthDots);
+        expect(line.widthDots).toBe(widthDots);
       }
     },
   );

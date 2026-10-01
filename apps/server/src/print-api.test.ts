@@ -409,7 +409,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
-    const payload = esc(WIDE).text("Mesa 4").cut().bytes();
+    const payload = esc(WIDE).line("Mesa 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
 
     const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
@@ -620,7 +620,7 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     // Unique per test: the suite shares one location, and `local_key` is unique per location.
     const serial = `SN-${randomUUID()}`;
     const printerId = await createUsbPrinter(app, serial, "Cocina USB");
-    const payload = esc(WIDE).text("Mesa 4").cut().bytes();
+    const payload = esc(WIDE).line("Mesa 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
 
     const blind = await pull(app, token, { visible: [], scanned: [] });
@@ -1804,7 +1804,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     ).toBe(404);
   });
 
-  it("previews a job at its printer's current columns and resolution, with the job's own images and their text", async () => {
+  it("previews a job at the width its lines were drawn, with the job's own images and their text", async () => {
     const app = mountApp();
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
@@ -1832,8 +1832,8 @@ describe("mountPrintApi — management: recent jobs", () => {
     );
     expect(narrowPreview.status).toBe(200);
     expect(await narrowPreview.json()).toMatchObject({
+      widthDots: 384,
       columns: 30,
-      dpi: 203,
       text: "Café 12,50 €\n",
       blocks: [
         {
@@ -1852,7 +1852,35 @@ describe("mountPrintApi — management: recent jobs", () => {
     const widePreview = await send(app, "GET", `/management-api/print-jobs/${wideJob}/preview`, {
       cookie: managerCookie,
     });
-    expect(await widePreview.json()).toMatchObject({ columns: 42, dpi: 180 });
+    expect(await widePreview.json()).toMatchObject({ widthDots: 512, columns: 42 });
+  });
+
+  it("previews a job drawn before its printer's setting changed at the width it was drawn, and a job with no line at the setting now", async () => {
+    const app = mountApp();
+    const created = await send(app, "POST", "/management-api/printers", {
+      cookie: managerCookie,
+      body: {
+        name: "Vista 80 nueva",
+        transport: "network_tcp",
+        host: "10.0.0.44",
+        paperWidth: "80mm",
+        resolution: "203dpi",
+      },
+    });
+    const { id: printerId } = (await created.json()) as { id: string };
+    const drawnAt384 = await enqueue(
+      printerId,
+      esc({ paperWidth: "58mm", resolution: "203dpi" }).init().line("Café").bytes(),
+    );
+    const drawerOnly = await enqueue(printerId, esc().init().kick().bytes());
+    const preview = async (jobId: string) =>
+      (
+        await send(app, "GET", `/management-api/print-jobs/${jobId}/preview`, {
+          cookie: managerCookie,
+        })
+      ).json();
+    expect(await preview(drawnAt384)).toMatchObject({ widthDots: 384, columns: 30 });
+    expect(await preview(drawerOnly)).toMatchObject({ widthDots: 576, columns: 42 });
   });
 
   it("answers print_job.not_found when previewing an unknown print job id", async () => {
@@ -2240,7 +2268,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     });
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 2").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 2").cut().bytes());
 
     const blind = await pull(app, token, { visible: [], scanned: [] });
     expect(blind.jobs.filter((job) => job.printerId === printerId)).toEqual([]);
@@ -2260,7 +2288,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
       body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
     });
     const { id: printerId } = (await created.json()) as { id: string };
-    return { mac, jobId: await enqueue(printerId, esc(WIDE).text("Mesa 2").cut().bytes()) };
+    return { mac, jobId: await enqueue(printerId, esc(WIDE).line("Mesa 2").cut().bytes()) };
   }
 
   it("ends a bluetooth printer's job failed, with its reason, once the box that has it paired says it cannot print over Bluetooth", async () => {
@@ -2333,7 +2361,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
       pairedBluetooth: [{ localKey: mac }],
       bluetoothPrinting: true,
     });
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 6").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 6").cut().bytes());
 
     await pull(app, blind.token, {
       visible: [],
@@ -2362,7 +2390,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
       pairedBluetooth: [{ localKey: mac }],
       bluetoothPrinting: true,
     });
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 7").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 7").cut().bytes());
 
     vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
     await pull(app, blind.token, {
@@ -2387,7 +2415,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
       pairedBluetooth: [{ localKey: mac }],
       bluetoothPrinting: true,
     });
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 8").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 8").cut().bytes());
 
     await pull(app, blind.token, {
       visible: [],
@@ -2444,7 +2472,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const printing = await joinAndAccept(app, "Barra agent");
     const blind = await joinAndAccept(app, "Cocina agent");
     const { mac, printerId } = await bluetoothPrinter(app);
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 9").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 9").cut().bytes());
 
     // Both pulls are past authentication, which takes the write lock, before a writer is held.
     const blindPull = heldPull(app, blind.token);
@@ -2547,7 +2575,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const { id: printerId } = (await created.json()) as { id: string };
     expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
 
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
     expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
   });
 
@@ -2587,7 +2615,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(edited.status).toBe(204);
     expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
 
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 4").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 4").cut().bytes());
     expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
   });
 
@@ -2605,7 +2633,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(edited.status).toBe(204);
     expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
 
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 5").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 5").cut().bytes());
     expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
   });
 
@@ -3232,7 +3260,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
     });
     const { id: printerId } = (await created.json()) as { id: string };
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 7").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 7").cut().bytes());
 
     const reply = await pull(app, token, {
       visible: [{ transport: "bluetooth", localKey: mac.toLowerCase() }],
@@ -3292,7 +3320,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     });
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
-    const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 5").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 5").cut().bytes());
 
     const reply = await pull(app, token, {
       visible: [],
@@ -3408,7 +3436,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const bystanderMac = randomMac();
       const printerId = await registerBluetooth(app, mac);
       const bystanderId = await registerBluetooth(app, bystanderMac);
-      const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       expect(await isActive(printerId)).toBe(true);
 
@@ -3503,9 +3531,9 @@ describe("Bluetooth Pair and Forget commands", () => {
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
       const bystanderId = await registerBluetooth(app, randomMac());
-      const first = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
-      const second = await enqueue(printerId, esc(WIDE).text("Mesa 4").cut().bytes());
-      const bystanderJob = await enqueue(bystanderId, esc(WIDE).text("Mesa 5").cut().bytes());
+      const first = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      const second = await enqueue(printerId, esc(WIDE).line("Mesa 4").cut().bytes());
+      const bystanderJob = await enqueue(bystanderId, esc(WIDE).line("Mesa 5").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
 
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
@@ -3546,7 +3574,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
 
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: false, error: "Not available" }] });
@@ -3567,7 +3595,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const id = await queueUnpair(app, holder.agentId, holder.token, mac);
       await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
       // Enqueued after the other box's pull, so that pull has not claimed it.
-      const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
 
       await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
 
@@ -3589,7 +3617,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
       vi.spyOn(Date, "now").mockReturnValue(start + 15_001);
       const id = await queueUnpair(app, holder.agentId, holder.token, mac);
-      const jobId = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
 
       await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
 
@@ -3601,7 +3629,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+      await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
       const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
@@ -3618,7 +3646,7 @@ describe("Bluetooth Pair and Forget commands", () => {
 
       expect(await alertsFor(later)).toEqual([]);
 
-      await enqueue(printerId, esc(WIDE).text("Mesa 4").cut().bytes());
+      await enqueue(printerId, esc(WIDE).line("Mesa 4").cut().bytes());
       expect(await alertsFor(later)).toMatchObject([
         { code: "printer.jobs_waiting", params: { count: 1 } },
       ]);
@@ -3629,7 +3657,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      const stale = await enqueue(printerId, esc(WIDE).text("Mesa 3").cut().bytes());
+      const stale = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
 

@@ -12,8 +12,8 @@ describe("formatSampleReceipt", () => {
       const bytes = formatSampleReceipt({ paperWidth, resolution: "203dpi" });
       const qr = printedCommands(bytes).find((c) => c.name === "GS v 0" && c.text === undefined);
       expect(qr).toBeDefined();
-      expect(qr!.bytes[4]! + 256 * qr!.bytes[5]!).toBe(stride);
-      expect(qr!.bytes[6]! + 256 * qr!.bytes[7]!).toBe(height);
+      expect(qr!.widthDots).toBe(stride * 8);
+      expect(qr!.heightDots).toBe(height);
     },
   );
 
@@ -23,7 +23,7 @@ describe("formatSampleReceipt", () => {
     expect(commands.map((c) => c.name)).not.toContain("ESC t");
     expect(commands.map((c) => c.name)).not.toContain("FS .");
     const lines = commands.filter((c) => c.text !== undefined);
-    for (const line of lines) expect((line.bytes[4]! + 256 * line.bytes[5]!) * 8).toBe(576);
+    for (const line of lines) expect(line.widthDots).toBe(576);
     const text = printedLines(bytes).join("\n");
     expect(text.match(/PRUEBA - SIN COBRO REAL/g)).toHaveLength(2);
     expect(text).toContain("Café y tostada");

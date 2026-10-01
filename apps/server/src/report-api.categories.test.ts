@@ -42,7 +42,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { CategoryReport, CategoryTotal } from "@waitron/reporting";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
-import { commandNames, printedLines } from "./testing/decode-ticket.js";
+import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
 
@@ -507,8 +507,8 @@ describe("POST /management-api/reports/categories/print", () => {
     const job = jobs.find((j) => j.id === body.jobId)!;
     expect(job.kind).toBe("document");
     expect(job.locationId).toBe(locationId);
-    // CLAUDE.md §5: a document job never carries the drawer kick, ESC p.
-    expect(commandNames(new Uint8Array(job.payload))).not.toContain("ESC p");
+    // CLAUDE.md §5: a document job never carries a drawer pulse.
+    expect(opensDrawer(new Uint8Array(job.payload))).toBe(false);
     const lines = printedLines(new Uint8Array(job.payload));
     expect(lines[0]).toBe("Current categories");
     expect(lines).toContain("From 2026-06-10 to 2026-06-11");

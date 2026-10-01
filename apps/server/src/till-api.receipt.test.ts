@@ -50,6 +50,7 @@ import { DRAWER_KICK } from "./receipt-print.js";
 import {
   commandNames,
   decodeTicket,
+  opensDrawer,
   printedCommands,
   printedLines,
 } from "./testing/decode-ticket.js";
@@ -424,7 +425,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     expect(decodeTicket(payload)).toContain("DUPLICADO");
     expect(decodeTicket(payload)).toContain("VERI*FACTU"); // the legal legend proves it is the receipt
     expect(decodeTicket(payload)).toContain("Deli Recibos SL"); // issuer venue name (art. 7.1.d)
-    expect(commandNames(payload).includes("ESC p")).toBe(false); // reprint = paper only, no kick
+    expect(opensDrawer(payload)).toBe(false); // reprint = paper only, no kick
   });
 
   it("reprints again on a second request, still filing nothing (each reprint is paper only)", async () => {
@@ -1155,8 +1156,8 @@ describe("payment slip persisted capture facts", () => {
     for (const name of ["ESC t", "FS ."]) {
       expect(commands.map((command) => command.name)).not.toContain(name);
     }
-    for (const { name, bytes } of commands) {
-      if (name === "GS v 0") expect((bytes[4]! + 256 * bytes[5]!) * 8).toBe(384);
+    for (const { name, widthDots } of commands) {
+      if (name === "GS v 0") expect(widthDots).toBe(384);
     }
     const lines = printedLines(payload);
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);

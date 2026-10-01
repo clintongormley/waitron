@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { TEXT_BAND_HEIGHT, esc, type EscSetting } from "@waitron/printing";
 import { previewPrintJob } from "./print-job-preview.js";
+import { formatTestPage } from "./test-page.js";
 
 const WIDE: EscSetting = { paperWidth: "80mm", resolution: "180dpi" };
 const band = (text: string, width = 512) => ({
@@ -36,8 +37,8 @@ describe("print job preview", () => {
         esc(WIDE).init().line("Café <table>").line("Total 12.50").kick().feedAndCut().bytes(),
       ),
     ).toEqual({
+      widthDots: 512,
       columns: 42,
-      dpi: 180,
       text: "Café <table>\nTotal 12.50\n",
       blocks: [
         band("Café <table>"),
@@ -65,8 +66,8 @@ describe("print job preview", () => {
     expect(
       previewPrintJob(esc(WIDE).init().line("Receipt").qr(data).line("Thank you").bytes()),
     ).toEqual({
+      widthDots: 512,
       columns: 42,
-      dpi: 180,
       text: "Receipt\nThank you\n",
       blocks: [
         band("Receipt"),
@@ -124,13 +125,15 @@ describe("print job preview", () => {
 
   it("bounds preview output for very large jobs", () => {
     const result = previewPrintJob(new Uint8Array(300_000).fill(65));
-    expect(result.text.length).toBe(65_536);
+    expect(result.text.length).toBe(131_072);
     expect(result.truncated).toBe(true);
   });
 
   it("bounds QR output as well as ordinary text", () => {
-    const result = previewPrintJob(esc().qr("a".repeat(40_000)).qr("b".repeat(40_000)).bytes());
-    expect(result.qrData).toEqual(["a".repeat(40_000)]);
+    const result = previewPrintJob(
+      esc().qr("a".repeat(50_000)).qr("b".repeat(50_000)).qr("c".repeat(50_000)).bytes(),
+    );
+    expect(result.qrData).toEqual(["a".repeat(50_000), "b".repeat(50_000)]);
     expect(result.truncated).toBe(true);
   });
 
@@ -177,7 +180,7 @@ describe("print job preview", () => {
 });
 
 it("keeps feed and cut positions between text and graphic blocks", () => {
-  const result = previewPrintJob(esc(WIDE).text("Left  Right").feed(2).cut().line("Next").bytes());
+  const result = previewPrintJob(esc(WIDE).line("Left  Right").feed(2).cut().line("Next").bytes());
   expect(result.blocks).toEqual([
     band("Left  Right"),
     { kind: "feed", lines: 2 },
@@ -224,14 +227,14 @@ it("omits oversized QR graphics while retaining their content and following text
 
 it("bounds cumulative decoded QR bitmap memory", () => {
   const builder = esc();
-  for (let i = 0; i < 40; i++) builder.qr("A", { moduleSize: 16 });
+  for (let i = 0; i < 60; i++) builder.qr("A".repeat(100), { moduleSize: 16 });
   const result = previewPrintJob(builder.bytes());
   const images = result.blocks.filter((block) => block.kind === "image");
   const bytes = images.reduce(
     (total, block) => total + Buffer.from(block.data, "base64").length,
     0,
   );
-  expect(bytes).toBeLessThanOrEqual(1_048_576);
+  expect(bytes).toBeLessThanOrEqual(4_194_304);
   expect(images.length).toBeGreaterThan(0);
   expect(result.omittedGraphics).toBe(true);
 });
@@ -286,30 +289,34 @@ describe("text", () => {
     for (const block of result.blocks) expect(block).not.toHaveProperty("text");
   });
 
-  it("previews every line of a long job: about 500 lines at 576 dots fit the 1 MiB caps", () => {
+  it("previews every line of a long job: 2,000 full-width lines at 576 dots fit the caps", () => {
     const builder = esc({ paperWidth: "80mm", resolution: "203dpi" });
-    for (let i = 0; i < 500; i++) builder.line(`Line ${i}`);
-    const payload = builder.bytes();
-    expect(payload.length).toBeGreaterThan(262_144);
+    for (let i = 0; i < 2000; i++) builder.line(`Line ${i}`.padEnd(41, ".") + "€");
+    const payload = builder.feedAndCut().bytes();
+    expect(payload.length).toBeGreaterThan(4_000_000);
     const result = previewPrintJob(payload);
     expect(result).toMatchObject({ omittedGraphics: false, truncated: false, unsupported: false });
-    expect(result.text.split("\n").slice(-3)).toEqual(["Line 498", "Line 499", ""]);
+    expect(result.text.split("\n").slice(-3)).toEqual([
+      "Line 1998".padEnd(41, ".") + "€",
+      "Line 1999".padEnd(41, ".") + "€",
+      "",
+    ]);
   });
 
   it("stops at a drawn line whose text would pass the output cap", () => {
-    const filler = new Uint8Array(65_530).fill(0x41);
+    const filler = new Uint8Array(131_066).fill(0x41);
     const line = esc(WIDE).line("Hello world").bytes();
     const result = previewPrintJob(Uint8Array.from([...filler, ...line]));
     expect(result.truncated).toBe(true);
-    expect(result.text).toBe("A".repeat(65_530));
+    expect(result.text).toBe("A".repeat(131_066));
     expect(result.blocks.filter((block) => block.kind === "image")).toEqual([]);
   });
 
-  it("reads past 1 MiB of payload no further", () => {
+  it("reads past 4 MiB of payload no further", () => {
     const builder = esc({ paperWidth: "80mm", resolution: "203dpi" });
-    for (let i = 0; i < 600; i++) builder.line(`Line ${i}`);
+    for (let i = 0; i < 2100; i++) builder.line(`Line ${i}`);
     const payload = builder.bytes();
-    expect(payload.length).toBeGreaterThan(1_048_576);
+    expect(payload.length).toBeGreaterThan(4_194_304);
     expect(previewPrintJob(payload).truncated).toBe(true);
   });
 
@@ -327,10 +334,36 @@ describe("text", () => {
     expect(result.text).toBe("A");
   });
 
-  it("reports the printer's column count and resolution", () => {
-    expect(previewPrintJob(Uint8Array.of(0x41), { columns: 30, dpi: 203 })).toMatchObject({
+  it("sizes the paper by the width the job's lines were drawn at, not the printer's setting now", () => {
+    const narrow = esc({ paperWidth: "58mm", resolution: "203dpi" }).line("Hola").bytes();
+    expect(previewPrintJob(narrow, { widthDots: 576 })).toMatchObject({
+      widthDots: 384,
       columns: 30,
-      dpi: 203,
+    });
+  });
+
+  it("takes the first drawn line's width, so the test page's captions set it and not its ruler", () => {
+    expect(previewPrintJob(formatTestPage({ locale: "en-GB" }), { widthDots: 576 })).toMatchObject({
+      widthDots: 360,
+      columns: 30,
+    });
+  });
+
+  it("falls back to the printer's line width when the job draws no line of text", () => {
+    expect(previewPrintJob(Uint8Array.of(0x41), { widthDots: 384 })).toMatchObject({
+      widthDots: 384,
+      columns: 30,
+    });
+    expect(
+      previewPrintJob(
+        esc()
+          .qrRaster([[true]])
+          .bytes(),
+        { widthDots: 576 },
+      ),
+    ).toMatchObject({
+      widthDots: 576,
+      columns: 42,
     });
   });
 });

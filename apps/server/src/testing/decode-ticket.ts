@@ -1,5 +1,6 @@
 import { expect } from "vitest";
-import { escPosCommands, readRasterText } from "@waitron/printing";
+import { readRasterText } from "@waitron/printing";
+import { escPosCommands } from "@waitron/printing/src/testing/escpos-commands.js";
 import { previewPrintJob } from "../print-job-preview.js";
 
 /** True iff `needle` occurs as a contiguous subsequence of `haystack`; an empty `needle` is present. */
@@ -39,23 +40,28 @@ export function commandNames(bytes: Uint8Array): string[] {
   return escPosCommands(bytes).map((command) => command.name);
 }
 
+/** True when a payload carries a drawer pulse: `ESC p`, or the real-time `DLE DC4`. */
+export function opensDrawer(bytes: Uint8Array): boolean {
+  return commandNames(bytes).some((name) => name === "ESC p" || name === "DLE DC4");
+}
+
 export interface PrintedCommand {
   name: string;
   bytes: Uint8Array;
+  /** An image's size, from its `GS v 0` header. */
+  widthDots?: number;
+  heightDots?: number;
   /** For an image that is a drawn line of text, what it reads as. */
   text?: string;
 }
 
 /** A payload's commands with their bytes, each drawn line of text carrying what it reads as. */
 export function printedCommands(payload: Uint8Array): PrintedCommand[] {
-  return escPosCommands(payload).map(({ name, offset, length }) => {
+  return escPosCommands(payload).map(({ name, offset, length, widthDots, heightDots }) => {
     const bytes = payload.subarray(offset, offset + length);
-    if (name !== "GS v 0") return { name, bytes };
-    const text = readRasterText(
-      (bytes[4]! + 256 * bytes[5]!) * 8,
-      bytes[6]! + 256 * bytes[7]!,
-      bytes.subarray(8),
-    );
-    return text === undefined ? { name, bytes } : { name, bytes, text };
+    if (widthDots === undefined || heightDots === undefined) return { name, bytes };
+    const image = { name, bytes, widthDots, heightDots };
+    const text = readRasterText(widthDots, heightDots, bytes.subarray(8));
+    return text === undefined ? image : { ...image, text };
   });
 }

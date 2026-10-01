@@ -1,11 +1,4 @@
-import {
-  esc,
-  labelAmountLines,
-  prepareText,
-  textGrid,
-  wrapText,
-  type EscSetting,
-} from "@waitron/printing";
+import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import type { CardDetails } from "@waitron/payments";
 import { formatMoney } from "./receipt-money.js";
 
@@ -31,8 +24,8 @@ const ENTRY_MODE_LABEL: Partial<Record<CardDetails["entryMode"], string>> = {
 };
 
 export function formatPaymentSlip(input: PaymentSlipInput): Uint8Array {
-  const { columns } = textGrid(input.printer.paperWidth, input.printer.resolution);
   const b = esc(input.printer).init();
+  const { columns } = b.grid;
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };

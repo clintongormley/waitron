@@ -21,7 +21,7 @@ import { seatTable } from "./parties.js";
 import { createTable } from "./tables.js";
 import type { TillConfig } from "./till-config.js";
 import { listStationQueue, updateHeldOrder } from "./working-order.js";
-import { commandNames, printedLines } from "./testing/decode-ticket.js";
+import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import {
   inTx,
   lineIdOf,
@@ -451,9 +451,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
       const enqueued = (await jobs()).slice(before);
       expect(enqueued.map((job) => job.kind)).toEqual(["document"]);
-      expect(
-        enqueued.some((job) => commandNames(new Uint8Array(job.payload)).includes("ESC p")),
-      ).toBe(false);
+      expect(enqueued.some((job) => opensDrawer(new Uint8Array(job.payload)))).toBe(false);
       expect((await inTx(venue, (tx) => tx.select().from(drawerOpens))).length).toBe(
         drawerOpensBefore,
       );

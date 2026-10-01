@@ -6,7 +6,7 @@
  *
  * `esc()` has no bold, so ASCII markers stand in for emphasis.
  */
-import { esc, prepareText, textGrid, wrapText, type EscSetting } from "@waitron/printing";
+import { esc, prepareText, wrapText, type EscSetting } from "@waitron/printing";
 import { stringToThousandths, thousandthsToDecimal } from "@waitron/shared";
 
 /** The printed header of an `order`-scope ticket. */
@@ -111,7 +111,6 @@ export function arrangeTicketItems(
   }));
 }
 
-/** `qty x name`, e.g. `2 x Steak`. */
 function itemLine(item: KitchenTicketItem): string {
   return `${item.qty}${item.unit ? ` ${item.unit}` : ""} x ${item.name}`;
 }
@@ -150,9 +149,6 @@ function emitItem(
   }
 }
 
-/** The printer settings a kitchen ticket is drawn for: the image width and the column count. */
-export type KitchenLayout = EscSetting;
-
 function hhmm(at: Date): string {
   const h = String(at.getHours()).padStart(2, "0");
   const m = String(at.getMinutes()).padStart(2, "0");
@@ -164,9 +160,9 @@ function hhmm(at: Date): string {
  * items all share one group names it once under the header; one spanning groups heads each group's
  * run of items instead, so callers put group-less items first and the rest in group order.
  */
-export function formatKitchenTicket(ticket: KitchenTicket, layout: KitchenLayout): Uint8Array {
-  const { columns } = textGrid(layout.paperWidth, layout.resolution);
+export function formatKitchenTicket(ticket: KitchenTicket, layout: EscSetting): Uint8Array {
   const b = esc(layout).init();
+  const { columns } = b.grid;
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };
@@ -249,9 +245,9 @@ function slipHeader(slip: CorrectionSlip): string {
  * Prints the item through {@link emitItem}, as a ticket does; a HOLD CHANGED slip prefixes it with
  * + or -.
  */
-export function formatCorrectionSlip(slip: CorrectionSlip, layout: KitchenLayout): Uint8Array {
-  const { columns } = textGrid(layout.paperWidth, layout.resolution);
+export function formatCorrectionSlip(slip: CorrectionSlip, layout: EscSetting): Uint8Array {
   const b = esc(layout).init();
+  const { columns } = b.grid;
   const text = (s: string): void => {
     for (const line of wrapText(prepareText(s), columns)) b.line(line);
   };
