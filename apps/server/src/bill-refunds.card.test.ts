@@ -1796,6 +1796,7 @@ describe("design §8 test 23: the invoice waits for the refund", () => {
       "Devolución -10,00 €",
       "Efectivo 20,00 €",
       "Efectivo 20,00 €",
+      "QR tributario:",
       "VERI*FACTU",
     ]);
   });

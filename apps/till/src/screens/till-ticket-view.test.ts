@@ -294,6 +294,21 @@ describe("till-ticket-view", () => {
     expect(text(el)).toContain("VERI*FACTU");
   });
 
+  it("shows «QR tributario:» centred, directly above the QR, in an English operator UI too", async () => {
+    setLocale("en-GB");
+    const { el } = await mount();
+    const qr = el.shadowRoot!.querySelector("svg")!.closest(".qr")!;
+    const caption = qr.previousElementSibling as HTMLElement | null;
+    expect(caption?.textContent?.trim()).toBe("QR tributario:");
+    expect(getComputedStyle(caption!).textAlign).toBe("center");
+  });
+
+  it("shows no «QR tributario:» caption when no QR is shown", async () => {
+    const { el } = await mount({ qr: "" });
+    expect(text(el)).not.toContain("QR tributario");
+    expect(text(el)).toContain("VERI*FACTU");
+  });
+
   it("prints the legend but no QR when the verification URL is empty", async () => {
     const { el } = await mount({ qr: "" });
     expect(el.shadowRoot!.querySelector("svg")).toBeNull();
@@ -571,7 +586,8 @@ describe("till-ticket-view", () => {
       // 7.1.g total
       expect(t).toContain("TOTAL");
       expect(t).toContain("9,40 €");
-      // QR + VERI*FACTU legend
+      // «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend
+      expect(t).toContain("QR tributario:");
       expect(el.shadowRoot!.querySelector("svg")).not.toBeNull();
       expect(t).toContain("VERI*FACTU");
       // The trim renders ONLY in its two slots — the core order is untouched: the issuer header still

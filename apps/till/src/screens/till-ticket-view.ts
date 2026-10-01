@@ -65,6 +65,9 @@ const LABEL = {
 /** The Veri*Factu legend — a FIXED legal string (Orden HAC/1177/2024 art. 20.1.b). Never translated. */
 const LEGEND = "VERI*FACTU";
 
+/** AEAT's caption above the QR (its QR specification v0.5.0, §3). Spanish; never translated. */
+const QR_CAPTION = "QR tributario:";
+
 /** The SAME `×` (U+00D7) the printed receipt (`apps/server/src/receipt-ticket.ts`) and the basket use. */
 const QTY_BADGE = "×";
 
@@ -230,7 +233,7 @@ function renderTender(result: TillSaleResult, locale: string) {
  *  - the tipo(s) impositivo(s) and the base imponible per rate (7.1.f) — per-item VAT is NOT required;
  *    the cuota per rate is shown as an allowed extra;
  *  - contraprestación total (7.1.g);
- *  - QR + VERI*FACTU legend.
+ *  - «QR tributario:» caption (AEAT QR specification v0.5.0 §3) + QR + VERI*FACTU legend.
  *
  * It renders in the INVOICE locale ({@link invoiceLocale}), INDEPENDENT of the operator's UI language:
  * an English-speaking operator still hands the customer a Spanish ticket. So nothing here goes through
@@ -353,10 +356,15 @@ export class TillTicketView extends LitElement {
         margin-bottom: var(--wt-space-3);
       }
 
+      .qr-caption {
+        margin: var(--wt-space-3) 0 var(--wt-space-1);
+        text-align: center;
+      }
+
       .qr {
         display: flex;
         justify-content: center;
-        margin: var(--wt-space-3) 0;
+        margin: 0 0 var(--wt-space-3);
       }
 
       .qr svg {
@@ -539,7 +547,12 @@ export class TillTicketView extends LitElement {
 
         <div class="tender">${renderTender(r, locale)}</div>
 
-        ${svg ? html`<div class="qr">${unsafeHTML(svg)}</div>` : nothing}
+        ${
+          svg
+            ? html`<p class="qr-caption">${QR_CAPTION}</p>
+                <div class="qr">${unsafeHTML(svg)}</div>`
+            : nothing
+        }
         <p class="legend">${LEGEND}</p>
         ${
           this.receipt?.footerMessage

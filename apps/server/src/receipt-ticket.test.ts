@@ -97,6 +97,43 @@ it("puts the QR legend immediately after the raster and a blank line before the 
   expect(blank?.text).toBe("");
 });
 
+it.each([PRINTER_80, PRINTER_58])(
+  "prints «QR tributario:» centred on its own line immediately above the QR on $paperWidth",
+  (printer) => {
+    for (const invoiceLocale of ["es-ES", "en-GB"]) {
+      const commands = printedCommands(
+        formatReceipt({
+          result: FILED_SALE,
+          issuer: ISSUER,
+          receipt: TRIM,
+          invoiceLocale,
+          printer,
+        }),
+      );
+      const qrAt = commands.findIndex((c) => c.name === "GS v 0" && c.text === undefined);
+      const { columns } = textGrid(printer.paperWidth, printer.resolution);
+      const label = "QR tributario:";
+      expect(commands[qrAt - 1]?.text).toBe(
+        `${" ".repeat(Math.floor((columns - label.length) / 2))}${label}`,
+      );
+    }
+  },
+);
+
+it("prints no «QR tributario:» label when no QR is printed, and still prints the legend", () => {
+  const s = decodeTicket(
+    formatReceipt({
+      result: { ...FILED_SALE, qr: "" },
+      issuer: ISSUER,
+      receipt: TRIM,
+      invoiceLocale: "es-ES",
+      printer: PRINTER_80,
+    }),
+  );
+  expect(s).not.toContain("QR tributario");
+  expect(s).toContain("VERI*FACTU");
+});
+
 /** Resolve a line's goods name the way the receipt does — invoice locale, then any description. */
 function lineName(line: TillSaleResult["lines"][number]): string {
   return line.descriptions["es-ES"] ?? Object.values(line.descriptions)[0] ?? "";
@@ -213,6 +250,9 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
       // Allowed operational extras: cash tendered (= total + change) and change.
       expect(s).toContain("Efectivo");
       expect(s).toContain("Cambio");
+
+      // AEAT's caption above the QR (its QR specification v0.5.0, §3).
+      expect(s).toContain("QR tributario:");
 
       // The Veri*Factu legend — a FIXED legal string, always printed (Orden HAC/1177/2024 art. 20.1.b).
       expect(s).toContain("VERI*FACTU");
@@ -1133,13 +1173,14 @@ describe("a bill paid in parts before its invoice", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 6),
+        .slice(0, 7),
     ).toEqual([
       "Efectivo 50,00 €",
       "Cambio 40,00 €",
       "Tarjeta 11,90 €",
       "Ref. OP-9",
       "Propina 1,00 €",
+      "QR tributario:",
       "VERI*FACTU",
     ]);
     expectPaymentRowsToAddUpToTotal(printed);
@@ -1186,8 +1227,14 @@ describe("a bill payment partly given back before its invoice", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 4),
-    ).toEqual(["Efectivo 50,00 €", "Devolución -6,00 €", "Devolución -4,00 €", "VERI*FACTU"]);
+        .slice(0, 5),
+    ).toEqual([
+      "Efectivo 50,00 €",
+      "Devolución -6,00 €",
+      "Devolución -4,00 €",
+      "QR tributario:",
+      "VERI*FACTU",
+    ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
 
@@ -1222,8 +1269,14 @@ describe("a bill payment partly given back before its invoice", () => {
       printed
         .slice(start + 1)
         .filter((line) => line !== "")
-        .slice(0, 4),
-    ).toEqual(["Tarjeta 20,00 €", "Ref. OP-3", "Devolución -5,00 €", "VERI*FACTU"]);
+        .slice(0, 5),
+    ).toEqual([
+      "Tarjeta 20,00 €",
+      "Ref. OP-3",
+      "Devolución -5,00 €",
+      "QR tributario:",
+      "VERI*FACTU",
+    ]);
     expectPaymentRowsToAddUpToTotal(printed);
   });
 });
