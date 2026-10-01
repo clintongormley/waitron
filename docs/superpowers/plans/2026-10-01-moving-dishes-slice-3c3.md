@@ -40,9 +40,12 @@ question still covers the one case that matters there); watchers and the whole-o
 **Builds after slices 3a, 3b and 3c-2** (`docs/superpowers/plans/2026-10-01-prep-station-rules-slice-3a.md`,
 `docs/superpowers/plans/2026-10-01-station-hours-fallbacks-slice-3b.md`, and 3c-2's plan,
 `docs/superpowers/plans/2026-10-01-split-off-extras-slice-3c2.md`, branch `feat/split-off-extras`),
-and most likely after 3c-1 (`feat/rest-of-order-made-here`) too. None of the three is on `main`
-today (read 2026-10-01 at `ebaa1f6c5`). Start this branch, `feat/move-dish-station`, from a `main`
-that holds 3a, 3b and 3c-2. **Where this plan says "3a's X", "3b's X", "3c-2's X" or "3c-1's X", read
+and after 3c-1 (`docs/superpowers/plans/2026-10-01-rest-of-order-made-here-slice-3c1.md`, branch
+`feat/rest-of-order-made-here`): the amendment of 2026-10-01 reads 3c-1's `ticket_items.made_here`
+mark (Tasks 3 and 4). None of them is on `main` today (read 2026-10-01 at `ebaa1f6c5`). Start this
+branch, `feat/move-dish-station`, from a `main` that holds 3a, 3b, 3c-1 and 3c-2; if 3c-1 has not
+landed when this branch starts, stop and ask, rather than building the made-here parts against a
+column that does not exist. **Where this plan says "3a's X", "3b's X", "3c-2's X" or "3c-1's X", read
 X in the code, not in that plan: the code is what landed.** The names this plan leans on are, from
 the plans: 3b's `VENUE_SERVICE.resolveMakers(tx, cfg, zoneId, productIds, at)` returning a
 `MakerOutcome` (`made` / `no_replacement` / `no_station`, 3b plan:937-946), 3b's
@@ -66,7 +69,7 @@ station on screen and paper, read as the order stands when it is shown or printe
 planned in parallel with this one; where its helper or field names matter, this plan says "3c-2's"
 and the builder finds the name in the code.
 
-## Decisions for the owner (M1–M24, and the plan's own P1–P12)
+## Decisions for the owner (M1–M24, and the plan's own P1–P13)
 
 The owner settled M3, M6 and M21's behaviour on 2026-10-01 (M21's alert SHAPE is this plan's
 default, P8 and P12), and said in M10 ("any waiter"), M13 (a closed
@@ -269,7 +272,14 @@ default the plan takes; approving the plan approves them.
   - **It never clears by itself**: moving the dish, or reopening the station, leaves it up until
     someone marks it handled on the dashboard. Then the next dead end records a new one.
   - **The wording says there may be more**, in a sentence of its own (Task 5).
-
+- **P13. A "made here" dish (3c-1) is never moved and never re-routed** (amended 2026-10-01). 3c-1
+  keeps such a dish as a kitchen record with a `made_here` mark: born `ready` when it fires at once,
+  but, when sent ON HOLD, an ordinary held record (`state = 'queued'`, no fire time) that turns
+  `ready` in the statement that releases it, printing nothing (3c-1 plan, T10). The till that sent it
+  makes it on the spot, so it has no ticket at its station to move. A move of one is refused with a
+  new code, `ticket.made_here` (Task 3), and the till never offers Move to station… for one; a release
+  never re-routes it and never raises the alert for it, whatever its station's state (Task 4) — its
+  station stays its maker and nothing prints.
 
 ## Global Constraints
 
@@ -317,7 +327,8 @@ default the plan takes; approving the plan approves them.
   Spanish, else English), as the "EXTRA CANCELLED" slip does (`apps/server/src/kitchen-ticket.ts:227-242`).
   Kitchen paper prints each dish by its kitchen name, through `buildTicketItems`, as every slip does
   (`docs/developers/products.md`).
-- Error codes name the domain concept. One new thrown code: `ticket.not_sent`. One new recorded
+- Error codes name the domain concept. New thrown codes: `ticket.not_sent` and `ticket.made_here`
+  (P13). One new recorded
   incident code: `route.released_at_closed_station` (P8), under venue-service's existing `route.`
   claim. Before committing each, grep the siblings (`grep -n '"ticket\.' apps/server/src/errors.ts`;
   `grep -rn '"route\.' apps/server/src/errors.ts packages/venue-service/src/errors.ts`).
@@ -630,7 +641,8 @@ with no active printer; nothing about it changes.
   `apps/server/src/till-api.station-move.test.ts`
 - Modify: `apps/server/src/till-api.ts` (the route beside `…/lines/recall`, `:2050-2060`; the status
   map `:270-345`), `apps/server/src/errors.ts` (`ticket.not_sent`; widen the descriptions of
-  `ticket.already_started` `:620-625` and `working_order.already_collected` `:277-283`),
+  `ticket.already_started` `:621-627` and `working_order.already_collected` `:278-284`, read at
+  `107746610`; add `ticket.made_here` beside the `ticket.*` siblings, `:601-627`),
   `apps/server/src/working-order.ts` (`TabLine` `:2617-2660` and `readTabLines` `:2663-2740` gain
   `stationId` and `movable`; and 3b's add-units path in `applyLineEdits`, for P11),
   `apps/server/src/order-groups.ts` (`readCurrentOrders` `:1054-1167`: the row's kitchen part gains
@@ -662,11 +674,11 @@ fail in the commit message, and restore.
 **Interfaces** (`station-move.ts`; it imports `./errors.js`, CLAUDE.md §3):
 
 ```ts
-/** Whether a kitchen record may still move to another station (M6): still queued — held or fired,
- *  not started — not sent out of the kitchen, and nothing of its line served. The till offers the
- *  button exactly where this holds (P3). */
+/** Whether a kitchen record may still move to another station (M6): not made here (3c-1's
+ *  `made_here`, P13), still queued — held or fired, not started — not sent out of the kitchen, and
+ *  nothing of its line served. The till offers the button exactly where this holds (P3). */
 export function stillMovable(
-  item: { state: TicketState; awayAt: string | null },
+  item: { state: TicketState; awayAt: string | null; madeHere: boolean },
   line: { servedAt: string | null; servedQuantity: number },
 ): boolean;
 
@@ -706,10 +718,12 @@ request.submissionId, "line.move_station", { orderId, lineIds: [...new Set(reque
    allowed (M13).
 4. The lines, one read: `working_order_lines` (id, `working_order_id`, `served_at`,
    `served_quantity`) left-joined to `ticket_items` (id, `station_id`, `state`, `fired_at`,
-   `away_at`, the fired quantity via `firedQuantity`, `kitchen-print.ts:519`), plus each line's
-   `group_id`. A requested id not on this order → `tab.line_not_found { tabId: orderId, lineId }`; one
-   with no kitchen record → `ticket.not_sent { workingOrderId: orderId, lineId }`; one where
-   `stillMovable` is false → `ticket.already_started { ticketItemId }`. All refusals come before any
+   `away_at`, `made_here`, the fired quantity via `firedQuantity`, `kitchen-print.ts:519`), plus each
+   line's `group_id`. A requested id not on this order → `tab.line_not_found { tabId: orderId,
+   lineId }`; one with no kitchen record → `ticket.not_sent { workingOrderId: orderId, lineId }`; one
+   whose record is made here (held or fired) → `ticket.made_here { ticketItemId }` (P13), checked
+   before the next; one where `stillMovable` is otherwise false → `ticket.already_started
+   { ticketItemId }`. All refusals come before any
    write. **Only the named lines' OWN records are read** — never 3c-2's "a dish's kitchen work"
    helper, which would add its split-off extras (M23).
 5. Lines already at `stationId` are dropped (M13). With none left: return `{ revision: <current>,
@@ -748,7 +762,7 @@ app.post("/api/working-orders/:id/lines/move-station", (c) =>
 );
 ```
 
-Status map: `"ticket.not_sent": 409`. Confirm `route.station_inactive: 409`, `station.not_found: 404`,
+Status map: `"ticket.not_sent": 409`, `"ticket.made_here": 409`. Confirm `route.station_inactive: 409`, `station.not_found: 404`,
 `tab.line_not_found: 404`, `ticket.already_started: 409` and `working_order.already_collected: 409`
 are still mapped after 3a and 3b (3a's plan deletes `route.station_inactive` from this map,
 3a plan:856-857; 3b's order writes raise it again, 3b plan:1171-1172; add it back if it is missing).
@@ -756,8 +770,16 @@ are still mapped after 3a and 3b (3a's plan deletes `route.station_inactive` fro
 **Error descriptions** (`errors.ts`):
 - `"ticket.not_sent": { workingOrderId: string; lineId: string }` — "A move to another station named
   a line with no kitchen record: never sent, or a dish that needs no preparation. Choosing where it is
-  made before it is sent is 'make at' (`make_at_station_id`)." `ticket.not_fired` (`:614`) means
+  made before it is sent is 'make at' (`make_at_station_id`)." `ticket.not_fired` (`:616`) means
   "the order was never fired" and is not stretched.
+- `"ticket.made_here": { ticketItemId: string }` (P13) — "A move to another station named a dish
+  that is made at the till that sent it (3c-1's `made_here`, held or fired): it has no ticket at its
+  station, and its station stays its maker." Why a new code rather than a sibling (grepped 2026-10-01,
+  `grep -n '"ticket\.' apps/server/src/errors.ts`: `invalid_transition`, `already_fired`,
+  `not_fired`, `item_held`, `already_started`, and this plan's `not_sent`): a HELD made-here dish is
+  neither started (`already_started` would tell the waiter the kitchen began it) nor without a
+  record (`not_sent` says it has no kitchen record, and it has one), and the till's words must say
+  why the move is pointless — it is made at the till.
 - `ticket.already_started`: "A recall, or a move to another station, was asked for a line the kitchen
   has already started (`preparing` or `ready`); a move also refuses a line sent out of the kitchen or
   with any part served. …" (keep the rest).
@@ -774,9 +796,10 @@ whole-order save (`PUT /api/working-orders/:id`, whose `SaleLine.makeAt` 3b writ
 A `makeAt` on a line with no kitchen record follows 3b's rule unchanged.
 
 **What the till reads** (P3, P4): `TabLine` gains `stationId: string | null` (the record's station,
-null without one) and `movable: boolean` (`stillMovable`, false without a record; the order's own
-status is the till's to know). `readTabLines` adds `ticket_items.station_id`, `ticket_items.away_at`
-and `working_order_lines.served_quantity` to its select. `readCurrentOrders`' kitchen part
+null without one) and `movable: boolean` (`stillMovable`, false without a record and false for a
+made-here record, P13; the order's own status is the till's to know). `readTabLines` adds
+`ticket_items.station_id`, `ticket_items.away_at`, `ticket_items.made_here` and
+`working_order_lines.served_quantity` to its select. `readCurrentOrders`' kitchen part
 (`{ state, firedAt, awayAt }`, built at `order-groups.ts:1150-1153` today) gains `stationId` and
 `movable` the same way. Suites that pin these bodies with `toEqual` fail until they list the new
 fields: find them with `grep -rln 'parentProductId\|awayAt' apps/server/src/*.test.ts` and update each
@@ -804,6 +827,12 @@ fields: find them with `grep -rln 'parentProductId\|awayAt' apps/server/src/*.te
     `submission.id_reused`.
   - **Review Focus 3:** `preparing` → `ticket.already_started`; `ready` → same; `away_at` set → same;
     `served_quantity` > 0 → same.
+  - **Made here (P13, amended 2026-10-01):** a lager sent ON HOLD from the bar till whose made-here
+    list names Bar (3c-1's setup: its record is at Bar, `made_here` true, `queued`, no fire time)
+    moved to Grill → refused `ticket.made_here`, nothing written (no print job, no notice, record
+    still at Bar, revision unchanged); the same lager sent fired (`ready`) → also `ticket.made_here`,
+    not `ticket.already_started`; `GET /api/working-orders/:id/lines` lists both with
+    `movable: false`, and the current-orders row's kitchen part likewise.
   - `ticket.not_sent` for a line with no record; `tab.line_not_found` for another order's line;
     `station.not_found` for another venue's station; `route.station_inactive` for a switched-off
     station; a station closed by hand (3b's `setStationToday`) is accepted; `working_order.not_open`
@@ -924,8 +953,11 @@ export async function rerouteHeldAtRelease(
 
 **Behaviour:**
 1. Read the held records in scope: `ticket_items` joined to `working_order_lines` where
-   `ticket_items.working_order_id = orderId`, `scope`, `fired_at is null` and `state = 'queued'` (a
-   3c-1 "made here" record is born `ready` and so never read). Take the record id, its
+   `ticket_items.working_order_id = orderId`, `scope`, `fired_at is null`, `state = 'queued'` and
+   `made_here = false` (P13). A 3c-1 "made here" record is `ready` only when it fired at once; one sent
+   ON HOLD waits as `queued` and turns `ready` in the release's own statement (3c-1 plan, T10), so
+   without this condition it would be re-routed and printed. It is never a candidate here: not
+   re-routed, not told to any station, not alerted, whatever its station's state. Take the record id, its
    `station_chosen_at`, the line id, station, the line's `parent_line_id`, `product_id`,
    `make_at_station_id` and `group_id`, and the fired quantity. A record whose line has a
    `parent_line_id` is a split-off extra's (3c-2): it is an **alert-only** candidate, never re-routed
@@ -1059,6 +1091,13 @@ the opener is lazy, and a replay asks it nothing.
     refusal ("lines may only be written while the order is open"); remove it.
   - P9: a recalled mojito (`recallLines`) whose station has since closed, with Downstairs bar as its
     fallback, sent again with `sendLines` → at Downstairs bar, and Upstairs bar gets nothing new.
+  - **Made here at release (P13, amended 2026-10-01):** a lager sent ON HOLD in group 1 from the bar
+    till whose made-here list names Upstairs bar (3c-1: its record at Upstairs bar, `made_here` true,
+    `queued`), `print_held_work` on, Upstairs bar then closed by hand with Downstairs bar as its
+    fallback; `fireGroup` → the lager's record is still at Upstairs bar, `ready` (3c-1's release), no
+    print job at either bar for it, no `rerouted` notice, and no `route.released_at_closed_station`
+    incident. Proof by deletion: drop `made_here = false` from step 1 — the case must fail on "still at
+    Upstairs bar" (it would move to Downstairs bar with a HOLD CANCELLED slip and a "From" ticket).
   - **Review Focus 11:** a held burger at Grill (open) whose chips are a split-off extra at Fryer
     (built through 3c-2's send path); Fryer closed with no fallback; `fireGroup` → the chips' record
     is released at Fryer (never re-routed, P3), and one incident names Fryer and the chips. With
@@ -1266,7 +1305,9 @@ whenever a table's order screen opens, the counter basket is shown, and a statio
   pedido se ha descartado"), `working_order.already_collected` ("This order has already been handed
   over" / "Este pedido ya se ha entregado"), `tab.line_not_found` ("This dish is no longer on this
   bill" / "Este plato ya no está en esta cuenta"), `ticket.not_sent` ("This dish has not gone to the
-  kitchen yet" / "Este plato aún no ha ido a cocina"); any other code shows `codeMessage(code)`;
+  kitchen yet" / "Este plato aún no ha ido a cocina"), `ticket.made_here` ("This dish is made here at
+  the till, so it has no ticket at a station to move" / "Este plato se prepara aquí en la caja, así
+  que no tiene comanda en ninguna estación que pasar"); any other code shows `codeMessage(code)`;
 - events (plain names, an app widget): `station-chosen` with `{ stationId: string | null }`, and
   `close`.
 
@@ -1329,11 +1370,13 @@ whenever a table's order screen opens, the counter basket is shown, and a statio
   make-at copy of a sent line to refresh: `TabLine` carries none, and (read from the 3b plan, Task 4c)
   the table's Change patch sends `makeAt` only on 3b's dead-end retry, which names a station the
   waiter just chose. The counter does hold one (Task 9).
-- `LINE_REFUSALS` gains `ticket.not_sent`, `working_order.already_collected`, `route.station_inactive`,
+- `LINE_REFUSALS` gains `ticket.not_sent`, `ticket.made_here`, `working_order.already_collected`, `route.station_inactive`,
   `station.not_found` and `tab.line_not_found` (`working_order.not_open` already reaches the screen
   through `TABLE_REFUSALS`, `till-app.ts:265-287`). `codes.ts` gains, in both languages: `ticket.not_sent` ("This dish has not
   gone to the kitchen yet. Choose where it is made before sending it" / "Este plato aún no ha ido a
-  cocina. Elige dónde se prepara antes de enviarlo"), `working_order.already_collected` ("This order
+  cocina. Elige dónde se prepara antes de enviarlo"), `ticket.made_here` ("This dish is made here at
+  the till, so it cannot be moved to a station" / "Este plato se prepara aquí en la caja, así que no
+  se puede pasar a una estación"), `working_order.already_collected` ("This order
   has already been handed over" / "Este pedido ya se ha entregado"), `route.station_inactive` ("That
   station has been switched off. Choose another" / "Esa estación se ha desactivado. Elige otra") and
   `station.not_found` ("That station no longer exists. Choose another" / "Esa estación ya no existe.
@@ -1491,7 +1534,7 @@ about the old behaviour, wherever it lives):
   M9, M10, M11, M13, M14, M15 → Task 3 (UI halves in 8, 9). M16 → Task 10. M17 → nothing built, stated.
   M18, M19, M20, M22 → Task 4. M21 → Tasks 4, 5. M23 → Task 3 (Review Focus 7). M24 → Task 10. P1–P3
   → Tasks 3, 4; P4 → Task 7; P5, P6 → Tasks 2, 3, 6; P7 → Tasks 8, 9; P8, P12 → Tasks 4, 5; P9 →
-  Task 4; P10 → Global Constraints and Task 1; P11 → Task 3.
+  Task 4; P10 → Global Constraints and Task 1; P11 → Task 3; P13 → Tasks 3, 4, 7, 8.
 - **Review Focus to tests:** 1, 2, 3, 7, 8, 10 in Task 3; 4 and 11 in Tasks 4 and 5; 5, 6, 9 in
   Task 4.
 - **Interfaces changed on purpose:** `recordKitchenNotices` gains a ninth parameter and the
@@ -1501,7 +1544,7 @@ about the old behaviour, wherever it lives):
   `station_chosen_at`; `TabLine` and the current-orders row gain
   `stationId` and `movable`; the till's `Station` gains `open`. Each task names the suites that pin
   the old shapes.
-- **Codes:** new `ticket.not_sent` (thrown) and `route.released_at_closed_station` (a recorded
+- **Codes:** new `ticket.not_sent` and `ticket.made_here` (thrown) and `route.released_at_closed_station` (a recorded
   incident under venue-service's `route.` claim). Kept and reused: `ticket.already_started`
   (description widened), `working_order.already_collected` (widened), `working_order.not_open`,
   `station.not_found`, `route.station_inactive`, `tab.line_not_found`, `submission.id_reused`,
@@ -1642,3 +1685,27 @@ coordinator's ruling, all applied:
   through the release's one routing snapshot. **m-5:** Review Focus 5's split-group case spies
   `routingAt` (once) and `resolveMakers` and `stationStates` (never), where both bills re-route.
   **m-6:** Task 4 also runs `pnpm --filter @waitron/venue-service typecheck`.
+
+## Amended 2026-10-01 (after approval)
+
+Found by the 3d plan's re-check (`plan-3d-recheck.md`, I-1). This plan said a 3c-1 "made here"
+record is "born `ready`", so its release re-route (which reads `state = 'queued'`) would never meet
+one. That holds only for a made-here dish that fires at once. 3c-1 keeps one sent ON HOLD as an
+ordinary held record (`queued`, made-here mark set) that turns `ready` at release (3c-1 plan, T10),
+so both this plan's re-route and its move could pick one up and print it at a station that never
+makes it. Changed:
+
+- **P13 (new):** a made-here dish is never moved and never re-routed; its station stays its maker and
+  nothing prints.
+- **Task 4, step 1:** the release's candidates add `made_here = false`; a made-here record is not
+  re-routed, told to any station or alerted. The false "born `ready`" sentence is corrected. New case:
+  a held made-here lager at a station closed before release stays there and prints nothing, with a
+  proof by deletion.
+- **Task 3:** a move of a made-here record (held or fired) is refused with a new code,
+  `ticket.made_here` (409), checked before `ticket.already_started`; a new code because no sibling
+  says it truthfully (a held made-here dish is neither started nor without a record). `stillMovable`
+  takes the mark, so `movable` is false for one and the till never offers Move to station…. New
+  cases for both refusals and the `movable` flag.
+- **Tasks 7 and 8:** English and Spanish wording for `ticket.made_here` in the Move dialog and the
+  till's code table; it joins `LINE_REFUSALS` (and so, through Task 9, `ACTIONABLE_REFUSALS`).
+- **Builds after:** 3c-1 is now required, not "most likely" — the amendment reads its column.
