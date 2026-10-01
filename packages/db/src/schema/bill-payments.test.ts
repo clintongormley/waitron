@@ -1,5 +1,5 @@
 import { locationId as brandLocationId } from "@waitron/shared";
-import { eq, sql } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { Transaction } from "../client.js";
 import { checkFailed, refusalOn, triggerRaised } from "../constraint-target.js";
@@ -925,6 +925,50 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
     it("still accepts a manual open with neither sale nor bill payment", async () => {
       await open({ reason: "manual" });
+    });
+  });
+
+  describe("drawer_opens: a card slip names its till and exactly one of a sale or a bill payment", () => {
+    function open(values: Partial<typeof drawerOpens.$inferInsert>): Promise<unknown> {
+      return inTx((tx) =>
+        tx
+          .insert(drawerOpens)
+          .values({ tillId: TILL, personId: PERSON, reason: "card_slip", ...values }),
+      );
+    }
+
+    async function aSale(): Promise<string> {
+      await tenderFor(null);
+      const [sale] = await inTx((tx) =>
+        tx.select({ id: sales.id }).from(sales).orderBy(desc(sales.invoiceNumber)).limit(1),
+      );
+      return sale!.id;
+    }
+
+    it("accepts a card slip naming the till and a sale", async () => {
+      await open({ saleId: await aSale() });
+    });
+
+    it("accepts a card slip naming the till and a bill payment", async () => {
+      await open({ billPaymentId: await receivedPayment() });
+    });
+
+    it("refuses a card slip naming neither a sale nor a bill payment", async () => {
+      const error = await captureError(() => open({}));
+      expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
+    });
+
+    it("refuses a card slip naming both a sale and a bill payment", async () => {
+      const saleId = await aSale();
+      const billPaymentId = await receivedPayment();
+      const error = await captureError(() => open({ saleId, billPaymentId }));
+      expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
+    });
+
+    it("refuses a card slip with no till", async () => {
+      const saleId = await aSale();
+      const error = await captureError(() => open({ tillId: null, saleId }));
+      expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
     });
   });
 });

@@ -153,8 +153,8 @@ Much more polished than the login screen (proper top bar, product grid, basket c
 
 - [ ] **Held order "#4 · 0 · €0.00"** — a held order with zero items / €0.00 in the Held orders list;
       looks like an empty basket got held (seed artifact or a real "can hold nothing" gap). Confirm.
-- [ ] **"Pay" vs "Card" as two big buttons** — relationship is unclear (is Pay = cash, Card = card?);
-      the tender each triggers should read plainly.
+- [x] **"Pay" vs "Card" as two big buttons** — relationship is unclear (is Pay = cash, Card = card?);
+      the tender each triggers should read plainly. Resolved by B30: the button reads Cash beside Card.
 - [ ] **Top bar mixes navigation, actions and identity** — Allergens / Floor / Kitchen / Pass / My
       schedule / Marta Ruiz / Log out sit in one undifferentiated row; consider grouping
       (navigate vs act vs who-am-I).

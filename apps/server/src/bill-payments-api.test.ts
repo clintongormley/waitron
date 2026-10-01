@@ -667,7 +667,9 @@ describe("a contribution (design §8 test 2)", () => {
     const opens = await inTx((tx) =>
       tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
     );
-    expect(opens).toEqual([]);
+    expect(opens).toMatchObject([
+      { reason: "card_slip", saleId: null, tillId: venue.deviceTillId, printerId: venue.printerId },
+    ]);
   });
 
   it("takes a card on the practice simulator, charging it with the outcome the operator chose", async () => {
@@ -2901,5 +2903,122 @@ describe("abandoning a bill after a full refund (design §8 test 14, §4.5)", ()
 
     expect(abandoned.status).toBe(200);
     expect(await statusOf(billId)).toBe("abandoned");
+  });
+});
+
+// Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer, so a hand-keyed card opens
+// the drawer of the till that took it, when that till's receipt printer has one attached.
+describe("a hand-keyed card bill payment and the cash drawer", () => {
+  const manualCard = {
+    kind: "contribution",
+    amount: "40.00",
+    method: "card",
+    entry: "manual",
+    applied: "40.00",
+    tip: "0.00",
+  } as const;
+
+  async function opensFor(paymentId: string) {
+    return inTx((tx) =>
+      tx.select().from(drawerOpens).where(eq(drawerOpens.billPaymentId, paymentId)),
+    );
+  }
+
+  it("opens the drawer once for a payment that settles the bill, naming the payment and not the invoice, and once only on a resend", async () => {
+    const billId = await tabWith("Chuletón");
+    const submissionId = randomUUID();
+    const body = { ...manualCard, amount: "25.00", applied: "25.00", submissionId };
+    const before = drawerJobCount();
+
+    const first = await request("POST", `/api/working-orders/${billId}/payments`, body);
+    const again = await request("POST", `/api/working-orders/${billId}/payments`, body);
+
+    expect(first.status).toBe(200);
+    expect(first.json.invoice).toMatchObject({ total: "25.00" });
+    expect(again.status).toBe(200);
+    const paymentId = paymentIdOf(first);
+    expect(await opensFor(paymentId)).toMatchObject([
+      {
+        reason: "card_slip",
+        billPaymentId: paymentId,
+        saleId: null,
+        tillId: venue.deviceTillId,
+        printerId: venue.printerId,
+        personId: venue.staffId,
+      },
+    ]);
+    expect(drawerJobCount() - before).toBe(1);
+  });
+
+  it("opens no drawer for a hand-keyed card taken on a handheld", async () => {
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      { ...manualCard, submissionId: randomUUID() },
+      venue.handheldCookie,
+    );
+
+    expect(paid.status).toBe(200);
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
+  it("opens no drawer for a card taken on the connected card machine", async () => {
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await request("POST", `/api/working-orders/${billId}/payments`, {
+      ...manualCard,
+      entry: "reader",
+      submissionId: randomUUID(),
+      simulationOutcome: "captured",
+    });
+
+    expect(paid.json).toMatchObject({ outcome: "received" });
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
+  });
+
+  it("opens no drawer for a hand-keyed card at another till whose receipt printer has none", async () => {
+    const otherTill = await withTransaction(suite.db, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Second till", formFactor: "till" })
+        .returning({ id: deviceProfiles.id });
+      const printer = await createPrinter(
+        tx,
+        { locationId: venue.cfg.locationId },
+        {
+          name: "Recibos terraza",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+          hasCashDrawer: false,
+        },
+      );
+      return { profileId: profile!.id, printerId: printer.id };
+    });
+    const device = await enrolDeviceForTest(suite.db, venue.cfg, {
+      name: "Terraza till",
+      profileId: otherTill.profileId,
+    });
+    suite.db.run(sql`update tills set receipt_printer_id = ${otherTill.printerId}
+      where id = (select till_id from devices where id = ${device.deviceId})`);
+    const cookie = `${venue.sessionCookie}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    const billId = await bill120();
+    const before = drawerJobCount();
+
+    const paid = await request(
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      { ...manualCard, submissionId: randomUUID() },
+      cookie,
+    );
+
+    expect(paid.status).toBe(200);
+    expect(await opensFor(paymentIdOf(paid))).toEqual([]);
+    expect(drawerJobCount()).toBe(before);
   });
 });

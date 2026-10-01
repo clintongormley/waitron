@@ -4,6 +4,8 @@ import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
+  drawerOpens,
+  printJobs,
   saleLines,
   sales,
   withTransaction,
@@ -49,12 +51,13 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { OrderFlow, TillConfig } from "./till-config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import type { TillSaleResult } from "./till-sale.js";
-import { decodeTicket } from "./testing/decode-ticket.js";
+import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
+import { DRAWER_KICK } from "./receipt-print.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createStation } from "./kitchen.js";
 
@@ -2582,5 +2585,256 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
       sql`select 1 from ticket_items where working_order_id = ${workingOrderId}`,
     );
     expect(fired.rows).toHaveLength(1);
+  });
+});
+
+// Owner decision 2026-10-01 (B30): card slips are kept in the cash drawer.
+describe("a hand-keyed card payment opens the drawer of the till that took it, for the slip", () => {
+  /** A receipt printer for `tillId`, with or without a drawer, printing receipts automatically. */
+  async function receiptPrinterFor(
+    cfg: TillConfig,
+    tillId: string,
+    hasCashDrawer: boolean,
+  ): Promise<string> {
+    return withTransaction(suite.db, async (tx) => {
+      const printer = await createPrinter(tx, cfg, {
+        name: `Recibos ${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        hasCashDrawer,
+      });
+      await tx.execute(
+        sql`update tills set receipt_printer_id = ${printer.id} where id = ${tillId}`,
+      );
+      await tx.execute(
+        sql`update locations set receipt_print_mode = 'auto' where id = ${cfg.locationId}`,
+      );
+      return printer.id;
+    });
+  }
+
+  /** The till an enrolled device rings on. */
+  async function tillOf(deviceCookie: string): Promise<string> {
+    const rows = await suite.db.execute<{ till_id: string }>(
+      sql`select till_id from devices where id = ${deviceIdOf(deviceCookie)}`,
+    );
+    return rows.rows[0]!.till_id;
+  }
+
+  async function drawerOpenRows() {
+    return withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          reason: drawerOpens.reason,
+          tillId: drawerOpens.tillId,
+          printerId: drawerOpens.printerId,
+          personId: drawerOpens.personId,
+          saleId: drawerOpens.saleId,
+          billPaymentId: drawerOpens.billPaymentId,
+        })
+        .from(drawerOpens),
+    );
+  }
+
+  /** Every print job's kind and bytes, split into drawer kicks and documents. */
+  async function jobs(): Promise<{ drawer: Uint8Array[]; documents: Uint8Array[] }> {
+    const rows = await withTransaction(suite.db, (tx) =>
+      tx.select({ kind: printJobs.kind, payload: printJobs.payload }).from(printJobs),
+    );
+    return {
+      drawer: rows.filter((row) => row.kind === "drawer").map((row) => row.payload),
+      documents: rows.filter((row) => row.kind === "document").map((row) => row.payload),
+    };
+  }
+
+  async function saleIdOf(workingOrderId: string): Promise<string> {
+    const [sale] = await withTransaction(suite.db, (tx) =>
+      tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, workingOrderId)),
+    );
+    return sale!.id;
+  }
+
+  async function venueWithTill(orderFlow: OrderFlow = "prepay") {
+    const venue = await setupVenue();
+    await suite.db.execute(
+      sql`update locations set order_flow = ${orderFlow} where id = ${venue.cfg.locationId}`,
+    );
+    const cfg: TillConfig = { ...venue.cfg, orderFlow };
+    const { available, operatorId } = venue;
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const cookie = (await loginSession(app, cfg, operatorId)).split(";")[0]!;
+    return { cfg, each, app, cookie, operatorId };
+  }
+
+  async function cardSale(
+    app: Hono,
+    cookie: string,
+    body: { workingOrderId: string; menuItemId: string },
+  ): Promise<Response> {
+    return await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        workingOrderId: body.workingOrderId,
+        lines: [{ menuItemId: body.menuItemId, quantity: "2" }],
+        tender: { method: "card", amount: "3.00" },
+      }),
+    });
+  }
+
+  it("a card sale at the till with the drawer opens it once, audited as a card slip naming the sale, and a replay opens nothing more", async () => {
+    const { cfg, each, app, cookie, operatorId } = await venueWithTill();
+    const deviceCookie = await enrolTillCookie(cfg);
+    const tillId = await tillOf(deviceCookie);
+    const printerId = await receiptPrinterFor(cfg, tillId, true);
+    const workingOrderId = randomUUID();
+
+    const first = await cardSale(app, `${cookie}; ${deviceCookie}`, {
+      workingOrderId,
+      menuItemId: each.menuItemId,
+    });
+    expect(first.status).toBe(200);
+
+    const saleId = await saleIdOf(workingOrderId);
+    expect(await drawerOpenRows()).toEqual([
+      { reason: "card_slip", tillId, printerId, personId: operatorId, saleId, billPaymentId: null },
+    ]);
+    const printed = await jobs();
+    expect(printed.drawer.map((payload) => [...payload])).toEqual([[...DRAWER_KICK]]);
+    expect(printed.documents).toHaveLength(1);
+    expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
+    expect(opensDrawer(new Uint8Array(printed.documents[0]!))).toBe(false);
+
+    const replay = await cardSale(app, `${cookie}; ${deviceCookie}`, {
+      workingOrderId,
+      menuItemId: each.menuItemId,
+    });
+    expect(replay.status).toBe(200);
+    expect(await drawerOpenRows()).toHaveLength(1);
+    expect((await jobs()).drawer).toHaveLength(1);
+  });
+
+  it("a card sale on a handheld opens no drawer, although the till it rings on has one", async () => {
+    const { cfg, each, app, cookie } = await venueWithTill();
+    await receiptPrinterFor(cfg, cfg.tillId, true);
+    const profileId = await seedProfileFF("phone-portrait");
+    const handheld = await enrolDeviceForTest(suite.db, cfg, {
+      name: "Waiter phone",
+      profileId,
+      registerId: cfg.tillId,
+    });
+
+    const res = await cardSale(
+      app,
+      `${cookie}; ${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`,
+      {
+        workingOrderId: randomUUID(),
+        menuItemId: each.menuItemId,
+      },
+    );
+
+    expect(res.status).toBe(200);
+    expect(await drawerOpenRows()).toEqual([]);
+    expect((await jobs()).drawer).toEqual([]);
+  });
+
+  it("a card sale at a till whose receipt printer has no drawer opens nothing, while the other till's printer has one", async () => {
+    const { cfg, each, app, cookie } = await venueWithTill();
+    await receiptPrinterFor(cfg, cfg.tillId, true);
+    const deviceCookie = await enrolTillCookie(cfg);
+    await receiptPrinterFor(cfg, await tillOf(deviceCookie), false);
+
+    const res = await cardSale(app, `${cookie}; ${deviceCookie}`, {
+      workingOrderId: randomUUID(),
+      menuItemId: each.menuItemId,
+    });
+
+    expect(res.status).toBe(200);
+    expect(await drawerOpenRows()).toEqual([]);
+    const printed = await jobs();
+    expect(printed.drawer).toEqual([]);
+    expect(printed.documents).toHaveLength(1);
+  });
+
+  it.each(["ticket_then_pay", "invoice_first"] as const)(
+    "collecting a placed %s order by hand-keyed card opens the till's drawer once for the slip, and a replay opens nothing more",
+    async (orderFlow) => {
+      const { cfg, each, app, cookie, operatorId } = await venueWithTill(orderFlow);
+      const deviceCookie = await enrolTillCookie(cfg);
+      const tillId = await tillOf(deviceCookie);
+      const printerId = await receiptPrinterFor(cfg, tillId, true);
+      const both = `${cookie}; ${deviceCookie}`;
+
+      const workingOrderId = randomUUID();
+      const park = await app.request("/api/working-orders", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie },
+        body: JSON.stringify({
+          id: workingOrderId,
+          lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+        }),
+      });
+      expect(park.status).toBe(200);
+      const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+        method: "POST",
+        headers: { cookie: both },
+      });
+      expect(placed.status).toBe(200);
+      expect(await drawerOpenRows()).toEqual([]);
+
+      const collect = () =>
+        app.request(`/api/working-orders/${workingOrderId}/collect`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: both },
+          body: JSON.stringify({ tender: { method: "card", amount: "3.00" } }),
+        });
+      expect((await collect()).status).toBe(200);
+
+      const saleId = await saleIdOf(workingOrderId);
+      expect(await drawerOpenRows()).toEqual([
+        {
+          reason: "card_slip",
+          tillId,
+          printerId,
+          personId: operatorId,
+          saleId,
+          billPaymentId: null,
+        },
+      ]);
+      const printed = await jobs();
+      expect(printed.drawer.map((payload) => [...payload])).toEqual([[...DRAWER_KICK]]);
+      for (const document of printed.documents) {
+        expect(opensDrawer(new Uint8Array(document))).toBe(false);
+      }
+
+      expect((await collect()).status).toBe(200);
+      expect(await drawerOpenRows()).toHaveLength(1);
+      expect((await jobs()).drawer).toHaveLength(1);
+    },
+  );
+
+  it("a cash sale at the till with the drawer still opens it as a cash sale", async () => {
+    const { cfg, each, app, cookie } = await venueWithTill();
+    const deviceCookie = await enrolTillCookie(cfg);
+    await receiptPrinterFor(cfg, await tillOf(deviceCookie), true);
+    const workingOrderId = randomUUID();
+
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+        tender: { method: "cash", amount: "5.00" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect((await drawerOpenRows()).map((row) => [row.reason, row.saleId])).toEqual([
+      ["cash_sale", await saleIdOf(workingOrderId)],
+    ]);
+    expect((await jobs()).drawer).toHaveLength(1);
   });
 });

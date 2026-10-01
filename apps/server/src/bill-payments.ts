@@ -56,7 +56,11 @@ import { claimLive, perDatabase } from "./live-in-process.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
-import { enqueueBillPaymentDrawer, enqueueSaleReceipt } from "./receipt-print.js";
+import {
+  enqueueBillCardSlipDrawer,
+  enqueueBillPaymentDrawer,
+  enqueueSaleReceipt,
+} from "./receipt-print.js";
 import type { TillConfig } from "./till-config.js";
 import {
   fireDishesAtPayment,
@@ -1086,6 +1090,7 @@ export async function takeBillPayment(
         externalRef: req.externalRef,
         billPaymentId: payment.id,
       });
+      await enqueueBillCardSlipDrawer(tx, cfg, payment.id, operatorId);
     } else {
       await enqueueBillPaymentDrawer(tx, cfg, payment.id, operatorId);
     }

@@ -285,6 +285,7 @@ describe("collecting an invoice that carries a corrective invoice", () => {
         .where(eq(payments.workingOrderId, billId)),
     );
     expect(paid).toEqual([]);
+    expect(await drawerOpensOf(saleId)).toEqual([]);
     expect(await statusOf(venue, billId)).toBe("settled");
     expect(registroCount(venue, billId)).toBe(1);
   });

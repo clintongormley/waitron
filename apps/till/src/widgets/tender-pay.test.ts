@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
 
 const cafe: TillProduct = {
   id: "cafe",
@@ -100,14 +100,14 @@ describe("till-tender-pay", () => {
     expect(customElements.get("till-tender-pay")).toBe(TillTenderPay);
   });
 
-  it("disables Pay when the basket is empty", async () => {
+  it("disables Cash when the basket is empty", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
-    expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
+    expect(el.shadowRoot!.textContent).toContain(t("tender.cash"));
   });
 
-  it("enables Pay once a line is rung up, reacting to store changes", async () => {
+  it("enables Cash once a line is rung up, reacting to store changes", async () => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.addProduct(cafe, "2");
@@ -115,7 +115,7 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(false);
   });
 
-  it("opens the cash screen showing the total when Pay is tapped", async () => {
+  it("opens the cash screen showing the total when Cash is tapped", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2"); // total 3.00
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
@@ -249,9 +249,9 @@ describe("till-tender-pay", () => {
     expect(query(el, "till-numeric-pad")).toBeNull();
   });
 
-  it("disables Pay while busy (a sale is in flight), even with a rung-up basket", async () => {
+  it("disables Cash while busy (a sale is in flight), even with a rung-up basket", async () => {
     const store = new WorkingOrderStore();
-    store.addProduct(cafe, "2"); // Pay would otherwise be enabled
+    store.addProduct(cafe, "2"); // Cash would otherwise be enabled
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, busy: true });
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
   });
@@ -293,7 +293,7 @@ describe("till-tender-pay", () => {
     await type(el, "5"); // a tender is part-entered
     click(el, ".cancel");
     await el.updateComplete;
-    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Cash button
     expect(query(el, "till-numeric-pad")).toBeNull();
     expect(spy).not.toHaveBeenCalled(); // Cancel never settles the sale
     expect(store.lines).toHaveLength(1); // basket untouched
@@ -411,7 +411,7 @@ describe("till-tender-pay", () => {
     await el.updateComplete;
     expect(query(el, ".label-input")).not.toBeNull();
     expect(query(el, ".park")).not.toBeNull();
-    expect(query(el, ".pay")).toBeNull(); // the idle Pay button is replaced by the prompt view
+    expect(query(el, ".pay")).toBeNull(); // the idle Cash button is replaced by the prompt view
   });
 
   it("emits park-order with the entered label", async () => {
@@ -462,7 +462,7 @@ describe("till-tender-pay", () => {
     await typeLabel(el, "Mesa 4"); // a label is part-entered
     click(el, ".cancel");
     await el.updateComplete;
-    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Pay button
+    expect(query(el, ".pay")).not.toBeNull(); // back to the idle Cash button
     expect(query(el, ".label-input")).toBeNull();
     expect(spy).not.toHaveBeenCalled(); // Cancel parks nothing
     expect(store.lines).toHaveLength(1); // basket untouched
@@ -579,10 +579,10 @@ describe("till-tender-pay", () => {
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store, stage: "collect" });
     expect(query(el, ".pay")).not.toBeNull();
     expect(query(el, ".hold")).not.toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(t("action.pay"));
+    expect(el.shadowRoot!.textContent).toContain(t("tender.cash"));
   });
 
-  it("Modes I/T at the order stage show Pay + Card beside Place + Hold", async () => {
+  it("Modes I/T at the order stage show Cash + Card beside Place + Hold", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -618,10 +618,10 @@ describe("till-tender-pay", () => {
         return mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage: "order" });
       }
 
-      it("makes Pay the main action, with Card beside it and Place order and Hold as secondary", async () => {
+      it("makes Cash the main action, with Card beside it and Place order and Hold as secondary", async () => {
         const { el } = await mountOrderStage();
         expect(query(el, ".pay")!.getAttribute("variant")).toBe("primary");
-        expect(query(el, ".pay")!.textContent).toContain(t("action.pay"));
+        expect(query(el, ".pay")!.textContent).toContain(t("tender.cash"));
         expect(query(el, ".pay-card")).not.toBeNull();
         expect(query(el, ".place")!.getAttribute("variant")).toBe("secondary");
         expect(query(el, ".place")!.textContent).toContain(t("action.place"));
@@ -699,7 +699,7 @@ describe("till-tender-pay", () => {
     expect(captured!.detail).toBeNull();
   });
 
-  it("Modes I/T at the collect stage show Collect + Card, not Place/Hold", async () => {
+  it("Modes I/T at the collect stage show Cash + Card, not Place/Hold", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -711,11 +711,11 @@ describe("till-tender-pay", () => {
     expect(query(el, ".pay-card")).not.toBeNull();
     expect(query(el, ".place")).toBeNull();
     expect(query(el, ".hold")).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(t("action.collect"));
+    expect(el.shadowRoot!.textContent).toContain(t("tender.cash"));
     expect(el.shadowRoot!.textContent).toContain(t("tender.card"));
   });
 
-  it("Mode T at the collect stage also shows Collect + Card", async () => {
+  it("Mode T at the collect stage also shows Cash + Card", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(cafe, "2");
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -725,6 +725,75 @@ describe("till-tender-pay", () => {
     });
     expect(query(el, ".pay")).not.toBeNull();
     expect(query(el, ".pay-card")).not.toBeNull();
+  });
+
+  describe.each([
+    { locale: "en-GB", cash: "Cash", card: "Card" },
+    { locale: "es-ES", cash: "Efectivo", card: "Tarjeta" },
+  ])("in $locale, the cash and card buttons", ({ locale, cash, card }) => {
+    afterEach(() => setLocale("en-GB"));
+
+    const zones = [
+      { mode: "prepay", stage: "order" },
+      { mode: "ticket_then_pay", stage: "order" },
+      { mode: "invoice_first", stage: "order" },
+      { mode: "ticket_then_pay", stage: "collect" },
+      { mode: "invoice_first", stage: "collect" },
+    ] as const;
+
+    async function mountAt(mode: OrderFlow, stage: "order" | "collect", width?: string) {
+      setLocale(locale);
+      const store = new WorkingOrderStore();
+      store.addProduct(cafe, "2");
+      const mounted = await mountWidget<TillTenderPay>("till-tender-pay", { store, mode, stage });
+      if (width !== undefined) {
+        mounted.host.style.width = width;
+        await mounted.el.updateComplete;
+      }
+      return mounted;
+    }
+
+    it.each(zones)(
+      `read ${cash} then ${card}, both primary, in a $mode zone at the $stage stage`,
+      async ({ mode, stage }) => {
+        const { el } = await mountAt(mode, stage);
+        const cashButton = query(el, ".pay")!;
+        const cardButton = query(el, ".pay-card")!;
+        expect(cashButton.textContent!.trim()).toBe(cash);
+        expect(cardButton.textContent!.trim()).toBe(card);
+        expect(cashButton.getAttribute("variant")).toBe("primary");
+        expect(cardButton.getAttribute("variant")).toBe("primary");
+        expect(cashButton.nextElementSibling).toBe(cardButton);
+      },
+    );
+
+    it.each(zones)(
+      `share one row in a 400px widget, ${cash} on the left, each half the width, in a $mode zone at the $stage stage`,
+      async ({ mode, stage }) => {
+        const { el } = await mountAt(mode, stage, "400px");
+        const widget = el.getBoundingClientRect();
+        const cashBox = query(el, ".pay")!.getBoundingClientRect();
+        const cardBox = query(el, ".pay-card")!.getBoundingClientRect();
+        expect(cardBox.top).toBe(cashBox.top);
+        expect(cardBox.left).toBeGreaterThan(cashBox.right);
+        expect(cashBox.left).toBeCloseTo(widget.left, 0);
+        expect(cardBox.right).toBeCloseTo(widget.right, 0);
+        expect(cardBox.width).toBeCloseTo(cashBox.width, 0);
+      },
+    );
+
+    it.each(zones)(
+      `stay inside a 106px widget in a $mode zone at the $stage stage`,
+      async ({ mode, stage }) => {
+        const { el } = await mountAt(mode, stage, "106px");
+        const widget = el.getBoundingClientRect();
+        for (const selector of [".pay", ".pay-card"]) {
+          const box = query(el, selector)!.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(widget.left);
+          expect(box.right).toBeLessThanOrEqual(widget.right);
+        }
+      },
+    );
   });
 
   it("at the collect stage, the cash screen's Confirm emits collect-order (not confirm-payment)", async () => {
@@ -739,8 +808,8 @@ describe("till-tender-pay", () => {
     const collectSpy = vi.fn();
     el.addEventListener("confirm-payment", confirmSpy);
     el.addEventListener("collect-order", (e) => collectSpy((e as CustomEvent).detail));
-    expect(el.shadowRoot!.textContent).toContain(t("action.collect")); // the idle button's own label
-    click(el, ".pay"); // opens the same cash screen Pay opens
+    expect(el.shadowRoot!.textContent).toContain(t("tender.cash")); // the idle button's own label
+    click(el, ".pay");
     await el.updateComplete;
     await type(el, "5");
     click(el, ".confirm");

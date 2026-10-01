@@ -74,7 +74,8 @@ import { printingAlertSource } from "./alert-sources.js";
  * with a chained fiscal sale.
  *
  * PRINTING NEVER OPENS THE DRAWER (CLAUDE.md §5): a receipt is a `document` job carrying no drawer
- * command, the kick is a separate `drawer` job, and cash settlement writes its own audit row.
+ * command, the kick is a separate `drawer` job, and a cash or hand-keyed card payment writes its own
+ * audit row.
  * NEVER-BLOCK: a broken or absent receipt printer never delays or fails a sale. Each test asserts
  * the fiscal record still lands, and the printer transports' `send` — the hardware entry points —
  * are spied to show the sale path delivers nothing.
@@ -620,7 +621,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(decodeTicket(new Uint8Array(jobs[0]!.payload))).toContain("PRUEBA - SIN COBRO REAL");
   });
 
-  it("auto + printer + CARD: enqueues the receipt with NO kick and records NO drawer open", async () => {
+  it("auto + printer + hand-keyed CARD: the receipt carries NO kick; a separate drawer job opens the drawer for the card slip", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
@@ -638,12 +639,114 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
     expect(await registroCount(cfg)).toBe(1);
     const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(2);
+    for (const job of jobs) expect(job.printerId).toBe(printerId);
+    const receipt = jobs.find((job) =>
+      decodeTicket(new Uint8Array(job.payload)).includes("VERI*FACTU"),
+    )!;
+    expect(opensDrawer(new Uint8Array(receipt.payload))).toBe(false);
+    const drawer = jobs.find((job) => job !== receipt)!;
+    expect([...drawer.payload]).toEqual([...DRAWER_KICK]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      {
+        reason: "card_slip",
+        saleId: await onlySaleId(cfg),
+        personId: OPERATOR,
+        tillId: cfg.tillId,
+        printerId,
+      },
+    ]);
+  });
+
+  it("hand-keyed CARD on a device that may not open the drawer: the receipt prints, and no drawer job or audit row", async () => {
+    const { cfg: base, each, zoneId } = await setupVenue();
+    const cfg: TillConfig = { ...base, allowCashDrawer: false };
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "auto", printerId });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    const jobs = await printJobsFor(cfg);
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]!.printerId).toBe(printerId);
-    const payload = new Uint8Array(jobs[0]!.payload);
-    expect(decodeTicket(payload)).toContain("VERI*FACTU"); // a real receipt, still printed
-    expect(opensDrawer(payload)).toBe(false); // card → NO drawer kick
-    expect(await drawerOpensFor(cfg)).toEqual([]); // card → NO cash_sale audit row
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("hand-keyed CARD at a till whose printer has no drawer: the receipt prints, and no drawer job or audit row", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg, { hasCashDrawer: false });
+    await configureReceipt(cfg, { mode: "auto", printerId });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("hand-keyed CARD but NO operator: prints the receipt, but no kick and no audit row", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "auto", printerId });
+
+    await recordTillSale(deps(), cfg, {
+      zoneId,
+      lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      tender: { method: "card", amount: "1.50" },
+    });
+
+    const jobs = await printJobsFor(cfg);
+    expect(jobs).toHaveLength(1);
+    expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
+    expect(await drawerOpensFor(cfg)).toEqual([]);
+  });
+
+  it("hand-keyed CARD in mode 'never': files the sale and enqueues only the drawer job for the card slip", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "never", printerId });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    expect(await registroCount(cfg)).toBe(1);
+    expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      {
+        reason: "card_slip",
+        saleId: await onlySaleId(cfg),
+        personId: OPERATOR,
+        tillId: cfg.tillId,
+        printerId,
+      },
+    ]);
   });
 
   it("mode 'on_request': files the sale and enqueues only the cash drawer job", async () => {
@@ -867,6 +970,9 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
 
+  // These cases count receipts; a card sale at a printer with a drawer also opens it (B30).
+  const NO_DRAWER = { hasCashDrawer: false } as const;
+
   /** The count the printer's "jobs waiting" alert shows for `printerId`, or 0 when it raises none. */
   async function waitingAt(printerId: string): Promise<number> {
     const alerts = await withTransaction(suite.db, (tx) =>
@@ -904,7 +1010,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
   /** An auto-printed card sale's receipt that ran out of attempts, then the till's reprint of it. */
   async function failedThenReprinted() {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg);
+    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     const sale = await sell(venue);
     const [original] = await jobs();
@@ -932,7 +1038,10 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("records the sale on an automatically printed receipt", async () => {
     const venue = await setupVenue();
-    await configureReceipt(venue.cfg, { mode: "auto", printerId: await makePrinter(venue.cfg) });
+    await configureReceipt(venue.cfg, {
+      mode: "auto",
+      printerId: await makePrinter(venue.cfg, NO_DRAWER),
+    });
     const sale = await sell(venue);
 
     expect((await jobs()).map(({ kind, saleId }) => ({ kind, saleId }))).toEqual([
@@ -950,7 +1059,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("drops a failed resend of the receipt from the Printers screen once the till's reprint has printed", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg);
+    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     const sale = await sell(venue);
     const [original] = await jobs();
@@ -973,7 +1082,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("counts a reprint that runs out of attempts after the original printed", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg);
+    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     const sale = await sell(venue);
     const [original] = await jobs();
@@ -986,12 +1095,12 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("keeps counting a failed receipt when the reprint prints on another printer", async () => {
     const venue = await setupVenue();
-    const first = await makePrinter(venue.cfg);
+    const first = await makePrinter(venue.cfg, NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId: first });
     const sale = await sell(venue);
     const [original] = await jobs();
     await setJobs([original!.id], exhausted);
-    const second = await makePrinter(venue.cfg);
+    const second = await makePrinter(venue.cfg, NO_DRAWER);
     await configureReceipt(venue.cfg, { printerId: second });
     await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
     const reprint = (await jobs()).at(-1)!;
@@ -1004,7 +1113,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("keeps counting another sale's failed receipt when this sale's reprint prints", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg);
+    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     await sell(venue);
     const other = await sell(venue);

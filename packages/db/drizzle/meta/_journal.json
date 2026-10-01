@@ -407,6 +407,13 @@
       "when": 1790870817688,
       "tag": "0057_unpaid_departures",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1790881966869,
+      "tag": "0058_drawer_opens_card_slip",
+      "breakpoints": true
     }
   ]
 }

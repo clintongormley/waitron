@@ -183,7 +183,7 @@ async function enqueueBillDrawer(
   cfg: TillConfig,
   billPaymentId: string,
   operatorId: string,
-  reason: "bill_payment" | "bill_refund",
+  reason: "bill_payment" | "bill_refund" | "card_slip",
   authorization: { authorizedBy: string; viaOverride: boolean } | null,
 ): Promise<void> {
   if (cfg.allowCashDrawer === false) return;
@@ -211,6 +211,19 @@ export async function enqueueBillPaymentDrawer(
 }
 
 /**
+ * A hand-keyed card taken against a bill opens the drawer for its slip, naming the bill payment, even
+ * when the payment issues the invoice.
+ */
+export async function enqueueBillCardSlipDrawer(
+  tx: Transaction,
+  cfg: TillConfig,
+  billPaymentId: string,
+  operatorId: string,
+): Promise<void> {
+  await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "card_slip", null);
+}
+
+/**
  * Cash given back from a bill payment before the invoice opens the drawer naming that payment, with
  * whoever authorised the refund.
  */
@@ -224,11 +237,15 @@ export async function enqueueBillRefundDrawer(
   await enqueueBillDrawer(tx, cfg, billPaymentId, operatorId, "bill_refund", authorization);
 }
 
-/** Cash collected at a till opens its attached drawer independently of document printing. */
-export async function enqueueCashSaleDrawer(
+/**
+ * A sale paid in cash, or by a card hand-keyed on a machine Waitron does not talk to (whose slip is
+ * kept in the drawer), opens the till's attached drawer independently of document printing.
+ */
+export async function enqueueSaleDrawer(
   tx: Transaction,
   cfg: TillConfig,
   saleId: string,
+  method: "cash" | "card",
   operatorId?: string,
 ): Promise<void> {
   if (operatorId === undefined || cfg.allowCashDrawer === false) return;
@@ -238,7 +255,7 @@ export async function enqueueCashSaleDrawer(
     tillId: cfg.tillId,
     printerId: printer.id,
     personId: operatorId,
-    reason: "cash_sale",
+    reason: method === "cash" ? "cash_sale" : "card_slip",
     saleId,
   });
   await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");

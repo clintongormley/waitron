@@ -428,10 +428,10 @@ describe("the generated migration and the converted table agree", () => {
     );
     expect(constraint).toBeDefined(); // positive control, as above
     expect(render(constraint.value)).toBe(
-      "\"drawer_opens\".\"reason\" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund')",
+      "\"drawer_opens\".\"reason\" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund', 'card_slip')",
     );
     expect(body).toContain(
-      `CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund'))`,
+      `CONSTRAINT "drawer_opens_reason_ck" CHECK("drawer_opens"."reason" in ('cash_sale', 'manual', 'calibration', 'bill_payment', 'bill_refund', 'card_slip'))`,
     );
   });
 });
