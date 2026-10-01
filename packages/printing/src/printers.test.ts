@@ -389,9 +389,7 @@ describe("printer layout settings", () => {
         paperWidth: "58mm",
       }),
     );
-    await asTx(cfg, (tx) =>
-      updatePrinter(tx, cfg, id, { resolution: "203dpi" }),
-    );
+    await asTx(cfg, (tx) => updatePrinter(tx, cfg, id, { resolution: "203dpi" }));
     const rows = await asTx(cfg, (tx) => listPrinters(tx, cfg));
     expect(rows.find((r) => r.id === defaulted)).toMatchObject({
       paperWidth: "80mm",
