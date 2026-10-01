@@ -215,8 +215,8 @@ select with its `<label for>` and error, in the reason editor), every `label` in
 screen's editor modals (each holds one field's text and control, and its error when it has one), and the
 content-languages editor's two select labels and their `.error` lines. A screen whose own layout
 makes a row of fields grow to fill the modal reads it on that row, so a button beside a field stays
-beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print block"
-button, and the section member list's `.add` row does, for its Add button, along with that row's
+beside it: the Printers screen's `.field-row` does, for the calibration wizard's "Print width ruler"
+button beside the ruler's answer, and the section member list's `.add` row does, for its Add button, along with that row's
 `.error` line (`apps/dashboard/src/widgets/member-list-editor.ts`, in the section editor's modal;
 the Menus screen shows the same editor on a page, where nothing changes). Guards: the form-width
 cases in `packages/ui/src/components/wt-modal.test.ts` (every shared field, a native select
