@@ -2210,7 +2210,6 @@ describe("zone offers from the published menus", () => {
 
       const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
       const { menus: served, unavailable } = await menuState(tx, venue.diningZone);
-      // The zone's menus, their live versions, then products, option labels and extras items.
       expect(prepared).toHaveBeenCalledTimes(4);
       expect(served.map(stateVersionOf)).toEqual(menus);
       expect({ ...unavailable, products: [...unavailable.products].sort() }).toEqual({

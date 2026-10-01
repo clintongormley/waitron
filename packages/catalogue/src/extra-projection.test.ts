@@ -85,11 +85,6 @@ const toppings = () => ({
   ],
 });
 
-/**
- * Attach these extras lists to the dish's product, on top of whatever it already carries.
- * `` refuses a list the offer's product does not carry, so a test that
- * publishes has to say what the dish carries first.
- */
 const carries = async (tx: Transaction, dish: keyof typeof offers, ...listIds: string[]) => {
   const productId = ids[dish];
   const held = (await readProductModifiers(tx, [productId])).get(productId) ?? [];

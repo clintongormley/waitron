@@ -601,8 +601,6 @@ describe("in English", () => {
     expect([style.paddingLeft, style.paddingRight]).toEqual(["0px", "0px"]);
   });
 
-  // The table never narrows a column below its content, so on a phone each count and each menu
-  // row's menu go on a line of their own rather than widening what scrolls sideways.
   it("keeps its product count aligned at phone width", async () => {
     const [width, height] = [window.innerWidth, window.innerHeight];
     const el = await mount();
@@ -906,7 +904,7 @@ it("refreshes with the passive client without replacing an open draft", async ()
 // ---------------------------------------------------------------------------
 // The detail modal
 
-it("opens a Used by modal listing the products and menu items that carry the list, with Edit and Close", async () => {
+it("opens a Used by modal listing the products that carry the list, with Edit and Close", async () => {
   const client = api({
     getExtraListDependants: vi.fn().mockResolvedValue({
       products: [{ id: "p1", name: "Hamburguesa" }],

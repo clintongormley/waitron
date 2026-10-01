@@ -204,11 +204,6 @@ async function assertNoParentsWithVariants(tx: Transaction, input: ExtraListInpu
  * (extras.concurrency.test.ts) passes on this engine; that it fails without the delete-then-insert
  * has not been re-checked since the storage switch. Receipt: docs/developers/conventions-data.md.
  *
- * Replacing the set is safe because nothing holds a key into `extra_list_items`:
- * ``grep -rn 'REFERENCES `extra_list_items' --include='*.sql' packages`` finds nothing, a menu
- * override names the PRODUCT and is cleaned up by {@link dropStaleMenuOverrides}, and an order's
- * child line names the picked product (`buildLineExtras`, `apps/server/src/modifier-selection.ts`).
- *
  * An id that names an item of a DIFFERENT list is refused as `extras.invalid` rather than moving it.
  */
 async function writeItems(

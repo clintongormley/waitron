@@ -3545,7 +3545,6 @@ type HeldLine = {
 describe("canonical modifier HTTP serialization", () => {
   it("publishes every mode, parks explicit answers and prices published extras exactly", async () => {
     const f = await modifierOfferFixture();
-    // What the offer PUBLISHES: the extras list at the offer's own 0.35, the options list the
 
     const offers = await f.app.request("/api/default-service-zone/offers", { headers: f.headers });
     expect(offers.status).toBe(200);

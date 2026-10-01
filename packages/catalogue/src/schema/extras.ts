@@ -33,9 +33,6 @@ export const extraLists = table(
   ],
 );
 
-/** One product a list offers, on the terms of the OFFER alone: how many of it one dish may take,
- * whether it starts picked, and a price that overrides the product's own. A null `price` means
- * "charge the product's `unit_price`" (`resolveExtraPrice`, extras.ts). */
 export const extraListItems = table(
   "extra_list_items",
   {

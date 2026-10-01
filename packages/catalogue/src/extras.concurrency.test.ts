@@ -23,7 +23,6 @@ function refusalCode(reason: unknown): unknown {
 
 /** The two products the lists below offer, filled by the setup. */
 const breads: { sourdough: string; rye: string } = { sourdough: "", rye: "" };
-/** The one menu offer the publication tests save against — a dish, in one section. */
 let dish = "";
 
 // `useVenueDb` empties every data table after each test, so the products are re-made per test.
