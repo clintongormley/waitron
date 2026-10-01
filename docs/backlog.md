@@ -7822,7 +7822,7 @@ ongoing overhaul listed at the top of Track A.
     the booted server with and without the passive header and checks that only the second moves the
     session's last-seen time.
 - **The Receipts preview offers a choice of paper width (C120, owner 2026-10-01) — done
-  (2026-10-01).** A location whose tills print on 58 mm and 80 mm paper previewed only one width.
+  (2026-10-01, #1000).** A location whose tills print on 58 mm and 80 mm paper previewed only one width.
   - The preview route, `GET /management-api/receipt-preview`
     (`apps/server/src/receipt-preview-api.ts`), now reads the active receipt printer of every till
     at the location, not only the first till's by name. Its answer gains `paperWidths`, the widths
