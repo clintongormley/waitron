@@ -410,10 +410,10 @@ describe("search and sorting", () => {
     });
   });
 
-  it("matches whole words only, and treats a query as text", async () => {
+  it("matches a finished word whole, and treats a query as text", async () => {
     await withTransaction(suite.db, async (tx) => {
       await uploadImage(tx, { image: photo, names: { en: "Bread" } }, { fallbackLanguage: "en" });
-      expect(await listImages(tx, { query: "bre" })).toEqual({ images: [], total: 0 });
+      expect(await listImages(tx, { query: "bre " })).toEqual({ images: [], total: 0 });
       expect((await listImages(tx, { query: "'; drop table products; --" })).total).toBe(0);
     });
   });
@@ -470,6 +470,70 @@ describe("search and sorting", () => {
       expect([...ids(first), ...ids(second)]).toEqual(ids(await listImages(tx)));
       expect(first.images[0]).not.toHaveProperty("bytes");
       expect(await listImages(tx, { offset: 9 })).toEqual({ images: [], total: 3 });
+    });
+  });
+});
+
+describe("a word still being typed", () => {
+  const NAMES = [
+    "Chicken",
+    "Grilled chicken",
+    "Chicken wings",
+    "Chicken, grilled",
+    "Chi tea",
+    "Pan-fried fish",
+  ];
+  const found = async (tx: Transaction, query: string): Promise<string[]> =>
+    (await listImages(tx, { query, limit: 100, fallbackLanguage: "en" })).images
+      .map((image) => image.names.en!)
+      .sort();
+
+  it.each<[string, string[]]>([
+    ["chick", ["Chicken", "Chicken wings", "Chicken, grilled", "Grilled chicken"]],
+    // A space, a closing quote or punctuation after the last word finishes it.
+    ["chick ", []],
+    ["chick,", []],
+    ['"chick"', []],
+    // Only the LAST word is a prefix.
+    ["chi wings", []],
+    ["wings chi", ["Chicken wings"]],
+    // An exclusion is always a whole word: "-chi" hides "Chi tea" and nothing that starts with chi.
+    ["-chi", ["Chicken", "Chicken wings", "Chicken, grilled", "Grilled chicken", "Pan-fried fish"]],
+    // An unclosed quote is a phrase still being typed: its words stay together and its last word
+    // is a prefix, so "Chicken, grilled" — both words, the other way round — is not found.
+    ['"grilled chi', ["Grilled chicken"]],
+    ['"grilled chi"', []],
+    ['"grill chi', []],
+    // A word with punctuation inside is a phrase of its parts, and its last part is the prefix.
+    ["pan-fr", ["Pan-fried fish"]],
+  ])("answers %j with %j", async (query, expected) => {
+    await withTransaction(suite.db, async (tx) => {
+      for (const [index, name] of NAMES.entries())
+        await uploadImage(
+          tx,
+          { image: await prepare(300 + index), names: { en: name } },
+          { fallbackLanguage: "en" },
+        );
+      expect(await found(tx, query)).toEqual(expected);
+    });
+  });
+
+  it("ranks a whole-word match above a match on the start of a longer word", async () => {
+    const low = "00000000-0000-4000-8000-000000000001";
+    const high = "00000000-0000-4000-8000-000000000002";
+    await withTransaction(suite.db, async (tx) => {
+      // The id tie-break alone would list the prefix-only match, which has the lower id, first.
+      for (const [id, filename, name] of [
+        [low, `${"b".repeat(64)}.webp`, "Chicken"],
+        [high, `${"c".repeat(64)}.webp`, "Chick peas"],
+      ] as const) {
+        await tx.insert(mediaImages).values({ id, filename, names: { en: name } });
+      }
+      const ids = async (query: string) =>
+        (await listImages(tx, { query, fallbackLanguage: "en" })).images.map((image) => image.id);
+      expect(await ids("chick")).toEqual([high, low]);
+      // With the whole word in both, the tie-break decides again.
+      expect(await ids("chick OR chicken")).toEqual([low, high]);
     });
   });
 });

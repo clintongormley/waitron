@@ -68,7 +68,9 @@ before Save leaves it out of the library.
 
 ## Find and reuse an image
 
-**Search images** finds photographs by the words in their names. Choose **Relevance** to prioritize
+**Search images** finds photographs by the words in their names, and searches as you type: the
+word you are still typing matches the start of a word, so **chick** finds **Chicken**. Once you type
+a space after a word, it matches only that whole word. Choose **Relevance** to prioritize
 search matches, **Date** to browse uploads or **Name** to scan names. Date starts with the newest
 uploads; switch to **Oldest first** when you need the earliest ones. Name starts with **A–Z** and
 also offers **Z–A**. Use the page controls when more photographs match than fit on the current page.
