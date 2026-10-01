@@ -127,7 +127,6 @@ async function mountWithOptions() {
 
 test("an option row paints the page-background token on hover", async () => {
   const { el, trigger } = await mountWithOptions();
-  // --wt-color-bg is the light-grey the search box already sits on, visible in both themes;
   // --wt-color-surface-raised equals the panel's own white in the light theme, so it would be
   // invisible there.
   host.style.setProperty("--wt-color-bg", "rgb(4, 5, 6)");
@@ -638,9 +637,11 @@ test("the popup stays inside the bottom gutter once its width matches the trigge
   }));
   el.style.cssText = `position: fixed; left: 20px; top: ${innerHeight - 100}px; width: 150px`;
   await el.updateComplete;
-  // At this width the resting label covers the trigger's middle; see the narrow-label case below.
-  await userEvent.click(trigger, { force: true });
+  // Pressed near the chevron: at this width the resting label covers the trigger's middle.
+  const { width, height } = trigger.getBoundingClientRect();
+  await userEvent.click(trigger, { position: { x: width - 20, y: height - 8 } });
   await new Promise(requestAnimationFrame);
+  expect(popup.matches(":popover-open")).toBe(true);
   expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
 });
 
@@ -1303,6 +1304,9 @@ test("the search box is outlined in the primary colour on the surface, and its a
   const area = el.shadowRoot!.querySelector<HTMLElement>(".search-area")!;
   expect(area.contains(search)).toBe(true);
   expect(getComputedStyle(area).boxShadow).toBe("rgb(3, 3, 3) 0px 2px 0px 0px");
+  expect(el.shadowRoot!.activeElement).toBe(search);
+  expect(search.matches(":focus-visible")).toBe(true);
+  expect(style.outlineStyle).toBe("none");
 });
 
 function manyOptions(count: number): ComboboxOption[] {
@@ -1725,6 +1729,17 @@ test("a printable key on a closed searchable trigger opens the list with that ch
   expect(activeRowText(el, searchBox(el))).toBe("Vegan");
 });
 
+/** Dispatched in one turn, so the keys always fall inside type-ahead's 500 ms however slow the
+ * runner; reports, per key, whether the component cancelled it. */
+function pressKeys(target: HTMLElement, ...keys: string[]): boolean[] {
+  return keys.map(
+    (key) =>
+      !target.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, composed: true, cancelable: true }),
+      ),
+  );
+}
+
 const PANTRY: ComboboxOption[] = [
   { value: "new", label: "Pack a new one…", action: true },
   { value: "olive", label: "Olive" },
@@ -1741,7 +1756,8 @@ test("typing on a closed list without a search box chooses the first option star
   );
   const { trigger, popup, value } = fieldParts(el);
   trigger.focus();
-  await userEvent.keyboard("pa");
+  pressKeys(trigger, "p", "a");
+  await el.updateComplete;
   expect(el.value).toBe("paper");
   expect(changes).toEqual(["pepper", "paper"]);
   expect(popup.matches(":popover-open")).toBe(false);
@@ -1757,7 +1773,7 @@ test("type-ahead that matches the option already chosen sends no change", async 
   const changed = vi.fn();
   el.addEventListener("wt-change", changed);
   fieldParts(el).trigger.focus();
-  await userEvent.keyboard("ol");
+  pressKeys(fieldParts(el).trigger, "o", "l");
   expect(el.value).toBe("olive");
   expect(changed).not.toHaveBeenCalled();
 });
@@ -1935,7 +1951,8 @@ test("a printable key in an open list without a search box moves to the next row
   fieldParts(el).trigger.focus();
   await userEvent.keyboard("{ArrowDown}");
   expect(activeRowText(el, listbox(el))).toBe("Pack a new one…");
-  await userEvent.keyboard("pa");
+  expect(pressKeys(listbox(el), "p", "a")).toEqual([true, true]);
+  await el.updateComplete;
   expect(activeRowText(el, listbox(el))).toBe("Paper");
   expect(el.value).toBe("");
 });
@@ -2157,4 +2174,85 @@ test("a printable key matching no row in an open list without a search box keeps
   expect(activeRowText(el, listbox(el))).toBe("Olive");
   await userEvent.keyboard("z");
   expect(activeRowText(el, listbox(el))).toBe("Olive");
+});
+
+test("pressing the label while the list is open closes it, and does not open it again", async () => {
+  const el = await mountWith('<wt-combobox label="Dietary tags"></wt-combobox>');
+  const { trigger, label, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await userEvent.type(searchBox(el), "veg");
+  const toggles: string[] = [];
+  popup.addEventListener("toggle", (event) => toggles.push((event as ToggleEvent).newState));
+  await userEvent.click(label!);
+  await new Promise(requestAnimationFrame);
+  expect(toggles).toEqual(["closed"]);
+  expect(popup.matches(":popover-open")).toBe(false);
+  // A later press on the closed field's label still opens it.
+  await userEvent.click(label!);
+  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
+});
+
+test("a value that names an action row shows nothing chosen", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Unit" value="add-unit" placeholder="Choose a unit"></wt-combobox>',
+    WITH_ACTION,
+  );
+  const { value } = fieldParts(el);
+  expect(value.textContent!.trim()).toBe("Choose a unit");
+  expect(value.classList.contains("placeholder")).toBe(true);
+
+  const multi = await mountWith(
+    '<wt-combobox label="Unit" multiple placeholder="Choose units"></wt-combobox>',
+    WITH_ACTION,
+  );
+  multi.values = ["add-unit"];
+  await multi.updateComplete;
+  expect(fieldParts(multi).value.textContent!.trim()).toBe("Choose units");
+});
+
+test("type-ahead on a closed list ignores the search text left from an earlier opening", async () => {
+  const eight = manyOptions(8).map((option, index) => ({
+    ...option,
+    label: ["Olive", "Pepper", "Paper", "Pasta", "Rice", "Salt", "Sugar", "Tea"][index]!,
+  }));
+  const el = await mountWith('<wt-combobox label="Pantry" search="auto"></wt-combobox>', eight);
+  const { trigger, popup } = fieldParts(el);
+  await userEvent.click(trigger);
+  await userEvent.type(searchBox(el), "sa");
+  await userEvent.keyboard("{Escape}");
+  expect(popup.matches(":popover-open")).toBe(false);
+  el.options = eight.slice(0, 7);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector(".search")).toBeNull();
+  pressKeys(trigger, "r");
+  expect(el.value).toBe("4");
+});
+
+test("Space, Enter and printable keys in a list without a search box are consumed", async () => {
+  const el = await mountWith(
+    '<wt-combobox label="Pantry" search="never" multiple></wt-combobox>',
+    PANTRY,
+  );
+  await userEvent.click(fieldParts(el).trigger);
+  expect(pressKeys(listbox(el), "o", " ", "Enter")).toEqual([true, true, true]);
+});
+
+test("type-ahead in a long list without a search box scrolls the row it reaches into view", async () => {
+  const options = [
+    ...Array.from({ length: 19 }, (_, index) => ({
+      value: String(index),
+      label: `Apple ${index}`,
+    })),
+    { value: "zest", label: "Zest" },
+  ];
+  const el = await mountWith('<wt-combobox label="Pantry" search="never"></wt-combobox>', options);
+  await userEvent.click(fieldParts(el).trigger);
+  const list = listbox(el);
+  expect(list.scrollHeight).toBeGreaterThan(list.clientHeight);
+  pressKeys(list, "z");
+  await vi.waitFor(() => {
+    const row = el.shadowRoot!.querySelector(".option.active")!.getBoundingClientRect();
+    expect(row.bottom).toBeLessThanOrEqual(list.getBoundingClientRect().bottom);
+  });
+  expect(activeRowText(el, list)).toBe("Zest");
 });

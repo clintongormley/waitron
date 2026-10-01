@@ -106,6 +106,11 @@ export class WtCombobox extends LitElement {
         box-shadow: var(--wt-shadow-1);
       }
 
+      /* Its own primary border is the focus marking; a ring outside it would draw a second line. */
+      .search:focus-visible {
+        outline: none;
+      }
+
       .search {
         width: 100%;
         min-height: var(--wt-tap-min);
@@ -319,14 +324,14 @@ export class WtCombobox extends LitElement {
     if (this.multiple) {
       if (this.values.length === 0) return "";
       if (this.values.length === 1) {
-        return this.options.find((o) => o.value === this.values[0])?.label ?? "";
+        return this.options.find((o) => !o.action && o.value === this.values[0])?.label ?? "";
       }
       return this.countLabel(this.values.length);
     }
     // An empty value means nothing is selected, so an option whose own value is "" never displaces
     // the placeholder.
     if (this.value === "") return "";
-    return this.options.find((o) => o.value === this.value)?.label ?? "";
+    return this.options.find((o) => !o.action && o.value === this.value)?.label ?? "";
   }
 
   // Refused while disabled because closing the panel on disable is not enough: a keystroke pressed
@@ -511,7 +516,8 @@ export class WtCombobox extends LitElement {
     }
     if (this.multiple) return;
     event.preventDefault();
-    const options = this.filteredOptions;
+    // All options, not the filtered ones: the search text left from the last opening is not shown.
+    const options = this.options;
     const current = options.findIndex((option) => this.isSelected(option));
     const index = this.typeAhead(event.key, options, current);
     if (index >= 0 && index !== current) this.commitSelection(options[index]!.value, event);
@@ -572,6 +578,19 @@ export class WtCombobox extends LitElement {
    * list, and that moves focus. */
   private onLabelMousedown(event: MouseEvent): void {
     event.preventDefault();
+  }
+
+  private labelPressedWhileOpen = false;
+
+  private onLabelPointerdown(): void {
+    this.labelPressedWhileOpen = this.popup.matches(":popover-open");
+  }
+
+  /** A press on the label while the list is open closes it (the popover's own light dismiss);
+   * forwarding the click to the trigger would open it again straight away. */
+  private onLabelClick(event: MouseEvent): void {
+    if (this.labelPressedWhileOpen) event.preventDefault();
+    this.labelPressedWhileOpen = false;
   }
 
   private onToggle(event: ToggleEvent): void {
@@ -695,7 +714,9 @@ export class WtCombobox extends LitElement {
                   class="field-label"
                   id=${this.labelId}
                   for=${triggerId}
+                  @pointerdown=${this.onLabelPointerdown}
                   @mousedown=${this.onLabelMousedown}
+                  @click=${this.onLabelClick}
                   ><span class="field-label-text">${this.label}</span>${
                     this.required
                       ? html`<span class="required" data-required aria-hidden="true">*</span>`
