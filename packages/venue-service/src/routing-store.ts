@@ -16,7 +16,13 @@ import {
   type RouteTarget,
   type RoutingRules,
 } from "./routing.js";
-import type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
+import type {
+  ExceptionInput,
+  RouteExplanation,
+  RoutingChange,
+  RoutingModel,
+  RoutingMove,
+} from "./routing-types.js";
 import { routeExceptions, stationClaims } from "./schema/routing.js";
 import "./errors.js";
 export type { ExceptionInput, RoutingChange, RoutingModel, RoutingMove } from "./routing-types.js";
@@ -287,6 +293,42 @@ async function snapshot(tx: Transaction, cfg: VenueScope) {
 
 export async function loadRoutingRules(tx: Transaction, cfg: VenueScope): Promise<RoutingRules> {
   return (await snapshot(tx, cfg)).rules;
+}
+
+export async function explainRoute(
+  tx: Transaction,
+  cfg: VenueScope,
+  productId: string,
+  zoneId: string | null,
+): Promise<RouteExplanation> {
+  const uuid = storedUuid(productId);
+  if (zoneId !== null) await resolveZoneContext(tx, cfg, zoneId);
+  const { rules, stations } = await snapshot(tx, cfg);
+  const [product] = await tx
+    .select({
+      id: products.id,
+      routedId: sql<string>`coalesce(${products.parentId}, ${products.id})`,
+      categoryId: effectiveProductColumns.categoryId,
+    })
+    .from(products)
+    .leftJoin(parentProducts, parentJoin)
+    .where(eq(products.id, uuid));
+  if (product === undefined)
+    throw new AppError("route.subject_not_found", { subject: "product", id: productId });
+  const choice = chooseMaker(
+    rules,
+    {
+      productId: uuid,
+      routedProductId: storedUuid(product.routedId),
+      categoryId: product.categoryId,
+    },
+    zoneId,
+  );
+  return {
+    ...choice,
+    skipped: [...choice.skipped],
+    stations: stations.map(({ id, name, active }) => ({ id, name, active })),
+  };
 }
 
 export async function previewRoutingChange(

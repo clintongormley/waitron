@@ -25,6 +25,49 @@ it("loads the routing and station context, including each station printer assign
   expect(view.stationPrinters).toEqual([{ stationId: "bar", printerId: "receipt" }]);
 });
 
+it("offers active products and their variants to the route tester", async () => {
+  const request = vi.fn(async (path: string) =>
+    path === "/management-api/products"
+      ? [
+          {
+            id: "lager",
+            name: "Lager",
+            active: true,
+            variants: [
+              { id: "large", name: "Large", active: true },
+              { id: "old", name: "Old", active: false },
+            ],
+          },
+        ]
+      : path === "/management-api/venue-service/routing"
+        ? {
+            claims: [],
+            exceptions: [],
+            unassigned: { folders: [], products: [] },
+            defaultStationId: null,
+            stations: [],
+          }
+        : [],
+  );
+  const result = await new PrepStationsApi(request as DashboardRequest).load();
+  expect(result.products).toEqual([
+    { id: "lager", name: "Lager" },
+    { id: "large", name: "Lager · Large" },
+  ]);
+});
+
+it("asks the route tester for a product and an optional zone", async () => {
+  const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
+  const result = await new PrepStationsApi(request as DashboardRequest).explain("lager", null);
+  expect(result.route).toBeNull();
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/explain?productId=lager&zoneId=",
+    "GET",
+    undefined,
+    { passive: false },
+  );
+});
+
 it("writes station changes to core and claims to venue-service", async () => {
   const request = vi.fn(async (path: string) =>
     path === "/management-api/stations" ? { id: "new-bar" } : undefined,

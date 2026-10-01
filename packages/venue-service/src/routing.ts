@@ -1,5 +1,5 @@
 import type { PreparationRoute } from "@waitron/module";
-export type { ExceptionInput, RoutingModel } from "./routing-types.js";
+export type { ExceptionInput, RoutingModel, RouteExplanation } from "./routing-types.js";
 
 /** What a claim or an exception sends work to. */
 export type RouteTarget = PreparationRoute; // { kind: "station"; stationId } | { kind: "no_preparation" }

@@ -30,7 +30,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { resolveNewOrderZone } from "./operations.js";
+import { configureZone, createDepartment, resolveNewOrderZone } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 
@@ -1229,5 +1229,54 @@ describe("routing preview route", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual([]);
+  });
+});
+
+describe("routing explanation route", () => {
+  it("requires a manager and explains a product in its service zone", async () => {
+    const fx = await fixture();
+    await withTransaction(db, async (tx) => {
+      const department = await createDepartment(
+        tx,
+        { locationId: fx.locationId },
+        { name: "Dining", defaultServiceMode: "table_tab" },
+      );
+      await configureZone(
+        tx,
+        { locationId: fx.locationId },
+        { zoneId: fx.zoneId, departmentId: department.id },
+      );
+    });
+    const product = await withTransaction(db, (tx) =>
+      createProduct(tx, {
+        catalogueId: fx.menuId,
+        name: "Lager",
+        categoryId: fx.categoryId,
+        pricingUnit: "each",
+        unitPrice: "3.00",
+        vatClass: "general",
+      }),
+    );
+    const path = `/management-api/venue-service/routing/explain?productId=${product.id}&zoneId=${fx.zoneId}`;
+    expect((await send(fx.app, "GET", path)).status).toBe(401);
+    expect((await send(fx.app, "GET", path, fx.staffCookie)).status).toBe(403);
+    const response = await send(fx.app, "GET", path, fx.managerCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      route: { kind: "station", stationId: fx.stationId },
+      decidedBy: { kind: "default" },
+      skipped: [],
+      stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
+    });
+    expect(
+      (
+        await send(
+          fx.app,
+          "GET",
+          "/management-api/venue-service/routing/explain?productId=bad",
+          fx.managerCookie,
+        )
+      ).status,
+    ).toBe(400);
   });
 });

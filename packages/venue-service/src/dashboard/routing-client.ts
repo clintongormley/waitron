@@ -1,5 +1,5 @@
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
-import type { RouteTarget, RoutingModel, ExceptionInput } from "../routing.js";
+import type { RouteTarget, RoutingModel, ExceptionInput, RouteExplanation } from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
 
 export interface PrepStation {
@@ -21,6 +21,12 @@ export interface PrepStationsView {
   printers: { id: string; name: string }[];
   stationPrinters: { stationId: string; printerId: string }[];
   devices: { id: string; label: string; stationId: string | null; kind: string; active: boolean }[];
+}
+interface ListedProduct {
+  id: string;
+  name: string;
+  active: boolean;
+  variants: { id: string; name: string; active: boolean }[];
 }
 export type StationInput = {
   name: string;
@@ -47,7 +53,7 @@ export class PrepStationsApi {
       this.#read<PrepStation[]>("/management-api/stations"),
       this.#read<PrepStationsView["categories"]>("/management-api/categories"),
       this.#read<PrepStationsView["zones"]>("/management-api/zones"),
-      this.#read<PrepStationsView["products"]>("/management-api/products"),
+      this.#read<ListedProduct[]>("/management-api/products"),
       this.#read<PrepStationsView["printers"]>("/management-api/printers"),
       this.#read<PrepStationsView["devices"]>("/management-api/devices"),
     ]);
@@ -60,7 +66,25 @@ export class PrepStationsApi {
         ),
       )
     ).flat();
-    return { routing, stations, categories, zones, products, printers, stationPrinters, devices };
+    return {
+      routing,
+      stations,
+      categories,
+      zones,
+      products: products.flatMap((product) =>
+        product.active === false
+          ? []
+          : [
+              { id: product.id, name: product.name },
+              ...(product.variants ?? [])
+                .filter((variant) => variant.active !== false)
+                .map((variant) => ({ id: variant.id, name: `${product.name} · ${variant.name}` })),
+            ],
+      ),
+      printers,
+      stationPrinters,
+      devices,
+    };
   }
   preview(change: RoutingChange): Promise<RoutingMove[]> {
     return this.request<RoutingMove[]>(
@@ -68,6 +92,10 @@ export class PrepStationsApi {
       "POST",
       change,
     );
+  }
+  explain(productId: string, zoneId: string | null): Promise<RouteExplanation> {
+    const query = new URLSearchParams({ productId, zoneId: zoneId ?? "" });
+    return this.#read<RouteExplanation>(`/management-api/venue-service/routing/explain?${query}`);
   }
   async createStation(input: StationInput): Promise<{ id: string }> {
     return this.request<{ id: string }>("/management-api/stations", "POST", input);

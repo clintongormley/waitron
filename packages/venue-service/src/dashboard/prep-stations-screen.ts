@@ -6,6 +6,7 @@ import {
   submitOnEnter,
   ReorderController,
   reorder,
+  UrlStateController,
   type ReorderModel,
 } from "@waitron/ui";
 import { repeat } from "lit/directives/repeat.js";
@@ -17,7 +18,13 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import type { RouteTarget, ExceptionInput, RouteException } from "../routing.js";
+import type {
+  RouteTarget,
+  ExceptionInput,
+  RouteException,
+  RoutingDecision,
+  RouteExplanation,
+} from "../routing.js";
 import type { RoutingChange, RoutingMove } from "../routing-types.js";
 import { exceptionSentence } from "./exception-sentence.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
@@ -157,6 +164,20 @@ export class PrepStationsScreen extends LitElement {
   @state() private exceptionTarget = "";
   @state() private exceptionFieldError = "";
   @state() private assignmentChoiceKey = 0;
+  @state() private testProduct = "";
+  @state() private testZone = "";
+  @state() private explanation?: RouteExplanation;
+  @state() private testError = "";
+  #testRequest = 0;
+  readonly #url = new UrlStateController(
+    this,
+    () => {
+      if (this.#url.read("dashboard") !== "prep-stations") return;
+      this.testProduct = this.#url.read("test") ?? "";
+      if (this.view && this.testProduct) void this.#explain();
+    },
+    { basePath: "/manage", primary: "dashboard", children: { "*": { test: "test" } } },
+  );
   @state() private pending?: {
     change: RoutingChange;
     moves: RoutingMove[];
@@ -218,6 +239,7 @@ export class PrepStationsScreen extends LitElement {
             .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
             .map((e) => e.id);
           this.error = "";
+          if (this.testProduct) void this.#explain();
         },
       );
     } catch {
@@ -416,6 +438,81 @@ export class PrepStationsScreen extends LitElement {
       zones: this.view.zones,
       stations: this.view.routing.stations,
     });
+  }
+  async #explain() {
+    const request = ++this.#testRequest;
+    this.explanation = undefined;
+    this.testError = "";
+    if (!this.testProduct) return;
+    try {
+      const explanation = await this.api.explain(this.testProduct, this.testZone || null);
+      if (request === this.#testRequest) this.explanation = explanation;
+    } catch {
+      if (request === this.#testRequest) this.testError = t("prep.test_error");
+    }
+  }
+  #testStationName(id: string): string {
+    return (
+      this.explanation?.stations.find((station) => station.id === id)?.name ?? this.#stationName(id)
+    );
+  }
+  #testRule(decision: RoutingDecision, skippedStationId?: string): string {
+    if (decision.kind === "default") return t("prep.test_default");
+    if (decision.kind === "claim") {
+      const folder = this.#path(decision.categoryId).split(" › ").at(-1)!;
+      if (!skippedStationId && this.explanation?.route?.kind === "no_preparation")
+        return t("prep.test_no_prep_claim")
+          .replace("{folder}", folder)
+          .replace("{target}", t("prep.no_preparation"));
+      const name = skippedStationId
+        ? this.#testStationName(skippedStationId)
+        : this.explanation?.route?.kind === "station"
+          ? this.#testStationName(this.explanation.route.stationId)
+          : t("prep.no_preparation");
+      return t("prep.test_claim").replace("{station}", name).replace("{folder}", folder);
+    }
+    const exception = this.view?.routing.exceptions.find((row) => row.id === decision.exceptionId);
+    return t("prep.test_exception").replace("{rule}", this.#exceptionText(exception));
+  }
+  #tester() {
+    const explanation = this.explanation;
+    return html`<wt-card data-test="route-tester">
+      <h2>${t("prep.test_title")}</h2>
+      <div class="form">
+        <wt-combobox
+          data-test="test-product"
+          name="product"
+          label=${t("prep.test_product")}
+          placeholder=${t("prep.test_choose_product")}
+          .value=${this.testProduct}
+          .options=${this.view?.products.map((product) => ({ value: product.id, label: product.name })) ?? []}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.testProduct = event.detail.value;
+            this.#url.write({ dashboard: "prep-stations", test: this.testProduct || null });
+            void this.#explain();
+          }}
+        ></wt-combobox>
+        <wt-combobox
+          data-test="test-zone"
+          name="zone"
+          label=${t("prep.service_zone")}
+          placeholder=${t("prep.test_no_zone")}
+          .value=${this.testZone}
+          .options=${[{ value: "", label: t("prep.test_no_zone") }, ...(this.view?.zones.filter((zone) => zone.active !== false).map((zone) => ({ value: zone.id, label: zone.name })) ?? [])]}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            this.testZone = event.detail.value;
+            void this.#explain();
+          }}
+        ></wt-combobox>
+      </div>
+      <div data-test="test-answer" aria-live="polite">
+        ${this.testError ? html`<p class="error" role="alert">${this.testError}</p>` : nothing}
+        ${explanation?.route === null ? html`<p>${t("prep.test_no_route")}</p>` : nothing}
+        ${explanation?.route ? html`<p>${t("prep.test_made_at")}: ${explanation.route.kind === "station" ? this.#testStationName(explanation.route.stationId) : t("prep.no_preparation")}</p>` : nothing}
+        ${explanation?.decidedBy ? html`<p>${t("prep.test_because")}: ${this.#testRule(explanation.decidedBy)}</p>` : nothing}
+        ${explanation?.skipped.map((rule) => html`<p>${t("prep.test_skipped")}: ${this.#testRule(rule.decision, rule.stationId)}${t("prep.test_station_off").replaceAll("{station}", this.#testStationName(rule.stationId))}</p>`) ?? nothing}
+      </div>
+    </wt-card>`;
   }
   #moveException(id: string, to: number, via: "key" | "pointer") {
     const next = reorder(this.exceptionOrder, this.exceptionOrder.indexOf(id), to);
@@ -873,7 +970,7 @@ export class PrepStationsScreen extends LitElement {
       </div>
       ${
         view
-          ? html`${this.#exceptions()}
+          ? html`${this.#tester()}${this.#exceptions()}
               <div class="cards">
                 ${active.map((s) => this.#stationCard(s))}<wt-card data-test="no-preparation"
                   ><h2>${t("prep.no_preparation")}</h2>

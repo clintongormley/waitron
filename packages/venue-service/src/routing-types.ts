@@ -1,4 +1,11 @@
-import type { RouteException, RouteTarget } from "./routing.js";
+import type { RouteException, RouteTarget, RoutingDecision, SkippedRule } from "./routing.js";
+
+export interface RouteExplanation {
+  route: RouteTarget | null;
+  decidedBy: RoutingDecision | null;
+  skipped: SkippedRule[];
+  stations: { id: string; name: string; active: boolean }[];
+}
 
 export interface ExceptionInput {
   zoneId: string | null;

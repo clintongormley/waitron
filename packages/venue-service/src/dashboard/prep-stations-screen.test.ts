@@ -54,6 +54,7 @@ function api(overrides: Partial<PrepStationsApi> = {}): PrepStationsApi {
     assignProduct: vi.fn(),
     removeClaim: vi.fn(),
     preview: vi.fn().mockResolvedValue([]),
+    explain: vi.fn().mockResolvedValue({ route: null, decidedBy: null, skipped: [], stations: [] }),
     createStation: vi.fn(),
     updateStation: vi.fn(),
     deactivateStation: vi.fn(),
@@ -78,6 +79,118 @@ async function settle(el: PrepStationsScreen) {
   await el.updateComplete;
 }
 const q = (el: PrepStationsScreen, s: string) => el.shadowRoot!.querySelector<HTMLElement>(s);
+it("explains exceptions, claims, defaults, skipped rules and an unroutable product", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      routing: {
+        ...view.routing,
+        exceptions: [
+          {
+            id: "ex",
+            position: 0,
+            zoneId: null,
+            categoryId: "cocktails",
+            productId: null,
+            target: { kind: "station", stationId: "bar" },
+            neverMatches: false,
+            stationOff: false,
+          },
+        ],
+      },
+    }),
+    explain: vi
+      .fn()
+      .mockResolvedValueOnce({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "exception", exceptionId: "ex" },
+        skipped: [],
+        stations: [{ id: "bar", name: "Bar", active: true }],
+      })
+      .mockResolvedValueOnce({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        skipped: [{ decision: { kind: "claim", categoryId: "drinks" }, stationId: "off" }],
+        stations: [
+          { id: "bar", name: "Bar", active: true },
+          { id: "off", name: "Cocktail bar", active: false },
+        ],
+      })
+      .mockResolvedValueOnce({
+        route: { kind: "station", stationId: "bar" },
+        decidedBy: { kind: "default" },
+        skipped: [],
+        stations: [{ id: "bar", name: "Bar", active: true }],
+      })
+      .mockResolvedValueOnce({ route: null, decidedBy: null, skipped: [], stations: [] }),
+  });
+  const el = await mount(a);
+  const select = q(el, '[data-test="test-product"]')!;
+  for (const expected of [
+    "Because: the exception 'Cocktails → Bar'",
+    "Because: Bar claims Cocktails",
+    "Because: nothing else matched, so the default station takes it",
+    "Nothing can make this: no rule matched and no default station is switched on.",
+  ]) {
+    select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
+    await settle(el);
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(expected);
+    if (expected.includes("Bar claims"))
+      expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+        "Skipped: Cocktail bar claims Drinks, but Cocktail bar is switched off",
+      );
+  }
+});
+
+it("opens a product tester link with its product selected", async () => {
+  setLocale("en");
+  const before = location.href;
+  history.replaceState(null, "", "/manage/prep-stations/test/lager");
+  try {
+    const el = await mount(
+      api({
+        load: vi.fn().mockResolvedValue({ ...view, products: [{ id: "lager", name: "Lager" }] }),
+      }),
+    );
+    expect((q(el, '[data-test="test-product"]') as HTMLElement & { value: string }).value).toBe(
+      "lager",
+    );
+    expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Nothing can make this");
+  } finally {
+    history.replaceState(null, "", before);
+  }
+});
+
+it("explains a no-preparation claim as an assignment", async () => {
+  setLocale("en");
+  const el = await mount(
+    api({
+      load: vi.fn().mockResolvedValue({
+        ...view,
+        routing: {
+          ...view.routing,
+          claims: [
+            { categoryId: "cocktails", target: { kind: "no_preparation" }, stationOff: false },
+          ],
+        },
+      }),
+      explain: vi.fn().mockResolvedValue({
+        route: { kind: "no_preparation" },
+        decidedBy: { kind: "claim", categoryId: "cocktails" },
+        skipped: [],
+        stations: [],
+      }),
+    }),
+  );
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain(
+    "Cocktails is assigned to No preparation",
+  );
+});
 it("shows station claims by full folder path and unassigned work with default destination", async () => {
   const el = await mount(api());
   expect(q(el, '[data-test="station-bar"]')!.textContent).toContain("Drinks › Cocktails");

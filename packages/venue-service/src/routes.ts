@@ -42,6 +42,7 @@ import {
   assignUnfiledProduct,
   createException,
   deleteException,
+  explainRoute,
   removeClaim,
   reorderExceptions,
   routingModel,
@@ -204,6 +205,16 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         return c.json(await gated(sessionId, (tx) => routingModel(tx, ctx.cfg)));
+      }),
+    );
+
+    app.get("/management-api/venue-service/routing/explain", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const productId = requireUuidParam(c.req.query("productId") ?? "", "ProductId");
+        const zone = c.req.query("zoneId");
+        const zoneId = zone ? requireUuidParam(zone, "ServiceZoneId") : null;
+        return c.json(await gated(sessionId, (tx) => explainRoute(tx, ctx.cfg, productId, zoneId)));
       }),
     );
 

@@ -26,6 +26,7 @@ import { chooseMaker, type RouteTarget } from "./routing.js";
 import {
   createException,
   deleteException,
+  explainRoute,
   loadRoutingRules,
   previewRoutingChange,
   removeClaim,
@@ -120,6 +121,63 @@ async function fixture(tx: Transaction) {
   };
 }
 const scoped = (fn: (tx: Transaction) => Promise<void>) => withTransaction(db, fn);
+
+describe("route explanation", () => {
+  it("names a matching exception, including a variant's parent product", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const id = await createException(tx, f.cfg, {
+        zoneId: f.terrace,
+        categoryId: null,
+        productId: f.mojito,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      expect(await explainRoute(tx, f.cfg, f.variant, f.terrace)).toMatchObject({
+        route: { kind: "station", stationId: f.terraceBar },
+        decidedBy: { kind: "exception", exceptionId: id },
+        skipped: [],
+        stations: expect.arrayContaining([{ id: f.terraceBar, name: "Terrace Bar", active: true }]),
+      });
+    }));
+
+  it("names a claim after skipping a switched-off exception", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      await setClaim(tx, f.cfg, f.drinks, { kind: "station", stationId: f.bar });
+      const id = await createException(tx, f.cfg, {
+        zoneId: f.terrace,
+        categoryId: f.cocktails,
+        productId: null,
+        target: { kind: "station", stationId: f.terraceBar },
+      });
+      await tx
+        .update(kitchenStations)
+        .set({ active: false })
+        .where(eq(kitchenStations.id, f.terraceBar));
+      expect(await explainRoute(tx, f.cfg, f.mojito, f.terrace)).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        decidedBy: { kind: "claim", categoryId: f.drinks },
+        skipped: [{ decision: { kind: "exception", exceptionId: id }, stationId: f.terraceBar }],
+        stations: expect.arrayContaining([
+          { id: f.terraceBar, name: "Terrace Bar", active: false },
+        ]),
+      });
+    }));
+
+  it("names the default and reports no route when no active default remains", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      expect(await explainRoute(tx, f.cfg, f.bread, null)).toMatchObject({
+        route: { kind: "station", stationId: f.bar },
+        decidedBy: { kind: "default" },
+      });
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, f.bar));
+      expect(await explainRoute(tx, f.cfg, f.bread, null)).toMatchObject({
+        route: null,
+        decidedBy: null,
+      });
+    }));
+});
 
 describe("stored preparation rules", () => {
   it("moves a claim from one station to another and removes it idempotently", async () =>

@@ -3017,6 +3017,37 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
 });
 
 describe("dashboard URL navigation", () => {
+  it("preserves a prep station tester product when the dashboard restores the screen", async () => {
+    history.replaceState(null, "", "/manage/prep-stations/test/lager");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockResolvedValue({
+          personId: "p1",
+          role: "manager",
+          locale: "en-GB",
+          venueLocale: "en-GB",
+          sessionDefault: "en-GB",
+          permissions: ["venue_service.manage"],
+          modules: ["venue-service"],
+          venueName: "Venue",
+        }),
+      }),
+      request: async (path, method, body, options) =>
+        path === "/management-api/venue-service/routing"
+          ? ({
+              claims: [],
+              exceptions: [],
+              unassigned: { folders: [], products: [] },
+              defaultStationId: null,
+              stations: [],
+            } as never)
+          : path.startsWith("/management-api/venue-service/routing/explain?")
+            ? ({ route: null, decidedBy: null, skipped: [], stations: [] } as never)
+            : stubRequest(path, method, body, options),
+    });
+    await flush(el);
+    expect(location.pathname).toBe("/manage/prep-stations/test/lager");
+  });
   it.each([
     { modules: ["venue-service"], permissions: [] },
     { modules: [], permissions: ["venue_service.manage"] },
