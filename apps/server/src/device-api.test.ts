@@ -771,10 +771,15 @@ describe("Device API — the device-guarded routes", () => {
     const res = await send(app, "GET", "/api/device/station", { cookie: jar });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      station: { queue: { orderId: string; elsewhere?: { id: string; stationName: string }[] }[] };
+      station: {
+        queue: {
+          orderId: string;
+          elsewhere?: { id: string; stationName: string; soldInEach: boolean }[];
+        }[];
+      };
     };
     expect(body.station.queue.find((group) => group.orderId === orderId)?.elsewhere).toEqual([
-      expect.objectContaining({ id: items[1], stationName: "Fría" }),
+      expect.objectContaining({ id: items[1], stationName: "Fría", soldInEach: true }),
     ]);
   });
 

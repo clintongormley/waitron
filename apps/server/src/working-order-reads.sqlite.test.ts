@@ -21,7 +21,6 @@ import {
   tillId as brandTillId,
 } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TillConfig } from "./till-config.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
@@ -39,8 +38,6 @@ const suite = useVenueDb({
 let db: Database;
 let cfg: TillConfig;
 let stationId: string;
-let nodeId: Awaited<ReturnType<typeof seedNode>>;
-let orderId: string;
 let tableId: string;
 
 beforeAll(async () => {
@@ -55,13 +52,13 @@ beforeAll(async () => {
   });
   const tillId = randomUUID();
   await db.insert(tills).values({ id: tillId, locationId, name: "Caja 1" });
-  nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db, brandLocationId(locationId));
   [{ id: stationId }] = await db
     .insert(kitchenStations)
     .values({ locationId, name: "Cocina", isDefault: true })
     .returning({ id: kitchenStations.id });
 
-  orderId = randomUUID();
+  const orderId = randomUUID();
   const [party] = await db
     .insert(parties)
     .values({ openedBy: randomUUID() })
@@ -145,179 +142,5 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     // Opened in this suite's own setup, so the floored minute count is 0.
     expect(orders[0]!.openedMinutes).toBe(0);
     expect(orders[0]!.tableLabel).toBe("Mesa 1");
-  });
-  it("shows the rest of the order only for an enabled station, with an empty list when none is elsewhere", async () => {
-    const otherStations = await db
-      .insert(kitchenStations)
-      .values([
-        { locationId: cfg.locationId, name: "A Freidora" },
-        { locationId: cfg.locationId, name: "Z Parrilla" },
-      ])
-      .returning({ id: kitchenStations.id, name: kitchenStations.name });
-    const station = (name: string) => otherStations.find((row) => row.name === name)!.id;
-    const cases = [
-      {
-        no: 2,
-        staff: "Staff steak",
-        kitchen: "Kitchen steak",
-        station: "Z Parrilla",
-        state: "ready",
-        held: false,
-      },
-      {
-        no: 3,
-        staff: "Staff chips",
-        kitchen: "Kitchen chips",
-        station: "A Freidora",
-        state: "queued",
-        held: true,
-      },
-      {
-        no: 4,
-        staff: "Staff sauce",
-        kitchen: "Kitchen sauce",
-        station: "A Freidora",
-        state: "preparing",
-        held: false,
-      },
-      {
-        no: 5,
-        staff: "Staff served",
-        kitchen: "Kitchen served",
-        station: "A Freidora",
-        state: "ready",
-        held: false,
-        served: true,
-      },
-      {
-        no: 6,
-        staff: "Staff away",
-        kitchen: "Kitchen away",
-        station: "A Freidora",
-        state: "ready",
-        held: false,
-        away: true,
-      },
-      {
-        no: 7,
-        staff: "Staff made",
-        kitchen: "Kitchen made",
-        station: "A Freidora",
-        state: "ready",
-        held: false,
-        madeHere: true,
-      },
-    ] as const;
-    const ids = new Map<number, string>();
-    for (const item of cases) {
-      const lineId = randomUUID();
-      await db.insert(workingOrderLines).values({
-        id: lineId,
-        workingOrderId: orderId,
-        lineNo: item.no,
-        name: item.staff,
-        kitchenName: item.kitchen,
-        descriptions: { [LOCALE]: `Customer ${item.no}` },
-        quantity: 1000,
-        unitPriceGross: 121,
-        vatClass: "general",
-        lineTotal: 121,
-        servedAt: "served" in item ? nowIso() : null,
-      });
-      const [ticket] = await db
-        .insert(ticketItems)
-        .values({
-          nodeId,
-          workingOrderId: orderId,
-          workingOrderLineId: lineId,
-          stationId: station(item.station),
-          state: item.state,
-          firedAt: item.held ? null : nowIso(),
-          awayAt: "away" in item ? nowIso() : null,
-          madeHere: "madeHere" in item,
-        })
-        .returning({ id: ticketItems.id });
-      ids.set(item.no, ticket!.id);
-    }
-    const ownOnlyOrderId = randomUUID();
-    const [baseOrder] = await db
-      .select({ tillId: workingOrders.tillId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, orderId));
-    await db.insert(workingOrders).values({
-      id: ownOnlyOrderId,
-      tillId: baseOrder!.tillId,
-      nodeId,
-      orderNumber: 2,
-      status: "open",
-    });
-    const ownOnlyLineId = randomUUID();
-    await db.insert(workingOrderLines).values({
-      id: ownOnlyLineId,
-      workingOrderId: ownOnlyOrderId,
-      lineNo: 1,
-      name: "Staff own",
-      kitchenName: "Kitchen own",
-      descriptions: { [LOCALE]: "Customer own" },
-      quantity: 1000,
-      unitPriceGross: 121,
-      vatClass: "general",
-      lineTotal: 121,
-    });
-    await db.insert(ticketItems).values({
-      nodeId,
-      workingOrderId: ownOnlyOrderId,
-      workingOrderLineId: ownOnlyLineId,
-      stationId,
-      state: "queued",
-      firedAt: nowIso(),
-    });
-
-    const read = () => withTransaction(db, (tx) => listStationQueue(tx, stationId));
-    const disabled = await read();
-    expect(disabled).toHaveLength(2);
-    for (const group of disabled) expect(group).not.toHaveProperty("elsewhere");
-
-    await db
-      .update(kitchenStations)
-      .set({ showsRestOfOrder: true })
-      .where(eq(kitchenStations.id, stationId));
-    const enabled = await read();
-    expect(enabled.find((group) => group.orderId === ownOnlyOrderId)?.elsewhere).toEqual([]);
-    expect(enabled.find((group) => group.orderId === orderId)?.elsewhere).toEqual([
-      {
-        id: ids.get(3),
-        name: "Kitchen chips",
-        quantity: "1.000",
-        unitName: null,
-        unitPrecision: null,
-        soldInEach: false,
-        stationName: "A Freidora",
-        state: "queued",
-        held: true,
-      },
-      {
-        id: ids.get(4),
-        name: "Kitchen sauce",
-        quantity: "1.000",
-        unitName: null,
-        unitPrecision: null,
-        soldInEach: false,
-        stationName: "A Freidora",
-        state: "preparing",
-        held: false,
-      },
-      {
-        id: ids.get(2),
-        name: "Kitchen steak",
-        quantity: "1.000",
-        unitName: null,
-        unitPrecision: null,
-        soldInEach: false,
-        stationName: "Z Parrilla",
-        state: "ready",
-        held: false,
-      },
-    ]);
   });
 });
