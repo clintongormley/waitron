@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
@@ -31,7 +31,13 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { applyVenue, planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
-import { createPrinter, deactivatePrinter, updatePrinter } from "@waitron/printing";
+import {
+  createPrinter,
+  deactivatePrinter,
+  MAX_DELIVERY_ATTEMPTS,
+  resendPrintJob,
+  updatePrinter,
+} from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { NetworkTcpTransport, UsbTransport } from "@waitron/print-agent";
 import {
@@ -43,7 +49,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import type { OrderFlow, TillConfig } from "./till-config.js";
-import { collectOrder, recordTillSale, reprintSale } from "./till-sale.js";
+import { collectOrder, printSaleReceipt, recordTillSale, reprintSale } from "./till-sale.js";
 import { createOpenOrder, parkOrder, placeOrder } from "./working-order.js";
 import { createTable } from "./tables.js";
 import { DRAWER_KICK, enqueueReceiptReprint } from "./receipt-print.js";
@@ -61,6 +67,7 @@ import {
 } from "./testing/party-venue.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { printingAlertSource } from "./alert-sources.js";
 
 /**
  * The auto-print hook: a `print_jobs` outbox row and a `drawer_opens` audit row written atomically
@@ -826,6 +833,184 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   );
 });
 
+describe("a receipt reprint and the printer's alert (A167)", () => {
+  /** Every print job, oldest first. */
+  async function jobs() {
+    return withTransaction(suite.db, (tx) =>
+      tx
+        .select({
+          id: printJobs.id,
+          kind: printJobs.kind,
+          printerId: printJobs.printerId,
+          saleId: printJobs.saleId,
+        })
+        .from(printJobs)
+        .orderBy(sql`rowid`),
+    );
+  }
+
+  async function setJobs(
+    ids: string[],
+    values: { status: "done" } | { status: "failed"; attempts: number },
+  ): Promise<void> {
+    await withTransaction(suite.db, (tx) =>
+      tx.update(printJobs).set(values).where(inArray(printJobs.id, ids)),
+    );
+  }
+
+  const exhausted = { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS } as const;
+
+  /** The count the printer's "jobs waiting" alert shows for `printerId`, or 0 when it raises none. */
+  async function waitingAt(printerId: string): Promise<number> {
+    const alerts = await withTransaction(suite.db, (tx) =>
+      printingAlertSource().read({ tx, now: new Date() }),
+    );
+    const alert = alerts.find((a) => a.key === `printer.jobs_waiting:${printerId}`);
+    return alert === undefined ? 0 : Number(alert.params.count);
+  }
+
+  /** Files a 1.50 sale paid as `method`, answering the sale and its bill. */
+  async function sell(
+    venue: Awaited<ReturnType<typeof setupVenue>>,
+    method: "card" | "cash" = "card",
+  ): Promise<{ saleId: string; workingOrderId: string }> {
+    await recordTillSale(
+      deps(),
+      venue.cfg,
+      {
+        zoneId: venue.zoneId,
+        lines: [{ menuItemId: venue.each.menuItemId, quantity: "1" }],
+        tender: { method, amount: "1.50" },
+      },
+      OPERATOR,
+    );
+    const [sale] = await withTransaction(suite.db, (tx) =>
+      tx
+        .select({ saleId: sales.id, workingOrderId: sales.workingOrderId })
+        .from(sales)
+        .orderBy(sql`rowid desc`)
+        .limit(1),
+    );
+    return { saleId: sale!.saleId, workingOrderId: sale!.workingOrderId! };
+  }
+
+  /** An auto-printed card sale's receipt that ran out of attempts, then the till's reprint of it. */
+  async function failedThenReprinted() {
+    const venue = await setupVenue();
+    const printerId = await makePrinter(venue.cfg);
+    await configureReceipt(venue.cfg, { mode: "auto", printerId });
+    const sale = await sell(venue);
+    const [original] = await jobs();
+    await setJobs([original!.id], exhausted);
+    await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
+    const reprint = (await jobs()).at(-1)!;
+    expect(reprint.id).not.toBe(original!.id);
+    return { venue, printerId, sale, original: original!.id, reprint: reprint.id };
+  }
+
+  it("records the sale on its original and duplicate receipts, and not on its drawer job", async () => {
+    const venue = await setupVenue();
+    const printerId = await makePrinter(venue.cfg, { hasCashDrawer: true });
+    await configureReceipt(venue.cfg, { mode: "on_request", printerId });
+    const sale = await sell(venue, "cash");
+    await printSaleReceipt({ db: suite.db, backend }, venue.cfg, sale.workingOrderId, false);
+    await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
+
+    expect((await jobs()).map(({ kind, saleId }) => ({ kind, saleId }))).toEqual([
+      { kind: "drawer", saleId: null },
+      { kind: "document", saleId: sale.saleId },
+      { kind: "document", saleId: sale.saleId },
+    ]);
+  });
+
+  it("records the sale on an automatically printed receipt", async () => {
+    const venue = await setupVenue();
+    await configureReceipt(venue.cfg, { mode: "auto", printerId: await makePrinter(venue.cfg) });
+    const sale = await sell(venue);
+
+    expect((await jobs()).map(({ kind, saleId }) => ({ kind, saleId }))).toEqual([
+      { kind: "document", saleId: sale.saleId },
+    ]);
+  });
+
+  it("counts a failed receipt while the till's reprint waits, and drops it once the reprint has printed", async () => {
+    const { printerId, reprint } = await failedThenReprinted();
+    expect(await waitingAt(printerId)).toBe(1);
+
+    await setJobs([reprint], { status: "done" });
+    expect(await waitingAt(printerId)).toBe(0);
+  });
+
+  it("drops a failed resend of the receipt from the Printers screen once the till's reprint has printed", async () => {
+    const venue = await setupVenue();
+    const printerId = await makePrinter(venue.cfg);
+    await configureReceipt(venue.cfg, { mode: "auto", printerId });
+    const sale = await sell(venue);
+    const [original] = await jobs();
+    await setJobs([original!.id], exhausted);
+    const resent = await withTransaction(suite.db, (tx) => resendPrintJob(tx, original!.id));
+    await setJobs([resent.jobId], exhausted);
+    await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
+    expect(await waitingAt(printerId)).toBe(2);
+
+    await setJobs([(await jobs()).at(-1)!.id], { status: "done" });
+    expect(await waitingAt(printerId)).toBe(0);
+  });
+
+  it("counts both when the reprint also runs out of attempts", async () => {
+    const { printerId, reprint } = await failedThenReprinted();
+    await setJobs([reprint], exhausted);
+
+    expect(await waitingAt(printerId)).toBe(2);
+  });
+
+  it("counts a reprint that runs out of attempts after the original printed", async () => {
+    const venue = await setupVenue();
+    const printerId = await makePrinter(venue.cfg);
+    await configureReceipt(venue.cfg, { mode: "auto", printerId });
+    const sale = await sell(venue);
+    const [original] = await jobs();
+    await setJobs([original!.id], { status: "done" });
+    await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
+    await setJobs([(await jobs()).at(-1)!.id], exhausted);
+
+    expect(await waitingAt(printerId)).toBe(1);
+  });
+
+  it("keeps counting a failed receipt when the reprint prints on another printer", async () => {
+    const venue = await setupVenue();
+    const first = await makePrinter(venue.cfg);
+    await configureReceipt(venue.cfg, { mode: "auto", printerId: first });
+    const sale = await sell(venue);
+    const [original] = await jobs();
+    await setJobs([original!.id], exhausted);
+    const second = await makePrinter(venue.cfg);
+    await configureReceipt(venue.cfg, { printerId: second });
+    await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
+    const reprint = (await jobs()).at(-1)!;
+    expect(reprint.printerId).toBe(second);
+
+    await setJobs([reprint.id], { status: "done" });
+    expect(await waitingAt(first)).toBe(1);
+    expect(await waitingAt(second)).toBe(0);
+  });
+
+  it("keeps counting another sale's failed receipt when this sale's reprint prints", async () => {
+    const venue = await setupVenue();
+    const printerId = await makePrinter(venue.cfg);
+    await configureReceipt(venue.cfg, { mode: "auto", printerId });
+    await sell(venue);
+    const other = await sell(venue);
+    const [failed, printed] = await jobs();
+    await setJobs([failed!.id], exhausted);
+    await setJobs([printed!.id], { status: "done" });
+    await reprintSale({ db: suite.db, backend }, venue.cfg, other.workingOrderId);
+    await setJobs([(await jobs()).at(-1)!.id], { status: "done" });
+
+    expect(await waitingAt(printerId)).toBe(1);
+  });
+});
+
 describe("receipt issuer", () => {
   it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
@@ -837,8 +1022,9 @@ describe("receipt issuer", () => {
     });
     const withoutIssuer = { ...filed, issuer: undefined };
     const taxpayer = (await withTransaction(suite.db, (tx) => readTenant(tx)))!;
+    const saleId = await onlySaleId(cfg);
 
-    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, withoutIssuer));
+    await withTransaction(suite.db, (tx) => enqueueReceiptReprint(tx, cfg, withoutIssuer, saleId));
     const [fallback] = (await printJobsFor(cfg)).map((job) =>
       decodeTicket(new Uint8Array(job.payload)),
     );
@@ -848,10 +1034,12 @@ describe("receipt issuer", () => {
     // The control: a ticket that does carry a filed issuer prints that one instead.
     await withTransaction(suite.db, (tx) => tx.delete(printJobs));
     await withTransaction(suite.db, (tx) =>
-      enqueueReceiptReprint(tx, cfg, {
-        ...filed,
-        issuer: { venueName: "Emisor Registrado SL", nif: "B99999999" },
-      }),
+      enqueueReceiptReprint(
+        tx,
+        cfg,
+        { ...filed, issuer: { venueName: "Emisor Registrado SL", nif: "B99999999" } },
+        saleId,
+      ),
     );
     const [recorded] = (await printJobsFor(cfg)).map((job) =>
       decodeTicket(new Uint8Array(job.payload)),

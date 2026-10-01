@@ -4595,7 +4595,7 @@ export async function placeOrder(
         vatBreakdown: ticket.vatBreakdown,
       };
       issuedOrderLabel = ticket.orderLabel;
-      await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket);
+      await enqueueOriginalReceipt(tx, { ...cfg, tillId: saleTillId }, ticket, saleId);
     }
 
     await tx

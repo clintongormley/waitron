@@ -2820,7 +2820,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     while reading A163's review, not run; believed to predate A163, history not checked. Queued
     as A165 (owner, 2026-10-01: "queue it"), which reproduces it on `main` first. _(2026-10-01,
     A165: fixed for the Printers screen's Reprint only; the till's kitchen Reprint and a receipt
-    reprint still leave the printer's alert up — see A165's entry.)_
+    reprint still leave the printer's alert up — see A165's entry.)_ _(2026-10-01, A167: the
+    till's kitchen Reprint and a receipt reprint now clear it too — see A167's entry.)_
 - **A printed resend clears the printer's "stuck" alert for the job it copies (A165, owner
   2026-10-01: "queue it") — done (#972, 2026-10-01).** Reproduced on `main` first: a job that ran out of
   attempts, then a resend of it that printed, left the printer's `printer.jobs_waiting` alert up,
@@ -2838,7 +2839,8 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `printJobInTrouble`; the table's printing problem keeps its own rule for the kitchen Reprint
     (`readPrintProblems`, `apps/server/src/kitchen-print.ts`). So a kitchen ticket or receipt that
     ran out of attempts and was then reprinted from the till still keeps the printer's
-    `printer.jobs_waiting` alert up. Left open, not queued yet. Read, not run.
+    `printer.jobs_waiting` alert up. Left open, not queued yet. Read, not run. _(2026-10-01: done
+    by A167 — see its entry.)_
   - Chosen by this branch (not an owner decision): a resend that runs out of attempts after an
     earlier copy printed counts on the printer's alert but is not a table printing problem — a
     resend is a byte-for-byte copy, so the kitchen already has every dish on it, while the alert is
@@ -2848,6 +2850,51 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     `apps/server/src/print-problems.test.ts`, and the chain case in
     `packages/printing/src/outbox.test.ts`; each part of the fix was deleted in turn and a case
     failed. The new foreign key is listed in `scripts/schema-constraints.test.ts`.
+- **The till's Reprint and a receipt reprint clear the printer's "stuck" alert once they print
+  (A167) — done (#TBD, 2026-10-01).** Reproduced on `main` first: a kitchen ticket that ran out of
+  attempts, then the till's Reprint of the bill (`POST /api/orders/:id/reprint`) that printed, left
+  the printer's `printer.jobs_waiting` alert at 1, though the table's printing problem cleared. A
+  receipt that ran out of attempts, then the till's receipt reprint (`POST /api/sales/:id/reprint`)
+  that printed, did the same.
+  - Kitchen tickets, with no schema change: `printJobInTrouble`
+    (`apps/server/src/print-job-trouble.ts`) stops counting a ticket once every bill and station it
+    is linked to (`kitchen_print_jobs`) has a Reprint for that bill and station, on the same
+    printer, queued after the link, that has printed. That is the rule the table's printing problem
+    already used (`readPrintProblems`, `apps/server/src/kitchen-print.ts`). A job with no kitchen
+    links is not touched by it.
+  - A Reprint that ran out of attempts counts as printed once a Printers-screen resend of it has
+    printed (`printedOrResent`, `apps/server/src/print-job-trouble.ts`), for the printer's alert,
+    the table's printing problem, and which tickets follow a bill's dishes to another bill
+    (`readUncoveredLinks`). The run-it review found the alert and the table both keeping the
+    original ticket after such a resend printed; with only the alert and the table fixed, merging
+    that bill into another table's brought the problem back, so `readUncoveredLinks` uses the same
+    rule. Cases: the four about a resend of a failed Reprint in
+    `apps/server/src/print-problems.test.ts` (three under the A167 heading, and "does not bring back
+    a merged bill's failure that a printed resend of its failed Reprint had cleared" under Review
+    Focus 6), one of them a failed resend that leaves the original counted.
+  - Receipts: a new nullable `print_jobs.sale_id` column (core migration `0054_print_job_sale_id`,
+    with an index and a foreign key to `sales`). Every till receipt, the original and every
+    duplicate, records its sale; a cash-drawer job records none; a resend from the Printers screen
+    copies it. A receipt stops counting once a later receipt of the same sale, on the same printer,
+    has printed.
+  - Still counted: a reprint that ran out of attempts after an earlier one printed; a ticket or
+    receipt whose reprint printed on a different printer; a ticket followed only by a later
+    round's ticket; another sale's receipt; a ticket linked to two bills while only one bill's
+    Reprint has printed; a failed Reprint whose resend also ran out of attempts.
+  - Left open, measured with throwaway cases and not pinned: (1) when every dish a failed ticket
+    carried for a station moves to another bill, that bill's printed Reprint clears the table's
+    problem, but the ticket's link to the bill it was fired on is never covered, so the printer's
+    alert keeps counting it. The table also drops a problem once a Reprint would print nothing
+    there (`readReprintTargets`), which the alert does not. (2) A Printers-screen resend of a
+    kitchen ticket carries no kitchen links, so when that resend runs out of attempts, a later
+    printed till Reprint does not clear it from the printer's alert (the table clears).
+  - Run: the A167 cases in `apps/server/src/print-problems.test.ts` and
+    `apps/server/src/receipt-print.test.ts`; each part of both rules, and the writes of `sale_id`,
+    was deleted in turn and a case failed. So was the resend clause: putting back the plain
+    `status = 'done'` check in `printJobInTrouble`, in `readPrintProblems` and in
+    `readUncoveredLinks`, one at a time, and dropping the resend's own `status = 'done'` in
+    `printedOrResent`, each failed at least one of the four resend cases. The new foreign key is
+    listed in `scripts/schema-constraints.test.ts`.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
@@ -3073,9 +3120,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
   `ON DELETE CASCADE`). Deleting a failed job's links clears its printing problem, and deleting a
   printed reprint's links brings back the failures it cleared, so a sweep must remove a bill's
   kitchen print jobs all together or not at all. It must also keep or remove a resend chain
-  together: deleting a printed resend brings back the "in trouble" state of the job it copied, and
-  deleting a chain's first job while a resend still names it is refused by the `resend_of` key
-  (read, not run).
+  together: deleting a printed resend brings back the "in trouble" state of the job it copied (for
+  a resend of a till Reprint, also the original kitchen ticket's alert and the table's problem that
+  it cleared), and deleting a chain's first job while a resend still names it is refused by the
+  `resend_of` key (read, not run).
 - **Printing A4 invoices on an office printer** (owner, 2026-09-14): a separate design, not started.
   It reverses the 2026-09-09 provisioning design's "raw ESC/POS only" decision and needs an A4
   invoice layout, a way to send a PDF to the printer over IPP (the standard office printing protocol,
