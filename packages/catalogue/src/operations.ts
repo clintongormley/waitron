@@ -651,6 +651,11 @@ async function offersOn(
       });
       result.set(offer.productId, {
         ...offer,
+        placements: offer.placements.filter((path) =>
+          path.every(
+            (id) => graph.role(id) !== "menu_root" || graph.menu(graph.ownerMenu(id)!)?.active,
+          ),
+        ),
         combined,
         unitPrice:
           combined.price.state === "decided"
@@ -701,7 +706,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
     includeSwitchedOff: true,
   });
   const combinedByProduct = new Map(combinedOffers.map((offer) => [offer.productId, offer]));
-  const { rows, placementsOf } = await offerRowsOn(tx, new Map([[menuId, rootSectionId]]), graph, {
+  const { rows } = await offerRowsOn(tx, new Map([[menuId, rootSectionId]]), graph, {
     includeSwitchedOff: true,
   });
   if (rows.length === 0) return [];
@@ -719,7 +724,7 @@ export async function menuPrices(tx: Transaction, menuId: string): Promise<MenuP
         productId: row.productId,
         name: row.name,
         categoryId: row.categoryId,
-        placements: placementsOf(row),
+        placements: combinedOffer.placements,
         productPrice,
         override,
         effectivePrice: combinedOffer.unitPrice,

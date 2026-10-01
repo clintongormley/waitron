@@ -41,7 +41,7 @@ import {
 } from "./operations.js";
 import { createExtraList, getExtraList, updateExtraList } from "./extras.js";
 import { addMember, moveMember, removeMember, updateSection, deleteSection } from "./sections.js";
-import { setMenuVariants } from "./variants.js";
+import { setProductVariants, setMenuVariants } from "./variants.js";
 import { menuDetails } from "./schema/menu.js";
 import { menuPublications, menuVersionImages, menuVersions } from "./schema/publication.js";
 import { sectionMembers, sections } from "./schema/sections.js";
@@ -1385,6 +1385,203 @@ it("lists direct and indirect parents beside an included menu's own price edit e
       productId: f.lager,
       source: "this_menu",
       alsoOn: ["Dinner Menu", "Outer"],
+    }),
+  );
+});
+
+describe("review regressions", () => {
+  it.each([false, true])(
+    "previews own placement with inactive inclusion present=%s",
+    async (includeInactive) => {
+      const f = await menusFixture(fx.db);
+      const parent = await app(async (tx) => {
+        const parent = await createCatalogue(tx, { name: "Own placement" });
+        const root = await requireMenuRoot(tx, parent.id);
+        if (includeInactive) await addMember(tx, root, section(f.drinks));
+        await addMember(tx, root, product(f.lager));
+        await operations.deactivateCatalogue(tx, f.drinksMenu);
+        return parent.id;
+      });
+      const preview = await app((tx) => previewMenu(tx, parent));
+      const offer = Object.values(preview.document.offers).find((o) => o.productId === f.lager);
+      expect(offer).toMatchObject({ placements: [[]], unitPrice: "4.00" });
+      expect(preview.changes).toEqual([
+        {
+          kind: "product_added",
+          productId: f.lager,
+          name: "Lager",
+          under: [],
+          source: "this_menu",
+        },
+      ]);
+      expect(
+        (await app((tx) => operations.listMenuOffers(tx, [parent]))).map((o) => o.placements),
+      ).toEqual([[[]]]);
+      expect(
+        (await app((tx) => operations.menuPrices(tx, parent))).map((o) => o.placements),
+      ).toEqual([[[]]]);
+    },
+  );
+
+  it.each(["own", "shared"])(
+    "retains %s variant attribution beside an included size edit",
+    async (otherSource) => {
+      const f = await menusFixture(fx.db);
+      const small = await app(async (tx) => {
+        const variants = await setProductVariants(
+          tx,
+          f.lemonade,
+          [
+            {
+              id: f.large,
+              name: "Large",
+              customerName: { en: "A big glass" },
+              kitchenName: "LRG",
+              image: "large.jpg",
+              unitPrice: "3.50",
+              available: true,
+            },
+            {
+              name: "Small",
+              customerName: { en: "A small glass" },
+              kitchenName: "SML",
+              image: null,
+              unitPrice: "2.00",
+              available: true,
+            },
+          ],
+          "en",
+        );
+        return variants[1]!.id;
+      });
+      await publish(f.dinner);
+      await app(async (tx) => {
+        await setMenuVariants(
+          tx,
+          await offerOf(tx, f.drinksMenu, f.lemonade),
+          [{ variantId: f.large, price: "4.20", offered: false }],
+          f.drinksMenu,
+        );
+        if (otherSource === "own")
+          await setMenuVariants(
+            tx,
+            await offerOf(tx, f.dinner, f.lemonade),
+            [{ variantId: small, price: "2.50" }],
+            f.dinner,
+          );
+        else
+          await setProductVariants(
+            tx,
+            f.lemonade,
+            [
+              {
+                id: f.large,
+                name: "Large",
+                customerName: { en: "A big glass" },
+                kitchenName: "LRG",
+                image: "large.jpg",
+                unitPrice: "3.50",
+                available: true,
+              },
+              {
+                id: small,
+                name: "Tiny",
+                customerName: { en: "A small glass" },
+                kitchenName: "SML",
+                image: null,
+                unitPrice: "2.00",
+                available: true,
+              },
+            ],
+            "en",
+          );
+      });
+      const changes = (await app((tx) => previewMenu(tx, f.dinner))).changes.filter(
+        (c) => c.kind === "product_changed" && c.productId === f.lemonade,
+      );
+      expect(changes).toContainEqual(
+        expect.objectContaining({
+          fields: ["variants"],
+          source: otherSource === "own" ? "this_menu" : "shared_product",
+        }),
+      );
+      expect(changes).toContainEqual(
+        expect.objectContaining({
+          fields: ["variants"],
+          source: "included_menu",
+          includedMenu: { id: f.drinksMenu, name: "Drinks" },
+        }),
+      );
+    },
+  );
+});
+
+it("retains two direct included sources for independent size edits", async () => {
+  const f = await menusFixture(fx.db);
+  const setup = await app(async (tx) => {
+    const [large, small] = await setProductVariants(
+      tx,
+      f.lemonade,
+      [
+        {
+          id: f.large,
+          name: "Large",
+          customerName: { en: "A big glass" },
+          kitchenName: "LRG",
+          image: null,
+          unitPrice: null,
+          available: true,
+        },
+        {
+          name: "Small",
+          customerName: { en: "A small glass" },
+          kitchenName: "SML",
+          image: null,
+          unitPrice: null,
+          available: true,
+        },
+      ],
+      "en",
+    );
+    const second = await createCatalogue(tx, { name: "Second drinks" });
+    const root = await requireMenuRoot(tx, second.id);
+    await addMember(tx, root, product(f.lemonade));
+    await addMember(tx, f.dinnerRoot, section(root));
+    return { second: second.id, large: large!.id, small: small!.id };
+  });
+  await publish(f.dinner);
+  await app(async (tx) => {
+    await setMenuVariants(
+      tx,
+      await offerOf(tx, f.drinksMenu, f.lemonade),
+      [{ variantId: setup.large, price: "4.20" }],
+      f.drinksMenu,
+    );
+    await setMenuVariants(
+      tx,
+      await offerOf(tx, setup.second, f.lemonade),
+      [{ variantId: setup.small, price: "2.20" }],
+      setup.second,
+    );
+  });
+  const preview = await app((tx) => previewMenu(tx, f.dinner));
+  expect(preview.clashes).toEqual([]);
+  const changes = preview.changes.filter(
+    (c) => c.kind === "product_changed" && c.productId === f.lemonade,
+  );
+  expect(changes).toHaveLength(2);
+  expect(changes).toContainEqual(
+    expect.objectContaining({
+      fields: ["variants"],
+      source: "included_menu",
+      includedMenu: { id: f.drinksMenu, name: "Drinks" },
+    }),
+  );
+  expect(changes).toContainEqual(
+    expect.objectContaining({
+      fields: ["variants"],
+      source: "included_menu",
+      includedMenu: { id: setup.second, name: "Second drinks" },
     }),
   );
 });
