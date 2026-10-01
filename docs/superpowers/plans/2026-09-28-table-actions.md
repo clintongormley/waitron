@@ -4203,7 +4203,8 @@ lands it.**
      pnpm exec vitest run scripts/migrations-match-schema.test.ts scripts/schema-constraints.test.ts scripts/behavioural-triggers.test.ts scripts/append-only-triggers.test.ts scripts/migration-upgrade.test.ts scripts/two-file-foreign-keys.test.ts scripts/classification-complete.test.ts scripts/journal-monotonic.test.ts scripts/module-graph-honesty.test.ts
      ```
      Expected: PASS. `migration-upgrade` walks empty tables, so it cannot see measurement 5's
-     failure on rows. Step 3 measures that.
+     failure on rows. Step 3 measures that. _(2026-10-01: no longer true — since A164 it carries
+     two rows per table through every step, and lists this plan's core `0044` in its `RESETS`.)_
 
 - [ ] **Step 3: Measure the reset, and write it down** (P28).
 

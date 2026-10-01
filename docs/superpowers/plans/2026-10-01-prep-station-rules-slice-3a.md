@@ -965,6 +965,9 @@ DROP TRIGGER IF EXISTS products_media_image_fk_parent_rename;
   "asserts only that each step does not throw, so a rebuild that silently drops a trigger ON the
   rebuilt table passes it") — both become untrue for `products` once Step 4's assertion exists;
   narrow each to say the final step checks the triggers on `products` and nothing else.
+  _(2026-10-01: A164 rewrote both texts, so the line numbers here are stale, and the test now
+  carries two rows per table through every step. A migration that cannot carry those rows fails
+  it unless named in the test's `RESETS`; whether this task's `0052`–`0054` can is not known.)_
 
 - [ ] **Step 1: Write the failing test** — in `packages/db/src/schema/catalogue.test.ts`, with the
   file's own `columnsOf` helper (`:36-38`):
