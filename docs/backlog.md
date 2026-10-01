@@ -4146,8 +4146,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       (`bill.received_exceeds_total`). The message now says so, keeps "take the rest from the bill's payments", and keeps
       "give it back" only for finishing a table whose emptied bill still holds money. Of the three
       till actions that show this message (merge, transfer, finish table), that is the only one
-      giving the money back unblocks. Guards: the merge and transfer cases for a bill whose only
-      payment was given back in full, in `apps/server/src/party-bill-actions.test.ts`, and "will
+      giving the money back unblocks. (2026-10-01, B22: Finish table now shows its own message,
+      `table.finish_bill_holds_money`, and the shared text, shown only for merge and transfer, no
+      longer has the finish-table sentence.) Guards: the merge and transfer cases for a bill whose
+      only payment was given back in full, in `apps/server/src/party-bill-actions.test.ts`, and "will
       not abandon an emptied bill that still holds a tip, and finishes once it is given back" in
       `apps/server/src/parties.test.ts`.
     - **DONE — finishing a table whose bill owes nothing but still holds money gets its own till
@@ -4157,8 +4159,11 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       it back before finishing the table" (`table.finish_bill_holds_money` in
       `apps/till/src/i18n/strings.ts`), and a refused merge or transfer says B19's text without its
       finish-table sentence, ending "Take the rest from the bill's payments". The server and its
-      error code are unchanged. Guards: "says a bill owing nothing still holds money when Finish is
-      refused for it, in its own words" in `apps/till/src/till-app-parties.test.ts`; the merge and
+      error code are unchanged. The party's bills are read again after that refusal, and a refusal
+      arriving after the waiter has opened another party says nothing. Guards: "says a bill owing
+      nothing still holds money when Finish is refused for it, in its own words" and "a refusal of
+      Finish for a bill still holding money, arriving late, says nothing on the other party" in
+      `apps/till/src/till-app-parties.test.ts`; the merge and
       transfer cases for a bill holding money in `apps/till/src/till-app-bill-payments.test.ts`; the
       two wordings pinned in `apps/till/src/i18n/codes.test.ts` and
       `apps/till/src/i18n/strings.test.ts`.

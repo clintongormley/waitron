@@ -4558,9 +4558,10 @@ export class TillApp extends LitElement {
    * or the operator session has ended (a logout or a server switch) since, the finished party is
    * closed: the floor comes next, except when the waiter has left the order and either has not come
    * back to it or a table open is under way ({@link #leftSince}); then the screen stays where it is
-   * and only the floor is read again. A bill still unpaid is said on the screen, beside the offer to
-   * take its payment, unless the waiter has left the party since ({@link #hasLeftParty}). At finish,
-   * `bill.payments_received` means an open bill with no items left still holds money (`finishTable`,
+   * and only the floor is read again. A bill still unpaid (with the offer to take its payment), or
+   * one still holding money, is said on the screen and the party's bills read again, unless the
+   * waiter has left the party since ({@link #hasLeftParty}). At finish, `bill.payments_received`
+   * means an open bill with no items left still holds money (`finishTable`,
    * apps/server/src/parties.ts), so it gets its own words rather than the merge and transfer ones. */
   async #onFinishTable(): Promise<void> {
     const party = this.orderParty;
@@ -4578,8 +4579,13 @@ export class TillApp extends LitElement {
         await this.#loadPartyBills();
         return;
       }
-      if (isPaymentsReceived(error)) this.errorKey = "table.finish_bill_holds_money";
-      else await this.#onTableRefusal(error);
+      if (isPaymentsReceived(error)) {
+        if (this.#hasLeftParty(party.id, sent)) return;
+        this.errorKey = "table.finish_bill_holds_money";
+        await this.#loadPartyBills();
+        return;
+      }
+      await this.#onTableRefusal(error);
       return;
     }
     // Logout and a server switch leave `orderParty` set; a server switch leaves `#orderVisit` too,
