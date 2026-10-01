@@ -377,7 +377,7 @@ older copy is refused; and a second device cannot change an order while a card p
 (D22). Owner decisions applied:
 a partial split takes its own copy of the kitchen ticket and a started line may be split (D10 and
 Review Focus 6 overturned); moving sent work to another table prints a MOVED slip and records a
-`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`) — decided by the owner 2026-09-26 as the safe behaviour until the service plan's Tasks 14 and 15 (lane B's B14/B15) let a guest pay for one held item against the table's bill. _(2026-09-30, B15: a guest can now pay for one held item — the till's Pay items takes it, and the server case "sends a held dish one guest paid for to the kitchen when it is fired, and charges it to nobody else" (`apps/server/src/bill-payments-api.test.ts`) holds it. B15 left `tab.split_held_line` unchanged, so splitting a held item onto a check is still refused. **Owner decision:** whether that refusal stays now that its stated reason is gone.)_ The core
+`moved` notice; held kitchen work cannot be split onto a check (`tab.split_held_line`) — decided by the owner 2026-09-26 as the safe behaviour until the service plan's Tasks 14 and 15 (lane B's B14/B15) let a guest pay for one held item against the table's bill. _(2026-09-30, B15: a guest can now pay for one held item — the till's Pay items takes it, and the server case "sends a held dish one guest paid for to the kitchen when it is fired, and charges it to nobody else" (`apps/server/src/bill-payments-api.test.ts`) holds it. B15 left `tab.split_held_line` unchanged, so splitting a held item onto a check is still refused. **Owner decision:** whether that refusal stays now that its stated reason is gone.)_ _(2026-10-01, B20: owner, 2026-09-30, "lift it": a dish in a held group may now be split onto a check of the same party, keeping its group, and fires with it; a dish held outside a held group (a recalled one) is still refused `tab.split_held_line`.)_ _(2026-10-01, B20: a dish held in a group whose bill is paid before the group fires reaches the kitchen once — one fired kitchen entry, one printed ticket — but its line is never stamped sent. `stampSent` (`apps/server/src/working-order.ts`) stamps only an open bill; its own comment says the `working_order_lines_require_open_parent_update` trigger refuses the stamp on any other, which was not run here. Measured with B20's two server changes taken back to main (56327e750): a whole table bill holding a Flan held in a group, paid in full and then fired, printed one FLAN ticket, its group became fired, and the line's `sent_at` stayed null. B20's split adds a second way in: a held dish split onto a check that is paid before the group fires. What reads `sent_at` for such a line is not traced. Left open.)_ The core
 migrations add five columns and replace the `working_orders_enforce_transition` trigger, and
 venue-service adds `kitchen_notices` and `service_settings`; the upgrade succeeds, but
 rows written before it misbehave (a dish sent before the upgrade counts as unsent, an extra saved
@@ -4569,8 +4569,10 @@ approved print agents to try it, so a printer the two discovery passes cannot se
     - `POST /api/bills/:id/split` puts chosen items on a new bill of the same party, from any open
       bill, including one no table points at and a counter order (whose new bill has no party). A
       presented bill is refused `bill.presented`, a paid one `bill.paid`; items already paid for
-      stay (`bill.line_paid`); held work stays (`tab.split_held_line`). A split that leaves the
-      source fully paid issues its invoice, as the tab split does.
+      stay (`bill.line_paid`); held work stays (`tab.split_held_line`; _2026-10-01, B20: a dish in a
+      held group may now be split, keeping its group — see the B20 notes beside "held kitchen work
+      cannot be split onto a check" above_). A split that leaves the source fully paid issues its
+      invoice, as the tab split does.
     - `POST /api/bills/:id/merge` (the path is the bill merged into) and
       `POST /api/bills/:id/transfer` (the path is the bill the items leave) work only between two
       untouched bills of one party: neither presented, partly paid, paid, nor holding a payment
