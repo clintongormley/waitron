@@ -9,8 +9,8 @@ import { printers } from "./printers.js";
 /**
  * The cash-drawer audit log: one row per drawer open. The kick itself is a separate `drawer` print
  * job; printing a receipt never opens the drawer (CLAUDE.md §5). A `card_slip` open is a hand-keyed
- * card payment's, so the slip goes in the drawer; it names the sale, or, for a payment against a bill,
- * the bill payment, the one that issues the invoice included.
+ * card payment's, so the slip goes in the drawer; it names the sale, or, for a bill payment, the bill
+ * payment, the one that issues the invoice included.
  *
  * No trigger refuses an update or a delete: the table is declared with `classify()`, not
  * `appendOnly()`, in `../classification.ts`.
@@ -42,8 +42,8 @@ export const drawerOpens = table(
     /* v8 ignore start */
     saleId: id("sale_id").references(() => sales.id),
     /* v8 ignore stop */
-    // Set for a payment or refund against a bill: cash taken before the bill's invoice exists has no
-    // sale to name, and a hand-keyed card names its bill payment even when that payment issues it.
+    // Set for every open a bill payment, or a cash refund from one, causes — the payment that issues
+    // the invoice included, because the row is written before the invoice exists.
     /* v8 ignore start */
     billPaymentId: id("bill_payment_id").references(() => billPayments.id),
     /* v8 ignore stop */

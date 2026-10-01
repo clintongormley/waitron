@@ -4985,12 +4985,13 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       list's Pay, a table's and the bill dialog's "Take payment", "Take the rest" and the kitchen
       queue's Collect. Existing assertions changed (owner-approved for these two buttons): five in
       `apps/till/src/widgets/tender-pay.test.ts` that read `action.pay` or `action.collect` on this
-      button now read `tender.cash`. Renamed only (body and assertions unchanged), in the same
-      file: "disables Pay when the basket is empty" → "disables Cash when the basket is empty";
-      "makes Pay the main action, with Card beside it and Place order and Hold as secondary" →
-      "makes Cash the main action, with Card beside it and Place order and Hold as secondary";
-      "Modes I/T at the collect stage show Collect + Card, not Place/Hold" → "Modes I/T at the
-      collect stage show Cash + Card, not Place/Hold"; "enables Pay once a line is rung up,
+      button now read `tender.cash`. Renamed, with that assertion change, in the same file:
+      "disables Pay when the basket is empty" → "disables Cash when the basket is empty"; "makes
+      Pay the main action, with Card beside it and Place order and Hold as secondary" → "makes
+      Cash the main action, with Card beside it and Place order and Hold as secondary"; and "Modes
+      I/T at the collect stage show Collect + Card, not Place/Hold" → "Modes I/T at the collect
+      stage show Cash + Card, not Place/Hold". Renamed only (body and assertions unchanged), in the
+      same file: "enables Pay once a line is rung up,
       reacting to store changes" → "enables Cash once a line is rung up, reacting to store
       changes"; "opens the cash screen showing the total when Pay is tapped" → "opens the cash
       screen showing the total when Cash is tapped"; "disables Pay while busy (a sale is in
