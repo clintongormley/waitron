@@ -3,6 +3,7 @@ import { render } from "lit";
 import { LiveData, createRequest } from "@waitron/dashboard-kit";
 import { VENUE_SERVICE_DASHBOARD } from "./index.js";
 import type { VenueOperationsScreen } from "./venue-operations-screen.js";
+import type { PrepStationsScreen } from "./prep-stations-screen.js";
 
 const containers: HTMLElement[] = [];
 afterEach(() => {
@@ -64,6 +65,52 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     );
     await vi.waitFor(() =>
       expect(screen.shadowRoot!.querySelector('[data-test="readiness"]')).not.toBeNull(),
+    );
+  });
+
+  it("opens Prep stations with the same request and live-data context", async () => {
+    const fetchImpl = vi.fn((path: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(
+            path === "/management-api/venue-service/routing"
+              ? {
+                  claims: [],
+                  exceptions: [],
+                  unassigned: { folders: [], products: [] },
+                  defaultStationId: null,
+                  stations: [],
+                }
+              : [],
+          ),
+      } as Response),
+    );
+    const liveData = new LiveData();
+    const prep = VENUE_SERVICE_DASHBOARD.moreScreens![0]!;
+    expect(prep.screen).toEqual({
+      id: "prep-stations",
+      navLabelKey: "nav.prep_stations",
+      group: "service",
+      requiresPermission: "venue_service.manage",
+    });
+    const handle = prep.create({
+      request: createRequest({ fetchImpl: fetchImpl as unknown as typeof fetch }),
+      liveData,
+    });
+    const container = document.createElement("div");
+    document.body.append(container);
+    containers.push(container);
+    render(handle.render(), container);
+    const screen = container.querySelector<PrepStationsScreen>("dashboard-prep-stations-screen")!;
+    expect(screen.api.liveData).toBe(liveData);
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector('[data-test="route-tester"]')).not.toBeNull(),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "/management-api/venue-service/routing",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 });

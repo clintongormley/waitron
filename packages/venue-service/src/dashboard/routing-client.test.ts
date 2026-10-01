@@ -61,6 +61,24 @@ it("keeps top-level names for exceptions and offers active variants only to the 
   ]);
 });
 
+it("offers an active product to the tester when it has no variants", async () => {
+  const request = vi.fn(async (path: string) =>
+    path === "/management-api/products"
+      ? [{ id: "bread", name: "Bread", active: true }]
+      : path === "/management-api/venue-service/routing"
+        ? {
+            claims: [],
+            exceptions: [],
+            unassigned: { folders: [], products: [] },
+            defaultStationId: null,
+            stations: [],
+          }
+        : [],
+  );
+  const result = await new PrepStationsApi(request as DashboardRequest).load();
+  expect(result.testProducts).toEqual([{ id: "bread", name: "Bread" }]);
+});
+
 it("asks the route tester for a product and an optional zone", async () => {
   const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
   const result = await new PrepStationsApi(request as DashboardRequest).explain("lager", null);
@@ -71,6 +89,41 @@ it("asks the route tester for a product and an optional zone", async () => {
     undefined,
     { passive: false },
   );
+});
+
+it("escapes product and zone identifiers in a zoned route explanation", async () => {
+  const request = vi.fn(async () => ({ route: null, decidedBy: null, skipped: [], stations: [] }));
+  await new PrepStationsApi(request as DashboardRequest).explain("rice & beans", "front/bar");
+  expect(request).toHaveBeenCalledWith(
+    "/management-api/venue-service/routing/explain?productId=rice+%26+beans&zoneId=front%2Fbar",
+    "GET",
+    undefined,
+    { passive: false },
+  );
+});
+
+it("uses passive reads for the background routing refresh", async () => {
+  const request = vi.fn(async (path: string) =>
+    path === "/management-api/venue-service/routing"
+      ? {
+          claims: [],
+          exceptions: [],
+          unassigned: { folders: [], products: [] },
+          defaultStationId: null,
+          stations: [],
+        }
+      : [],
+  );
+  const liveData = {} as ConstructorParameters<typeof PrepStationsApi>[1];
+  const background = new PrepStationsApi(request as DashboardRequest, liveData).background;
+  expect(background.liveData).toBe(liveData);
+  await background.load();
+  expect(request).toHaveBeenCalledTimes(7);
+  expect(
+    (request.mock.calls as unknown as [string, string, unknown, { passive: boolean }][]).every(
+      (call) => call[3]?.passive === true,
+    ),
+  ).toBe(true);
 });
 
 it("writes station changes to core and claims to venue-service", async () => {
@@ -216,5 +269,61 @@ it("updates, deletes and reorders exceptions using the routing endpoints", async
     ],
     ["/management-api/venue-service/routing/exceptions/e1", "DELETE"],
     ["/management-api/venue-service/routing/exception-order", "PUT", { ids: ["e2", "e1"] }],
+  ]);
+});
+
+it("writes a no-preparation exception and product assignment without a station id", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.createException({
+    zoneId: "terrace",
+    categoryId: null,
+    productId: "bread",
+    target: { kind: "no_preparation" },
+  });
+  await api.assignProduct("bread", { kind: "no_preparation" });
+  expect(request.mock.calls).toEqual([
+    [
+      "/management-api/venue-service/routing/exceptions",
+      "POST",
+      {
+        zoneId: "terrace",
+        categoryId: null,
+        productId: "bread",
+        noPreparation: true,
+      },
+    ],
+    [
+      "/management-api/venue-service/routing/products/bread/assignment",
+      "PUT",
+      {
+        noPreparation: true,
+      },
+    ],
+  ]);
+});
+
+it("writes station targets for a claim and an edited exception", async () => {
+  const request = vi.fn(async () => undefined);
+  const api = new PrepStationsApi(request as DashboardRequest);
+  await api.setClaim("drinks", { kind: "station", stationId: "bar" });
+  await api.updateException("rule-1", {
+    zoneId: null,
+    categoryId: "drinks",
+    productId: null,
+    target: { kind: "station", stationId: "bar" },
+  });
+  expect(request.mock.calls).toEqual([
+    ["/management-api/venue-service/routing/claims/drinks", "PUT", { stationId: "bar" }],
+    [
+      "/management-api/venue-service/routing/exceptions/rule-1",
+      "PUT",
+      {
+        zoneId: null,
+        categoryId: "drinks",
+        productId: null,
+        stationId: "bar",
+      },
+    ],
   ]);
 });

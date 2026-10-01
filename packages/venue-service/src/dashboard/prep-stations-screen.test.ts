@@ -1004,6 +1004,269 @@ it("offers only active stations for a new exception and names a switched-off edi
   expect(edited.options.map((o) => o.value)).toContain("old");
   expect(edited.shadowRoot!.querySelector(".trigger .value")!.textContent).toContain("Old bar");
 });
+
+it("shows affected products and their old and new destinations before an assignment is saved", async () => {
+  setLocale("en");
+  const a = api({
+    preview: vi.fn().mockResolvedValue([
+      {
+        productId: "bread",
+        productName: "Bread",
+        zoneId: null,
+        zoneName: null,
+        from: null,
+        to: { kind: "no_preparation" },
+      },
+      {
+        productId: "bread",
+        productName: "Bread",
+        zoneId: "terrace",
+        zoneName: "Terrace",
+        from: { kind: "station", stationId: "bar" },
+        to: { kind: "station", stationId: "unknown" },
+      },
+    ]),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="assign-bread"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
+  );
+  await settle(el);
+  const rows = [...el.shadowRoot!.querySelectorAll('[data-test="routing-preview"] tbody tr')];
+  expect(rows.map((row) => row.textContent!.replace(/\s+/g, " ").trim())).toEqual([
+    "Bread Any service zone No station No preparation",
+    "Bread Terrace Bar unknown",
+  ]);
+  expect(a.assignProduct).not.toHaveBeenCalled();
+});
+
+it("shows a refused preview without opening confirmation or writing an exception", async () => {
+  setLocale("en");
+  const a = api({
+    preview: vi.fn().mockRejectedValue({
+      code: "management.request_invalid",
+      params: { field: "condition" },
+    }),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+  );
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-field-error="condition"]')?.textContent).toContain(
+    "Choose a folder or product",
+  );
+  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  expect(a.createException).not.toHaveBeenCalled();
+});
+
+it("keeps an exception editable after its confirmed write fails", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    updateException: vi.fn().mockRejectedValue(new Error("offline")),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-exception-a"]')!.click();
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  expect(q(el, '[data-test="exception-what"]')).not.toBeNull();
+  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be saved");
+});
+
+it("shows a tester failure without inventing an answer", async () => {
+  setLocale("en");
+  const a = api({
+    explain: vi.fn().mockRejectedValue(new Error("offline")),
+  });
+  const el = await mount(a);
+  const select = q(el, '[data-test="test-product"]')!;
+  select.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bread" } }));
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
+  expect(q(el, '[data-test="test-answer"] [role="alert"]')).not.toBeNull();
+});
+
+it("previews a claimed folder moving from a station to No preparation", async () => {
+  setLocale("en");
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="claim-no-preparation"]')!.click();
+  await settle(el);
+  q(el, '[data-test="claim-choice"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "cocktails" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("Drinks › Cocktails");
+  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("Bar");
+  expect(q(el, '[data-test="routing-preview"]')!.textContent).toContain("No preparation");
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
+  expect(a.setClaim).toHaveBeenCalledWith("cocktails", { kind: "no_preparation" });
+});
+
+it("lets the tester change zones and clear the product without retaining a route", async () => {
+  const a = api({
+    load: vi.fn().mockResolvedValue({
+      ...view,
+      zones: [
+        { id: "terrace", name: "Terrace", active: true },
+        { id: "closed", name: "Closed", active: false },
+      ],
+    }),
+    explain: vi.fn().mockResolvedValue({
+      route: { kind: "station", stationId: "bar" },
+      decidedBy: { kind: "default" },
+      skipped: [],
+      stations: [],
+    }),
+  });
+  const el = await mount(a);
+  const zone = q(el, '[data-test="test-zone"]') as HTMLElement & {
+    options: { value: string }[];
+  };
+  expect(zone.options.map((option) => option.value)).toEqual(["", "terrace"]);
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bread" } }),
+  );
+  zone.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "terrace" } }));
+  await settle(el);
+  expect(a.explain).toHaveBeenCalledWith("bread", "terrace");
+  expect(q(el, '[data-test="test-answer"]')!.textContent).toContain("Made at: Bar");
+  q(el, '[data-test="test-product"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "" } }),
+  );
+  await settle(el);
+  expect(q(el, '[data-test="test-answer"]')!.textContent).not.toContain("Made at: Bar");
+});
+
+it("saves a product exception after changing its subject and clearing its zone", async () => {
+  const a = api({ load: vi.fn().mockResolvedValue(exceptionView) });
+  const el = await mount(a);
+  q(el, '[data-test="add-exception"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "terrace" } }),
+  );
+  q(el, '[data-test="exception-what"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "category:cocktails" } }),
+  );
+  q(el, '[data-test="exception-what"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "product:bread" } }),
+  );
+  q(el, '[data-test="exception-zone"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "" } }),
+  );
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "no_preparation" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(a.preview).toHaveBeenCalledWith({
+    kind: "exception",
+    id: null,
+    input: {
+      zoneId: null,
+      categoryId: null,
+      productId: "bread",
+      target: { kind: "no_preparation" },
+    },
+  });
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
+  expect(a.createException).toHaveBeenCalledWith({
+    zoneId: null,
+    categoryId: null,
+    productId: "bread",
+    target: { kind: "no_preparation" },
+  });
+});
+
+it("refuses negative order and invalid warm and forgotten thresholds together", async () => {
+  const a = api();
+  const el = await mount(a);
+  q(el, '[data-test="edit-bar"]')!.click();
+  await settle(el);
+  for (const [field, value] of [
+    ["displayOrder", "-1"],
+    ["warmAfterMinutes", "0"],
+    ["forgottenAfterMinutes", "10"],
+  ]) {
+    q(el, `[data-test="${field}"]`)!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value } }),
+    );
+  }
+  await settle(el);
+  q(el, '[data-test="save-station"]')!.click();
+  await settle(el);
+  for (const field of ["displayOrder", "warmAfterMinutes", "forgottenAfterMinutes"])
+    expect(q(el, `[data-field-error="${field}"]`)).not.toBeNull();
+  expect(a.updateStation).not.toHaveBeenCalled();
+});
+
+it("reports an initial routing load failure and recovers when live data refreshes", async () => {
+  setLocale("en");
+  const liveData = new LiveData();
+  const a = api({
+    liveData,
+    load: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue(view),
+  });
+  const el = await mount(a);
+  expect(q(el, '[role="alert"]')?.textContent).toContain("could not be loaded");
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
+  await vi.waitFor(() => expect(q(el, '[data-test="station-bar"]')).not.toBeNull());
+  expect(q(el, '[role="alert"]')).toBeNull();
+});
+
+it("shows an inactive station refusal from exception preview without calling its write", async () => {
+  setLocale("en");
+  const a = api({
+    load: vi.fn().mockResolvedValue(exceptionView),
+    preview: vi.fn().mockRejectedValue({ code: "route.station_inactive" }),
+    updateException: vi.fn(),
+  });
+  const el = await mount(a);
+  q(el, '[data-test="edit-exception-a"]')!.click();
+  await settle(el);
+  q(el, '[data-test="exception-target"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "bar" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="save-exception"]')!.click();
+  await settle(el);
+  expect(q(el, '[role="alert"]')?.textContent).toContain("This station is switched off");
+  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+  expect(a.updateException).not.toHaveBeenCalled();
+});
+
+it("keeps a refused folder claim next to its choice after confirmation", async () => {
+  setLocale("en");
+  const a = api({ setClaim: vi.fn().mockRejectedValue({ code: "route.station_inactive" }) });
+  const el = await mount(a);
+  q(el, '[data-test="claim-bar"]')!.click();
+  await settle(el);
+  q(el, '[data-test="claim-choice"]')!.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "food" } }),
+  );
+  await settle(el);
+  q(el, '[data-test="confirm-routing"]')!.click();
+  await settle(el);
+  expect(q(el, '[data-field-error="claim"]')?.textContent).toContain("switched off");
+  expect(q(el, '[data-test="claim-choice"]')).not.toBeNull();
+  expect(q(el, '[data-test="routing-preview"]')).toBeNull();
+});
 it.each([
   ["en", "Old bar (Switched off)"],
   ["es-ES", "Old bar (Desactivada)"],
