@@ -312,7 +312,7 @@ test("a valid stepper is not marked invalid", async () => {
   expect(parts(el).input.getAttribute("aria-invalid")).toBe("false");
 });
 
-test("shows a hint under the box and describes the box with it, before any error", async () => {
+test("describes the box with its hint, before any error", async () => {
   const el = await mount(
     '<wt-number-stepper label="Min" hint="0 makes the list optional" error="Too many"></wt-number-stepper>',
   );
@@ -325,16 +325,54 @@ test("shows a hint under the box and describes the box with it, before any error
   expect(bare.shadowRoot!.querySelector("[data-hint]")).toBeNull();
 });
 
-test("the hint paints from the muted-text token and the error from the danger token", async () => {
+test("a hint shown as the placeholder paints from the muted-text token and the error from the danger token", async () => {
   const el = await mount(
     '<wt-number-stepper label="Min" hint="Help" error="Bad"></wt-number-stepper>',
   );
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
   host.style.setProperty("--wt-color-danger", "rgb(13, 14, 15)");
-  expect(getComputedStyle(el.shadowRoot!.querySelector("[data-hint]")!).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(parts(el).input, "::placeholder").color).toBe("rgb(7, 8, 9)");
   expect(getComputedStyle(el.shadowRoot!.querySelector("[data-error]")!).color).toBe(
     "rgb(13, 14, 15)",
   );
+});
+
+test("shows the hint inside the empty box as its placeholder when no placeholder is given", async () => {
+  const el = await mount('<wt-number-stepper label="Min" hint="Optional"></wt-number-stepper>');
+  expect(parts(el).input.getAttribute("placeholder")).toBe("Optional");
+  expect(parts(el).input.matches(":placeholder-shown")).toBe(true);
+});
+
+test("an explicit placeholder wins over the hint, which still describes the box", async () => {
+  const el = await mount(
+    '<wt-number-stepper label="Max" placeholder="No limit" hint="Leave it empty for no limit"></wt-number-stepper>',
+  );
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(parts(el).input.getAttribute("placeholder")).toBe("No limit");
+  expect(hint.textContent).toBe("Leave it empty for no limit");
+  expect(parts(el).input.getAttribute("aria-describedby")).toBe(hint.id);
+});
+
+test("draws no hint line: the description is visually hidden and takes no room", async () => {
+  const hinted = await mount(
+    '<wt-number-stepper label="Min" hint="0 makes the list optional"></wt-number-stepper>',
+  );
+  const plain = await mount('<wt-number-stepper label="Min"></wt-number-stepper>');
+  const hint = hinted.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  const box = hint.getBoundingClientRect();
+  expect(box.width).toBeLessThanOrEqual(1);
+  expect(box.height).toBeLessThanOrEqual(1);
+  const style = getComputedStyle(hint);
+  expect(style.position).toBe("absolute");
+  expect(style.overflow).toBe("hidden");
+  expect(style.clip).toBe("rect(0px, 0px, 0px, 0px)");
+  expect(style.whiteSpace).toBe("nowrap");
+  expect(hinted.getBoundingClientRect().height).toBe(plain.getBoundingClientRect().height);
+});
+
+test("cuts a placeholder too long for the box with an ellipsis", async () => {
+  const el = await mount('<wt-number-stepper label="Min" hint="Optional"></wt-number-stepper>');
+  expect(getComputedStyle(parts(el).input).textOverflow).toBe("ellipsis");
 });
 
 test("marks a required stepper visibly and on the native box", async () => {

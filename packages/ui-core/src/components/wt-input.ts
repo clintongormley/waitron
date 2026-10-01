@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { baseStyles, disabledStyles } from "../base-styles.js";
+import { baseStyles, disabledStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
 
 @customElement("wt-input")
@@ -43,6 +43,7 @@ export class WtInput extends LitElement {
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
         font: inherit;
+        text-overflow: ellipsis;
       }
 
       input::placeholder {
@@ -82,14 +83,13 @@ export class WtInput extends LitElement {
         margin-inline-start: var(--wt-space-1);
       }
 
-      .error,
-      .hint {
+      .error {
         margin: var(--wt-space-1) 0 0;
         font-size: var(--wt-font-size-sm);
       }
 
       .hint {
-        color: var(--wt-color-text-muted);
+        ${visuallyHiddenStyles}
       }
     `,
   ];
@@ -102,8 +102,8 @@ export class WtInput extends LitElement {
   @property() placeholder = "";
   @property({ type: Number }) maxlength?: number;
   @property() error = "";
-  /** A line of help under the field, rendered in this shadow root so the native input is described
-   * by it; why a paragraph beside the element is not: design-system.md → Forms. */
+  /** Shown as the placeholder unless one is given, and kept as the input's description because a
+   * placeholder disappears once the field holds a value. */
   @property() hint = "";
   @property({ type: Boolean, reflect: true }) required = false;
   @property({ type: Boolean, reflect: true }) disabled = false;
@@ -153,7 +153,7 @@ export class WtInput extends LitElement {
           .value=${this.value}
           type=${this.type}
           autocomplete=${this.autocomplete || nothing}
-          placeholder=${this.placeholder}
+          placeholder=${this.placeholder || this.hint}
           maxlength=${this.maxlength ?? nothing}
           ?required=${this.required}
           ?disabled=${this.disabled}

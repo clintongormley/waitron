@@ -644,7 +644,7 @@ test("a field moved elsewhere in the page re-measures its sign", async () => {
   expectSignClearOfText(currency!, input);
 });
 
-test("shows a hint under the field and describes the amount by it first, then by any error, the currency and a fixed unit", async () => {
+test("describes the amount by its hint first, then by any error, the currency and a fixed unit", async () => {
   const el = await mount(
     '<wt-price-input label="Price" name="price" unit="kg" fixed-unit locale="en-GB" hint="Leave it empty to use the product price."></wt-price-input>',
   );
@@ -665,17 +665,55 @@ test("shows a hint under the field and describes the amount by it first, then by
   expect(error.compareDocumentPosition(hint) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
 });
 
-test("a price field with no hint renders no hint line", async () => {
+test("a price field with no hint renders no hint description", async () => {
   const el = await mount('<wt-price-input label="Price"></wt-price-input>');
   expect(el.shadowRoot!.querySelector("[data-hint]")).toBeNull();
   expect(el.shadowRoot!.querySelector("input")!.hasAttribute("aria-describedby")).toBe(false);
 });
 
-test("the hint paints from the muted-text and small-font tokens", async () => {
+test("shows the hint inside the empty amount as its placeholder when no placeholder is given", async () => {
+  const el = await mount('<wt-price-input label="Price" hint="Leave it empty"></wt-price-input>');
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(input.getAttribute("placeholder")).toBe("Leave it empty");
+  expect(input.matches(":placeholder-shown")).toBe(true);
+});
+
+test("an explicit placeholder wins over the hint, which still describes the amount", async () => {
+  const el = await mount(
+    '<wt-price-input label="Price" placeholder="12.00" hint="Leave it empty"></wt-price-input>',
+  );
+  const input = el.shadowRoot!.querySelector("input")!;
+  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  expect(input.getAttribute("placeholder")).toBe("12.00");
+  expect(hint.textContent).toBe("Leave it empty");
+  expect(input.getAttribute("aria-describedby")).toBe(hint.id);
+});
+
+test("draws no hint line: the description is visually hidden and takes no room", async () => {
+  const hinted = await mount(
+    '<wt-price-input label="Price" hint="Leave it empty to use the product price."></wt-price-input>',
+  );
+  const plain = await mount('<wt-price-input label="Price"></wt-price-input>');
+  const hint = hinted.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
+  const box = hint.getBoundingClientRect();
+  expect(box.width).toBeLessThanOrEqual(1);
+  expect(box.height).toBeLessThanOrEqual(1);
+  const style = getComputedStyle(hint);
+  expect(style.position).toBe("absolute");
+  expect(style.overflow).toBe("hidden");
+  expect(style.clip).toBe("rect(0px, 0px, 0px, 0px)");
+  expect(style.whiteSpace).toBe("nowrap");
+  expect(hinted.getBoundingClientRect().height).toBe(plain.getBoundingClientRect().height);
+});
+
+test("cuts a placeholder too long for the amount with an ellipsis", async () => {
+  const el = await mount('<wt-price-input label="Price" hint="Optional"></wt-price-input>');
+  expect(getComputedStyle(el.shadowRoot!.querySelector("input")!).textOverflow).toBe("ellipsis");
+});
+
+test("a hint shown as the placeholder paints from the muted-text token", async () => {
   const el = await mount('<wt-price-input label="Price" hint="Optional"></wt-price-input>');
   host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-  host.style.setProperty("--wt-font-size-sm", "11px");
-  const hint = el.shadowRoot!.querySelector<HTMLElement>("[data-hint]")!;
-  expect(getComputedStyle(hint).color).toBe("rgb(7, 8, 9)");
-  expect(getComputedStyle(hint).fontSize).toBe("11px");
+  const input = el.shadowRoot!.querySelector("input")!;
+  expect(getComputedStyle(input, "::placeholder").color).toBe("rgb(7, 8, 9)");
 });

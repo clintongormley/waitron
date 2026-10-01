@@ -102,12 +102,16 @@ describe.each(["light", "dark"] as const)("wt-price-input a11y (%s theme)", (the
     expect(contrastRatio(sign, field)).toBeGreaterThanOrEqual(4.5);
   });
 
-  test("hint line, with a currency sign and an error", async () => {
+  test("hint, with a currency sign and an error", async () => {
     await mountThemed(
       '<wt-price-input label="Price" name="price" locale="es-ES" fixed-unit hint="Leave it empty to use the product price, 9,00 €." error="Enter a price"></wt-price-input>',
       theme,
     );
     await expectNoA11yViolations(host);
+    const input = host.querySelector("wt-price-input")!.shadowRoot!.querySelector("input")!;
+    const placeholder = getComputedStyle(input, "::placeholder").color;
+    const field = getComputedStyle(input).backgroundColor;
+    expect(contrastRatio(placeholder, field)).toBeGreaterThanOrEqual(4.5);
   });
 
   test("disabled currency sign", async () => {

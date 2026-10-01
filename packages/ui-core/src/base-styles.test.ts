@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { baseStyles, disabledStyles } from "./base-styles.js";
+import { baseStyles, disabledStyles, visuallyHiddenStyles } from "./base-styles.js";
 test("exports a Lit stylesheet", () => {
   expect(baseStyles.cssText).toContain("box-sizing");
 });
@@ -10,6 +10,7 @@ test("exports a Lit stylesheet", () => {
 test.each([
   ["baseStyles", baseStyles],
   ["disabledStyles", disabledStyles],
+  ["visuallyHiddenStyles", visuallyHiddenStyles],
 ])("%s declares no literal colours", (_name, styles) => {
   expect(styles.cssText).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
 });

@@ -40,3 +40,18 @@ export const disabledStyles = css`
   opacity: var(--wt-opacity-disabled);
   cursor: not-allowed;
 `;
+
+/** Hides an element from sight while leaving it in the accessibility tree, so it can still name or
+ * describe a control. Interpolate it into a selector body, as with {@link disabledStyles}.
+ * `text-wrap`, not `white-space`: no-hardcoded-chrome.test.ts reads "white" in it as a colour. */
+export const visuallyHiddenStyles = css`
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  text-wrap: nowrap;
+  border: 0;
+`;
