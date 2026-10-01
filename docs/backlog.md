@@ -1014,7 +1014,15 @@ labels are untouched. The migration drops media's eleven reference triggers, cop
 drizzle's file as generated failed its rename on an upgraded database with
 `no such table: main.media_images`, and without the copy the rebuild's `DROP TABLE` emptied
 `media_image_data` through its cascading key
-(`packages/media/src/schema/name-only-upgrade.test.ts`).
+(`packages/media/src/schema/name-only-upgrade.test.ts`). Landed as #980.
+
+Left by A157's review, not changed: the new upgrade test makes its scratch folder with `tmpdir()`
+rather than `scratchParent()` (`scripts/scratch-dir.mjs`), unmeasured either way; the list of
+hand-written migrations in `docs/developers/conventions-data.md` already left out core `0036` and
+`0047`, catalogue `0013` and media `0004` before this change, and still does; and a review marked
+the photo search's "a phrase cannot straddle two translations of a name" as untested — existing
+search code, not looked into. **Next action:** fill the list when next touching that file; the
+other two need a decision whether they are worth a change at all.
 
 **Photos are shrunk on upload (slice 2, Task 0) — LANDED #543 (2026-09-24).** Every upload is
 resized to at most 1600 pixels on its longer side, turned upright, stripped of its metadata (GPS
