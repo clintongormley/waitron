@@ -720,6 +720,35 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     expect(await drawerOpensFor(cfg)).toEqual([]);
   });
 
+  it("hand-keyed CARD in mode 'never': files the sale and enqueues only the drawer job for the card slip", async () => {
+    const { cfg, each, zoneId } = await setupVenue();
+    const printerId = await makePrinter(cfg);
+    await configureReceipt(cfg, { mode: "never", printerId });
+
+    await recordTillSale(
+      deps(),
+      cfg,
+      {
+        zoneId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      },
+      OPERATOR,
+    );
+
+    expect(await registroCount(cfg)).toBe(1);
+    expect((await printJobsFor(cfg)).map((job) => [...job.payload])).toEqual([[...DRAWER_KICK]]);
+    expect(await drawerOpensFor(cfg)).toEqual([
+      {
+        reason: "card_slip",
+        saleId: await onlySaleId(cfg),
+        personId: OPERATOR,
+        tillId: cfg.tillId,
+        printerId,
+      },
+    ]);
+  });
+
   it("mode 'on_request': files the sale and enqueues only the cash drawer job", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     const printerId = await makePrinter(cfg);
