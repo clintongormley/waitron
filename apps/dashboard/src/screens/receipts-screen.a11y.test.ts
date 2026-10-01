@@ -21,6 +21,8 @@ function preview(config: ReceiptConfig): ReceiptPreview {
       headerSubtitle: config.headerSubtitle ? { start: 1, end: 2 } : null,
       footerMessage: null,
     },
+    paperWidth: "80mm",
+    paperWidths: ["80mm"],
   };
 }
 

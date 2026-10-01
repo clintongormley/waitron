@@ -226,6 +226,25 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("asks for a preview at a chosen paper width", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+
+    await api.previewReceipt({ footerMessage: "Gracias" }, "58mm");
+
+    expect(callsOf(fetchImpl)).toEqual([
+      [
+        `/management-api/receipt-preview?receipt=${encodeURIComponent(
+          JSON.stringify({ footerMessage: "Gracias" }),
+        )}&paperWidth=58mm`,
+        "GET",
+        undefined,
+      ],
+    ]);
+  });
+
   it("marks a preview passive only when it goes through the background client", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ preview: {}, marks: { headerSubtitle: null, footerMessage: null } }),

@@ -33,6 +33,8 @@ function fakePreview(config: ReceiptConfig): ReceiptPreview {
       headerSubtitle: header === null ? null : { start: header, end: header + 1 },
       footerMessage: footer === null ? null : { start: footer, end: footer + 1 },
     },
+    paperWidth: "80mm",
+    paperWidths: ["80mm"],
   };
 }
 

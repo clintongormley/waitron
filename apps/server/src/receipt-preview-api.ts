@@ -1,10 +1,17 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import { and, asc, eq } from "drizzle-orm";
-import { printers, readTenant, tills, withTransaction, type Database } from "@waitron/db";
+import {
+  printPaperWidth,
+  printers,
+  readTenant,
+  tills,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { validateReceiptConfig, type ReceiptConfig } from "@waitron/layouts";
-import { textGrid, type EscSetting } from "@waitron/printing";
+import { textGrid, type EscSetting, type PaperWidth } from "@waitron/printing";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
@@ -40,6 +47,10 @@ export interface BlockRange {
 
 export interface ReceiptPreviewResponse {
   preview: PrintJobPreview;
+  /** The width drawn at. */
+  paperWidth: PaperWidth;
+  /** The widths of the location's tills' active receipt printers, narrowest first. */
+  paperWidths: PaperWidth[];
   /** The blocks each trim field adds; `null` for a field left out or blank. */
   marks: { headerSubtitle: BlockRange | null; footerMessage: BlockRange | null };
 }
@@ -69,10 +80,38 @@ function requireReceiptParameter(given: string[] | undefined): unknown {
   }
 }
 
+function optionalPaperWidth(given: string[] | undefined): PaperWidth | undefined {
+  if (given === undefined) return undefined;
+  const [width] = given;
+  if (given.length !== 1 || !printPaperWidth.enumValues.some((known) => known === width))
+    throw new AppError("management.request_invalid", { field: "paperWidth" });
+  return width as PaperWidth;
+}
+
+/**
+ * The setting to draw at: the asked-for width when a receipt printer has it, else the width most
+ * tills print on, a tie going to the till first by name. A width's resolution is that of the till
+ * first by name with it. `settings` holds one entry per till, ordered by name.
+ */
+function chooseSetting(settings: EscSetting[], asked: PaperWidth | undefined): EscSetting {
+  const tillsUsing = new Map<PaperWidth, number>();
+  for (const { paperWidth } of settings)
+    tillsUsing.set(paperWidth, (tillsUsing.get(paperWidth) ?? 0) + 1);
+  let width = asked;
+  if (width === undefined || !tillsUsing.has(width)) {
+    width = undefined;
+    // A map iterates in insertion order, the order of the first till with each width.
+    for (const [each, count] of tillsUsing)
+      if (width === undefined || count > tillsUsing.get(width)!) width = each;
+  }
+  return settings.find((setting) => setting.paperWidth === width) ?? DEFAULT_PRINTER;
+}
+
 /**
  * A sample receipt drawn by the formatter a sale's receipt prints from, with unsaved trim. It
  * files, saves and enqueues nothing. A GET, so a dashboard refresh can ask for it passively; the
- * `receipt` parameter holds the JSON object a save sends as `receipt`.
+ * `receipt` parameter holds the JSON object a save sends as `receipt`, and an optional `paperWidth`
+ * picks one of the widths an answer offers.
  */
 export function mountReceiptPreviewApi(
   app: Hono,
@@ -83,14 +122,15 @@ export function mountReceiptPreviewApi(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const requested = requireReceiptParameter(c.req.queries("receipt"));
-      const { issuer, printer } = await withTransaction(deps.db, async (tx) => {
+      const asked = optionalPaperWidth(c.req.queries("paperWidth"));
+      const { issuer, settings } = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, {
           managementSessionId: sessionId,
           permission: "layout.configure",
         });
         // Provisioning writes the one taxpayer row before the management API is served.
         const taxpayer = (await readTenant(tx))!;
-        const [receiptPrinter] = await tx
+        const settings = await tx
           .select({ paperWidth: printers.paperWidth, resolution: printers.resolution })
           .from(tills)
           .innerJoin(
@@ -98,13 +138,10 @@ export function mountReceiptPreviewApi(
             and(eq(printers.id, tills.receiptPrinterId), eq(printers.active, true)),
           )
           .where(eq(tills.locationId, deps.cfg.locationId))
-          .orderBy(asc(tills.name), asc(tills.id))
-          .limit(1);
-        return {
-          issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId },
-          printer: receiptPrinter ?? DEFAULT_PRINTER,
-        };
+          .orderBy(asc(tills.name), asc(tills.id));
+        return { issuer: { venueName: taxpayer.legalName, nif: taxpayer.taxId }, settings };
       });
+      const printer = chooseSetting(settings, asked);
       const receipt = validateReceiptConfig(requested);
       const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
       const draw = (trim: ReceiptConfig) =>
@@ -126,6 +163,10 @@ export function mountReceiptPreviewApi(
           : null;
       const response: ReceiptPreviewResponse = {
         preview,
+        paperWidth: printer.paperWidth,
+        paperWidths: printPaperWidth.enumValues.filter((width) =>
+          settings.some((setting) => setting.paperWidth === width),
+        ),
         marks: { headerSubtitle: markOf("headerSubtitle"), footerMessage: markOf("footerMessage") },
       };
       return c.json(response);
