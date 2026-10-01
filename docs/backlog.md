@@ -1243,6 +1243,21 @@ like (heading and chevron fixed in place either way), and what "current values" 
 — three names for the names sections; the product editor's sections already show a one-line
 `summary` today.
 
+**The option window inside an Options list: two owner fixes (A170, owner 2026-10-01) — OPEN.**
+Both in the editor for one options list, `apps/dashboard/src/widgets/option-list-form.ts`, and the
+window it opens for one option, `apps/dashboard/src/widgets/option-label-form.ts`.
+
+- **Clicking an option's name should open its "Edit option" window.** Today the name is plain text
+  in the row (`#labelRow`); only the row menu's Edit opens the window (`#openEditor`). The Default
+  radio button and the row menu in the same row must keep their own clicks.
+- **The "Edit option" window should open with its "Customer and kitchen names" section already
+  expanded** — owner: _"it's the only thing on that screen"_ besides the name and the Available
+  switch. Today it starts collapsed like every `wt-disclosure`. "Add option" opens the same window;
+  the owner's reason applies to it too, but the owner named only Edit, so confirm. **This is an
+  exception to a written rule:** `docs/developers/design-system.md` → "Sections always start
+  collapsed", which the change must update to name the exception and why. Related: A169 redraws
+  the same section.
+
 **Branch 2, variants as products — LANDED.** A variant is now a `products` row
 behind a `parent_id`; the separate `product_variants` and `menu_item_variants` tables are gone. Its
 nine pull requests: Task 1 #511, Task 2 #517, Task 3 #528, Task 4 #532, Task 5 #537, Task 6 #539,
