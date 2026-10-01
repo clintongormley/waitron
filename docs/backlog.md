@@ -3047,6 +3047,45 @@ approved print agents to try it, so a printer the two discovery passes cannot se
       measured. The preview shrinks a picture wider than the job's line instead of cutting it, so on
       the ruler page, whose captions are 360 dots wide, the 576-dot ruler is shrunk on every
       printer.
+- **"Print test page" in each printer's row menu (C108, owner 2026-09-30) — done (2026-10-01, #PR).**
+  The owner: _"i think we need to add a 'Print test page' to the printer kebab menu"_.
+  - What it prints: one page, at the printer's SAVED paper width and resolution, in the language
+    the calibration ruler page would use: a title, the printer's name, its paper width and
+    resolution as saved (for example "80mm · 203dpi"), the date and time in the venue's time zone,
+    "Café, jamón, niño · 5 € · ¿Sí? ¡Sí!", a rule from the first text column to the last
+    (`|----|`), a QR code holding the fixed text "Waitron test page" (not a tax-agency link), and
+    "If this is centred and readable, this printer is set up correctly." (Spanish: "Si esto sale
+    centrado y legible, la impresora está bien configurada."), then feed and cut. The title is not
+    bold or larger: the picture font has one weight and one size, and the receipt's own heading is
+    drawn the same way. Built by `formatPrinterTestPage` (`apps/server/src/printer-test-page.ts`),
+    printed by `POST /management-api/printers/:id/print-test-page`. Run: the cases in
+    `apps/server/src/printer-test-page.test.ts`, and the "management: print-test-page" cases in
+    `apps/server/src/print-api.test.ts`, which read the words back from the job's pictures in
+    English and Spanish, check the venue's time zone moves the hour, and check a 58 mm and an 80 mm
+    printer get lines 384 and 576 dots wide.
+  - It is an ordinary `document` job with no cash-drawer command, even for a printer saved with a
+    drawer attached: "sends no drawer pulse, even to a printer with a cash drawer attached"
+    (`print-api.test.ts`) and "never opens a cash drawer, and ends by feeding and cutting"
+    (`printer-test-page.test.ts`). The second was checked by adding a drawer pulse to the
+    formatter: it failed, and passed again once the pulse was removed.
+  - It sends a print area (`GS L`/`GS W`) as wide as its lines, as the receipt does, so it checks
+    the same layout a receipt prints with: "sets a print area as wide as its lines, as the receipt
+    does". Whether a job of pictures still needs one is still unmeasured (C107's entry).
+  - The menu item sits between Edit and Disable (and, read from the code but not tested, before
+    Unpair where Unpair stands in for Disable). For a switched-off printer it is shown
+    greyed out and sends nothing, and while a request is on its way it is greyed out so it cannot
+    be sent twice. A success shows "Test page sent to <name>" in a notice that fades after four
+    seconds (`NOTICE_MS`, the Bluetooth messages' own); a refusal (an unknown or switched-off
+    printer is refused with `printer.not_found`, 404) shows that refusal's message in the alert
+    line under the tabs, which does not fade. Run:
+    the "Print test page in a printer's row menu" cases in
+    `apps/dashboard/src/screens/printers-screen.test.ts`, and the accessibility case for the open
+    menu and the notice, in both themes at 390 and 1280 px, in
+    `apps/dashboard/src/screens/printers-screen.a11y.test.ts`.
+  - Not checked: the page has not been printed on a real printer; the owner's photographs of it on
+    both printers are owed. The page was only drawn into an image from the job's own bytes, by a
+    throwaway script that placed the QR the way `ESC a` centring would, at 58 mm/180 dpi and
+    80 mm/203 dpi, and looked at: centred, readable, QR present.
 - **The owner cannot find how to unpair a Bluetooth printer (A141, owner 2026-09-29) — done (#902, 2026-09-30).** The
   owner: _"i also don't see how to unpair the printer"_. The cause: an added Bluetooth printer's row
   offered Forget pairing only while the printer was switched off (`#pairedReport`,
