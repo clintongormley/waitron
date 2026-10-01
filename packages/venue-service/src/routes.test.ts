@@ -153,6 +153,264 @@ async function send(
 }
 
 describe("venue service management routes", () => {
+  it("keeps stored rules and foreign station or zone references within their location", async () => {
+    const fx = await fixture(),
+      other = await fixture();
+    const base = "/management-api/venue-service/routing";
+    expect(
+      (
+        await send(other.app, "PUT", `${base}/claims/${fx.categoryId}`, other.managerCookie, {
+          noPreparation: true,
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/claims/${fx.categoryId}`, fx.managerCookie)).status,
+    ).toBe(204);
+    expect(await (await send(fx.app, "GET", base, fx.managerCookie)).json()).toMatchObject({
+      claims: [],
+      exceptions: [],
+    });
+    expect(await (await send(other.app, "GET", base, other.managerCookie)).json()).toMatchObject({
+      claims: [{ categoryId: fx.categoryId }],
+    });
+    const created = await send(other.app, "POST", `${base}/exceptions`, other.managerCookie, {
+      categoryId: other.categoryId,
+      noPreparation: true,
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/exceptions/${id}`, fx.managerCookie, {
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          noPreparation: true,
+        })
+      ).status,
+    ).toBe(404);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/exceptions/${id}`, fx.managerCookie)).status,
+    ).toBe(404);
+    expect(
+      (await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, { ids: [id] }))
+        .status,
+    ).toBe(400);
+    for (const [body, status, code] of [
+      [{ categoryId: fx.categoryId, stationId: other.stationId }, 409, "route.station_inactive"],
+      [{ zoneId: other.zoneId, noPreparation: true }, 404, "service_zone.not_found"],
+    ] as const) {
+      const response = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, body);
+      expect(response.status).toBe(status);
+      expect(await response.json()).toMatchObject({ error: { code } });
+    }
+    expect(await (await send(other.app, "GET", base, other.managerCookie)).json()).toMatchObject({
+      exceptions: [{ id, target: { kind: "no_preparation" } }],
+    });
+  });
+
+  it("reads, claims, creates, replaces, reorders and removes stored preparation rules", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/${fx.categoryId}`, fx.managerCookie, {
+          stationId: fx.stationId,
+        })
+      ).status,
+    ).toBe(204);
+    const first = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, {
+      categoryId: fx.categoryId,
+      noPreparation: true,
+    });
+    expect(first.status).toBe(201);
+    const { id } = (await first.json()) as { id: string };
+    const input = {
+      zoneId: null,
+      categoryId: fx.categoryId,
+      productId: null,
+      stationId: fx.stationId,
+    };
+    expect(
+      (await send(fx.app, "PUT", `${base}/exceptions/${id}`, fx.managerCookie, input)).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, { ids: [id] }))
+        .status,
+    ).toBe(204);
+    const response = await send(fx.app, "GET", base, fx.managerCookie);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      claims: [
+        {
+          categoryId: fx.categoryId,
+          target: { kind: "station", stationId: fx.stationId },
+          stationOff: false,
+        },
+      ],
+      exceptions: [
+        {
+          id,
+          position: 0,
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          target: { kind: "station", stationId: fx.stationId },
+          neverMatches: false,
+          stationOff: false,
+        },
+      ],
+      stations: [{ id: fx.stationId, name: "Terrace bar", active: true }],
+    });
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/${fx.categoryId}`, fx.managerCookie, {
+          noPreparation: true,
+        })
+      ).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/claims/${fx.categoryId}`, fx.managerCookie)).status,
+    ).toBe(204);
+    expect(
+      (await send(fx.app, "DELETE", `${base}/exceptions/${id}`, fx.managerCookie)).status,
+    ).toBe(204);
+    expect(await (await send(fx.app, "GET", base, fx.managerCookie)).json()).toMatchObject({
+      claims: [],
+      exceptions: [],
+    });
+  });
+
+  it("rejects missing or conflicting targets, dual subjects and empty conditions by field", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    for (const [body, field] of [
+      [{ categoryId: fx.categoryId }, "target"],
+      [{ categoryId: fx.categoryId, stationId: fx.stationId, noPreparation: true }, "target"],
+      [
+        { categoryId: fx.categoryId, productId: crypto.randomUUID(), noPreparation: true },
+        "subject",
+      ],
+      [{ noPreparation: true }, "condition"],
+    ] as const) {
+      const res = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, body);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    const missingClaimTarget = await send(
+      fx.app,
+      "PUT",
+      `${base}/claims/${fx.categoryId}`,
+      fx.managerCookie,
+      {},
+    );
+    expect(missingClaimTarget.status).toBe(400);
+    expect(await missingClaimTarget.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "target" } },
+    });
+    for (const ids of [undefined, "bad", ["bad-id"], [crypto.randomUUID()]]) {
+      const response = await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, {
+        ids,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field: "ids" } },
+      });
+    }
+    expect(
+      (await send(fx.app, "PUT", `${base}/exception-order`, fx.managerCookie, { ids: [] })).status,
+    ).toBe(204);
+  });
+
+  it("requires explicit replacement condition keys and preserves the rejected exception", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    const created = await send(fx.app, "POST", `${base}/exceptions`, fx.managerCookie, {
+      categoryId: fx.categoryId,
+      noPreparation: true,
+    });
+    expect(created.status).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    const complete: Record<string, unknown> = {
+      zoneId: null,
+      categoryId: fx.categoryId,
+      productId: null,
+      noPreparation: true,
+    };
+    for (const field of ["zoneId", "categoryId", "productId"]) {
+      const body = { ...complete };
+      delete body[field];
+      const response = await send(
+        fx.app,
+        "PUT",
+        `${base}/exceptions/${id}`,
+        fx.managerCookie,
+        body,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "management.request_invalid", params: { field } },
+      });
+    }
+    expect(await (await send(fx.app, "GET", base, fx.managerCookie)).json()).toMatchObject({
+      exceptions: [
+        {
+          id,
+          zoneId: null,
+          categoryId: fx.categoryId,
+          productId: null,
+          target: { kind: "no_preparation" },
+        },
+      ],
+    });
+  });
+
+  it("gates every stored-rule endpoint and applies domain status codes", async () => {
+    const fx = await fixture();
+    const base = "/management-api/venue-service/routing";
+    for (const [method, path, body] of [
+      ["GET", base, undefined],
+      ["PUT", `${base}/claims/${fx.categoryId}`, { noPreparation: true }],
+      ["DELETE", `${base}/claims/${fx.categoryId}`, undefined],
+      ["POST", `${base}/exceptions`, { categoryId: fx.categoryId, noPreparation: true }],
+      [
+        "PUT",
+        `${base}/exceptions/${crypto.randomUUID()}`,
+        { zoneId: null, categoryId: fx.categoryId, productId: null, noPreparation: true },
+      ],
+      ["DELETE", `${base}/exceptions/${crypto.randomUUID()}`, undefined],
+      ["PUT", `${base}/exception-order`, { ids: [] }],
+    ] as const) {
+      expect((await send(fx.app, method, path, undefined, body)).status).toBe(401);
+      expect((await send(fx.app, method, path, fx.staffCookie, body)).status).toBe(403);
+    }
+    const missing = await send(
+      fx.app,
+      "DELETE",
+      `${base}/exceptions/${crypto.randomUUID()}`,
+      fx.managerCookie,
+    );
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ error: { code: "route.not_found" } });
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/${fx.categoryId}`, fx.managerCookie, {
+          stationId: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await send(fx.app, "PUT", `${base}/claims/bad-id`, fx.managerCookie, {
+          noPreparation: true,
+        })
+      ).status,
+    ).toBe(400);
+  });
+
   it("requires an explicit zone when replacing a route and keeps its scope on invalid input", async () => {
     const fx = await fixture();
     const departmentResponse = await send(

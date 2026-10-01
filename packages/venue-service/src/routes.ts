@@ -43,6 +43,16 @@ import {
 } from "./kitchen-notices.js";
 import { KITCHEN_TICKET_GROUPINGS, type KitchenTicketGrouping } from "./schema/settings.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
+import {
+  createException,
+  deleteException,
+  removeClaim,
+  reorderExceptions,
+  routingModel,
+  setClaim,
+  updateException,
+} from "./routing-store.js";
+import type { ExceptionInput, RouteTarget } from "./routing.js";
 import "./errors.js";
 
 const [{ permission: MANAGE_VENUE_SERVICE }] = VENUE_SERVICE_PERMISSIONS;
@@ -130,6 +140,36 @@ function requirePreparationRouteInput(body: Record<string, unknown>): Preparatio
   };
 }
 
+function requireRoutingTarget(body: Record<string, unknown>): RouteTarget {
+  const stationId =
+    body.stationId === undefined || body.stationId === null
+      ? null
+      : requireBodyUuid(body.stationId, "stationId");
+  if ((stationId === null) === (body.noPreparation !== true))
+    throw new AppError("management.request_invalid", { field: "target" });
+  return stationId === null ? { kind: "no_preparation" } : { kind: "station", stationId };
+}
+
+function requireExceptionInput(body: Record<string, unknown>): ExceptionInput {
+  const zoneId =
+    body.zoneId === undefined || body.zoneId === null
+      ? null
+      : requireBodyUuid(body.zoneId, "zoneId");
+  const categoryId =
+    body.categoryId === undefined || body.categoryId === null
+      ? null
+      : requireBodyUuid(body.categoryId, "categoryId");
+  const productId =
+    body.productId === undefined || body.productId === null
+      ? null
+      : requireBodyUuid(body.productId, "productId");
+  if (categoryId !== null && productId !== null)
+    throw new AppError("management.request_invalid", { field: "subject" });
+  if (zoneId === null && categoryId === null && productId === null)
+    throw new AppError("management.request_invalid", { field: "condition" });
+  return { zoneId, categoryId, productId, target: requireRoutingTarget(body) };
+}
+
 export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
@@ -140,6 +180,76 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         });
         return fn(tx);
       });
+
+    app.get("/management-api/venue-service/routing", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        return c.json(await gated(sessionId, (tx) => routingModel(tx, ctx.cfg)));
+      }),
+    );
+
+    app.put("/management-api/venue-service/routing/claims/:categoryId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const categoryId = requireUuidParam(c.req.param("categoryId"), "CategoryId");
+        const target = requireRoutingTarget(await readJsonBody<Record<string, unknown>>(c));
+        await gated(sessionId, (tx) => setClaim(tx, ctx.cfg, categoryId, target));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.delete("/management-api/venue-service/routing/claims/:categoryId", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const categoryId = requireUuidParam(c.req.param("categoryId"), "CategoryId");
+        await gated(sessionId, (tx) => removeClaim(tx, ctx.cfg, categoryId));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.post("/management-api/venue-service/routing/exceptions", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const input = requireExceptionInput(await readJsonBody<Record<string, unknown>>(c));
+        const id = await gated(sessionId, (tx) => createException(tx, ctx.cfg, input));
+        return c.json({ id }, 201);
+      }),
+    );
+
+    app.put("/management-api/venue-service/routing/exceptions/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "PreparationRouteId");
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        for (const field of ["zoneId", "categoryId", "productId"])
+          if (body[field] === undefined)
+            throw new AppError("management.request_invalid", { field });
+        const input = requireExceptionInput(body);
+        await gated(sessionId, (tx) => updateException(tx, ctx.cfg, id, input));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.delete("/management-api/venue-service/routing/exceptions/:id", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const id = requireUuidParam(c.req.param("id"), "PreparationRouteId");
+        await gated(sessionId, (tx) => deleteException(tx, ctx.cfg, id));
+        return c.body(null, 204);
+      }),
+    );
+
+    app.put("/management-api/venue-service/routing/exception-order", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const body = await readJsonBody<Record<string, unknown>>(c);
+        if (!Array.isArray(body.ids))
+          throw new AppError("management.request_invalid", { field: "ids" });
+        const ids = body.ids.map((id) => requireBodyUuid(id, "ids"));
+        await gated(sessionId, (tx) => reorderExceptions(tx, ctx.cfg, ids));
+        return c.body(null, 204);
+      }),
+    );
 
     app.get("/management-api/venue-service", (c) =>
       run(c, log, async () => {

@@ -37,6 +37,8 @@ const TABLES = [
   "zone_menus",
   "device_zone_defaults",
   "preparation_routes",
+  "station_claims",
+  "route_exceptions",
   "department_hours",
   "order_service_contexts",
   "working_line_contexts",
@@ -179,6 +181,24 @@ describe("the venue-service migration set carries no tenant column", () => {
           "(zone_id) -> floor_zones(id)",
         ],
       },
+      station_claims: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(category_id) -> categories(id) on delete cascade",
+          "(location_id) -> locations(id)",
+          "(station_id) -> kitchen_stations(id)",
+        ],
+      },
+      route_exceptions: {
+        primaryKey: ["id"],
+        foreignKeys: [
+          "(category_id) -> categories(id) on delete cascade",
+          "(location_id) -> locations(id)",
+          "(product_id) -> products(id)",
+          "(station_id) -> kitchen_stations(id)",
+          "(zone_id) -> floor_zones(id)",
+        ],
+      },
       department_hours: {
         primaryKey: ["id"],
         foreignKeys: ["(department_id) -> departments(id) on delete cascade"],
@@ -224,6 +244,10 @@ describe("the venue-service migration set carries no tenant column", () => {
       "product_id",
       "category_id",
     ]);
+    expect(columns("station_claims_folder_key")).toEqual(["location_id", "category_id"]);
+    expect(defs["station_claims_folder_key"]?.unique).toBe(true);
+    expect(columns("route_exceptions_order_idx")).toEqual(["location_id", "position"]);
+    expect(defs["route_exceptions_order_idx"]?.unique).toBe(false);
     expect(columns("zone_menus_order_idx")).toEqual(["zone_id", "display_order"]);
     expect(columns("kitchen_notices_open_idx")).toEqual(["station_id", "created_at"]);
     expect(predicate("kitchen_notices_open_idx")).toBe(
