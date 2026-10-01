@@ -69,6 +69,7 @@ export class VenueOperationsScreen extends LitElement {
       wt-data-table::part(till-zone-select) {
         font-size: var(--wt-font-size-sm);
         padding: var(--wt-space-1);
+        min-height: var(--wt-tap-min);
         min-width: 0;
         box-sizing: border-box;
       }

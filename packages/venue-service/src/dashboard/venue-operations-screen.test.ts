@@ -319,6 +319,10 @@ describe("venue operations screen", () => {
         const root = table(el, "tills").shadowRoot!;
         const scroll = root.querySelector<HTMLElement>(".scroll")!;
         const selector = root.querySelector<HTMLSelectElement>("select")!;
+        const minimumTapHeight = Number.parseFloat(
+          getComputedStyle(selector).getPropertyValue("--wt-tap-min"),
+        );
+        expect(selector.getBoundingClientRect().height).toBeGreaterThanOrEqual(minimumTapHeight);
         expect(selector.getBoundingClientRect().right).toBeLessThanOrEqual(
           scroll.getBoundingClientRect().right,
         );
